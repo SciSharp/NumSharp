@@ -32,12 +32,19 @@ namespace NumSharp
         /// <returns>The two results: each the input itself when its shape is the broadcast shape, else a view on it. Views
         ///     are typically not contiguous, and more than one element of a broadcasted array may refer to a single memory
         ///     location: copy first to write to them independently. A view of a read-only array is read-only.</returns>
-        /// <exception cref="IncorrectShapeException">The arrays do not broadcast together.</exception>
+        /// <exception cref="IncorrectShapeException">The arrays do not broadcast together: NumPy's <c>shape mismatch: objects
+        ///     cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1 with shape
+        ///     (4,).</c> (parity QA-30).</exception>
+        /// <exception cref="ValueError">The broadcast shape's element count does not fit a 64-bit integer
+        ///     (<c>broadcast dimensions too large.</c>).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html; the same statement as the
         ///     params overload (<see cref="NDArray.BroadcastArraysMember"/> per operand).</remarks>
         public static (NDArray Lhs, NDArray Rhs) broadcast_arrays(NDArray lhs, NDArray rhs)
         {
             using var plain = NDMatrixBoundary.PlainFor(lhs, rhs);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // `_broadcast_shape(*args)` first: its refusal names the pair that disagrees, as NumPy's does (parity QA-30); the
+            // two-shape Broadcast below then lays out both views and cannot refuse.
+            Shape.BroadcastShape(lhs.Shape, rhs.Shape);
             var (leftShape, rightShape) = Shape.Broadcast(lhs.Shape, rhs.Shape);
             // NumPy 2.4.2's rule per operand: a matching operand as itself, else a view writeable iff the operand is.
             return (NDArray.BroadcastArraysMember(lhs, leftShape), NDArray.BroadcastArraysMember(rhs, rightShape));

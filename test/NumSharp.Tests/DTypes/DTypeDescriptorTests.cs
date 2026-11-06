@@ -276,14 +276,65 @@ namespace NumSharp.Tests.DTypes
             (d != "i4").Should().BeFalse();
             ("f8" == np.dtype("double")).Should().BeTrue();
             (np.dtype(">i4") == "i4").Should().BeFalse("NumPy: np.dtype('>i4') == 'i4' is False");
-            // `d == "garbage"` goes through the implicit string->DType conversion and raises like np.dtype("garbage");
-            // the NumPy-shaped "unequal, never an error" answer is Equals(string) (asserted above). There are deliberately
-            // no ==(DType, string) operators: a null literal would bind them and break every `descr == null` check.
-            Action viaOperator = () => { bool _ = d == "garbage"; };
-            viaOperator.Should().Throw<TypeError>().Which.Message.Should().Be("data type 'garbage' not understood");
+            // The operators answer like dtype.__eq__ too: a string that is not a dtype is unequal, never an error (parity
+            // QA-46; they used to bind ==(DType, DType) through the raising implicit string -> DType conversion).
+            (d == "garbage").Should().BeFalse("np.dtype('i4') == 'garbage' is False, never an error");
+            (d != "garbage").Should().BeTrue();
             DType none = null;
             (none == null).Should().BeTrue();
             (none != null).Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     Parity QA-46: <c>==</c> / <c>!=</c> between a descriptor and a string, in both operand orders, give NumPy
+        ///     2.4.2's answers (scratchpad probe p166_numpy.py: <c>arraydescr_richcompare</c> converts the string, returns
+        ///     <c>NotImplemented</c> when that fails, and Python falls back to identity), and a NULL string is the null
+        ///     descriptor — the footgun the operators are built around: C# binds <c>descr == null</c> to
+        ///     <c>==(DType, string)</c>, and it must keep meaning "no descriptor".
+        /// </summary>
+        [TestMethod]
+        public void StringOperators_AnswerLikeNumPy_AndANullStringIsTheNullDescriptor()
+        {
+            var i4 = np.dtype("i4");
+            // (descriptor, string, NumPy's ==) rows from the NumPy matrix; != is always the negation, and the reflected
+            // `str == dtype` gives the same answer.
+            var rows = new (DType D, string S, bool Equal)[]
+            {
+                (i4, "i4", true), (i4, "int32", true), (i4, "<i4", true), (i4, "=i4", true), (i4, "|i4", true),
+                (i4, "i 4", true), (i4, ">i4", false), (i4, " i4", false), (i4, "f8", false), (i4, "bogus", false),
+                (i4, "", false), (i4, "i4,i4", false), (i4, "complex64", false), (i4, "O", false),
+                (i4, "f16", false), (i4, "int0", false), (i4, "T", false),
+                (np.dtype("f8"), "double", true), (np.dtype("f8"), "float64", true), (np.dtype("f8"), "M8[ns]", false),
+                (np.dtype(">i4"), ">i4", true), (np.dtype(">i4"), "i4", false),
+                (np.dtype("?"), "bool", true), (np.dtype("?"), "b1", true), (np.dtype("?"), "?", true),
+                (np.dtype("M8[ns]"), "M8[ns]", true), (np.dtype("M8[ns]"), "M8[s]", false), (np.dtype("M8[ns]"), "M8", false),
+                (np.dtype("U5"), "U5", true), (np.dtype("U5"), "U", false),
+                (np.dtype("S"), "S", true), (np.dtype("S"), "S0", true), (np.dtype("S"), "a", true),
+                // A StringDType descriptor does not coerce: stringdtype_richcompare returns NotImplemented for a str.
+                (np.dtype("T"), "T", false), (np.dtype("T"), "bogus", false),
+            };
+            foreach (var (d, s, equal) in rows)
+            {
+                (d == s).Should().Be(equal, $"np.dtype('{d}') == '{s}'");
+                (d != s).Should().Be(!equal, $"np.dtype('{d}') != '{s}'");
+                (s == d).Should().Be(equal, $"'{s}' == np.dtype('{d}')");
+                (s != d).Should().Be(!equal, $"'{s}' != np.dtype('{d}')");
+            }
+
+            // The null literal binds the string overloads; a null string compares as the null descriptor, in both orders.
+            DType none = null;
+            (i4 == null).Should().BeFalse();
+            (i4 != null).Should().BeTrue();
+            (null == i4).Should().BeFalse();
+            (null != i4).Should().BeTrue();
+            (none == null).Should().BeTrue();
+            (none != null).Should().BeFalse();
+            (null == none).Should().BeTrue();
+            (none == (string)null).Should().BeTrue();
+            (none == "i4").Should().BeFalse("no descriptor equals any dtype string");
+            (none != "i4").Should().BeTrue();
+            ("i4" == none).Should().BeFalse();
+            (i4 == (DType)null).Should().BeFalse();
         }
 
         [TestMethod]

@@ -26,12 +26,18 @@ paths:
   validators in `DefaultEngine.UfuncOut.cs`, `GufuncGuard.cs`, the string loops, np.evaluate, fft, linalg, polynomial
   calculus). It is not an `ArgumentException`; the `where=` mask's 'safe'-cast refusal still is.
 - Loop-existence gates raise `No loop matching ... ufunc <name>`: the float-only ufuncs (sqrt, exp, log, trig, `divide`,
-  `true_divide`) reject an int or bool dtype; the bitwise ufuncs reject float, complex and decimal dtypes.
+  `true_divide`) reject an int or bool dtype; the bitwise ufuncs reject float, complex and decimal dtypes; floor_divide,
+  remainder (`np.mod` quotes that name) and fmod reject a bool or complex dtype (integer and float loops only; parity
+  QA-53), after the out and mask checks and before any input cast or shape check.
 - `positive` is a full ufunc with identity loops at every dtype except bool: `positive(bool)` and `dtype: bool` raise the
   `did not contain a loop with signature matching types <class 'numpy.dtypes.XDType'> -> ...` texts;
   `positive(bool, dtype: f64)` works.
 - `round_`/`around` follow NumPy's non-ufunc shape `round(a, int decimals = 0, NDArray out = null)`: `out=` only, the
   second positional is `decimals`, and a cast error at `decimals != 0` names ufunc 'multiply' (NumPy's composition).
+  Their `out=` follows `PyArray_Round` (parity QA-31): another SIZE is `invalid output shape` before anything else;
+  integer data at `decimals >= 0` is `PyArray_AssignArray` (np.copyto's read-only, cast and broadcast texts); complex data
+  assigns its parts (the assignment's broadcast text); float data is the rint ufunc at 0 decimals and
+  `multiply(a, 10**d, out)` otherwise, whose refusal lists three operands (`(3,4) () (4,3) `).
 - `rint` is the true ufunc form of round-half-to-even: float-tier (bool/i8/u8 → f16, i16/u16 → f32, i32+ → f64; floats
   and complex keep their dtype), reusing `UnaryOp.Round`'s kernel (complex rounds both parts; `dtype=<int>` has no loop).
   `round_`/`around` keep integer dtypes (np.round's integer path is an identity copy).
@@ -239,8 +245,8 @@ NumPy's Python int (`type(min) is int`); every other bound is strong — an elem
 - No complex loop (parity QA-27): a complex operand with no `dtype=` is NumPy's generic no-loop TypeError (`ufunc 'divmod'
   not supported for the input types, ...`, the text floor_divide and remainder raise), refused for the loop before any
   element is read (a zero-size operand too) and, on the keyword route, after the outs and the mask; under a real
-  `dtype=` it is the `input 0` cast refusal instead. Open (QA-53, `[OpenBugs]`): floor_divide / remainder / fmod with
-  `dtype=complex` reach their kernel's NotSupportedException where NumPy says `No loop matching … for ufunc X`.
+  `dtype=` it is the `input 0` cast refusal instead. A bool or complex `dtype=` request is the no-loop text for all four
+  (divmod's DivModNoLoopText; floor_divide / remainder / fmod since parity QA-53).
 - `out=(q, r)` (either slot null), `where=` and `dtype=` run NumPy's two-output ufunc call (`DivModInto`,
   `Default.DivMod.cs`): ONE NDIter over `(x1, x2, out1, out2[, where])`, with np.clip's flags (COPY_IF_OVERLAP,
   OVERLAP_ASSUME_ELEMENTWISE, outputs NO_BROADCAST, a masked caller out READWRITE, buffered casts for an input or out of

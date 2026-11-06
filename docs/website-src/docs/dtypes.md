@@ -196,6 +196,16 @@ ReferenceEquals(np.@long, np.dtype("long"));
 ReferenceEquals(np.float16, np.dtype("float16"));
 ```
 
+A descriptor also compares with a dtype string, as NumPy's `dtype.__eq__` does: the string is parsed and compared, and a string that is not a dtype is simply unequal, never an error. A `StringDType` descriptor equals no string, and a `null` string stands for "no descriptor":
+
+```csharp
+np.int32 == "i4";                  // true
+np.int32 != "bogus";               // true: not a dtype, so unequal
+np.dtype("T") == "T";              // false, as in NumPy
+DType none = null;
+none == null;                      // true: there is no descriptor
+```
+
 Use `.type` or an explicit `(Type)` cast only when a .NET API needs the CLR element type. It is not a replacement for a text descriptor.
 
 ---

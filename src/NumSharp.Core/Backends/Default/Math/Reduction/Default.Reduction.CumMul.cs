@@ -30,8 +30,12 @@ namespace NumSharp.Backends
         ///     loop dtype with the text cast around it.</exception>
         /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number, or a
         ///     read-only <paramref name="out"/> (<c>output array is read-only</c>).</exception>
-        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape (NumPy's
-        ///     <c>provided out is the wrong size for the accumulation.</c>).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape: the text of
+        ///     the NumPy statement that refuses it (parity QA-31, <see cref="AccumulateOutShapeError"/>): NpyIter's
+        ///     <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (4,3)-&gt;(4,3)
+        ///     (3,4)-&gt;(3,4) </c> (or its <c>op_axes</c> / non-broadcastable-output siblings) on NumPy's iterator path, an
+        ///     input of more than one dimension among its triggers; <c>provided out is the wrong size for the
+        ///     accumulation.</c> on the direct 1-D path.</exception>
         /// <remarks>
         ///     The statements are np.cumprod's, in its order (moved from <c>APIs/np.cumprod.cs</c> by the np-layer dtype
         ///     plan's P0 pilot): multiply.accumulate's loop resolution on (out, arr) answers FIRST for text or a string
@@ -58,7 +62,9 @@ namespace NumSharp.Backends
                     arr = parsed;
                 Strings.NDStringUfuncs.ThrowIfReduce("cumprod", arr, axis_, @out, dtype);
                 // With out= and no dtype= the loop is promote_types(out, arr), without NEP 50's widening (AccumulateLoop).
-                return WriteScanToOut(CumProdCore(arr, axis_, AccumulateLoop(arr, dtype, @out)), @out);
+                // The loop also decides which NumPy statement refuses an out of the wrong shape (parity QA-31).
+                DType loop = AccumulateLoop(arr, dtype, @out);
+                return WriteScanToOut(CumProdCore(arr, axis_, loop), @out, arr, axis_, loop);
             }
             finally
             {

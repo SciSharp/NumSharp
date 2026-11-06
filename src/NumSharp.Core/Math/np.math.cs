@@ -66,8 +66,23 @@ namespace NumSharp
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => subtract(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
             : x1.TensorEngine.Subtract(x1, x2, dtype, @out, where);
 
+        /// <summary>
+        /// Return element-wise remainder of division (the floored remainder — result has the same sign as the divisor,
+        /// Python's <c>%</c>). NumPy's ufunc <c>remainder</c> under its alias <c>mod</c>: errors quote the name
+        /// <c>remainder</c>, as NumPy's do.
+        /// Mirrors NumPy's ufunc signature: <c>mod(x1, x2, /, out=None, *, where=True, dtype=None)</c>.
+        /// </summary>
+        /// <param name="x1">Dividend array.</param>
+        /// <param name="x2">Divisor array; broadcasts against <paramref name="x1"/>.</param>
+        /// <param name="out">A location into which the result is stored (NumPy ufunc out=; returned as-is).</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): computation runs in this dtype.</param>
+        /// <returns>The floored remainders, or <paramref name="out"/> itself when given.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mod.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="IncorrectTypeException">A bool or complex <paramref name="dtype"/>: remainder has integer and
+        ///     float loops only, so NumPy's <c>No loop matching the specified signature and casting was found for ufunc
+        ///     remainder</c> (parity QA-53).</exception>
         public static NDArray mod(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => mod(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
@@ -85,11 +100,17 @@ namespace NumSharp
         /// The complement <see cref="fmod(NDArray, NDArray, NDArray, NDArray, DType)"/> uses the
         /// dividend's sign instead.
         /// </summary>
+        /// <param name="x1">Dividend array.</param>
+        /// <param name="x2">Divisor array; broadcasts against <paramref name="x1"/>.</param>
         /// <param name="@out">A location into which the result is stored (NumPy ufunc out=; returned as-is).</param>
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=).</param>
+        /// <returns>The floored remainders, or <paramref name="out"/> itself when given.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.remainder.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="IncorrectTypeException">A bool or complex <paramref name="dtype"/>: remainder has integer and
+        ///     float loops only, so NumPy's <c>No loop matching the specified signature and casting was found for ufunc
+        ///     remainder</c> (parity QA-53).</exception>
         public static NDArray remainder(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => remainder(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
@@ -110,11 +131,17 @@ namespace NumSharp
         /// supported (NumPy has no complex fmod loop).
         /// Mirrors NumPy's ufunc signature: <c>fmod(x1, x2, /, out=None, *, where=True, dtype=None)</c>.
         /// </summary>
+        /// <param name="x1">Dividend array.</param>
+        /// <param name="x2">Divisor array; broadcasts against <paramref name="x1"/>.</param>
         /// <param name="@out">A location into which the result is stored (NumPy ufunc out=; returned as-is).</param>
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): computation runs in this dtype.</param>
+        /// <returns>The truncated remainders, or <paramref name="out"/> itself when given.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fmod.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="IncorrectTypeException">A bool or complex <paramref name="dtype"/>: fmod has integer and float
+        ///     loops only, so NumPy's <c>No loop matching the specified signature and casting was found for ufunc fmod</c>
+        ///     (parity QA-53).</exception>
         public static NDArray fmod(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => fmod(s.x1, s.x2, s.@out, s.where, s.dtype), @out)

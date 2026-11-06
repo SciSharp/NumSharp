@@ -213,9 +213,27 @@ namespace NumSharp.Backends
         ///     the input would have to stretch, or the mask has more axes than the input.</exception>
         /// <exception cref="IncorrectShapeException">The shapes do not broadcast (NumPy's "remapped shapes" text).</exception>
         internal static void ValidateOperands(NDArray input, bool[] axisFlags, bool keepdims, NDArray @out, NDArray @where, string funcname)
+            => ValidateOperands(input.Shape.dimensions, axisFlags, keepdims, @out, @where, funcname);
+
+        /// <summary>
+        ///     <see cref="ValidateOperands(NDArray, bool[], bool, NDArray, NDArray, string)"/> over the input's DIMENSIONS
+        ///     alone: for a reduction NumPy runs over an array NumSharp never builds (np.median's
+        ///     <c>mean(part[indexer], out=out)</c>, whose operand is the middle slice of a partition), so the checks and texts
+        ///     are NumPy's without materializing it.
+        /// </summary>
+        /// <param name="inShape">The dimensions of the array being reduced (not modified).</param>
+        /// <param name="axisFlags">The reduced-axis flags (one per input axis).</param>
+        /// <param name="keepdims">Whether the reduced axes stay in the result with length 1.</param>
+        /// <param name="out">The caller's output array, or <c>null</c>.</param>
+        /// <param name="where">The caller's mask, or <c>null</c>.</param>
+        /// <param name="funcname">The ufunc name NumPy prints in the rank message.</param>
+        /// <exception cref="ValueError"><paramref name="out"/> has the wrong rank, a kept reduced axis of
+        ///     <paramref name="out"/> is not 1 long, an axis of <paramref name="out"/> is 1 long where the result is longer,
+        ///     the input would have to stretch, or the mask has more axes than the input.</exception>
+        /// <exception cref="IncorrectShapeException">The shapes do not broadcast (NumPy's "remapped shapes" text).</exception>
+        internal static void ValidateOperands(long[] inShape, bool[] axisFlags, bool keepdims, NDArray @out, NDArray @where, string funcname)
         {
-            int ndim = input.ndim;
-            long[] inShape = input.Shape.dimensions;
+            int ndim = inShape.Length;
 
             // result_axes: the out axis each input axis maps to (-1 for a reduced axis that keepdims drops), and
             // whether the input axis is a reduction axis (NPY_ITER_REDUCTION_AXIS).
@@ -247,14 +265,14 @@ namespace NumSharp.Backends
                 {
                     int i = resultAxes[idim];
                     if (i >= 0 && !Join(bshape, idim, outShape[i]))
-                        throw BroadcastError(input, @out, @where, resultAxes);
+                        throw BroadcastError(inShape, @out, @where, resultAxes);
                 }
             }
 
             for (int idim = 0; idim < ndim; idim++)
             {
                 if (!Join(bshape, idim, inShape[idim]))
-                    throw BroadcastError(input, @out, @where, resultAxes);
+                    throw BroadcastError(inShape, @out, @where, resultAxes);
             }
 
             if (whereShape is not null)
@@ -265,7 +283,7 @@ namespace NumSharp.Backends
                 for (int k = 0; k < wdim; k++)
                 {
                     if (!Join(bshape, k + ndim - wdim, whereShape[k]))
-                        throw BroadcastError(input, @out, @where, resultAxes);
+                        throw BroadcastError(inShape, @out, @where, resultAxes);
                 }
             }
 
@@ -331,12 +349,12 @@ namespace NumSharp.Backends
         ///     order, <c>out=</c> followed by <c>-&gt;</c> and its remapped shape (a dropped reduced axis reads
         ///     <c>newaxis</c>), each shape followed by one space.
         /// </summary>
-        /// <param name="input">The array being reduced.</param>
+        /// <param name="inShape">The dimensions of the array being reduced.</param>
         /// <param name="out">The caller's output array, or <c>null</c> (an allocated result is not printed).</param>
         /// <param name="where">The caller's mask, or <c>null</c>.</param>
         /// <param name="resultAxes">The out axis per input axis (-1 for a dropped reduced axis).</param>
         /// <returns>The exception to throw.</returns>
-        private static IncorrectShapeException BroadcastError(NDArray input, NDArray @out, NDArray @where, int[] resultAxes)
+        private static IncorrectShapeException BroadcastError(long[] inShape, NDArray @out, NDArray @where, int[] resultAxes)
         {
             var sb = new StringBuilder("operands could not be broadcast together with remapped shapes [original->remapped]: ");
             if (@out is not null)
@@ -352,7 +370,7 @@ namespace NumSharp.Backends
                 sb.Append(Shape.ConvertShapeToString(outShape)).Append("->").Append(Shape.ConvertShapeToString(remapped)).Append(' ');
             }
 
-            sb.Append(Shape.ConvertShapeToString(input.Shape.dimensions)).Append(' ');
+            sb.Append(Shape.ConvertShapeToString(inShape)).Append(' ');
             if (@where is not null)
                 sb.Append(Shape.ConvertShapeToString(@where.Shape.dimensions)).Append(' ');
             return new IncorrectShapeException(sb.ToString());

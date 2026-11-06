@@ -39,7 +39,13 @@ namespace NumSharp.Backends
         ///     of two or more elements, an empty reduced axis (the mean's add.reduce has no identity) or a read-only
         ///     <paramref name="out"/>.</exception>
         /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> that np.median's closing <c>mean(part[indexer], out=out)</c>
+        ///     refuses in its add.reduce prologue, before anything is computed: read-only (<c>output array is read-only</c>),
+        ///     of the wrong rank (<c>output parameter for reduction operation add has the wrong number of dimensions: Found 2
+        ///     but expected 1</c>) or with a length-1 axis where the result is longer (parity QA-31).</exception>
+        /// <exception cref="IncorrectShapeException">An <paramref name="out"/> whose axes do not broadcast with the
+        ///     result's: the prologue's iterator text over the partition's middle slice (<c>operands could not be broadcast
+        ///     together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3) (1,4) </c>), NumPy's ValueError.</exception>
         /// <exception cref="TypeError">Text data or a text <paramref name="out"/> that NumPy's closing mean refuses (its
         ///     verbatim text); a <c>StringDType</c> array after its sort (its mean's divide refuses the concatenated
         ///     text).</exception>
@@ -108,7 +114,10 @@ namespace NumSharp.Backends
         ///     of two or more elements, an empty input's mean (no identity), or the store into
         ///     <paramref name="out"/>.</exception>
         /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="ValueError">The store <c>out[...] = result</c> (np.nanmedian's, after the computation): an
+        ///     <paramref name="out"/> the result does not broadcast to (<c>could not broadcast input array from shape (4,)
+        ///     into shape (3,)</c>) or a read-only one (<c>assignment destination is read-only</c>); for empty data,
+        ///     np.nanmean's add.reduce prologue texts (parity QA-31).</exception>
         /// <exception cref="TypeError">Fixed-width text data that NumPy's NaN test (or, for empty data, its
         ///     <c>nanmean</c>) refuses (its verbatim text); a <c>StringDType</c> array's median, numpy.ma or keepdims
         ///     refusals.</exception>

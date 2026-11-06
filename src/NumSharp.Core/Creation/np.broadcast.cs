@@ -63,6 +63,13 @@ namespace NumSharp
             ///     fixed NPY_MAXARGS=64 cap, any number of operands is accepted — matching NumSharp's
             ///     unlimited-operand <c>NDIter</c>.
             /// </summary>
+            /// <param name="ops">The operands (null is treated as none); the object borrows them, it does not own or dispose
+            ///     them.</param>
+            /// <exception cref="IncorrectShapeException">Two operands disagree on an axis: NumPy's <c>shape mismatch: objects
+            ///     cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1 with shape
+            ///     (4,).</c> (<see cref="Shape.MultiIterShape"/>).</exception>
+            /// <exception cref="ValueError">The broadcast shape's element count does not fit a 64-bit integer
+            ///     (<c>broadcast dimensions too large.</c>).</exception>
             internal Broadcast(params NDArray[] ops)
             {
                 _ops = ops ?? Array.Empty<NDArray>();
@@ -72,9 +79,11 @@ namespace NumSharp
                 // operand cap (see NDIter.State.cs — "UNLIMITED ... matches NumSharp's core
                 // philosophy"). np.broadcast follows that engine, so any number of operands is
                 // accepted. 0 operands is legal and yields a 0-d (scalar) broadcast.
+                // The shape is multiiter_new_impl's PyArray_Broadcast, so a mismatch names the first pair of operands that
+                // disagree, as NumPy's ValueError does (parity QA-30; the generic resolver stopped at "...to a single shape").
                 shape = _ops.Length == 0
                     ? Shape.Scalar
-                    : Shape.ResolveReturnShape(_ops.Select(o => o.Shape).ToArray());
+                    : Shape.MultiIterShape(_ops.Select(o => o.Shape).ToArray());
             }
 
             public Shape shape { get; internal set; }

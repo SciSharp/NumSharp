@@ -22,7 +22,13 @@ namespace NumSharp
         /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
         /// <returns>The median (NaN for an empty slice); <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> that np.median's closing <c>mean(part[indexer], out=out)</c>
+        ///     refuses in its add.reduce prologue, before anything is computed: read-only (<c>output array is read-only</c>),
+        ///     of the wrong rank (<c>output parameter for reduction operation add has the wrong number of dimensions: Found 2
+        ///     but expected 1</c>) or with a length-1 axis where the result is longer (parity QA-31).</exception>
+        /// <exception cref="IncorrectShapeException">An <paramref name="out"/> whose axes do not broadcast with the
+        ///     result's: the prologue's iterator text over the partition's middle slice (<c>operands could not be broadcast
+        ///     together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3) (1,4) </c>), NumPy's ValueError.</exception>
         /// <exception cref="TypeError">Text data or a text <paramref name="out"/>: NumPy's closing <c>mean</c> refuses (its
         ///     verbatim text). A NEP 55 <c>StringDType</c> array is sorted first (NumPy's partition of a <c>StringDType</c>
         ///     line), then its mean's divide refuses the concatenated text.</exception>
@@ -81,7 +87,13 @@ namespace NumSharp
         ///     mean's add.reduce has no identity) or a read-only <paramref name="out"/>. A <c>StringDType</c> median exists
         ///     only over NaN-like NAs (<c>np.float64(nan)</c>).</exception>
         /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> that np.median's closing <c>mean(part[indexer], out=out)</c>
+        ///     refuses in its add.reduce prologue, before anything is computed: read-only (<c>output array is read-only</c>),
+        ///     of the wrong rank (<c>output parameter for reduction operation add has the wrong number of dimensions: Found 2
+        ///     but expected 1</c>) or with a length-1 axis where the result is longer (parity QA-31).</exception>
+        /// <exception cref="IncorrectShapeException">An <paramref name="out"/> whose axes do not broadcast with the
+        ///     result's: the prologue's iterator text over the partition's middle slice (<c>operands could not be broadcast
+        ///     together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3) (1,4) </c>), NumPy's ValueError.</exception>
         /// <exception cref="TypeError">Text data or a text <paramref name="out"/> that NumPy's closing mean refuses (its
         ///     verbatim text); a <c>StringDType</c> array after its sort (the mean's divide refuses the concatenated text).</exception>
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has

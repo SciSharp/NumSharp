@@ -49,11 +49,11 @@ namespace NumSharp.Tests
     //        where NumPy answers True, and True for a Type object of a primitive (typeof(int)), where NumPy's isscalar(int)
     //        is False. Found by P8's snapshot tool, whose object operand (18835e6b) first ran np.isscalar over them; the
     //        move onto the array object (4cea01d6) kept the behaviour.
-    //   NL12 np.broadcast_to's refusals are not NumPy's texts: a 1-tuple prints without its comma and the separator before
-    //        "and requested shape" is one space where NumPy has two, and a source with more axes than the target gets the
-    //        shape text where NumPy raises "input operand has more dimensions than allowed by the axis remapping".
-    //        np.mean / np.var / np.std with a where= mask that does not broadcast to the operand reach it, because
-    //        _count_reduce_items broadcasts the mask first. Found by P10 item 1's reduce_kwargs cells.
+    //   NL12 FIXED by parity QA-30 (batch 13): np.broadcast_to's refusals were not NumPy's texts (a 1-tuple without its
+    //        comma, one space before "and requested shape", the shape text for a source with more axes than the target), and
+    //        np.mean / np.var / np.std with a where= mask that does not broadcast reached them through _count_reduce_items;
+    //        its test stays below as the regression pin, without [OpenBugs], the more-axes refusal under the house type of a
+    //        broadcast refusal (IncorrectShapeException, NumPy's ValueError) as the owner's QA-30 decision keeps it.
     //   NL13 np.max / np.min / np.amax / np.amin / np.nanmax / np.nanmin with a numpy.matrix operand: NumPy calls the
     //        matrix method (matrix.max(axis, out)), so initial= / where= raise its TypeError ("matrix.max() got an
     //        unexpected keyword argument 'initial'") where NumSharp computes, and a matrix out= returns the method's
@@ -309,16 +309,18 @@ namespace NumSharp.Tests
         ///     remapping</c> (a ValueError). np.mean with a mask that does not broadcast to the operand raises the same text,
         ///     because <c>_count_reduce_items</c> broadcasts the mask first.
         /// </summary>
-        /// <remarks>Root cause: <c>Shape.ValidateBroadcastTo</c> (src/NumSharp.Core/View/Shape.Broadcasting.cs) formats its
-        ///     own text for both refusals.</remarks>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL12")]
+        /// <remarks>Fixed by parity QA-30: <c>Shape.ValidateBroadcastTo</c> (src/NumSharp.Core/View/Shape.Broadcasting.cs)
+        ///     raises NumPy's texts, the more-axes one under the house <see cref="IncorrectShapeException"/> of every
+        ///     broadcast refusal. A regression pin now, without [OpenBugs]; the full matrix is
+        ///     <c>Creation/np.broadcast.RefusalTexts.Test.cs</c>.</remarks>
+        [TestMethod]
         public void NpLayer_BroadcastTo_ErrorTexts_ShouldBeNumPys()
         {
             new Action(() => np.broadcast_to(np.ones(new Shape(2)), new Shape(3))).Should().Throw<IncorrectShapeException>()
                 .WithMessage("operands could not be broadcast together with remapped shapes [original->remapped]: (2,)  and requested shape (3,)");
             new Action(() => np.mean(np.arange(3.0), where: np.ones(new Shape(2), np.@bool))).Should().Throw<IncorrectShapeException>()
                 .WithMessage("operands could not be broadcast together with remapped shapes [original->remapped]: (2,)  and requested shape (3,)");
-            new Action(() => np.broadcast_to(np.ones(new Shape(2, 3)), new Shape(3))).Should().Throw<ValueError>()
+            new Action(() => np.broadcast_to(np.ones(new Shape(2, 3)), new Shape(3))).Should().Throw<IncorrectShapeException>()
                 .WithMessage("input operand has more dimensions than allowed by the axis remapping");
         }
 

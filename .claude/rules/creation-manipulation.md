@@ -342,6 +342,16 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   must be non-negative` (`Shape.ValidateBroadcastTo`, behind every overload; parity QA-13): a `Shape` accepts negatives
   (reshape's -1), and the stride-0 view built from one had a negative size. `np.broadcast_shapes` keeps NumPy's
   `negative dimensions are not allowed`. Gate: `Creation/NpBroadcastFromNumPyTests.cs`.
+- The broadcast refusals are NumPy's texts (parity QA-30), under the house `IncorrectShapeException`:
+  `np.broadcast_to` runs `_broadcast_to`'s Python tests (`cannot broadcast a non-scalar to a scalar array` for a 0-d
+  target, first; then the negative dimension) and NpyIter's (`input operand has more dimensions than allowed by the axis
+  remapping`; `operands could not be broadcast together with remapped shapes [original->remapped]: (3,)  and requested
+  shape (4,)`: `convert_shape_to_string` shapes, two spaces before "and"). `np.broadcast_arrays` checks
+  `_broadcast_shape` first (`Shape.BroadcastShape`: PyArray_Broadcast's scan, `shape mismatch: objects cannot be
+  broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1 with shape (4,).`, past 64 operands
+  numbered within each group of 63), then lays the views out through `Shape.Broadcast`; `np.broadcast` is ONE scan over
+  every operand (`Shape.MultiIterShape`; NumSharp takes more than NumPy's 64). Gate:
+  `Creation/np.broadcast.RefusalTexts.Test.cs`.
   The axis errors of this family (`split(..., axis=oob)`'s leaked `IndexError`, `squeeze`) are NumPy's
   (`axis-arguments.md`).
 - No `NPY_MAXDIMS` (a documented divergence, `[Misaligned]`): an array may have more than NumPy's 64 dimensions. Where

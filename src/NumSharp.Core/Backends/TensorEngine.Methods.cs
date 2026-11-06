@@ -810,7 +810,13 @@ namespace NumSharp
         ///     A read-only out, an empty reduction (NumPy's maximum has no identity), or a StringDType subtraction NumPy
         ///     refuses.
         /// </exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="ValueError">An <paramref name="out"/> that _ptp's <c>maximum.reduce(a, axis, out=out)</c>
+        ///     refuses in its prologue, before anything is computed: of the wrong rank (<c>output parameter for reduction
+        ///     operation maximum has the wrong number of dimensions: Found 2 but expected 1</c>) or with a length-1 axis
+        ///     where the result is longer (parity QA-31).</exception>
+        /// <exception cref="IncorrectShapeException">An <paramref name="out"/> whose axes do not broadcast with the
+        ///     result's (<c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3)
+        ///     (3,4) </c>), NumPy's ValueError under the house type of a broadcast failure.</exception>
         /// <remarks>
         ///     NumPy writes ptp in Python (<c>numpy/_core/_methods.py</c>); DefaultEngine's override runs those statements
         ///     over <see cref="ReduceAMax"/> and <see cref="ReduceAMin"/>. An override replaces <c>np.ptp</c> for every
@@ -835,7 +841,13 @@ namespace NumSharp
         /// <exception cref="AxisError">An axis is out of range (a 0-d input has no axis for a tuple to name).</exception>
         /// <exception cref="ValueError">An axis appears twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="TypeError">Fixed-width text, or a text out (NumPy's loop refusal).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> has the wrong shape.</exception>
+        /// <exception cref="ValueError">An <paramref name="out"/> that _ptp's <c>maximum.reduce(a, axis, out=out)</c>
+        ///     refuses in its prologue, before anything is computed: of the wrong rank (<c>output parameter for reduction
+        ///     operation maximum has the wrong number of dimensions: Found 2 but expected 1</c>) or with a length-1 axis
+        ///     where the result is longer (parity QA-31).</exception>
+        /// <exception cref="IncorrectShapeException">An <paramref name="out"/> whose axes do not broadcast with the
+        ///     result's (<c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3)
+        ///     (3,4) </c>), NumPy's ValueError under the house type of a broadcast failure.</exception>
         /// <remarks>
         ///     A tuple of one axis, or of every axis, re-enters <see cref="Ptp(NDArray, int?, NDArray, bool)"/> through
         ///     virtual dispatch, so an override of that member sees those calls too. New in 0.71.0 (the np-layer dtype

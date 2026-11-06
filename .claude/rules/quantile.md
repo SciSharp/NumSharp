@@ -49,6 +49,13 @@ one builder per precision (`DirectILKernelGenerator.QuantilePlan`, cached per dt
   array is read-only`), the nan forms' `out[...] = result` (an array by the unsafe cast; a NumPy SCALAR by `PyArray_Pack`,
   `ReductionInitial.PackNumPyScalar`: only a SIGNED integer out converts with `int()`, so NaN, infinity and 400 into int8
   raise there, while an unsigned / bool / float out casts: NaN is 0 in uint8 and 2^63 in uint64), keepdims' out index.
+- np.median and np.nanmedian write into the out `_ureduce` hands them (keepdims' `out[(Ellipsis,) + index_out]`), for every
+  dtype (parity QA-31): np.median runs np.mean's add.reduce prologue over the partition's MIDDLE slice first
+  (`MedianOutChecks`: the reduced axis cut to 1 element for an odd length, 2 for an even one, 0 for an empty axis;
+  `operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3) (1,4) `, the add rank
+  text) and copies its result under same_kind (NumPy's mean casts unsafely: QA-55, pinned); np.nanmedian is the nan forms'
+  `out[...] = result` (np.copyto's broadcast and texts, the unsafe cast). An empty input under the nan forms is
+  np.nanmean's prologue against the input. Gate: `Math/OutShapeRefusals.NumPy.Test.cs`.
 - All-NaN data answers `np.full(q.shape, nan)` in the data's dtype, and an all-NaN FIRST slice makes the result the data's
   dtype. `np.nanquantile` takes the element for an integer `q` and reads an array `q` as a strong float64 weight. Empty data
   raises NumPy's IndexError (`index -1 ...`; `index 0 ...` for integer data).

@@ -459,6 +459,70 @@ namespace NumSharp.Tests.Math
                 exAdd.Message);
         }
 
+        /// <summary>
+        ///     Parity QA-53: floor_divide, remainder (np.mod is its alias and quotes its name) and fmod register integer and
+        ///     float loops only, so a bool or complex <c>dtype=</c> request finds no loop for ANY operand dtype — NumPy 2.4.2's
+        ///     <c>No loop matching the specified signature and casting was found for ufunc X</c>, raised after a read-only out
+        ///     and a non-bool mask are reported and before any input cast, out cast or shape check (scratchpad probe
+        ///     p165_numpy.py). Before the fix a bool request raised the input-cast text and a complex request reached the
+        ///     kernel's NotSupportedException.
+        /// </summary>
+        [TestMethod]
+        public void DivModFamily_BoolOrComplexDtype_RaiseNumPysNoLoopTypeError()
+        {
+            using var f8 = np.array(new[] { 2.0, 1.0 });
+            using var i4 = np.array(new[] { 2, 1 });
+            using var b1 = np.array(new[] { true, false });
+            using var c16 = np.array(new[] { new System.Numerics.Complex(2, 1), new System.Numerics.Complex(1, 0) });
+            using var three = np.zeros(new Shape(3));
+            using var emptyComplex = np.zeros(new Shape(0), NPTypeCode.Complex);
+            using var intMask = np.array(new long[] { 1, 0 });
+            using var complexOut = np.zeros(new Shape(2), NPTypeCode.Complex);
+            using var boolOut = np.zeros(new Shape(2), NPTypeCode.Boolean);
+            using var readOnly = np.zeros(new Shape(2));
+            readOnly.setflags(write: false);
+            using var trues = np.array(new[] { true, true });
+            const string maskCast = "Cannot cast array data from dtype('int64') to dtype('bool') according to the rule 'safe'";
+
+            var calls = new (string Name, Func<NDArray, NDArray, DType, NDArray, NDArray, NDArray> Call)[]
+            {
+                ("floor_divide", (x, y, dt, o, w) => np.floor_divide(x, y, o, w, dtype: dt)),
+                ("remainder", (x, y, dt, o, w) => np.remainder(x, y, o, w, dtype: dt)),
+                ("remainder", (x, y, dt, o, w) => np.mod(x, y, o, w, dtype: dt)),
+                ("fmod", (x, y, dt, o, w) => np.fmod(x, y, o, w, dtype: dt)),
+            };
+
+            foreach (var (name, call) in calls)
+            {
+                string noLoop = $"No loop matching the specified signature and casting was found for ufunc {name}";
+                foreach (DType dt in new DType[] { NPTypeCode.Boolean, NPTypeCode.Complex })
+                {
+                    // Every operand dtype, a complex pair included: the request itself has no loop.
+                    foreach (var x in new[] { f8, i4, b1, c16 })
+                        Assert.AreEqual(noLoop, Assert.ThrowsException<IncorrectTypeException>(() => call(x, x, dt, null, null)).Message,
+                            $"{name}({x.dtype}, {x.dtype}, dtype={dt})");
+
+                    // Before the shape check (the operands do not broadcast), and for a zero-size operand.
+                    Assert.AreEqual(noLoop, Assert.ThrowsException<IncorrectTypeException>(() => call(f8, three, dt, null, null)).Message);
+                    Assert.AreEqual(noLoop, Assert.ThrowsException<IncorrectTypeException>(() => call(emptyComplex, emptyComplex, dt, null, null)).Message);
+
+                    // A non-bool mask is reported first (NumPy parses where= before it resolves the loop), and so is a
+                    // read-only out.
+                    Assert.AreEqual(maskCast, Assert.ThrowsException<ArgumentException>(() => call(f8, f8, dt, null, intMask)).Message);
+                    Assert.AreEqual("output array is read-only",
+                        Assert.ThrowsException<ValueError>(() => call(f8, f8, dt, readOnly, null)).Message);
+                }
+
+                // An out of the requested class does not create the loop.
+                Assert.AreEqual(noLoop, Assert.ThrowsException<IncorrectTypeException>(() => call(f8, f8, NPTypeCode.Complex, complexOut, null)).Message);
+                Assert.AreEqual(noLoop, Assert.ThrowsException<IncorrectTypeException>(() => call(f8, f8, NPTypeCode.Boolean, boolOut, null)).Message);
+
+                // Without dtype= a bool pair still runs the int8 loop (NumPy's 'bb->b').
+                using var boolPair = call(b1, trues, null, null, null);
+                Assert.AreEqual(NPTypeCode.SByte, boolPair.typecode, name);
+            }
+        }
+
         // =====================================================================
         // Bitwise dtype= — bool/int loops only (probed)
         // =====================================================================

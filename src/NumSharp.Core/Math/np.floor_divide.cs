@@ -17,6 +17,9 @@ namespace NumSharp
         /// <returns>y = floor(x1/x2). This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.floor_divide.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="IncorrectTypeException">A bool or complex <paramref name="dtype"/>: floor_divide has integer and
+        ///     float loops only, so NumPy's <c>No loop matching the specified signature and casting was found for ufunc
+        ///     floor_divide</c> (parity QA-53).</exception>
         public static NDArray floor_divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => floor_divide(s.x1, s.x2, s.@out, s.where, s.dtype), @out)

@@ -184,8 +184,9 @@ A port of `_convert_from_str`:
   `M8[ns]`), sized strings and non-native descriptors are fresh.
 - `DType` equality is STRUCTURAL (class + canonical byte order + unit: `M8[ns] != M8[s]`, `M8[1s] == M8[s]`,
   `>i4 != i4`, an explicit `'<'` equals `'='` on a little-endian host); the hash is class + canonical byte order, so
-  `hash(M8[ns]) == hash(M8[s])` as in NumPy (the C-type classes: above). `Equals(object/string/Type/NPTypeCode)` coerces
-  like `dtype.__eq__` (`d.Equals("garbage")` is false, never an error). `<`/`<=`/`>`/`>=` are NumPy's safe-cast ordering.
+  `hash(M8[ns]) == hash(M8[s])` as in NumPy (the C-type classes: above). `Equals(object/string/Type/NPTypeCode)` and
+  `==` / `!=` with a string coerce like `dtype.__eq__` (`d.Equals("garbage")` and `d == "garbage"` are false, never an
+  error; trap 1). `<`/`<=`/`>`/`>=` are NumPy's safe-cast ordering.
 - Null is NumPy's `None` wherever NumPy runs `PyArray_DescrConverter` (`_convert_from_any`'s first test,
   `PyArray_DescrFromType(NPY_DEFAULT_TYPE)`): every `np.dtype` overload (`np.dtype((DType)null)` is the float64
   singleton; `copy: true` / `metadata:` then apply as for any argument) and every `np.result_type` operand (a STRONG
@@ -231,8 +232,12 @@ public. They run once per call or per Python value; bulk moves keep their typed 
 
 ## Traps (pinned by tests)
 
-1. Never add `==(DType, string)` operators: a `null` literal binds them over `==(DType, DType)`, and every
-   `descr == null` inside the engine silently answers false. The coercing string comparison lives on `Equals(string)`.
+1. `==` / `!=` between a `DType` and a string (both operand orders) read a NULL string as the null descriptor: C# binds
+   `descr == null` and `null == descr` to them, not to `==(DType, DType)` (string is the better conversion target: an
+   implicit string → `DType` conversion exists, none the other way), and `descr == null` is the engine's no-descriptor
+   test. Any other string compares through `Equals(string)`, NumPy's `dtype.__eq__`: a string that is not a dtype is
+   unequal, never an error (`np.dtype('i4') == 'bogus'` is False), and a `StringDType` descriptor equals no string.
+   Never drop the null branch.
 2. C# scalar literals bind NumSharp's scalar → `NDArray` conversion before `params object[]`, so
    `np.result_type(int8_array, 300)` reaches the STRONG `(NDArray, NDArray)` overload; the weak rule is reachable through
    the dtype: `np.result_type(a.dtype, 300)`. A dtype STRING likewise binds string → `NDArray` (a character array) and is

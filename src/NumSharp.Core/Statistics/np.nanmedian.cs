@@ -22,7 +22,10 @@ namespace NumSharp
         ///     <c>StringDType</c> array, NumPy's Python object), or <c>np.float64(nan)</c> where NumPy's mean of NaN-like NAs
         ///     gives it.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="ValueError">The store <c>out[...] = result</c> (np.nanmedian's, after the computation): an
+        ///     <paramref name="out"/> the result does not broadcast to (<c>could not broadcast input array from shape (4,)
+        ///     into shape (3,)</c>) or a read-only one (<c>assignment destination is read-only</c>); for empty data,
+        ///     np.nanmean's add.reduce prologue texts (parity QA-31).</exception>
         /// <exception cref="TypeError">Fixed-width text data that NumPy's NaN test (or, for empty data, its <c>nanmean</c>)
         ///     refuses (its verbatim text). A <c>StringDType</c> array: the median's mean refuses the concatenated text;
         ///     along an axis shorter than 600 numpy.ma's median refuses first (<c>Unsuitable type StringDType() for
@@ -72,7 +75,10 @@ namespace NumSharp
         /// <exception cref="ValueError">An axis repeats; or a <c>StringDType</c> array's errors (see the one-axis overload: a
         ///     None-like NA in a sorted line, an empty input's mean, the store into <paramref name="out"/>).</exception>
         /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="ValueError">The store <c>out[...] = result</c> (np.nanmedian's, after the computation): an
+        ///     <paramref name="out"/> the result does not broadcast to (<c>could not broadcast input array from shape (4,)
+        ///     into shape (3,)</c>) or a read-only one (<c>assignment destination is read-only</c>); for empty data,
+        ///     np.nanmean's add.reduce prologue texts (parity QA-31).</exception>
         /// <exception cref="TypeError">Text data that NumPy's NaN test (or, for empty text data, its <c>nanmean</c>)
         ///     refuses (its verbatim text); a <c>StringDType</c> array's median, numpy.ma or keepdims refusals (see the
         ///     one-axis overload).</exception>

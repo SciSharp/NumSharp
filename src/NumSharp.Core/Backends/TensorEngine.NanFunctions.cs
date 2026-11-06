@@ -295,7 +295,10 @@ namespace NumSharp
         /// <exception cref="ValueError">An axis repeats; a <c>StringDType</c> array's errors (a None-like NA in a sorted
         ///     line, an empty input's mean, the store into out).</exception>
         /// <exception cref="AxisError">An axis is out of range.</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="ValueError">The store <c>out[...] = result</c> (np.nanmedian's, after the computation): an
+        ///     <paramref name="out"/> the result does not broadcast to (<c>could not broadcast input array from shape (4,)
+        ///     into shape (3,)</c>) or a read-only one (<c>assignment destination is read-only</c>); for empty data,
+        ///     np.nanmean's add.reduce prologue texts (parity QA-31).</exception>
         /// <exception cref="TypeError">Text data that NumPy's NaN test (or, for empty data, its <c>nanmean</c>)
         ///     refuses.</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> row result NumPy stores in an OBJECT

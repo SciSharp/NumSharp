@@ -378,11 +378,13 @@ namespace NumSharp
         ///     dimensions already agree it is <paramref name="from"/> itself (its strides and flags, WRITEABLE included); the
         ///     array form clears WRITEABLE on the result, this one does not.</returns>
         /// <exception cref="ValueError">A dimension of <paramref name="against"/> is negative (<c>all elements of broadcast
-        ///     shape must be non-negative</c>), checked first.</exception>
-        /// <exception cref="IncorrectShapeException"><paramref name="from"/> has more axes than <paramref name="against"/>,
-        ///     or an axis of a length other than 1 differs from the target's (<c>operands could not be broadcast together with
-        ///     remapped shapes [original->remapped]: (2,3) and requested shape (4,3)</c>), checked before any shape is
-        ///     built.</exception>
+        ///     shape must be non-negative</c>), checked after the 0-d target test and before the axes are compared.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="against"/> is 0-d and <paramref name="from"/> is not
+        ///     (<c>cannot broadcast a non-scalar to a scalar array</c>), <paramref name="from"/> has more axes than
+        ///     <paramref name="against"/> (<c>input operand has more dimensions than allowed by the axis remapping</c>), or an
+        ///     axis of a length other than 1 differs from the target's (<c>operands could not be broadcast together with
+        ///     remapped shapes [original-&gt;remapped]: (2,3)  and requested shape (4,3)</c>): NumPy's texts, checked before any
+        ///     shape is built (<see cref="ValidateBroadcastTo"/>).</exception>
         internal static Shape BroadcastTo(Shape from, Shape against)
         {
             ValidateBroadcastTo(from, against);
@@ -396,12 +398,22 @@ namespace NumSharp
         /// </summary>
         /// <param name="from">The source's shape; only its dimensions are read.</param>
         /// <param name="target">The requested shape; only its dimensions are read.</param>
+        /// <exception cref="IncorrectShapeException">The source does not broadcast to the target, with NumPy's three texts
+        ///     (parity QA-30): a 0-d target and a source with axes, <c>cannot broadcast a non-scalar to a scalar array</c>,
+        ///     checked first; a source with more axes than the target, <c>input operand has more dimensions than allowed
+        ///     by the axis remapping</c>; an axis of a length other than 1 that differs from the target's,
+        ///     <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (3,)  and requested
+        ///     shape (4,)</c> (NumPy's <c>convert_shape_to_string</c> shapes, two spaces before <c>and</c>). NumPy raises
+        ///     ValueError for all three; this is the house type of a broadcast refusal.</exception>
         /// <exception cref="ValueError">A dimension of <paramref name="target"/> is negative: NumPy's <c>all elements of
-        ///     broadcast shape must be non-negative</c>, checked first.</exception>
-        /// <exception cref="IncorrectShapeException">The source does not broadcast to the target (the text names both
-        ///     shapes' dimensions).</exception>
+        ///     broadcast shape must be non-negative</c>, checked before the axis comparisons.</exception>
         private static void ValidateBroadcastTo(Shape from, Shape target)
         {
+            // _broadcast_to's first test, `if not shape and array.shape`: a 0-d target takes only a 0-d source. It used to
+            // fall into the more-axes text below.
+            if (target.NDim == 0 && from.NDim != 0)
+                throw new IncorrectShapeException("cannot broadcast a non-scalar to a scalar array");
+
             // _broadcast_to refuses a negative target dimension before it broadcasts anything (`if any(size < 0 for size in
             // shape)`); a Shape accepts negatives (reshape's -1), and the stride-0 view built from one had a negative size
             // that broke every later read (parity QA-13).
@@ -409,21 +421,25 @@ namespace NumSharp
                 if (d < 0)
                     throw new ValueError("all elements of broadcast shape must be non-negative");
 
+            // Then np.nditer((array,), itershape=shape): npyiter_fill_axisdata refuses an operand with more axes than the
+            // iteration before it compares any length (op_axes is set, op_axes[0] is NULL), with its own text.
             if (from.NDim > target.NDim)
-                throw new IncorrectShapeException(
-                    $"operands could not be broadcast together with remapped shapes " +
-                    $"[original->remapped]: ({string.Join(",", from.dimensions)}) and requested shape ({string.Join(",", target.dimensions)})");
+                throw new IncorrectShapeException("input operand has more dimensions than allowed by the axis remapping");
 
-            // Right-align: iterate from the rightmost dimension
+            // Right-aligned: a source axis of length 1 stretches, any other length must equal the target's. NumPy's loop also
+            // lets an operand expand a target axis of length 1, then refuses that expansion (`itershape[idim] == 1 &&
+            // broadcast_shape[idim] != 1`): the same condition, and the same broadcast_error text.
             for (int i = 0; i < from.NDim; i++)
             {
                 long fromDim = from.dimensions[from.NDim - 1 - i];
                 long targetDim = target.dimensions[target.NDim - 1 - i];
 
                 if (fromDim != 1 && fromDim != targetDim)
+                    // broadcast_error with op_axes set and itershape given: each operand's convert_shape_to_string followed
+                    // by a space, then " and requested shape " — hence NumPy's two spaces before "and".
                     throw new IncorrectShapeException(
-                        $"operands could not be broadcast together with remapped shapes " +
-                        $"[original->remapped]: ({string.Join(",", from.dimensions)}) and requested shape ({string.Join(",", target.dimensions)})");
+                        "operands could not be broadcast together with remapped shapes [original->remapped]: " +
+                        ConvertShapeToString(from.dimensions) + "  and requested shape " + ConvertShapeToString(target.dimensions));
             }
         }
 
@@ -585,6 +601,27 @@ namespace NumSharp
                 dims = MultiIterDims(dims, shapes, pos, Math.Min(count, pos + MaxBroadcastArgs - 1));
             return Shape.Adopt(dims);
         }
+
+        /// <summary>
+        ///     The shape of NumPy's <c>np.broadcast(*args)</c> multi-iterator: ONE <c>PyArray_Broadcast</c> scan over every
+        ///     operand, with NumPy's mismatch text naming the two operands that disagree. Use it for <c>np.broadcast</c>
+        ///     itself; np.broadcast_arrays and np.broadcast_shapes are <see cref="BroadcastShape"/>.
+        /// </summary>
+        /// <param name="shapes">The operand shapes in argument order (null or empty: the scalar shape); only their dimensions
+        ///     are read.</param>
+        /// <returns>A C-ordered shape of the broadcast dimensions.</returns>
+        /// <exception cref="IncorrectShapeException">Two operands disagree on an axis (<c>shape mismatch: objects cannot be
+        ///     broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1 with shape (4,).</c>), the
+        ///     house type of a broadcast failure (NumPy's ValueError).</exception>
+        /// <exception cref="ValueError">The broadcast shape's element count does not fit a 64-bit integer
+        ///     (<c>broadcast dimensions too large.</c>).</exception>
+        /// <remarks>
+        ///     The difference from <see cref="BroadcastShape"/> shows only past 64 operands: NumPy's np.broadcast refuses them
+        ///     (<c>Need at least 0 and at most 64 array objects.</c>) while NumSharp's takes any number, so they stay ONE scan
+        ///     numbered from 0 here, where <c>_broadcast_shape</c> regroups them and numbers within each group.
+        /// </remarks>
+        internal static Shape MultiIterShape(Shape[] shapes)
+            => Shape.Adopt(MultiIterDims(null, shapes, 0, shapes?.Length ?? 0));
 
         /// <summary>
         ///     One <c>np.broadcast</c> call of <see cref="BroadcastShape"/>: <c>PyArray_Broadcast</c>'s scan over an optional

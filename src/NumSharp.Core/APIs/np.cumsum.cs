@@ -15,7 +15,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a read-only <paramref name="out"/> (<c>output array is read-only</c>); text a numeric loop must parse that does not parse.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the input (a 0-d input counts as 1-D).</exception>
         /// <exception cref="TypeError">Fixed-width text, or a string <paramref name="typeCode"/>, where NumPy's loop resolution refuses (its verbatim text); a <c>StringDType</c> input concatenates.</exception>
-        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape (<c>provided out is the wrong size for the accumulation.</c>).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape: NumPy's text for the path its accumulate takes (parity QA-31): NpyIter's <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (4,3)-&gt;(4,3) (3,4)-&gt;(3,4) </c> and its siblings along an axis of an N-D input (or with another out dtype), <c>provided out is the wrong size for the accumulation.</c> on the direct 1-D path (the flattened form included).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html. The facade holds only the matrix boundary; NumPy's whole call is <see cref="TensorEngine.ReduceCumAdd"/>.</remarks>
         [NDScoped]
         public static NDArray cumsum(NDArray arr, int? axis = null, DType typeCode = null, NDArray @out = null)

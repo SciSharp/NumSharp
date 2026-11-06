@@ -1465,56 +1465,12 @@ namespace NumSharp.Backends.Strings
         /// <remarks>
         ///     Every text is NumPy's as it prints it, quirks included: the <c>op_axes</c> error reports the entry index
         ///     <c>ndim - idim - 1</c> beside the axis value <c>idim</c>, and the non-broadcastable error's "remapped to" lists
-        ///     the out's extents in REVERSED axis order (NumPy builds it from <c>axes[ndim - idim - 1]</c>).
+        ///     the out's extents in REVERSED axis order (NumPy builds it from <c>axes[ndim - idim - 1]</c>). The port lives in
+        ///     <see cref="DefaultEngine.AccumulateIteratorShapeError"/>, shared with the numeric scans (parity QA-31): NumPy's
+        ///     accumulate iterator is the same for every dtype.
         /// </remarks>
         internal static IncorrectShapeException AccumulateIteratorShapeError(NDArray @out, NDArray input)
-        {
-            int ndim = input.ndim, ondim = @out.ndim;
-            long[] outDims = @out.Shape.dimensions ?? Array.Empty<long>();
-            long[] inDims = input.Shape.dimensions;
-            var bshape = new long[ndim];
-            Array.Fill(bshape, 1L);
-            // Operand 0, the out: its op_axes name axes 0 .. ndim-1, and an axis past its rank is invalid.
-            for (int idim = 0; idim < ndim; idim++)
-            {
-                if (idim >= ondim)
-                    return new IncorrectShapeException(
-                        $"Iterator input op_axes[0][{ndim - idim - 1}] (=={idim}) is not a valid axis of op[0], which has {ondim} dimensions ");
-                if (bshape[idim] == 1)
-                    bshape[idim] = outDims[idim];
-            }
-            // Operand 1, the input: an extent that neither matches nor is 1 does not broadcast.
-            for (int idim = 0; idim < ndim; idim++)
-            {
-                long b = bshape[idim], s = inDims[idim];
-                if (b == 1)
-                    bshape[idim] = s;
-                else if (b != s && s != 1)
-                {
-                    var sb = new StringBuilder("operands could not be broadcast together with remapped shapes [original->remapped]: ");
-                    var outRemapped = new long[ndim];
-                    Array.Copy(outDims, outRemapped, ndim);
-                    sb.Append(Shape.ConvertShapeToString(outDims)).Append("->").Append(Shape.ConvertShapeToString(outRemapped)).Append(' ');
-                    sb.Append(Shape.ConvertShapeToString(inDims)).Append("->").Append(Shape.ConvertShapeToString(inDims)).Append(' ');
-                    return new IncorrectShapeException(sb.ToString());
-                }
-            }
-            // The out never broadcasts: an extent of 1 where the broadcast is longer (NumPy fills the axes last first, and
-            // the text does not depend on which axis fails).
-            for (int idim = 0; idim < ndim; idim++)
-            {
-                if (bshape[idim] != 1 && outDims[idim] == 1)
-                {
-                    var reversed = new long[ndim];
-                    for (int k = 0; k < ndim; k++)
-                        reversed[k] = outDims[ndim - k - 1];
-                    return new IncorrectShapeException(
-                        $"non-broadcastable output operand with shape {Shape.ConvertShapeToString(outDims)} [remapped to " +
-                        $"{Shape.ConvertShapeToString(reversed)}] doesn't match the broadcast shape {Shape.ConvertShapeToString(bshape)}");
-                }
-            }
-            return null;
-        }
+            => DefaultEngine.AccumulateIteratorShapeError(@out.Shape.dimensions ?? Array.Empty<long>(), input.Shape.dimensions);
 
         /// <summary>
         ///     The view of an out's leading <paramref name="ndim"/> axes with every later axis at index 0 — the cells NumPy's

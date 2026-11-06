@@ -24,7 +24,13 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <exception cref="TypeError">Fixed-width text, or a text out (NumPy's maximum.reduce refuses the loop).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="ValueError">An <paramref name="out"/> that _ptp's <c>maximum.reduce(a, axis, out=out)</c>
+        ///     refuses in its prologue, before anything is computed: of the wrong rank (<c>output parameter for reduction
+        ///     operation maximum has the wrong number of dimensions: Found 2 but expected 1</c>) or with a length-1 axis
+        ///     where the result is longer (parity QA-31).</exception>
+        /// <exception cref="IncorrectShapeException">An <paramref name="out"/> whose axes do not broadcast with the
+        ///     result's (<c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3)
+        ///     (3,4) </c>), NumPy's ValueError under the house type of a broadcast failure.</exception>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a read-only out; an empty reduction (no identity).</exception>
         [NDScoped]
         public static NDArray ptp(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
@@ -54,7 +60,13 @@ namespace NumSharp
         /// <exception cref="ValueError">An axis appears twice ("duplicate value in 'axis'"); a <c>numpy.matrix</c> operand
         ///     whose result cannot be a matrix.</exception>
         /// <exception cref="TypeError">Fixed-width text, or a text out (NumPy's maximum.reduce refuses the loop).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> has the wrong shape.</exception>
+        /// <exception cref="ValueError">An <paramref name="out"/> that _ptp's <c>maximum.reduce(a, axis, out=out)</c>
+        ///     refuses in its prologue, before anything is computed: of the wrong rank (<c>output parameter for reduction
+        ///     operation maximum has the wrong number of dimensions: Found 2 but expected 1</c>) or with a length-1 axis
+        ///     where the result is longer (parity QA-31).</exception>
+        /// <exception cref="IncorrectShapeException">An <paramref name="out"/> whose axes do not broadcast with the
+        ///     result's (<c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3)
+        ///     (3,4) </c>), NumPy's ValueError under the house type of a broadcast failure.</exception>
         /// <remarks>NumPy's whole function is the engine's <see cref="TensorEngine.Ptp(NDArray, int[], NDArray, bool)"/>
         ///     (the np-layer dtype plan, P1b and PE); this applies the matrix rule and calls it.</remarks>
         [NDScoped]

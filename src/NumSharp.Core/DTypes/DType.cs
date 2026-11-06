@@ -815,8 +815,8 @@ namespace NumSharp
         ///     (e.g. <see cref="NPY_TYPES.NPY_CFLOAT"/>) throws <see cref="NotSupportedException"/> — the same
         ///     throw-on-invalid the string conversion has (a bad <c>"complex64"</c> string). Unlike the reference-type
         ///     spellings there is no <see langword="null"/> case: <see cref="NPY_TYPES"/> is a value type, which is also
-        ///     why it cannot reintroduce the <c>null</c>-literal binding hazard that bars <c>==(DType, string)</c>
-        ///     operators. The reverse direction is the <see cref="type_num"/> property (not an operator, to keep
+        ///     why it cannot meet the <c>null</c>-literal binding hazard that the <c>==(DType, string)</c> operators answer
+        ///     by reading a null string as the null descriptor. The reverse direction is the <see cref="type_num"/> property (not an operator, to keep
         ///     <c>DType</c>'s back-conversions to <see cref="System.Type"/>/<see cref="NPTypeCode"/> unambiguous).
         /// </summary>
         /// <exception cref="NotSupportedException">The number has no NumSharp dtype class on the current platform.</exception>
@@ -985,10 +985,53 @@ namespace NumSharp
                 : Meta is LegacyBuiltinDTypeMeta { IsNumPyNumeric: true } ? HashCode.Combine(kind, itemsize, CanonicalByteOrder)
                 : HashCode.Combine(Meta.type_num, CanonicalByteOrder);
 
-        // NOTE: there are deliberately NO `==(DType, string)` operators. A `null` literal would bind them (`descr == null`
-        // silently became "false" for a null descriptor inside the engine), so the coercing string comparison lives on
-        // Equals(string) only; `dtype == "i4"` still works through the implicit string→DType conversion (and, like that
-        // conversion, raises on a string that is not a dtype).
+        /// <summary>
+        ///     NumPy's <c>dtype == str</c>: the string is converted to a descriptor and compared structurally, and a string
+        ///     that is not a dtype compares UNEQUAL instead of raising (<c>arraydescr_richcompare</c> returns
+        ///     <c>NotImplemented</c> when the conversion fails, so Python falls back to identity):
+        ///     <c>np.dtype('int32') == 'i4'</c> is True, <c>== 'bogus'</c>, <c>== ''</c> and <c>== 'i4,i4'</c> are False.
+        /// </summary>
+        /// <param name="left">The descriptor, or null.</param>
+        /// <param name="right">A NumPy dtype string. A null string is the NULL DESCRIPTOR here, not a string (see the
+        ///     remarks).</param>
+        /// <returns>True when both are null, or when <paramref name="right"/> denotes a descriptor equal to
+        ///     <paramref name="left"/> (<see cref="Equals(string)"/>).</returns>
+        /// <remarks>
+        ///     FOOTGUN this overload is built around: C# binds <c>descr == null</c> HERE, not to
+        ///     <c>==(DType, DType)</c> — string is the better conversion target for a null literal, because an implicit
+        ///     string → <see cref="DType"/> conversion exists and none the other way. <c>descr == null</c> is how the engine
+        ///     tests for a missing descriptor, so a null string must answer exactly what a null descriptor answers: equal to
+        ///     a null descriptor and to nothing else. Before this overload existed a string bound <c>==(DType, DType)</c>
+        ///     through that implicit conversion, which raises on a string that is not a dtype (parity QA-46). A
+        ///     <c>StringDType</c> descriptor does not coerce (NumPy: <c>np.dtype('T') == 'T'</c> is False), as
+        ///     <see cref="Equals(object)"/> answers.
+        /// </remarks>
+        public static bool operator ==(DType left, string right)
+            => right is null ? left is null : left is not null && left.Equals(right);
+
+        /// <summary>NumPy's <c>dtype != str</c>: the negation of <see cref="op_Equality(DType, string)"/> (True for a
+        ///     string that is not a dtype; a null string is the null descriptor).</summary>
+        /// <param name="left">The descriptor, or null.</param>
+        /// <param name="right">A NumPy dtype string; null is the null descriptor.</param>
+        /// <returns>False when both are null or when <paramref name="right"/> denotes an equal descriptor; True
+        ///     otherwise.</returns>
+        public static bool operator !=(DType left, string right) => !(left == right);
+
+        /// <summary>NumPy's reflected <c>str == dtype</c> (<c>str.__eq__</c> returns <c>NotImplemented</c>, so Python asks the
+        ///     dtype): the same answer as <see cref="op_Equality(DType, string)"/>, with the operands swapped (it also
+        ///     takes <c>null == descr</c>, which C# binds here for the same reason).</summary>
+        /// <param name="left">A NumPy dtype string; null is the null descriptor.</param>
+        /// <param name="right">The descriptor, or null.</param>
+        /// <returns>True when both are null, or when <paramref name="left"/> denotes a descriptor equal to
+        ///     <paramref name="right"/>.</returns>
+        public static bool operator ==(string left, DType right) => right == left;
+
+        /// <summary>NumPy's reflected <c>str != dtype</c>: the negation of <see cref="op_Equality(string, DType)"/>.</summary>
+        /// <param name="left">A NumPy dtype string; null is the null descriptor.</param>
+        /// <param name="right">The descriptor, or null.</param>
+        /// <returns>False when both are null or when <paramref name="left"/> denotes an equal descriptor; True
+        ///     otherwise.</returns>
+        public static bool operator !=(string left, DType right) => !(right == left);
 
         /// <summary>Structural equality (null-safe).</summary>
         public static bool operator ==(DType left, DType right)

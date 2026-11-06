@@ -98,6 +98,15 @@ makes is part of the answer:
   order across positions changes (np.cumsum of a (100, 100, 100) C array along axis 0: 0.6 ms by rows against 2.3 ms
   for the per-position walk; NumPy, which walks per position, 6.8 ms). float16, bool, char, decimal and complex128 keep
   the per-position kernels (complex128's product is NumPy's contracted loop_scalar form).
+- `out=` of the wrong shape (parity QA-31; `DefaultEngine.AccumulateOutShapeError`): the text depends on
+  `PyUFunc_Accumulate`'s path. Its outer ITERATOR (an input of more than one dimension after CheckAxis's ravel, a loop
+  dtype not equivalent to the input's or the out's, an unaligned operand, an out overlapping the input under
+  MAY_SHARE_BOUNDS) raises NpyIter's `Iterator input op_axes[0][k] (==i) is not a valid axis of op[0], which has n
+  dimensions `, `operands could not be broadcast together with remapped shapes [original->remapped]: (4,3)->(4,3)
+  (3,4)->(3,4) ` or `non-broadcastable output operand with shape (3,1) [remapped to (1,3)] ...` (reversed);
+  the direct 1-D path `provided out is the wrong size for the accumulation.`. `AccumulateIteratorShapeError` is shared
+  with the StringDType scan. Open (QA-54, pinned): the outs NumPy's accumulate ACCEPTS (more trailing out axes, a
+  broadcast input, an empty input or out on the direct path) are refused here; the StringDType scan accepts them.
 - Gates: `Math/np.cumsum.RowScan.Test.cs` (every vector dtype × C / F / permuted / 4-D × every axis, byte for byte
   against the per-position route, with NaN, ±inf, -0.0 and wrapping integers), `Math/UfuncResultLayout.Test.cs`,
   `Math/NDArray.cumprod.Test.cs`, the `scan` tier and the array-object tiers' scan rows.
@@ -338,6 +347,10 @@ np.nanmax of an ndarray is `np.fmax.reduce`), so the keywords are `PyUFunc_Reduc
   parsed, a sequence refused; without it a mask raises "... does not have an identity, so to use a where mask one has to
   specify 'initial'" and an empty axis "zero-size array to reduction operation ...";
 - the result starts as the initial value or each output's first element (an unsafe cast).
+- `np.ptp`'s `out=` meets the same prologue before anything is computed (`_ptp`'s first statement is
+  `maximum.reduce(a, axis, out=out)`; parity QA-31): read-only, the axes, the rank text naming `maximum`, the iterator's
+  shapes, so a misshapen out is reported before an empty reduction's no-identity error. Its closing subtract into an
+  integer out raises np.copyto's text where NumPy raises subtract's UFuncTypeError (QA-55, pinned).
 - ONE overload per function: NumPy's `(a, axis, out, keepdims, initial, where)` and `ndarray.max/min(axis, out,
   keepdims, initial, where)`, nothing else (no positional `(a, axis, keepdims)` shim, no `dtype=` extension, no generic
   `np.amax<T>` / `a.max<T>()`, no `NDArray.amax` / `NDArray.amin`: they resolved only through

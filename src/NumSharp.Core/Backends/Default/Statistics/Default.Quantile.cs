@@ -195,16 +195,19 @@ namespace NumSharp.Backends
         ///     NaN is then copied in with <c>np.copyto</c> (same_kind from the data). An interpolating method runs
         ///     <c>_lerp(..., out=out)</c>: <c>add</c> casts its output into out (same_kind) and broadcasts it (out may be
         ///     larger), and <c>subtract(..., dtype=type(out.dtype))</c> computes the t &gt;= 0.5 branch in out's dtype. The
-        ///     nan forms assign their result (<c>out[...] = result</c>: broadcast, unsafe). np.median / np.nanmedian keep
-        ///     the result-then-copy rule (NumPy's median writes through <c>np.mean(..., out=out)</c>, not ported), and so
-        ///     do the NumSharp-only decimal and complex data and a decimal out.</para>
+        ///     nan forms assign their result (<c>out[...] = result</c>: broadcast, unsafe), np.nanmedian included. np.median
+        ///     writes through <c>np.mean(part[indexer], out=out)</c>: mean's add.reduce prologue checks the out against the
+        ///     partition's middle slice before anything is computed (<see cref="MedianOutChecks"/>, NumPy's texts), and the
+        ///     result is then copied into that out under same_kind (NumPy's mean casts unsafely). The NumSharp-only decimal
+        ///     and complex data and a decimal out keep the result-then-copy rule for every other function (parity
+        ///     QA-31).</para>
         /// </remarks>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="q"/> is null.</exception>
         /// <exception cref="AxisError">An axis is out of range.</exception>
         /// <exception cref="ValueError">An axis repeats.</exception>
         /// <exception cref="IndexError">keepdims with an out of too few dimensions (NumPy's <c>too many indices for
         ///     array</c>), or with a reduced axis of length 0 (<c>index 0 is out of bounds for axis 0 with size 0</c>) —
-        ///     np.median's and np.nanmedian's legacy out included (<see cref="UReduce"/> indexes it).</exception>
+        ///     np.median's and np.nanmedian's out included (<see cref="UReduce"/> indexes it).</exception>
         /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0: <c>_ureduce</c>'s
         ///     merge cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape
         ///     (0,newaxis)</c>), before q's rank and the method (the nan forms answer an empty input before it).</exception>
@@ -220,16 +223,24 @@ namespace NumSharp.Backends
         ///     ndarray.take</c>) or read-only (<c>WRITEBACKIFCOPY base is read-only</c>); an interpolating method's out that
         ///     is read-only (<c>output array is read-only</c>) or does not broadcast (<c>operands could not be broadcast
         ///     together with shapes ...</c>, <c>non-broadcastable output operand with shape ... doesn't match the broadcast
-        ///     shape ...</c>); the nan forms' assignment (<c>could not broadcast input array from shape ... into shape
-        ///     ...</c>, <c>assignment destination is read-only</c>).</exception>
+        ///     shape ...</c>); the nan forms' assignment, np.nanmedian's too (<c>could not broadcast input array from shape
+        ///     ... into shape ...</c>, <c>assignment destination is read-only</c>); np.median's out, which mean's add.reduce
+        ///     prologue refuses before anything is computed (<c>output array is read-only</c>, <c>output parameter for
+        ///     reduction operation add has the wrong number of dimensions: Found 2 but expected 1</c>, a length-1 axis where
+        ///     the result is longer); an empty input's out under the nan forms (np.nanmean's same prologue, against the
+        ///     input).</exception>
+        /// <exception cref="IncorrectShapeException">np.median's out, or an empty input's under the nan forms, whose axes do
+        ///     not broadcast with the result's: add.reduce's iterator text (<c>operands could not be broadcast together with
+        ///     remapped shapes [original-&gt;remapped]: (3,)-&gt;(3) (1,4) </c>; parity QA-31).</exception>
         /// <exception cref="TypeError">A selection method's out whose dtype does not cast safely to the data's
         ///     (<c>Cannot cast array data from dtype('float64') to dtype('float32') according to the rule 'safe'</c>; "scalar"
         ///     for a 0-d out), or a slice holding NaN copied into an out the data does not cast to under same_kind (NumPy's
         ///     <c>np.copyto</c> text).</exception>
         /// <exception cref="TypeError">An interpolating method's out that the lerp's dtype does not cast to under
         ///     same_kind: NumPy's UFuncTypeError <c>Cannot cast ufunc 'add' output from dtype('float64') to dtype('int64')
-        ///     with casting rule 'same_kind'</c> (the type every ufunc out= route raises). The legacy routes: an
-        ///     <paramref name="out"/> of another shape than the result.</exception>
+        ///     with casting rule 'same_kind'</c> (the type every ufunc out= route raises). The legacy routes (decimal or
+        ///     complex data, a decimal out; never np.median / np.nanmedian): an <paramref name="out"/> of another shape than
+        ///     the result.</exception>
         [NDScoped]
         internal NDArray QuantileCompute(
             NDArray a, double[] q, int[] axisArr, NDArray @out,
@@ -263,12 +274,21 @@ namespace NumSharp.Backends
             UReduced prologue = UReduce(a, axisArr, @out, keepdims);
 
             // The out NumPy's reduction writes into: keepdims' `out[(Ellipsis,) + index_out]` from the prologue (each reduced
-            // axis taken at 0). np.median's out (np.mean's rules), the NumSharp-only decimal / complex data and a decimal out
-            // keep the legacy result-then-copy rule instead (see the remarks): the prologue still indexed the view, so an out
-            // NumPy cannot index is NumPy's IndexError, but the result is copied into the caller's out.
+            // axis taken at 0). The NumSharp-only decimal / complex data and a decimal out keep the legacy result-then-copy rule
+            // instead (see the remarks): the prologue still indexed the view, so an out NumPy cannot index is NumPy's
+            // IndexError, but the result is copied into the caller's out. legacyOut also keeps np.median / np.nanmedian off
+            // the nan forms' apply_along_axis layout below; their OUT goes its own way (medianRoute).
             bool legacyOut = medianMean || a.typecode == NPTypeCode.Decimal || a.typecode == NPTypeCode.Complex
                              || (@out is not null && @out.typecode == NPTypeCode.Decimal);
-            NDArray target = legacyOut ? @out : prologue.Target;
+            // np.median writes through `mean(part[indexer], axis, out=out)` (route 5: mean's add.reduce prologue checks the
+            // out against the partition's middle slice, MedianOutChecks, before anything is computed), np.nanmedian through
+            // `out[...] = result` (route 3, the nan forms' assignment: broadcast, unsafe cast, np.copyto's texts) — each into
+            // the out _ureduce handed it, for every dtype (parity QA-31; both used to compare the result's shape with the
+            // caller's whole out, with np.quantile's weighted-path text).
+            int medianRoute = !medianMean ? 0 : ignoreNaN ? 3 : 5;
+            NDArray target = legacyOut && medianRoute == 0 ? @out : prologue.Target;
+            if (medianRoute == 5 && @out is not null)
+                MedianOutChecks(prologue);
 
             // `_quantile_ureduce_func`'s first statement refuses a q of rank above 2, after the axis checks (and, for the
             // nan forms, after the empty-input return above). The nan forms reach it per slice and only for a slice that
@@ -391,6 +411,9 @@ namespace NumSharp.Backends
             {
                 NDArray nanResult = NewArray(outTypeCode, resultShape, true);
                 FillWithNaN(nanResult, outTypeCode);
+                // An out receives it where np.median's mean writes (route 5: the out the prologue checked).
+                if (@out is not null && medianRoute != 0)
+                    return FinishResult(nanResult, a, axisArr, keepdims, qNdim, @out, target, medianRoute, staged: null, outerDims);
                 return FinalizeResult(nanResult, a, axisArr, keepdims, qNdim, @out);
             }
 
@@ -415,8 +438,8 @@ namespace NumSharp.Backends
                 throw new TypeError("Partition index must be integer");
 
             // How NumPy writes the result into out (see the remarks): 0 none, 1 take, 2 lerp, 3 the nan forms' assignment,
-            // 4 the legacy copy.
-            int outRoute = @out is null ? 0 : legacyOut ? 4 : ignoreNaN ? 3 : discrete ? 1 : 2;
+            // 4 the legacy copy, 5 np.median's mean.
+            int outRoute = @out is null ? 0 : medianRoute != 0 ? medianRoute : legacyOut ? 4 : ignoreNaN ? 3 : discrete ? 1 : 2;
 
             // ── An array with no element (an empty line, or no line at all). ──
             // NumPy's partition validates nothing then (partition_prep_kth_array skips an array of size 0); the take or the
@@ -755,6 +778,62 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     np.median's out checks, NumPy's statements: <c>_median</c> ends with <c>mean(part[indexer], axis=axis,
+        ///     out=out)</c>, so the out <c>_ureduce</c> handed it (<see cref="UReduced.Target"/>: the caller's out, or keepdims'
+        ///     <c>out[(Ellipsis,) + index_out]</c>) meets np.mean's add.reduce prologue over the MIDDLE SLICE of the partition —
+        ///     the data with its reduced axis cut to the one or two central elements — before anything is computed: a
+        ///     read-only out, then its rank and the reduction iterator's shapes, with NumPy's texts naming ufunc 'add'
+        ///     (<c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3) (1,4) </c>).
+        /// </summary>
+        /// <param name="prologue">The <c>_ureduce</c> prologue of the call (its data, the axis it reduces, its out view; the
+        ///     out is not null).</param>
+        /// <exception cref="ValueError">A read-only out (<c>output array is read-only</c>), an out of the wrong rank, or one with
+        ///     a length-1 axis where the result is longer (mean's prologue texts).</exception>
+        /// <exception cref="IncorrectShapeException">An out whose axes do not broadcast with the result's (NumPy's
+        ///     remapped-shapes ValueError, the house type of a broadcast failure).</exception>
+        /// <exception cref="TypeError">An out that is a C# scalar turned into a 0-d array (<c>return arrays must be of
+        ///     ArrayType</c>).</exception>
+        /// <remarks>
+        ///     NumPy never builds the slice's shape from the reduced axis alone: <c>part.shape[axis] // 2</c> picks the middle,
+        ///     an odd length keeps <c>slice(index, index + 1)</c> (one element) and an even one <c>slice(index - 1, index +
+        ///     1)</c> (two; NONE for an empty axis, whose slice is <c>[-1:1]</c>). <c>axis=None</c> partitions the flattened data
+        ///     and reduces its axis 0. The checks read shapes only, so the slice is never materialized
+        ///     (<see cref="ReductionArguments.ValidateOperands(long[], bool[], bool, NDArray, NDArray, string)"/>).
+        /// </remarks>
+        private static void MedianOutChecks(UReduced prologue)
+        {
+            NDArray data = prologue.Data;
+            long[] partDims;
+            bool[] flags;
+            if (prologue.Axis is null)
+            {
+                // `part = partition(a, kth, axis=None)` flattens; `axis = 0`.
+                partDims = new[] { MedianMiddleExtent(data.size) };
+                flags = new[] { true };
+            }
+            else
+            {
+                int axis = prologue.Axis.Value;
+                partDims = (long[])data.Shape.dimensions.Clone();
+                partDims[axis] = MedianMiddleExtent(partDims[axis]);
+                flags = new bool[partDims.Length];
+                flags[axis] = true;
+            }
+
+            // _mean's umr_sum(arr, axis, dtype, out, keepdims=False): the argument converters, then the wrapper's rank check
+            // and the iterator's shapes.
+            ReductionArguments.ValidateParsedArguments(prologue.Target, null);
+            ReductionArguments.ValidateOperands(partDims, flags, keepdims: false, prologue.Target, null, "add");
+        }
+
+        /// <summary>
+        ///     The length of np.median's middle slice along its reduced axis: <c>part[indexer]</c> with <c>index = n // 2</c>.
+        /// </summary>
+        /// <param name="n">The reduced axis's length.</param>
+        /// <returns>1 for an odd length, 2 for an even one, 0 for an empty axis (<c>slice(-1, 1)</c> of nothing).</returns>
+        private static long MedianMiddleExtent(long n) => n == 0 ? 0 : n % 2 == 1 ? 1 : 2;
+
+        /// <summary>
         ///     Fills <paramref name="result"/> with the dtype's NaN — used for the empty-axis
         ///     median path (NumPy returns nan for the median of an empty slice). Decimal has
         ///     no NaN and no NumPy analogue here, so it falls back to 0.
@@ -780,6 +859,23 @@ namespace NumSharp.Backends
         ///     widths preserved, everything else → float64). The q dimension is dropped to
         ///     match NumPy's <c>return np.nanmean(a, axis, out, keepdims)</c> short-circuit.
         /// </summary>
+        /// <param name="a">The empty data (some dimension is 0).</param>
+        /// <param name="axisArr">The reduced axes, or null for every axis (an empty tuple reduces none).</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="out">The caller's out (np.nanmean's: never a <c>_ureduce</c> view), or null.</param>
+        /// <returns>The NaN result (a read-only 0-d scalar when every axis is reduced), or <paramref name="out"/> after the
+        ///     store.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">An axis repeats; a read-only out; an out of the wrong rank or with a length-1 axis
+        ///     where the result is longer (np.nanmean's add.reduce prologue texts, parity QA-31).</exception>
+        /// <exception cref="IncorrectShapeException">An out whose axes do not broadcast with the result's (add.reduce's
+        ///     remapped-shapes text).</exception>
+        /// <exception cref="TypeError">An out that is a C# scalar turned into a 0-d array (<c>return arrays must be of
+        ///     ArrayType</c>).</exception>
+        /// <exception cref="ArgumentException">A backstop the prologue makes unreachable: the out's dimensions are not the
+        ///     result's.</exception>
+        /// <exception cref="InvalidCastException">The NaN does not cast to the out's dtype under np.copyto's same_kind rule (an
+        ///     integer out).</exception>
         private NDArray BuildEmptyNanResult(NDArray a, int[] axisArr, bool keepdims, NDArray @out)
         {
             NPTypeCode tc =
@@ -816,6 +912,16 @@ namespace NumSharp.Backends
 
             if (@out is not null)
             {
+                // NumPy answers an empty input with np.nanmean(a, axis, out=out, keepdims=keepdims), whose np.sum / np.mean
+                // checks the CALLER's out in add.reduce's prologue against the input itself (no _ureduce view): read-only,
+                // then the out's rank and the iterator's shapes, with NumPy's texts (parity QA-31; this used to compare the
+                // result's shape with np.quantile's weighted-path text). The axes were normalized above.
+                var reducedFlags = new bool[nd];
+                for (int i = 0; i < nd; i++)
+                    reducedFlags[i] = reduceAll || axes.Contains(i);
+                ReductionArguments.ValidateParsedArguments(@out, null);
+                ReductionArguments.ValidateOperands(a.Shape.dimensions, reducedFlags, keepdims, @out, null, "add");
+                // Backstop: after the prologue the out has the result's dimensions exactly.
                 if (!result.Shape.dimensions.SequenceEqual(@out.Shape.dimensions))
                     throw new ArgumentException(
                         $"Wrong shape of argument 'out', shape={string.Join(",", result.Shape.dimensions)} is required; " +
@@ -1205,11 +1311,14 @@ namespace NumSharp.Backends
         /// <param name="qNdim">How many leading axes of the result are q's.</param>
         /// <param name="out">The caller's out, or null.</param>
         /// <param name="target">The view of out the reduction writes (keepdims), or out itself.</param>
-        /// <param name="outRoute">0 none, 1 take, 2 lerp, 3 the nan forms, 4 legacy.</param>
+        /// <param name="outRoute">0 none, 1 take, 2 lerp, 3 the nan forms (np.nanmedian too), 4 legacy, 5 np.median's mean
+        ///     (its shapes already checked by <see cref="MedianOutChecks"/>).</param>
         /// <param name="staged">The staged data (the NaN-slice check of the take route), or null for an empty array.</param>
         /// <param name="keptDims">How many kept axes the data has (0: NumPy's <c>arr[-1, ...]</c> is a scalar).</param>
         /// <returns>The result, or <paramref name="out"/> itself.</returns>
         /// <exception cref="ArgumentException">The legacy route: out of another shape.</exception>
+        /// <exception cref="InvalidCastException">The legacy route or np.median's: the result's dtype does not cast to the
+        ///     out's under np.copyto's same_kind rule (np.copyto's text).</exception>
         /// <exception cref="ValueError">The nan forms' assignment does not broadcast, or out is read-only.</exception>
         /// <exception cref="TypeError">The take route: a slice holding NaN is copied into an out the data's dtype does not
         ///     cast to under same_kind (NumPy's <c>np.copyto(result, arr[-1, ...], where=slices_having_nans)</c>: <c>Cannot
@@ -1248,6 +1357,12 @@ namespace NumSharp.Backends
                         StoreNumPyScalar(target, resultRaw);
                     else
                         UnmanagedStorage.Copyto(target, resultRaw, NPY_CASTING.NPY_UNSAFE_CASTING, null);
+                    return @out;
+                case 5:
+                    // np.median: `mean(part[indexer], axis, out=out)` wrote the out _ureduce handed it (out itself, or keepdims'
+                    // view). MedianOutChecks ran mean's prologue over it before the computation, so it has the result's
+                    // dimensions exactly; the value goes in under np.copyto's same_kind rule (the legacy rule's cast, kept).
+                    UnmanagedStorage.Copyto(target, resultRaw, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
                     return @out;
                 default:
                     return FinalizeResult(resultRaw, a, axisArr, keepdims, qNdim, @out);

@@ -24,8 +24,16 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">Fixed-width text, or a text out: NumPy's maximum.reduce refuses the loop with its
         ///     verbatim text.</exception>
         /// <exception cref="ValueError">A read-only out (NumPy parses out first), an empty reduction (no identity), or a
-        ///     StringDType subtraction NumPy refuses.</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        ///     StringDType subtraction NumPy refuses; an out of the wrong rank or with a length-1 axis where the result is
+        ///     longer: maximum.reduce's texts (<c>output parameter for reduction operation maximum has the wrong number of
+        ///     dimensions: Found 2 but expected 1</c>, parity QA-31), checked before anything is computed.</exception>
+        /// <exception cref="IncorrectShapeException">An out whose axes do not broadcast with the result's: maximum.reduce's
+        ///     iterator text (<c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]:
+        ///     (3,)-&gt;(3) (3,4) </c>), NumPy's ValueError under the house type of a broadcast failure.</exception>
+        /// <exception cref="TypeError">An out that is a C# scalar turned into a 0-d array (NumPy's <c>return arrays must be
+        ///     of ArrayType</c>).</exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape (a backstop: the
+        ///     prologue above refuses every such out first).</exception>
         /// <remarks>
         ///     Moved from the public <c>np.ptp(a, int? axis, out, keepdims)</c> by the np-layer dtype plan's P1b, statement for
         ///     statement; the facade's <c>np.amax</c> / <c>np.amin</c> calls became the engine members they reach for a
@@ -46,6 +54,12 @@ namespace NumSharp.Backends
             if (Strings.NDStringUfuncs.VStringReduces("ptp", a, axis, null, @out))
                 return Strings.NDVStringStatistics.Ptp(a, axis, @out, keepdims);
             Strings.NDStringUfuncs.ThrowIfReduce("ptp", a, axis, @out);
+            // `umr_maximum(a, axis, None, out, keepdims)` is _ptp's first statement, so maximum.reduce's prologue checks the
+            // out before anything is computed — read-only, the axis, its rank, the reduction iterator's shapes — with NumPy's
+            // texts naming ufunc 'maximum' (parity QA-31; the store used to compare the result's dimensions itself, with a
+            // text of its own). A misshapen out is therefore reported before an empty reduction's "no identity".
+            if (@out is not null)
+                ReductionArguments.Validate(a, axis, keepdims, @out, null, "maximum");
 
             var maxRes = a.TensorEngine.ReduceAMax(a, axis, keepdims);
             var minRes = a.TensorEngine.ReduceAMin(a, axis, keepdims);
@@ -68,8 +82,14 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError">An axis is out of range (a 0-d input has no axis for a tuple to name).</exception>
         /// <exception cref="ValueError">An axis appears twice ("duplicate value in 'axis'").</exception>
-        /// <exception cref="TypeError">Fixed-width text, or a text out (NumPy's loop refusal).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> has the wrong shape.</exception>
+        /// <exception cref="TypeError">Fixed-width text, or a text out (NumPy's loop refusal); an out that is a C# scalar
+        ///     turned into a 0-d array (<c>return arrays must be of ArrayType</c>).</exception>
+        /// <exception cref="ValueError">A read-only out, or one of the wrong rank or with a length-1 axis where the result is
+        ///     longer: maximum.reduce's prologue texts (parity QA-31), before the axes are reduced.</exception>
+        /// <exception cref="IncorrectShapeException">An out whose axes do not broadcast with the result's (maximum.reduce's
+        ///     <c>operands could not be broadcast together with remapped shapes ...</c>).</exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> has the wrong shape (a backstop: the prologue refuses
+        ///     every such out first).</exception>
         /// <remarks>Moved from the public tuple-axis <c>np.ptp</c> by the np-layer dtype plan's P1b, statement for
         ///     statement; its re-entries into the one-axis overload call the one-axis member above, through virtual
         ///     dispatch since phase PE made both of them DefaultEngine's overrides of
@@ -90,6 +110,11 @@ namespace NumSharp.Backends
             }
             Strings.NDStringUfuncs.ThrowIfReduce("ptp", a, axis, @out);
             if (axis is null) return Ptp(a, (int?)null, @out, keepdims);
+            // _ptp's maximum.reduce(a, axis, out=out, keepdims) checks the out first, in its prologue's order: read-only, then
+            // the tuple's axes, then the out's rank and the iterator's shapes (parity QA-31). The one-axis and every-axis
+            // delegations below run the same check again, which passes.
+            if (@out is not null)
+                ReductionArguments.Validate(a, axis, keepdims, @out, null, "maximum");
 
             // maximum.reduce's tuple axis (PyUFunc_GenericReduction's tuple branch, then PyUFunc_Reduce's flags): every
             // axis normalized first — NumPy's AxisError, with no 0-d exception for a tuple — then "duplicate value in

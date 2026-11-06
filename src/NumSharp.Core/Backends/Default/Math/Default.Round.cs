@@ -91,8 +91,38 @@ namespace NumSharp.Backends
         /// <c>same_kind</c> back to bool (message reproduced verbatim, naming multiply/divide by sign).</exception>
         /// <exception cref="TypeError">An <paramref name="out"/> whose dtype the loop result cannot reach by
         /// a <c>same_kind</c> cast (via <see cref="ValidateOutCast"/>).</exception>
+        /// <exception cref="ValueError">An <paramref name="out"/> of another SIZE than <paramref name="nd"/>:
+        /// PyArray_Round's <c>invalid output shape</c>, checked first (parity QA-31). Integer data at <c>decimals &gt;= 0</c>
+        /// copies into the out with np.copyto's statement (<c>assignment destination is read-only</c>, <c>could not broadcast
+        /// input array from shape (3,4) into shape (4,3)</c>); complex data refuses an out its parts do not broadcast to
+        /// with that assignment's text.</exception>
+        /// <exception cref="InvalidCastException">Integer data at <c>decimals &gt;= 0</c> into an out its dtype does not
+        /// cast to under same_kind (np.copyto's text, the house type of that refusal).</exception>
+        /// <exception cref="ArgumentException">Float data at <c>decimals != 0</c> whose out does not broadcast with it:
+        /// <c>multiply(a, 10**decimals, out)</c>'s iterator texts, the Python float listed as <c>()</c> (<c>operands could not
+        /// be broadcast together with shapes (3,4) () (4,3) </c>; the house type of a ufunc out's shape refusal).</exception>
         public override NDArray Round(NDArray nd, int decimals, DType dtype = null, NDArray @out = null)
         {
+            // PyArray_Round's first statement: an out of another SIZE (not shape) is refused before anything else, with its
+            // own ValueError (parity QA-31; the ufunc routes below used to report their broadcast texts instead).
+            if (@out is not null && @out.size != nd.size)
+                throw new ValueError("invalid output shape");
+            // Integer data rounded to decimals >= 0 is a copy, not a ufunc: `PyArray_AssignArray(out, a, NULL,
+            // NPY_DEFAULT_ASSIGN_CASTING)`, np.copyto's statement — its self-copy shortcut, `assignment destination is
+            // read-only`, the same_kind cast and `could not broadcast input array from shape (3,4) into shape (4,3)`. A
+            // dtype= request (NumSharp's convenience, which NumPy's round lacks) keeps the ufunc route below.
+            NPTypeCode dataType = nd.GetTypeCode;
+            if (@out is not null && dtype is null && decimals >= 0 && (dataType.IsInteger() || dataType == NPTypeCode.Char))
+            {
+                UnmanagedStorage.Copyto(@out, nd, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
+                return @out;
+            }
+            // Complex data takes PyArray_Round's complex branch, whose `out.real = a.real.round(decimals)` assigns into the
+            // out: a shape the parts do not broadcast to is that assignment's refusal, before any ufunc meets the out.
+            if (@out is not null && dataType == NPTypeCode.Complex)
+                Shape.AssignmentBroadcastStrides(@out.Shape.dimensions, nd.Shape.dimensions, nd.Shape.strides, "input array",
+                    stripLeadingUnitAxes: true);
+
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "rint", nd, null, @out);
             // NumPy's round: decimals == 0 is rint; a positive count first multiplies by 10**decimals (a float64 scalar,
             // so multiply(<U3, float64) has no loop); a negative count divides by 10**-decimals (divide refuses text).
@@ -132,7 +162,8 @@ namespace NumSharp.Backends
 
             // Integer/char with POSITIVE decimals is an IDENTITY (no fractional part to remove, and — unlike the
             // negative branch — no float round-trip, so a huge int64 is returned untouched). Preserves the integer
-            // dtype; an out= receives the identity through the same same_kind write-back the other ufuncs use.
+            // dtype. An out= took PyArray_Round's AssignArray route at the top (parity QA-31), so the out branch here is
+            // reached only through NumSharp's dtype= convenience, which this test excludes: kept as the ufunc write-back.
             if (isInt && !typeCode.HasValue && decimals > 0)
             {
                 if (@out is null)
@@ -178,6 +209,14 @@ namespace NumSharp.Backends
             try
             {
                 ValidateOutCast(work, @out.typecode, op1Name);
+                // `op1(a, 10**|decimals|, out)` meets the out next: NpyIter's broadcast over (a, the Python float, out), so
+                // a refusal lists THREE operands, the scale as `()` (parity QA-31: the copy below listed two). The scale's
+                // value does not matter here, only its 0-d shape.
+                if (dataType != NPTypeCode.Complex)
+                {
+                    using var scale = NDArray.Scalar(1.0);
+                    ResolveUfuncIterationShape(nd.Shape, new[] { nd, scale }, @out, null);
+                }
                 return ExecuteUnaryOp(core, UnaryOp.Positive, work, @out, null);
             }
             finally

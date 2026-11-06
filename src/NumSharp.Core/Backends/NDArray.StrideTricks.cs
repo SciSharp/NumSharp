@@ -55,8 +55,12 @@ namespace NumSharp
         ///     elements of a stretched view are one memory location, so a write through one element writes every element
         ///     that aliases it (NumPy warns on such a write); copy first to write independently. Do not dispose a result
         ///     without checking it is not the caller's own operand.</returns>
-        /// <exception cref="IncorrectShapeException">The arrays do not broadcast together
-        ///     (<see cref="Shape.Broadcast(Shape[])"/>), checked before any view is built.</exception>
+        /// <exception cref="IncorrectShapeException">The arrays do not broadcast together, checked before any view is built,
+        ///     with NumPy's text naming the first pair that disagrees (<c>shape mismatch: objects cannot be broadcast to a
+        ///     single shape.  Mismatch is between arg 0 with shape (3,) and arg 1 with shape (4,).</c>,
+        ///     <see cref="Shape.BroadcastShape"/>; parity QA-30).</exception>
+        /// <exception cref="ValueError">The broadcast shape's element count does not fit a 64-bit integer
+        ///     (<c>broadcast dimensions too large.</c>).</exception>
         /// <remarks>
         ///     <para>
         ///     NumPy builds each stretched view with <c>_broadcast_to(array, shape, readonly=False)</c>, which sets
@@ -79,6 +83,10 @@ namespace NumSharp
             var inputShapes = new Shape[len];
             for (i = 0; i < len; i++)
                 inputShapes[i] = ndArrays[i].Shape;
+            // `shape = _broadcast_shape(*args)` is NumPy's first statement, and its refusal is the text a mismatch reports
+            // (np.broadcast's PyArray_Broadcast, naming the pair that disagrees; parity QA-30). The per-operand layouts still
+            // come from Shape.Broadcast, which cannot refuse after this check and keeps every view's strides as they were.
+            Shape.BroadcastShape(inputShapes);
             var outputShapes = Shape.Broadcast(inputShapes);
 
             var list = new NDArray[len];

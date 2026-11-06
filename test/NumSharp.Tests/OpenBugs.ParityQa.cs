@@ -53,79 +53,6 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-30 — np.broadcast_to's refusal texts are not NumPy's
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's broadcast_to refuses through NpyIter, whose texts carry two quirks: the remapped-shapes list ends with a
-        ///     space before " and requested shape " (two spaces) and a one-element shape prints as a Python tuple,
-        ///     <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (3,)  and requested
-        ///     shape (4,)</c>; a source with more axes than the target is a different message, <c>input operand has more
-        ///     dimensions than allowed by the axis remapping</c>. <c>Shape.ValidateBroadcastTo</c> (View/Shape.Broadcasting.cs)
-        ///     formats its own text with <c>string.Join</c>: one space, <c>(3)</c> / <c>(4)</c>, and the remapped-shapes
-        ///     text for the more-axes case too. np.nditer and the gufunc guard already reproduce NumPy's formatter
-        ///     (<c>np.nditer.cs</c>, <c>GufuncGuard.cs</c>). The exception type is the house <c>IncorrectShapeException</c>
-        ///     for broadcast refusals, so only the texts are pinned.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA30")]
-        public void ParityQa_BroadcastTo_RefusalTexts_ShouldBeNumPys()
-        {
-            using var row = np.zeros(new Shape(3));
-            using var grid = np.zeros(new Shape(2, 3));
-
-            Action lengthMismatch = () => np.broadcast_to(row, new Shape(4)).Dispose();
-            Action moreAxes = () => np.broadcast_to(grid, new Shape(3)).Dispose();
-
-            lengthMismatch.Should().Throw<Exception>().Which.Message.Should().Be(
-                "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)  and requested shape (4,)");
-            moreAxes.Should().Throw<Exception>().Which.Message.Should().Be(
-                "input operand has more dimensions than allowed by the axis remapping");
-
-            // np.broadcast_arrays / np.broadcast: NumPy 2.x names the two operands that clash (two spaces after the period).
-            using var four = np.zeros(new Shape(4));
-            Action arrays = () => np.broadcast_arrays(row, four);
-            arrays.Should().Throw<Exception>().Which.Message.Should().Be(
-                "shape mismatch: objects cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1 with shape (4,).");
-        }
-
-        // ------------------------------------------------------------------
-        // QA-31 — out= of the wrong shape: np.cumsum (axis), np.ptp, np.median, np.nanmedian refuse with texts NumPy has not
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy's refusals of an <c>out=</c> whose shape does not fit come from the iterator its statements run:
-        ///     <c>np.cumsum(a, 0, out=(4, 3))</c> (accumulate over an axis) and <c>np.ptp(a, 0, out=(3,))</c>
-        ///     (<c>maximum.reduce</c>) and <c>np.median(a, 0, out=(3,))</c> (<c>np.mean</c> of the partition) raise
-        ///     <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: …</c>; np.nanmedian
-        ///     raises <c>could not broadcast input array from shape (4,) into shape (3,)</c>. Only the FLAT cumsum keeps
-        ///     <c>provided out is the wrong size for the accumulation.</c>. NumSharp uses that flat text for the axis cumsum
-        ///     too, its own <c>out has wrong shape; expected=[4] got=[3]</c> for ptp (<c>PtpOut</c>), and np.quantile's
-        ///     <c>Wrong shape of argument 'out', shape=4 is required; got shape=3.</c> (right for quantile / percentile) for
-        ///     median and nanmedian (<c>p70</c>). Everything else in the 26-call out= sweep matches.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA31")]
-        public void ParityQa_OutShapeRefusals_CumsumAxisPtpMedian_ShouldUseNumPysTexts()
-        {
-            using var a = np.arange(12.0).reshape(3, 4);
-            using var wrong43 = np.zeros(new Shape(4, 3));
-            using var wrong3 = np.zeros(new Shape(3));
-
-            Action cumsum = () => np.cumsum(a, 0, @out: wrong43);
-            Action cumprod = () => np.cumprod(a, 0, @out: wrong43);
-            Action ptp = () => np.ptp(a, 0, @out: wrong3);
-            Action median = () => np.median(a, 0, @out: wrong3);
-
-            cumsum.Should().Throw<Exception>().Which.Message.Should().Be(
-                "operands could not be broadcast together with remapped shapes [original->remapped]: (4,3)->(4,3) (3,4)->(3,4) ");
-            cumprod.Should().Throw<Exception>().Which.Message.Should().Be(
-                "operands could not be broadcast together with remapped shapes [original->remapped]: (4,3)->(4,3) (3,4)->(3,4) ");
-            ptp.Should().Throw<Exception>().Which.Message.Should().Be(
-                "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3) (3,4) ");
-            median.Should().Throw<Exception>().Which.Message.Should().Be(
-                "operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3) (1,4) ");
-        }
-
-        // ------------------------------------------------------------------
         // QA-41 — finfo's repr and the error texts follow the current culture
         // ------------------------------------------------------------------
 
@@ -162,61 +89,72 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QA-46 — DType == / != a string that names no dtype throws instead of answering
+        // QA-54 — np.cumsum / np.cumprod refuse outs NumPy's accumulate accepts
         // ------------------------------------------------------------------
 
         /// <summary>
-        ///     NumPy's <c>arraydescr_richcompare</c> converts the other operand and, when that fails, clears the error and
-        ///     returns <c>NotImplemented</c>, so Python falls back to identity: <c>np.dtype('int32') == 'bogus'</c> is False and
-        ///     <c>!= 'bogus'</c> True (likewise <c>''</c>, the structured spelling <c>'i4,i4'</c>, a number, a list). NumSharp's
-        ///     <c>DType</c> operators take two <c>DType</c>s, so a string operand goes through the implicit string → DType
-        ///     conversion first, which parses and throws: <c>NotSupportedException: data type 'bogus' not understood</c> (and
-        ///     NumSharp's structured-dtype refusal for <c>'i4,i4'</c>) from both <c>==</c> and <c>!=</c> (<c>rp16</c>,
-        ///     <c>rp17</c>). <c>DType.Equals("bogus")</c> already answers False, and every parseable spelling compares as NumPy's.
+        ///     Found 2026-11-06 while fixing QA-31 (scratchpad probe p168_numpy.py): NumPy's <c>PyUFunc_Accumulate</c> accepts
+        ///     several outs whose shape is not the accumulation's. On its ITERATOR path (op_axes naming the input's axes) an
+        ///     out with MORE dimensions whose leading ones fit is accepted, its extra trailing axes staying at index 0
+        ///     (<c>np.cumsum(a(3,4), 0, out=zeros((3,4,1)))</c>); an input of extent 1 broadcasts against a longer out, and
+        ///     along the accumulated axis only the input's extent is written (<c>np.cumsum(ones((3,1)), 0, out=(3,4))</c> fills
+        ///     every column with 1, 2, 3; <c>np.cumsum(ones((1,4)), 0, out=(3,4))</c> writes row 0 and leaves the rest). On
+        ///     its DIRECT 1-D path an empty input or an empty out returns the out untouched before the dimensions are compared
+        ///     (<c>np.cumsum(zeros(0), out=zeros(5))</c>). NumSharp's numeric scans refuse all of them with <c>provided out is
+        ///     the wrong size for the accumulation.</c> (<c>DefaultEngine.AccumulateOutShapeError</c>); its StringDType
+        ///     accumulation (<c>NDVStringReduction.CumSum</c>) already accepts them.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA46")]
-        public void ParityQa_DTypeEqualityWithAnUnparseableString_ShouldAnswerNotThrow()
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA54")]
+        public void ParityQa_CumsumCumprod_AcceptTheOutsNumPysAccumulateAccepts()
         {
-            var int32 = np.dtype("int32");
+            using var a = np.arange(12.0).reshape(3, 4);
 
-            Func<bool> equal = () => int32 == "bogus";
-            Func<bool> notEqual = () => int32 != "bogus";
+            using var deeper = np.full(new Shape(3, 4, 1), -1.0);
+            np.cumsum(a, 0, @out: deeper);
+            deeper[":, :, 0"].ToArray<double>().Should().Equal(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0, 15.0, 18.0, 21.0);
 
-            equal.Should().NotThrow().Which.Should().BeFalse();
-            notEqual.Should().NotThrow().Which.Should().BeTrue();
+            using var columns = np.full(new Shape(3, 4), -1.0);
+            using var col = np.ones(new Shape(3, 1));
+            np.cumsum(col, 0, @out: columns);
+            columns.ToArray<double>().Should().Equal(1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0);
+
+            using var firstRow = np.full(new Shape(3, 4), -1.0);
+            using var row = np.ones(new Shape(1, 4));
+            np.cumprod(row, 0, @out: firstRow);
+            firstRow.ToArray<double>().Should().Equal(1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0);
+
+            using var untouched = np.full(new Shape(5), -1.0);
+            using var empty = np.zeros(new Shape(0));
+            ReferenceEquals(np.cumsum(empty, @out: untouched), untouched).Should().BeTrue();
+            untouched.ToArray<double>().Should().OnlyContain(x => x == -1.0);
         }
 
         // ------------------------------------------------------------------
-        // QA-53 — floor_divide / remainder / fmod / mod with dtype=complex raise NotSupportedException
+        // QA-55 — np.median / np.ptp: the out's dtype rule is not NumPy's
         // ------------------------------------------------------------------
 
         /// <summary>
-        ///     Found 2026-11-06 while fixing QA-27: none of floor_divide, remainder (mod) and fmod has a complex loop, so a
-        ///     complex <c>dtype=</c> request finds no loop and NumPy 2.4.2 raises <c>TypeError: No loop matching the
-        ///     specified signature and casting was found for ufunc floor_divide</c> (<c>remainder</c> for np.mod, its alias;
-        ///     <c>fmod</c>). NumSharp reaches the kernel and throws <c>NotSupportedException: Operation FloorDivide not
-        ///     supported for Complex</c> (<c>Mod</c>, <c>Fmod</c>). np.divmod already raises NumPy's text for the same request
-        ///     (<c>DivModNoLoopText</c>), and a complex OPERAND without <c>dtype=</c> already raises NumPy's generic no-loop
-        ///     TypeError for all four.
+        ///     Found 2026-11-06 while fixing QA-31 (scratchpad probe p169_numpy.py): NumPy's np.median writes its out through
+        ///     <c>np.mean(..., out=out)</c>, whose add.reduce and <c>true_divide(..., casting='unsafe')</c> store into an out of
+        ///     any kind: <c>np.median(arange(12.).reshape(3, 4), axis=1, out=zeros(3, int64))</c> is <c>[1, 5, 9]</c> (1.5, 5.5,
+        ///     9.5 truncated). NumSharp copies its median into the out under np.copyto's same_kind rule and raises
+        ///     <c>InvalidCastException: Cannot cast array data from dtype('float64') to dtype('int64') according to the rule
+        ///     'same_kind'</c>. np.ptp into an integer out is NumPy's subtract refusal, <c>UFuncTypeError: Cannot cast ufunc
+        ///     'subtract' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'</c> (a TypeError), where
+        ///     NumSharp raises np.copyto's InvalidCastException text. (np.nanmedian's unsafe store is NumPy's since QA-31.)
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA53")]
-        public void ParityQa_ComplexDtypeRequest_FloorDivideRemainderFmod_ShouldRaiseNumPysNoLoopTypeError()
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QA55")]
+        public void ParityQa_MedianAndPtp_IntegerOut_FollowNumPysCastRules()
         {
-            using var f = np.array(new[] { 2.0, 1.0 });
+            using var a = np.arange(12.0).reshape(3, 4);
 
-            Action floorDivide = () => np.floor_divide(f, f, dtype: NPTypeCode.Complex);
-            Action remainder = () => np.remainder(f, f, dtype: NPTypeCode.Complex);
-            Action fmod = () => np.fmod(f, f, dtype: NPTypeCode.Complex);
-            Action mod = () => np.mod(f, f, dtype: NPTypeCode.Complex);
+            using var medians = np.zeros(new Shape(3), np.int64);
+            np.median(a, 1, medians);
+            medians.ToArray<long>().Should().Equal(1L, 5L, 9L);
 
-            floorDivide.Should().Throw<TypeError>()
-                .WithMessage("No loop matching the specified signature and casting was found for ufunc floor_divide");
-            remainder.Should().Throw<TypeError>()
-                .WithMessage("No loop matching the specified signature and casting was found for ufunc remainder");
-            fmod.Should().Throw<TypeError>()
-                .WithMessage("No loop matching the specified signature and casting was found for ufunc fmod");
-            mod.Should().Throw<TypeError>()
-                .WithMessage("No loop matching the specified signature and casting was found for ufunc remainder");
+            using var ranges = np.zeros(new Shape(4), np.int64);
+            new Action(() => np.ptp(a, 0, ranges)).Should().Throw<TypeError>()
+                .WithMessage("Cannot cast ufunc 'subtract' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'");
         }
     }
 }

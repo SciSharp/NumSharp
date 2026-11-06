@@ -139,7 +139,13 @@ namespace NumSharp
         /// <exception cref="ValueError">An axis repeats; or, for a <c>StringDType</c> array, a None-like NA in a sorted line,
         ///     an empty reduced axis or a read-only out.</exception>
         /// <exception cref="AxisError">An axis is out of range.</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> that np.median's closing <c>mean(part[indexer], out=out)</c>
+        ///     refuses in its add.reduce prologue, before anything is computed: read-only (<c>output array is read-only</c>),
+        ///     of the wrong rank (<c>output parameter for reduction operation add has the wrong number of dimensions: Found 2
+        ///     but expected 1</c>) or with a length-1 axis where the result is longer (parity QA-31).</exception>
+        /// <exception cref="IncorrectShapeException">An <paramref name="out"/> whose axes do not broadcast with the
+        ///     result's: the prologue's iterator text over the partition's middle slice (<c>operands could not be broadcast
+        ///     together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3) (1,4) </c>), NumPy's ValueError.</exception>
         /// <exception cref="TypeError">Text data or a text out that NumPy's closing mean refuses (its verbatim
         ///     text).</exception>
         /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0.</exception>

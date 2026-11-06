@@ -59,6 +59,9 @@ Exception
 | Failure | NumSharp | NumPy | Message (NumPy's text) |
 |---------|----------|-------|------------------------|
 | Shapes that do not broadcast (`a + b`) | `IncorrectShapeException` | `ValueError` | `operands could not be broadcast together with shapes (3,4) (3,)` |
+| A shape `np.broadcast_to` cannot stretch to | `IncorrectShapeException` | `ValueError` | `operands could not be broadcast together with remapped shapes [original->remapped]: (3,)  and requested shape (4,)` |
+| Arrays `np.broadcast_arrays` cannot broadcast together | `IncorrectShapeException` | `ValueError` | `shape mismatch: objects cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1 with shape (4,).` |
+| A reduction's `out=` of the wrong rank (`np.max(a, 0, out)`, `np.ptp`, `np.median`) | `ValueError` | `ValueError` | `output parameter for reduction operation maximum has the wrong number of dimensions: Found 2 but expected 1` |
 | A reshape to another size | `IncorrectShapeException` | `ValueError` | `cannot reshape array of size 6 into shape (4,)` |
 | An axis out of range | `AxisError` | `AxisError` | `axis 5 is out of bounds for array of dimension 2` |
 | An index out of range | `IndexError` | `IndexError` | `index 5 is out of bounds for axis 0 with size 3` |
