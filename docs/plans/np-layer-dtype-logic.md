@@ -152,8 +152,18 @@ loops are calls of the binary ufunc's own add kernels - one inner-loop call per 
 variant for several rows, which gains row blocks and an x86 next-block prefetch - so NumPy's NaN operand order has
 one copy; the same bytes over 840 cases, np.average over an axis pair 1.91–1.96×, no cell of the 35 slower. PA2 is
 done. PA2a, PA2b and PA2c landed on `strings` together, picked onto `3420f43a` and re-gated there; another session's
-uncommitted edits of four of their files had held them in a scratch worktree. Next, the owner's call (not asked
-yet): P10 item 6, PA5, PA6, the fixes of the pinned divergences.
+uncommitted edits of four of their files had held them in a scratch worktree.
+
+The owner's divergence round of 2026-11-06 (D24) decided the pinned divergences, each fix a D4 commit on `strings`,
+measured equal or faster on every hot path it touches: NL1 (`d7177a61`: a masked copy into StringDType converts only
+the elements the mask selects, sparse masks 1.1–62× faster), NL2 (`c39a29bc`: complex np.median's NaN check), NL4
+(`b0d2d390`: np.polyval's first product in x's dtype), NL13 (`f56fc38e`: the max / min family follows the matrix
+method), NL10 (`5ea19a4c`: np.einsum_path's IndexErrors), NL5 (`a5b0ff85`: np.nested_iters' converters and
+np.einsum's out extent and explicit path in NumPy's order), NL9 (`4f16e102`: np.polyder's recursion) and NL11
+(`4a680b5d`: np.isscalar, 1.7–3.7× faster as well) are fixed; NL12 was fixed the same week by the parity QA (QA-30).
+NL3 is a documented divergence by decision (`095b2395`: np.prod keeps its SIMD lanes, 3.7–16× NumPy). NL5's fix found
+NL14 (np.einsum's `out=` rules), pinned. Open: NL7 and P10 item 6 (with the class-boundary re-prototype), NL8 and NL14;
+PA5 and PA6 are deferred.
 
 **The owner's decisions of 2026-10-31** ([§5](#5-decisions-for-the-owner), D7 to D22, asked with each option's code):
 - P7 is dropped. D7's first answer ("Rule on the result") gave it a design; in the step round the same day the owner
@@ -174,8 +184,9 @@ yet): P10 item 6, PA5, PA6, the fixes of the pinned divergences.
 Order of the work left (decided 2026-10-31 in the step round, D22): the merge (done); P6b (done 2026-11-01); P8 (done
 2026-11-01: the rename `838fccfd`, the 12 functions that compute `c046d2ca` .. `d0c7a582`, the array object's functions
 `690948f3` .. `75788048`); P9 (done 2026-11-01: `72415a24`, `55a277e5`); P10 (items 1 to 5 done 2026-11-02:
-`38bcad09`, `96411eec`, `a5fd6535`, `614b1a8a`, `4e7fca46`; item 6, the three `NDArray` homes, open); PA3; PA2. Later:
-PA5, PA6 and the fixes of the pinned divergences (`OpenBugs.NpLayer.cs`, NL1 to NL13).
+`38bcad09`, `96411eec`, `a5fd6535`, `614b1a8a`, `4e7fca46`; item 6, the three `NDArray` homes, open); PA3; PA2; the
+pinned divergences (D24: nine fixed, NL3 kept as a documented divergence; NL7, NL8 and NL14 open). Later: PA5 and PA6
+(deferred, D24); P10 item 6 and NL7 with the class-boundary re-prototype.
 
 Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
@@ -620,6 +631,7 @@ The owner's answers (2026-10-24; D1 again twice on 2026-10-28), and what they me
 | D21 | 2026-10-31, step 12 (the divergences found on the way): "Create an open bug reproducing the problem/s and defer to tackle them later" | Each is an `[OpenBugs]` reproduction in `test/NumSharp.Tests/OpenBugs.NpLayer.cs`, every expected value NumPy 2.4.2's: NL1 to NL6 (`f2eee1d1`) and B3 as NL7 (`efc50d14`, once P7 was dropped); NL8 (`2cad8823`), found by the merge's Debug gate; NL9 and NL10 (`401703b5`), found by P8's moves; NL11 (`845f99f2`), found by P8's snapshot tool. Their fixes are deferred; each will be a D4 commit. |
 | D22 | 2026-10-31, the step round: the rebase, P6b, P8, P9, P10 and P7b-d "Accept and start" (P7b-d dropped later, D7); P7a "Skip"; PA3 "Defer until after P7"; PA2 "Defer until after PA3"; PA6 "Defer until after PA5" | The order of the work: the rebase; P6b; P8; P9; P10; PA3 (where P7 stood); PA2. PA5 and PA6 later (D20). |
 | D23 | 2026-11-05, the PA round: "continue but for each you must prove that its faster and if its not after some effort then we should not land the change ... i'll approve each task individually"; on its pages PA3a "Approve, faster only"; PA3b "Approve, only if faster", "and complete full dtype and edge cases parity"; PA2a "Approve" and PA2b + PA2c "Approve both", each with the same parity note | Each task lands only where it is measured faster: old and new route switchable in one process, CPUs 2 and 4 pinned, best of 9 interleaved rounds after warm-up; faster above 1.05× old, slower below 0.95× old re-measured once. A call site still slower after the effort keeps its code. PA3b's moved code lands only where it is faster (identical code moved is not). Order: PA3a, PA3b, PA2a, PA2b, PA2c. |
+| D24 | 2026-11-06, the divergence round: NL3 "Keep SIMD lanes (Misaligned)"; the fixes "NL1 masked StringDType copy", "NL2 + NL4 complex NaN / inf", "Error parity NL5/10/12/13" and "NL9 + NL11" (NL8 not chosen); PA5 / PA6 "Defer both"; P10 item 6 and NL7 "With the re-prototype" | NL1, NL2, NL4, NL5, NL9, NL10, NL11 and NL13 are fixed, each a D4 commit measured equal or faster where it touches a hot path (NL12 was fixed meanwhile by the parity QA's QA-30); NL3 becomes a `[Misaligned]` documented divergence (`Math/np.prod.LaneOrder.Test.cs`); NL8 stays pinned; PA5 and PA6 wait; P10 item 6 and NL7 wait for the class-boundary re-prototype. |
 
 The recommendations as written before the answers:
 
@@ -1732,43 +1744,35 @@ D8's pass is P8 and D9's answer P9 (decided 2026-10-31).
 
 PA5 and PA6 wait here (D20, D22).
 
-The divergences pinned as `[OpenBugs]` in `test/NumSharp.Tests/OpenBugs.NpLayer.cs` (D21), each to be fixed in a D4
-commit of its own, with its oracle excuse narrowed where it has one:
-- NL1: np.copyto into a StringDType array under `where=` converts the whole source (`CopytoAssignVStrings`), so a
-  ufunc with a StringDType `out=` and `where=` (np.logical_and / or / xor / not) can raise "invalid value encountered
-  in bool to string cast" on the uninitialized masked-off slots of its temporary.
-- NL2: complex np.median skips `_median_nancheck` (excused today as "complex median ... [documented non-contractual]").
-- NL3: the flat float32 / float64 np.prod multiplies in SIMD lane order where NumPy's multiply reduce is sequential -
-  for C-contiguous arrays too, not only for the F-ordered and reversed ones `d84021b8` recorded (excused today by the
-  unbounded "reduction summation/two-pass precision (algorithm order)" rule).
-- NL4: 1-D np.polyval starts its Horner loop in `result_type(p, x)` instead of `zeros_like(x)`.
-- NL5: np.nested_iters' converters run after its axes and operand checks (and its no-operand error is an
-  `ArgumentException`); np.einsum's `out=` extent check runs after the cast check; np.einsum does not check an explicit
-  path for completeness.
-- NL6: np.array of a ragged jagged C# array truncates (or throws `IndexOutOfRangeException`). Fixed 2026-11-03 by the
-  parity QA's QA-45 (`78b122b0`: `NDArray.DiscoverJaggedShape`); its test is untagged.
-- NL7: B3, the boundary depth reaching user callbacks (P7 dropped).
-- NL8: np.sum's add.reduce step (`AccumulateDouble` / `AccumulateSingle`, `*acc = *acc + s`) leaves the NaN of
-  NaN + NaN to the JIT: a Debug build keeps the pairwise sum's NaN where NumPy keeps the accumulator's (a Release build
-  happens to agree with NumPy). The fix chooses the accumulator's NaN explicitly.
-- NL9: np.polyder counts `p.size - 1` terms per order where NumPy's `n = len(p) - 1` takes the first axis, and computes m
-  products where NumPy's recursion computes m + 1 (the last, at m == 0, discarded): a 2-D p, a 0-d p (len()'s TypeError
-  at every order) and an N-D p whose extra product does not broadcast. The fix ports the recursion.
-- NL10: np.einsum_path with an ellipsis and too few operands lets .NET's `IndexOutOfRangeException` escape where
-  NumPy's `_parse_einsum_input` raises `IndexError: list index out of range`.
-- NL11: np.isscalar answers False for a `Half` (NumPy's float16 scalar) and a `BigInteger` (a Python int), where NumPy
-  answers True, and True for a `Type` object of a primitive (`typeof(int)`), where NumPy's `isscalar(int)` is False. A
-  0-d NDArray answering True is NumSharp's convention (a 0-d array is what a NumPy scalar becomes), not part of it.
-- NL12: np.broadcast_to's refusals are not NumPy's texts (a 1-tuple without its comma, one space before "and requested
-  shape" where NumPy has two, and the shape text where NumPy says "input operand has more dimensions than allowed by the
-  axis remapping"); np.mean / np.var / np.std with a `where=` mask that does not broadcast reach it. The `reduce_kwargs`
-  tier does not generate those cells for the three (`REDUCE_KWARGS_NL12`).
-- NL13: the max / min family with a numpy.matrix operand applies the plain reduction where NumPy calls the matrix method:
-  `initial=` / `where=` compute where NumPy raises the method's TypeError, and a matrix `out=` meets the plain rank check
-  where NumPy returns `out[0, 0]`. np.sum's family applies the method's rules since P10 item 1.
-- NL3 covers the axis products too (a row multiplied in SIMD lane order; the `out=` route computes the same plain
-  product); np.prod with `initial=` or a mask runs NumPy's sequential loop. The `reduce_kwargs` tier skips np.prod's
-  plain inexact cells.
+The divergences pinned as `[OpenBugs]` in `test/NumSharp.Tests/OpenBugs.NpLayer.cs` (D21), as the owner decided them
+(D24), each fix a D4 commit with its tests moved next to its API's:
+- NL1, fixed (`d7177a61`): np.copyto into StringDType under `where=` converts only the elements the mask selects
+  (`CopytoIntoVStringSelected`), as NumPy's masked transfer casts only the selected runs.
+- NL2, fixed (`c39a29bc`): complex np.median runs `_median_nancheck` with NumPy's complex order; the oracle's excuse is
+  gone.
+- NL3, kept as a `[Misaligned]` documented divergence (`095b2395`): the float32 / float64 np.prod (flat, along an axis,
+  `out=`) multiplies in SIMD lane order, 3.7–16× NumPy, where NumPy's reduce is sequential; `initial=` or `where=`
+  run NumPy's loop. The `reduce_kwargs` tier skips np.prod's plain inexact cells.
+- NL4, fixed (`b0d2d390`): 1-D np.polyval takes its first product in x's dtype (`zeros_like(x)`).
+- NL5, fixed (`a5b0ff85`): np.nested_iters runs its converters first and raises ValueError without an operand; np.einsum
+  refuses an `out=` extent before any cast check and plans an explicit path first.
+- NL6, fixed by the parity QA's QA-45 (`78b122b0`); its test is untagged.
+- NL7, open: B3, the boundary depth reaching user callbacks; it waits for the class-boundary re-prototype (D24).
+- NL8, open (not chosen in D24): np.sum's add.reduce step leaves the NaN of NaN + NaN to the JIT (a Debug build keeps
+  the pairwise sum's NaN where NumPy keeps the accumulator's).
+- NL9, fixed (`4f16e102`): np.polyder is NumPy's recursion (`len(p)`, the first axis; m + 1 products, the last
+  discarded but still raising; a 0-d p is len()'s TypeError at every order).
+- NL10, fixed (`5ea19a4c`): np.einsum_path raises NumPy's `IndexError` for an ellipsis without its operand and for an
+  explicit path past the operands.
+- NL11, fixed (`4a680b5d`): np.isscalar answers True for `Half`, `BigInteger`, `Char8` and `DateTime64` and False for a
+  `Type`.
+- NL12, fixed by the parity QA's QA-30 (`7a531362`); the `reduce_kwargs` tier still does not generate its cells
+  (`REDUCE_KWARGS_NL12`).
+- NL13, fixed (`f56fc38e`): the max / min family with a numpy.matrix operand follows `matrix.max` / `matrix.min`, and
+  np.nanmax / np.nanmin take NumPy's subclass branch.
+- NL14, open (found by NL5's fix): np.einsum's `out=` rules are c_einsum's minus its broadcast whatever `optimize=` says
+  (an output label of extent 1 is not broadcast up to the out; with `optimize=` NumPy hands the out to its last
+  contraction step).
 
 The ten array-object members `TensorEngine` shipped in 0.70.0 (E7) stay (decided 2026-10-31, D13): removing them
 breaks a subclass or a direct caller for a layering reason alone.
@@ -1790,10 +1794,45 @@ breaks a subclass or a direct caller for a layering reason alone.
 
 ## 9. State log
 
+- **2026-11-06, the divergence round (D24): NL1, NL2, NL4, NL5, NL9, NL10, NL11 and NL13 fixed, NL3 kept as a
+  documented divergence, NL14 pinned.** Eleven commits on `strings`, `d7177a61` .. `da8c1714` on `a88da1d0`.
+  - NL1 `d7177a61`: np.copyto into StringDType under `where=` converts only the selected elements (no broadcast: the
+    flat positions; a broadcast source: the elements some selected output reads, `Any()` over the broadcast axes), so a
+    masked-off element is never read; sparse masks 1.1–62× faster, dense equal, a 1,840-case differential snapshot
+    identical. Five versions were measured; the first ran 0.16–0.25× on a broadcast row.
+  - NL2 `c39a29bc`: complex np.median of data holding a NaN returns the element NumPy's complex order puts last
+    (`_median_nancheck`), per slice along an axis; the oracle's complex-median excuse is gone.
+  - NL4 `b0d2d390`: 1-D np.polyval's first product runs in x's dtype (`[1+1j]` at `[inf]` is nan+1j; `[-0.0]` at an int
+    x is +0.0).
+  - NL13 `f56fc38e`: `MatrixExtreme` (the method's keyword TypeErrors, `ReducedInto` for `out=`) and `MatrixNanExtreme`
+    (NumPy's subclass branch inside a plain region: the boundary's caller audit caught a first version that passed
+    matrices from call to call); the plain path is the same code. `6096c3c3` moved its inexact test into the array
+    object's `NDArray.ReplaceNaN` (NumPy's `_replace_nan`) after ratchet R1 flagged it in the facade.
+  - NL10 `5ea19a4c`: `ExpandEllipses`' `list index out of range`, the contraction loop's `pop index out of range`.
+  - NL5 `a5b0ff85`: the converters first, ValueError without an operand; `EinsumPlan.OutConflicts` before the casts
+    (allocation-free: a first version allocated per call and measured 2% slower on 4×4 calls), an explicit path planned
+    first; `da8c1714` formats that refusal's extents culture-invariantly (the analyzer rule NDW020, added on
+    `strings` while the round waited to land). NL14 pinned.
+  - NL9 `4f16e102`: the recursion unrolled; the discarded m == 0 product is skipped for a 1-D numeric p, where it cannot
+    raise.
+  - NL11 `4a680b5d`: the cheapest tests first (`IsPrimitive`, exact type compares, then the one class test); a first
+    version with four more switch arms measured 9–13% slower, this one 1.7–3.7× faster than before.
+  - NL3 `095b2395`: three `[Misaligned]` tests over inputs whose lane answer is the same on every vector width; the
+    reductions rule and the oracle's ledger name the decision.
+  - Measured (two builds in one process, both side orders, geo-mean new / old): np.einsum 4×4 / 8×8 with and without
+    `out=` 0.988–0.997, np.nested_iters 1.000, np.max / np.nanmax 1.002–1.004, np.polyder 0.975–0.998, np.isscalar
+    1.7–3.7×. The harness's second side runs 10–18% slower on a 40-µs matmul cell whichever build it is (position,
+    not code).
+  - Gates (Release, on `a88da1d0`): NumSharp.Tests 23,341 / 23,340 on net10.0 / net8.0, 23,335 under
+    `NUMSHARP_DEBUG_GUARD_PAGES=1` (the four pool-counting tests fail there by design; no crash); the oracle project
+    419 passed, 2 skipped (ratchet R1 and the matrix-operand caller audit among them). The replay onto `a88da1d0` did not
+    build until `da8c1714` (NDW020).
+
 - **2026-11-05, PA2c (D23): the reduction's add loops are calls of the binary ufunc's own add kernels; PA2c is done,
   and with it PA2.** One commit on top of PA2b's, `ddfe2d3f` (with PA2a's and PA2b's; the three waited in a scratch
   worktree while the `strings` worktree carried another session's uncommitted edits of four of their files, then
-  were picked onto `3420f43a` together and re-gated there: unit 23,267 / 23,266 on net10.0 / net8.0, the kernel and reduction classes under guard pages, the oracle 419).
+  were picked onto `3420f43a` together and re-gated there: unit 23,267 / 23,266 on net10.0 / net8.0, the kernel and
+  reduction classes under guard pages, the oracle 419).
   - The moves, and the stationary-out mode's row blocks and prefetch: see PA2c in §7.
   - The effort the rule asked for, in order: PA2b's mode as it stood (the axis pair 1.09–1.26× of the hand form,
     where the prototype's plain 2-D kernel measured 2.00× / 1.91×); a shape rule sending such rows to the plain
