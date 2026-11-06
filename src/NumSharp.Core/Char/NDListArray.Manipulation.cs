@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 // =============================================================================
 // NDListArray.Manipulation.cs — the ndarray members of NumPy's object array of lists that only move the lists:
@@ -405,7 +406,7 @@ namespace NumSharp
                     _ = np.dtype(st);
                     return false;
                 default:
-                    throw new TypeError($"Cannot interpret '{dtype}' as a data type");
+                    throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"Cannot interpret '{dtype}' as a data type"));
             }
         }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 
 namespace NumSharp
@@ -144,8 +145,8 @@ namespace NumSharp
 
             if (@out is not null && @out.ndim != grammar.OutputLabels.Length)
                 throw new ValueError(
-                    $"out parameter does not have the correct number of dimensions, has {@out.ndim} " +
-                    $"but should have {grammar.OutputLabels.Length}");
+                    string.Create(CultureInfo.InvariantCulture, $"out parameter does not have the correct number of dimensions, has {@out.ndim} " +
+                    $"but should have {grammar.OutputLabels.Length}"));
 
             bool singleOperandView = operands.Length == 1 && @out is null && grammar.NothingSummed;
             grammar.ValidateExtents(operands, singleOperandView);
@@ -360,7 +361,7 @@ namespace NumSharp
                 {
                     if (idim >= ndim)
                         throw new ValueError(
-                            $"einstein sum subscripts string contains too many subscripts for operand {iop}");
+                            string.Create(CultureInfo.InvariantCulture, $"einstein sum subscripts string contains too many subscripts for operand {iop}"));
 
                     labels[idim++] = (sbyte)c;
                     if (c < minLabel)
@@ -376,7 +377,7 @@ namespace NumSharp
                         || subscripts[start + i + 1] != '.' || subscripts[start + i + 2] != '.')
                         throw new ValueError(
                             "einstein sum subscripts string contains a '.' that is not part of an " +
-                            $"ellipsis ('...') in operand {iop}");
+                            string.Create(CultureInfo.InvariantCulture, $"ellipsis ('...') in operand {iop}"));
 
                     i += 2;
                     ellipsis = idim;
@@ -531,10 +532,10 @@ namespace NumSharp
                         continue;
 
                     throw new ValueError(singleOperandView
-                        ? $"dimensions in single operand for collapsing index '{(char)original}' " +
-                          $"don't match ({expected} != {dim})"
-                        : $"dimensions in operand {iop} for collapsing index '{(char)original}' " +
-                          $"don't match ({expected} != {dim})");
+                        ? string.Create(CultureInfo.InvariantCulture, $"dimensions in single operand for collapsing index '{(char)original}' " +
+                          $"don't match ({expected} != {dim})")
+                        : string.Create(CultureInfo.InvariantCulture, $"dimensions in operand {iop} for collapsing index '{(char)original}' " +
+                          $"don't match ({expected} != {dim})"));
                 }
             }
 
@@ -582,8 +583,8 @@ namespace NumSharp
                         // parser — and note the two sizes read swapped against the sentence: the
                         // first is the size already recorded, the second the one just seen.
                         throw new ValueError(
-                            $"Size of label '{(char)label}' for operand {iop} ({previous}) " +
-                            $"does not match previous terms ({dim}).");
+                            string.Create(CultureInfo.InvariantCulture, $"Size of label '{(char)label}' for operand {iop} ({previous}) " +
+                            $"does not match previous terms ({dim})."));
                     }
                 }
             }
@@ -628,8 +629,8 @@ namespace NumSharp
                 return current;
 
             throw new ValueError(
-                $"operands could not be broadcast together: the ellipsis dimensions of operand {iop} " +
-                $"give {candidate} where an earlier operand gave {current}");
+                string.Create(CultureInfo.InvariantCulture, $"operands could not be broadcast together: the ellipsis dimensions of operand {iop} " +
+                $"give {candidate} where an earlier operand gave {current}"));
         }
 
         private static bool IsAsciiLetter(char c) => (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');

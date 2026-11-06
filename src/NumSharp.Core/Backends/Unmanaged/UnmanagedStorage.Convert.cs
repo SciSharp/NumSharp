@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NumSharp.Backends
 {
@@ -80,7 +81,7 @@ namespace NumSharp.Backends
             for (int d = 0; d < dims.Length; d++)
                 lengths[d] = dims[d] <= int.MaxValue
                     ? (int)dims[d]
-                    : throw new InvalidOperationException($"Dimension {d} has {dims[d]} elements, more than a C# array holds.");
+                    : throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Dimension {d} has {dims[d]} elements, more than a C# array holds."));
             var result = Array.CreateInstance(elementType, lengths);
             long n = a.size;
             if (n == 0)

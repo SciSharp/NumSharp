@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged;
 
@@ -364,7 +365,7 @@ namespace NumSharp.Backends
         /// <summary>A shape as NumPy prints it in assignment errors: <c>(3,)</c>, <c>(2,3)</c>.</summary>
         /// <param name="dims">The dimensions.</param>
         /// <returns>The text.</returns>
-        private static string Tuple(long[] dims) => dims.Length == 1 ? $"({dims[0]},)" : "(" + string.Join(",", dims) + ")";
+        private static string Tuple(long[] dims) => dims.Length == 1 ? string.Create(CultureInfo.InvariantCulture, $"({dims[0]},)") : "(" + string.Join(",", Array.ConvertAll(dims, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
 
         /// <summary>
         ///     The string descriptor a width-less request means: this storage's own descriptor when it already is a string

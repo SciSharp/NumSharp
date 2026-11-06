@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Kernels;
@@ -89,7 +90,7 @@ namespace NumSharp.Backends.Iteration
 
             if (operandTypes.Length != kernelNOp)
                 throw new ArgumentException(
-                    $"operandTypes length ({operandTypes.Length}) must match iterator NOp ({_state->NOp}).",
+                    string.Create(CultureInfo.InvariantCulture, $"operandTypes length ({operandTypes.Length}) must match iterator NOp ({_state->NOp})."),
                     nameof(operandTypes));
 
             // A where= ufunc over narrow strided rows: the masked 2-D block kernel runs the whole
@@ -213,7 +214,7 @@ namespace NumSharp.Backends.Iteration
 
             if (operandTypeCount != kernelNOp)
                 throw new ArgumentException(
-                    $"operandTypes length ({operandTypeCount}) must match iterator NOp ({_state->NOp}).",
+                    string.Create(CultureInfo.InvariantCulture, $"operandTypes length ({operandTypeCount}) must match iterator NOp ({_state->NOp})."),
                     "operandTypes");
         }
 
@@ -729,7 +730,7 @@ namespace NumSharp.Backends.Iteration
             if (inputTypes is null) throw new ArgumentNullException(nameof(inputTypes));
             if (inputTypes.Length + 1 != _state->NOp)
                 throw new ArgumentException(
-                    $"inputTypes length ({inputTypes.Length}) + 1 must equal iterator NOp ({_state->NOp}).",
+                    string.Create(CultureInfo.InvariantCulture, $"inputTypes length ({inputTypes.Length}) + 1 must equal iterator NOp ({_state->NOp})."),
                     nameof(inputTypes));
 
             // EXTERNAL_LOOP guard (the measured ~40× foot-gun): without EXLOOP

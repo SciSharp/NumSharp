@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NumSharp
 {
@@ -322,7 +323,7 @@ namespace NumSharp
         {
             const long HypergeomMax = 1000000000;
             if (ngood >= HypergeomMax || nbad >= HypergeomMax)
-                throw new ValueError($"both ngood and nbad must be less than {HypergeomMax}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"both ngood and nbad must be less than {HypergeomMax}"));
             if (ngood + nbad < nsample)
                 throw new ValueError("ngood + nbad < nsample");
             RandomConstraints.Check((double)ngood, "ngood", ConstraintType.CONS_NON_NEGATIVE);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection.Emit;
 using NumSharp.Backends.Iteration;
 
@@ -153,7 +154,7 @@ namespace NumSharp.Backends.Kernels
             ValidateTextShape(unit, widthA);
             ValidateTextShape(unit, widthB);
             if (aIndex is not (0 or 1))
-                throw new ArgumentOutOfRangeException(nameof(aIndex), aIndex, "A comparison reads its operands from slots 0 and 1.");
+                throw new ArgumentOutOfRangeException(nameof(aIndex), aIndex.ToString(CultureInfo.InvariantCulture), "A comparison reads its operands from slots 0 and 1.");
             return new TextCompareKey(op, unit, widthA, widthB, aIndex, rstrip);
         }
 

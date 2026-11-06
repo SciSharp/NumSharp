@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -845,7 +846,7 @@ namespace NumSharp.Backends.Printing
                 if (exponent == 0 || x.Length == 0)
                     return;
                 if ((uint)exponent > Pow10Table.MaxExponent)
-                    throw new InvalidOperationException($"Dragon4: 10^{exponent} is outside the power table");
+                    throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Dragon4: 10^{exponent} is outside the power table"));
                 ulong[] p = Pow10Table.Powers[exponent];
                 fixed (ulong* pb = p)
                     MultiplyInto(temp, x.Blocks, x.Length, pb, p.Length);
@@ -976,7 +977,7 @@ namespace NumSharp.Backends.Printing
             private void EnsureCapacity(int length)
             {
                 if (length > Capacity)
-                    throw new InvalidOperationException($"Dragon4: a {length}-block intermediate exceeds the {Capacity}-block capacity");
+                    throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Dragon4: a {length}-block intermediate exceeds the {Capacity}-block capacity"));
             }
         }
 

@@ -18,6 +18,7 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
@@ -267,7 +268,7 @@ namespace NumSharp
         {
             for (int d = 0; d < dims.Length; d++)
                 if (dims[d] > int.MaxValue)
-                    throw new InvalidOperationException($"Dimension {d} has length {dims[d]}, which exceeds int.MaxValue ({int.MaxValue}); .NET arrays are int-indexed.");
+                    throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Dimension {d} has length {dims[d]}, which exceeds int.MaxValue ({int.MaxValue}); .NET arrays are int-indexed."));
         }
 
         /// <summary>Whether <paramref name="code"/> is one of the 15 dtypes NumSharp can store and convert to.</summary>

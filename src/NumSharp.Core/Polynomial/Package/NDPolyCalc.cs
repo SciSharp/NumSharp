@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
@@ -557,14 +558,14 @@ namespace NumSharp
                 int len = 0;
                 foreach (var _ in text.EnumerateRunes())
                     len++;
-                throw new TypeError($"ufunc 'add' did not contain a loop with signature matching types " +
-                                    $"(dtype('{cm.typecode.AsNumpyDtypeName()}'), dtype('<U{Math.Max(1, len)}')) -> None");
+                throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"ufunc 'add' did not contain a loop with signature matching types " +
+                                    $"(dtype('{cm.typecode.AsNumpyDtypeName()}'), dtype('<U{Math.Max(1, len)}')) -> None"));
             }
             if (kRaw is TextBytesConstant bytes)
             {
                 // c[0] + np.bytes_(…): the same no-loop add, the bytes' dtype np.array's — S{len}, S1 for the empty bytes.
-                throw new TypeError($"ufunc 'add' did not contain a loop with signature matching types " +
-                                    $"(dtype('{cm.typecode.AsNumpyDtypeName()}'), dtype('S{Math.Max(1, bytes.Length)}')) -> None");
+                throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"ufunc 'add' did not contain a loop with signature matching types " +
+                                    $"(dtype('{cm.typecode.AsNumpyDtypeName()}'), dtype('S{Math.Max(1, bytes.Length)}')) -> None"));
             }
             if (kRaw is NDArray textRow && Backends.Strings.NDStringUfuncs.IsText(textRow))
             {
@@ -918,8 +919,8 @@ namespace NumSharp
                 {
                     // np.array(np.bytes_(…)).dtype: S{len}, S1 for the empty bytes.
                     string other = v.IsComplex64 ? "complex64" : v.Dtype.AsNumpyDtypeName();
-                    throw new TypeError($"ufunc 'subtract' did not contain a loop with signature matching types " +
-                                        $"(dtype('S{Math.Max(1, b.Length)}'), dtype('{other}')) -> None");
+                    throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"ufunc 'subtract' did not contain a loop with signature matching types " +
+                                        $"(dtype('S{Math.Max(1, b.Length)}'), dtype('{other}')) -> None"));
                 }
                 case NDArray text when Backends.Strings.NDStringUfuncs.IsText(text):
                 {
@@ -936,8 +937,8 @@ namespace NumSharp
                     foreach (var _ in text.EnumerateRunes())
                         len++;
                     string other = v.IsComplex64 ? "complex64" : v.Dtype.AsNumpyDtypeName();
-                    throw new TypeError($"ufunc 'subtract' did not contain a loop with signature matching types " +
-                                        $"(dtype('<U{Math.Max(1, len)}'), dtype('{other}')) -> None");
+                    throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"ufunc 'subtract' did not contain a loop with signature matching types " +
+                                        $"(dtype('<U{Math.Max(1, len)}'), dtype('{other}')) -> None"));
                 }
                 case null:
                     throw new TypeError($"unsupported operand type(s) for -: 'NoneType' and '{NDPolyBase.ObjectLoopTypeName(v)}'");

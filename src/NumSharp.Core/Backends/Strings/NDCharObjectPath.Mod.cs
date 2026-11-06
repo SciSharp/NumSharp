@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
@@ -2004,7 +2005,7 @@ namespace NumSharp.Backends.Strings
         private static ValueError UnsupportedStrConversion(int c, int index)
         {
             char shown = c >= 31 && c <= 126 ? (char)c : '?';
-            return new ValueError($"unsupported format character '{shown}' (0x{(uint)c:x}) at index {index}");
+            return new ValueError(string.Create(CultureInfo.InvariantCulture, $"unsupported format character '{shown}' (0x{(uint)c:x}) at index {index}"));
         }
 
         /// <summary>
@@ -2019,7 +2020,7 @@ namespace NumSharp.Backends.Strings
         {
             if (c >= 0x80)
                 return new OverflowException("character argument not in range(0x110000)");
-            return new ValueError($"unsupported format character '{(char)c}' (0x{c:x}) at index {index}");
+            return new ValueError(string.Create(CultureInfo.InvariantCulture, $"unsupported format character '{(char)c}' (0x{c:x}) at index {index}"));
         }
     }
 }

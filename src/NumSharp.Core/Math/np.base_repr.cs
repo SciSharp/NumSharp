@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 
 namespace NumSharp
@@ -147,7 +148,7 @@ namespace NumSharp
         private static void ThrowIfInsufficientWidth(int? width, int binwidth)
         {
             if (width.HasValue && width.Value < binwidth)
-                throw new ValueError($"Insufficient bit width={width.Value} provided for binwidth={binwidth}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Insufficient bit width={width.Value} provided for binwidth={binwidth}"));
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Kernels;
 
 // =============================================================================
@@ -380,7 +381,7 @@ namespace NumSharp.Backends
                 if (Y.Shape.dimensions[1] != X.Shape.dimensions[1])
                     throw new ValueError(
                         "all the input array dimensions except for the concatenation axis must match exactly, but along " +
-                        $"dimension 1, the array at index 0 has size {X.Shape.dimensions[1]} and the array at index 1 has size {Y.Shape.dimensions[1]}");
+                        string.Create(CultureInfo.InvariantCulture, $"dimension 1, the array at index 0 has size {X.Shape.dimensions[1]} and the array at index 1 has size {Y.Shape.dimensions[1]}"));
                 X = NDArray.concatenate(new[] { X, Y }, 0, null, null, "same_kind");
             }
 

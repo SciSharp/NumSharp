@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 
@@ -91,7 +92,7 @@ namespace NumSharp
         internal static NDArray AdoptInsertedAxis(NDArray r, int axis)
         {
             if ((uint)axis > (uint)r.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis), axis, "the new axis must lie between 0 and ndim");
+                throw new ArgumentOutOfRangeException(nameof(axis), axis.ToString(CultureInfo.InvariantCulture), "the new axis must lie between 0 and ndim");
 
             r = FreshOwner(r);
             long[] dims = r.Shape.dimensions, strides = r.Shape.strides;
@@ -133,7 +134,7 @@ namespace NumSharp
         internal static NDArray AdoptDroppedAxis(NDArray r, int axis)
         {
             if ((uint)axis >= (uint)r.ndim || r.Shape.dimensions[axis] != 1)
-                throw new ArgumentOutOfRangeException(nameof(axis), axis, "the dropped axis must be a length-1 axis");
+                throw new ArgumentOutOfRangeException(nameof(axis), axis.ToString(CultureInfo.InvariantCulture), "the dropped axis must be a length-1 axis");
 
             r = FreshOwner(r);
             long[] dims = r.Shape.dimensions, strides = r.Shape.strides;
@@ -175,7 +176,7 @@ namespace NumSharp
         {
             int nd = r.ndim;
             if (permutation.Length != nd)
-                throw new ArgumentException($"a permutation of {nd} axes was expected, got {permutation.Length}",
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"a permutation of {nd} axes was expected, got {permutation.Length}"),
                     nameof(permutation));
             var seen = new bool[nd];
             foreach (int ax in permutation)

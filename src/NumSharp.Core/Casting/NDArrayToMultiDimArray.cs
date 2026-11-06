@@ -17,6 +17,7 @@
  */
 
 using System;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
@@ -239,7 +240,7 @@ namespace NumSharp
         /// <exception cref="InvalidOperationException">Always.</exception>
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         private static void ToArrayThrowTooLarge(long count)
-            => throw new InvalidOperationException($"Array size {count} exceeds int.MaxValue; a .NET array cannot hold it.");
+            => throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Array size {count} exceeds int.MaxValue; a .NET array cannot hold it."));
 
         /// <summary>
         ///     The T ≠ dtype path of <see cref="ToArray{T}"/>. Runs the common small conversion itself — a C-contiguous
@@ -404,7 +405,7 @@ namespace NumSharp
             ref readonly Shape shape = ref storage.ShapeReference;
             long count = shape.size;
             if (count > int.MaxValue)
-                throw new InvalidOperationException($"Array size {count} exceeds int.MaxValue; a .NET array cannot hold it.");
+                throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Array size {count} exceeds int.MaxValue; a .NET array cannot hold it."));
             if (count == 0)
                 return System.Array.Empty<T>();
 
@@ -2495,7 +2496,7 @@ namespace NumSharp
         private static int ManagedLength(long d)
             => d <= int.MaxValue
                 ? (int)d
-                : throw new InvalidOperationException($"Dimension {d} exceeds int.MaxValue. Cannot convert to .NET multi-dimensional array.");
+                : throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Dimension {d} exceeds int.MaxValue. Cannot convert to .NET multi-dimensional array."));
 
         /// <summary>
         ///     Writes a non-contiguous source's elements to a dense row-major destination, one plane (the two

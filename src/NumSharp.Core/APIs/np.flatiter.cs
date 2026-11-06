@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 
@@ -171,7 +172,7 @@ namespace NumSharp
                 if (i < 0)
                     i += _size;
                 if (i < 0 || i >= _size)
-                    throw new IndexError($"index {orig} is out of bounds for size {_size}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {orig} is out of bounds for size {_size}"));
                 return i;
             }
 
@@ -411,7 +412,7 @@ namespace NumSharp
                     bool broadcast = packed.size == 1;
                     if (!broadcast && packed.size != n)
                         throw new ValueError(
-                            $"cannot assign {packed.size} input values to the {n} output values where the mask is true");
+                            string.Create(CultureInfo.InvariantCulture, $"cannot assign {packed.size} input values to the {n} output values where the mask is true"));
                     // Cast to the base dtype once (numpy casts on flat assignment); SetAtIndex does not convert.
                     // astype(dtype) always COPIES, so the cast is this method's temp: every element is boxed
                     // out of it below, and it is released on exit instead of stranding a buffer per set.

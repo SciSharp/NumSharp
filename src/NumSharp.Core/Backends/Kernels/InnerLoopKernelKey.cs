@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NumSharp.Backends.Kernels
 {
@@ -140,7 +141,7 @@ namespace NumSharp.Backends.Kernels
                 case KernelFamily.PowerStrideZero:
                     return $"npy_powz_{Type0}_{Type1}_{Type2}";
                 default:
-                    throw new InvalidOperationException($"Unknown inner-loop kernel family {(byte)Family}.");
+                    throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Unknown inner-loop kernel family {(byte)Family}."));
             }
         }
 

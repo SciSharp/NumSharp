@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NumSharp.Backends
 {
@@ -105,7 +106,7 @@ namespace NumSharp.Backends
             int ax = axis;
             if (ax < 0) ax += nd;
             if (ax < 0 || ax >= nd)
-                throw new IndexError($"index {axis} is out of bounds for axis 0 with size {nd}");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {axis} is out of bounds for axis 0 with size {nd}"));
             return (int)a.Shape.dimensions[ax];
         }
 
@@ -151,7 +152,7 @@ namespace NumSharp.Backends
         internal NDArray RawFft(NDArray a, int n, int axis, bool isReal, bool isForward, string norm, NDArray @out, string name, bool floatPrec = false)
         {
             if (n < 1)
-                throw new ValueError($"Invalid number of FFT data points ({n}) specified.");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Invalid number of FFT data points ({n}) specified."));
 
             // Inverse transforms swap the norm direction first (may raise the WITH-space message).
             string effNorm = norm;

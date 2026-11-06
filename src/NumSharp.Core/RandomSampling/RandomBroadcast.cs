@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -690,7 +691,7 @@ namespace NumSharp
             {
                 if (i > 0)
                     sb.Append(", ");
-                sb.Append(dims[i]);
+                sb.Append(dims[i].ToString(CultureInfo.InvariantCulture));
             }
             if (dims.Length == 1)
                 sb.Append(',');

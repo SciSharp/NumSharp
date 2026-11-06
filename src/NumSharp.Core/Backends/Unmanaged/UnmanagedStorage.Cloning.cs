@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
@@ -312,7 +313,7 @@ namespace NumSharp.Backends
             long byteOffset = _shape.offset * oldSize;
             if (byteOffset % newSize != 0)
                 throw new InvalidOperationException(
-                    $"This view starts {byteOffset} bytes into its buffer, which is not a whole number of {newSize}-byte elements: " +
+                    string.Create(CultureInfo.InvariantCulture, $"This view starts {byteOffset} bytes into its buffer, which is not a whole number of {newSize}-byte elements: ") +
                     "NumSharp keeps offsets in elements, so it cannot reinterpret this view as the new dtype (copy it first).");
 
             var newDims = new long[dims.Length];
@@ -323,7 +324,7 @@ namespace NumSharp.Backends
                 long outerByteStride = oldStrides[i] * oldSize;
                 if (outerByteStride % newSize != 0)
                     throw new InvalidOperationException(
-                        $"Axis {i} of this view steps {outerByteStride} bytes, which is not a whole number of {newSize}-byte elements: " +
+                        string.Create(CultureInfo.InvariantCulture, $"Axis {i} of this view steps {outerByteStride} bytes, which is not a whole number of {newSize}-byte elements: ") +
                         "NumSharp keeps strides in elements, so it cannot reinterpret this view as the new dtype (copy it first).");
                 newStrides[i] = outerByteStride / newSize;
             }

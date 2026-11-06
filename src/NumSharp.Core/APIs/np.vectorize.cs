@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -186,7 +187,7 @@ namespace NumSharp
 
                 if (_inputCoreDims.Length != _nin)
                     throw new ValueError(
-                        $"vectorize signature has {_inputCoreDims.Length} input argument(s) but the delegate takes {_nin}");
+                        string.Create(CultureInfo.InvariantCulture, $"vectorize signature has {_inputCoreDims.Length} input argument(s) but the delegate takes {_nin}"));
 
                 _signatureInvoker = BuildSignatureInvoker();
             }
@@ -216,7 +217,7 @@ namespace NumSharp
             {
                 if (otypes.Length != _nout)
                     throw new ValueError(
-                        $"vectorize: otypes has {otypes.Length} entr(y/ies) but the function has {_nout} output(s)");
+                        string.Create(CultureInfo.InvariantCulture, $"vectorize: otypes has {otypes.Length} entr(y/ies) but the function has {_nout} output(s)"));
                 _otypes = otypes;
             }
         }
@@ -245,7 +246,7 @@ namespace NumSharp
             NDArray[] outputs = CallCore(args);
             if (outputs.Length != 1)
                 throw new InvalidOperationException(
-                    $"vectorize: this function has {outputs.Length} outputs; use CallMany(...) to receive all of them.");
+                    string.Create(CultureInfo.InvariantCulture, $"vectorize: this function has {outputs.Length} outputs; use CallMany(...) to receive all of them."));
             return outputs[0];
         }
 
@@ -271,10 +272,10 @@ namespace NumSharp
             if (args is null) throw new ArgumentNullException(nameof(args));
             for (int i = 0; i < args.Length; i++)
                 if (args[i] is null)
-                    throw new ArgumentNullException(nameof(args), $"argument {i} is null");
+                    throw new ArgumentNullException(nameof(args), string.Create(CultureInfo.InvariantCulture, $"argument {i} is null"));
             if (args.Length != _nin)
                 throw new ArgumentException(
-                    $"vectorize: expected {_nin} input array(s), got {args.Length}.", nameof(args));
+                    string.Create(CultureInfo.InvariantCulture, $"vectorize: expected {_nin} input array(s), got {args.Length}."), nameof(args));
 
             return _signature != null ? CallWithSignature(args) : CallElementwise(args);
         }
@@ -330,7 +331,7 @@ namespace NumSharp
             MethodInfo adaptOpen = typeof(Vectorized).GetMethod(
                 "Adapt" + _paramTypes.Length, BindingFlags.NonPublic | BindingFlags.Static)
                 ?? throw new NotSupportedException(
-                    $"vectorize: multi-output element-wise is supported for arities 1-4, not {_paramTypes.Length}. " +
+                    string.Create(CultureInfo.InvariantCulture, $"vectorize: multi-output element-wise is supported for arities 1-4, not {_paramTypes.Length}. ") +
                     "Use a gufunc signature, or split the outputs into separate single-output calls.");
 
             var adapters = new Delegate[_nout];
@@ -408,7 +409,7 @@ namespace NumSharp
                     NDArray[] results = _signatureInvoker(coreArgs);
                     if (results.Length != _nout)
                         throw new ValueError(
-                            $"wrong number of outputs from pyfunc: expected {_nout}, got {results.Length}");
+                            string.Create(CultureInfo.InvariantCulture, $"wrong number of outputs from pyfunc: expected {_nout}, got {results.Length}"));
 
                     // The FIRST result fixes any new output core-dim sizes (e.g. k in (n),(m)->(k)) and,
                     // with otypes absent, the output dtypes — so allocate the outputs here, once.
@@ -514,7 +515,7 @@ namespace NumSharp
             long[] dims = arg.Shape.dimensions;
             if (dims.Length < coreDims.Length)
                 throw new ValueError(
-                    $"{dims.Length}-dimensional argument does not have enough dimensions for all core dimensions ({string.Join(", ", coreDims)})");
+                    string.Create(CultureInfo.InvariantCulture, $"{dims.Length}-dimensional argument does not have enough dimensions for all core dimensions ({string.Join(", ", coreDims)})"));
 
             int start = dims.Length - coreDims.Length;
             for (int d = 0; d < coreDims.Length; d++)
@@ -525,7 +526,7 @@ namespace NumSharp
                 {
                     if (size != existing)
                         throw new ValueError(
-                            $"inconsistent size for core dimension '{name}': {size} vs {existing}");
+                            string.Create(CultureInfo.InvariantCulture, $"inconsistent size for core dimension '{name}': {size} vs {existing}"));
                 }
                 else
                 {
@@ -628,7 +629,7 @@ namespace NumSharp
                     var arr = new NDArray[tuple.Length];
                     for (int i = 0; i < tuple.Length; i++)
                         arr[i] = tuple[i] as NDArray
-                            ?? throw new ValueError($"vectorize: pyfunc tuple element {i} is not an NDArray");
+                            ?? throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"vectorize: pyfunc tuple element {i} is not an NDArray"));
                     return arr;
                 default:
                     throw new ValueError(
@@ -937,9 +938,9 @@ namespace NumSharp
         {
             var v = new Vectorized(func, otypes: null, signature: null);
             if (v.nin != nin)
-                throw new ValueError($"frompyfunc: nin ({nin}) does not match the delegate's parameter count ({v.nin})");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"frompyfunc: nin ({nin}) does not match the delegate's parameter count ({v.nin})"));
             if (v.nout != nout)
-                throw new ValueError($"frompyfunc: nout ({nout}) does not match the delegate's return-component count ({v.nout})");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"frompyfunc: nout ({nout}) does not match the delegate's return-component count ({v.nout})"));
             return v;
         }
     }

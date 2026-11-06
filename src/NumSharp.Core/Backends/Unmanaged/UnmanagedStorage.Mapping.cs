@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
@@ -147,7 +148,7 @@ namespace NumSharp.Backends
             // be sized `srcShape.NDim - ndsCount` (negative) and the offset/getter loops would
             // walk strides[i] past the end — an OOB read/write (memory corruption). NumPy raises.
             if (ndsCount > source.ndim)
-                throw new IndexError($"too many indices for array: array is {source.ndim}-dimensional, but {ndsCount} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {source.ndim}-dimensional, but {ndsCount} were indexed"));
             bool isSubshaped = ndsCount != source.ndim;
             NDArray idxs;
             long[] indicesImpliedShape = null;
@@ -288,7 +289,7 @@ namespace NumSharp.Backends
                         // Same NumPy-verbatim text the general route raises (the single index array is
                         // axis 0); the partially filled result is a scope-reclaimed temp.
                         long badIndex = FancyIndexKernelRoute.ReadIndex(kernelIdxPtr, kernelIdx32, fail);
-                        throw new IndexError($"index {badIndex} is out of bounds for axis 0 with size {axisLength}");
+                        throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {badIndex} is out of bounds for axis 0 with size {axisLength}"));
                     }
                     // -2: the IL kernels are unavailable on this host — fall through to the general route.
                 }
@@ -328,7 +329,7 @@ namespace NumSharp.Backends
                     // the upper-bound check and read/write BEFORE the buffer — a wild access that can land
                     // in the GC heap (silent corruption). Fault here, like the block-copy guards do.
                     if ((computedAddr[i] = srcShape.GetOffset(index, ndsCount)) > largestOffset || computedAddr[i] < 0)
-                        throw new IndexOutOfRangeException($"Index [{string.Join(", ", new Span<long>(index, ndsCount).ToArray())}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
+                        throw new IndexOutOfRangeException($"Index [{string.Join(", ", Array.ConvertAll(new Span<long>(index, ndsCount).ToArray(), d => d.ToString(CultureInfo.InvariantCulture)))}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
                 }
             }
             else
@@ -337,7 +338,7 @@ namespace NumSharp.Backends
                 for (long i = 0; i < indicesSize; i++)
                 {
                     if ((computedAddr[i] = srcShape.GetOffset_1D(getter(i))) > largestOffset || computedAddr[i] < 0)
-                        throw new IndexOutOfRangeException($"Index [{getter(i)}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
+                        throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"Index [{getter(i)}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}."));
                 }
             }
 
@@ -411,7 +412,7 @@ namespace NumSharp.Backends
             {
                 //compare computed retShape vs given @out
                 if (!retShape.SequenceEqual(@out.Shape.dimensions))
-                    throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", retShape)}] but is instead [{string.Join(", ", @out.Shape.dimensions)}]");
+                    throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", Array.ConvertAll(retShape, d => d.ToString(CultureInfo.InvariantCulture)))}] but is instead [{string.Join(", ", Array.ConvertAll(@out.Shape.dimensions, d => d.ToString(CultureInfo.InvariantCulture)))}]");
                 if (@out.dtype != typeof(T))
                     throw new ArgumentException($"Given @out NDArray is expected to be dtype '{typeof(T).Name}' but is instead '{@out.dtype.type.Name}'");
 
@@ -490,7 +491,7 @@ namespace NumSharp.Backends
             {
                 //compare computed retShape vs given @out
                 if (!retShape.SequenceEqual(@out.Shape.dimensions))
-                    throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", retShape)}] but is instead [{string.Join(", ", @out.Shape.dimensions)}]");
+                    throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", Array.ConvertAll(retShape, d => d.ToString(CultureInfo.InvariantCulture)))}] but is instead [{string.Join(", ", Array.ConvertAll(@out.Shape.dimensions, d => d.ToString(CultureInfo.InvariantCulture)))}]");
                 if (@out.dtype != typeof(T))
                     throw new ArgumentException($"Given @out NDArray is expected to be dtype '{typeof(T).Name}' but is instead '{@out.dtype.type.Name}'");
 
@@ -620,8 +621,8 @@ namespace NumSharp.Backends
         /// <param name="subShape">The computed sub-array shape, or null.</param>
         /// <returns>The message of the guard's <see cref="IndexOutOfRangeException"/>.</returns>
         private static string IndexingOobMessage(string where, long srcOff, long dstOff, long span, long srcCap, long dstCap, long[] retShape, long[] subShape)
-            => $"[indexing OOB guard] {where}: copy src[{srcOff},+{span}) of {srcCap} -> dst[{dstOff},+{span}) of {dstCap} out of bounds " +
-               $"(retShape=[{(retShape == null ? "" : string.Join(",", retShape))}] subShape=[{(subShape == null ? "" : string.Join(",", subShape))}]).";
+            => string.Create(CultureInfo.InvariantCulture, $"[indexing OOB guard] {where}: copy src[{srcOff},+{span}) of {srcCap} -> dst[{dstOff},+{span}) of {dstCap} out of bounds " +
+               $"(retShape=[{(retShape == null ? "" : string.Join(",", Array.ConvertAll(retShape, d => d.ToString(CultureInfo.InvariantCulture))))}] subShape=[{(subShape == null ? "" : string.Join(",", Array.ConvertAll(subShape, d => d.ToString(CultureInfo.InvariantCulture))))}]).");
 
         // ---- The store: mapiter_set ------------------------------------------------------------------------------------
 
@@ -824,7 +825,7 @@ namespace NumSharp.Backends
             // See the getter: more advanced indices than axes is never valid and would walk
             // strides past the end (OOB write / heap corruption). NumPy raises; so do we.
             if (ndsCount > source.ndim)
-                throw new IndexError($"too many indices for array: array is {source.ndim}-dimensional, but {ndsCount} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {source.ndim}-dimensional, but {ndsCount} were indexed"));
 
             // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar, packed into the destination's dtype with
             // NumPy's range checks (PyArray_Pack). NumPy validates the index's structure first (prepare_index: the
@@ -998,7 +999,7 @@ namespace NumSharp.Backends
                     // in the GC heap (silent corruption crashing a later GC). Fault here, like the
                     // block-scatter guard in MapIterSetSubspace does.
                     if ((computedAddr[i] = srcShape.GetOffset(index, ndsCount)) > largestOffset || computedAddr[i] < 0)
-                        throw new IndexOutOfRangeException($"Index [{string.Join(", ", new Span<long>(index, ndsCount).ToArray())}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
+                        throw new IndexOutOfRangeException($"Index [{string.Join(", ", Array.ConvertAll(new Span<long>(index, ndsCount).ToArray(), d => d.ToString(CultureInfo.InvariantCulture)))}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
                 }
             }
             else
@@ -1007,7 +1008,7 @@ namespace NumSharp.Backends
                 for (long i = 0; i < indicesSize; i++)
                 {
                     if ((computedAddr[i] = srcShape.GetOffset_1D(getter(i))) > largestOffset || computedAddr[i] < 0)
-                        throw new IndexOutOfRangeException($"Index [{getter(i)}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
+                        throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"Index [{getter(i)}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}."));
                 }
             }
 
@@ -1036,7 +1037,7 @@ namespace NumSharp.Backends
                 // aligns with the C-order offsets.
                 if (!(valuesTyped.Shape.IsContiguous && valuesTyped.Shape.dimensions.SequenceEqual(retShape)))
                 {
-                    string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+                    string Tup(long[] s) => s.Length == 1 ? string.Create(CultureInfo.InvariantCulture, $"({s[0]},)") : "(" + string.Join(",", Array.ConvertAll(s, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
                     try
                     {
                         valuesTyped = NDArray.broadcast_to(valuesTyped, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
@@ -1074,7 +1075,7 @@ namespace NumSharp.Backends
                         // NumPy: ValueError: shape mismatch: value array of shape (X,) could
                         // not be broadcast to indexing result of shape (Y, Z).
                         // NumPy's mapping.c shape string uses NO space after the comma: (2,4).
-                        string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+                        string Tup(long[] s) => s.Length == 1 ? string.Create(CultureInfo.InvariantCulture, $"({s[0]},)") : "(" + string.Join(",", Array.ConvertAll(s, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
                         throw new ValueError(
                             $"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +
                             $"could not be broadcast to indexing result of shape {Tup(retShape)}", ex);
@@ -1127,9 +1128,9 @@ namespace NumSharp.Backends
         {
             long bad = FancyIndexKernelRoute.FirstOutOfRange(idxPtr, idx32, indexCount, axisLength);
             if (bad >= 0)
-                throw new IndexError($"index {FancyIndexKernelRoute.ReadIndex(idxPtr, idx32, bad)} is out of bounds for axis 0 with size {axisLength}");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {FancyIndexKernelRoute.ReadIndex(idxPtr, idx32, bad)} is out of bounds for axis 0 with size {axisLength}"));
 
-            string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+            string Tup(long[] s) => s.Length == 1 ? string.Create(CultureInfo.InvariantCulture, $"({s[0]},)") : "(" + string.Join(",", Array.ConvertAll(s, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
             var typed = values.AsOrMakeGeneric<T>();
             long valuesCount;
             if (!isSubshaped && typed.size == 1)
@@ -1169,7 +1170,7 @@ namespace NumSharp.Backends
             if (status == -2)
                 return false;
             if (status >= 0)   // unreachable after the scan above; a hard stop rather than a silent partial write
-                throw new IndexError($"index {FancyIndexKernelRoute.ReadIndex(idxPtr, idx32, status)} is out of bounds for axis 0 with size {axisLength}");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {FancyIndexKernelRoute.ReadIndex(idxPtr, idx32, status)} is out of bounds for axis 0 with size {axisLength}"));
             return true;
         }
 

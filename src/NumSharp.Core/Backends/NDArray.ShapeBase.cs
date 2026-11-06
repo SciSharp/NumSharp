@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
@@ -209,7 +210,7 @@ namespace NumSharp
                 // flipping — see MisalignedRegistry) which need not be the C-order-first; the
                 // error TYPE, axis and size still match, only the offending index VALUE may differ.
                 throw new IndexError(
-                    $"index {badIdx} is out of bounds for axis {ax} with size {axisLen}");
+                    string.Create(CultureInfo.InvariantCulture, $"index {badIdx} is out of bounds for axis {ax} with size {axisLen}"));
 
             return result;
         }
@@ -472,7 +473,7 @@ namespace NumSharp
                 long status = validate(idxBase, pIdxStrides, axisLen, pShape, ndim, totalSize, &badIdx);
                 if (status < totalSize)
                     throw new IndexError(
-                        $"index {badIdx} is out of bounds for axis {ax} with size {axisLen}");
+                        string.Create(CultureInfo.InvariantCulture, $"index {badIdx} is out of bounds for axis {ax} with size {axisLen}"));
 
                 // Pass 2: the bounds-check-free scatter (indices now known in range).
                 scatter(arrBase, pArrStrides, axisStrideBytes, axisLen,
@@ -824,7 +825,7 @@ namespace NumSharp
             {
                 var arr = tup[i];
                 if (arr is null)
-                    throw new ArgumentNullException($"{nameof(tup)}[{i}]");
+                    throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"{nameof(tup)}[{i}]"));
 
                 if (arr.ndim < 2)
                 {
@@ -1613,7 +1614,7 @@ namespace NumSharp
 
             for (int i = 0; i < outDim; i++)
                 if (tup[i] < 0)
-                    throw new ArgumentException($"reps[{i}] must be non-negative, got {tup[i]}.", nameof(reps));
+                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"reps[{i}] must be non-negative, got {tup[i]}."), nameof(reps));
 
             // Compute output shape.
             var outShape = new long[outDim];

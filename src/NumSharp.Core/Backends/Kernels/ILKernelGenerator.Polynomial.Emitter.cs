@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -210,7 +211,7 @@ namespace NumSharp.Backends.Kernels
                 128 => typeof(Vector128<>).MakeGenericType(Clr),
                 256 => typeof(Vector256<>).MakeGenericType(Clr),
                 512 => typeof(Vector512<>).MakeGenericType(Clr),
-                _ => throw new NotSupportedException($"no {bits}-bit vector of {t}"),
+                _ => throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"no {bits}-bit vector of {t}")),
             };
         }
 
@@ -275,7 +276,7 @@ namespace NumSharp.Backends.Kernels
         /// <exception cref="NotSupportedException">Another lane count.</exception>
         public PolyHalfLaneKind(int w) : base(true, NPTypeCode.Single, 256)
         {
-            if (w is not (2 or 4 or 8)) throw new NotSupportedException($"no {w}-lane float16 kind");
+            if (w is not (2 or 4 or 8)) throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"no {w}-lane float16 kind"));
             _w = w;
         }
 

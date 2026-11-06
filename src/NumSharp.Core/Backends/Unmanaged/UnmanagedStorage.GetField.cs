@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -222,8 +223,8 @@ namespace NumSharp.Backends
                 long byteStride = oldStrides[i] * oldSize;
                 if (dims[i] > 1 && byteStride % newSize != 0)
                     throw new NotSupportedException(
-                        $"getfield {descr.ToString(true)} of a {Descr.ToString(true)} array: the byte stride {byteStride} of axis " +
-                        $"{i} is not a multiple of the field size {newSize}. NumSharp stores strides in whole elements, so it " +
+                        string.Create(CultureInfo.InvariantCulture, $"getfield {descr.ToString(true)} of a {Descr.ToString(true)} array: the byte stride {byteStride} of axis " +
+                        $"{i} is not a multiple of the field size {newSize}. NumSharp stores strides in whole elements, so it ") +
                         "cannot lay out this view (NumPy keeps byte strides).");
                 newStrides[i] = byteStride / newSize;
             }

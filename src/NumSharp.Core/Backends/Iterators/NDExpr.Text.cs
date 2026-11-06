@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Strings;
@@ -205,7 +206,7 @@ namespace NumSharp.Backends.Iteration
         {
             if ((uint)index >= (uint)_inputTypes.Length)
                 throw new InvalidOperationException(
-                    $"Input({index}) out of range; typing provided {_inputTypes.Length} inputs.");
+                    string.Create(CultureInfo.InvariantCulture, $"Input({index}) out of range; typing provided {_inputTypes.Length} inputs."));
             return _inputTypes[index] == NPTypeCode.String;
         }
 

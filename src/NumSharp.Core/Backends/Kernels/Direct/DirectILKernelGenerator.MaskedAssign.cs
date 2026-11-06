@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
@@ -119,7 +120,7 @@ namespace NumSharp.Backends.Kernels
                 2 => typeof(ushort),
                 4 => typeof(uint),
                 8 => typeof(ulong),
-                _ => throw new ArgumentOutOfRangeException(nameof(elementSize), elementSize, "element width must be 1, 2, 4, 8 or 16 bytes"),
+                _ => throw new ArgumentOutOfRangeException(nameof(elementSize), elementSize.ToString(CultureInfo.InvariantCulture), "element width must be 1, 2, 4, 8 or 16 bytes"),
             };
             var open = typeof(DirectILKernelGenerator).GetMethod(nameof(MaskedAssignRun), BindingFlags.Static | BindingFlags.NonPublic)
                        ?? throw new MissingMethodException(nameof(DirectILKernelGenerator), nameof(MaskedAssignRun));
@@ -392,7 +393,7 @@ namespace NumSharp.Backends.Kernels
                     case 4: MaskedAssignRun<uint>(src + sOff, sIn, dst + dOff, dIn, mask + mOff, mIn, n); break;
                     case 8: MaskedAssignRun<ulong>(src + sOff, sIn, dst + dOff, dIn, mask + mOff, mIn, n); break;
                     case 16: MaskedAssignRun16(src + sOff, sIn, dst + dOff, dIn, mask + mOff, mIn, n); break;
-                    default: throw new ArgumentOutOfRangeException(nameof(elementSize), elementSize, "element width must be 1, 2, 4, 8 or 16 bytes");
+                    default: throw new ArgumentOutOfRangeException(nameof(elementSize), elementSize.ToString(CultureInfo.InvariantCulture), "element width must be 1, 2, 4, 8 or 16 bytes");
                 }
 
                 int ax = outer - 1;
@@ -491,7 +492,7 @@ namespace NumSharp.Backends.Kernels
         internal static int MaskedAssignLaneWidth(int elementSize)
         {
             if (elementSize <= 0)
-                throw new ArgumentOutOfRangeException(nameof(elementSize), elementSize, "element width must be positive");
+                throw new ArgumentOutOfRangeException(nameof(elementSize), elementSize.ToString(CultureInfo.InvariantCulture), "element width must be positive");
             if (elementSize % 16 == 0)
                 return 16;
             if (elementSize % 8 == 0)

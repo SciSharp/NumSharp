@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Sorting;
 
 namespace NumSharp.Backends
@@ -22,7 +23,7 @@ namespace NumSharp.Backends
                 throw new TypeError("need sequence of keys with len > 0 in lexsort");
             for (int i = 0; i < keys.Length; i++)
                 if (keys[i] is null)
-                    throw new ArgumentNullException(nameof(keys), $"lexsort key {i} is null");
+                    throw new ArgumentNullException(nameof(keys), string.Create(CultureInfo.InvariantCulture, $"lexsort key {i} is null"));
 
             var first = keys[0];
             for (int i = 1; i < keys.Length; i++)

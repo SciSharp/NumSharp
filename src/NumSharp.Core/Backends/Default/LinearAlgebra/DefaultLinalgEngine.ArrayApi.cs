@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NumSharp.Backends
 {
@@ -15,7 +16,7 @@ namespace NumSharp.Backends
         {
             if (x1.ndim != 1 || x2.ndim != 1)
                 throw new ValueError(
-                    $"Input arrays must be one-dimensional, but they are x1.ndim={x1.ndim} and x2.ndim={x2.ndim}.");
+                    string.Create(CultureInfo.InvariantCulture, $"Input arrays must be one-dimensional, but they are x1.ndim={x1.ndim} and x2.ndim={x2.ndim}."));
 
             return x1.TensorEngine.Outer(x1, x2, null);
         }
@@ -41,7 +42,7 @@ namespace NumSharp.Backends
             if (x1.Shape.dimensions[a1] != 3 || x2.Shape.dimensions[a2] != 3)
                 throw new ValueError(
                     "Both input arrays must be (arrays of) 3-dimensional vectors, but they are " +
-                    $"{x1.Shape.dimensions[a1]} and {x2.Shape.dimensions[a2]} dimensional instead.");
+                    string.Create(CultureInfo.InvariantCulture, $"{x1.Shape.dimensions[a1]} and {x2.Shape.dimensions[a2]} dimensional instead."));
 
             // `return _core_cross(x1, x2, axis=axis)`: np.cross's engine member with the call np.cross makes for it -
             // axisa / axisb / axisc at their -1 defaults and axis set, which the member's `if axis is not None` then

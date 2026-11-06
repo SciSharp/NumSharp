@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using NumSharp.IO;
 
@@ -125,7 +126,7 @@ namespace NumSharp
         internal static void CheckToFileArgument(string s, int position)
         {
             if (s is null)
-                throw new TypeError($"tofile() argument {position} must be str, not None");
+                throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"tofile() argument {position} must be str, not None"));
             // The encode, then the NUL test (the bytes themselves are written by the text mode later, encoded again).
             ArrayFileIO.CStringArgument(s);
         }

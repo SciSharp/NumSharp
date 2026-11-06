@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using NumSharp.Backends;
@@ -179,7 +180,7 @@ namespace NumSharp
                 selected = np.count_nonzero(mask);
                 if (length != 1 && length != selected)
                     throw new ValueError(
-                        $"NumPy boolean array indexing assignment cannot assign {length} input values to the {selected} output values where the mask is true");
+                        string.Create(CultureInfo.InvariantCulture, $"NumPy boolean array indexing assignment cannot assign {length} input values to the {selected} output values where the mask is true"));
             }
             else
             {
@@ -189,7 +190,7 @@ namespace NumSharp
                 long[] dims = selection.Shape.dimensions;
                 long last = dims.Length == 0 ? 1 : dims[dims.Length - 1];
                 if (length != last && length != 1)
-                    throw new ValueError($"could not broadcast input array from shape ({length},) into shape {selection.Shape.ToPythonTuple()}");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"could not broadcast input array from shape ({length},) into shape {selection.Shape.ToPythonTuple()}"));
                 selected = selection.size;
             }
             if (selected > 0)
@@ -226,7 +227,7 @@ namespace NumSharp
             var dims = target.Shape.dimensions;
             long last = dims[dims.Length - 1];
             if (length != last && length != 1)
-                throw new ValueError($"could not broadcast input array from shape ({length},) into shape {target.Shape.ToPythonTuple()}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"could not broadcast input array from shape ({length},) into shape {target.Shape.ToPythonTuple()}"));
             if (target.size > 0)
                 throw new NotSupportedException(
                     "NumPy assigns a list to a sub-array as the sequence of its items, so the elements would become the " +
@@ -547,7 +548,7 @@ namespace NumSharp
             long newSize = ResizeGuards(new_shape, refcheck);
             if (newSize > size)
                 throw new NotSupportedException(
-                    $"NumPy fills the {newSize - size} new elements of a growing resize with the int 0, which an NDListArray (a list " +
+                    string.Create(CultureInfo.InvariantCulture, $"NumPy fills the {newSize - size} new elements of a growing resize with the int 0, which an NDListArray (a list ") +
                     "array) cannot hold; np.resize repeats the lists instead");
             Ids.resize(new_shape, refcheck);
         }

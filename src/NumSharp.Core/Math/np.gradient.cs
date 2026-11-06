@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 using NumSharp.Utilities;
@@ -69,7 +70,7 @@ namespace NumSharp
             {
                 if (!result._single || result.Length != 1)
                     throw new InvalidOperationException(
-                        $"np.gradient produced {result.Length} components; it is a tuple, not a single " +
+                        string.Create(CultureInfo.InvariantCulture, $"np.gradient produced {result.Length} components; it is a tuple, not a single ") +
                         "array. Deconstruct it, index it, or convert to NDArray[].");
                 return result._grads[0];
             }
@@ -99,7 +100,7 @@ namespace NumSharp
                 int have = Length;
                 if (have != n)
                     throw new InvalidOperationException(
-                        $"np.gradient produced {have} components; cannot deconstruct into {n}. Use " +
+                        string.Create(CultureInfo.InvariantCulture, $"np.gradient produced {have} components; cannot deconstruct into {n}. Use ") +
                         "indexing or the NDArray[] conversion.");
             }
 

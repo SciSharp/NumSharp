@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 
 namespace NumSharp
@@ -672,7 +673,7 @@ namespace NumSharp
                     descr = null;
                     return;
                 default:
-                    throw new TypeError($"Cannot interpret '{operand}' as a data type");
+                    throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"Cannot interpret '{operand}' as a data type"));
             }
         }
     }

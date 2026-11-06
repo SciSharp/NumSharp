@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Kernels;
 
 // =============================================================================
@@ -67,7 +68,7 @@ namespace NumSharp.Backends.Iteration
             int ndim = input.ndim;
             if (axis < 0 || axis >= ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis} is out of bounds for array of dimension {ndim}");
+                    string.Create(CultureInfo.InvariantCulture, $"axis {axis} is out of bounds for array of dimension {ndim}"));
 
             var reduced = new bool[ndim];
             reduced[axis] = true;

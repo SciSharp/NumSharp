@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using System.Reflection.Emit;
 using NumSharp.Backends.Iteration;
@@ -161,7 +162,7 @@ namespace NumSharp.Backends.Kernels
         internal static NDInnerLoopFunc GetVStringWriteKernel(VStringWriteOp op, int textIndex)
         {
             if (textIndex is not (0 or 1))
-                throw new ArgumentOutOfRangeException(nameof(textIndex), textIndex, "A writing kernel reads its inputs from slots 0 and 1.");
+                throw new ArgumentOutOfRangeException(nameof(textIndex), textIndex.ToString(CultureInfo.InvariantCulture), "A writing kernel reads its inputs from slots 0 and 1.");
             if (!TextKernelsAvailable)
                 return null;
             var key = new VStringWriteKey(op, textIndex);
@@ -321,7 +322,7 @@ namespace NumSharp.Backends.Kernels
         internal static NDInnerLoopFunc GetVStringCompareKernel(TextCompareOp op, int aIndex, bool prefetch = false)
         {
             if (aIndex is not (0 or 1))
-                throw new ArgumentOutOfRangeException(nameof(aIndex), aIndex, "A comparison reads its operands from slots 0 and 1.");
+                throw new ArgumentOutOfRangeException(nameof(aIndex), aIndex.ToString(CultureInfo.InvariantCulture), "A comparison reads its operands from slots 0 and 1.");
             if (prefetch && op is not (TextCompareOp.Less or TextCompareOp.LessEqual))
                 throw new ArgumentException($"The {op} kernel has no prefetching form (an equality reads no text of a pair it decides by the sizes).", nameof(prefetch));
             if (!TextKernelsAvailable)
@@ -352,7 +353,7 @@ namespace NumSharp.Backends.Kernels
         internal static NDInnerLoopFunc GetVStringTruthKernel(byte naTruth)
         {
             if (naTruth > 1)
-                throw new ArgumentOutOfRangeException(nameof(naTruth), naTruth, "An NA cell's truth is 0 or 1.");
+                throw new ArgumentOutOfRangeException(nameof(naTruth), naTruth.ToString(CultureInfo.InvariantCulture), "An NA cell's truth is 0 or 1.");
             if (!TextKernelsAvailable)
                 return null;
             if (s_vstringTruthKernels.TryGetValue(naTruth, out var cached))

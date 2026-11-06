@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Generic;
@@ -221,9 +222,9 @@ namespace NumSharp
             }
 
             if (row < -dims[0] || row >= dims[0])
-                throw new IndexError($"index {row} is out of bounds for axis 0 with size {dims[0]}");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {row} is out of bounds for axis 0 with size {dims[0]}"));
             if (column < -dims[1] || column >= dims[1])
-                throw new IndexError($"index {column} is out of bounds for axis 1 with size {dims[1]}");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {column} is out of bounds for axis 1 with size {dims[1]}"));
             return Storage.GetView(Slice.Index(row), Slice.Index(column));
         }
 
@@ -258,7 +259,7 @@ namespace NumSharp
             }
 
             if (consuming > dims.Length)
-                throw new IndexError($"too many indices for array: array is {dims.Length}-dimensional, but {consuming} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {dims.Length}-dimensional, but {consuming} were indexed"));
 
             int axis = 0;
             foreach (Slice slice in slices)
@@ -277,7 +278,7 @@ namespace NumSharp
                     long index = slice.Start ?? 0;
                     long extent = dims[axis];
                     if (index < -extent || index >= extent)
-                        throw new IndexError($"index {index} is out of bounds for axis {axis} with size {extent}");
+                        throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {index} is out of bounds for axis {axis} with size {extent}"));
                 }
 
                 axis++;

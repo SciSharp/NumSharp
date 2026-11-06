@@ -18,7 +18,8 @@ namespace NumSharp.Backends
         /// <param name="out">An optional output of the result's shape; the result is written into it and it is returned.</param>
         /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
         /// <returns>The range, dtype preserved (integer overflow wraps as in NumPy): <paramref name="out"/> itself when
-        ///     given, else a fresh array, read-only when 0-d (NumPy's scalar).</returns>
+        ///     given (the subtraction then runs in NEP 50's loop over the out's dtype and the minima's, so an int8 range into
+        ///     an int64 out does not wrap), else a fresh array, read-only when 0-d (NumPy's scalar).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <exception cref="TypeError">Fixed-width text, or a text out: NumPy's maximum.reduce refuses the loop with its
@@ -32,8 +33,10 @@ namespace NumSharp.Backends
         ///     (3,)-&gt;(3) (3,4) </c>), NumPy's ValueError under the house type of a broadcast failure.</exception>
         /// <exception cref="TypeError">An out that is a C# scalar turned into a 0-d array (NumPy's <c>return arrays must be
         ///     of ArrayType</c>).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape (a backstop: the
-        ///     prologue above refuses every such out first).</exception>
+        /// <exception cref="TypeError">An out the range cannot reach by a same_kind cast: subtract's UFuncTypeError
+        ///     (<c>Cannot cast ufunc 'subtract' output from dtype('float64') to dtype('int64') with casting rule
+        ///     'same_kind'</c>), raised after maximum.reduce stored the maxima into it, as NumPy leaves them (parity
+        ///     QA-55).</exception>
         /// <remarks>
         ///     Moved from the public <c>np.ptp(a, int? axis, out, keepdims)</c> by the np-layer dtype plan's P1b, statement for
         ///     statement; the facade's <c>np.amax</c> / <c>np.amin</c> calls became the engine members they reach for a
@@ -54,19 +57,27 @@ namespace NumSharp.Backends
             if (Strings.NDStringUfuncs.VStringReduces("ptp", a, axis, null, @out))
                 return Strings.NDVStringStatistics.Ptp(a, axis, @out, keepdims);
             Strings.NDStringUfuncs.ThrowIfReduce("ptp", a, axis, @out);
-            // `umr_maximum(a, axis, None, out, keepdims)` is _ptp's first statement, so maximum.reduce's prologue checks the
-            // out before anything is computed — read-only, the axis, its rank, the reduction iterator's shapes — with NumPy's
-            // texts naming ufunc 'maximum' (parity QA-31; the store used to compare the result's dimensions itself, with a
-            // text of its own). A misshapen out is therefore reported before an empty reduction's "no identity".
+            // With an out, _ptp's three statements in NumPy's order: `subtract(umr_maximum(a, axis, None, out, keepdims),
+            // umr_minimum(a, axis, None, None, keepdims), out)`.
             if (@out is not null)
-                ReductionArguments.Validate(a, axis, keepdims, @out, null, "maximum");
+            {
+                // maximum.reduce(out=out) first: its prologue checks the out before anything is computed (read-only, the
+                // axis, the rank text naming 'maximum', the iterator's shapes; parity QA-31), so a misshapen out is reported
+                // before an empty reduction's "no identity", and its unsafe store leaves the maxima in the out.
+                NDArray maxima = a.TensorEngine.ReduceAMax(a, axis, keepdims, null, @out);
+                NDArray minima = a.TensorEngine.ReduceAMin(a, axis, keepdims);
+                // subtract(out, min, out): NEP 50's loop over the out's dtype and the minima's (an int8 range into an int64
+                // out subtracts in int64, without int8's wrap), and its same_kind out cast — NumPy's UFuncTypeError for an
+                // integer out of float data, raised with the maxima already stored, as NumPy leaves them (parity QA-55).
+                return a.TensorEngine.Subtract(maxima, minima, null, @out);
+            }
 
             var maxRes = a.TensorEngine.ReduceAMax(a, axis, keepdims);
             var minRes = a.TensorEngine.ReduceAMin(a, axis, keepdims);
             var diff = maxRes - minRes;
 
-            // Fresh 0-d ptp is a numpy SCALAR (read-only); out= returns the writeable out.
-            return @out is null ? diff.MarkReductionScalar() : PtpOut(diff, @out);
+            // Fresh 0-d ptp is a numpy SCALAR (read-only).
+            return diff.MarkReductionScalar();
         }
 
         /// <summary>
@@ -78,7 +89,8 @@ namespace NumSharp.Backends
         ///     reduces nothing (the result is <c>a - a</c>).</param>
         /// <param name="out">An optional output; the result is written into it and it is returned.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
-        /// <returns>The range, dtype preserved (integer overflow wraps as in NumPy).</returns>
+        /// <returns>The range, dtype preserved (integer overflow wraps as in NumPy); <paramref name="out"/> itself when given,
+        ///     the subtraction then in NEP 50's loop over the out's dtype and the minima's.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError">An axis is out of range (a 0-d input has no axis for a tuple to name).</exception>
         /// <exception cref="ValueError">An axis appears twice ("duplicate value in 'axis'").</exception>
@@ -88,8 +100,8 @@ namespace NumSharp.Backends
         ///     longer: maximum.reduce's prologue texts (parity QA-31), before the axes are reduced.</exception>
         /// <exception cref="IncorrectShapeException">An out whose axes do not broadcast with the result's (maximum.reduce's
         ///     <c>operands could not be broadcast together with remapped shapes ...</c>).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> has the wrong shape (a backstop: the prologue refuses
-        ///     every such out first).</exception>
+        /// <exception cref="TypeError">An out the range cannot reach by a same_kind cast: subtract's UFuncTypeError, raised
+        ///     after the maxima were stored into it (parity QA-55).</exception>
         /// <remarks>Moved from the public tuple-axis <c>np.ptp</c> by the np-layer dtype plan's P1b, statement for
         ///     statement; its re-entries into the one-axis overload call the one-axis member above, through virtual
         ///     dispatch since phase PE made both of them DefaultEngine's overrides of
@@ -146,44 +158,31 @@ namespace NumSharp.Backends
                 minRes = minRes.TensorEngine.ReduceAMin(minRes, ax, keepdims: true);
             }
 
-            NDArray diff = maxRes - minRes;
-
+            // The result's dimensions without keepdims: the kept axes alone (the keepdims chain left length-1 axes in place).
+            Shape resultShape = default;
             if (!keepdims)
             {
                 var kept = new List<long>(a.ndim - sortedDesc.Count);
                 for (int i = 0; i < a.ndim; i++)
                     if (!flags[i])
                         kept.Add(a.Shape.dimensions[i]);
-                diff = diff.reshape(Shape.Adopt(kept.ToArray()));
+                resultShape = Shape.Adopt(kept.ToArray());
             }
 
-            return PtpOut(diff, @out);
-        }
+            if (@out is not null)
+            {
+                // _ptp's statements with the tuple (parity QA-55): maximum.reduce's unsafe store leaves the maxima in the out
+                // (its prologue checked the out above), then subtract(out, min, out) takes NEP 50's loop over the out's dtype
+                // and the minima's and casts into the out under same_kind (NumPy's UFuncTypeError text for an out it cannot
+                // reach, the maxima already stored).
+                NDArray maxima = keepdims ? maxRes : maxRes.reshape(resultShape);
+                NDArray minima = keepdims ? minRes : minRes.reshape(resultShape);
+                UnmanagedStorage.Copyto(@out, maxima, NPY_CASTING.NPY_UNSAFE_CASTING);
+                return a.TensorEngine.Subtract(@out, minima, null, @out);
+            }
 
-        /// <summary>
-        ///     The ptp's <c>out=</c> store: <paramref name="out"/> must have the result's dimensions and receives it under
-        ///     np.copyto's default <c>same_kind</c> rule.
-        /// </summary>
-        /// <param name="diff">The range.</param>
-        /// <param name="out">The caller's out, or null.</param>
-        /// <returns><paramref name="diff"/> when <paramref name="out"/> is null, else <paramref name="out"/> after the
-        ///     store.</returns>
-        /// <exception cref="ArgumentException"><paramref name="out"/>'s dimensions are not the result's ("out has wrong
-        ///     shape").</exception>
-        /// <exception cref="InvalidCastException">The result's dtype does not cast to <paramref name="out"/>'s under
-        ///     <c>same_kind</c> (np.copyto's text).</exception>
-        /// <exception cref="ValueError"><paramref name="out"/> is read-only (np.copyto's text).</exception>
-        /// <remarks>Moved from <c>np.ptp</c>'s <c>WriteOrReturn</c> by the np-layer dtype plan's P1b. The store still goes
-        ///     through <c>np.copyto</c>, a structural call into the facade that the plan's P6 replaces with an engine copy;
-        ///     the up-call ratchet pins it with that reason.</remarks>
-        private static NDArray PtpOut(NDArray diff, NDArray @out)
-        {
-            if (@out is null) return diff;
-            if (!diff.Shape.dimensions.SequenceEqual(@out.Shape.dimensions))
-                throw new ArgumentException(
-                    $"out has wrong shape; expected=[{string.Join(",", diff.Shape.dimensions)}] got=[{string.Join(",", @out.Shape.dimensions)}]");
-            UnmanagedStorage.Copyto(@out, diff, NPY_CASTING.NPY_SAME_KIND_CASTING);
-            return @out;
+            NDArray diff = maxRes - minRes;
+            return keepdims ? diff : diff.reshape(resultShape);
         }
     }
 }

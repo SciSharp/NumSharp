@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Strings;
@@ -195,7 +196,7 @@ namespace NumSharp
                 }
             }
             if (consumed > ndim)
-                throw new IndexError($"too many indices for array: array is {ndim}-dimensional, but {consumed} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {ndim}-dimensional, but {consumed} were indexed"));
         }
 
         /// <summary>
@@ -469,7 +470,7 @@ namespace NumSharp
 
             picked.Dispose();
             if (fail >= 0)
-                throw new IndexError($"index {FancyIndexKernelRoute.ReadIndex(indexPtr, index32, fail)} is out of bounds for axis 0 with size {dims[0]}");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {FancyIndexKernelRoute.ReadIndex(indexPtr, index32, fail)} is out of bounds for axis 0 with size {dims[0]}"));
             return false;   // -2: the IL kernels are unavailable on this host
         }
 
@@ -502,7 +503,7 @@ namespace NumSharp
             {
                 using (var proxy = np.broadcast_to(NDArray.Scalar((byte)0), new Shape((long[])Shape.dimensions.Clone())))
                     Backends.UnmanagedStorage.MapIterGet(proxy, selection, null, true)?.Dispose();
-                throw new IndexError($"too many indices for array: array is {ndim}-dimensional, but {selection.Length} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {ndim}-dimensional, but {selection.Length} were indexed"));
             }
             if (selection.Length == 1 && TryStringGatherRows(selection[0], out var gathered))
                 return gathered;
@@ -520,7 +521,7 @@ namespace NumSharp
             {
                 using (var proxy = np.zeros(new Shape((long[])Shape.dimensions.Clone()), NPTypeCode.Byte))
                     Backends.UnmanagedStorage.MapIterSet(proxy, selection, NDArray.Scalar((byte)0));
-                throw new IndexError($"too many indices for array: array is {ndim}-dimensional, but {selection.Length} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {ndim}-dimensional, but {selection.Length} were indexed"));
             }
             StringAdvancedSet(value, (u, v) => Backends.UnmanagedStorage.MapIterSet(u, selection, v), (p, v) => Backends.UnmanagedStorage.MapIterSet(p, selection, v));
         }

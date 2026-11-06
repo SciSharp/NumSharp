@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -538,7 +539,7 @@ namespace NumSharp.Backends.Unmanaged
             var sourceBytes = Count * ItemLength;
             var targetSize = InfoOf<T1>.Size;
             if (sourceBytes % targetSize != 0)
-                throw new InvalidOperationException($"Cannot reinterpret {sourceBytes} bytes as {typeof(T1).Name} elements.");
+                throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Cannot reinterpret {sourceBytes} bytes as {typeof(T1).Name} elements."));
 
             return new ArraySlice<T1>(UnmanagedMemoryBlock<T1>.Copy(VoidAddress, sourceBytes / targetSize));
         }

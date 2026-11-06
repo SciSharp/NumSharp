@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Contracts;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Unmanaged;
 
@@ -363,7 +364,7 @@ namespace NumSharp.Utilities
             get
             {
                 if (m_count > int.MaxValue)
-                    throw new OverflowException($"Count ({m_count}) exceeds int.MaxValue. Use LongCount instead.");
+                    throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Count ({m_count}) exceeds int.MaxValue. Use LongCount instead."));
                 return (int)m_count;
             }
         }

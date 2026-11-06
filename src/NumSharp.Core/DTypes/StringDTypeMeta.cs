@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
@@ -91,9 +92,9 @@ namespace NumSharp
         public DType Descr(long chars)
         {
             if (chars < 0)
-                throw new ArgumentOutOfRangeException(nameof(chars), chars, "A string length cannot be negative.");
+                throw new ArgumentOutOfRangeException(nameof(chars), chars.ToString(CultureInfo.InvariantCulture), "A string length cannot be negative.");
             if (chars > MaxChars)
-                throw new TypeError($"string of length {chars} is too large to store inside array.");
+                throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"string of length {chars} is too large to store inside array."));
             return new DType(this, DType.NPY_NATIVE, null, (int)(chars * UnitSize), TypeChar);
         }
 
@@ -227,7 +228,7 @@ namespace NumSharp
         public DType Instantiate(long size)
         {
             if (size < 0)
-                throw new ValueError($"Strings cannot have a negative size but a size of {size} was given");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Strings cannot have a negative size but a size of {size} was given"));
             if (IsUnicode)
             {
                 // unicode strings are 4 bytes per character; npy_mul_sizes_with_overflow on intp

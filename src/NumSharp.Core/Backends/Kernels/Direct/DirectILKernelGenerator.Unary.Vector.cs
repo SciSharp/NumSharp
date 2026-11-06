@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Reflection;
@@ -121,7 +122,7 @@ namespace NumSharp.Backends.Kernels
                 method = VectorMethodCache.V(VectorBits, clrType).GetMethod(methodName,
                     BindingFlags.Public | BindingFlags.Static,
                     null, new[] { VectorMethodCache.V(VectorBits, clrType) }, null)
-                    ?? throw new InvalidOperationException($"Could not find {methodName} for Vector{VectorBits}<{clrType.Name}>");
+                    ?? throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Could not find {methodName} for Vector{VectorBits}<{clrType.Name}>"));
             }
             else if (op == UnaryOp.Floor || op == UnaryOp.Ceil || op == UnaryOp.Round || op == UnaryOp.Rint || op == UnaryOp.Truncate)
             {
@@ -131,7 +132,7 @@ namespace NumSharp.Backends.Kernels
                 // only routes here when it is non-null, so the throw is a defensive assert — it can
                 // fire only if the emitter is reached without going through the eligibility gate.
                 method = VectorMethodCache.ContainerUnaryOrNull(VectorBits, methodName, clrType)
-                    ?? throw new InvalidOperationException($"Could not find {methodName} for Vector{VectorBits}<{clrType.Name}>");
+                    ?? throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Could not find {methodName} for Vector{VectorBits}<{clrType.Name}>"));
             }
             else
             {

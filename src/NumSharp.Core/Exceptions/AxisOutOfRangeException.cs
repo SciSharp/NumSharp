@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 
 namespace NumSharp
 {
@@ -18,12 +19,12 @@ namespace NumSharp
         /// <summary>The legacy text for an axis and a rank.</summary>
         /// <param name="ndim">The rank.</param>
         /// <param name="axis">The axis.</param>
-        public AxisOutOfRangeException(int ndim, int axis) : base($"axis ({axis}) is out of bounds for array of dimension ({ndim})") { }
+        public AxisOutOfRangeException(int ndim, int axis) : base(string.Create(CultureInfo.InvariantCulture, $"axis ({axis}) is out of bounds for array of dimension ({ndim})")) { }
 
         /// <summary>The legacy text for a 64-bit axis and a rank.</summary>
         /// <param name="ndim">The rank.</param>
         /// <param name="axis">The axis.</param>
-        public AxisOutOfRangeException(int ndim, long axis) : base($"axis ({axis}) is out of bounds for array of dimension ({ndim})") { }
+        public AxisOutOfRangeException(int ndim, long axis) : base(string.Create(CultureInfo.InvariantCulture, $"axis ({axis}) is out of bounds for array of dimension ({ndim})")) { }
 
         /// <summary>The legacy text without an axis or a rank.</summary>
         public AxisOutOfRangeException() : base("axis is out of bounds for array of dimension") { }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -927,7 +928,7 @@ namespace NumSharp.Backends.Kernels
                     return;
                 }
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(laneBytes), laneBytes, "EmitPackedMasksToBools: 2-, 4- or 8-byte lanes only — caller bug.");
+                    throw new ArgumentOutOfRangeException(nameof(laneBytes), laneBytes.ToString(CultureInfo.InvariantCulture), "EmitPackedMasksToBools: 2-, 4- or 8-byte lanes only — caller bug.");
             }
         }
 

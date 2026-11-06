@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 
 namespace NumSharp
@@ -32,7 +33,7 @@ namespace NumSharp
             if (ndim == 0)
                 return ScalarOffsetChecked(indices.Length == 0 ? 0 : indices[0], indices.Length);
             if (indices.Length > ndim)
-                throw new IndexError($"too many indices for array: array is {ndim}-dimensional, but {indices.Length} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {ndim}-dimensional, but {indices.Length} were indexed"));
 
             long off = offset;
             for (int ax = 0; ax < indices.Length; ax++)
@@ -54,7 +55,7 @@ namespace NumSharp
             if (ndim == 0)
                 return ScalarOffsetChecked(indices.Length == 0 ? 0 : indices[0], indices.Length);
             if (indices.Length > ndim)
-                throw new IndexError($"too many indices for array: array is {ndim}-dimensional, but {indices.Length} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {ndim}-dimensional, but {indices.Length} were indexed"));
 
             long off = offset;
             for (int ax = 0; ax < indices.Length; ax++)
@@ -80,8 +81,8 @@ namespace NumSharp
             // One unsigned compare tests both ends: a still-negative index becomes a huge unsigned value.
             if ((ulong)i >= (ulong)n)
                 throw new IndexError(dimensions.Length == 1
-                    ? $"index {index} is out of bounds for axis 0 with size {n}"
-                    : $"index {index} is out of bounds for size {n}");
+                    ? string.Create(CultureInfo.InvariantCulture, $"index {index} is out of bounds for axis 0 with size {n}")
+                    : string.Create(CultureInfo.InvariantCulture, $"index {index} is out of bounds for size {n}"));
             return TransformOffset(i);
         }
 
@@ -98,7 +99,7 @@ namespace NumSharp
             long n = dimensions[axis];
             long i = coordinate < 0 ? coordinate + n : coordinate;
             if ((ulong)i >= (ulong)n)
-                throw new IndexError($"index {coordinate} is out of bounds for axis {axis} with size {n}");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {coordinate} is out of bounds for axis {axis} with size {n}"));
             return i;
         }
 
@@ -114,9 +115,9 @@ namespace NumSharp
         private readonly long ScalarOffsetChecked(long index, int count)
         {
             if (count > 1)
-                throw new IndexError($"too many indices for array: array is 0-dimensional, but {count} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is 0-dimensional, but {count} were indexed"));
             if (index != 0 && index != -1)
-                throw new IndexError($"index {index} is out of bounds for size 1");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {index} is out of bounds for size 1"));
             return offset;
         }
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
@@ -788,7 +789,7 @@ namespace NumSharp.Backends
                 int nb = nEqualBins.Value;
                 NDArray edges = HistogramLinspace(first, last, nb + 1, computeType, resultType);
                 if (AnyNonIncreasing(edges))
-                    throw new ValueError($"Too many bins for data range. Cannot create {nb} finite-sized bins.");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Too many bins for data range. Cannot create {nb} finite-sized bins."));
                 return new BinEdgesResult(edges, true, first, last, nb, resultType, rangeEdges: range.HasValue);
             }
 
@@ -848,8 +849,8 @@ namespace NumSharp.Backends
             if (nbytes > long.MaxValue)
                 throw new ValueError(AllocationGuard.TooBigMessage);
             throw new OutOfMemoryException(
-                $"Unable to allocate {NumPySizeString(nbytes)} for an array with shape ({new System.Numerics.BigInteger(length)},) " +
-                $"and data type {linspaceDtype.AsNumpyDtypeName()}");
+                string.Create(CultureInfo.InvariantCulture, $"Unable to allocate {NumPySizeString(nbytes)} for an array with shape ({new System.Numerics.BigInteger(length)},) " +
+                $"and data type {linspaceDtype.AsNumpyDtypeName()}"));
         }
 
         /// <summary>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection.Emit;
 using System.Text;
 using NumSharp.Backends.Kernels;
@@ -1059,7 +1060,7 @@ namespace NumSharp.Backends.Iteration
         {
             if (_index >= ctx.InputTypes.Length)
                 throw new InvalidOperationException(
-                    $"Input({_index}) out of range; compile provided {ctx.InputTypes.Length} inputs.");
+                    string.Create(CultureInfo.InvariantCulture, $"Input({_index}) out of range; compile provided {ctx.InputTypes.Length} inputs."));
 
             // An iterator operand's per-element local, or a parameter's once-loaded local (a 0-d
             // array np.evaluate hoisted into the aux block) — the node cannot tell the two apart.
@@ -1076,7 +1077,7 @@ namespace NumSharp.Backends.Iteration
         {
             if (_index >= ctx.InputTypes.Length)
                 throw new InvalidOperationException(
-                    $"Input({_index}) out of range; compile provided {ctx.InputTypes.Length} inputs.");
+                    string.Create(CultureInfo.InvariantCulture, $"Input({_index}) out of range; compile provided {ctx.InputTypes.Length} inputs."));
 
             // The local already holds this input's vector in the representation the plan chose:
             // the shared Vector<lane(W)> (uniform v2 — a bool operand's local is its lane mask), or
@@ -2857,7 +2858,7 @@ namespace NumSharp.Backends.Iteration
             var parameters = mi.GetParameters();
             if (parameters.Length != args.Length)
                 throw new ArgumentException(
-                    $"Delegate {mi.Name} expects {parameters.Length} arg(s), got {args.Length}.",
+                    string.Create(CultureInfo.InvariantCulture, $"Delegate {mi.Name} expects {parameters.Length} arg(s), got {args.Length}."),
                     nameof(args));
 
             _paramCodes = MapParamCodes(parameters);
@@ -2895,7 +2896,7 @@ namespace NumSharp.Backends.Iteration
             var parameters = method.GetParameters();
             if (parameters.Length != args.Length)
                 throw new ArgumentException(
-                    $"Method {method.Name} expects {parameters.Length} arg(s), got {args.Length}.",
+                    string.Create(CultureInfo.InvariantCulture, $"Method {method.Name} expects {parameters.Length} arg(s), got {args.Length}."),
                     nameof(args));
 
             _paramCodes = MapParamCodes(parameters);
@@ -2938,7 +2939,7 @@ namespace NumSharp.Backends.Iteration
                 var tc = pt.GetTypeCode();
                 if (!IsSupported(tc))
                     throw new ArgumentException(
-                        $"Parameter {i} type {pt.Name} is not one of the 15 supported NPTypeCode dtypes.",
+                        string.Create(CultureInfo.InvariantCulture, $"Parameter {i} type {pt.Name} is not one of the 15 supported NPTypeCode dtypes."),
                         nameof(parameters));
                 codes[i] = tc;
             }

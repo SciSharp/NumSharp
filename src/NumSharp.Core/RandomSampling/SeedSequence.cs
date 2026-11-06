@@ -165,11 +165,11 @@ namespace NumSharp
         public SeedSequence(object entropy, object spawn_key = null, long pool_size = DEFAULT_POOL_SIZE, uint n_children_spawned = 0)
         {
             if (pool_size < DEFAULT_POOL_SIZE)
-                throw new ValueError($"The size of the entropy pool should be at least {DEFAULT_POOL_SIZE}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"The size of the entropy pool should be at least {DEFAULT_POOL_SIZE}"));
             // The pool is a managed uint[] (it is mixed word by word and read by every generate_state): a size past what an
             // array can hold is NumPy's MemoryError from np.zeros(pool_size), refused before any entropy is drawn for it.
             if (pool_size > Array.MaxLength)
-                throw new OutOfMemoryException($"Unable to allocate an entropy pool of {pool_size} uint32 words.");
+                throw new OutOfMemoryException(string.Create(CultureInfo.InvariantCulture, $"Unable to allocate an entropy pool of {pool_size} uint32 words."));
 
             if (entropy is null)
             {
@@ -396,13 +396,13 @@ namespace NumSharp
             {
                 EntropyPiece p = pieces[i];
                 if (p.NDim != ndim)
-                    throw new ValueError($"all the input arrays must have same number of dimensions, but the array at index 0 has {ndim} dimension(s) and the array at index {i} has {p.NDim} dimension(s)");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"all the input arrays must have same number of dimensions, but the array at index 0 has {ndim} dimension(s) and the array at index {i} has {p.NDim} dimension(s)"));
                 for (int d = 0; d < ndim; d++)
                 {
                     if (d == 0)
                         shape[0] += p.Shape[0];
                     else if (shape[d] != p.Shape[d])
-                        throw new ValueError($"all the input array dimensions except for the concatenation axis must match exactly, but along dimension {d}, the array at index 0 has size {shape[d]} and the array at index {i} has size {p.Shape[d]}");
+                        throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"all the input array dimensions except for the concatenation axis must match exactly, but along dimension {d}, the array at index 0 has size {shape[d]} and the array at index {i} has size {p.Shape[d]}"));
                 }
                 total += p.Words.Length;
             }

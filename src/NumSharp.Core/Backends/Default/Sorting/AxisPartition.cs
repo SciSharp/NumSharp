@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -424,7 +425,7 @@ namespace NumSharp.Backends.Sorting
                 if (k < 0)
                     k += axisLength;
                 if (size != 0 && (k < 0 || k >= axisLength))
-                    throw new ValueError($"kth(={k}) out of bounds ({axisLength})");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"kth(={k}) out of bounds ({axisLength})"));
                 ks[i] = k; // a kth position can exceed int.MaxValue for an axis longer than 2^31
             }
             if (ks.Length > 1)

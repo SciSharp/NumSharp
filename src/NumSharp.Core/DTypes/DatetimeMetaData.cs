@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 
 namespace NumSharp
@@ -154,7 +155,7 @@ namespace NumSharp
             string basestr = UnitString;
             if (num == 1)
                 return skipBrackets ? basestr : "[" + basestr + "]";
-            return skipBrackets ? num + basestr : "[" + num + basestr + "]";
+            return skipBrackets ? num.ToString(CultureInfo.InvariantCulture) + basestr : "[" + num.ToString(CultureInfo.InvariantCulture) + basestr + "]";
         }
 
         /// <summary>The bracketed metadata string (<c>"[ns]"</c>, <c>"[10ns]"</c>, <c>""</c> for generic).</summary>
@@ -376,7 +377,7 @@ namespace NumSharp
                 // NumPy: integer division by zero (interpreter crash). Report it as malformed metadata instead.
                 throw new TypeError(metastr == null
                     ? "Invalid datetime metadata string \"" + meta.ToString(false) + "\""
-                    : $"Invalid datetime metadata string \"{metastr}\" at position {Math.Max(0, metastr.IndexOf('/') + 1)}");
+                    : string.Create(CultureInfo.InvariantCulture, $"Invalid datetime metadata string \"{metastr}\" at position {Math.Max(0, metastr.IndexOf('/') + 1)}"));
             }
 
             int num = 3;
@@ -417,8 +418,8 @@ namespace NumSharp
             if (i == num)
             {
                 if (metastr == null)
-                    throw new ValueError($"divisor ({den}) is not a multiple of a lower-unit in datetime metadata");
-                throw new ValueError($"divisor ({den}) is not a multiple of a lower-unit in datetime metadata \"{metastr}\"");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"divisor ({den}) is not a multiple of a lower-unit in datetime metadata"));
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"divisor ({den}) is not a multiple of a lower-unit in datetime metadata \"{metastr}\""));
             }
 
             return new DatetimeMetaData((NPY_DATETIMEUNIT)baseunit[i], meta.num * q);
@@ -470,7 +471,7 @@ namespace NumSharp
         private static TypeError BadInput(string metastr, int position)
         {
             if (position != 0)
-                return new TypeError($"Invalid datetime metadata string \"{metastr}\" at position {position}");
+                return new TypeError(string.Create(CultureInfo.InvariantCulture, $"Invalid datetime metadata string \"{metastr}\" at position {position}"));
             return new TypeError($"Invalid datetime metadata string \"{metastr}\"");
         }
 

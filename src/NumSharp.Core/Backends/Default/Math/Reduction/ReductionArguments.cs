@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Text;
 
 namespace NumSharp.Backends
@@ -246,8 +247,8 @@ namespace NumSharp.Backends
             {
                 // "NpyIter does not raise a good error message in this common case" (reduction.c): the wrapper's own text.
                 throw new ValueError(
-                    $"output parameter for reduction operation {funcname} has the wrong number of dimensions: " +
-                    $"Found {@out.ndim} but expected {curr}" +
+                    string.Create(CultureInfo.InvariantCulture, $"output parameter for reduction operation {funcname} has the wrong number of dimensions: " +
+                    $"Found {@out.ndim} but expected {curr}") +
                     (keepdims ? " (must match the operand's when keepdims=True)" : ""));
             }
 
@@ -302,14 +303,14 @@ namespace NumSharp.Backends
                         // An explicit reduction axis: kept (keepdims) it must be exactly 1 long.
                         if (i >= 0 && outShape[i] != 1)
                             throw new ValueError(
-                                $"operand was set up as a reduction along axis {i}, but the length of the axis is {outShape[i]} (it has to be 1)");
+                                string.Create(CultureInfo.InvariantCulture, $"operand was set up as a reduction along axis {i}, but the length of the axis is {outShape[i]} (it has to be 1)"));
                     }
                     else if (bs != 1 && outShape[i] == 1)
                     {
                         // out would broadcast (a write-side reduction) along a kept axis; the reduction iterator does not
                         // enable REDUCE_OK, so NumPy refuses it (npyiter_check_reduce_ok_and_set_flags, dim = out's axis).
                         throw new ValueError(
-                            $"output operand requires a reduction along dimension {i}, but the reduction is not enabled. " +
+                            string.Create(CultureInfo.InvariantCulture, $"output operand requires a reduction along dimension {i}, but the reduction is not enabled. ") +
                             "The dimension size of 1 does not match the expected output shape.");
                     }
                 }

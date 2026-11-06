@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
@@ -77,7 +78,7 @@ namespace NumSharp.Backends.Strings
             SwapcaseMap => "swapcase",
             CapitalizeMap => "capitalize",
             TitleMap => "title",
-            _ => throw new ArgumentOutOfRangeException(nameof(map), map, "Not a case map."),
+            _ => throw new ArgumentOutOfRangeException(nameof(map), map.ToString(CultureInfo.InvariantCulture), "Not a case map."),
         };
 
         /// <summary>

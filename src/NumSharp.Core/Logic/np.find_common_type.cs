@@ -2,6 +2,7 @@
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -1307,7 +1308,7 @@ namespace NumSharp
             if (N == 1)
                 return dtypelist[0];
             if (start < 0)
-                throw new ArgumentOutOfRangeException(nameof(start), start, "A candidate index into __test_types.");
+                throw new ArgumentOutOfRangeException(nameof(start), start.ToString(CultureInfo.InvariantCulture), "A candidate index into __test_types.");
 
             // The descriptors are compared once per candidate; resolve them once.
             var descrs = new DType[N];

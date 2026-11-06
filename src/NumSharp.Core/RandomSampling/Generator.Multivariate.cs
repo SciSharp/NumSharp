@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -532,10 +533,10 @@ namespace NumSharp
             if (nsample < 0)
                 throw new ValueError("nsample must be nonnegative.");
             if (colors is null)
-                throw new ValueError($"colors must be a one-dimensional sequence of nonnegative integers not exceeding {long.MaxValue}.");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"colors must be a one-dimensional sequence of nonnegative integers not exceeding {long.MaxValue}."));
             for (int i = 0; i < colors.Length; i++)
                 if (colors[i] < 0)
-                    throw new ValueError($"colors must be a one-dimensional sequence of nonnegative integers not exceeding {long.MaxValue}.");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"colors must be a one-dimensional sequence of nonnegative integers not exceeding {long.MaxValue}."));
             return MultivariateHypergeometricCore(colors, nsample, size, method);
         }
 
@@ -556,7 +557,7 @@ namespace NumSharp
                 throw new ValueError("method must be \"count\" or \"marginals\".");
             if (nsample < 0)
                 throw new ValueError("nsample must be nonnegative.");
-            string invalid = $"colors must be a one-dimensional sequence of nonnegative integers not exceeding {long.MaxValue}.";
+            string invalid = string.Create(CultureInfo.InvariantCulture, $"colors must be a one-dimensional sequence of nonnegative integers not exceeding {long.MaxValue}.");
             if (colors is null || colors.ndim != 1)
                 throw new ValueError(invalid);
             // An empty array of any dtype passes; a non-empty one must be an integer dtype.
@@ -603,7 +604,7 @@ namespace NumSharp
             for (int i = 0; i < colors.Length; i++)
             {
                 if (colors[i] > long.MaxValue - total)
-                    throw new ValueError($"sum(colors) must not exceed the maximum value of a 64 bit signed integer ({long.MaxValue})");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"sum(colors) must not exceed the maximum value of a 64 bit signed integer ({long.MaxValue})"));
                 total += colors[i];
             }
             if (method == "marginals" && total >= 1000000000)
@@ -611,7 +612,7 @@ namespace NumSharp
             // The count method allocates total * sizeof(size_t); NumPy caps the index so that product cannot overflow.
             const long MaxIndex = long.MaxValue / sizeof(ulong);
             if (method == "count" && total > MaxIndex)
-                throw new ValueError($"When method is 'count', sum(colors) must not exceed {MaxIndex}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"When method is 'count', sum(colors) must not exceed {MaxIndex}"));
             if (nsample > total)
                 throw new ValueError("nsample > sum(colors)");
 
@@ -687,7 +688,7 @@ namespace NumSharp
             }
             catch (OutOfMemoryException)
             {
-                throw new OutOfMemoryException($"Insufficient memory for multivariate_hypergeometric with method='count' and sum(colors)={total}");
+                throw new OutOfMemoryException(string.Create(CultureInfo.InvariantCulture, $"Insufficient memory for multivariate_hypergeometric with method='count' and sum(colors)={total}"));
             }
             ulong* choices = (ulong*)work.Address;
             try
@@ -1489,7 +1490,7 @@ namespace NumSharp
             {
                 if (i > 0)
                     sb.Append(", ");
-                sb.Append(dims[i]);
+                sb.Append(dims[i].ToString(CultureInfo.InvariantCulture));
             }
             if (dims.Length == 1)
                 sb.Append(',');

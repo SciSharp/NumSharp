@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Kernels;
 
 // =============================================================================
@@ -57,9 +58,9 @@ namespace NumSharp.Backends.Sorting
         internal TextKeyer(int unit, int units)
         {
             if (unit != 1 && unit != 4)
-                throw new ArgumentOutOfRangeException(nameof(unit), unit, "a text code unit is 1 (S) or 4 (U) bytes");
+                throw new ArgumentOutOfRangeException(nameof(unit), unit.ToString(CultureInfo.InvariantCulture), "a text code unit is 1 (S) or 4 (U) bytes");
             if (units < 0)
-                throw new ArgumentOutOfRangeException(nameof(units), units, "a width cannot be negative");
+                throw new ArgumentOutOfRangeException(nameof(units), units.ToString(CultureInfo.InvariantCulture), "a width cannot be negative");
             Unit = unit;
             Units = units;
         }

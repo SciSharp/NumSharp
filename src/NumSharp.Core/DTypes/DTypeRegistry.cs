@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -401,7 +402,7 @@ namespace NumSharp
         private static void Add(DTypeMeta meta)
         {
             if (_byTypeNum.TryGetValue(meta.type_num, out var holder))
-                throw new InvalidOperationException($"A DType with type number {meta.type_num} is already registered ({holder}).");
+                throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"A DType with type number {meta.type_num} is already registered ({holder})."));
             if (_byName.ContainsKey(meta.Name))
                 throw new InvalidOperationException($"A DType named '{meta.Name}' is already registered.");
             foreach (var alias in meta.Aliases)

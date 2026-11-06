@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Generic;
 
@@ -94,7 +95,7 @@ namespace NumSharp
             bool cOrder = OrderResolver.RequireCOrFOrder(npyOrder);
 
             if (index < 0 || index >= unravelSize)
-                throw new ValueError($"index {index} is out of bounds for array with size {unravelSize}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"index {index} is out of bounds for array with size {unravelSize}"));
 
             int ndim = shape.Length;
             // shape=(): index 0 (the only valid one) has no coordinate — NumPy's empty tuple.

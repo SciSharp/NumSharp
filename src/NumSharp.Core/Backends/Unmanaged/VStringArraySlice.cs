@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged.Pooling;
@@ -60,7 +61,7 @@ namespace NumSharp.Backends.Unmanaged
             if (descr.Meta is not VStringDTypeMeta)
                 throw new ArgumentException($"{descr.ToString(true)} is not a StringDType descriptor.", nameof(descr));
             if (cells.Count % VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING != 0)
-                throw new ArgumentException($"A buffer of {cells.Count} bytes is not a whole number of 16-byte cells.", nameof(cells));
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"A buffer of {cells.Count} bytes is not a whole number of 16-byte cells."), nameof(cells));
             Cells = cells;
             Descr = descr;
             Count = cells.Count / VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
@@ -597,7 +598,7 @@ namespace NumSharp.Backends.Unmanaged
         private static string Decode(byte* buf, long size)
         {
             if (size > int.MaxValue)
-                throw new OutOfMemoryException($"A StringDType element of {size} bytes is longer than a .NET string can be.");
+                throw new OutOfMemoryException(string.Create(CultureInfo.InvariantCulture, $"A StringDType element of {size} bytes is longer than a .NET string can be."));
             return NDUtf8.DecodeTrusted(new ReadOnlySpan<byte>(buf, (int)size));
         }
 

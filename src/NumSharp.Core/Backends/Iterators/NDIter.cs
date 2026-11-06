@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
@@ -551,7 +552,7 @@ namespace NumSharp.Backends.Iteration
                             allocDtype = NPTypeCode.Boolean;  // mask default (c:1041-1049)
                         else
                             throw new ArgumentException(
-                                $"Operand {opIdx} is null with ALLOCATE flag but opDtypes is not provided", nameof(opDtypes));
+                                string.Create(CultureInfo.InvariantCulture, $"Operand {opIdx} is null with ALLOCATE flag but opDtypes is not provided"), nameof(opDtypes));
                     }
                     else if (isArrayMaskOp)
                     {
@@ -905,7 +906,7 @@ namespace NumSharp.Backends.Iteration
                                     }
                                 }
                                 throw new ValueError(
-                                    $"output operand requires a reduction along dimension {_state->NDim - 1 - reported}, " +
+                                    string.Create(CultureInfo.InvariantCulture, $"output operand requires a reduction along dimension {_state->NDim - 1 - reported}, ") +
                                     "but the reduction is not enabled. The dimension size of 1 " +
                                     "does not match the expected output shape.");
                             }
@@ -1435,7 +1436,7 @@ namespace NumSharp.Backends.Iteration
                                 else if (opAxis >= opShape.Length)
                                 {
                                     throw new IncorrectShapeException(
-                                        $"Operand {opIdx} op_axes refers to non-existent axis {opAxis}");
+                                        string.Create(CultureInfo.InvariantCulture, $"Operand {opIdx} op_axes refers to non-existent axis {opAxis}"));
                                 }
                                 else
                                 {
@@ -1444,8 +1445,8 @@ namespace NumSharp.Backends.Iteration
                                     {
                                         // NumPy's ValueError (npyiter_fill_axisdata's explicit reduction branch).
                                         throw new ValueError(
-                                            $"operand was set up as a reduction along axis {opAxis}, but the length of the " +
-                                            $"axis is {len} (it has to be 1)");
+                                            string.Create(CultureInfo.InvariantCulture, $"operand was set up as a reduction along axis {opAxis}, but the length of the " +
+                                            $"axis is {len} (it has to be 1)"));
                                     }
                                     virtualDims[iterAxis] = 1;
                                 }
@@ -1457,7 +1458,7 @@ namespace NumSharp.Backends.Iteration
                             else if (opAxis >= opShape.Length)
                             {
                                 throw new IncorrectShapeException(
-                                    $"Operand {opIdx} op_axes refers to non-existent axis {opAxis}");
+                                    string.Create(CultureInfo.InvariantCulture, $"Operand {opIdx} op_axes refers to non-existent axis {opAxis}"));
                             }
                             else
                             {
@@ -1472,7 +1473,7 @@ namespace NumSharp.Backends.Iteration
                         int offset = opAxesNDim - opShape.Length;
                         if (offset < 0)
                             throw new IncorrectShapeException(
-                                $"Operand {opIdx} has {opShape.Length} dims but opAxesNDim={opAxesNDim}");
+                                string.Create(CultureInfo.InvariantCulture, $"Operand {opIdx} has {opShape.Length} dims but opAxesNDim={opAxesNDim}"));
                         for (int d = 0; d < opAxesNDim; d++)
                             virtualDims[d] = d < offset ? 1 : opShape[d - offset];
                     }
@@ -1646,7 +1647,7 @@ namespace NumSharp.Backends.Iteration
 
                         // Validate that the operand axis exists and is compatible
                         if (opAxis >= opShape.Length)
-                            throw new IncorrectShapeException($"Operand {opIdx} op_axes refers to non-existent axis {opAxis}");
+                            throw new IncorrectShapeException(string.Create(CultureInfo.InvariantCulture, $"Operand {opIdx} op_axes refers to non-existent axis {opAxis}"));
 
                         // An explicit reduction axis must have length 1 on the operand; that is a STRIDE-pass refusal in NumPy,
                         // raised after every shape check, so it is ThrowStridePassRefusals' (in NumPy's axis order), not this
@@ -1658,7 +1659,7 @@ namespace NumSharp.Backends.Iteration
 
                         // opDim must equal iterDim or be 1 (broadcastable)
                         if (opDim != iterDim && opDim != 1)
-                            throw new IncorrectShapeException($"Operand {opIdx} shape incompatible with iterShape at axis {iterAxis}");
+                            throw new IncorrectShapeException(string.Create(CultureInfo.InvariantCulture, $"Operand {opIdx} shape incompatible with iterShape at axis {iterAxis}"));
                     }
                 }
                 else
@@ -1668,7 +1669,7 @@ namespace NumSharp.Backends.Iteration
 
                     // Operand must have fewer or equal dimensions
                     if (offset < 0)
-                        throw new IncorrectShapeException($"Operand {opIdx} has more dimensions than iterShape");
+                        throw new IncorrectShapeException(string.Create(CultureInfo.InvariantCulture, $"Operand {opIdx} has more dimensions than iterShape"));
 
                     for (int d = 0; d < opShape.Length; d++)
                     {
@@ -1677,7 +1678,7 @@ namespace NumSharp.Backends.Iteration
 
                         // opDim must equal iterDim or be 1 (broadcastable)
                         if (opDim != iterDim && opDim != 1)
-                            throw new IncorrectShapeException($"Operand {opIdx} shape incompatible with iterShape at axis {d}");
+                            throw new IncorrectShapeException(string.Create(CultureInfo.InvariantCulture, $"Operand {opIdx} shape incompatible with iterShape at axis {d}"));
                     }
                 }
             }
@@ -1854,7 +1855,7 @@ namespace NumSharp.Backends.Iteration
                 // Marked a reduction without a reduce_ok check (ApplyOpAxes); only its length is refused.
                 return axis >= 0 && dims is not null && axis < dims.Length && dims[axis] != 1
                     ? new ValueError(
-                        $"operand was set up as a reduction along axis {axis}, but the length of the axis is {dims[axis]} " +
+                        string.Create(CultureInfo.InvariantCulture, $"operand was set up as a reduction along axis {axis}, but the length of the axis is {dims[axis]} ") +
                         "(it has to be 1)")
                     : null;
             }
@@ -1899,7 +1900,7 @@ namespace NumSharp.Backends.Iteration
                 return null;
             if (!reduceOk)
                 return new ValueError(
-                    $"output operand requires a reduction along dimension {dim}, " +
+                    string.Create(CultureInfo.InvariantCulture, $"output operand requires a reduction along dimension {dim}, ") +
                     "but the reduction is not enabled. The dimension size of 1 " +
                     "does not match the expected output shape.");
             if ((opFlag & NDIterOpFlags.READ) == 0)
@@ -2675,7 +2676,7 @@ namespace NumSharp.Backends.Iteration
 
             if (!reduceOk)
                 throw new ValueError(
-                    $"output operand requires a reduction along dimension {dim}, " +
+                    string.Create(CultureInfo.InvariantCulture, $"output operand requires a reduction along dimension {dim}, ") +
                     "but the reduction is not enabled. The dimension size of 1 " +
                     "does not match the expected output shape.");
 
@@ -3225,7 +3226,7 @@ namespace NumSharp.Backends.Iteration
 
             if (outStrides.Length < _state->NDim)
                 throw new ArgumentException(
-                    $"outStrides must have at least {_state->NDim} elements.", nameof(outStrides));
+                    string.Create(CultureInfo.InvariantCulture, $"outStrides must have at least {_state->NDim} elements."), nameof(outStrides));
 
             // Walk from innermost axis outward, accumulating itemsize.
             // NumSharp's innermost is at NDim-1 (opposite of NumPy's reversed storage
@@ -3273,11 +3274,11 @@ namespace NumSharp.Backends.Iteration
         {
             if (axis < 0 || axis >= _state->NDim)
                 throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis} out of bounds for iterator with NDim={_state->NDim}");
+                    string.Create(CultureInfo.InvariantCulture, $"axis {axis} out of bounds for iterator with NDim={_state->NDim}"));
 
             if (outStrides.Length < _state->NOp)
                 throw new ArgumentException(
-                    $"outStrides must have at least {_state->NOp} elements.", nameof(outStrides));
+                    string.Create(CultureInfo.InvariantCulture, $"outStrides must have at least {_state->NOp} elements."), nameof(outStrides));
 
             int nop = _state->NOp;
             int stridesNDim = _state->StridesNDim;
@@ -3334,7 +3335,7 @@ namespace NumSharp.Backends.Iteration
         {
             if (outStrides.Length < _state->NOp)
                 throw new ArgumentException(
-                    $"outStrides must have at least {_state->NOp} elements.", nameof(outStrides));
+                    string.Create(CultureInfo.InvariantCulture, $"outStrides must have at least {_state->NOp} elements."), nameof(outStrides));
 
             int nop = _state->NOp;
 
@@ -3391,7 +3392,7 @@ namespace NumSharp.Backends.Iteration
             if (baseptrs.Length != _state->NOp)
             {
                 throw new ArgumentException(
-                    $"baseptrs length {baseptrs.Length} does not match operand count {_state->NOp}.",
+                    string.Create(CultureInfo.InvariantCulture, $"baseptrs length {baseptrs.Length} does not match operand count {_state->NOp}."),
                     nameof(baseptrs));
             }
 
@@ -3449,7 +3450,7 @@ namespace NumSharp.Backends.Iteration
             if (newOperands.Length != _state->NOp)
             {
                 throw new ArgumentException(
-                    $"newOperands length {newOperands.Length} does not match operand count {_state->NOp}.",
+                    string.Create(CultureInfo.InvariantCulture, $"newOperands length {newOperands.Length} does not match operand count {_state->NOp}."),
                     nameof(newOperands));
             }
 
@@ -3458,7 +3459,7 @@ namespace NumSharp.Backends.Iteration
             {
                 var arr = newOperands[i];
                 if (arr is null)
-                    throw new ArgumentException($"newOperands[{i}] is null.");
+                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"newOperands[{i}] is null."));
                 // ElementBytes — not arr.dtypesize — because the latter uses
                 // Marshal.SizeOf(bool) == 4 while in-memory bool storage is 1
                 // byte per element; it also sizes a fixed-width string element.
@@ -3663,7 +3664,7 @@ namespace NumSharp.Backends.Iteration
         {
             if (fn == null) throw new ArgumentNullException(nameof(fn));
             if (outCoords.Length < _state->NDim)
-                throw new ArgumentException($"outCoords must have at least {_state->NDim} elements.", nameof(outCoords));
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"outCoords must have at least {_state->NDim} elements."), nameof(outCoords));
             fixed (long* ptr = outCoords)
             {
                 fn(ref *_state, ptr);
@@ -3718,7 +3719,7 @@ namespace NumSharp.Backends.Iteration
                 throw new InvalidOperationException("Iterator not tracking multi-index. Use NDIterGlobalFlags.MULTI_INDEX during construction.");
 
             if (outCoords.Length < _state->NDim)
-                throw new ArgumentException($"Output span must have at least {_state->NDim} elements", nameof(outCoords));
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Output span must have at least {_state->NDim} elements"), nameof(outCoords));
 
             // Fast path: IDENTPERM means perm is identity (no reordering or flipping)
             if ((_state->ItFlags & (uint)NDIterFlags.IDENTPERM) != 0)
@@ -3762,7 +3763,7 @@ namespace NumSharp.Backends.Iteration
                 throw new InvalidOperationException("Iterator not tracking multi-index. Use NDIterGlobalFlags.MULTI_INDEX during construction.");
 
             if (coords.Length < _state->NDim)
-                throw new ArgumentException($"Coordinates must have at least {_state->NDim} elements", nameof(coords));
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Coordinates must have at least {_state->NDim} elements"), nameof(coords));
 
             bool hasNegPerm = (_state->ItFlags & (uint)NDIterFlags.NEGPERM) != 0;
 
@@ -3791,7 +3792,7 @@ namespace NumSharp.Backends.Iteration
                 }
 
                 if (coord < 0 || coord >= _state->Shape[d])
-                    throw new IndexOutOfRangeException($"Coordinate {coords[originalAxis]} out of range for original axis {originalAxis} (size {_state->Shape[d]})");
+                    throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"Coordinate {coords[originalAxis]} out of range for original axis {originalAxis} (size {_state->Shape[d]})"));
 
                 _state->Coords[d] = coord;
                 iterIndex += coord * multiplier;
@@ -3951,7 +3952,7 @@ namespace NumSharp.Backends.Iteration
                 throw new InvalidOperationException("Iterator not tracking index. Use NDIterGlobalFlags.C_INDEX or F_INDEX during construction.");
 
             if (flatIndex < 0 || flatIndex >= _state->IterSize)
-                throw new IndexOutOfRangeException($"Flat index {flatIndex} out of range [0, {_state->IterSize})");
+                throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"Flat index {flatIndex} out of range [0, {_state->IterSize})"));
 
             // NpyIter_GotoIndex: the iteration index the flat index names, read off the index strides (correct on coalesced
             // and flipped axes alike), then the coordinates of that position.
@@ -3998,7 +3999,7 @@ namespace NumSharp.Backends.Iteration
         public NDArray GetIterView(int operand)
         {
             if ((uint)operand >= (uint)_state->NOp)
-                throw new ArgumentOutOfRangeException(nameof(operand), $"Operand index {operand} out of range [0, {_state->NOp})");
+                throw new ArgumentOutOfRangeException(nameof(operand), string.Create(CultureInfo.InvariantCulture, $"Operand index {operand} out of range [0, {_state->NOp})"));
 
             // Cannot provide views when buffering is enabled (data may be in temporary buffers)
             // NumPy's ValueError (npyiter_itviews_get), whether or not any operand is actually buffered.

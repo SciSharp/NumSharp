@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Kernels;
 
@@ -48,7 +49,7 @@ namespace NumSharp
         {
             var prog = PolySteps.Eval(basis);
             if (n == 0)
-                throw new IndexError($"index {(prog.Horner ? -1 : -2)} is out of bounds for axis 0 with size 0");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {(prog.Horner ? -1 : -2)} is out of bounds for axis 0 with size 0"));
             // NumPy's common case: a float64 series at a float64 scalar (p(0.5), integ's lbnd), every statement float64
             // scalarmath — the double lane, the same bits at a fraction of the cost.
             if (t == NPTypeCode.Double && x.Kind == PolyNumberKind.Scalar && x.Dtype == NPTypeCode.Double && F64LaneApplies(basis))

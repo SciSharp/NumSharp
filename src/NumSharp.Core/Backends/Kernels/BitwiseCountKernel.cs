@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
@@ -82,7 +83,7 @@ namespace NumSharp.Backends.Kernels
                 case 8: W8((ulong*)src, dst, n, signed); break;
                 default:
                     // Every NumSharp integer/bool/char dtype is 1/2/4/8 bytes; the caller validates the dtype.
-                    throw new NotSupportedException($"bitwise_count element size {elemSize} is not supported.");
+                    throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"bitwise_count element size {elemSize} is not supported."));
             }
         }
 

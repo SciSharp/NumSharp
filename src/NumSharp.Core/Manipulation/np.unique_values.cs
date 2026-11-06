@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -76,7 +77,7 @@ namespace NumSharp
                 1 => indices,
                 2 => inverse_indices,
                 3 => counts,
-                _ => throw new IndexOutOfRangeException($"UniqueAllResult has 4 outputs; index {index} is out of range.")
+                _ => throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"UniqueAllResult has 4 outputs; index {index} is out of range."))
             };
 
             /// <summary>Returns the outputs as an <see cref="NDArray"/><c>[]</c> in NumPy field order.</summary>
@@ -130,7 +131,7 @@ namespace NumSharp
             {
                 0 => values,
                 1 => counts,
-                _ => throw new IndexOutOfRangeException($"UniqueCountsResult has 2 outputs; index {index} is out of range.")
+                _ => throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"UniqueCountsResult has 2 outputs; index {index} is out of range."))
             };
 
             /// <summary>Returns the outputs as an <see cref="NDArray"/><c>[]</c> in NumPy field order.</summary>
@@ -180,7 +181,7 @@ namespace NumSharp
             {
                 0 => values,
                 1 => inverse_indices,
-                _ => throw new IndexOutOfRangeException($"UniqueInverseResult has 2 outputs; index {index} is out of range.")
+                _ => throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"UniqueInverseResult has 2 outputs; index {index} is out of range."))
             };
 
             /// <summary>Returns the outputs as an <see cref="NDArray"/><c>[]</c> in NumPy field order.</summary>

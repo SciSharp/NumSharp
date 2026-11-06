@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
@@ -38,7 +39,7 @@ namespace NumSharp.Backends
 
             if (K != right.Shape.dimensions[0])
                 throw new IncorrectShapeException(
-                    $"shapes {left.Shape.ToPythonTuple()} and {right.Shape.ToPythonTuple()} not aligned: {K} (dim 1) != {right.Shape.dimensions[0]} (dim 0)");
+                    string.Create(CultureInfo.InvariantCulture, $"shapes {left.Shape.ToPythonTuple()} and {right.Shape.ToPythonTuple()} not aligned: {K} (dim 1) != {right.Shape.dimensions[0]} (dim 0)"));
 
             // fillZeros:false: every route below writes all M*N cells of C (the kernels clear C; an
             // installed BLAS runs gemm/gemv beta=0 or syrk), so pre-zeroing is wasted — and a fresh
@@ -51,7 +52,7 @@ namespace NumSharp.Backends
             {
                 if (@out.ndim != 2 || @out.Shape.dimensions[0] != M || @out.Shape.dimensions[1] != N)
                     throw new IncorrectShapeException(
-                        $"Output shape {@out.Shape} incompatible with matmul result shape ({M}, {N})");
+                        string.Create(CultureInfo.InvariantCulture, $"Output shape {@out.Shape} incompatible with matmul result shape ({M}, {N})"));
             }
 
             // An external BLAS, when one is installed (np is 100% managed by default — see

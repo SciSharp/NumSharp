@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -1075,7 +1076,7 @@ namespace NumSharp.Backends
         }
 
         private static string DimsText(long[] dims, int nb)
-            => "(" + string.Join(",", new ArraySegment<long>(dims, 0, nb)) + ")";
+            => "(" + string.Join(",", Array.ConvertAll(dims[..nb], d => d.ToString(CultureInfo.InvariantCulture))) + ")";
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static T* Alloc<T>(long count) where T : unmanaged

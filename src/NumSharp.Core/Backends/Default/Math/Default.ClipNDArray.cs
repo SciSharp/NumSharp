@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
@@ -328,8 +329,8 @@ namespace NumSharp.Backends
         private static string ShapeRepr(long[] dims)
         {
             if (dims.Length == 0) return "()";
-            if (dims.Length == 1) return $"({dims[0]},)";
-            return $"({string.Join(",", dims)})";
+            if (dims.Length == 1) return string.Create(CultureInfo.InvariantCulture, $"({dims[0]},)");
+            return $"({string.Join(",", Array.ConvertAll(dims, d => d.ToString(CultureInfo.InvariantCulture)))})";
         }
 
         /// <summary>The element count of a shape (0 when any dimension is 0).</summary>
@@ -909,8 +910,8 @@ namespace NumSharp.Backends
 
             if (!ok)
                 throw new TypeError(
-                    $"Cannot cast ufunc '{ufunc}' input {index} from dtype('{fromName}') to " +
-                    $"dtype('{loop.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+                    string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc '{ufunc}' input {index} from dtype('{fromName}') to " +
+                    $"dtype('{loop.AsNumpyDtypeName()}') with casting rule 'same_kind'"));
         }
 
         private static bool IsSameKind(NPTypeCode a, NPTypeCode b)

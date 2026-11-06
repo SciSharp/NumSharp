@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -230,7 +231,7 @@ namespace NumSharp.Backends.Strings
         internal static void FailAllocationAfter(int successes)
         {
             if (successes < 0)
-                throw new ArgumentOutOfRangeException(nameof(successes), successes, "The number of successful allocations is not negative.");
+                throw new ArgumentOutOfRangeException(nameof(successes), successes.ToString(CultureInfo.InvariantCulture), "The number of successful allocations is not negative.");
             t_failCountdown = successes + 1;
             s_faultInjectionArmed = true;
         }

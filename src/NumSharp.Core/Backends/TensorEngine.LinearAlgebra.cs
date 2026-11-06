@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Kernels;
 
@@ -337,7 +338,7 @@ namespace NumSharp.Backends
         internal static NDArray UnitAxisView(NDArray x, int axis)
         {
             if ((uint)axis > (uint)x.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis), axis, "the new axis must lie between 0 and ndim");
+                throw new ArgumentOutOfRangeException(nameof(axis), axis.ToString(CultureInfo.InvariantCulture), "the new axis must lie between 0 and ndim");
 
             var src = x.Shape;
             var dims = new long[src.NDim + 1];

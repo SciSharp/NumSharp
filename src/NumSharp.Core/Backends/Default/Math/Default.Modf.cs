@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
@@ -294,9 +295,9 @@ namespace NumSharp.Backends
             if (NDIterCasting.CanCast(loopType, outType, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 return;
             throw new TypeError(
-                $"Cannot cast ufunc 'modf' output {operandIndex} from " +
+                string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc 'modf' output {operandIndex} from " +
                 $"dtype('{loopType.AsNumpyDtypeName()}') to " +
-                $"dtype('{outType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+                $"dtype('{outType.AsNumpyDtypeName()}') with casting rule 'same_kind'"));
         }
 
         /// <summary>

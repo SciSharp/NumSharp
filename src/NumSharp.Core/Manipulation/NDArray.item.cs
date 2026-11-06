@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NumSharp
 {
@@ -61,8 +62,8 @@ namespace NumSharp
             // index as given (a negative one included).
             if (index < 0 || index >= arraySize)
                 throw new IndexOutOfRangeException(ndim == 1
-                    ? $"index {original} is out of bounds for axis 0 with size {arraySize}"
-                    : $"index {original} is out of bounds for size {arraySize}");
+                    ? string.Create(CultureInfo.InvariantCulture, $"index {original} is out of bounds for axis 0 with size {arraySize}")
+                    : string.Create(CultureInfo.InvariantCulture, $"index {original} is out of bounds for size {arraySize}"));
             return Storage.GetAtIndex(index);
         }
 
@@ -96,7 +97,7 @@ namespace NumSharp
             // are valid only for a 2-D array; anything else raises, matching numpy's
             // "incorrect number of indices for array" rather than silently dropping/padding an axis.
             if (ndim != 2)
-                throw new ArgumentException($"Incorrect number of indices for array with {ndim} dimensions.");
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Incorrect number of indices for array with {ndim} dimensions."));
             return Storage.GetValue(new[] { i, j });
         }
 
@@ -128,7 +129,7 @@ namespace NumSharp
             // Three indices are valid only for a 3-D array (see item(i, j) — NumPy requires exactly
             // ndim indices), else "incorrect number of indices for array".
             if (ndim != 3)
-                throw new ArgumentException($"Incorrect number of indices for array with {ndim} dimensions.");
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Incorrect number of indices for array with {ndim} dimensions."));
             return Storage.GetValue(new[] { i, j, k });
         }
 
@@ -157,7 +158,7 @@ namespace NumSharp
         public object item(params long[] indices)
         {
             if (indices.Length != ndim)
-                throw new ArgumentException($"Incorrect number of indices for array with {ndim} dimensions.");
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Incorrect number of indices for array with {ndim} dimensions."));
             return Storage.GetValue(indices);
         }
 

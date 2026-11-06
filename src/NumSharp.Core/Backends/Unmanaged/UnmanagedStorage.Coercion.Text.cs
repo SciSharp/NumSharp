@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Strings;
@@ -484,10 +485,10 @@ namespace NumSharp.Backends
         private static ValueError Inhomogeneous(List<long> dims, int agreedAxes)
         {
             int n = Math.Min(agreedAxes, dims.Count);
-            string shape = n == 1 ? $"({dims[0]},)" : "(" + string.Join(", ", dims.Take(n)) + ")";
+            string shape = n == 1 ? string.Create(CultureInfo.InvariantCulture, $"({dims[0]},)") : "(" + string.Join(", ", dims.Take(n).Select(d => d.ToString(CultureInfo.InvariantCulture))) + ")";
             return new ValueError(
-                $"setting an array element with a sequence. The requested array has an inhomogeneous shape after {n} dimensions. " +
-                $"The detected shape was {shape} + inhomogeneous part.");
+                string.Create(CultureInfo.InvariantCulture, $"setting an array element with a sequence. The requested array has an inhomogeneous shape after {n} dimensions. " +
+                $"The detected shape was {shape} + inhomogeneous part."));
         }
     }
 }

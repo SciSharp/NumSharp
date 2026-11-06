@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 
 namespace NumSharp
@@ -1536,7 +1537,7 @@ namespace NumSharp
                 return hypergeometric(pg.ScalarInt64(), pb.ScalarInt64(), ps.ScalarInt64(), size);
 
             if (RandomBroadcast.AnyInRange(pg.Array, HypergeomMax, double.PositiveInfinity) || RandomBroadcast.AnyInRange(pb.Array, HypergeomMax, double.PositiveInfinity))
-                throw new ValueError($"both ngood and nbad must be less than {HypergeomMax}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"both ngood and nbad must be less than {HypergeomMax}"));
             using (var total = RandomBroadcast.Ufunc(() => np.add(pg.Array, pb.Array)))
                 if (RandomBroadcast.AnyAndDispose(RandomBroadcast.Ufunc(() => np.less(total, ps.Array))))
                     throw new ValueError("ngood + nbad < nsample");

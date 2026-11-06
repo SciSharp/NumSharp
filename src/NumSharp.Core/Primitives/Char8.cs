@@ -128,7 +128,7 @@ namespace NumSharp
         public static explicit operator Char8(char c)
         {
             if ((uint)c > 0xFF)
-                throw new OverflowException("Char value " + (int)c + " exceeds Char8 max (0xFF).");
+                throw new OverflowException("Char value " + ((int)c).ToString(CultureInfo.InvariantCulture) + " exceeds Char8 max (0xFF).");
             return new Char8((byte)c);
         }
 
@@ -136,7 +136,7 @@ namespace NumSharp
         public static explicit operator Char8(int v)
         {
             if ((uint)v > 0xFF)
-                throw new OverflowException("Int value " + v + " outside Char8 range [0, 255].");
+                throw new OverflowException("Int value " + v.ToString(CultureInfo.InvariantCulture) + " outside Char8 range [0, 255].");
             return new Char8((byte)v);
         }
 
@@ -510,7 +510,7 @@ namespace NumSharp
             {
                 char c = s[i];
                 if ((uint)c > 0xFF)
-                    throw new ArgumentException($"Character '{c}' (U+{(int)c:X4}) at index {i} cannot be encoded in Latin-1.", nameof(s));
+                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Character '{c}' (U+{(int)c:X4}) at index {i} cannot be encoded in Latin-1."), nameof(s));
                 result[i] = new Char8((byte)c);
             }
             return result;
@@ -528,7 +528,7 @@ namespace NumSharp
             {
                 char c = s[i];
                 if ((uint)c > 0x7F)
-                    throw new ArgumentException($"Character '{c}' (U+{(int)c:X4}) at index {i} is not ASCII.", nameof(s));
+                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Character '{c}' (U+{(int)c:X4}) at index {i} is not ASCII."), nameof(s));
                 result[i] = new Char8((byte)c);
             }
             return result;
@@ -575,7 +575,7 @@ namespace NumSharp
             for (int i = 0; i < chars.Length; i++)
             {
                 if (chars[i].m_value > 0x7F)
-                    throw new ArgumentException($"Byte 0x{chars[i].m_value:X2} at index {i} is not ASCII.");
+                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Byte 0x{chars[i].m_value:X2} at index {i} is not ASCII."));
             }
             return ToStringLatin1(chars);
         }

@@ -98,18 +98,21 @@ makes is part of the answer:
   order across positions changes (np.cumsum of a (100, 100, 100) C array along axis 0: 0.6 ms by rows against 2.3 ms
   for the per-position walk; NumPy, which walks per position, 6.8 ms). float16, bool, char, decimal and complex128 keep
   the per-position kernels (complex128's product is NumPy's contracted loop_scalar form).
-- `out=` of the wrong shape (parity QA-31; `DefaultEngine.AccumulateOutShapeError`): the text depends on
+- `out=` of the wrong shape (parity QA-31; `DefaultEngine.StoreIntoMisfitOut`): the text depends on
   `PyUFunc_Accumulate`'s path. Its outer ITERATOR (an input of more than one dimension after CheckAxis's ravel, a loop
   dtype not equivalent to the input's or the out's, an unaligned operand, an out overlapping the input under
   MAY_SHARE_BOUNDS) raises NpyIter's `Iterator input op_axes[0][k] (==i) is not a valid axis of op[0], which has n
   dimensions `, `operands could not be broadcast together with remapped shapes [original->remapped]: (4,3)->(4,3)
   (3,4)->(3,4) ` or `non-broadcastable output operand with shape (3,1) [remapped to (1,3)] ...` (reversed);
   the direct 1-D path `provided out is the wrong size for the accumulation.`. `AccumulateIteratorShapeError` is shared
-  with the StringDType scan. Open (QA-54, pinned): the outs NumPy's accumulate ACCEPTS (more trailing out axes, a
-  broadcast input, an empty input or out on the direct path) are refused here; the StringDType scan accepts them.
+  with the StringDType scan. The outs NumPy's accumulate ACCEPTS are stored where its iterator writes (parity QA-54,
+  `StoreIntoMisfitOut`): an out with more trailing axes keeps them at index 0, the accumulated axis is cut to the input's
+  extent (an extent-1 input writes the first cell only), an extent-1 input broadcasts along the other axes, and an empty
+  input along the axis or an empty out returns the out untouched on both paths; the StringDType scan shares the views.
 - Gates: `Math/np.cumsum.RowScan.Test.cs` (every vector dtype × C / F / permuted / 4-D × every axis, byte for byte
   against the per-position route, with NaN, ±inf, -0.0 and wrapping integers), `Math/UfuncResultLayout.Test.cs`,
-  `Math/NDArray.cumprod.Test.cs`, the `scan` tier and the array-object tiers' scan rows.
+  `Math/NDArray.cumprod.Test.cs`, `Math/OutShapeRefusals.NumPy.Test.cs` (the refusals),
+  `Math/np.cumsum_cumprod.AcceptedOuts.Test.cs` (the accepted outs), the `scan` tier and the array-object tiers' scan rows.
 
 ## `np.sum` / `np.mean`: the add identity and NumPy's add.reduce
 
@@ -349,8 +352,10 @@ np.nanmax of an ndarray is `np.fmax.reduce`), so the keywords are `PyUFunc_Reduc
 - the result starts as the initial value or each output's first element (an unsafe cast).
 - `np.ptp`'s `out=` meets the same prologue before anything is computed (`_ptp`'s first statement is
   `maximum.reduce(a, axis, out=out)`; parity QA-31): read-only, the axes, the rank text naming `maximum`, the iterator's
-  shapes, so a misshapen out is reported before an empty reduction's no-identity error. Its closing subtract into an
-  integer out raises np.copyto's text where NumPy raises subtract's UFuncTypeError (QA-55, pinned).
+  shapes, so a misshapen out is reported before an empty reduction's no-identity error. Then `_ptp`'s statements (parity
+  QA-55): the maxima stored into the out by that reduce, the minima reduced, `subtract(out, min, out)` in NEP 50's loop
+  over the out's dtype and the minima's (an int8 range into an int64 out does not wrap) with subtract's same_kind out cast
+  (its UFuncTypeError for an integer out of float data, the maxima left in the out, as NumPy leaves them).
 - ONE overload per function: NumPy's `(a, axis, out, keepdims, initial, where)` and `ndarray.max/min(axis, out,
   keepdims, initial, where)`, nothing else (no positional `(a, axis, keepdims)` shim, no `dtype=` extension, no generic
   `np.amax<T>` / `a.max<T>()`, no `NDArray.amax` / `NDArray.amin`: they resolved only through

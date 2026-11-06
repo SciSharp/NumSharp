@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -501,7 +502,7 @@ namespace NumSharp.Backends.Kernels
         /// <exception cref="NotSupportedException">Another lane count.</exception>
         public PolyNarrowIntLaneKind(NPTypeCode logical, int w) : base(true, NPTypeCode.Int32, w == 8 ? 256 : 128)
         {
-            if (w is not (2 or 4 or 8)) throw new NotSupportedException($"no {w}-lane {logical} kind");
+            if (w is not (2 or 4 or 8)) throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"no {w}-lane {logical} kind"));
             _logical = logical; _w = w; _elem = DirectILKernelGenerator.GetClrType(logical);
         }
 
@@ -665,7 +666,7 @@ namespace NumSharp.Backends.Kernels
         /// <exception cref="NotSupportedException">No kind (<see cref="HasLaneKind"/> is false).</exception>
         public static PolyValueKind CreateLaneKind(NPTypeCode t, int w)
         {
-            if (!HasLaneKind(t, w)) throw new NotSupportedException($"no {w}-lane {t} values");
+            if (!HasLaneKind(t, w)) throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"no {w}-lane {t} values"));
             if (t == NPTypeCode.Half) return new PolyHalfLaneKind(w);
             if (t == NPTypeCode.Complex) return new PolyComplexLaneKind();
             if (IsNarrowInt(t)) return new PolyNarrowIntLaneKind(t, w);
@@ -705,7 +706,7 @@ namespace NumSharp.Backends.Kernels
         public static void EmitLaneConvert(ILGenerator il, NPTypeCode from, NPTypeCode to, int w)
         {
             if (from == to) return;
-            if (!LaneConvertible(from, to, w)) throw new NotSupportedException($"no {w}-lane conversion {from} -> {to}");
+            if (!LaneConvertible(from, to, w)) throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"no {w}-lane conversion {from} -> {to}"));
             if (to == NPTypeCode.Complex)
             {
                 EmitLaneConvert(il, from, NPTypeCode.Double, w);
@@ -726,7 +727,7 @@ namespace NumSharp.Backends.Kernels
                         new[] { (w == 4 ? typeof(Vector256<>) : typeof(Vector128<>)).MakeGenericType(DirectILKernelGenerator.GetClrType(from)) }),
                 (_, NPTypeCode.Double) => w == 4 ? s_cvtdq2pd : s_cvtdq2pd2,   // int32 and the int32 containers
                 (NPTypeCode.Boolean, NPTypeCode.Int64) => w == 4 ? s_pmovsxdq4 : s_pmovsxdq2,
-                _ => throw new NotSupportedException($"no {w}-lane conversion {from} -> {to}"),
+                _ => throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"no {w}-lane conversion {from} -> {to}")),
             };
             if (m is not null) il.EmitCall(OpCodes.Call, m, null);
         }

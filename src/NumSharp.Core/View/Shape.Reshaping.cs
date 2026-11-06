@@ -173,7 +173,7 @@ namespace NumSharp
         ///     but the message is NumPy's, character for character.
         /// </remarks>
         private static IncorrectShapeException ReshapeSizeMismatch(long size, long[] requested)
-            => new IncorrectShapeException($"cannot reshape array of size {size} into shape {ConvertShapeToString(requested)}");
+            => new IncorrectShapeException(string.Create(CultureInfo.InvariantCulture, $"cannot reshape array of size {size} into shape {ConvertShapeToString(requested)}"));
 
         /// <summary>
         ///     Resolves an unknown (negative) dimension and validates the requested shape's size.
@@ -420,7 +420,7 @@ namespace NumSharp
                 {
                     axis = dimensions.Length + 1 + axis;
                     if (axis < 0)
-                        throw new ArgumentException($"Effective axis {axis} is less than 0");
+                        throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Effective axis {axis} is less than 0"));
                 }
 
                 Arrays.Insert(ref newDims, axis, 1L);

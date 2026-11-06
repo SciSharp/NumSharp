@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text;
 using NumSharp.Backends.Strings;
 
@@ -358,8 +359,8 @@ namespace NumSharp.IO
         /// <returns>The exception (not thrown).</returns>
         internal static UnicodeDecodeError DecodeError(string codec, ReadOnlySpan<byte> data, int start, int end, string reason)
             => new UnicodeDecodeError(end - start == 1
-                ? $"'{codec}' codec can't decode byte 0x{data[start]:x2} in position {start}: {reason}"
-                : $"'{codec}' codec can't decode bytes in position {start}-{end - 1}: {reason}",
+                ? string.Create(CultureInfo.InvariantCulture, $"'{codec}' codec can't decode byte 0x{data[start]:x2} in position {start}: {reason}")
+                : string.Create(CultureInfo.InvariantCulture, $"'{codec}' codec can't decode bytes in position {start}-{end - 1}: {reason}"),
                 codec, data.ToArray(), start, end, reason);
 
         // ---- charmap ------------------------------------------------------------------------------------------------

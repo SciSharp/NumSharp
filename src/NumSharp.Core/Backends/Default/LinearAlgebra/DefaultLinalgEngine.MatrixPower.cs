@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends
@@ -79,7 +80,7 @@ namespace NumSharp.Backends
         {
             long side = a.Shape.dimensions[a.ndim - 1];
             if (side > int.MaxValue)
-                throw new OverflowException($"Matrix dimension {side} exceeds int.MaxValue for np.eye");
+                throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Matrix dimension {side} exceeds int.MaxValue for np.eye"));
 
             // np.eye(side, dtype=a.dtype): the facade's default order 'C' (its order and device checks pass for the
             // defaults), then the array object's identity.

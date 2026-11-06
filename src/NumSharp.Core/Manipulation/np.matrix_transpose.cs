@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NumSharp
 {
@@ -25,7 +26,7 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(x))
                 return NDCharArrayBoundary.Kept(x, static s => matrix_transpose(s));
             if (x.ndim < 2)
-                throw new ArgumentException($"Input array must be at least 2-dimensional, but it is {x.ndim}");
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Input array must be at least 2-dimensional, but it is {x.ndim}"));
 
             return x.TensorEngine.SwapAxes(x, -1, -2);
         }

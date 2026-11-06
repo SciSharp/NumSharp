@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
@@ -159,7 +160,7 @@ namespace NumSharp
 
             if (n > int.MaxValue)
                 throw new ArgumentException(
-                    $"array is too big; `arr.size * arr.itemsize` is larger than the maximum possible size (n={n}).");
+                    string.Create(CultureInfo.InvariantCulture, $"array is too big; `arr.size * arr.itemsize` is larger than the maximum possible size (n={n})."));
 
             var res = new NDArray(v1d.dtype, Shape.Matrix((int)n, (int)n), true); // descriptor: a string's zero is '' at v's width
             if (s == 0)

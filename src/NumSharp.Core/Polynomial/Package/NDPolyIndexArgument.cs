@@ -125,7 +125,7 @@ namespace NumSharp
             // A list / tuple: its repr (items repr'd).
             if (Backends.UnmanagedStorage.IsSequence(x))
                 return Repr(x);
-            return x.ToString() ?? string.Empty;
+            return Convert.ToString(x, CultureInfo.InvariantCulture) ?? string.Empty;
         }
 
         /// <summary>
@@ -167,7 +167,7 @@ namespace NumSharp
                 sb.Append(tuple ? ')' : ']');
                 return sb.ToString();
             }
-            return x.ToString() ?? string.Empty;
+            return Convert.ToString(x, CultureInfo.InvariantCulture) ?? string.Empty;
         }
 
         /// <summary>

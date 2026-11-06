@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -52,7 +53,7 @@ namespace NumSharp
                 var arrays = result.ToArray();
                 if (arrays.Length != 1)
                     throw new InvalidOperationException(
-                        $"np.ogrid produced {arrays.Length} arrays; only a single-slice result converts to a " +
+                        string.Create(CultureInfo.InvariantCulture, $"np.ogrid produced {arrays.Length} arrays; only a single-slice result converts to a ") +
                         "bare NDArray. Use the NDArray[] conversion, Deconstruct, or an index instead.");
                 return arrays[0];
             }
@@ -89,7 +90,7 @@ namespace NumSharp
                 int have = Length;
                 if (have != n)
                     throw new InvalidOperationException(
-                        $"np.ogrid produced {have} arrays; cannot deconstruct into {n}. Use indexing or the " +
+                        string.Create(CultureInfo.InvariantCulture, $"np.ogrid produced {have} arrays; cannot deconstruct into {n}. Use indexing or the ") +
                         "NDArray[] conversion.");
             }
 

@@ -4,6 +4,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -302,7 +303,7 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     public TValue GetByKey(TKey key)
     {
         if (TryGetValue(key, out TValue value)) return value;
-        throw new KeyNotFoundException($"The key '{key}' was not present in the {nameof(OrderedDictionary<TKey, TValue>)}.");
+        throw new KeyNotFoundException(string.Create(CultureInfo.InvariantCulture, $"The key '{key}' was not present in the {nameof(OrderedDictionary<TKey, TValue>)}."));
     }
 
     /// <summary>Gets or sets the value for <paramref name="key" /> (the dictionary path). With <c>int</c> keys the compiler prefers <see cref="this[int]" /> — use <see cref="GetByKey" />/<see cref="SetByKey" /> instead.</summary>
@@ -329,7 +330,7 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
             Tables t = _t;
             int count = Volatile.Read(ref t._count);
             if ((uint)index >= (uint)count)
-                throw new ArgumentOutOfRangeException(nameof(index), index, $"Index must be in [0, {count}).");
+                throw new ArgumentOutOfRangeException(nameof(index), index.ToString(CultureInfo.InvariantCulture), string.Create(CultureInfo.InvariantCulture, $"Index must be in [0, {count})."));
             return t._values[index];
         }
     }
@@ -654,7 +655,7 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     public void CopyTo(TValue[] array, int arrayIndex)
     {
         if (array is null) throw new ArgumentNullException(nameof(array));
-        if (arrayIndex < 0) throw new ArgumentOutOfRangeException(nameof(arrayIndex), arrayIndex, "Non-negative index required.");
+        if (arrayIndex < 0) throw new ArgumentOutOfRangeException(nameof(arrayIndex), arrayIndex.ToString(CultureInfo.InvariantCulture), "Non-negative index required.");
         Tables t = _t;
         int count = Volatile.Read(ref t._count);
         if (array.Length - arrayIndex < count) throw new ArgumentException("Destination array is too small.", nameof(array));
@@ -889,8 +890,8 @@ public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     /// <exception cref="ArgumentOutOfRangeException">Always.</exception>
     [DoesNotReturn]
     private static void ThrowTooManyEntries(long requested)
-        => throw new ArgumentOutOfRangeException("capacity", requested,
-            $"{nameof(OrderedDictionary<TKey, TValue>)} cannot hold more than {MaxCount} entries: its open-addressed index would need more than 2^30 words, the largest power-of-two int[].");
+        => throw new ArgumentOutOfRangeException("capacity", requested.ToString(CultureInfo.InvariantCulture),
+            string.Create(CultureInfo.InvariantCulture, $"{nameof(OrderedDictionary<TKey, TValue>)} cannot hold more than {MaxCount} entries: its open-addressed index would need more than 2^30 words, the largest power-of-two int[]."));
 
     /// <summary>Throws <see cref="ArgumentNullException" /> if <paramref name="key" /> is null (guards the reference-key case), like the sibling ordered maps.</summary>
     /// <param name="key">The key to validate.</param>

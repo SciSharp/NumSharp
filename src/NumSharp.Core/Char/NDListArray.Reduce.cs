@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
@@ -1282,7 +1283,7 @@ namespace NumSharp
                     throw new NotSupportedException(
                         $"the reduction's result is the Python {start.TypeName} 'initial' itself, which an NDListArray (a list array) cannot hold");
                 throw new NotSupportedException(
-                    $"an empty {(fold == ListFold.Sum ? "sum" : "product")} of lists is NumPy's int {(fold == ListFold.Sum ? 0 : 1)} " +
+                    string.Create(CultureInfo.InvariantCulture, $"an empty {(fold == ListFold.Sum ? "sum" : "product")} of lists is NumPy's int {(fold == ListFold.Sum ? 0 : 1)} ") +
                     "(the ufunc's identity), which an NDListArray cannot hold; give a list as 'initial'");
             }
             if (start.Present && !start.IsList)
@@ -1630,8 +1631,8 @@ namespace NumSharp
             }
             // Pass 1 (op_axes 0 .. nd-1): an out with fewer axes has no axis k; the first nd extents broadcast, out first.
             if (outIds.ndim < nd)
-                throw new ValueError($"Iterator input op_axes[0][{nd - outIds.ndim - 1}] (=={outIds.ndim}) is not a valid axis of op[0], " +
-                                     $"which has {outIds.ndim} dimensions ");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Iterator input op_axes[0][{nd - outIds.ndim - 1}] (=={outIds.ndim}) is not a valid axis of op[0], " +
+                                     $"which has {outIds.ndim} dimensions "));
             var mapped = new long[nd];
             Array.Copy(o, mapped, nd);
             var broadcast = new long[nd];

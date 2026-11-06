@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 
@@ -91,7 +92,7 @@ namespace NumSharp
                 {
                     if (array.Shape.dimensions[ax] == 0 && (padPairs[ax, 0] != 0 || padPairs[ax, 1] != 0))
                         throw new ValueError(
-                            $"can't extend empty axis {ax} using modes other than 'constant' or 'empty'");
+                            string.Create(CultureInfo.InvariantCulture, $"can't extend empty axis {ax} using modes other than 'constant' or 'empty'"));
                 }
                 if (mode is "edge" or "wrap" or "reflect" or "symmetric" or "maximum" or "minimum" or "mean" or "median"
                     or "linear_ramp")
@@ -838,7 +839,7 @@ namespace NumSharp
             object start = strong ? startArray : WeakStartClass(startArray);
             // result_type(start, stop, ensure_inexact): raises NumPy's DTypePromotionError when no common DType exists.
             DType promoted = DTypePromotion.ResultType(start, array.dtype, DTypeRegistry.PyFloat);
-            string startClass = start is DType d ? d.Meta.ToString() : start.ToString();
+            string startClass = start is DType d ? d.Meta.ToString() : Convert.ToString(start, CultureInfo.InvariantCulture);
             // The promotion found a (text) dtype; np.subtract(stop, start, dtype=type(promoted)) has no loop for it.
             throw new TypeError(
                 $"ufunc 'subtract' did not contain a loop with signature matching types ({array.dtype.Meta}, {startClass}) -> {promoted.Meta}");
@@ -1430,7 +1431,7 @@ namespace NumSharp
                     int axis = ToInt32Key(kv.Key);
                     if (axis < 0) axis += ndim;
                     if (axis < 0 || axis >= ndim)
-                        throw new ArgumentException($"pad_width dict axis {kv.Key} out of bounds for ndim={ndim}");
+                        throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"pad_width dict axis {kv.Key} out of bounds for ndim={ndim}"));
                     var pair = NormalizeSinglePair(kv.Value, asIndex);
                     result[axis, 0] = pair.before;
                     result[axis, 1] = pair.after;
@@ -1504,7 +1505,7 @@ namespace NumSharp
             if (cols != 1 && cols != 2 || rows != 1 && rows != ndim)
                 throw new ValueError(
                     "operands could not be broadcast together with remapped shapes [original->remapped]: "
-                    + Shape.ConvertShapeToString(shape) + "  and requested shape (" + ndim + ",2)");
+                    + Shape.ConvertShapeToString(shape) + "  and requested shape (" + ndim.ToString(CultureInfo.InvariantCulture) + ",2)");
             return (rows == 1 ? 0 : cols, cols == 1 ? 0 : 1);
         }
 
@@ -1666,7 +1667,7 @@ namespace NumSharp
                     int axis = ToInt32Key(kv.Key);
                     if (axis < 0) axis += ndim;
                     if (axis < 0 || axis >= ndim)
-                        throw new ArgumentException($"values dict axis {kv.Key} out of bounds");
+                        throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"values dict axis {kv.Key} out of bounds"));
                     var (b, a) = ExtractValuePair(kv.Value);
                     result[axis, 0] = b; result[axis, 1] = a;
                 }
@@ -1824,7 +1825,7 @@ namespace NumSharp
             if (TryToInt64(key, out long v))
             {
                 if (v > int.MaxValue || v < int.MinValue)
-                    throw new ArgumentException($"axis key out of int range: {v}");
+                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"axis key out of int range: {v}"));
                 return (int)v;
             }
             throw new ArgumentException($"pad_width dict key must be int (got {key?.GetType().Name})");

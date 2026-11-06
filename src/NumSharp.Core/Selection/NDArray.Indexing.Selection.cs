@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using System.Linq;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -154,7 +155,7 @@ namespace NumSharp
                                 // leave a NEGATIVE offset that only the upper-bound check guarded,
                                 // so it read OUT-OF-BOUNDS memory. Validate both bounds here.
                                 if (val < -dimensionSize || val >= dimensionSize)
-                                    throw new IndexError($"index {val} is out of bounds for axis {axis} with size {dimensionSize}");
+                                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {val} is out of bounds for axis {axis} with size {dimensionSize}"));
                                 return val < 0 ? dimensionSize + val : val;
                             };
                         }
@@ -166,7 +167,7 @@ namespace NumSharp
                             {
                                 var val = idxAddr[idxShape.GetOffset_1D(idx)];
                                 if (val < -dimensionSize || val >= dimensionSize)
-                                    throw new IndexError($"index {val} is out of bounds for axis {axis} with size {dimensionSize}");
+                                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {val} is out of bounds for axis {axis} with size {dimensionSize}"));
                                 return val < 0 ? dimensionSize + val : val;
                             };
                         }
@@ -185,7 +186,7 @@ namespace NumSharp
                                 // leave a NEGATIVE offset that only the upper-bound check guarded,
                                 // so it read OUT-OF-BOUNDS memory. Validate both bounds here.
                                 if (val < -dimensionSize || val >= dimensionSize)
-                                    throw new IndexError($"index {val} is out of bounds for axis {axis} with size {dimensionSize}");
+                                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {val} is out of bounds for axis {axis} with size {dimensionSize}"));
                                 return val < 0 ? dimensionSize + val : val;
                             };
                         }
@@ -197,7 +198,7 @@ namespace NumSharp
                             {
                                 var val = idxAddr[idxShape.GetOffset_1D(idx)];
                                 if (val < -dimensionSize || val >= dimensionSize)
-                                    throw new IndexError($"index {val} is out of bounds for axis {axis} with size {dimensionSize}");
+                                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {val} is out of bounds for axis {axis} with size {dimensionSize}"));
                                 return val < 0 ? dimensionSize + val : val;
                             };
                         }

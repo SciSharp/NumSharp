@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection.Emit;
 using NumSharp.Backends.Kernels;
 
@@ -387,7 +388,7 @@ namespace NumSharp.Backends.Iteration
             if (adopted == NPTypeCode.UInt64 || !(IsIntegerKind(adopted) || adopted == NPTypeCode.Boolean))
                 return;
             throw new OverflowException(
-                $"Python integer {value} out of bounds for {adopted.AsNumpyDtypeName()}");
+                string.Create(CultureInfo.InvariantCulture, $"Python integer {value} out of bounds for {adopted.AsNumpyDtypeName()}"));
         }
 
         /// <summary>
@@ -411,7 +412,7 @@ namespace NumSharp.Backends.Iteration
         {
             if (!IntLiteralFits(value, adopted))
                 throw new OverflowException(
-                    $"Python integer {value} out of bounds for {adopted.AsNumpyDtypeName()}");
+                    string.Create(CultureInfo.InvariantCulture, $"Python integer {value} out of bounds for {adopted.AsNumpyDtypeName()}"));
         }
 
         /// <summary>
@@ -466,7 +467,7 @@ namespace NumSharp.Backends.Iteration
                 throw new OverflowException("Python int too large to convert to C long");
 
             throw new OverflowException(
-                $"Python integer {value} out of bounds for {loop.AsNumpyDtypeName()}");
+                string.Create(CultureInfo.InvariantCulture, $"Python integer {value} out of bounds for {loop.AsNumpyDtypeName()}"));
         }
     }
 
@@ -660,7 +661,7 @@ namespace NumSharp.Backends.Iteration
         {
             if (_index >= inputTypes.Length)
                 throw new InvalidOperationException(
-                    $"Input({_index}) out of range; typing provided {inputTypes.Length} inputs.");
+                    string.Create(CultureInfo.InvariantCulture, $"Input({_index}) out of range; typing provided {inputTypes.Length} inputs."));
             nodeTypes[this] = inputTypes[_index];
             return NDExprTypeInfo.Strong(inputTypes[_index]);
         }

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp
@@ -54,7 +55,7 @@ namespace NumSharp
         {
             // Precondition checks are O(1); the per-value bounds are the caller's contract (see <param name="indices"/>).
             if (axis < 1 || axis >= a.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis), axis, "FancyIndexAlongAxis serves a non-leading axis only.");
+                throw new ArgumentOutOfRangeException(nameof(axis), axis.ToString(CultureInfo.InvariantCulture), "FancyIndexAlongAxis serves a non-leading axis only.");
             if (indices.ndim != 1 || indices.typecode != NPTypeCode.Int64 || !indices.Shape.IsContiguous)
                 throw new ArgumentOutOfRangeException(nameof(indices), "FancyIndexAlongAxis needs a 1-D C-contiguous int64 index array.");
 

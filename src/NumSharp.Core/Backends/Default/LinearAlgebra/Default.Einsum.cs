@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using NumSharp.Backends.Iteration;
@@ -102,9 +103,9 @@ namespace NumSharp.Backends
             {
                 if (operands[i].typecode != computeType && !CanCast(operands[i].typecode, computeType))
                     throw new TypeError(
-                        $"Iterator operand {i} dtype could not be cast from " +
+                        string.Create(CultureInfo.InvariantCulture, $"Iterator operand {i} dtype could not be cast from " +
                         $"dtype('{operands[i].typecode.AsNumpyDtypeName()}') to " +
-                        $"dtype('{computeType.AsNumpyDtypeName()}') according to the rule '{casting}'");
+                        $"dtype('{computeType.AsNumpyDtypeName()}') according to the rule '{casting}'"));
             }
 
             // The out is the iterator's last operand, READWRITE: NpyIter checks the read cast (out -> loop) and then
@@ -113,15 +114,15 @@ namespace NumSharp.Backends
             {
                 if (!CanCast(@out.typecode, computeType))
                     throw new TypeError(
-                        $"Iterator operand {operands.Length} dtype could not be cast from " +
+                        string.Create(CultureInfo.InvariantCulture, $"Iterator operand {operands.Length} dtype could not be cast from " +
                         $"dtype('{@out.typecode.AsNumpyDtypeName()}') to " +
-                        $"dtype('{computeType.AsNumpyDtypeName()}') according to the rule '{casting}'");
+                        $"dtype('{computeType.AsNumpyDtypeName()}') according to the rule '{casting}'"));
                 if (!CanCast(computeType, @out.typecode))
                     throw new TypeError(
-                        $"Iterator requested dtype could not be cast from " +
+                        string.Create(CultureInfo.InvariantCulture, $"Iterator requested dtype could not be cast from " +
                         $"dtype('{computeType.AsNumpyDtypeName()}') to " +
                         $"dtype('{@out.typecode.AsNumpyDtypeName()}'), the operand {operands.Length} dtype, " +
-                        $"according to the rule '{casting}'");
+                        $"according to the rule '{casting}'"));
             }
 
             var terms = new List<(NDArray Array, string Term)>(operands.Length);
@@ -164,17 +165,17 @@ namespace NumSharp.Backends
             // mismatch gets), so — like that case — NumSharp words it about the contraction instead.
             if (!ShapesEqual(@out.Shape.dimensions, result.Shape.dimensions))
                 throw new ValueError(
-                    $"einsum() output parameter has shape ({string.Join(",", @out.Shape.dimensions)}) " +
-                    $"but the contraction produces ({string.Join(",", result.Shape.dimensions)})");
+                    $"einsum() output parameter has shape ({string.Join(",", Array.ConvertAll(@out.Shape.dimensions, d => d.ToString(CultureInfo.InvariantCulture)))}) " +
+                    $"but the contraction produces ({string.Join(",", Array.ConvertAll(result.Shape.dimensions, d => d.ToString(CultureInfo.InvariantCulture)))})");
 
             // The result must reach out='s dtype under the SAME casting rule as the inputs. NumPy's
             // iterator names out as operand <nop> in this message.
             if (@out.typecode != result.typecode && !CanCast(result.typecode, @out.typecode))
                 throw new TypeError(
-                    $"Iterator requested dtype could not be cast from " +
+                    string.Create(CultureInfo.InvariantCulture, $"Iterator requested dtype could not be cast from " +
                     $"dtype('{result.typecode.AsNumpyDtypeName()}') to " +
                     $"dtype('{@out.typecode.AsNumpyDtypeName()}'), the operand {operands.Length} dtype, " +
-                    $"according to the rule '{casting}'");
+                    $"according to the rule '{casting}'"));
 
             UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_UNSAFE_CASTING, null);   // np.copyto(out, result, 'unsafe')
             return @out;
@@ -328,7 +329,7 @@ namespace NumSharp.Backends
                 if (sizes.TryGetValue(ix, out long prev))
                 {
                     if (prev != d)
-                        throw new ValueError($"einsum: label '{Describe(ix)}' has mismatched sizes {prev} and {d}.");
+                        throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"einsum: label '{Describe(ix)}' has mismatched sizes {prev} and {d}."));
                 }
                 else
                 {
@@ -356,7 +357,7 @@ namespace NumSharp.Backends
                 if (sizes.TryGetValue(ix, out long prev))
                 {
                     if (prev != d)
-                        throw new ValueError($"einsum: label '{Describe(ix)}' has mismatched sizes {prev} and {d}.");
+                        throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"einsum: label '{Describe(ix)}' has mismatched sizes {prev} and {d}."));
                 }
                 else
                 {

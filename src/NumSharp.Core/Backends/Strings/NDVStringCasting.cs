@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Unmanaged;
@@ -604,7 +605,7 @@ namespace NumSharp.Backends.Strings
                 if (isNull == 1)
                     throw new ValueError(MissingDataText);
                 if (size > int.MaxValue)
-                    throw new OutOfMemoryException($"A StringDType element of {size} bytes is longer than a .NET span can be.");
+                    throw new OutOfMemoryException(string.Create(CultureInfo.InvariantCulture, $"A StringDType element of {size} bytes is longer than a .NET span can be."));
                 NDTextParse.ParseVStringElement(new ReadOnlySpan<byte>(buf, (int)size), to, canon);
                 // Written as it goes (an ArrayMethod loop, no commit blocks): the cast from the canonical value is exact for
                 // a range-checked integer and rounds once for float32 / float16 (npy_double_to_half).

@@ -185,7 +185,7 @@ namespace NumSharp
                 string repr = PyRepr.Bytes(b.AsSpan(0, Math.Min(b.Length, 200)));
                 if (repr.Length > 200)
                     repr = repr.Substring(0, 200); // all ASCII: units are code points
-                throw new ValueError($"invalid literal for int() with base {radix}: {repr}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"invalid literal for int() with base {radix}: {repr}"));
             }
             return value;
         }
@@ -281,8 +281,8 @@ namespace NumSharp
         /// <param name="digits">The digit count of the refused literal.</param>
         /// <returns>The exception to throw.</returns>
         private static ValueError DigitLimit(int digits)
-            => new ValueError($"Exceeds the limit ({MaxStrDigits} digits) for integer string conversion: value has " +
-                              $"{digits} digits; use sys.set_int_max_str_digits() to increase the limit");
+            => new ValueError(string.Create(CultureInfo.InvariantCulture, $"Exceeds the limit ({MaxStrDigits} digits) for integer string conversion: value has " +
+                              $"{digits} digits; use sys.set_int_max_str_digits() to increase the limit"));
 
         /// <summary>
         ///     CPython's <c>_PyUnicode_TransformDecimalAndSpaceToASCII</c>: code points below 127 are kept, a non-ASCII
@@ -372,7 +372,7 @@ namespace NumSharp
                     units += char.IsHighSurrogate(repr[units]) && units + 1 < repr.Length && char.IsLowSurrogate(repr[units + 1]) ? 2 : 1;
                 repr = repr.Substring(0, units);
             }
-            return new ValueError($"invalid literal for int() with base {radix}: {repr}");
+            return new ValueError(string.Create(CultureInfo.InvariantCulture, $"invalid literal for int() with base {radix}: {repr}"));
         }
 
         /// <summary>

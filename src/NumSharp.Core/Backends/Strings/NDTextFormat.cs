@@ -218,7 +218,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>The exception (<c>_MAX_STR_DIGITS_ERROR_FMT_TO_STR</c> in <c>longobject.c</c>; its parsing twin, which
         ///     also names the digit count, is <see cref="NDTextParse"/>'s).</returns>
         private static ValueError MaxStrDigitsExceeded() => new ValueError(
-            $"Exceeds the limit ({NDTextParse.MaxStrDigits} digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit");
+            string.Create(CultureInfo.InvariantCulture, $"Exceeds the limit ({NDTextParse.MaxStrDigits} digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit"));
 
         /// <summary>
         ///     <c>str()</c> of a NumPy float scalar of the given precision (see the class remarks for the rule).

@@ -518,7 +518,7 @@ namespace NumSharp
                 switch (item)
                 {
                     case null:
-                        throw new ArgumentNullException($"key[{k}]",
+                        throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"key[{k}]"),
                             "index expression entries must not be null.");
 
                     case string s:
@@ -1064,7 +1064,7 @@ namespace NumSharp
                 switch (item)
                 {
                     case null:
-                        throw new ArgumentNullException($"key[{k}]",
+                        throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"key[{k}]"),
                             $"{caller} index entries must not be null.");
 
                     case string s:
@@ -1383,7 +1383,7 @@ namespace NumSharp
         /// <returns>The exception, for the caller to throw.</returns>
         private static ValueError GridMissingStop(string caller, int k) =>
             new ValueError(
-                $"{caller} with more than one slice requires an explicit stop for slice {k}: 'start:stop' or " +
+                string.Create(CultureInfo.InvariantCulture, $"{caller} with more than one slice requires an explicit stop for slice {k}: 'start:stop' or ") +
                 "'start:stop:Nj' (NumPy raises AttributeError: 'tuple' object has no attribute 'step').");
 
         /// <summary>

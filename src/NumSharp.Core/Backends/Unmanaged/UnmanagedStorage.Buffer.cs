@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
@@ -142,7 +143,7 @@ namespace NumSharp.Backends
         private static long FromBufferCount(long bufferLength, int itemSize, long count, long offset)
         {
             if (offset < 0 || offset > bufferLength)
-                throw new ValueError($"offset must be non-negative and no greater than buffer length ({bufferLength})");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"offset must be non-negative and no greater than buffer length ({bufferLength})"));
 
             long available = bufferLength - offset;
             if (count < 0)

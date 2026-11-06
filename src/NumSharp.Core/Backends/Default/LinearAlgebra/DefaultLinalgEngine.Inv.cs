@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NumSharp.Backends
 {
@@ -52,7 +53,7 @@ namespace NumSharp.Backends
             if (IsEmpty2d(a))
             {
                 if (nd < 2)
-                    throw new ValueError($"not enough values to unpack (expected 2, got {nd})");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"not enough values to unpack (expected 2, got {nd})"));
                 var emptyDims = (long[]) a.Shape.dimensions.Clone();
                 long m0 = emptyDims[nd - 2];
                 emptyDims[nd - 2] = emptyDims[nd - 1];

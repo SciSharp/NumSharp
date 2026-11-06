@@ -1,3 +1,4 @@
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 
 namespace NumSharp
@@ -73,11 +74,11 @@ namespace NumSharp
             if (size < 0)
                 throw new ValueError("buffer size must be non-negative");
             if (size > NDIterBufferManager.MaxBufferSize)
-                throw new ValueError($"Buffer size, {size}, is too big");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Buffer size, {size}, is too big"));
             if (size < 5)
-                throw new ValueError($"Buffer size, {size}, is too small");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Buffer size, {size}, is too small"));
             if (size % 16 != 0)
-                throw new ValueError($"Buffer size, {size}, is not a multiple of 16");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Buffer size, {size}, is not a multiple of 16"));
 
             long old = NDIterBufferManager.CurrentBufferSize;
             NDIterBufferManager.CurrentBufferSize = size;

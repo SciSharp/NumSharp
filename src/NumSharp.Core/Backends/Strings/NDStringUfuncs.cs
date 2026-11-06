@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Frozen;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Utilities;
 
@@ -775,8 +776,8 @@ namespace NumSharp.Backends.Strings
             int matchDim = b.ndim > 1 ? b.ndim - 2 : 0;
             if (b.Shape.dimensions[matchDim] != l)
                 throw new IncorrectShapeException(
-                    $"shapes {a.Shape.ToPythonTuple()} and {b.Shape.ToPythonTuple()} not aligned: {l} (dim {a.ndim - 1}) " +
-                    $"!= {b.Shape.dimensions[matchDim]} (dim {matchDim})");
+                    string.Create(CultureInfo.InvariantCulture, $"shapes {a.Shape.ToPythonTuple()} and {b.Shape.ToPythonTuple()} not aligned: {l} (dim {a.ndim - 1}) " +
+                    $"!= {b.Shape.dimensions[matchDim]} (dim {matchDim})"));
 
             if (@out is null)
                 throw NoItemsize();
@@ -887,8 +888,8 @@ namespace NumSharp.Backends.Strings
                 var target = !unsized ? loop : from.Meta == dtype.Meta ? from : DTypePromotion.CastDescrToDType(from, dtype.Meta);
                 if (!DTypeCasting.CanCastTypeTo(from, target, rule))
                     return new TypeError(
-                        $"Iterator operand {i} dtype could not be cast from {from.ToString(true)} to {target.ToString(true)} " +
-                        $"according to the rule '{casting}'");
+                        string.Create(CultureInfo.InvariantCulture, $"Iterator operand {i} dtype could not be cast from {from.ToString(true)} to {target.ToString(true)} " +
+                        $"according to the rule '{casting}'"));
             }
 
             if (@out is not null)
@@ -898,12 +899,12 @@ namespace NumSharp.Backends.Strings
                 var target = !unsized ? loop : od.Meta == dtype.Meta ? od : DTypePromotion.CastDescrToDType(od, dtype.Meta);
                 if (!DTypeCasting.CanCastTypeTo(od, target, rule))
                     return new TypeError(
-                        $"Iterator operand {operands.Length} dtype could not be cast from {od.ToString(true)} to " +
-                        $"{target.ToString(true)} according to the rule '{casting}'");
+                        string.Create(CultureInfo.InvariantCulture, $"Iterator operand {operands.Length} dtype could not be cast from {od.ToString(true)} to " +
+                        $"{target.ToString(true)} according to the rule '{casting}'"));
                 if (!DTypeCasting.CanCastTypeTo(target, od, rule))
                     return new TypeError(
-                        $"Iterator requested dtype could not be cast from {target.ToString(true)} to {od.ToString(true)}, " +
-                        $"the operand {operands.Length} dtype, according to the rule '{casting}'");
+                        string.Create(CultureInfo.InvariantCulture, $"Iterator requested dtype could not be cast from {target.ToString(true)} to {od.ToString(true)}, " +
+                        $"the operand {operands.Length} dtype, according to the rule '{casting}'"));
             }
 
             // The bool zero is assigned into the out itself when one is given, else into the allocated output.
@@ -1117,7 +1118,7 @@ namespace NumSharp.Backends.Strings
                     return null;
             }
             return new TypeError(
-                $"Cannot cast ufunc '{ufunc}' input {index} from {from.ToString(true)} to dtype('{loop.AsNumpyDtypeName()}') " +
+                string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc '{ufunc}' input {index} from {from.ToString(true)} to dtype('{loop.AsNumpyDtypeName()}') ") +
                 "with casting rule 'same_kind'");
         }
     }

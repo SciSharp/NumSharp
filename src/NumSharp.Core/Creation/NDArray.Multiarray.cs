@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -86,7 +87,7 @@ namespace NumSharp
             for (int k = 0; k < arrays.Length; k++)
             {
                 if (arrays[k] is null)
-                    throw new ArgumentNullException($"{nameof(arrays)}[{k}]");
+                    throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"{nameof(arrays)}[{k}]"));
                 if (arrays[k].ndim == 0 && axis is not null)
                     throw new ValueError(
                         "zero-dimensional arrays cannot be concatenated");
@@ -131,8 +132,8 @@ namespace NumSharp
                 var src = workArrays[k];
                 if (src.ndim != ndim)
                     throw new IncorrectShapeException(
-                        $"all the input arrays must have same number of dimensions, " +
-                        $"but the array at index 0 has {ndim} dimension(s) and the array at index {k} has {src.ndim} dimension(s)");
+                        string.Create(CultureInfo.InvariantCulture, $"all the input arrays must have same number of dimensions, " +
+                        $"but the array at index 0 has {ndim} dimension(s) and the array at index {k} has {src.ndim} dimension(s)"));
 
                 var srcShape = src.Shape.dimensions;
                 for (int j = 0; j < ndim; j++)
@@ -140,8 +141,8 @@ namespace NumSharp
                     if (j == effectiveAxis) continue;
                     if (srcShape[j] != firstShape[j])
                         throw new IncorrectShapeException(
-                            $"all the input array dimensions except for the concatenation axis must match exactly, " +
-                            $"but along dimension {j}, the array at index 0 has size {firstShape[j]} and the array at index {k} has size {srcShape[j]}");
+                            string.Create(CultureInfo.InvariantCulture, $"all the input array dimensions except for the concatenation axis must match exactly, " +
+                            $"but along dimension {j}, the array at index 0 has size {firstShape[j]} and the array at index {k} has size {srcShape[j]}"));
                 }
 
                 axisSize += srcShape[effectiveAxis];

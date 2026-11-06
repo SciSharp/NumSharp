@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -528,7 +529,7 @@ namespace NumSharp
                     throw new ValueError("Power is too large");
                 if (!numeric)
                     throw v.Refusal;
-                throw new OverflowException($"power {pow} is beyond int64: NumPy would run out of memory computing it");
+                throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"power {pow} is beyond int64: NumPy would run out of memory computing it"));
             }
             return PowChecked(basis, v, numeric, t, (long)truncated, maxpower);
         }
@@ -568,7 +569,7 @@ namespace NumSharp
             if (!numeric)
                 throw v.Refusal;
             if (power > long.MaxValue)
-                throw new OverflowException($"power {power} is beyond int64: NumPy would run out of memory computing it");
+                throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"power {power} is beyond int64: NumPy would run out of memory computing it"));
             return PowProduct(basis, v, t, (long)power);
         }
 
@@ -1345,7 +1346,7 @@ namespace NumSharp
                 House(BinaryOp.Subtract, ExecutionPath.SimdScalarLeft, x.T, (byte*)s, y.P, dst, y.N);
                 return y.N;
             }
-            throw new IncorrectShapeException($"operands could not be broadcast together with shapes ({x.N},) ({y.N},) ");
+            throw new IncorrectShapeException(string.Create(CultureInfo.InvariantCulture, $"operands could not be broadcast together with shapes ({x.N},) ({y.N},) "));
         }
 
         /// <summary>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Strings;
 
@@ -1023,6 +1024,6 @@ namespace NumSharp.Statistics
         /// <param name="dims">The dimensions.</param>
         /// <returns>The text.</returns>
         private static string PyTuple(long[] dims)
-            => dims.Length == 1 ? $"({dims[0]},)" : "(" + string.Join(", ", dims) + ")";
+            => dims.Length == 1 ? string.Create(CultureInfo.InvariantCulture, $"({dims[0]},)") : "(" + string.Join(", ", Array.ConvertAll(dims, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
     }
 }

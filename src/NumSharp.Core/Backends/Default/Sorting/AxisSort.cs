@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -421,7 +422,7 @@ namespace NumSharp.Backends.Sorting
             {
                 if (N > int.MaxValue)
                     throw new NotSupportedException(
-                        $"sort of a {tc} axis longer than int.MaxValue ({N}) is not supported: the scalar "
+                        string.Create(CultureInfo.InvariantCulture, $"sort of a {tc} axis longer than int.MaxValue ({N}) is not supported: the scalar ")
                         + "comparison sort uses managed buffers, which cap at int.MaxValue elements.");
                 NDInnerLoopFunc scalarKern = GetSortKernel(tc);
                 DriveAllButAxis(new[] { target }, new[] { NDIterPerOpFlags.READWRITE }, axis, scalarKern, &ctx);
@@ -498,7 +499,7 @@ namespace NumSharp.Backends.Sorting
             {
                 if (N > int.MaxValue)
                     throw new NotSupportedException(
-                        $"argsort of a {tc} axis longer than int.MaxValue ({N}) is not supported: the scalar "
+                        string.Create(CultureInfo.InvariantCulture, $"argsort of a {tc} axis longer than int.MaxValue ({N}) is not supported: the scalar ")
                         + "comparison sort uses managed buffers, which cap at int.MaxValue elements.");
                 NDInnerLoopFunc scalarKern = GetArgSortKernel(tc);
                 DriveAllButAxis(new[] { src, dst }, new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY }, axis, scalarKern, &ctx);

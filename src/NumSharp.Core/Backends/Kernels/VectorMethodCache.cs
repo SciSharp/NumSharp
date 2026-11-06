@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.Intrinsics;
@@ -114,7 +115,7 @@ namespace NumSharp.Backends.Kernels
             128 => typeof(Vector128),
             256 => typeof(Vector256),
             512 => typeof(Vector512),
-            _ => throw new NotSupportedException($"SIMD width {simdBits} not supported")
+            _ => throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"SIMD width {simdBits} not supported"))
         };
 
         public static Type V(int simdBits, Type elemType) => simdBits switch
@@ -122,7 +123,7 @@ namespace NumSharp.Backends.Kernels
             128 => typeof(Vector128<>).MakeGenericType(elemType),
             256 => typeof(Vector256<>).MakeGenericType(elemType),
             512 => typeof(Vector512<>).MakeGenericType(elemType),
-            _ => throw new NotSupportedException($"SIMD width {simdBits} not supported")
+            _ => throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"SIMD width {simdBits} not supported"))
         };
 
         /// <summary>
@@ -274,7 +275,7 @@ namespace NumSharp.Backends.Kernels
             {
                 256 => "ConvertToVector256Int" + targetElemBits,
                 128 => "ConvertToVector128Int" + targetElemBits,
-                _ => throw new NotSupportedException($"SIMD width {targetSimdBits} not supported for byte-lane expand")
+                _ => throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"SIMD width {targetSimdBits} not supported for byte-lane expand"))
             };
 
             return _methods.GetOrAdd(new Key(targetSimdBits, name, typeof(byte), /*x86Intrinsic*/ 4000), static key =>

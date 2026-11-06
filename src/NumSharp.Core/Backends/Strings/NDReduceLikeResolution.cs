@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using NumSharp.Backends.Iteration;
 
@@ -987,7 +988,7 @@ namespace NumSharp.Backends.Strings
             for (int i = 0; i < 2; i++)
                 if (!DTypeCasting.CanCastTypeTo(ops[i], descrs[i], casting))
                     throw new TypeError(
-                        $"Cannot cast ufunc '{ufunc}' input {i} from {ops[i].ToString(true)} to {descrs[i].ToString(true)} with casting rule '{rule}'");
+                        string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc '{ufunc}' input {i} from {ops[i].ToString(true)} to {descrs[i].ToString(true)} with casting rule '{rule}'"));
             if (ops[2] is not null && !DTypeCasting.CanCastTypeTo(descrs[2], ops[2], casting))
                 throw new TypeError(
                     $"Cannot cast ufunc '{ufunc}' output from {descrs[2].ToString(true)} to {ops[2].ToString(true)} with casting rule '{rule}'");
@@ -1026,7 +1027,7 @@ namespace NumSharp.Backends.Strings
                     if (resultSize > int.MaxValue)
                     {
                         long length = given[0].@char == 'U' ? resultSize / 4 : resultSize;
-                        throw new TypeError($"addition result string of length {length} is too large to store inside array.");
+                        throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"addition result string of length {length} is too large to store inside array."));
                     }
                     var l0 = Canonical(given[0]);
                     var l1 = Canonical(given[1]);

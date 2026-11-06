@@ -7,6 +7,7 @@ NumSharp raises NumPy's errors: an exception named after the Python or NumPy exc
 1. **NumPy's message.** The message is NumPy's text for the same failure, so an error you look up in NumPy's documentation or issue tracker reads the same.
 2. **NumPy's class, on a .NET base.** Each class follows Python's hierarchy where .NET allows it, and derives from the .NET exception a .NET caller expects: `ValueError` is an `ArgumentException`, `AxisError` an `ArgumentOutOfRangeException`, `OSError` an `IOException`.
 3. **One marker.** Every NumSharp exception implements `INumSharpException`, whatever its .NET base, so one filter catches them all.
+4. **The same text under every culture.** A number in a message is formatted with the invariant culture, as NumPy's texts are ASCII whatever the locale (see [Culture-independent texts](#culture-independent-texts)).
 
 ---
 
@@ -115,6 +116,24 @@ catch (Exception e) when (e is INumSharpException)
     // any other NumSharp error, whatever its .NET base
 }
 ```
+
+---
+
+## Culture-independent texts
+
+.NET formats a number with the thread's current culture unless told otherwise, and many cultures change the text: de-DE writes `1,5`, sv-SE writes the minus sign as U+2212 (`−6`), ar-SA puts U+061C before it, and en-US prints an infinity as `∞`. NumPy's messages never change with the locale, so NumSharp formats every number in an exception message with `CultureInfo.InvariantCulture`:
+
+```csharp
+CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+var a = np.arange(5.0);
+var x = a[-6];                                  // IndexError: index -6 is out of bounds for axis 0 with size 5
+var s = np.sum(np.ones(new Shape(2, 2)), -3);   // AxisError: axis -3 is out of bounds for array of dimension 2
+                                                // (Parameter 'axis') Actual value was -3.
+```
+
+The same holds for `np.finfo(...)` and `np.iinfo(...)`, whose `ToString()` is NumPy's repr byte for byte: `finfo(resolution=1e-06, min=-3.4028235e+38, max=3.4028235e+38, dtype=float32)`, `iinfo(min=0, max=18446744073709551615, dtype=uint64)`. Array printing, `astype` to text, `savetxt`, `tofile` and the text parsers were culture-independent already.
+
+NumSharp's own build keeps it that way with the analyzer rule **NDW020**: in NumSharp.Core a message that formats a number, an `object` or a type parameter without a format provider is a build error. It checks interpolated strings, `+` concatenations, `ToString()`, `string.Format`, `string.Join`, `StringBuilder` appends and an `ArgumentOutOfRangeException`'s actual value, inside the exception's arguments, the locals they read and the methods they call. The fix is `string.Create(CultureInfo.InvariantCulture, $"...")` for an interpolated string, or `CultureInfo.InvariantCulture` passed to the formatting call. The rule ships in the NumSharp package but is off by default, because your own exception texts are your business; turn it on with `dotnet_diagnostic.NDW020.severity = error` in an `.editorconfig` if you want the same guarantee.
 
 ---
 

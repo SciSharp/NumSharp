@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
@@ -1407,7 +1408,7 @@ namespace NumSharp.Backends.Kernels
             for (int i = 0; i < lanes; i++) idxArgTypes[i] = typeof(int);
             MethodInfo idxCreate = (is32 ? typeof(Vector256) : typeof(Vector128))
                 .GetMethod("Create", idxArgTypes)
-                ?? throw new InvalidOperationException($"Vector{(is32 ? 256 : 128)}.Create(int×{lanes}) not found");
+                ?? throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Vector{(is32 ? 256 : 128)}.Create(int×{lanes}) not found"));
 
             MethodInfo gather = typeof(Avx2).GetMethod(
                     "GatherVector256",

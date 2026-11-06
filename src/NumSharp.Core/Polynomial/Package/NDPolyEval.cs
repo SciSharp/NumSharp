@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using NumSharp.Backends;
@@ -469,7 +470,7 @@ namespace NumSharp
         /// <param name="basis">The basis.</param>
         /// <returns>The exception to throw.</returns>
         private static IndexError EmptySeriesError(PolyBasis basis)
-            => new IndexError($"index {(basis == PolyBasis.Power ? -1 : -2)} is out of bounds for axis 0 with size 0");
+            => new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {(basis == PolyBasis.Power ? -1 : -2)} is out of bounds for axis 0 with size 0"));
 
         /// <summary>The evaluation proper (x classified, c normalized).</summary>
         /// <param name="basis">The basis.</param>

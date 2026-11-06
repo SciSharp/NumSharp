@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Unmanaged;
@@ -38,7 +39,7 @@ namespace NumSharp.Backends
             // slices were silently dropped by Shape.Slice (it iterates only over NDim).
             int consuming = slices.Length - newaxis_count - ellipsis_count;
             if (consuming > Shape.NDim)
-                throw new IndexError($"too many indices for array: array is {Shape.NDim}-dimensional, but {consuming} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {Shape.NDim}-dimensional, but {consuming} were indexed"));
 
             // deal with ellipsis
             if (ellipsis_count > 1)
@@ -61,7 +62,7 @@ namespace NumSharp.Backends
                     long index = slice.Start ?? 0;
                     long dim = Shape.dimensions[sourceAxis];
                     if (index < -dim || index >= dim)
-                        throw new IndexError($"index {index} is out of bounds for axis {sourceAxis} with size {dim}");
+                        throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {index} is out of bounds for axis {sourceAxis} with size {dim}"));
                 }
                 sourceAxis++;
             }

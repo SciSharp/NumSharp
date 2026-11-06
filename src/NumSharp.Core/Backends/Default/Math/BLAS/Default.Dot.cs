@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -229,8 +230,8 @@ namespace NumSharp.Backends
                 long contracted = leftshape.dimensions[leftshape.NDim - 1];
                 if (contracted != rightshape.dimensions[0])
                     throw new ArgumentException(
-                        $"shapes {leftshape.ToPythonTuple()} and {rightshape.ToPythonTuple()} not aligned: " +
-                        $"{contracted} (dim {leftshape.NDim - 1}) != {rightshape.dimensions[0]} (dim 0)");
+                        string.Create(CultureInfo.InvariantCulture, $"shapes {leftshape.ToPythonTuple()} and {rightshape.ToPythonTuple()} not aligned: " +
+                        $"{contracted} (dim {leftshape.NDim - 1}) != {rightshape.dimensions[0]} (dim 0)"));
                 return Matmul(left, right);
             }
             // If a is 1-D and b is 2-D, treat a as row vector and do matrix multiply, then squeeze
@@ -238,7 +239,7 @@ namespace NumSharp.Backends
             if (leftshape.NDim == 1 && rightshape.NDim == 2)
             {
                 if (leftshape[0] != rightshape[0])
-                    throw new ArgumentException($"shapes ({leftshape[0]},) and ({rightshape[0]},{rightshape[1]}) not aligned: {leftshape[0]} (dim 0) != {rightshape[0]} (dim 0)");
+                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"shapes ({leftshape[0]},) and ({rightshape[0]},{rightshape[1]}) not aligned: {leftshape[0]} (dim 0) != {rightshape[0]} (dim 0)"));
 
                 // Reshape 1D to row vector (1, n), multiply, squeeze back to 1D
                 var leftReshaped = left.reshape(1, leftshape[0]);

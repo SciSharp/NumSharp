@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -457,7 +458,7 @@ namespace NumSharp
         /// <returns>The exception (its message names the value).</returns>
         public NotSupportedException ObjectArrayRefusal()
             => new NotSupportedException(
-                $"Python int {Py.I} fits neither int64 nor uint64: NumPy builds an object array for it, a dtype NumSharp does not have");
+                string.Create(CultureInfo.InvariantCulture, $"Python int {Py.I} fits neither int64 nor uint64: NumPy builds an object array for it, a dtype NumSharp does not have"));
 
         // ---------------------------------------------------------------------------------------------
         //  Value conversion
@@ -556,7 +557,7 @@ namespace NumSharp
         /// <exception cref="OverflowException">NumPy's OverflowError, with its text.</exception>
         public static long WeakIntToInteger(BigInteger v, NPTypeCode t)
         {
-            string OutOfBounds() => $"Python integer {v} out of bounds for {t.AsNumpyDtypeName()}";
+            string OutOfBounds() => string.Create(CultureInfo.InvariantCulture, $"Python integer {v} out of bounds for {t.AsNumpyDtypeName()}");
             const long LongMin = int.MinValue, LongMax = int.MaxValue;   // C long on win-amd64
             switch (t)
             {
@@ -1264,9 +1265,9 @@ namespace NumSharp
             var detected = new long[len + 1];
             detected[0] = items.Length;
             System.Array.Copy(common, 0, detected, 1, len);
-            string text = detected.Length == 1 ? $"({detected[0]},)" : "(" + string.Join(", ", detected) + ")";
+            string text = detected.Length == 1 ? string.Create(CultureInfo.InvariantCulture, $"({detected[0]},)") : "(" + string.Join(", ", System.Array.ConvertAll(detected, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
             return new ValueError("setting an array element with a sequence. The requested array has an inhomogeneous shape " +
-                                  $"after {detected.Length} dimensions. The detected shape was {text} + inhomogeneous part.");
+                                  string.Create(CultureInfo.InvariantCulture, $"after {detected.Length} dimensions. The detected shape was {text} + inhomogeneous part."));
         }
     }
 }

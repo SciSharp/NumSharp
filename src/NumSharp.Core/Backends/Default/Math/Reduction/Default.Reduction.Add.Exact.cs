@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
@@ -594,7 +595,7 @@ namespace NumSharp.Backends
                     case 4: NumPyMinMaxReduce.CopyRun((float*)dst, 1, (float*)srcRun, stride, n); return;
                     case 8: NumPyMinMaxReduce.CopyRun((double*)dst, 1, (double*)srcRun, stride, n); return;
                     case 16: NumPyMinMaxReduce.CopyRun((Complex*)dst, 1, (Complex*)srcRun, stride, n); return;
-                    default: throw new NotSupportedException($"no element copy for {src} ({srcSize} bytes)");
+                    default: throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"no element copy for {src} ({srcSize} bytes)"));
                 }
             }
 

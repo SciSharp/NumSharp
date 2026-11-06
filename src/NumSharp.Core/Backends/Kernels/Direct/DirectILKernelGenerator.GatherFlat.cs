@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection.Emit;
 using System.Runtime.Intrinsics.X86;
 
@@ -137,7 +138,7 @@ namespace NumSharp.Backends.Kernels
         private static void EmitScaleByWidth(ILGenerator il, int width)
         {
             if (width <= 0)
-                throw new ArgumentOutOfRangeException(nameof(width), width, "flat kernels need a constant width");
+                throw new ArgumentOutOfRangeException(nameof(width), width.ToString(CultureInfo.InvariantCulture), "flat kernels need a constant width");
             if ((width & (width - 1)) == 0)
             {
                 il.Emit(OpCodes.Ldc_I4, System.Numerics.BitOperations.Log2((uint)width));
@@ -217,7 +218,7 @@ namespace NumSharp.Backends.Kernels
         private static TakeFlatKernel GenerateTakeFlatKernelIL(int copyKind, bool idx32, bool prefetch)
         {
             if (copyKind <= 0)
-                throw new ArgumentOutOfRangeException(nameof(copyKind), copyKind, "flat kernels need a constant width");
+                throw new ArgumentOutOfRangeException(nameof(copyKind), copyKind.ToString(CultureInfo.InvariantCulture), "flat kernels need a constant width");
             int idxWidth = idx32 ? 4 : 8;
             bool usePrefetch = prefetch && Sse.IsSupported && _ssePrefetch0 != null;
 
@@ -335,7 +336,7 @@ namespace NumSharp.Backends.Kernels
         private static PutFlatKernel GeneratePutFlatKernelIL(int copyKind, bool idx32)
         {
             if (copyKind <= 0)
-                throw new ArgumentOutOfRangeException(nameof(copyKind), copyKind, "flat kernels need a constant width");
+                throw new ArgumentOutOfRangeException(nameof(copyKind), copyKind.ToString(CultureInfo.InvariantCulture), "flat kernels need a constant width");
             int idxWidth = idx32 ? 4 : 8;
 
             var dm = new DynamicMethod(

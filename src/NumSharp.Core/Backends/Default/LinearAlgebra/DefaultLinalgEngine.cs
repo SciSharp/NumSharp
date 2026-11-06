@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using NumSharp.Backends.Iteration;
 
@@ -61,7 +62,7 @@ namespace NumSharp.Backends
             {
                 if (a.ndim < 2)
                     throw new LinAlgError(
-                        $"{a.ndim}-dimensional array given. Array must be at least two-dimensional");
+                        string.Create(CultureInfo.InvariantCulture, $"{a.ndim}-dimensional array given. Array must be at least two-dimensional"));
             }
         }
 
@@ -76,7 +77,7 @@ namespace NumSharp.Backends
             foreach (var a in arrays)
             {
                 if (a.ndim != 2)
-                    throw new LinAlgError($"{a.ndim}-dimensional array given. Array must be two-dimensional");
+                    throw new LinAlgError(string.Create(CultureInfo.InvariantCulture, $"{a.ndim}-dimensional array given. Array must be two-dimensional"));
             }
         }
 
@@ -94,7 +95,7 @@ namespace NumSharp.Backends
             {
                 if (a.ndim < 2)
                     throw new LinAlgError(
-                        $"{a.ndim}-dimensional array given. Array must be at least two-dimensional");
+                        string.Create(CultureInfo.InvariantCulture, $"{a.ndim}-dimensional array given. Array must be at least two-dimensional"));
 
                 if (a.Shape.dimensions[a.ndim - 2] != a.Shape.dimensions[a.ndim - 1])
                     throw new LinAlgError("Last 2 dimensions of the array must be square");
@@ -180,7 +181,7 @@ namespace NumSharp.Backends
                 return;
             // _commonType: any complex operand makes the loop complex128, a string or any other operand float64.
             string target = complex ? "complex128" : "float64";
-            string input = operands.Length > 1 ? $"input {first}" : "input";
+            string input = operands.Length > 1 ? string.Create(CultureInfo.InvariantCulture, $"input {first}") : "input";
             throw new TypeError(
                 $"Cannot cast ufunc '{gufunc}' {input} from {operands[first].dtype.ToString(true)} to dtype('{target}') " +
                 "with casting rule 'same_kind'");

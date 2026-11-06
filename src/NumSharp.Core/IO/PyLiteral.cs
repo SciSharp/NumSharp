@@ -60,7 +60,7 @@ namespace NumSharp.IO
             object v = p.ParseValue();
             p.SkipWhitespace();
             if (!p.AtEnd)
-                throw new SyntaxException($"unexpected trailing content at position {p.Position}");
+                throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"unexpected trailing content at position {p.Position}"));
             return v;
         }
 
@@ -246,7 +246,7 @@ namespace NumSharp.IO
             {
                 SkipWhitespace();
                 if (_i >= _s.Length || _s[_i] != c)
-                    throw new SyntaxException($"expected '{c}' at position {_i}");
+                    throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"expected '{c}' at position {_i}"));
                 _i++;
             }
 
@@ -266,7 +266,7 @@ namespace NumSharp.IO
                     return ParseNumber();
                 if (char.IsLetter(c) || c == '_')
                     return ParseKeyword();
-                throw new SyntaxException($"invalid syntax at position {_i}: '{c}'");
+                throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"invalid syntax at position {_i}: '{c}'"));
             }
 
             private object ParseKeyword()
@@ -283,7 +283,7 @@ namespace NumSharp.IO
                     // Deliberately NOT nan/inf: they are Names, not literals, so ast.literal_eval
                     // rejects them too. Accepting them here would make this parser more permissive
                     // than the thing it stands in for.
-                    default: throw new SyntaxException($"unknown name '{word}' at position {start}");
+                    default: throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"unknown name '{word}' at position {start}"));
                 }
             }
 
@@ -298,7 +298,7 @@ namespace NumSharp.IO
                 {
                     SkipWhitespace();
                     if (Peek() != '\'' && Peek() != '"')
-                        throw new SyntaxException($"dict keys must be strings, at position {_i}");
+                        throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"dict keys must be strings, at position {_i}"));
                     string key = ParseString();
                     Expect(':');
                     dict[key] = ParseValue();
@@ -313,7 +313,7 @@ namespace NumSharp.IO
                         continue;
                     }
                     if (c == '}') { _i++; return dict; }
-                    throw new SyntaxException($"expected ',' or '}}' at position {_i}");
+                    throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"expected ',' or '}}' at position {_i}"));
                 }
             }
 
@@ -360,7 +360,7 @@ namespace NumSharp.IO
                         continue;
                     }
                     if (c == close) { _i++; return items; }
-                    throw new SyntaxException($"expected ',' or '{close}' at position {_i}");
+                    throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"expected ',' or '{close}' at position {_i}"));
                 }
             }
 
@@ -451,14 +451,14 @@ namespace NumSharp.IO
 
                 string text = _s.Substring(start, _i - start).Replace("_", "");
                 if (text.Length == 0 || text == "-" || text == "+")
-                    throw new SyntaxException($"invalid number at position {start}");
+                    throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"invalid number at position {start}"));
 
                 // Python 2 wrote longs as `3L`. NumPy strips the suffix via _filter_header, but only
                 // when retrying a v1.0/v2.0 header; v3.0 post-dates Python 2 and rejects it.
                 if (!isFloat && _i < _s.Length && (_s[_i] == 'L' || _s[_i] == 'l'))
                 {
                     if (!_allowLongSuffix)
-                        throw new SyntaxException($"invalid decimal literal at position {_i}");
+                        throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"invalid decimal literal at position {_i}"));
                     _i++;
                 }
 
@@ -466,7 +466,7 @@ namespace NumSharp.IO
                     return l;
                 if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double d))
                     return d;
-                throw new SyntaxException($"invalid number '{text}' at position {start}");
+                throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"invalid number '{text}' at position {start}"));
             }
         }
     }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
 
@@ -371,7 +372,7 @@ namespace NumSharp
             var sb = new System.Text.StringBuilder("arrays");
             foreach (var i in index)
                 if (i != _blockEmptyListMarker)
-                    sb.Append('[').Append(i).Append(']');
+                    sb.Append('[').Append(i.ToString(CultureInfo.InvariantCulture)).Append(']');
             return sb.ToString();
         }
 
@@ -455,8 +456,8 @@ namespace NumSharp
                     if (index.Length != firstIndex.Length)
                         throw new ValueError(
                             "List depths are mismatched. First element was at " +
-                            $"depth {firstIndex.Length}, but there is an element at " +
-                            $"depth {index.Length} ({_block_format_index(index)})");
+                            string.Create(CultureInfo.InvariantCulture, $"depth {firstIndex.Length}, but there is an element at ") +
+                            string.Create(CultureInfo.InvariantCulture, $"depth {index.Length} ({_block_format_index(index)})"));
                     // propagate the flag that indicates an empty list at the bottom
                     if (index[index.Length - 1] == _blockEmptyListMarker)
                         firstIndex = index;
@@ -586,7 +587,7 @@ namespace NumSharp
                     if (j == axis) continue;
                     if (s[j] != firstShape[j])
                         throw new ValueError(
-                            $"Mismatched array shapes in block along axis {axis}.");
+                            string.Create(CultureInfo.InvariantCulture, $"Mismatched array shapes in block along axis {axis}."));
                 }
 
                 axisTotal += s[axis];

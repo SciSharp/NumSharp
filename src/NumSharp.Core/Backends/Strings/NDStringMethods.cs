@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
@@ -189,7 +190,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="from">The source descriptor's repr.</param>
         /// <returns>The exception (not thrown).</returns>
         private static TypeError InputCast(string ufunc, int index, string from)
-            => new TypeError($"Cannot cast ufunc '{ufunc}' input {index} from {from} to dtype('int64') with casting rule 'same_kind'");
+            => new TypeError(string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc '{ufunc}' input {index} from {from} to dtype('int64') with casting rule 'same_kind'"));
 
         /// <summary>Disposes a temporary the call made (never the caller's operand).</summary>
         /// <param name="temp">The possibly-temporary array.</param>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 
 namespace NumSharp
@@ -56,7 +57,7 @@ namespace NumSharp
                 throw new ArgumentOutOfRangeException(nameof(nin));
             this.dtypes = dtypes ?? throw new ArgumentNullException(nameof(dtypes));
             if (dtypes.Count != nin + nout)
-                throw new ArgumentException($"ArrayMethod '{name}' declares {nin} inputs and {nout} outputs but {dtypes.Count} DTypes.", nameof(dtypes));
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"ArrayMethod '{name}' declares {nin} inputs and {nout} outputs but {dtypes.Count} DTypes."), nameof(dtypes));
             this.nin = nin;
             this.nout = nout;
             this.casting = casting;
@@ -171,7 +172,7 @@ namespace NumSharp
             this.method = method ?? throw new ArgumentNullException(nameof(method));
             this.descriptors = descriptors ?? throw new ArgumentNullException(nameof(descriptors));
             if (allocators is not null && allocators.Count != descriptors.Count)
-                throw new ArgumentException($"{allocators.Count} allocators for {descriptors.Count} operands.", nameof(allocators));
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"{allocators.Count} allocators for {descriptors.Count} operands."), nameof(allocators));
             Allocators = allocators;
         }
 

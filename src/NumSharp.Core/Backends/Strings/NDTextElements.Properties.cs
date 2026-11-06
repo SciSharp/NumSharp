@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -86,7 +87,7 @@ namespace NumSharp.Backends.Strings
             IsTitleKind => "istitle",
             IsDecimalKind => "isdecimal",
             IsNumericKind => "isnumeric",
-            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not a predicate kind."),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind.ToString(CultureInfo.InvariantCulture), "Not a predicate kind."),
         };
 
         /// <summary>Whether a kind tests EVERY unit for one class (the six predicates other than the case ones).</summary>

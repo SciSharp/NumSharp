@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
@@ -251,7 +252,7 @@ namespace NumSharp.Backends
                 // check_and_adjust_index: one negative wrap, then [0, maxItem).
                 long adjusted = v < 0 ? v + maxItem : v;
                 if (adjusted < 0 || adjusted >= maxItem)
-                    throw new IndexError($"index {v} is out of bounds for axis {axis} with size {maxItem}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {v} is out of bounds for axis {axis} with size {maxItem}"));
             }
         }
 
@@ -338,7 +339,7 @@ namespace NumSharp.Backends
                 // NumPy's IndexError text, verbatim (probed 2.4.2): the flat (axis=None) take runs on the raveled
                 // array, so it names axis 0 too ("index 7 is out of bounds for axis 0 with size 5"). The
                 // axis-less "for size {n}" spelling belongs to a.flat[i], not to take.
-                throw new IndexError($"index {badVal} is out of bounds for axis {axis ?? 0} with size {maxItem}");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {badVal} is out of bounds for axis {axis ?? 0} with size {maxItem}"));
             }
         }
 
@@ -595,7 +596,7 @@ namespace NumSharp.Backends
                 long badI = status;
                 long badVal = idx32 ? ((int*)idxPtr)[badI] : idxPtr[badI];
                 // NumPy's check_and_adjust_index text (an IndexError), the ORIGINAL value of the bad index.
-                throw new IndexError($"index {badVal} is out of bounds for axis 0 with size {a.size}");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {badVal} is out of bounds for axis 0 with size {a.size}"));
             }
         }
 
@@ -1305,7 +1306,7 @@ namespace NumSharp.Backends
             bool broadcast = repFlat.size == 1 || repeats.ndim == 0;
             if (!broadcast && src.size != repFlat.size)
                 throw new ArgumentException(
-                    $"operands could not be broadcast together with shape ({src.size},) ({repFlat.size},)");
+                    string.Create(CultureInfo.InvariantCulture, $"operands could not be broadcast together with shape ({src.size},) ({repFlat.size},)"));
 
             if (src.size == 0)
                 return new NDArray(a.dtype, Shape.Vector(0));
@@ -1418,7 +1419,7 @@ namespace NumSharp.Backends
             bool broadcast = repFlat.size == 1 || repeats.ndim == 0;
             if (!broadcast && repFlat.size != n)
                 throw new ArgumentException(
-                    $"operands could not be broadcast together with shape ({n},) ({repFlat.size},)");
+                    string.Create(CultureInfo.InvariantCulture, $"operands could not be broadcast together with shape ({n},) ({repFlat.size},)"));
 
             long[] counts;
             long broadcastVal;
@@ -1597,7 +1598,7 @@ namespace NumSharp.Backends
                 {
                     case null:
                         // NumPy would build an object array (a dtype NumSharp lacks); a null choice is a bug.
-                        throw new ArgumentNullException($"choices[{i}]", "choices entries must not be null.");
+                        throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"choices[{i}]"), "choices entries must not be null.");
 
                     case NDArray lit when lit.WasPythonLiteral:
                         // A C# number literal that reached choose as its implicit 0-d array (a literal inside an NDArray[]
@@ -2110,7 +2111,7 @@ namespace NumSharp.Backends
                     {
                         int axisNumber = a.ndim == 0 || axis is null ? 0 : (axis.Value < 0 ? axis.Value + a.ndim : axis.Value);
                         throw new IndexOutOfRangeException(
-                            $"index {axisSize + firstTrue} is out of bounds for axis {axisNumber} with size {axisSize}");
+                            string.Create(CultureInfo.InvariantCulture, $"index {axisSize + firstTrue} is out of bounds for axis {axisNumber} with size {axisSize}"));
                     }
                 }
             }
@@ -2155,7 +2156,7 @@ namespace NumSharp.Backends
 
             if (written != count)
                 throw new InvalidOperationException(
-                    $"compress: filter kernel wrote {written}, expected {count}");
+                    string.Create(CultureInfo.InvariantCulture, $"compress: filter kernel wrote {written}, expected {count}"));
 
             return true;
         }

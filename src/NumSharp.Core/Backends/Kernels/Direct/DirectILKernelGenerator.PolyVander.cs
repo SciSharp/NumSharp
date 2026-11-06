@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
@@ -429,7 +430,7 @@ namespace NumSharp.Backends.Kernels
                 128 => nameof(Mul128),
                 256 => nameof(Mul256),
                 512 => nameof(Mul512),
-                _ => throw new NotSupportedException($"no {bits}-bit NaN-priority multiply"),
+                _ => throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"no {bits}-bit NaN-priority multiply")),
             };
             return typeof(PolyVanderOps).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!.MakeGenericMethod(clr);
         }

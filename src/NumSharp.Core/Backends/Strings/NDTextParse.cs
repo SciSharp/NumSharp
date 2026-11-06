@@ -1362,8 +1362,8 @@ namespace NumSharp.Backends.Strings
                     return new ValueError("invalid literal for int() with base 10: " + CutCodePoints(repr, 200));
                 }
                 case TextParseStatus.DigitLimit:
-                    return new ValueError($"Exceeds the limit ({MaxStrDigits} digits) for integer string conversion: value has " +
-                                          $"{d.Digits} digits; use sys.set_int_max_str_digits() to increase the limit");
+                    return new ValueError(string.Create(CultureInfo.InvariantCulture, $"Exceeds the limit ({MaxStrDigits} digits) for integer string conversion: value has " +
+                                          $"{d.Digits} digits; use sys.set_int_max_str_digits() to increase the limit"));
                 case TextParseStatus.OutOfBounds:
                 {
                     string v = (d.Negative && d.Magnitude != 0 ? "-" : "") + d.Magnitude.ToString(CultureInfo.InvariantCulture);
@@ -1392,8 +1392,8 @@ namespace NumSharp.Backends.Strings
                 case TextParseStatus.DecodeError:
                 {
                     string text = d.DecodeEnd - d.DecodeStart == 1
-                        ? $"'utf-8' codec can't decode byte 0x{bytes[d.DecodeStart]:x2} in position {d.DecodeStart}: {d.DecodeReason}"
-                        : $"'utf-8' codec can't decode bytes in position {d.DecodeStart}-{d.DecodeEnd - 1}: {d.DecodeReason}";
+                        ? string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't decode byte 0x{bytes[d.DecodeStart]:x2} in position {d.DecodeStart}: {d.DecodeReason}")
+                        : string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't decode bytes in position {d.DecodeStart}-{d.DecodeEnd - 1}: {d.DecodeReason}");
                     return new UnicodeDecodeError(text);
                 }
                 default:

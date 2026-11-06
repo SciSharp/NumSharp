@@ -4,6 +4,7 @@
 // helpers the scalar overload of np.ravel_multi_index shares (RavelStrides, ThrowIfZeroDimension).
 
 using System;
+using System.Globalization;
 using System.Text;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
@@ -232,7 +233,7 @@ namespace NumSharp.Backends
             // NumPy's int_sequence_to_arrays: a ValueError naming the expected length. dims=() takes no coordinate array
             // (and gives the flat index 0).
             if (multi_index.Length != dims.Length)
-                throw new ValueError($"parameter multi_index must be a sequence of length {dims.Length}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"parameter multi_index must be a sequence of length {dims.Length}"));
             return dims.Length;
         }
 

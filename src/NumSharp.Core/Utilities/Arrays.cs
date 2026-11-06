@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -401,7 +402,7 @@ namespace NumSharp.Utilities
         public static Array Create(Type type, long length)
         {
             if (length > int.MaxValue)
-                throw new OverflowException($"Cannot create managed array with {length} elements. Maximum is {int.MaxValue}.");
+                throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Cannot create managed array with {length} elements. Maximum is {int.MaxValue}."));
             return Create(type, (int)length);
         }
 
@@ -441,7 +442,7 @@ namespace NumSharp.Utilities
         public static T[] Create<T>(long length)
         {
             if (length > int.MaxValue)
-                throw new OverflowException($"Cannot create managed array with {length} elements. Maximum is {int.MaxValue}.");
+                throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Cannot create managed array with {length} elements. Maximum is {int.MaxValue}."));
             return new T[(int)length];
         }
 
@@ -558,7 +559,7 @@ namespace NumSharp.Utilities
         public static Array Create(NPTypeCode typeCode, long length)
         {
             if (length > int.MaxValue)
-                throw new OverflowException($"Cannot create managed array with {length} elements. Maximum is {int.MaxValue}.");
+                throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Cannot create managed array with {length} elements. Maximum is {int.MaxValue}."));
             return Create(typeCode, (int)length);
         }
 

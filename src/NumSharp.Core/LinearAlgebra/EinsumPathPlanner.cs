@@ -94,8 +94,8 @@ namespace NumSharp
                 long[] sh = shapes[tnum];
                 if (sh.Length != term.Length)
                     throw new ValueError(
-                        $"Einstein sum subscript {inputSubscripts[tnum]} does not contain the correct " +
-                        $"number of indices for operand {tnum}.");
+                        string.Create(CultureInfo.InvariantCulture, $"Einstein sum subscript {inputSubscripts[tnum]} does not contain the correct " +
+                        $"number of indices for operand {tnum}."));
 
                 for (int cnum = 0; cnum < term.Length; cnum++)
                 {
@@ -108,8 +108,8 @@ namespace NumSharp
                             dimensionDict[ch] = dim;
                         else if (dim != 1 && dim != previous)
                             throw new ValueError(
-                                $"Size of label '{ch}' for operand {tnum} ({previous}) " +
-                                $"does not match previous terms ({dim}).");
+                                string.Create(CultureInfo.InvariantCulture, $"Size of label '{ch}' for operand {tnum} ({previous}) " +
+                                $"does not match previous terms ({dim})."));
                     }
                     else
                     {
@@ -209,7 +209,7 @@ namespace NumSharp
 
             if (workingList.Count != 1)
                 throw new RuntimeError(
-                    $"Invalid einsum_path is specified: {workingList.Count - 1} more operands has to be contracted.");
+                    string.Create(CultureInfo.InvariantCulture, $"Invalid einsum_path is specified: {workingList.Count - 1} more operands has to be contracted."));
 
             // The printable representation.
             string overallContraction = inputSubscripts + "->" + outputSubscript;

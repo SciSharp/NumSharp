@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using NumSharp.IO;
@@ -301,10 +302,10 @@ namespace NumSharp
             {
                 for (int i = 0; i < args.Length; i++)
                 {
-                    string key = $"arr_{i}";
+                    string key = string.Create(CultureInfo.InvariantCulture, $"arr_{i}");
                     if (seen.Contains(key))
                         throw new ArgumentException($"Cannot use un-named variables and keyword {key}", nameof(kwds));
-                    if (args[i] is null) throw new ArgumentNullException(nameof(args), $"Array at index {i} is null.");
+                    if (args[i] is null) throw new ArgumentNullException(nameof(args), string.Create(CultureInfo.InvariantCulture, $"Array at index {i} is null."));
                     namedict.Add(new KeyValuePair<string, NDArray>(key, args[i]));
                     seen.Add(key);
                 }

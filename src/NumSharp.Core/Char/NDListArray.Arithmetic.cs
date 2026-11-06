@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
@@ -829,7 +830,7 @@ namespace NumSharp
             long length = ad[ad.Length - 1];
             if (bd[matchDim] != length)
                 throw new IncorrectShapeException(
-                    $"shapes {a.ToPythonTuple()} and {b.ToPythonTuple()} not aligned: {length} (dim {ad.Length - 1}) != {bd[matchDim]} (dim {matchDim})");
+                    string.Create(CultureInfo.InvariantCulture, $"shapes {a.ToPythonTuple()} and {b.ToPythonTuple()} not aligned: {length} (dim {ad.Length - 1}) != {bd[matchDim]} (dim {matchDim})"));
             var outDims = new List<long>();
             for (int d = 0; d < ad.Length - 1; d++)
                 outDims.Add(ad[d]);

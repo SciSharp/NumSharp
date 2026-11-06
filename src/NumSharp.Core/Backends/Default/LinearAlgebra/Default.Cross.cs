@@ -3,6 +3,8 @@
 // engine, the operand's engine in the static StackCross, the array object's concatenation and expand_dims, Shape's
 // broadcast of the leading shapes, the dtype layer's promotion).
 
+using System.Globalization;
+
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
@@ -159,7 +161,7 @@ namespace NumSharp.Backends
         {
             int resolved = axis < 0 ? axis + ndim : axis;
             if (resolved < 0 || resolved >= ndim)
-                throw new AxisError($"{prefix}: axis {axis} is out of bounds for array of dimension {ndim}");
+                throw new AxisError(string.Create(CultureInfo.InvariantCulture, $"{prefix}: axis {axis} is out of bounds for array of dimension {ndim}"));
             return resolved;
         }
     }

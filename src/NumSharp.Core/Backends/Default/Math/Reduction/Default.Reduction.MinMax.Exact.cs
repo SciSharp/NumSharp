@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
@@ -829,7 +830,7 @@ namespace NumSharp.Backends
                 }
 
                 if (rpos <= 0)
-                    throw new InvalidOperationException($"SlabCallTiling: axis {axis} is not a SLAB-mode reduced axis — caller bug.");
+                    throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"SlabCallTiling: axis {axis} is not a SLAB-mode reduced axis — caller bug."));
 
                 // P region: the axes below the reduced one, positions enumerated in iteration order.
                 place.Clear();

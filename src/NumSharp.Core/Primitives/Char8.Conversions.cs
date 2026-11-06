@@ -1,6 +1,7 @@
 // Conversions to and from all NumSharp-supported primitive dtypes.
 
 using System;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 
 namespace NumSharp
@@ -111,7 +112,7 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 FromChar(char c)
         {
-            if ((uint)c > 0xFF) throw new OverflowException("Char value " + (int)c + " exceeds Char8 max (0xFF).");
+            if ((uint)c > 0xFF) throw new OverflowException("Char value " + ((int)c).ToString(CultureInfo.InvariantCulture) + " exceeds Char8 max (0xFF).");
             return new Char8((byte)c);
         }
 
@@ -237,7 +238,7 @@ namespace NumSharp
                 for (int i = 0; i < src.Length; i++)
                 {
                     int v = src[i];
-                    if ((uint)v > 0xFF) throw new OverflowException($"int[{i}]={v} out of Char8 range [0, 255].");
+                    if ((uint)v > 0xFF) throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"int[{i}]={v} out of Char8 range [0, 255]."));
                     r[i] = new Char8((byte)v);
                 }
             }

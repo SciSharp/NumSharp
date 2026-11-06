@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
@@ -201,7 +202,7 @@ namespace NumSharp.Backends
         internal static unsafe bool TryCopytoUnsafeScalarElement(object value, NPTypeCode dstType, Span<byte> element)
         {
             if (element.Length < ReductionInitial.SlotBytes)
-                throw new ArgumentException($"The element slot needs {ReductionInitial.SlotBytes} bytes.", nameof(element));
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"The element slot needs {ReductionInitial.SlotBytes} bytes."), nameof(element));
 
             // A C# literal's 0-d array stands for the Python scalar it was made from.
             if (value is NDArray marked && marked.WasPythonLiteral)

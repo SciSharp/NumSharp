@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
@@ -571,12 +572,12 @@ namespace NumSharp
                             continue;
                         if (i >= NumPyMaxDims && i >= operandRank)
                             throw new ValueError(
-                                $"The 'op_axes' provided to the iterator constructor for operand {iop} contained invalid values {i}");
+                                string.Create(CultureInfo.InvariantCulture, $"The 'op_axes' provided to the iterator constructor for operand {iop} contained invalid values {i}"));
                         for (int prev = 0; prev < idim; prev++)
                         {
                             if (NDIterUtils.GetOpAxis(axes[prev], out _) == i)
                                 throw new ValueError(
-                                    $"The 'op_axes' provided to the iterator constructor for operand {iop} contained duplicate value {i}");
+                                    string.Create(CultureInfo.InvariantCulture, $"The 'op_axes' provided to the iterator constructor for operand {iop} contained duplicate value {i}"));
                         }
                     }
                 }
@@ -788,8 +789,8 @@ namespace NumSharp
                                 continue;
                             if (i >= ondim)
                                 throw new ValueError(
-                                    $"Iterator input op_axes[{iop}][{ndim - idim - 1}] (=={i}) is not a valid axis of op[{iop}], " +
-                                    $"which has {ondim} dimensions ");
+                                    string.Create(CultureInfo.InvariantCulture, $"Iterator input op_axes[{iop}][{ndim - idim - 1}] (=={i}) is not a valid axis of op[{iop}], " +
+                                    $"which has {ondim} dimensions "));
                             ref long bshape = ref broadcast[idim];
                             long extent = dims[i];
                             if (bshape == 1)
@@ -1388,9 +1389,9 @@ namespace NumSharp
                             "support in the constructor");
                     if (value.Start < 0 || value.End > it.IterSize)
                         throw new ValueError(
-                            $"Out-of-bounds range [{value.Start}, {value.End}) passed to ResetToIterIndexRange");
+                            string.Create(CultureInfo.InvariantCulture, $"Out-of-bounds range [{value.Start}, {value.End}) passed to ResetToIterIndexRange"));
                     if (value.End < value.Start)
-                        throw new ValueError($"Invalid range [{value.Start}, {value.End}) passed to ResetToIterIndexRange");
+                        throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Invalid range [{value.Start}, {value.End}) passed to ResetToIterIndexRange"));
 
                     // The engine sets the range and resets to its start (NpyIter_Reset: the buffer is written back and
                     // refilled for the new range unless NumPy's early return keeps it, delayed buffers are allocated).
@@ -1534,7 +1535,7 @@ namespace NumSharp
                 {
                     int op = CheckedOperandIndex(i);
                     if ((_state->GetOpFlags(op) & NDIterOpFlags.WRITE) == 0)
-                        throw new RuntimeError($"Iterator operand {i} is not writeable");
+                        throw new RuntimeError(string.Create(CultureInfo.InvariantCulture, $"Iterator operand {i} is not writeable"));
 
                     var it = Borrow();
 
@@ -1584,7 +1585,7 @@ namespace NumSharp
                 int nop = _state->NOp;
                 int op = i < 0 ? i + nop : i;
                 if (op < 0 || op >= nop)
-                    throw new IndexError($"Iterator operand index {i} is out of bounds");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"Iterator operand index {i} is out of bounds"));
                 return op;
             }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using NumSharp.Backends.Strings;
@@ -103,7 +104,7 @@ namespace NumSharp.IO
 
             // _ensure_ndmin_ndarray_check_param.
             if (ndmin != 0 && ndmin != 1 && ndmin != 2)
-                throw new ValueError($"Illegal value of ndmin keyword: {ndmin}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Illegal value of ndmin keyword: {ndmin}"));
 
             // _read: an empty comment is refused ("" in comment — only a str equals ""), one one-character str goes to the C
             // tokenizer, anything else is stripped per line; several comments must not include the delimiter (Python's `in`
@@ -373,7 +374,7 @@ namespace NumSharp.IO
 
                 if (usecols == null && actualNumFields != currentNumFields)
                     throw new ValueError(
-                        $"the number of columns changed from {actualNumFields} to {currentNumFields} at row {rowCount + 1}; " +
+                        string.Create(CultureInfo.InvariantCulture, $"the number of columns changed from {actualNumFields} to {currentNumFields} at row {rowCount + 1}; ") +
                         "use `usecols` to select a subset and avoid this error");
 
                 if (usecols == null && convFuncs == null)
@@ -397,7 +398,7 @@ namespace NumSharp.IO
                         if (col < 0)
                             col += currentNumFields;
                         if (col < 0 || col >= currentNumFields)
-                            throw new ValueError($"invalid column index {usecols[i]} at row {rowCount + 1} with {currentNumFields} columns");
+                            throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"invalid column index {usecols[i]} at row {rowCount + 1} with {currentNumFields} columns"));
                     }
 
                     // The main "conversion" step: parse the field's text (or run its converter) and store the result.
@@ -471,12 +472,12 @@ namespace NumSharp.IO
                 else
                 {
                     if (column < -numFields || column >= numFields)
-                        throw new ValueError($"converter specified for column {column}, which is invalid for the number of fields {numFields}.");
+                        throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"converter specified for column {column}, which is invalid for the number of fields {numFields}."));
                     if (column < 0)
                         column += numFields;
                 }
                 if (entry.Value is null)
-                    throw new TypeError($"values of the converters dictionary must be callable, but the value associated with key {entry.Key} is not");
+                    throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"values of the converters dictionary must be callable, but the value associated with key {entry.Key} is not"));
                 conv[column] = entry.Value;
             }
             return conv;
@@ -494,7 +495,7 @@ namespace NumSharp.IO
         /// <param name="cause">The error the conversion raised, or null when the parser just refused the text.</param>
         /// <returns>The error to throw.</returns>
         private static ValueError LoadTxtConvertError(ReadOnlySpan<char> field, string descrText, long row, int col, Exception cause)
-            => new ValueError($"could not convert string {Repr100(field.ToString())} to {descrText} at row {row}, column {col + 1}.", cause);
+            => new ValueError(string.Create(CultureInfo.InvariantCulture, $"could not convert string {Repr100(field.ToString())} to {descrText} at row {row}, column {col + 1}."), cause);
 
         /// <summary>
         ///     NumPy's <c>_ensure_ndmin_ndarray</c>: squeeze the size-1 axes of a result with more dimensions than

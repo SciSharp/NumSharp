@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Kernels;
@@ -658,7 +659,7 @@ namespace NumSharp
         {
             if (d is null) throw new ArgumentNullException(name);
             if (d.Length < 2)
-                throw new IndexError($"index 1 is out of bounds for axis 0 with size {d.Length}");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index 1 is out of bounds for axis 0 with size {d.Length}"));
         }
     }
 }

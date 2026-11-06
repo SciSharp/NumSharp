@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Utilities;
@@ -230,8 +231,8 @@ namespace NumSharp.Backends.Iteration
                     if (!CanCast(srcType, dstType, casting))
                     {
                         throw new InvalidCastException(
-                            $"Iterator operand {op} dtype could not be cast from {srcType.AsNumpyDtypeName()} " +
-                            $"to {dstType.AsNumpyDtypeName()} according to the rule '{GetCastingName(casting)}'");
+                            string.Create(CultureInfo.InvariantCulture, $"Iterator operand {op} dtype could not be cast from {srcType.AsNumpyDtypeName()} " +
+                            $"to {dstType.AsNumpyDtypeName()} according to the rule '{GetCastingName(casting)}'"));
                     }
 
                     anyCast = true;

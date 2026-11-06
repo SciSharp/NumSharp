@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection.Emit;
 
 // =============================================================================
@@ -77,7 +78,7 @@ namespace NumSharp.Backends.Kernels
         public static WhereBytesStepKernel GetWhereBytesStepKernel(int width)
         {
             if (width <= 0)
-                throw new ArgumentOutOfRangeException(nameof(width), width, "An element is at least one byte wide.");
+                throw new ArgumentOutOfRangeException(nameof(width), width.ToString(CultureInfo.InvariantCulture), "An element is at least one byte wide.");
             if (!Enabled)
                 return null;
             if (_whereBytesStepKernels.TryGetValue(width, out var cached))
@@ -192,7 +193,7 @@ namespace NumSharp.Backends.Kernels
         public static WhereBytesKernel GetWhereBytesKernel(int width)
         {
             if (width <= 0)
-                throw new ArgumentOutOfRangeException(nameof(width), width, "An element is at least one byte wide.");
+                throw new ArgumentOutOfRangeException(nameof(width), width.ToString(CultureInfo.InvariantCulture), "An element is at least one byte wide.");
             if (!Enabled)
                 return null;
             if (_whereBytesKernels.TryGetValue(width, out var cached))

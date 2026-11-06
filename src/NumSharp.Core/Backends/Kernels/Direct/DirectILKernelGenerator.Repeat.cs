@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.Intrinsics;
@@ -429,7 +430,7 @@ namespace NumSharp.Backends.Kernels
                     il.EmitCall(OpCodes.Call, Vector128LoadByte, null);
                     break;
                 default:
-                    throw new InvalidOperationException($"EmitPreload: unsupported chunkBytes {chunkBytes}");
+                    throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"EmitPreload: unsupported chunkBytes {chunkBytes}"));
             }
             il.Emit(OpCodes.Stloc, locVal);
         }

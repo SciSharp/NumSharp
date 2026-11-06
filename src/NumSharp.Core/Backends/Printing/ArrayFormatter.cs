@@ -796,7 +796,7 @@ namespace NumSharp.Backends.Printing
                 case NPTypeCode.String:
                     return value is byte[] bytes ? "np.bytes_(" + PyRepr.Bytes(bytes) + ")" : (string)value;
                 default:
-                    return value?.ToString() ?? "";
+                    return Convert.ToString(value, CultureInfo.InvariantCulture) ?? "";
             }
         }
 

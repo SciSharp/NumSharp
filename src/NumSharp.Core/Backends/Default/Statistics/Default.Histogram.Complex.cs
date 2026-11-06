@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using NumSharp.Backends;
 
@@ -113,7 +114,7 @@ namespace NumSharp.Backends
         {
             NDArray binEdges = ComplexEqualWidthEdges(edges, nbins);
             if (AnyNonIncreasing(binEdges))
-                throw new ValueError($"Too many bins for data range. Cannot create {nbins} finite-sized bins.");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Too many bins for data range. Cannot create {nbins} finite-sized bins."));
             return new BinEdgesResult(binEdges, true, 0, 0, nbins, NPTypeCode.Complex, edges);
         }
 

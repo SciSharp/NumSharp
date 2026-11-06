@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Sorting;
 using NumSharp.Backends.Strings;
@@ -684,7 +685,7 @@ namespace NumSharp
             {
                 long k = raw < 0 ? raw + axisLength : raw;
                 if (arraySize != 0 && (k < 0 || k >= axisLength))
-                    throw new ValueError($"kth(={k}) out of bounds ({axisLength})");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"kth(={k}) out of bounds ({axisLength})"));
             }
         }
 

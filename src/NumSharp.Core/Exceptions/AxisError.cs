@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NumSharp
 {
@@ -20,7 +21,10 @@ namespace NumSharp
     ///     It derives from <see cref="ArgumentOutOfRangeException"/>, so a handler written for
     ///     <see cref="ArgumentOutOfRangeException"/> or <see cref="ArgumentException"/> still catches it. The .NET base
     ///     appends <c>" (Parameter '…')"</c> and an <c>"Actual value was …"</c> line to <see cref="Exception.Message"/>;
-    ///     NumPy's text is the part before them.
+    ///     NumPy's text is the part before them. The axis reaches that line as invariant TEXT
+    ///     (<see cref="ArgumentOutOfRangeException.ActualValue"/> is the string <c>"-3"</c>, <see cref="Axis"/> the
+    ///     number): the base formats a number with the current culture, which made the line read <c>؜-3</c> under ar-SA
+    ///     and <c>−3</c> under sv-SE (parity QA-41).
     ///     </para>
     /// </remarks>
     public class AxisError : ArgumentOutOfRangeException, INumSharpException
@@ -55,7 +59,7 @@ namespace NumSharp
         ///     <c>": axis 5 is …"</c>, which this constructor reproduces.
         /// </remarks>
         public AxisError(int axis, int ndim, string msgPrefix)
-            : base(string.IsNullOrEmpty(msgPrefix) ? "axis" : msgPrefix, axis, Format(axis, ndim, msgPrefix))
+            : base(string.IsNullOrEmpty(msgPrefix) ? "axis" : msgPrefix, axis.ToString(CultureInfo.InvariantCulture), Format(axis, ndim, msgPrefix))
         {
             Axis = axis;
             NDim = ndim;
@@ -78,7 +82,7 @@ namespace NumSharp
         /// <returns>The message text.</returns>
         private static string Format(int axis, int ndim, string msgPrefix)
         {
-            string text = $"axis {axis} is out of bounds for array of dimension {ndim}";
+            string text = string.Create(CultureInfo.InvariantCulture, $"axis {axis} is out of bounds for array of dimension {ndim}");
             return msgPrefix is null ? text : $"{msgPrefix}: {text}";
         }
     }

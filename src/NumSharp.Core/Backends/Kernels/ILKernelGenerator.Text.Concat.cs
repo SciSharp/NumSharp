@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -180,7 +181,7 @@ namespace NumSharp.Backends.Kernels
             ValidateTextShape(unit, width);
             ValidateTextShape(unit, outWidth);
             if (textIndex is not (0 or 1))
-                throw new ArgumentOutOfRangeException(nameof(textIndex), textIndex, "The text operand is slot 0 or 1.");
+                throw new ArgumentOutOfRangeException(nameof(textIndex), textIndex.ToString(CultureInfo.InvariantCulture), "The text operand is slot 0 or 1.");
             if (!TextKernelsAvailable)
                 return null;
             var key = new TextRepeatKey(unit, width, outWidth, textIndex);

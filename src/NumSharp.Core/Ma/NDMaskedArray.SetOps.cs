@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -121,8 +122,8 @@ namespace NumSharp
                 if (Length != n)
                     throw new InvalidOperationException(
                         Length < n
-                            ? $"not enough values to unpack (expected {n}, got {Length})"
-                            : $"too many values to unpack (expected {n})");
+                            ? string.Create(CultureInfo.InvariantCulture, $"not enough values to unpack (expected {n}, got {Length})")
+                            : string.Create(CultureInfo.InvariantCulture, $"too many values to unpack (expected {n})"));
             }
 
             /// <inheritdoc/>

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using NumSharp.Utilities;
@@ -45,8 +46,8 @@ namespace NumSharp.Backends
             long Kr = rhs.Shape.dimensions[rhs.ndim - 2];
             if (K != Kr)
                 throw new IncorrectShapeException(
-                    $"matmul: Input operand core dimension mismatch (n?,k),(k,m?)->(n?,m?): " +
-                    $"{K} (lhs last axis) != {Kr} (rhs second-to-last axis).");
+                    string.Create(CultureInfo.InvariantCulture, $"matmul: Input operand core dimension mismatch (n?,k),(k,m?)->(n?,m?): " +
+                    $"{K} (lhs last axis) != {Kr} (rhs second-to-last axis)."));
 
             NDArray result = (lhs.ndim == 2 && rhs.ndim == 2)
                 ? MultiplyMatrix(lhs, rhs)
@@ -192,7 +193,7 @@ namespace NumSharp.Backends
                     outDims[i] = da == 1 ? db : da;
                 else
                     throw new IncorrectShapeException(
-                        $"matmul: stacked (batch) dimensions are not broadcastable: {da} vs {db}.");
+                        string.Create(CultureInfo.InvariantCulture, $"matmul: stacked (batch) dimensions are not broadcastable: {da} vs {db}."));
             }
             return outDims;
         }

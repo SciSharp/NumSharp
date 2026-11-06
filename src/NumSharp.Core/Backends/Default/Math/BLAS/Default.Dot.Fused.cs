@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -45,8 +46,8 @@ namespace NumSharp.Backends
             long n = left.Shape.dimensions[0];
             if (right.Shape.dimensions[0] != n)
                 throw new IncorrectShapeException(
-                    $"shapes ({left.Shape.dimensions[0]},) and ({right.Shape.dimensions[0]},) not aligned: " +
-                    $"{left.Shape.dimensions[0]} (dim 0) != {right.Shape.dimensions[0]} (dim 0)");
+                    string.Create(CultureInfo.InvariantCulture, $"shapes ({left.Shape.dimensions[0]},) and ({right.Shape.dimensions[0]},) not aligned: " +
+                    $"{left.Shape.dimensions[0]} (dim 0) != {right.Shape.dimensions[0]} (dim 0)"));
 
             // PyArray_MatrixProduct2 converts BOTH operands to their common dtype (PyArray_FromAny) before choosing a
             // route, so a mixed pair is that dtype's dot of the converted values; the former route multiplied with
@@ -100,8 +101,8 @@ namespace NumSharp.Backends
             long n = left.Shape.dimensions[0];
             if (right.Shape.dimensions[0] != n)
                 throw new IncorrectShapeException(
-                    $"shapes ({left.Shape.dimensions[0]},) and ({right.Shape.dimensions[0]},) not aligned: " +
-                    $"{left.Shape.dimensions[0]} (dim 0) != {right.Shape.dimensions[0]} (dim 0)");
+                    string.Create(CultureInfo.InvariantCulture, $"shapes ({left.Shape.dimensions[0]},) and ({right.Shape.dimensions[0]},) not aligned: " +
+                    $"{left.Shape.dimensions[0]} (dim 0) != {right.Shape.dimensions[0]} (dim 0)"));
 
             // array_vdot converts both operands to their common dtype first (PyArray_FromAny), as np.dot does.
             if (left.typecode != right.typecode)
@@ -150,8 +151,8 @@ namespace NumSharp.Backends
                 long n = left.Shape.dimensions[0];
                 if (right.Shape.dimensions[0] != n)
                     throw new IncorrectShapeException(
-                        $"shapes ({left.Shape.dimensions[0]},) and ({right.Shape.dimensions[0]},) not aligned: " +
-                        $"{left.Shape.dimensions[0]} (dim 0) != {right.Shape.dimensions[0]} (dim 0)");
+                        string.Create(CultureInfo.InvariantCulture, $"shapes ({left.Shape.dimensions[0]},) and ({right.Shape.dimensions[0]},) not aligned: " +
+                        $"{left.Shape.dimensions[0]} (dim 0) != {right.Shape.dimensions[0]} (dim 0)"));
                 return NewScalar(NDDot.ComplexDotc((Complex*)left.Address + left.Shape.offset, left.Shape.strides[0],
                     (Complex*)right.Address + right.Shape.offset, right.Shape.strides[0], n));
             }

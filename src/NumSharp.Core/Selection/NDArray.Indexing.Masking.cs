@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using NumSharp.Generic;
 
 namespace NumSharp
@@ -222,7 +223,7 @@ namespace NumSharp
         internal IndexError BooleanIndexError(NDArray mask)
         {
             if (mask.ndim > this.ndim)
-                return new IndexError($"too many indices for array: array is {this.ndim}-dimensional, but {mask.ndim} were indexed");
+                return new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {this.ndim}-dimensional, but {mask.ndim} were indexed"));
 
             var dims = this.Shape.dimensions;
             var maskDims = mask.Shape.dimensions;
@@ -230,8 +231,8 @@ namespace NumSharp
             {
                 if (maskDims[i] != 0 && maskDims[i] != dims[i])
                     return new IndexError(
-                        $"boolean index did not match indexed array along axis {i}; size of axis is {dims[i]} but size of " +
-                        $"corresponding boolean axis is {maskDims[i]}");
+                        string.Create(CultureInfo.InvariantCulture, $"boolean index did not match indexed array along axis {i}; size of axis is {dims[i]} but size of " +
+                        $"corresponding boolean axis is {maskDims[i]}"));
             }
 
             // Unreachable for a mask the caller found not to fit; kept so a future caller cannot throw null.
@@ -260,14 +261,14 @@ namespace NumSharp
                     return;
             if (value.ndim > 1)
                 throw new TypeError(
-                    $"NumPy boolean array indexing assignment requires a 0 or 1-dimensional input, input has {value.ndim} dimensions");
+                    string.Create(CultureInfo.InvariantCulture, $"NumPy boolean array indexing assignment requires a 0 or 1-dimensional input, input has {value.ndim} dimensions"));
             if (value.ndim == 1 && value.Shape.dimensions[0] != 1)
             {
                 long trues = np.count_nonzero(mask);
                 long given = value.Shape.dimensions[0];
                 if (trues != given)
                     throw new ValueError(
-                        $"NumPy boolean array indexing assignment cannot assign {given} input values to the {trues} output values where the mask is true");
+                        string.Create(CultureInfo.InvariantCulture, $"NumPy boolean array indexing assignment cannot assign {given} input values to the {trues} output values where the mask is true"));
             }
         }
 

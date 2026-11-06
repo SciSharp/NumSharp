@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
@@ -203,7 +204,7 @@ namespace NumSharp
             ulong[] words = s.state
                             ?? throw new TypeError("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
             if (words.Length != 4 && words.Length != 1)
-                throw new ValueError($"could not broadcast input array from shape ({words.Length},) into shape (4,)");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"could not broadcast input array from shape ({words.Length},) into shape (4,)"));
             if (words.Length == 1)
                 _s0 = _s1 = _s2 = _s3 = words[0];
             else

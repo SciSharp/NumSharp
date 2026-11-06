@@ -53,7 +53,8 @@ one builder per precision (`DirectILKernelGenerator.QuantilePlan`, cached per dt
   dtype (parity QA-31): np.median runs np.mean's add.reduce prologue over the partition's MIDDLE slice first
   (`MedianOutChecks`: the reduced axis cut to 1 element for an odd length, 2 for an even one, 0 for an empty axis;
   `operands could not be broadcast together with remapped shapes [original->remapped]: (3,)->(3) (1,4) `, the add rank
-  text) and copies its result under same_kind (NumPy's mean casts unsafely: QA-55, pinned); np.nanmedian is the nan forms'
+  text) and copies its result unsafely, as np.mean's add.reduce and `true_divide(..., casting='unsafe')` store (an integer
+  out takes the truncated median; parity QA-55); np.nanmedian is the nan forms'
   `out[...] = result` (np.copyto's broadcast and texts, the unsafe cast). An empty input under the nan forms is
   np.nanmean's prologue against the input. Gate: `Math/OutShapeRefusals.NumPy.Test.cs`.
 - All-NaN data answers `np.full(q.shape, nan)` in the data's dtype, and an all-NaN FIRST slice makes the result the data's

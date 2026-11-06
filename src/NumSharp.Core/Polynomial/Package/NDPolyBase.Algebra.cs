@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
@@ -119,7 +120,7 @@ namespace NumSharp
             var prog = PolySteps.Eval(basis);
             long n = cc.size;
             if (n == 0)
-                throw new IndexError($"index {(prog.Horner ? -1 : -2)} is out of bounds for axis 0 with size 0");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {(prog.Horner ? -1 : -2)} is out of bounds for axis 0 with size 0"));
             var temps = new List<NDPolyBase>();
             NDPolyBase result = null;
             try
@@ -647,7 +648,7 @@ namespace NumSharp
         private static unsafe NDArray Linspace(in PolyNumber start, in PolyNumber stop, long num)
         {
             if (num < 0)
-                throw new ValueError($"Number of samples, {num}, must be non-negative.");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Number of samples, {num}, must be non-negative."));
             // _array_converter keeps two NumPy scalars as 0-d arrays and converts two Python numbers to arrays of their
             // discovered dtypes (int64 / float64 / complex128); the result type is then made inexact.
             PolyNumber s = start.IsPython ? PolyNumber.FromArray(start.ToNDArray()) : start;

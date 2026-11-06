@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Unmanaged.Pooling;
 
@@ -328,6 +329,6 @@ namespace NumSharp.Backends.Kernels
         /// <exception cref="IndexError">Always.</exception>
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void ThrowHistogramIndexOutOfEdges(long idx, int nbins) =>
-            throw new IndexError($"index {idx} is out of bounds for axis 0 with size {(long)nbins + 1}");
+            throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {idx} is out of bounds for axis 0 with size {(long)nbins + 1}"));
     }
 }

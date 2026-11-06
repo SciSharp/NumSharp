@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -622,7 +623,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(shape));
 
             if (shape.size != arraySlice.Count)
-                throw new IncorrectShapeException($"Given shape size ({shape.size}) does not match the size of the given storage size ({arraySlice.Count})");
+                throw new IncorrectShapeException(string.Create(CultureInfo.InvariantCulture, $"Given shape size ({shape.size}) does not match the size of the given storage size ({arraySlice.Count})"));
 
             _Allocate(shape, arraySlice);
         }
@@ -2029,7 +2030,7 @@ namespace NumSharp.Backends
 
             // .NET arrays are limited to int32 indexing
             if (Shape.Size > int.MaxValue)
-                throw new InvalidOperationException($"Array size {Shape.Size} exceeds int.MaxValue. Use ToArraySlice() for large arrays.");
+                throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Array size {Shape.Size} exceeds int.MaxValue. Use ToArraySlice() for large arrays."));
 
             var ret = new T[(int)Shape.Size];
 

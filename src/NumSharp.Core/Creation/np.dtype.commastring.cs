@@ -261,7 +261,7 @@ namespace NumSharp
                         while (p < astr.Length && PyUnicode.IsSpace(astr[p]))
                             p++;
                         if (p >= astr.Length || astr[p] != ',')
-                            throw new ValueError($"format number {result.Count + 1} of \"{astr}\" is not recognized");
+                            throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"format number {result.Count + 1} of \"{astr}\" is not recognized"));
                         p++;
                         while (p < astr.Length && PyUnicode.IsSpace(astr[p]))
                             p++;

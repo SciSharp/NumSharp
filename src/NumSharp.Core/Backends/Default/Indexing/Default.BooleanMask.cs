@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
@@ -136,7 +137,7 @@ namespace NumSharp.Backends
             bool ownShapeMask = leadNdim == arr.ndim && mask.Shape.dimensions.AsSpan().SequenceEqual(arr.Shape.dimensions);
             if (ownShapeMask && value.ndim > 1)
                 throw new TypeError("NumPy boolean array indexing assignment requires a 0 or 1-dimensional input, " +
-                                    $"input has {value.ndim} dimensions");
+                                    string.Create(CultureInfo.InvariantCulture, $"input has {value.ndim} dimensions"));
 
             // Trailing block size B = prod(arr.shape[leadNdim:]). An empty trailing block
             // (B == 0 — arr shaped (0,3), or a mask on an array whose last axis a prior basic
@@ -153,7 +154,7 @@ namespace NumSharp.Backends
                 // must equal the True count — also when that count is 0 (an all-False mask refuses a 3-vector).
                 if (value.ndim == 1 && value.Shape.dimensions[0] != 1 && value.Shape.dimensions[0] != trueCount)
                     throw new ValueError("NumPy boolean array indexing assignment cannot assign " +
-                                         $"{value.Shape.dimensions[0]} input values to the {trueCount} output values where the mask is true");
+                                         string.Create(CultureInfo.InvariantCulture, $"{value.Shape.dimensions[0]} input values to the {trueCount} output values where the mask is true"));
             }
             else if (trueCount != 0 && blockSize != 0 && value.size != 1)
             {

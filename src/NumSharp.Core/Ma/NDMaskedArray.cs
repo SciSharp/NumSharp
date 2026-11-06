@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Text;
@@ -2341,7 +2342,7 @@ namespace NumSharp
                 return true;
             long nd = d.size, nm = raw.size;
             if (nm != 1 && nm != nd)
-                throw new MaskError($"Mask and data not compatible: data size is {nd}, mask size is {nm}.");
+                throw new MaskError(string.Create(CultureInfo.InvariantCulture, $"Mask and data not compatible: data size is {nd}, mask size is {nm}."));
             return false;
         }
 
@@ -3064,7 +3065,7 @@ namespace NumSharp
             // values are read.
             DType d1 = MaskOperandDType(m1), d2 = MaskOperandDType(m2);
             if (!Equals(d1, d2))
-                throw new ValueError($"Incompatible dtypes '{(object)d1 ?? "None"}'<>'{(object)d2 ?? "None"}'");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Incompatible dtypes '{(object)d1 ?? "None"}'<>'{(object)d2 ?? "None"}'"));
             // `dtype1.names` of two dtype-less operands.
             if (d1 is null)
                 throw new AttributeError("'NoneType' object has no attribute 'names'");
@@ -6003,7 +6004,7 @@ namespace NumSharp
                 int nd = a.ndim;
                 int ax = axis < 0 ? axis + nd : axis;
                 if (ax < 0 || ax >= nd)
-                    throw new AxisError($"axis {axis} is out of bounds for array of dimension {nd}");
+                    throw new AxisError(string.Create(CultureInfo.InvariantCulture, $"axis {axis} is out of bounds for array of dimension {nd}"));
                 var shape = a.shape;
                 var outerAxes = Enumerable.Range(0, nd).Where(d => d != ax).ToArray();
                 var outerShape = outerAxes.Select(d => shape[d]).ToArray();
@@ -6060,7 +6061,7 @@ namespace NumSharp
                     return Yield(scope, new NDMaskedArray(d, np.any(m) ? m : null, ResultDefaultFill(d)));
                 }
                 throw new NotSupportedException(
-                    "np.ma.apply_along_axis supports a scalar or 1-D per-slice result; a rank-{resNd} result needs the object-array assembly NumSharp lacks.".Replace("{resNd}", resNd.ToString()));
+                    "np.ma.apply_along_axis supports a scalar or 1-D per-slice result; a rank-{resNd} result needs the object-array assembly NumSharp lacks.".Replace("{resNd}", resNd.ToString(CultureInfo.InvariantCulture)));
             }
             finally
             {
@@ -7356,7 +7357,7 @@ namespace NumSharp
         {
             // `if n == 0: return a` — the operand itself (a plain array is wrapped, without a copy, to fit the return type).
             if (n == 0) return a as NDMaskedArray ?? array(a);
-            if (n < 0) throw new ArgumentException("order must be non-negative but got " + n);
+            if (n < 0) throw new ArgumentException("order must be non-negative but got " + n.ToString(CultureInfo.InvariantCulture));
             using var scope = NDScope.Open();
             var d = AsData(a);
             if (d.ndim == 0) throw new ValueError("diff requires input that is at least one dimensional");   // NumPy's ValueError
@@ -7559,7 +7560,7 @@ namespace NumSharp
             {
                 int nd = am.ndim;
                 if (requested < -nd || requested >= nd)
-                    throw new AxisError($"axis: axis {requested} is out of bounds for array of dimension {nd}");
+                    throw new AxisError(string.Create(CultureInfo.InvariantCulture, $"axis: axis {requested} is out of bounds for array of dimension {nd}"));
                 ax = requested < 0 ? requested + nd : requested;
             }
             if (weights is null)

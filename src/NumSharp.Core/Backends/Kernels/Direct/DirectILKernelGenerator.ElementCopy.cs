@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection.Emit;
 
 // =============================================================================
@@ -58,9 +59,9 @@ namespace NumSharp.Backends.Kernels
         public static ElementCopyKernel GetElementCopyKernel(int copyBytes, int zeroBytes)
         {
             if (copyBytes <= 0)
-                throw new ArgumentOutOfRangeException(nameof(copyBytes), copyBytes, "An element copy moves at least one byte.");
+                throw new ArgumentOutOfRangeException(nameof(copyBytes), copyBytes.ToString(CultureInfo.InvariantCulture), "An element copy moves at least one byte.");
             if (zeroBytes < 0)
-                throw new ArgumentOutOfRangeException(nameof(zeroBytes), zeroBytes, "The NUL padding cannot be negative.");
+                throw new ArgumentOutOfRangeException(nameof(zeroBytes), zeroBytes.ToString(CultureInfo.InvariantCulture), "The NUL padding cannot be negative.");
             if (!Enabled)
                 return null;
             var key = (copyBytes, zeroBytes);

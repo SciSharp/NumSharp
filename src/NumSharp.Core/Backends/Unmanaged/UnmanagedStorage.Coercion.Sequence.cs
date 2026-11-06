@@ -437,7 +437,7 @@ namespace NumSharp.Backends
             // ragged below it.
             if (d.MaxDims == d.Limit)
                 throw new ValueError("setting an array element with a sequence. The requested array would exceed the maximum " +
-                                     $"number of dimension of {maxDims}.");
+                                     string.Create(CultureInfo.InvariantCulture, $"number of dimension of {maxDims}."));
             throw Inhomogeneous(d);
         }
 
@@ -904,7 +904,7 @@ namespace NumSharp.Backends
                 parts[k] = d.Shape[k].ToString(CultureInfo.InvariantCulture);
             string shape = n == 1 ? $"({parts[0]},)" : "(" + string.Join(", ", parts) + ")";
             return new ValueError("setting an array element with a sequence. The requested array has an inhomogeneous shape " +
-                                  $"after {n} dimensions. The detected shape was {shape} + inhomogeneous part.");
+                                  string.Create(CultureInfo.InvariantCulture, $"after {n} dimensions. The detected shape was {shape} + inhomogeneous part."));
         }
 
         // ---------------------------------------------------------------------------------------------

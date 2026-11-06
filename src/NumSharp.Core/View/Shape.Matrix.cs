@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NumSharp
 {
@@ -76,7 +77,7 @@ namespace NumSharp
                 long t0 = keep == 2 ? kd[0] : 1;
                 long t1 = keep == 2 ? kd[1] : keep == 1 ? kd[0] : 1;
                 if (t0 * t1 != size)
-                    throw new IncorrectShapeException($"cannot reshape array of size {size} into shape ({t0},{t1})");
+                    throw new IncorrectShapeException(string.Create(CultureInfo.InvariantCulture, $"cannot reshape array of size {size} into shape ({t0},{t1})"));
 
                 if (keep == 2)
                     return WithAccessFlagsOf(new Shape(kd, ks, offset, keptSize));

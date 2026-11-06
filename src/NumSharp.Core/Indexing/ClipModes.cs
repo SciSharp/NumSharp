@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace NumSharp
 {
@@ -88,7 +89,7 @@ namespace NumSharp
                 return result;   // ClipModeRaise is 0: every dimension raises.
 
             if (modes.Length != n)
-                throw new ValueError($"list of clipmodes has wrong length ({modes.Length} instead of {n})");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"list of clipmodes has wrong length ({modes.Length} instead of {n})"));
             for (int i = 0; i < n; i++)
                 result[i] = ClipmodeConverter(modes[i]);
             return result;
@@ -133,7 +134,7 @@ namespace NumSharp
                     foreach (object entry in sequence)
                         entries.Add(entry);
                     if (entries.Count != n)
-                        throw new ValueError($"list of clipmodes has wrong length ({entries.Count} instead of {n})");
+                        throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"list of clipmodes has wrong length ({entries.Count} instead of {n})"));
                     var result = new int[n];
                     for (int i = 0; i < n; i++)
                         result[i] = entries[i] is null or string

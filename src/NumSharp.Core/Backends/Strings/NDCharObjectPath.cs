@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -2276,13 +2277,13 @@ namespace NumSharp.Backends.Strings
                 if (strMethod)
                 {
                     if (item is not (string or char))
-                        throw new TypeError($"sequence item {k}: expected str instance, {NDPyObject.TypeName(item)} found");
+                        throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"sequence item {k}: expected str instance, {NDPyObject.TypeName(item)} found"));
                     total += item is string s ? NDStringCodec.CodePointCount(s) : 1;
                 }
                 else
                 {
                     if (item is not byte[] b)
-                        throw new TypeError($"sequence item {k}: expected a bytes-like object, {NDPyObject.TypeName(item)} found");
+                        throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"sequence item {k}: expected a bytes-like object, {NDPyObject.TypeName(item)} found"));
                     total += b.Length;
                 }
             }
@@ -2314,7 +2315,7 @@ namespace NumSharp.Backends.Strings
                 // bytes_join takes each item's buffer in order: the first plain str has none.
                 for (long k = start; k < end; k++)
                     if (!heap.IsNpStr(k))
-                        throw new TypeError($"sequence item {k - start}: expected a bytes-like object, str found");
+                        throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"sequence item {k - start}: expected a bytes-like object, str found"));
             }
             long* offsets = heap.Offsets;
             long sepLength = strMethod ? sep.Length : SeparatorBytes(sep);

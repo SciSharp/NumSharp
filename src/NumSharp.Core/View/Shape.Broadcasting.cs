@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -674,7 +675,7 @@ namespace NumSharp
                         long[] s = src < first ? lead : shapes[from + src - first].dimensions;
                         throw new IncorrectShapeException(
                             "shape mismatch: objects cannot be broadcast to a single shape.  " +
-                            $"Mismatch is between arg {src} with shape {PythonTupleRepr(s)} and arg {j} with shape {PythonTupleRepr(d)}.");
+                            string.Create(CultureInfo.InvariantCulture, $"Mismatch is between arg {src} with shape {PythonTupleRepr(s)} and arg {j} with shape {PythonTupleRepr(d)}."));
                     }
                 }
             }
@@ -703,13 +704,13 @@ namespace NumSharp
             if (dims.Length == 0)
                 return "()";
             if (dims.Length == 1)
-                return "(" + dims[0] + ",)";
+                return "(" + dims[0].ToString(CultureInfo.InvariantCulture) + ",)";
             var sb = new System.Text.StringBuilder("(");
             for (int i = 0; i < dims.Length; i++)
             {
                 if (i > 0)
                     sb.Append(", ");
-                sb.Append(dims[i]);
+                sb.Append(dims[i].ToString(CultureInfo.InvariantCulture));
             }
             return sb.Append(')').ToString();
         }

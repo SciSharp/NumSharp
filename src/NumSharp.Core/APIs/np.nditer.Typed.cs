@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 
@@ -268,10 +269,10 @@ namespace NumSharp
                             _it.Dispose();
                             _live = false;
                             throw new NotSupportedException(
-                                $"np.nditer_chunks<{typeof(T).Name}> requires a unit-stride inner loop, but this " +
+                                string.Create(CultureInfo.InvariantCulture, $"np.nditer_chunks<{typeof(T).Name}> requires a unit-stride inner loop, but this " +
                                 $"layout iterates with element stride {elementStride} (a stepped view such as " +
                                 $"a[\":, ::2\"]). A Span<T> is contiguous by definition and cannot describe it. " +
-                                $"Use np.nditer<{typeof(T).Name}>(...), which handles any stride, or iterate a .copy().");
+                                $"Use np.nditer<{typeof(T).Name}>(...), which handles any stride, or iterate a .copy()."));
                         }
                     }
                 }

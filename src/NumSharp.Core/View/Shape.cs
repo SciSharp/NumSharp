@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using NumSharp.Utilities;
@@ -924,7 +925,7 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(strides));
 
             if (dims.Length != strides.Length)
-                throw new ArgumentException($"While trying to construct a shape, given dimensions and strides does not match size ({dims.Length} != {strides.Length})");
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"While trying to construct a shape, given dimensions and strides does not match size ({dims.Length} != {strides.Length})"));
         }
 
         /// <summary>
@@ -1218,7 +1219,7 @@ namespace NumSharp
             // Use bufferSize for bounds checking (NumPy-aligned: no ViewInfo dependency)
             long boundSize = bufferSize > 0 ? bufferSize : size;
             if (offset >= boundSize && AddressesAnElement(dim))
-                throw new IndexOutOfRangeException($"The offset {offset} is out of range in Shape {boundSize}");
+                throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"The offset {offset} is out of range in Shape {boundSize}"));
 
             if (indicies.Length == dimensions.Length)
                 return (Scalar, offset);
@@ -1540,7 +1541,7 @@ namespace NumSharp
             for (int i = 0; i < shape.dimensions.Length; i++)
             {
                 if (shape.dimensions[i] > int.MaxValue)
-                    throw new OverflowException($"Dimension {i} value {shape.dimensions[i]} exceeds int.MaxValue");
+                    throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Dimension {i} value {shape.dimensions[i]} exceeds int.MaxValue"));
                 result[i] = (int)shape.dimensions[i];
             }
 
@@ -1571,7 +1572,7 @@ namespace NumSharp
         public static explicit operator int(Shape shape)
         {
             if (shape.Size > int.MaxValue)
-                throw new OverflowException($"Shape size {shape.Size} exceeds int.MaxValue");
+                throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Shape size {shape.Size} exceeds int.MaxValue"));
             return (int)shape.Size;
         }
 
@@ -1772,13 +1773,13 @@ namespace NumSharp
             // code only wrapped negatives, leaving per-axis OOB to slip through whenever the
             // resulting flat offset still landed inside the buffer (e.g. a[0,4] returned a[1,0]).
             if (coords.Length > dimensions.Length)
-                throw new IndexError($"too many indices for array: array is {dimensions.Length}-dimensional, but {coords.Length} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {dimensions.Length}-dimensional, but {coords.Length} were indexed"));
             for (int i = 0; i < coords.Length; i++)
             {
                 var curr = coords[i];
                 var dim = dimensions[i];
                 if (curr < -dim || curr >= dim)
-                    throw new IndexError($"index {curr} is out of bounds for axis {i} with size {dim}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {curr} is out of bounds for axis {i} with size {dim}"));
                 if (curr < 0)
                     coords[i] = dim + curr;
             }
@@ -1793,13 +1794,13 @@ namespace NumSharp
         public static int[] InferNegativeCoordinates(long[] dimensions, int[] coords)
         {
             if (coords.Length > dimensions.Length)
-                throw new IndexError($"too many indices for array: array is {dimensions.Length}-dimensional, but {coords.Length} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {dimensions.Length}-dimensional, but {coords.Length} were indexed"));
             for (int i = 0; i < coords.Length; i++)
             {
                 var curr = coords[i];
                 var dim = dimensions[i];
                 if (curr < -dim || curr >= dim)
-                    throw new IndexError($"index {curr} is out of bounds for axis {i} with size {dim}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {curr} is out of bounds for axis {i} with size {dim}"));
                 if (curr < 0)
                     coords[i] = (int)(dim + curr);
             }
@@ -1815,20 +1816,20 @@ namespace NumSharp
         public static unsafe void InferNegativeCoordinates(long[] dimensions, int* coords, int ndims)
         {
             if (ndims > dimensions.Length)
-                throw new IndexError($"too many indices for array: array is {dimensions.Length}-dimensional, but {ndims} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {dimensions.Length}-dimensional, but {ndims} were indexed"));
             for (int i = 0; i < ndims; i++)
             {
                 var curr = coords[i];
                 var dim = dimensions[i];
                 if (curr < -dim || curr >= dim)
-                    throw new IndexError($"index {curr} is out of bounds for axis {i} with size {dim}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {curr} is out of bounds for axis {i} with size {dim}"));
                 if (curr < 0)
                     coords[i] = (int)(dim + curr);
             }
         }
 
         public override string ToString() =>
-            "(" + string.Join(", ", dimensions) + ")";
+            "(" + string.Join(", ", Array.ConvertAll(dimensions, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
 
         /// <summary>
         ///     This shape written the way a Python tuple prints — no space after the comma, and a
@@ -1844,8 +1845,8 @@ namespace NumSharp
             if (dimensions == null || dimensions.Length == 0)
                 return "()";
             if (dimensions.Length == 1)
-                return "(" + dimensions[0] + ",)";
-            return "(" + string.Join(",", dimensions) + ")";
+                return "(" + dimensions[0].ToString(CultureInfo.InvariantCulture) + ",)";
+            return "(" + string.Join(",", Array.ConvertAll(dimensions, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
         }
 
         /// <summary>Creates a new object that is a copy of the current instance.</summary>

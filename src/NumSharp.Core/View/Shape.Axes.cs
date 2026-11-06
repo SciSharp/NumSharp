@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 
@@ -80,7 +81,7 @@ namespace NumSharp
         /// </remarks>
         internal static int[] normalize_axis_tuple(int[] axis, int ndim, object argname = null, bool allow_duplicate = false)
         {
-            string name = argname?.ToString();
+            string name = argname is null ? null : System.Convert.ToString(argname, CultureInfo.InvariantCulture);
             var normalized = new int[axis.Length];
             // normalize_axis_index(ax, ndim, argname) for each entry, in order: the FIRST out-of-range axis is reported,
             // and every range check runs before the repeat check (NumPy's tuple comprehension, then len(set(axis))).
@@ -250,7 +251,7 @@ namespace NumSharp
 
             // NumPy's own message-only AxisError, reporting `start` AFTER the negative wrap.
             if (!(0 <= start && start < n + 1))
-                throw new AxisError($"'start' arg requires {-n} <= start < {n + 1}, but {start} was passed in");
+                throw new AxisError(string.Create(CultureInfo.InvariantCulture, $"'start' arg requires {-n} <= start < {n + 1}, but {start} was passed in"));
 
             if (axis < start)
                 start -= 1;

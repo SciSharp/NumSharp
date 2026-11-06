@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Statistics;
 
@@ -322,7 +323,7 @@ namespace NumSharp.Backends
             long n = a.size;
             long k = n % 2 == 0 ? 2 : 1;
             if (n != k && n != 1 && k != 1)
-                return new IncorrectShapeException($"operands could not be broadcast together with shapes ({n},) ({k},) () () ");
+                return new IncorrectShapeException(string.Create(CultureInfo.InvariantCulture, $"operands could not be broadcast together with shapes ({n},) ({k},) () () "));
             // The string partition computed and left `part` as it was: `mean(part[indexer], axis=0, out=out)` refuses the text
             // as the median of plain text does — except a U chararray into a StringDType out, whose mean concatenates the
             // elements at the middle POSITIONS (nothing was moved) into the out before its division refuses.

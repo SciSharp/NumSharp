@@ -75,10 +75,24 @@ namespace NumSharp
             (bits, min, max, maxUnsigned, kind) = GetTypeInfo(typeCode);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     NumPy's <c>repr(np.iinfo(dtype))</c>, the same text under every culture:
+        ///     <c>iinfo(min=-128, max=127, dtype=int8)</c>, <c>iinfo(min=0, max=18446744073709551615, dtype=uint64)</c>.
+        /// </summary>
+        /// <returns>The repr text.</returns>
+        /// <remarks>
+        ///     NumPy's <c>"%s(min=%s, max=%s, dtype=%s)"</c> of Python ints, which have no culture (parity QA-41: under
+        ///     ar-SA this text was <c>iinfo(min=؜-128, ...)</c>, U+061C before the minus, and U+2212 under sv-SE). An
+        ///     unsigned type prints its true maximum (<see cref="maxUnsigned"/>), so uint64 shows
+        ///     18446744073709551615 where the <see cref="max"/> property is clamped to <c>long.MaxValue</c>.
+        /// </remarks>
         public override string ToString()
         {
-            return $"iinfo(min={min}, max={max}, dtype={dtype.name})";
+            string maxText = kind == 'u'
+                ? maxUnsigned.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : max.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return "iinfo(min=" + min.ToString(System.Globalization.CultureInfo.InvariantCulture) + ", max=" + maxText
+                   + ", dtype=" + dtype.name + ")";
         }
 
         private static bool IsIntegerType(NPTypeCode typeCode)

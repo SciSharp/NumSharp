@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 
 namespace NumSharp
@@ -226,7 +227,7 @@ namespace NumSharp
                 indices ??= Array.Empty<long>();
                 int nd = ndim;
                 if (indices.Length != nd)
-                    throw new ArgumentException($"cannot index {nd}-dimensional memory with {indices.Length} indices");
+                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"cannot index {nd}-dimensional memory with {indices.Length} indices"));
 
                 var dims = _arr.Shape.dimensions;
                 var coords = new long[nd];
@@ -237,7 +238,7 @@ namespace NumSharp
                     if (ix < 0)
                         ix += dim;
                     if (ix < 0 || ix >= dim)
-                        throw new IndexOutOfRangeException($"index out of bounds on dimension {i + 1}");
+                        throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"index out of bounds on dimension {i + 1}"));
                     coords[i] = ix;
                 }
                 return coords;
@@ -261,7 +262,7 @@ namespace NumSharp
                 char o = ResolveOrder(order);
                 long total = nbytes;
                 if (total > int.MaxValue)
-                    throw new NotSupportedException($"tobytes(): result of {total} bytes exceeds the maximum byte[] length ({int.MaxValue}).");
+                    throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"tobytes(): result of {total} bytes exceeds the maximum byte[] length ({int.MaxValue})."));
 
                 var ret = new byte[total];
                 if (total == 0)

@@ -332,7 +332,7 @@ namespace NumSharp
                 else if (usedNdim > arrayNdim)
                 {
                     throw new IndexError(
-                        $"too many indices for array: array is {arrayNdim}-dimensional, but {usedNdim} were indexed");
+                        string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {arrayNdim}-dimensional, but {usedNdim} were indexed"));
                 }
                 else if (indexNdim == 0)
                 {
@@ -377,13 +377,13 @@ namespace NumSharp
                             case IndexKind.Fancy when op.Value > 0 && pass == 0:  // bool-derived: axis-size check
                                 if (op.Value != dims[axis])
                                     throw new IndexError(
-                                        $"boolean index did not match indexed array along axis {axis}; size of axis is " +
-                                        $"{dims[axis]} but size of corresponding boolean axis is {op.Value}");
+                                        string.Create(CultureInfo.InvariantCulture, $"boolean index did not match indexed array along axis {axis}; size of axis is " +
+                                        $"{dims[axis]} but size of corresponding boolean axis is {op.Value}"));
                                 break;
                             case IndexKind.Integer when pass == 1:              // scalar int / 0-d array: value bounds
                                 if (op.IntVal < -dims[axis] || op.IntVal >= dims[axis])
                                     throw new IndexError(
-                                        $"index {op.IntVal} is out of bounds for axis {axis} with size {dims[axis]}");
+                                        string.Create(CultureInfo.InvariantCulture, $"index {op.IntVal} is out of bounds for axis {axis} with size {dims[axis]}"));
                                 break;
                         }
 
@@ -537,9 +537,9 @@ namespace NumSharp
             {
                 long v;
                 try { v = Convert.ToInt64(flat.GetValue(i), CultureInfo.InvariantCulture); }
-                catch (OverflowException ex) { throw new IndexError($"index out of bounds for axis {axis} with size {dim}", ex); }
+                catch (OverflowException ex) { throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index out of bounds for axis {axis} with size {dim}"), ex); }
                 if (v < -dim || v >= dim)
-                    throw new IndexError($"index {v} is out of bounds for axis {axis} with size {dim}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {v} is out of bounds for axis {axis} with size {dim}"));
             }
         }
 

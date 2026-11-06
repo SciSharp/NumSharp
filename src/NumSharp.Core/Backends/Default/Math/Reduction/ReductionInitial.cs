@@ -89,7 +89,7 @@ namespace NumSharp.Backends
             if (initial is null)
                 return false;
             if (slot.Length < SlotBytes)
-                throw new ArgumentException($"The initial slot needs {SlotBytes} bytes.", nameof(slot));
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"The initial slot needs {SlotBytes} bytes."), nameof(slot));
 
             // A C# literal's 0-d array (NDArray.WasPythonLiteral, NumPy's NPY_ARRAY_WAS_PYTHON_LITERAL temporary) stands
             // for the Python scalar it was made from: pack the literal's own value, not the array's cast. A Half / char
@@ -230,7 +230,7 @@ namespace NumSharp.Backends
         internal static void PackNone(NPTypeCode loop, Span<byte> slot)
         {
             if (slot.Length < SlotBytes)
-                throw new ArgumentException($"The None slot needs {SlotBytes} bytes.", nameof(slot));
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"The None slot needs {SlotBytes} bytes."), nameof(slot));
 
             slot.Clear();
             switch (loop)
@@ -382,7 +382,7 @@ namespace NumSharp.Backends
         internal static void PackNumPyScalar(object value, NPTypeCode loop, Span<byte> slot)
         {
             if (slot.Length < SlotBytes)
-                throw new ArgumentException($"The scalar slot needs {SlotBytes} bytes.", nameof(slot));
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"The scalar slot needs {SlotBytes} bytes."), nameof(slot));
 
             NPTypeCode own = value switch
             {
@@ -458,7 +458,7 @@ namespace NumSharp.Backends
         internal static void CastScalarValue(object value, NPTypeCode loop, Span<byte> slot)
         {
             if (slot.Length < SlotBytes)
-                throw new ArgumentException($"The scalar slot needs {SlotBytes} bytes.", nameof(slot));
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"The scalar slot needs {SlotBytes} bytes."), nameof(slot));
             slot.Clear();
             NPTypeCode own = value?.GetType().GetTypeCode() ?? NPTypeCode.Empty;
             switch (value)
@@ -618,7 +618,7 @@ namespace NumSharp.Backends
             bool unsignedLong = loop is NPTypeCode.UInt32 or NPTypeCode.UInt64;
             if (v < long.MinValue || (unsignedLong ? v > ulong.MaxValue : v > long.MaxValue))
                 throw new OverflowException("Python int too large to convert to C long");
-            throw new OverflowException($"Python integer {v} out of bounds for {loop.AsNumpyDtypeName()}");
+            throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Python integer {v} out of bounds for {loop.AsNumpyDtypeName()}"));
         }
 
         /// <summary>

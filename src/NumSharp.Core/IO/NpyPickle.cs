@@ -1,6 +1,7 @@
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Numerics;
 using System.Text;
@@ -845,7 +846,7 @@ namespace NumSharp.IO
             private void Grow(long needed)
             {
                 if (needed > Array.MaxLength)
-                    throw new FormatException($"A pickled list of {needed} items is longer than NumSharp can read.");
+                    throw new FormatException(string.Create(CultureInfo.InvariantCulture, $"A pickled list of {needed} items is longer than NumSharp can read."));
                 int capacity = (int)Math.Min(Array.MaxLength, Math.Max(needed, (long)Items.Length * 2));
                 Array.Resize(ref Items, capacity);
             }
@@ -929,7 +930,7 @@ namespace NumSharp.IO
                 count = checked(count * d);
             if (items.Count != count)
                 throw new FormatException(
-                    $"The ndarray pickle lists {items.Count} elements for an array of shape ({string.Join(", ", shape)}).");
+                    string.Create(CultureInfo.InvariantCulture, $"The ndarray pickle lists {items.Count} elements for an array of shape ({string.Join(", ", Array.ConvertAll(shape, d => d.ToString(CultureInfo.InvariantCulture)))})."));
 
             // NumPy builds the array in the pickled order, then setitem()s the list in C logical order (PyArray_IterNew): a C
             // array takes the list as it is, an F array element by element at its F position, so the strings reach the arena
@@ -1093,11 +1094,11 @@ namespace NumSharp.IO
             PyNoneValue => "None",
             PyGlobalRef g => $"the global {g}",
             PyCall c => $"a call to {Describe(c.Callable)}",
-            PyTupleValue t => $"a tuple of {t.Items.Length}",
-            PyList l => $"a list of {l.Count}",
+            PyTupleValue t => string.Create(CultureInfo.InvariantCulture, $"a tuple of {t.Items.Length}"),
+            PyList l => string.Create(CultureInfo.InvariantCulture, $"a list of {l.Count}"),
             string s => $"the str '{(s.Length > 40 ? s.Substring(0, 40) + "…" : s)}'",
-            byte[] b => $"bytes of length {b.Length}",
-            _ => $"a {value.GetType().Name} ({value})",
+            byte[] b => string.Create(CultureInfo.InvariantCulture, $"bytes of length {b.Length}"),
+            _ => string.Create(CultureInfo.InvariantCulture, $"a {value.GetType().Name} ({value})"),
         };
 
         /// <summary>
@@ -1200,7 +1201,7 @@ namespace NumSharp.IO
                         case PROTO:
                             int proto = ReadByte();
                             if (proto < 2 || proto > 5)
-                                throw new NotSupportedException($"NumSharp reads pickle protocols 2 to 5, not protocol {proto}.");
+                                throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"NumSharp reads pickle protocols 2 to 5, not protocol {proto}."));
                             break;
                         case FRAME:
                         {
@@ -1208,7 +1209,7 @@ namespace NumSharp.IO
                             if (_pos < _length)
                                 throw new FormatException("beginning of a new frame before end of current frame");
                             if (length > long.MaxValue)
-                                throw new FormatException($"A pickle frame of {length} bytes is too large.");
+                                throw new FormatException(string.Create(CultureInfo.InvariantCulture, $"A pickle frame of {length} bytes is too large."));
                             Append((long)length, "pickle frame");
                             break;
                         }
@@ -1386,7 +1387,7 @@ namespace NumSharp.IO
                             break;
                         default:
                             throw new NotSupportedException(
-                                OnlyStringDType + $"it holds the pickle opcode 0x{op:X2}, which that pickle never uses.");
+                                OnlyStringDType + string.Create(CultureInfo.InvariantCulture, $"it holds the pickle opcode 0x{op:X2}, which that pickle never uses."));
                     }
                 }
             }
@@ -1437,7 +1438,7 @@ namespace NumSharp.IO
                     return _memo[index];
                 if (_sparseMemo != null && _sparseMemo.TryGetValue(index, out PyValue v))
                     return v;
-                throw new FormatException($"Memo value not found at index {index}");
+                throw new FormatException(string.Create(CultureInfo.InvariantCulture, $"Memo value not found at index {index}"));
             }
 
             /// <summary>A little-endian two's-complement int of <paramref name="n"/> bytes (<c>LONG1</c> / <c>LONG4</c>).</summary>
@@ -1467,7 +1468,7 @@ namespace NumSharp.IO
             private void PushText(ulong size)
             {
                 if (size > int.MaxValue)
-                    throw new FormatException($"A pickled payload of {size} bytes is too large for NumSharp.");
+                    throw new FormatException(string.Create(CultureInfo.InvariantCulture, $"A pickled payload of {size} bytes is too large for NumSharp."));
                 int n = (int)size;
                 long at = Take(n, "pickle data");
                 NDUtf8.ThrowIfInvalid(new ReadOnlySpan<byte>(_data + at, n));
@@ -1480,7 +1481,7 @@ namespace NumSharp.IO
             private byte[] ReadPayloadArray(ulong size)
             {
                 if (size > int.MaxValue)
-                    throw new FormatException($"A pickled payload of {size} bytes is too large for NumSharp.");
+                    throw new FormatException(string.Create(CultureInfo.InvariantCulture, $"A pickled payload of {size} bytes is too large for NumSharp."));
                 int n = (int)size;
                 long at = Take(n, "pickle data"); // first: Take may move the buffer
                 return new ReadOnlySpan<byte>(_data + at, n).ToArray();
@@ -1546,7 +1547,7 @@ namespace NumSharp.IO
                         break; // the stream ended
                 }
                 if (got != n)
-                    throw new FormatException($"EOF: reading {what}, expected {n} bytes got {got}");
+                    throw new FormatException(string.Create(CultureInfo.InvariantCulture, $"EOF: reading {what}, expected {n} bytes got {got}"));
                 _length += n;
             }
 

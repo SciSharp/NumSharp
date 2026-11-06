@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
@@ -368,7 +369,7 @@ namespace NumSharp.Backends
                 throw new NotSupportedException($"NanMinMaxSequential serves float16 / complex128, got {tc} — caller bug.");
             int nd = shape.NDim;
             if (nd > 64)
-                throw new NotSupportedException($"NanMinMaxSequential: rank {nd} exceeds 64.");
+                throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"NanMinMaxSequential: rank {nd} exceeds 64."));
 
             int es = tc.SizeOf();
             // Logical element 0: a contiguous slice re-seats Address (offset 0), a strided view keeps its base with a

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -84,7 +85,7 @@ namespace NumSharp
                 {
                     arrays[i - 1] = operands[i] as NDArray
                                     ?? throw new TypeError(
-                                        $"einsum_path operand {i - 1} must be an NDArray, got {operands[i]?.GetType().Name ?? "null"}");
+                                        string.Create(CultureInfo.InvariantCulture, $"einsum_path operand {i - 1} must be an NDArray, got {operands[i]?.GetType().Name ?? "null"}"));
                 }
 
                 return EinsumPathOnEngine(subscripts, arrays, "greedy");

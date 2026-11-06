@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 // NDExprTypeRules: NEP 50's check of a Python int against an integer dtype (the multi-index branch's `indices < 0` add).
 using NumSharp.Backends.Iteration;
@@ -110,7 +111,7 @@ namespace NumSharp
             if (axes[0] >= ndim || axes[0] < -ndim
                 || axes[1] >= ndim || axes[1] < -ndim)
                 throw new ValueError(
-                    $"Axes=({axes[0]}, {axes[1]}) out of range for array of ndim={ndim}.");
+                    string.Create(CultureInfo.InvariantCulture, $"Axes=({axes[0]}, {axes[1]}) out of range for array of ndim={ndim}."));
 
             // Python-style modulo: always in [0, 3], even for negative k.
             k = ((k % 4) + 4) % 4;
@@ -527,7 +528,7 @@ namespace NumSharp
             // NumPy's array printing.
             if (index < -N || index > N)
                 throw new IndexOutOfRangeException(
-                    $"index {PythonStr(obj)} is out of bounds for axis {axis} with size {N}");
+                    string.Create(CultureInfo.InvariantCulture, $"index {PythonStr(obj)} is out of bounds for axis {axis} with size {N}"));
             if (index < 0) index += N;
 
             // Cast values to arr.dtype (NumPy: values = array(values, dtype=arr.dtype))
@@ -631,7 +632,7 @@ namespace NumSharp
             {
                 long p = indices[i];
                 if (p < -M || p >= M)
-                    throw new IndexOutOfRangeException($"index {p} is out of bounds for axis 0 with size {M}");
+                    throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"index {p} is out of bounds for axis 0 with size {M}"));
                 positions[i] = p < 0 ? p + M : p;
             }
 
@@ -665,8 +666,8 @@ namespace NumSharp
             if (count != N && N != 1)
             {
                 if (arr.ndim == 1)
-                    throw new ValueError($"NumPy boolean array indexing assignment cannot assign {N} input values to the " +
-                                         $"{count} output values where the mask is true");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"NumPy boolean array indexing assignment cannot assign {N} input values to the " +
+                                         $"{count} output values where the mask is true"));
                 var resultDims = (long[])arr.Shape.dimensions.Clone();
                 resultDims[axis] = count;
                 throw new ValueError($"shape mismatch: value array of shape {arr.Shape.ToPythonTuple()} could not be " +
@@ -769,7 +770,7 @@ namespace NumSharp
             long[] list => "[" + string.Join(", ", System.Array.ConvertAll(list,
                 v => v.ToString(System.Globalization.CultureInfo.InvariantCulture))) + "]",
             NDArray array => array.ToString(),
-            _ => obj?.ToString(),
+            _ => obj is null ? null : Convert.ToString(obj, CultureInfo.InvariantCulture),
         };
 
         /// <summary>
@@ -831,7 +832,7 @@ namespace NumSharp
                 double index = Convert.ToDouble(obj.GetAtIndex(0));
                 long N = arr.Shape.dimensions[axis];
                 if (index < -N || index > N)
-                    return new IndexError($"index {obj} is out of bounds for axis {axis} with size {N}");
+                    return new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {obj} is out of bounds for axis {axis} with size {N}"));
                 // values = array(values, ndmin=arr.ndim, dtype=arr.dtype) (and the 0-d index's moveaxis) runs before the
                 // slice is built; the values are never assigned, so their broadcast is not checked (a column of two into
                 // one position still reports the slice's TypeError, probed 2.4.2).
@@ -1340,7 +1341,7 @@ namespace NumSharp
             if (obj.Length != N)
                 throw new ArgumentException(
                     "boolean array argument obj to delete must be one dimensional " +
-                    $"and match the axis length of {N}",
+                    string.Create(CultureInfo.InvariantCulture, $"and match the axis length of {N}"),
                     nameof(obj));
 
             // keep = ~obj; route through np.compress which has the fused gather kernel.
@@ -1380,7 +1381,7 @@ namespace NumSharp
                 if (obj.size != N || obj.ndim != 1)
                     throw new ArgumentException(
                         "boolean array argument obj to delete must be one dimensional " +
-                        $"and match the axis length of {N}",
+                        string.Create(CultureInfo.InvariantCulture, $"and match the axis length of {N}"),
                         nameof(obj));
                 // keep = ~obj. Build a contig bool keep-mask without leaning on
                 // bitwise-not over a possibly-strided NDArray.
@@ -1429,7 +1430,7 @@ namespace NumSharp
             long N = arr.Shape.dimensions[axis];
             if (obj < -N || obj >= N)
                 throw new IndexOutOfRangeException(
-                    $"index {obj} is out of bounds for axis {axis} with size {N}");
+                    string.Create(CultureInfo.InvariantCulture, $"index {obj} is out of bounds for axis {axis} with size {N}"));
             if (obj < 0) obj += N;
 
             var pre = SliceAlongAxis(arr, axis, 0, obj);
@@ -1549,7 +1550,7 @@ namespace NumSharp
                 long idx = indices[k];
                 if (idx < -N || idx >= N)
                     throw new IndexOutOfRangeException(
-                        $"index {indices[k]} is out of bounds for axis 0 with size {N}");
+                        string.Create(CultureInfo.InvariantCulture, $"index {indices[k]} is out of bounds for axis 0 with size {N}"));
                 if (idx < 0) idx += N;
                 indices[k] = idx;
             }
@@ -1735,7 +1736,7 @@ namespace NumSharp
                 long tailTrues = countKernel(maskPtr + arrSize, maskSize - arrSize);
                 if (tailTrues > 0)
                     throw new IndexOutOfRangeException(
-                        $"index {arrSize} is out of bounds for axis 0 with size {arrSize}");
+                        string.Create(CultureInfo.InvariantCulture, $"index {arrSize} is out of bounds for axis 0 with size {arrSize}"));
             }
 
             // Pass 1: popcount mask over the effective scan range.
@@ -1760,7 +1761,7 @@ namespace NumSharp
             // must equal count. A mismatch indicates kernel-corruption.
             if (written != count)
                 throw new InvalidOperationException(
-                    $"extract: filter kernel wrote {written}, expected {count}");
+                    string.Create(CultureInfo.InvariantCulture, $"extract: filter kernel wrote {written}, expected {count}"));
 
             return true;
         }
@@ -2095,7 +2096,7 @@ namespace NumSharp
                         // A null CHOICE is a caller bug (NumPy would build an object array, a dtype
                         // NumSharp lacks). A null DEFAULT is NumPy's default=0 — a weak python int.
                         if (i < n)
-                            throw new ArgumentNullException($"choicelist[{i}]",
+                            throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"choicelist[{i}]"),
                                 "choicelist entries must not be null.");
                         // np.broadcast_arrays makes np.asarray(0) of it: int64.
                         mat = Scalar(0L);
@@ -2188,7 +2189,7 @@ namespace NumSharp
             // Conditions must be boolean — checked after the group broadcasts, reporting the index.
             for (int i = 0; i < n; i++)
                 if (condlist[i].GetTypeCode != NPTypeCode.Boolean)
-                    throw new TypeError($"invalid entry {i} in condlist: should be boolean ndarray");
+                    throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"invalid entry {i} in condlist: should be boolean ndarray"));
 
             // Result shape: the condition shape when every choice is 0-d (NumPy skips the call), else
             // np.broadcast_arrays(condlist[0], choicelist[0]) - the two GROUP shapes are its arguments 0 and 1.
@@ -2594,7 +2595,7 @@ namespace NumSharp
             bool hasDefault = n == n2 - 1;
             if (!hasDefault && n != n2)
                 throw new ValueError(
-                    $"with {n} condition(s), either {n} or {n + 1} functions are expected");
+                    string.Create(CultureInfo.InvariantCulture, $"with {n} condition(s), either {n} or {n + 1} functions are expected"));
 
             // Ownership: every conds[i] and condElse is created HERE (a fresh MakeGeneric alias or a
             // converted copy, never the caller's instance), and the finally releases them all. Before,
@@ -2954,7 +2955,7 @@ namespace NumSharp
             bool swapXY = indexing == "xy" && ndim > 1;
             for (int i = 0; i < ndim; i++)
             {
-                NDArray a = xi[i] ?? throw new ArgumentNullException($"xi[{i}]",
+                NDArray a = xi[i] ?? throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"xi[{i}]"),
                     "meshgrid coordinate vectors must not be null.");
                 int axis = swapXY ? (i == 0 ? 1 : i == 1 ? 0 : i) : i;
                 output[i] = a.reshape(Shape.Adopt(OpenMeshShape(ndim, axis, a.size)));

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -698,7 +699,7 @@ namespace NumSharp.Backends.Iteration
         {
             if (!IsOperandIterContiguous(iop))
                 throw new InvalidOperationException(
-                    $"{method} requires a C-contiguous output operand (operand {iop}): the legacy " +
+                    string.Create(CultureInfo.InvariantCulture, $"{method} requires a C-contiguous output operand (operand {iop}): the legacy ") +
                     "whole-array kernel it bridges to ignores output strides and would write the " +
                     "result contiguously. Use ExecuteElementWise*/ForEach (per-chunk kernels honor " +
                     "operand strides) or provide a contiguous output.");
@@ -720,7 +721,7 @@ namespace NumSharp.Backends.Iteration
             {
                 if (_state->NOp != 3)
                     throw new InvalidOperationException(
-                        $"ExecuteBinary requires 3 operands (in0, in1, out); got {_state->NOp}.");
+                        string.Create(CultureInfo.InvariantCulture, $"ExecuteBinary requires 3 operands (in0, in1, out); got {_state->NOp}."));
 
                 // Buffered path first: a buffered (possibly strided/cast) output is
                 // legal there — the buffer write-back honors the array's true
@@ -780,7 +781,7 @@ namespace NumSharp.Backends.Iteration
             {
                 if (_state->NOp != 2)
                     throw new InvalidOperationException(
-                        $"ExecuteUnary requires 2 operands (in, out); got {_state->NOp}.");
+                        string.Create(CultureInfo.InvariantCulture, $"ExecuteUnary requires 2 operands (in, out); got {_state->NOp}."));
                 RequireContiguousOutput(1, nameof(ExecuteUnary));
 
                 int ndim = _state->NDim;
@@ -838,7 +839,7 @@ namespace NumSharp.Backends.Iteration
             {
                 if (_state->NOp != 1)
                     throw new InvalidOperationException(
-                        $"ExecuteReduction requires 1 operand; got {_state->NOp}.");
+                        string.Create(CultureInfo.InvariantCulture, $"ExecuteReduction requires 1 operand; got {_state->NOp}."));
 
                 uint f = _state->ItFlags;
                 bool isContig = (f & (uint)NDIterFlags.CONTIGUOUS) != 0;
@@ -933,7 +934,7 @@ namespace NumSharp.Backends.Iteration
             {
                 if (_state->NOp != 3)
                     throw new InvalidOperationException(
-                        $"ExecuteComparison requires 3 operands; got {_state->NOp}.");
+                        string.Create(CultureInfo.InvariantCulture, $"ExecuteComparison requires 3 operands; got {_state->NOp}."));
                 RequireContiguousOutput(2, nameof(ExecuteComparison));
 
                 var key = new ComparisonKernelKey(
@@ -1008,7 +1009,7 @@ namespace NumSharp.Backends.Iteration
             {
                 if (_state->NOp != 2)
                     throw new InvalidOperationException(
-                        $"ExecuteScan requires 2 operands (in, out); got {_state->NOp}.");
+                        string.Create(CultureInfo.InvariantCulture, $"ExecuteScan requires 2 operands (in, out); got {_state->NOp}."));
                 RequireContiguousOutput(1, nameof(ExecuteScan));
 
                 int ndim = _state->NDim;
@@ -1054,7 +1055,7 @@ namespace NumSharp.Backends.Iteration
             {
                 if (_state->NOp != 2)
                     throw new InvalidOperationException(
-                        $"ExecuteCopy requires 2 operands; got {_state->NOp}.");
+                        string.Create(CultureInfo.InvariantCulture, $"ExecuteCopy requires 2 operands; got {_state->NOp}."));
 
                 var dtype = _state->GetOpDType(1);  // target dtype
                 bool bothContig = (_state->ItFlags & (uint)NDIterFlags.CONTIGUOUS) != 0;

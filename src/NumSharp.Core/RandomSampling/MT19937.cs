@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
@@ -650,9 +651,9 @@ namespace NumSharp
             // parameterless State, NumPy's None) fails on the first subscript with CPython's own text.
             uint[] key = s.key ?? throw new TypeError("'NoneType' object is not subscriptable");
             if (key.Length < N)
-                throw new IndexError($"index {key.Length} is out of bounds for axis 0 with size {key.Length}");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {key.Length} is out of bounds for axis 0 with size {key.Length}"));
             if (s.pos < 0 || s.pos > N)
-                throw new ValueError($"state['state']['pos'] must be in [0, {N}], got {s.pos}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"state['state']['pos'] must be in [0, {N}], got {s.pos}"));
             Array.Copy(key, _key, N);
             _pos = s.pos;
         }
@@ -665,9 +666,9 @@ namespace NumSharp
         internal void SetState(uint[] key, int pos)
         {
             if (key == null || key.Length != N)
-                throw new ArgumentException($"Key array must be length {N}", nameof(key));
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Key array must be length {N}"), nameof(key));
             if (pos < 0 || pos > N)
-                throw new ArgumentOutOfRangeException(nameof(pos), $"Position must be in [0, {N}]");
+                throw new ArgumentOutOfRangeException(nameof(pos), string.Create(CultureInfo.InvariantCulture, $"Position must be in [0, {N}]"));
             Array.Copy(key, _key, N);
             _pos = pos;
         }

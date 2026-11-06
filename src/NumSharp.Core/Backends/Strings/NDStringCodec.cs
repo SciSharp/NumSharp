@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Text;
@@ -442,7 +443,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="position">Its index in the value being decoded.</param>
         /// <returns>The exception (not thrown).</returns>
         public static UnicodeDecodeError DecodeError(byte value, long position)
-            => new UnicodeDecodeError($"'ascii' codec can't decode byte 0x{value:x2} in position {position}: ordinal not in range(128)");
+            => new UnicodeDecodeError(string.Create(CultureInfo.InvariantCulture, $"'ascii' codec can't decode byte 0x{value:x2} in position {position}: ordinal not in range(128)"));
 
         /// <summary>
         ///     Builds CPython's <c>UnicodeEncodeError</c> for the run of unencodable code points starting at the UTF-16 index
@@ -503,12 +504,12 @@ namespace NumSharp.Backends.Strings
         {
             if (end == start + 1)
             {
-                string escaped = firstCodePoint <= 0xFF ? $"\\x{firstCodePoint:x2}"
-                    : firstCodePoint <= 0xFFFF ? $"\\u{firstCodePoint:x4}"
-                    : $"\\U{firstCodePoint:x8}";
-                return new UnicodeEncodeError($"'{codec}' codec can't encode character '{escaped}' in position {start}: {reason}");
+                string escaped = firstCodePoint <= 0xFF ? string.Create(CultureInfo.InvariantCulture, $"\\x{firstCodePoint:x2}")
+                    : firstCodePoint <= 0xFFFF ? string.Create(CultureInfo.InvariantCulture, $"\\u{firstCodePoint:x4}")
+                    : string.Create(CultureInfo.InvariantCulture, $"\\U{firstCodePoint:x8}");
+                return new UnicodeEncodeError(string.Create(CultureInfo.InvariantCulture, $"'{codec}' codec can't encode character '{escaped}' in position {start}: {reason}"));
             }
-            return new UnicodeEncodeError($"'{codec}' codec can't encode characters in position {start}-{end - 1}: {reason}");
+            return new UnicodeEncodeError(string.Create(CultureInfo.InvariantCulture, $"'{codec}' codec can't encode characters in position {start}-{end - 1}: {reason}"));
         }
 
         // ---------------------------------------------------------------------------------------------

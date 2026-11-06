@@ -70,7 +70,7 @@ namespace NumSharp.Backends.Strings
                         return text;
                     if (obj is IDictionary || obj is IList || obj is ITuple)
                         return Repr(obj); // a container's str() is its repr()
-                    return obj.ToString();
+                    return Convert.ToString(obj, CultureInfo.InvariantCulture);
             }
         }
 
@@ -134,7 +134,7 @@ namespace NumSharp.Backends.Strings
                     // A Python number's repr equals its str (int, float, complex, bool).
                     if (TryFormatNumber(obj, out var text))
                         return text;
-                    return obj.ToString();
+                    return Convert.ToString(obj, CultureInfo.InvariantCulture);
             }
         }
 

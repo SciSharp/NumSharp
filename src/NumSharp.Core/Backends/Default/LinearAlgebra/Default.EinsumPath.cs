@@ -4,6 +4,7 @@
 // are LinearAlgebra/np.einsum_path.cs (the string-first, the explicit-optimize and the variadic / sublist spellings).
 
 using System;
+using System.Globalization;
 
 namespace NumSharp.Backends
 {
@@ -39,7 +40,7 @@ namespace NumSharp.Backends
             for (int i = 0; i < operands.Length; i++)
             {
                 if (operands[i] is null)
-                    throw new ValueError($"einsum_path operand {i} is null");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"einsum_path operand {i} is null"));
                 shapes[i] = operands[i].Shape.dimensions;
             }
 

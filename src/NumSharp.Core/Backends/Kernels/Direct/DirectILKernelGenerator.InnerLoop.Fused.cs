@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Reflection.Emit;
 using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Iteration;
@@ -778,7 +779,7 @@ namespace NumSharp.Backends.Kernels
                 2 => typeof(ushort),
                 4 => typeof(uint),
                 8 => typeof(ulong),
-                _ => throw new NotSupportedException($"lane size {size} has no bool mask expansion"),
+                _ => throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"lane size {size} has no bool mask expansion")),
             };
             var clr = GetClrType(laneType);
             if (produced != clr)

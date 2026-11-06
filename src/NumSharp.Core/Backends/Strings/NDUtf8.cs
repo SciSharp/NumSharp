@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Globalization;
 using System.Text;
 using System.Text.Unicode;
 
@@ -173,7 +174,7 @@ namespace NumSharp.Backends.Strings
             var status = Utf8.FromUtf16(s, new Span<byte>(dst, size), out _, out int written, replaceInvalidSequences: false);
             if (status != OperationStatus.Done || written != size)
                 throw new InvalidOperationException(
-                    $"A text did not encode to its computed UTF-8 size of {size} bytes ({status}, {written} bytes written).");
+                    string.Create(CultureInfo.InvariantCulture, $"A text did not encode to its computed UTF-8 size of {size} bytes ({status}, {written} bytes written)."));
         }
 
         /// <summary>
@@ -248,8 +249,8 @@ namespace NumSharp.Backends.Strings
         /// <returns>The exception to throw.</returns>
         internal static UnicodeDecodeError DecodeError(ReadOnlySpan<byte> bytes, int start, int end, string reason)
             => new UnicodeDecodeError(end - start == 1
-                ? $"'utf-8' codec can't decode byte 0x{bytes[start]:x2} in position {start}: {reason}"
-                : $"'utf-8' codec can't decode bytes in position {start}-{end - 1}: {reason}",
+                ? string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't decode byte 0x{bytes[start]:x2} in position {start}: {reason}")
+                : string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't decode bytes in position {start}-{end - 1}: {reason}"),
                 "utf-8", bytes.ToArray(), start, end, reason);
 
         /// <summary>
@@ -405,8 +406,8 @@ namespace NumSharp.Backends.Strings
                 endUnit++;
             int runLength = endUnit - unitIndex;
             if (runLength == 1)
-                return new UnicodeEncodeError($"'utf-8' codec can't encode character '\\u{(int)s[unitIndex]:x4}' in position {position}: surrogates not allowed");
-            return new UnicodeEncodeError($"'utf-8' codec can't encode characters in position {position}-{position + runLength - 1}: surrogates not allowed");
+                return new UnicodeEncodeError(string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't encode character '\\u{(int)s[unitIndex]:x4}' in position {position}: surrogates not allowed"));
+            return new UnicodeEncodeError(string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't encode characters in position {position}-{position + runLength - 1}: surrogates not allowed"));
         }
     }
 }

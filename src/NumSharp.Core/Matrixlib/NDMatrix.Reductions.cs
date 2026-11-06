@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 
 // =============================================================================
@@ -568,7 +569,7 @@ namespace NumSharp
                 // returns that plain array, and subtracting the (wrapped, two-dimensional) minima from it cannot
                 // be stored back into it.
                 np.max((NDArray)this, axis: axis, @out: @out, keepdims: false);
-                string wide = axis is null ? "(1,1)" : $"(1,{@out.size})";
+                string wide = axis is null ? "(1,1)" : string.Create(CultureInfo.InvariantCulture, $"(1,{@out.size})");
                 throw new ValueError(
                     $"non-broadcastable output operand with shape {@out.Shape.ToPythonTuple()} doesn't match the broadcast shape {wide}");
             }

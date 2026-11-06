@@ -1,6 +1,7 @@
 using System;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -142,7 +143,7 @@ namespace NumSharp.Backends.Kernels
         internal static TextGatherFunc GetTextGatherKernel(int width)
         {
             if (width < 0)
-                throw new ArgumentOutOfRangeException(nameof(width), width, "An element width cannot be negative.");
+                throw new ArgumentOutOfRangeException(nameof(width), width.ToString(CultureInfo.InvariantCulture), "An element width cannot be negative.");
             if (!TextKernelsAvailable)
                 return null;
             if (s_textGatherKernels.TryGetValue(width, out var cached))
@@ -231,12 +232,12 @@ namespace NumSharp.Backends.Kernels
         private static void ValidateTextSortKey(int unit, int units, int bits, bool collectOr)
         {
             if (unit is not (1 or 4))
-                throw new ArgumentOutOfRangeException(nameof(unit), unit, "A string code unit is 1 byte (S) or 4 bytes (U).");
+                throw new ArgumentOutOfRangeException(nameof(unit), unit.ToString(CultureInfo.InvariantCulture), "A string code unit is 1 byte (S) or 4 bytes (U).");
             bool bitsOk = unit == 1 ? bits == 8 : bits is 8 or 16 or 21 or 32;
             if (!bitsOk)
-                throw new ArgumentOutOfRangeException(nameof(bits), bits, "S keys take 8 bits a unit; U keys 8, 16, 21 or 32.");
+                throw new ArgumentOutOfRangeException(nameof(bits), bits.ToString(CultureInfo.InvariantCulture), "S keys take 8 bits a unit; U keys 8, 16, 21 or 32.");
             if (units < 1 || units > 64 / bits)
-                throw new ArgumentOutOfRangeException(nameof(units), units, $"A {bits}-bit packing holds 1 to {64 / bits} units.");
+                throw new ArgumentOutOfRangeException(nameof(units), units.ToString(CultureInfo.InvariantCulture), string.Create(CultureInfo.InvariantCulture, $"A {bits}-bit packing holds 1 to {64 / bits} units."));
             if (collectOr && !(unit == 4 && bits == 8))
                 throw new ArgumentOutOfRangeException(nameof(collectOr), collectOr, "Only the 8-bit U packing collects the unit OR.");
         }

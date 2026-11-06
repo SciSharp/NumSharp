@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 
 namespace NumSharp
@@ -117,7 +118,7 @@ namespace NumSharp
                         // is then NumPy's reshape ValueError (NumSharp's reshape reports it as IncorrectShapeException).
                         var perm = LegacyPermutation(popExceedsInt64 ? new BigInteger(bigPop) : new BigInteger(popSize));
                         if (perm.size < count)
-                            throw new ValueError($"cannot reshape array of size {perm.size} into shape {shape.ToPythonTuple()}");
+                            throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"cannot reshape array of size {perm.size} into shape {shape.ToPythonTuple()}"));
                         idx = perm[$":{count}"].reshape(shape);
                     }
                 }

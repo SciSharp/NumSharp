@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Kernels;
 
@@ -166,20 +167,20 @@ namespace NumSharp.Backends
                     if (Backends.Strings.NDStringUfuncs.IsText(earr))
                     {
                         if (earr.size > 1 && TextEdgesDecrease(earr))
-                            throw new ValueError($"`bins[{i}]` must be monotonically increasing, when an array");
+                            throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"`bins[{i}]` must be monotonically increasing, when an array"));
                     }
                     else if (AnyDecreasing(edges[i]))
-                        throw new ValueError($"`bins[{i}]` must be monotonically increasing, when an array");
+                        throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"`bins[{i}]` must be monotonically increasing, when an array"));
                 }
                 else if (spec is NDArray earr0 && earr0.ndim > 1)
                 {
-                    throw new ValueError($"`bins[{i}]` must be a scalar or 1d array");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"`bins[{i}]` must be a scalar or 1d array"));
                 }
                 else
                 {
                     // `np.ndim(bins[i]) == 0`: `if bins[i] < 1: raise`, the outer edges, then `operator.index(bins[i])`.
                     if (DdScalarBinBelowOne(spec))
-                        throw new ValueError($"`bins[{i}]` must be positive, when an integer");
+                        throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"`bins[{i}]` must be positive, when an integer"));
                     // A text sample's column is the STACKED text column (CastColumnsToStacked), so the outer edges' a.min()
                     // (np.amin, in GetOuterEdges) names that dtype when its minimum loop refuses (<U32 beside float64).
                     if (cols[i].typecode == NPTypeCode.Complex)
@@ -681,7 +682,7 @@ namespace NumSharp.Backends
                 case NDArray nd when nd.ndim == 0 && nd.typecode.IsInteger():
                     return checked((int)Convert.ToInt64(nd.GetAtIndex(0), System.Globalization.CultureInfo.InvariantCulture));
                 default:
-                    throw new TypeError($"`bins[{i}]` must be an integer, when a scalar");
+                    throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"`bins[{i}]` must be an integer, when a scalar"));
             }
         }
 

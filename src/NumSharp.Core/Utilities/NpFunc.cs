@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
@@ -248,7 +249,7 @@ namespace NumSharp.Utilities
                 {
                     if (targetIdx >= targetTypes.Length)
                         throw new ArgumentException(
-                            $"Method has more distinct generic types than the {targetTypes.Length} type code(s) provided");
+                            string.Create(CultureInfo.InvariantCulture, $"Method has more distinct generic types than the {targetTypes.Length} type code(s) provided"));
                     mapped = targetTypes[targetIdx++];
                     typeMap[concreteArgs[i]] = mapped;
                 }

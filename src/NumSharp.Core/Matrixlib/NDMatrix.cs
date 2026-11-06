@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Globalization;
 using System.Numerics;
 using NumSharp.Backends;
 
@@ -422,7 +423,7 @@ namespace NumSharp
                 long[] dims = Shape.dimensions;
                 // NumPy: M, N = self.shape. A matrix of another rank fails that unpacking before any algebra.
                 if (dims.Length < 2)
-                    throw new ValueError($"not enough values to unpack (expected 2, got {dims.Length})");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"not enough values to unpack (expected 2, got {dims.Length})"));
                 if (dims.Length > 2)
                     throw new ValueError("too many values to unpack (expected 2)");
 

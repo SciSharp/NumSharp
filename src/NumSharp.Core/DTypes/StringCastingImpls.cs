@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 
 namespace NumSharp
@@ -174,7 +175,7 @@ namespace NumSharp
             if (toMeta.IsUnicode)
             {
                 if (size > int.MaxValue / 4)
-                    throw new TypeError($"string of length {size} is too large to store inside array.");
+                    throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"string of length {size} is too large to store inside array."));
                 size *= 4;
             }
 

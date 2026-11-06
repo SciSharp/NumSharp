@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
@@ -370,7 +371,7 @@ namespace NumSharp.IO
 
             int ndim = X.ndim;
             if (ndim == 0 || ndim > 2)
-                throw new ValueError($"Expected 1D or 2D array, got {ndim}D array instead");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Expected 1D or 2D array, got {ndim}D array instead"));
 
             long nrows, ncol;
             if (ndim == 1) { nrows = X.Shape.dimensions[0]; ncol = 1; }
@@ -556,7 +557,7 @@ namespace NumSharp.IO
             }
 
             // NumPy: raise ValueError(f'invalid fmt: {fmt!r}'). The typed overloads leave only None to reach here.
-            throw new ValueError($"invalid fmt: {(fmt is null ? "None" : fmt.ToString())}");
+            throw new ValueError($"invalid fmt: {(fmt is null ? "None" : Convert.ToString(fmt, CultureInfo.InvariantCulture))}");
         }
 
         /// <summary>
@@ -575,7 +576,7 @@ namespace NumSharp.IO
             for (int i = 0; i < items.Length; i++)
             {
                 if (items[i] is null)
-                    throw new TypeError($"sequence item {i}: expected str instance, NoneType found");
+                    throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"sequence item {i}: expected str instance, NoneType found"));
             }
             return string.Join(delimiter, items);
         }

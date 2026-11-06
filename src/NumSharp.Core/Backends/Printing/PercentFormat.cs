@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using System.Text;
 
@@ -592,7 +593,7 @@ namespace NumSharp.Backends.Printing
         private static ValueError Unsupported(int c, int index)
         {
             char shown = c >= 31 && c <= 126 ? (char)c : '?';
-            return new ValueError($"unsupported format character '{shown}' (0x{c:x}) at index {index}");
+            return new ValueError(string.Create(CultureInfo.InvariantCulture, $"unsupported format character '{shown}' (0x{c:x}) at index {index}"));
         }
     }
 }

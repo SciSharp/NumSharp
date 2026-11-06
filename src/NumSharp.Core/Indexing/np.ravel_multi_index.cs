@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Generic;
 
@@ -131,7 +132,7 @@ namespace NumSharp
             int modeInt = ClipModes.ClipmodeConverter(mode);
             var ravelStrides = Backends.DefaultEngine.RavelStrides(dims, npyOrder);
             if (coords.Length != dims.Length)
-                throw new ValueError($"parameter multi_index must be a sequence of length {dims.Length}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"parameter multi_index must be a sequence of length {dims.Length}"));
 
             int ndim = dims.Length;
             // A scalar tuple is one coordinate to fold, so NumPy's zero-dimension check applies (in every mode).

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Reflection.Emit;
 using System.Text;
 using NumSharp.Backends.Kernels;
@@ -229,7 +230,7 @@ namespace NumSharp.Backends.Iteration
                 else
                 {
                     throw new InvalidOperationException(
-                        $"parameter {j} is {t} but the vector lane is {lane} — the vector plan admits only lane-typed or bool inputs.");
+                        string.Create(CultureInfo.InvariantCulture, $"parameter {j} is {t} but the vector lane is {lane} — the vector plan admits only lane-typed or bool inputs."));
                 }
 
                 il.Emit(OpCodes.Stloc, vectorLocals[j]);

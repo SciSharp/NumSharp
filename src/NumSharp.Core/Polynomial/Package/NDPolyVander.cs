@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
@@ -637,7 +638,7 @@ namespace NumSharp
                     break;
             }
             if (len != n)
-                throw new ValueError($"Expected {n} dimensions of degrees, got {len}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Expected {n} dimensions of degrees, got {len}"));
 
             var items = new object[n];
             for (int k = 0; k < n; k++)

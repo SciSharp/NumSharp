@@ -90,7 +90,7 @@ namespace NumSharp
                 parts[k] = agreed[k].ToString(CultureInfo.InvariantCulture);
             string shape = n == 1 ? $"({parts[0]},)" : "(" + string.Join(", ", parts) + ")";
             return new ValueError("setting an array element with a sequence. The requested array has an inhomogeneous shape " +
-                                  $"after {n} dimensions. The detected shape was {shape} + inhomogeneous part.");
+                                  string.Create(CultureInfo.InvariantCulture, $"after {n} dimensions. The detected shape was {shape} + inhomogeneous part."));
         }
 
         /// <summary>

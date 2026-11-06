@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using System.Threading;
 using NumSharp.Backends.Kernels;
@@ -846,7 +847,7 @@ namespace NumSharp.Backends.Iteration
                 throw new ArgumentException("inputTypes must name at least one operand dtype.", nameof(inputTypes));
             for (int i = 0; i < inputTypes.Length; i++)
                 if (inputTypes[i] == NPTypeCode.Empty)
-                    throw new ArgumentException($"inputTypes[{i}] is not a storage dtype.", nameof(inputTypes));
+                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"inputTypes[{i}] is not a storage dtype."), nameof(inputTypes));
 
             var types = (NPTypeCode[])inputTypes.Clone();
             bool forceScalar = ForceScalar;
@@ -931,7 +932,7 @@ namespace NumSharp.Backends.Iteration
         {
             if (IsPositional)
                 throw new InvalidOperationException(
-                    $"this expression was compiled for {OperandCount} positional operand(s) — pass them: Evaluate(operands, out).");
+                    string.Create(CultureInfo.InvariantCulture, $"this expression was compiled for {OperandCount} positional operand(s) — pass them: Evaluate(operands, out)."));
 
             var inputs = _inputs;
             if (!_program.ParamsStillValid(inputs))

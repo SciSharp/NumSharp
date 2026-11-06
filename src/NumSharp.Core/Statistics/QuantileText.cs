@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using NumSharp.Backends;
 
 // =============================================================================
@@ -233,7 +234,7 @@ namespace NumSharp.Statistics
             // npy_fasttake checks every index (the outer product before the axis is one line), in C order of q.
             foreach (long index in indexes)
                 if (index < -n || index >= n)
-                    throw new IndexError($"index {index} is out of bounds for axis 0 with size {n}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {index} is out of bounds for axis 0 with size {n}"));
 
             NDArray picks = qShape.Length == 0 ? NDArray.Scalar(indexes[0]) : np.array(indexes).reshape(Shape.Adopt((long[])qShape.Clone()));
             NDArray result = np.take(sorted, picks, 0);

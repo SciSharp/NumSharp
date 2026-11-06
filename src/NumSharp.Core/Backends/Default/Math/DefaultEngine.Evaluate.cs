@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
@@ -842,8 +843,8 @@ namespace NumSharp.Backends
             int expected = keepdims ? childNdim : 0;
             if (@out.ndim != expected || (keepdims && @out.size != 1))
                 throw new ArgumentException(
-                    $"output parameter for reduction operation {ufuncName} " +
-                    $"has the wrong number of dimensions: Found {@out.ndim} but expected {expected}");
+                    string.Create(CultureInfo.InvariantCulture, $"output parameter for reduction operation {ufuncName} " +
+                    $"has the wrong number of dimensions: Found {@out.ndim} but expected {expected}"));
         }
 
         /// <summary>

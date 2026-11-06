@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
@@ -198,7 +199,7 @@ namespace NumSharp.Backends
         ///     nan forms assign their result (<c>out[...] = result</c>: broadcast, unsafe), np.nanmedian included. np.median
         ///     writes through <c>np.mean(part[indexer], out=out)</c>: mean's add.reduce prologue checks the out against the
         ///     partition's middle slice before anything is computed (<see cref="MedianOutChecks"/>, NumPy's texts), and the
-        ///     result is then copied into that out under same_kind (NumPy's mean casts unsafely). The NumSharp-only decimal
+        ///     result is then copied into that out unsafely, as mean's stores are (an integer out truncates). The NumSharp-only decimal
         ///     and complex data and a decimal out keep the result-then-copy rule for every other function (parity
         ///     QA-31).</para>
         /// </remarks>
@@ -767,8 +768,8 @@ namespace NumSharp.Backends
             {
                 if (!result.Shape.dimensions.SequenceEqual(@out.Shape.dimensions))
                     throw new ArgumentException(
-                        $"Wrong shape of argument 'out', shape={string.Join(",", result.Shape.dimensions)} is required; " +
-                        $"got shape={string.Join(",", @out.Shape.dimensions)}.");
+                        $"Wrong shape of argument 'out', shape={string.Join(",", Array.ConvertAll(result.Shape.dimensions, d => d.ToString(CultureInfo.InvariantCulture)))} is required; " +
+                        $"got shape={string.Join(",", Array.ConvertAll(@out.Shape.dimensions, d => d.ToString(CultureInfo.InvariantCulture)))}.");
                 UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
                 return @out;
             }
@@ -924,8 +925,8 @@ namespace NumSharp.Backends
                 // Backstop: after the prologue the out has the result's dimensions exactly.
                 if (!result.Shape.dimensions.SequenceEqual(@out.Shape.dimensions))
                     throw new ArgumentException(
-                        $"Wrong shape of argument 'out', shape={string.Join(",", result.Shape.dimensions)} is required; " +
-                        $"got shape={string.Join(",", @out.Shape.dimensions)}.");
+                        $"Wrong shape of argument 'out', shape={string.Join(",", Array.ConvertAll(result.Shape.dimensions, d => d.ToString(CultureInfo.InvariantCulture)))} is required; " +
+                        $"got shape={string.Join(",", Array.ConvertAll(@out.Shape.dimensions, d => d.ToString(CultureInfo.InvariantCulture)))}.");
                 UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
                 return @out;
             }
@@ -1317,8 +1318,9 @@ namespace NumSharp.Backends
         /// <param name="keptDims">How many kept axes the data has (0: NumPy's <c>arr[-1, ...]</c> is a scalar).</param>
         /// <returns>The result, or <paramref name="out"/> itself.</returns>
         /// <exception cref="ArgumentException">The legacy route: out of another shape.</exception>
-        /// <exception cref="InvalidCastException">The legacy route or np.median's: the result's dtype does not cast to the
-        ///     out's under np.copyto's same_kind rule (np.copyto's text).</exception>
+        /// <exception cref="InvalidCastException">The legacy route: the result's dtype does not cast to the out's under
+        ///     np.copyto's same_kind rule (np.copyto's text). np.median's route stores unsafely and refuses no numeric
+        ///     out.</exception>
         /// <exception cref="ValueError">The nan forms' assignment does not broadcast, or out is read-only.</exception>
         /// <exception cref="TypeError">The take route: a slice holding NaN is copied into an out the data's dtype does not
         ///     cast to under same_kind (NumPy's <c>np.copyto(result, arr[-1, ...], where=slices_having_nans)</c>: <c>Cannot
@@ -1361,8 +1363,11 @@ namespace NumSharp.Backends
                 case 5:
                     // np.median: `mean(part[indexer], axis, out=out)` wrote the out _ureduce handed it (out itself, or keepdims'
                     // view). MedianOutChecks ran mean's prologue over it before the computation, so it has the result's
-                    // dimensions exactly; the value goes in under np.copyto's same_kind rule (the legacy rule's cast, kept).
-                    UnmanagedStorage.Copyto(target, resultRaw, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
+                    // dimensions exactly. The value goes in UNSAFELY, as mean's add.reduce store and its
+                    // `true_divide(ret, rcount, out=ret, casting='unsafe')` put it (parity QA-55): an integer out takes the
+                    // truncated median. Casting the finished median once is the same value as NumPy's two steps (the sum of
+                    // the middles truncated, then divided by their count and truncated): trunc(trunc(s) / n) == trunc(s / n).
+                    UnmanagedStorage.Copyto(target, resultRaw, NPY_CASTING.NPY_UNSAFE_CASTING, null);
                     return @out;
                 default:
                     return FinalizeResult(resultRaw, a, axisArr, keepdims, qNdim, @out);
@@ -1486,7 +1491,7 @@ namespace NumSharp.Backends
             {
                 long k = raw[2 * j + slot];
                 if (k < -n || k >= n)
-                    throw new IndexOutOfRangeException($"index {k} is out of bounds for axis 0 with size {n}");
+                    throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"index {k} is out of bounds for axis 0 with size {n}"));
             }
         }
 
@@ -1537,7 +1542,7 @@ namespace NumSharp.Backends
         /// <param name="dims">The dimensions.</param>
         /// <returns>The text.</returns>
         private static string PyTuple(long[] dims)
-            => dims.Length == 0 ? "()" : dims.Length == 1 ? $"({dims[0]},)" : "(" + string.Join(",", dims) + ")";
+            => dims.Length == 0 ? "()" : dims.Length == 1 ? string.Create(CultureInfo.InvariantCulture, $"({dims[0]},)") : "(" + string.Join(",", Array.ConvertAll(dims, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
 
         private static int TypeSize(NPTypeCode tc) => tc switch
         {

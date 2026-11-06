@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using NumSharp.Backends.Unmanaged;
 
@@ -86,7 +87,7 @@ namespace NumSharp
         {
             long n = dims[axis];
             if (n > System.Array.MaxLength)
-                throw new OutOfMemoryException($"An axis of {n} elements is longer than a .NET list can hold ({System.Array.MaxLength}).");
+                throw new OutOfMemoryException(string.Create(CultureInfo.InvariantCulture, $"An axis of {n} elements is longer than a .NET list can hold ({System.Array.MaxLength})."));
             // The list is sized once and filled through its span (CollectionsMarshal): no Add per element, and a row's
             // values land in place by one GetItems call.
             var list = new List<object>((int)n);

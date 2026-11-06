@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NumSharp
 {
@@ -102,6 +103,6 @@ namespace NumSharp
         /// <param name="dims">The dimensions.</param>
         /// <returns>The shape text.</returns>
         private static string PyShapeTuple(long[] dims)
-            => dims.Length == 1 ? $"({dims[0]},)" : "(" + string.Join(",", dims) + ")";
+            => dims.Length == 1 ? string.Create(CultureInfo.InvariantCulture, $"({dims[0]},)") : "(" + string.Join(",", System.Array.ConvertAll(dims, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
     }
 }

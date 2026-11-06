@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
@@ -167,8 +168,8 @@ namespace NumSharp.Backends
         {
             var dims = s.dimensions;
             if (dims.Length == 0) return "()";
-            if (dims.Length == 1) return $"({dims[0]},)";
-            return $"({string.Join(",", dims)})";
+            if (dims.Length == 1) return string.Create(CultureInfo.InvariantCulture, $"({dims[0]},)");
+            return $"({string.Join(",", Array.ConvertAll(dims, d => d.ToString(CultureInfo.InvariantCulture)))})";
         }
 
         /// <summary>
@@ -560,8 +561,8 @@ namespace NumSharp.Backends
             if (loop == @out.typecode || NDIterCasting.CanCast(loop, @out.typecode, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 return;
             throw new TypeError(
-                $"Cannot cast ufunc '{ufunc}' output {position} from dtype('{loop.AsNumpyDtypeName()}') to " +
-                $"dtype('{@out.typecode.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+                string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc '{ufunc}' output {position} from dtype('{loop.AsNumpyDtypeName()}') to " +
+                $"dtype('{@out.typecode.AsNumpyDtypeName()}') with casting rule 'same_kind'"));
         }
 
         // =====================================================================

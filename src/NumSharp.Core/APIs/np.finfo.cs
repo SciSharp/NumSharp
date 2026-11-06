@@ -184,11 +184,20 @@ namespace NumSharp
             }
         }
 
-        /// <inheritdoc />
-        public override string ToString()
-        {
-            return $"finfo(resolution={resolution}, min={min:E}, max={max:E}, dtype={dtype.name})";
-        }
+        /// <summary>
+        ///     NumPy's <c>repr(np.finfo(dtype))</c>, the same text under every culture:
+        ///     <c>finfo(resolution=1e-06, min=-3.4028235e+38, max=3.4028235e+38, dtype=float32)</c>.
+        /// </summary>
+        /// <returns>The repr text.</returns>
+        /// <remarks>
+        ///     NumPy's <c>finfo.__repr__</c>, printed by <see cref="Backends.Printing.MachineLimitsRepr.Finfo"/>: the
+        ///     resolution through the dtype's own scalar <c>str()</c>, min / max through the dtype's <c>_MACHAR_PARAMS</c>
+        ///     printf format (<c>%24.16e</c> / <c>%15.7e</c> / <c>%12.5e</c>), the long double's and decimal's <c>str()</c>.
+        ///     A complex dtype reports its real part (<c>dtype=float64</c>). Never .NET's current culture (parity QA-41:
+        ///     this text was <c>finfo(resolution=1E-06, min=-3.402823E+038, ...)</c>, with a decimal comma under de-DE and
+        ///     U+2212 minus signs under sv-SE).
+        /// </remarks>
+        public override string ToString() => Backends.Printing.MachineLimitsRepr.Finfo(dtype, resolution, min, max);
 
         private static bool IsFloatType(NPTypeCode typeCode)
         {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 
 namespace NumSharp
@@ -48,7 +49,7 @@ namespace NumSharp
             for (int i = 0; i < obj.Length; i++)
             {
                 if (obj[i] is null)
-                    throw new ArgumentNullException($"{nameof(obj)}[{i}]");
+                    throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"{nameof(obj)}[{i}]"));
                 rows[i] = BmatConcat(obj[i], -1);
             }
 
@@ -254,7 +255,7 @@ namespace NumSharp
                 if (ndimk != ndim0)
                     throw new ValueError(
                         "all the input arrays must have same number of dimensions, but the array at " +
-                        $"index 0 has {ndim0} dimension(s) and the array at index {k} has {ndimk} dimension(s)");
+                        string.Create(CultureInfo.InvariantCulture, $"index 0 has {ndim0} dimension(s) and the array at index {k} has {ndimk} dimension(s)"));
             }
 
             // All blocks share ndim ≥ 1 (so none is null here); concatenate does the extent check + copy.

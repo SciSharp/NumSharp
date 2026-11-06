@@ -144,7 +144,7 @@ namespace NumSharp.IO
             public override int GetHashCode() => (Major << 8) | Minor;
 
             /// <summary>Formatted as Python's tuple repr, e.g. <c>(1, 0)</c>, so it can go verbatim into messages.</summary>
-            public override string ToString() => $"({Major}, {Minor})";
+            public override string ToString() => string.Create(CultureInfo.InvariantCulture, $"({Major}, {Minor})");
 
             public static bool operator ==(FormatVersion l, FormatVersion r) => l.Equals(r);
             public static bool operator !=(FormatVersion l, FormatVersion r) => !l.Equals(r);
@@ -562,7 +562,7 @@ namespace NumSharp.IO
             long totalHeaderLen = (long)hlen + padlen;
 
             if (totalHeaderLen > version.MaxHeaderLength)
-                throw new InvalidOperationException($"Header length {hlen} too big for version={version}");
+                throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Header length {hlen} too big for version={version}"));
 
             var result = new byte[prefixSize + totalHeaderLen];
             int pos = 0;
@@ -740,7 +740,7 @@ namespace NumSharp.IO
 
             if (header.Length > maxHeaderSize)
                 throw new FormatException(
-                    $"Header info length ({header.Length}) is large and may not be safe to load securely.\n" +
+                    string.Create(CultureInfo.InvariantCulture, $"Header info length ({header.Length}) is large and may not be safe to load securely.\n") +
                     "To allow loading, adjust `maxHeaderSize` or fully trust the `.npy` file using `allow_pickle=True`.\n" +
                     "For safety against large resource use or crashes, sandboxing may be necessary.");
 
@@ -864,7 +864,7 @@ namespace NumSharp.IO
                 char c = p[i];
                 if (char.IsSurrogate(c))
                     throw new NotSupportedException(
-                        $"Char at flat index {i} is the surrogate U+{(int)c:X4}. A NumPy '<U1' element holds one " +
+                        string.Create(CultureInfo.InvariantCulture, $"Char at flat index {i} is the surrogate U+{(int)c:X4}. A NumPy '<U1' element holds one ") +
                         "whole code point, so a surrogate pair cannot be represented and would corrupt the file.");
 
                 BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(filled), c);
@@ -987,7 +987,7 @@ namespace NumSharp.IO
                 int toRead = (int)Math.Min(remaining, buffer.Length);
                 int got = ReadInto(stream, buffer, toRead);
                 if (got != toRead)
-                    throw new FormatException($"EOF: reading array data, expected {fileBytes} bytes got {fileBytes - remaining + got}");
+                    throw new FormatException(string.Create(CultureInfo.InvariantCulture, $"EOF: reading array data, expected {fileBytes} bytes got {fileBytes - remaining + got}"));
 
                 if (dtype.NeedsSwap)
                     SwapBytes(buffer, got, dtype.SwapUnit);
@@ -1349,7 +1349,7 @@ namespace NumSharp.IO
             }
 
             if (total != count)
-                throw new FormatException($"EOF: reading {what}, expected {count} bytes got {total}");
+                throw new FormatException(string.Create(CultureInfo.InvariantCulture, $"EOF: reading {what}, expected {count} bytes got {total}"));
 
             if (buffer.Length != total)
                 Array.Resize(ref buffer, (int)total);

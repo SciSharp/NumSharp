@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using NumSharp.Utilities;
 
@@ -415,7 +416,7 @@ namespace NumSharp.Statistics
             else if (typeof(TQ) == typeof(ulong)) fits = value >= 0;
             else fits = true;
             if (!fits)
-                throw new OverflowException($"Python integer {value} out of bounds for {IntegerName<TQ>()}");
+                throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Python integer {value} out of bounds for {IntegerName<TQ>()}"));
             return value;
         }
 
@@ -662,7 +663,7 @@ namespace NumSharp.Statistics
             if (kth < 0)
                 kth += n;
             if (kth < 0 || kth >= n)
-                throw new ValueError($"kth(={kth}) out of bounds ({n})");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"kth(={kth}) out of bounds ({n})"));
         }
     }
 }

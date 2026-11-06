@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using NumSharp.Backends.Printing;
 using NumSharp.Backends.Strings;
@@ -330,7 +331,7 @@ namespace NumSharp
             {
                 long n = size, i = index[0];
                 if (i < -n || i >= n)
-                    throw new IndexError($"index {i} is out of bounds for size {n}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {i} is out of bounds for size {n}"));
                 return Heap.ToList(FlatId(i < 0 ? i + n : i));
             }
             if (index.Length != ndim)
@@ -591,7 +592,7 @@ namespace NumSharp
             ThrowIfDisposed();
             index ??= Array.Empty<long>();
             if (index.Length != ndim)
-                throw new IndexError($"an NDListArray element needs one integer per axis ({index.Length} given for {ndim}); " +
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"an NDListArray element needs one integer per axis ({index.Length} given for {ndim}); ") +
                                      "use slice notation, as in lists[\"0\"], for a sub-array");
             var dims = Ids.Shape.dimensions;
             var at = new long[index.Length];
@@ -600,7 +601,7 @@ namespace NumSharp
                 long i = index[d];
                 long n = dims[d];
                 if (i < -n || i >= n)
-                    throw new IndexError($"index {i} is out of bounds for axis {d} with size {n}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {i} is out of bounds for axis {d} with size {n}"));
                 at[d] = i < 0 ? i + n : i;
             }
             return Ids.GetInt64(at);

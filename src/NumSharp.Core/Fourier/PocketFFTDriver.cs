@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using NumSharp.Fourier;
 using NumSharp.Backends.Iteration;
@@ -49,9 +50,9 @@ namespace NumSharp
                 throw new ArgumentException("FFT requires an array with at least one dimension.");
             int ax = axis < 0 ? axis + ndim : axis;
             if (ax < 0 || ax >= ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis), $"axis {axis} is out of bounds for array of dimension {ndim}");
+                throw new ArgumentOutOfRangeException(nameof(axis), string.Create(CultureInfo.InvariantCulture, $"axis {axis} is out of bounds for array of dimension {ndim}"));
             if (n < 1)
-                throw new ArgumentException($"Invalid number of FFT data points ({n}) specified.");
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Invalid number of FFT data points ({n}) specified."));
 
             // Resolve n_out and the input/output dtypes per transform kind.
             long nout;

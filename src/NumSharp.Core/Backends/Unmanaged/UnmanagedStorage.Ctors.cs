@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Unmanaged;
@@ -571,7 +572,7 @@ namespace NumSharp.Backends
                 if (strides != null)
                     throw new ValueError(NdarrayStridesIncompatible);
                 if (offset < 0)
-                    throw new ValueError($"offset must be non-negative and no greater than buffer length ({length})");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"offset must be non-negative and no greater than buffer length ({length})"));
                 throw new TypeError(NdarrayBufferTooSmall);
             }
 
@@ -725,7 +726,7 @@ namespace NumSharp.Backends
                 long delta = (long)(buf.Start + offset - (byte*)cells.Address);
                 if (delta % cellBytes != 0)
                     throw new NotSupportedException(
-                        $"np.ndarray: the byte offset {offset} splits a 16-byte StringDType cell; a StringDType view must start " +
+                        string.Create(CultureInfo.InvariantCulture, $"np.ndarray: the byte offset {offset} splits a 16-byte StringDType cell; a StringDType view must start ") +
                         "on a cell of its buffer (NumPy reads the straddled bytes as a cell).");
                 first = delta / cellBytes;
             }
@@ -764,7 +765,7 @@ namespace NumSharp.Backends
         /// <returns>The exception to throw.</returns>
         private static NotSupportedException StrideSplitsElement(long[] byteStrides, int axis, int itemSize)
             => new NotSupportedException(
-                $"The byte stride {byteStrides[axis]} of axis {axis} is not a multiple of the element size {itemSize}. " +
+                string.Create(CultureInfo.InvariantCulture, $"The byte stride {byteStrides[axis]} of axis {axis} is not a multiple of the element size {itemSize}. ") +
                 "NumSharp stores strides in whole elements, so it cannot lay out this array (NumPy accepts it as an unaligned array).");
     }
 }

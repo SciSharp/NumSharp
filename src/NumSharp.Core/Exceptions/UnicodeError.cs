@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NumSharp
 {
@@ -103,8 +104,8 @@ namespace NumSharp
         internal string PythonRepr()
             => CodecName == null
                 ? $"UnicodeDecodeError({NumSharp.Backends.Printing.PyRepr.Str(Message)})"
-                : $"UnicodeDecodeError({NumSharp.Backends.Printing.PyRepr.Str(CodecName)}, " +
+                : string.Create(CultureInfo.InvariantCulture, $"UnicodeDecodeError({NumSharp.Backends.Printing.PyRepr.Str(CodecName)}, " +
                   $"{NumSharp.Backends.Printing.PyRepr.Bytes(ObjectBytes)}, {Start}, {End}, " +
-                  $"{NumSharp.Backends.Printing.PyRepr.Str(Reason)})";
+                  $"{NumSharp.Backends.Printing.PyRepr.Str(Reason)})");
     }
 }

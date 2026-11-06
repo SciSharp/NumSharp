@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using NumSharp.Backends;
@@ -56,7 +57,7 @@ namespace NumSharp
             var s = new StringBuilder();
             if (this.Shape.dimensions.Length == 0)
             {
-                s.Append($"{Storage.GetAtIndex(0)}");
+                s.Append(string.Create(CultureInfo.InvariantCulture, $"{Storage.GetAtIndex(0)}"));
             }
             else if (this.Shape.dimensions.Length == 1)
             {

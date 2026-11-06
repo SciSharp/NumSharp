@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection.Emit;
 using System.Runtime.Intrinsics;
 using NumSharp.Backends.Iteration;
@@ -140,7 +141,7 @@ namespace NumSharp.Backends.Kernels
             ValidateTextShape(unit, widthA);
             ValidateTextShape(unit, widthB);
             if (aIndex is not (0 or 1))
-                throw new ArgumentOutOfRangeException(nameof(aIndex), aIndex, "A comparison reads its operands from slots 0 and 1.");
+                throw new ArgumentOutOfRangeException(nameof(aIndex), aIndex.ToString(CultureInfo.InvariantCulture), "A comparison reads its operands from slots 0 and 1.");
             if (!TextKernelsAvailable)
                 return null;
             var key = new TextCompareKey(op, unit, widthA, widthB, aIndex, rstrip);
@@ -205,9 +206,9 @@ namespace NumSharp.Backends.Kernels
         private static void ValidateTextShape(int unit, int width)
         {
             if (unit is not (1 or 4))
-                throw new ArgumentOutOfRangeException(nameof(unit), unit, "A string code unit is 1 byte (S) or 4 bytes (U).");
+                throw new ArgumentOutOfRangeException(nameof(unit), unit.ToString(CultureInfo.InvariantCulture), "A string code unit is 1 byte (S) or 4 bytes (U).");
             if (width < 0 || width % unit != 0)
-                throw new ArgumentOutOfRangeException(nameof(width), width, "An element width is a non-negative whole number of code units.");
+                throw new ArgumentOutOfRangeException(nameof(width), width.ToString(CultureInfo.InvariantCulture), "An element width is a non-negative whole number of code units.");
         }
 
         // =============================================================================================================

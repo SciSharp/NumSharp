@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace NumSharp
@@ -102,7 +103,7 @@ namespace NumSharp
             {
                 if (d > skip)
                     sb.Append(',');
-                sb.Append(dims[d]);
+                sb.Append(dims[d].ToString(CultureInfo.InvariantCulture));
             }
             if (n == 1)
                 sb.Append(',');

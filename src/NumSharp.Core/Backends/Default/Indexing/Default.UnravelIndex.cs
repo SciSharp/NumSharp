@@ -4,6 +4,7 @@
 // shares).
 
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
@@ -218,7 +219,7 @@ namespace NumSharp.Backends
             }
 
             if (status < count)
-                throw new ValueError($"index {idx[status]} is out of bounds for array with size {unravelSize}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"index {idx[status]} is out of bounds for array with size {unravelSize}"));
         }
 
         /// <summary>

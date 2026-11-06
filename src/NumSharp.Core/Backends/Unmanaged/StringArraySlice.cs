@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using NumSharp.Backends.Strings;
 using NumSharp.Utilities;
 
@@ -48,7 +49,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             var meta = BufferClassOf(descr);
             if (bytes.Count % descr.itemsize != 0)
-                throw new ArgumentException($"A buffer of {bytes.Count} bytes is not a whole number of {descr.itemsize}-byte elements.", nameof(bytes));
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"A buffer of {bytes.Count} bytes is not a whole number of {descr.itemsize}-byte elements."), nameof(bytes));
 
             Bytes = bytes;
             Descr = descr;

@@ -4,6 +4,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -594,7 +595,7 @@ public sealed class ConcurrentOrderedCompactDictionary<TKey, TValue> : IReadOnly
     {
         if (!TryGetValue(key, out var value))
         {
-            throw new KeyNotFoundException(SR.Format(SR.Arg_KeyNotFoundWithKey, key.ToString()));
+            throw new KeyNotFoundException(SR.Format(SR.Arg_KeyNotFoundWithKey, Convert.ToString(key, CultureInfo.InvariantCulture)));
         }
 
         return value;

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -222,7 +223,7 @@ namespace NumSharp
                 }
 
                 if (i < size)
-                    throw new ValueError($"iterator too short: Expected {size} but iterator had only {i} items.");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"iterator too short: Expected {size} but iterator had only {i} items."));
                 filled = true;
             }
             finally

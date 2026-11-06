@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using NumSharp.Backends.Iteration;
 using NumSharp.IO; // PyLiteral.Repr: the Python repr a KeyError's str() shows
@@ -288,7 +289,7 @@ namespace NumSharp
             if (meta is StringDTypeMeta str)
             {
                 if (itemsize < 0 || itemsize % str.UnitSize != 0)
-                    throw new ArgumentException($"{meta} cannot have an item size of {itemsize} bytes (a non-negative multiple of {str.UnitSize} is required).", nameof(itemsize));
+                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"{meta} cannot have an item size of {itemsize} bytes (a non-negative multiple of {str.UnitSize} is required)."), nameof(itemsize));
                 // 'c' is NumPy's legacy one-character S1 spelling (NPY_CHARLTR): it renders and compares as S1, but
                 // keeps its own dtype.char.
                 bool charSpelling = !str.IsUnicode && typeChar == (char)NPY_TYPECHAR.NPY_CHARLTR && itemsize == 1;
@@ -297,7 +298,7 @@ namespace NumSharp
             }
             else if (itemsize != meta.ItemSize || typeChar != meta.TypeChar)
             {
-                throw new ArgumentException($"{meta} has a fixed layout ({meta.ItemSize} bytes, char '{meta.TypeChar}'); got {itemsize} bytes, char '{typeChar}'.");
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"{meta} has a fixed layout ({meta.ItemSize} bytes, char '{meta.TypeChar}'); got {itemsize} bytes, char '{typeChar}'."));
             }
 
             _datetime = datetime;
@@ -525,7 +526,7 @@ namespace NumSharp
                 if (Meta is DatetimeDTypeMeta)
                     return endian.ToString() + Meta.TypeChar + "8" + _datetime.Value.ToString(skipBrackets: false);
                 int size = kind == 'U' ? itemsize >> 2 : itemsize;
-                return endian.ToString() + kind + size;
+                return endian.ToString() + kind + size.ToString(CultureInfo.InvariantCulture);
             }
         }
 
@@ -726,7 +727,7 @@ namespace NumSharp
             var meta = DTypeRegistry.FromTypeNum((int)type_num);
             if (meta == null)
                 throw new NotSupportedException(
-                    $"NumPy type number {(int)type_num} (NPY_TYPES.{type_num}) has no NumSharp dtype class: " +
+                    string.Create(CultureInfo.InvariantCulture, $"NumPy type number {(int)type_num} (NPY_TYPES.{type_num}) has no NumSharp dtype class: ") +
                     "NumSharp has no complex64/object/void types, a single complex width, and no void storage.");
             return meta.singleton;
         }
@@ -1102,7 +1103,7 @@ namespace NumSharp
             if (Meta.type_num >= 256)
                 return Meta.ScalarName;
             if (kind == 'S')
-                return itemsize == 0 ? "'S'" : "'S" + itemsize + "'"; // _scalar_str: "'S%d'" % dtype.itemsize, no byte order
+                return itemsize == 0 ? "'S'" : "'S" + itemsize.ToString(CultureInfo.InvariantCulture) + "'"; // _scalar_str: "'S%d'" % dtype.itemsize, no byte order
             if (kind == 'U' && itemsize == 0)
                 return "'" + (byteorder == NPY_NATIVE ? NPY_NATBYTE : byteorder) + "U'"; // NumPy's unsized `dtype('<U')`
             // _scalar_str takes the short '<f8' form whenever the STORED byte order is explicit — the opposite order, and

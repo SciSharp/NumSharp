@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -305,7 +306,7 @@ namespace NumSharp.Backends.Kernels
                 case 1: il.Emit(OpCodes.Ldarg_1); break;
                 case 3: il.Emit(OpCodes.Ldarg_3); break;
                 case 4: il.Emit(OpCodes.Ldarg_S, (byte)4); break;
-                default: throw new ArgumentException($"Unexpected argIdx {argIdx}");
+                default: throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Unexpected argIdx {argIdx}"));
             }
             il.Emit(OpCodes.Ldloc, locByteOff);
             il.Emit(OpCodes.Add);

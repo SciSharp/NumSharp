@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection.Emit;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
@@ -21,7 +22,7 @@ namespace NumSharp.Backends
             if (n == 0) return a;
             if (n < 0)
                 throw new ArgumentException(
-                    $"order must be non-negative but got {n}", nameof(n));
+                    string.Create(CultureInfo.InvariantCulture, $"order must be non-negative but got {n}"), nameof(n));
 
             int nd = a.ndim;
             int ax = DiffAxis(a, axis);

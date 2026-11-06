@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
@@ -486,7 +487,7 @@ namespace NumSharp.Backends.Kernels
                 case 4: FillWith((uint*)block + 1, n - 1, *(uint*)block); return;
                 case 8: FillWith((ulong*)block + 1, n - 1, *(ulong*)block); return;
                 case 16: FillWith((Block16*)block + 1, n - 1, *(Block16*)block); return;
-                default: throw new NotSupportedException($"ReplicateFirstElement: element size {itemSize}");
+                default: throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"ReplicateFirstElement: element size {itemSize}"));
             }
         }
 

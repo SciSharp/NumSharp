@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 // =============================================================================
 // NDExpr.Combinators.cs — C6 macro / decision combinators (docs/plans/ndexpr-capabilities.md §7)
@@ -110,7 +111,7 @@ namespace NumSharp.Backends.Iteration
             for (int i = cases.Length - 1; i >= 0; i--)
             {
                 if (cases[i].cond is null || cases[i].value is null)
-                    throw new ArgumentNullException(nameof(cases), $"case {i} has a null condition or value.");
+                    throw new ArgumentNullException(nameof(cases), string.Create(CultureInfo.InvariantCulture, $"case {i} has a null condition or value."));
                 acc = Where(cases[i].cond, cases[i].value, acc);
             }
 
@@ -134,7 +135,7 @@ namespace NumSharp.Backends.Iteration
             // Fold from the last value inward so index == 0 is the OUTERMOST test.
             for (int k = values.Length - 1; k >= 0; k--)
             {
-                if (values[k] is null) throw new ArgumentNullException(nameof(values), $"value {k} is null.");
+                if (values[k] is null) throw new ArgumentNullException(nameof(values), string.Create(CultureInfo.InvariantCulture, $"value {k} is null."));
                 acc = Where(Equal(index, Const(k)), values[k], acc);
             }
 

@@ -17,3 +17,4 @@ NDW013 | NumSharp.Build | Warning | Scope attribute or [NDScopedExit] present, b
 NDW015 | NumSharp.Build | Error | Scoped method has an unsupported 'out' NDArray-carrying parameter
 NDW016 | NumSharp.Build | Warning | Type stores NDArrays but is not disposable
 NDW017 | NumSharp.Build | Warning | NDArray-holding member is never disposed
+NDW020 | NumSharp.Build | Disabled | An exception message formats a number with the current culture (NumSharp's own build turns it on as an error)

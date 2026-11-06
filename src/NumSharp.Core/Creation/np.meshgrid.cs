@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -61,7 +62,7 @@ namespace NumSharp
                 int have = Length;
                 if (have != n)
                     throw new InvalidOperationException(
-                        $"np.meshgrid produced {have} grids; cannot deconstruct into {n}. Use indexing or the " +
+                        string.Create(CultureInfo.InvariantCulture, $"np.meshgrid produced {have} grids; cannot deconstruct into {n}. Use indexing or the ") +
                         "NDArray[] conversion.");
             }
 

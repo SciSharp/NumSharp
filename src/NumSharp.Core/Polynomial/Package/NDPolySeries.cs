@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
@@ -1505,7 +1506,7 @@ namespace NumSharp
                 throw new IndexError("too many indices for array: array is 0-dimensional, but 1 were indexed");
             long n = nd.Shape.dimensions[0];
             if (i >= n)
-                throw new IndexError($"index {i} is out of bounds for axis 0 with size {n}");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {i} is out of bounds for axis 0 with size {n}"));
             if (nd.ndim > 1)
                 return PolyNumber.FromArray(nd[i]);
             var v = PolySeriesView.Element(nd, i);
@@ -1623,7 +1624,7 @@ namespace NumSharp
                 return new IndexError("too many indices for array: array is 0-dimensional, but 1 were indexed");
             long n = d.Shape.dimensions[0];
             if (n < 2)
-                return new IndexError($"index 1 is out of bounds for axis 0 with size {n}");
+                return new IndexError(string.Create(CultureInfo.InvariantCulture, $"index 1 is out of bounds for axis 0 with size {n}"));
             if (d.ndim == 1)
             {
                 string name = Backends.Strings.NDStringUfuncs.IsVString(d) ? "str" : d.dtype.kind == 'S' ? "numpy.bytes_" : "numpy.str_";
@@ -3060,7 +3061,7 @@ namespace NumSharp
                 double d => NDArray.PythonLiteral(d),
                 Complex c => NDArray.PythonLiteral(c),
                 _ => throw new NotSupportedException(
-                    $"numpy.polynomial: the Python int {boxed} does not fit uint64, so NumPy builds an object array from it, a dtype NumSharp does not have"),
+                    string.Create(CultureInfo.InvariantCulture, $"numpy.polynomial: the Python int {boxed} does not fit uint64, so NumPy builds an object array from it, a dtype NumSharp does not have")),
             };
         }
 
@@ -3227,9 +3228,9 @@ namespace NumSharp
             var detected = new long[len + 1];
             detected[0] = arrays.Length;
             System.Array.Copy(common, 0, detected, 1, len);
-            string text = detected.Length == 1 ? $"({detected[0]},)" : "(" + string.Join(", ", detected) + ")";
+            string text = detected.Length == 1 ? string.Create(CultureInfo.InvariantCulture, $"({detected[0]},)") : "(" + string.Join(", ", Array.ConvertAll(detected, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
             return new ValueError("setting an array element with a sequence. The requested array has an inhomogeneous shape " +
-                                  $"after {detected.Length} dimensions. The detected shape was {text} + inhomogeneous part.");
+                                  string.Create(CultureInfo.InvariantCulture, $"after {detected.Length} dimensions. The detected shape was {text} + inhomogeneous part."));
         }
 
         // ---------------------------------------------------------------------------------------------

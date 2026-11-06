@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
@@ -435,7 +436,7 @@ namespace NumSharp
 
                 BigInteger v = PythonInt.From(nd is not null ? nd.GetAtIndex(0) : value);
                 if (v.Sign < 0 || v >= BigInteger.One << bits)
-                    throw new ValueError($"{name} must be positive and less than 2**{bits}.");
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"{name} must be positive and less than 2**{bits}."));
                 var result = new ulong[len];
                 for (int i = 0; i < len; i++)
                 {
@@ -469,7 +470,7 @@ namespace NumSharp
                 switch (e)
                 {
                     case System.Collections.IList or NDArray:
-                        throw new ValueError($"{name} must have {len} elements when using array form");
+                        throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"{name} must have {len} elements when using array form"));
                     case bool or char or sbyte or byte or short or ushort or int or uint or long or ulong or BigInteger:
                         break;
                     case double or float or Half or decimal:
@@ -512,7 +513,7 @@ namespace NumSharp
         private static ulong[] CheckArrayForm(ulong[] words, string name, int len, long[] shape)
         {
             if (shape.Length != 1 || shape[0] != len)
-                throw new ValueError($"{name} must have {len} elements when using array form");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"{name} must have {len} elements when using array form"));
             return words;
         }
 
@@ -549,7 +550,7 @@ namespace NumSharp
                     if (b < int64Min || b > uint64Max)
                         throw new OverflowException("Python int too large to convert to C long");
                     if (b.Sign < 0)
-                        throw new OverflowException($"Python integer {b} out of bounds for uint64");
+                        throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Python integer {b} out of bounds for uint64"));
                 }
                 throw new InvalidOperationException("unreachable: an object element always fails to convert");
             }
@@ -669,7 +670,7 @@ namespace NumSharp
             for (int i = 0; i < BufferSize; i++)
                 CheckWord(buffer, i);
             if (s.buffer_pos < 0)
-                throw new ValueError($"state['buffer_pos'] must be non-negative, got {s.buffer_pos}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"state['buffer_pos'] must be non-negative, got {s.buffer_pos}"));
 
             _c0 = counter[0];
             _c1 = counter[1];
@@ -696,7 +697,7 @@ namespace NumSharp
             if (words is null)
                 throw new TypeError("'NoneType' object is not subscriptable");
             if (i >= words.Length)
-                throw new IndexError($"index {i} is out of bounds for axis 0 with size {words.Length}");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {i} is out of bounds for axis 0 with size {words.Length}"));
         }
     }
 }

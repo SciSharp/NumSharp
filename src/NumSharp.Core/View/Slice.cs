@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
@@ -419,12 +420,12 @@ namespace NumSharp
                 if (index < 0)
                 {
                     if (Math.Abs(index) > dim)
-                        throw new ArgumentException($"Index {index} is out of bounds for the axis with size {dim}");
+                        throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Index {index} is out of bounds for the axis with size {dim}"));
                     return new SliceDef(dim + index);
                 }
 
                 if (index > 0 && index >= dim)
-                    throw new ArgumentException($"Index {index} is out of bounds for the axis with size {dim}");
+                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Index {index} is out of bounds for the axis with size {dim}"));
                 return new SliceDef(index);
             }
 

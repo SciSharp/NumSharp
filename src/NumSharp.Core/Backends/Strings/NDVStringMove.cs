@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 
@@ -704,7 +705,7 @@ namespace NumSharp.Backends.Strings
                     null => null,
                     string s => s,
                     _ => throw new InvalidCastException(
-                        $"Element {i} of the {a.dtype} array is the NA object {NDPyObject.Repr(v)}, which is not a string; read it with tolist()."),
+                        string.Create(CultureInfo.InvariantCulture, $"Element {i} of the {a.dtype} array is the NA object {NDPyObject.Repr(v)}, which is not a string; read it with tolist().")),
                 };
             }
             return result;
@@ -790,7 +791,7 @@ namespace NumSharp.Backends.Strings
                             if (k < 0)
                                 continue;
                             if ((ulong)k >= (ulong)valCount)
-                                throw new IndexOutOfRangeException($"A scatter mark {k} is outside the {valCount} value elements.");
+                                throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"A scatter mark {k} is outside the {valCount} value elements."));
                             NDVStringCopy.CopyRun(valBase + k * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, 0, d, 0, 1, inAllocator, outAllocator, naName);
                         }
                     });

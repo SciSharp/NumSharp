@@ -264,7 +264,7 @@ namespace NumSharp
                         // (s[np.array(True)] -> (1,), s[np.array(False)] -> (0,)) and newaxis /
                         // ellipsis consume no axis and pass through below.
                         if (this.ndim == 0 && !(nd.typecode == NPTypeCode.Boolean && nd.ndim == 0))
-                            throw new IndexError($"too many indices for array: array is 0-dimensional, but {(nd.typecode == NPTypeCode.Boolean ? nd.ndim : 1)} were indexed");
+                            throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is 0-dimensional, but {(nd.typecode == NPTypeCode.Boolean ? nd.ndim : 1)} were indexed"));
                         // An empty NON-bool index array (size 0) is an empty integer fancy index
                         // (A[np.array([],int)] -> (0, ...)). An empty BOOLEAN array stays a MASK and
                         // falls through to the mask path below: NumPy consumes mask.ndim axes via its
@@ -384,7 +384,7 @@ namespace NumSharp
                     case string _:
                     case Slice _:
                         continue;
-                    case null: throw new ArgumentNullException($"The {i}th dimension in given indices is null.");
+                    case null: throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"The {i}th dimension in given indices is null."));
                     default:   throw new IndexError(InvalidIndexMessage);   // NumPy's text, no type name (prepare_index)
                 }
             }

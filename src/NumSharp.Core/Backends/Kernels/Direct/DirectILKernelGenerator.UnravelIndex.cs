@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -384,7 +385,7 @@ namespace NumSharp.Backends.Kernels
         internal static void FillUnravelDivisor(long d, Span<long> entry)
         {
             if (d <= 0)
-                throw new ArgumentOutOfRangeException(nameof(d), d, "the reciprocal kernel divides by positive dimensions only");
+                throw new ArgumentOutOfRangeException(nameof(d), d.ToString(CultureInfo.InvariantCulture), "the reciprocal kernel divides by positive dimensions only");
             // l = ceil(log2 d): 0 for d = 1, else the bit width of d - 1.
             int l = d == 1 ? 0 : 64 - BitOperations.LeadingZeroCount((ulong)(d - 1));
             // 2^l - d fits 64 bits (d <= 2^l <= 2^63 for any positive long), and the 128-bit numerator keeps the floor exact.

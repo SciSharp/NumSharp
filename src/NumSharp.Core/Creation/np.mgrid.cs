@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -64,7 +65,7 @@ namespace NumSharp
                 int have = Length;
                 if (have != n)
                     throw new InvalidOperationException(
-                        $"np.mgrid produced a grid of {have} axes; cannot deconstruct into {n}. A single-slice " +
+                        string.Create(CultureInfo.InvariantCulture, $"np.mgrid produced a grid of {have} axes; cannot deconstruct into {n}. A single-slice ") +
                         "mgrid is a bare 1-D array — use it as an NDArray, not a tuple.");
             }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
@@ -1287,7 +1288,7 @@ namespace NumSharp.Backends.Kernels
             if (!scratch)
                 return ctx.Rows[row];
             if (ctx.Scratch is null || (uint)row >= (uint)ctx.Scratch.Length)
-                throw new InvalidOperationException($"the step reads scratch slot {row}, which its stage does not bind");
+                throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"the step reads scratch slot {row}, which its stage does not bind"));
             return ctx.Scratch[row];
         }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
@@ -874,7 +875,7 @@ namespace NumSharp.Backends
                 case 4: ReverseElements((uint*)p, n); break;
                 case 8: ReverseElements((ulong*)p, n); break;
                 case 16: ReverseElements((Element16*)p, n); break;
-                default: throw new NotSupportedException($"No element width of {ret.dtypesize} bytes to reverse.");
+                default: throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"No element width of {ret.dtypesize} bytes to reverse."));
             }
         }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Strings;
 
 namespace NumSharp.Backends.Iteration
@@ -123,15 +124,15 @@ namespace NumSharp.Backends.Iteration
                 if (read && !DTypeCasting.CanCastTypeTo(src, iter, casting))
                 {
                     plan.CastError = new TypeError(
-                        $"Iterator operand {i} dtype could not be cast from {src.ToString(true)} to {iter.ToString(true)} " +
-                        $"according to the rule '{DTypeCasting.CastingToString(casting)}'");
+                        string.Create(CultureInfo.InvariantCulture, $"Iterator operand {i} dtype could not be cast from {src.ToString(true)} to {iter.ToString(true)} " +
+                        $"according to the rule '{DTypeCasting.CastingToString(casting)}'"));
                     return plan;
                 }
                 if (write && !DTypeCasting.CanCastTypeTo(iter, src, casting))
                 {
                     plan.CastError = new TypeError(
-                        $"Iterator requested dtype could not be cast from {iter.ToString(true)} to {src.ToString(true)}, " +
-                        $"the operand {i} dtype, according to the rule '{DTypeCasting.CastingToString(casting)}'");
+                        string.Create(CultureInfo.InvariantCulture, $"Iterator requested dtype could not be cast from {iter.ToString(true)} to {src.ToString(true)}, " +
+                        $"the operand {i} dtype, according to the rule '{DTypeCasting.CastingToString(casting)}'"));
                     return plan;
                 }
                 plan.Routes[i] = DescriptorRoute.Cast;

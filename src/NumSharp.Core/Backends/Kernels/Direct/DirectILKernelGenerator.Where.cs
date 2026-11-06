@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
@@ -516,7 +517,7 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Call, VectorMethodCache.Load(128, typeof(byte)));
                     break;
                 default:
-                    throw new NotSupportedException($"SIMD={simdBits} elementSize={elementSize} -> byteCount={byteCount} not supported");
+                    throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"SIMD={simdBits} elementSize={elementSize} -> byteCount={byteCount} not supported"));
             }
 
             // Sign-extend V128<byte> → V<simdBits><signedT>, reinterpret as unsigned, compare > 0.
@@ -526,7 +527,7 @@ namespace NumSharp.Backends.Kernels
                 16 => typeof(short),
                 32 => typeof(int),
                 64 => typeof(long),
-                _ => throw new NotSupportedException($"Target lane width {targetElemBits} not supported")
+                _ => throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"Target lane width {targetElemBits} not supported"))
             };
             Type unsignedT = targetElemBits switch
             {

@@ -1,3 +1,4 @@
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends
@@ -175,8 +176,8 @@ namespace NumSharp.Backends
                 return;
 
             throw new ValueError(
-                $"{name}: Input operand {operandIndex} does not have enough dimensions " +
-                $"(has {operand.ndim}, gufunc core with signature {signature} requires {required})");
+                string.Create(CultureInfo.InvariantCulture, $"{name}: Input operand {operandIndex} does not have enough dimensions " +
+                $"(has {operand.ndim}, gufunc core with signature {signature} requires {required})"));
         }
 
         /// <summary>
@@ -199,8 +200,8 @@ namespace NumSharp.Backends
                 return;
 
             throw new ValueError(
-                $"{name}: Input operand {operandIndex} has a mismatch in its core dimension {coreDimension}, " +
-                $"with gufunc signature {signature} (size {actual} is different from {expected})");
+                string.Create(CultureInfo.InvariantCulture, $"{name}: Input operand {operandIndex} has a mismatch in its core dimension {coreDimension}, " +
+                $"with gufunc signature {signature} (size {actual} is different from {expected})"));
         }
 
         /// <summary>
@@ -338,9 +339,9 @@ namespace NumSharp.Backends
                 if (sig.CoreNumDims(i) == (i < sig.Nin ? inputCoreDims : 0))
                     continue;
                 throw new TypeError(
-                    $"{sig.Name} does not support keepdims: its signature {sig.Text} requires " +
+                    string.Create(CultureInfo.InvariantCulture, $"{sig.Name} does not support keepdims: its signature {sig.Text} requires " +
                     $"{(i < sig.Nin ? "input" : "output")} {(i < sig.Nin ? i : i - sig.Nin)} to have " +
-                    $"{sig.CoreNumDims(i)} core dimensions, but keepdims can only be used when all inputs have the " +
+                    $"{sig.CoreNumDims(i)} core dimensions, but keepdims can only be used when all inputs have the ") +
                     "same number of core dimensions and all outputs have no core dimensions.");
             }
         }
@@ -352,8 +353,8 @@ namespace NumSharp.Backends
         {
             if (sig.CoreNumDimIx != 1)
                 throw new TypeError(
-                    $"{sig.Name}: axis can only be used with a single shared core dimension, not with the " +
-                    $"{sig.CoreNumDimIx} distinct ones implied by signature {sig.Text}.");
+                    string.Create(CultureInfo.InvariantCulture, $"{sig.Name}: axis can only be used with a single shared core dimension, not with the " +
+                    $"{sig.CoreNumDimIx} distinct ones implied by signature {sig.Text}."));
         }
 
         /// <summary>
@@ -396,8 +397,8 @@ namespace NumSharp.Backends
                 }
                 if (ndim < opCore[i])
                     throw new ValueError(
-                        $"{sig.Name}: {(i < nin ? "Input" : "Output")} operand {(i < nin ? i : i - nin)} does not have " +
-                        $"enough dimensions (has {ndim}, gufunc core with signature {sig.Text} requires {opCore[i]})");
+                        string.Create(CultureInfo.InvariantCulture, $"{sig.Name}: {(i < nin ? "Input" : "Output")} operand {(i < nin ? i : i - nin)} does not have " +
+                        $"enough dimensions (has {ndim}, gufunc core with signature {sig.Text} requires {opCore[i]})"));
             }
         }
 
@@ -467,7 +468,7 @@ namespace NumSharp.Backends
             int nin = sig.Nin, nop = sig.Nop;
             if (axes.Length != nop && (axes.Length != nin || sig.HasOutputCoreDims))
                 throw new ValueError(
-                    $"axes should be a list with an entry for all {nop} inputs and outputs; entries for " +
+                    string.Create(CultureInfo.InvariantCulture, $"axes should be a list with an entry for all {nop} inputs and outputs; entries for ") +
                     "outputs can only be omitted if none of them has core axes.");
 
             var remap = new int[nop][];
@@ -489,8 +490,8 @@ namespace NumSharp.Backends
                 var entry = axes[iop] ?? System.Array.Empty<int>();
                 if (entry.Length != ncore)
                     throw new AxisError(
-                        $"{sig.Name}: operand {iop} has {ncore} core dimensions, " +
-                        $"but {entry.Length} dimensions are specified by axes tuple.");
+                        string.Create(CultureInfo.InvariantCulture, $"{sig.Name}: operand {iop} has {ncore} core dimensions, " +
+                        $"but {entry.Length} dimensions are specified by axes tuple."));
 
                 // The core axes take the last default positions, in the entry's order.
                 var seen = new bool[opNdim];
@@ -499,7 +500,7 @@ namespace NumSharp.Backends
                 {
                     int opAxis = CheckAndAdjustAxis(entry[a - nbroadcast], opNdim);
                     if (seen[opAxis])
-                        throw new ValueError($"axes item {iop} has value {opAxis} repeated");
+                        throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"axes item {iop} has value {opAxis} repeated"));
                     seen[opAxis] = true;
                     r[a] = opAxis;
                 }
@@ -564,9 +565,9 @@ namespace NumSharp.Backends
                         sizes[ix] = size;
                     else if (size != sizes[ix])
                         throw new ValueError(
-                            $"{sig.Name}: {(i < nin ? "Input" : "Output")} operand {(i < nin ? i : i - nin)} has a " +
+                            string.Create(CultureInfo.InvariantCulture, $"{sig.Name}: {(i < nin ? "Input" : "Output")} operand {(i < nin ? i : i - nin)} has a " +
                             $"mismatch in its core dimension {idim - delta}, with gufunc signature {sig.Text} " +
-                            $"(size {size} is different from {sizes[ix]})");
+                            $"(size {size} is different from {sizes[ix]})"));
                 }
             }
 
@@ -576,8 +577,8 @@ namespace NumSharp.Backends
                 for (int idim = 0; idim < ixs.Length; idim++)
                     if (sizes[ixs[idim]] < 0)
                         throw new ValueError(
-                            $"{sig.Name}: Output operand {i - nin} has core dimension {idim} unspecified, with gufunc " +
-                            $"signature {sig.Text}");
+                            string.Create(CultureInfo.InvariantCulture, $"{sig.Name}: Output operand {i - nin} has core dimension {idim} unspecified, with gufunc " +
+                            $"signature {sig.Text}"));
             }
             return sizes;
         }
@@ -703,7 +704,7 @@ namespace NumSharp.Backends
                     int i = opAxes[iop][idim];
                     if (i < 0)
                         throw new ValueError(
-                            $"output operand requires a reduction along dimension {i}, but the reduction is not " +
+                            string.Create(CultureInfo.InvariantCulture, $"output operand requires a reduction along dimension {i}, but the reduction is not ") +
                             "enabled. The dimension size of 1 does not match the expected output shape.");
                     if (op[iop].Shape.dimensions[i] == 1)
                         throw NonBroadcastableOutputError(op[iop], opAxes[iop], bshape);

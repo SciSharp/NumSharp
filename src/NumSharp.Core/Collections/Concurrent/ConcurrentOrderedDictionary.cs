@@ -4,6 +4,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -374,7 +375,7 @@ public sealed class ConcurrentOrderedDictionary<TKey, TValue> : IReadOnlyList<TV
     {
         if (!TryGetValue(key, out var value))
         {
-            throw new KeyNotFoundException(Concurrent.SR.Format(Concurrent.SR.Arg_KeyNotFoundWithKey, key.ToString()));
+            throw new KeyNotFoundException(Concurrent.SR.Format(Concurrent.SR.Arg_KeyNotFoundWithKey, Convert.ToString(key, CultureInfo.InvariantCulture)));
         }
 
         return value;

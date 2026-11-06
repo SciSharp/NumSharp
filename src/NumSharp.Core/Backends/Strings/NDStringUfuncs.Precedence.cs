@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Frozen;
+using System.Globalization;
 using System.Text;
 using NumSharp.Backends.Iteration;
 
@@ -467,7 +468,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>The exception (not thrown).</returns>
         private static TypeError InputCastText(string ufunc, int index, DType from, DType to)
             => new TypeError(
-                $"Cannot cast ufunc '{ufunc}' input {index} from {from.ToString(true)} to {to.ToString(true)} with casting rule 'same_kind'");
+                string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc '{ufunc}' input {index} from {from.ToString(true)} to {to.ToString(true)} with casting rule 'same_kind'"));
 
         /// <summary>
         ///     The descriptor of a string concatenation: the class of the two (equal-class) inputs and the sum of their
@@ -492,7 +493,7 @@ namespace NumSharp.Backends.Strings
             // (`if (given_descrs[0]->type == NPY_UNICODE) length /= 4;`), but `type` is the CHARACTER code 'U' (85) and
             // NPY_UNICODE the type NUMBER (19), so the division never happens: the bytes are what NumPy prints.
             if (bytes > int.MaxValue)
-                throw new TypeError($"addition result string of length {bytes} is too large to store inside array.");
+                throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"addition result string of length {bytes} is too large to store inside array."));
             return meta.Descr(bytes / meta.UnitSize);
         }
 
@@ -765,7 +766,7 @@ namespace NumSharp.Backends.Strings
             if (ax >= 0 && ax < ndim)
                 return ax;
             if (op == "average")
-                throw new AxisError($"axis: axis {axis} is out of bounds for array of dimension {ndim}");
+                throw new AxisError(string.Create(CultureInfo.InvariantCulture, $"axis: axis {axis} is out of bounds for array of dimension {ndim}"));
             throw new AxisError(axis, ndim);
         }
 
@@ -1448,7 +1449,7 @@ namespace NumSharp.Backends.Strings
                 // q is null only for a caller that has no quantiles at hand; 0.5's neighbour (0) is the answer for every
                 // interpolating method there.
                 long neighbour = NumSharp.Statistics.QuantileText.EmptyAxisNeighbour(parsed, q is null ? 0.5 : q[0]);
-                return new IndexError($"index {neighbour} is out of bounds for axis 0 with size 0");
+                return new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {neighbour} is out of bounds for axis 0 with size 0"));
             }
             if (IsVString(a))
                 // StringDType: the answer depends on the neighbours' VALUES (two NaN NA objects interpolate into NaN, a str

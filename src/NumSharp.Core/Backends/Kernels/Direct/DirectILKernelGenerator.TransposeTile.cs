@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
@@ -215,7 +216,7 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 default:
-                    throw new NotSupportedException($"TransposeTile has no kernel for elements of {itemSize} bytes.");
+                    throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"TransposeTile has no kernel for elements of {itemSize} bytes."));
             }
         }
 
@@ -282,7 +283,7 @@ namespace NumSharp.Backends.Kernels
                             d[b * rs] = s[b];
                         break;
                     default:
-                        throw new NotSupportedException($"TransposeTile has no kernel for elements of {itemSize} bytes.");
+                        throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"TransposeTile has no kernel for elements of {itemSize} bytes."));
                 }
             }
         }

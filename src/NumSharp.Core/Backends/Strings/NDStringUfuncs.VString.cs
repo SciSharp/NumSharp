@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using NumSharp.Backends.Iteration;
 
@@ -861,8 +862,8 @@ namespace NumSharp.Backends.Strings
             int matchDim = b.ndim > 1 ? b.ndim - 2 : 0;
             if (b.Shape.dimensions[matchDim] != l)
                 return new IncorrectShapeException(
-                    $"shapes {a.Shape.ToPythonTuple()} and {b.Shape.ToPythonTuple()} not aligned: {l} (dim {a.ndim - 1}) " +
-                    $"!= {b.Shape.dimensions[matchDim]} (dim {matchDim})");
+                    string.Create(CultureInfo.InvariantCulture, $"shapes {a.Shape.ToPythonTuple()} and {b.Shape.ToPythonTuple()} not aligned: {l} (dim {a.ndim - 1}) " +
+                    $"!= {b.Shape.dimensions[matchDim]} (dim {matchDim})"));
 
             // new_array_for_sum: an out= must be an OBJECT C-array of the result's rank, which no NumSharp array is.
             if (@out is not null)

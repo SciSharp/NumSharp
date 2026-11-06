@@ -2,6 +2,7 @@
 // np.geomspace (real and complex ends), each function's statements as its np.* facade held them, with their helpers.
 
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Utilities;
@@ -381,7 +382,7 @@ namespace NumSharp.Backends
         {
             // No paramName: NumPy's ValueError message has no ".NET (Parameter 'num')" suffix, so keep it verbatim.
             if (num < 0)
-                throw new ValueError($"Number of samples, {num}, must be non-negative.");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Number of samples, {num}, must be non-negative."));
         }
 
         /// <summary>
@@ -394,7 +395,7 @@ namespace NumSharp.Backends
         internal static void ValidateSpacingAxis(int axis)
         {
             if (axis != 0 && axis != -1)
-                throw new AxisError($"destination: axis {axis} is out of bounds for array of dimension 1");
+                throw new AxisError(string.Create(CultureInfo.InvariantCulture, $"destination: axis {axis} is out of bounds for array of dimension 1"));
         }
 
         /// <summary>
