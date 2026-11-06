@@ -377,6 +377,8 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         private static int _paceGate;               // 1 while a paced collection is in flight
         private static long _outstandingBytes;      // taken − returned (≈ native bytes user code holds)
         private static long _registeredPressure;    // what we've told GC.AddMemoryPressure, in whole chunks
+        private static long _foreignNetSincePace;   // BookForeign bytes minus ReturnForeign bytes since the last foreign pace, floored at zero
+        private static long _foreignOutstanding;    // BookForeign bytes minus ReturnForeign bytes overall (diagnostic)
 
         // Diagnostic counters — useful for telling whether the pool is
         // doing real work or just adding overhead. Not on a hot path so
@@ -663,6 +665,79 @@ namespace NumSharp.Backends.Unmanaged.Pooling
             if (bytes > 0)
                 AccountReturn(bytes);
         }
+
+        /// <summary>
+        ///     Books native memory that NumSharp keeps alive or hands out but did NOT allocate - an ONNX Runtime tensor a
+        ///     caller received from NumSharp, a numpy or ONNX Runtime buffer under a NumSharp view - so the GC hears about
+        ///     it the way it hears about NumSharp's own buffers: through the coarse <see cref="PressureChunkBytes"/> chunks,
+        ///     and through ONE paced gen-0 collection each time the booked bytes GROW by a pacing window
+        ///     (<see cref="PaceThresholdBytes"/>) since the last such collection.
+        /// </summary>
+        /// <remarks>
+        ///     <para><b>Why growth, not volume.</b> A holder that the caller disposes gives its booking back at once, so code
+        ///     that disposes what it books never grows the balance and never pays for a collection. A holder dropped
+        ///     undisposed keeps its booking until its finalizer runs, which needs a collection the GC would not otherwise
+        ///     make (the holder is a few dozen managed bytes): the growth trigger makes that collection after a window's worth
+        ///     of dropped bytes, and the finalizers it queues give the bookings back.</para>
+        ///     <para><b>Why not <see cref="GC.AddMemoryPressure"/> per holder.</b> The GC counts every addition toward its
+        ///     next full collection even after the matching removal, so a loop that books and gives back at once still ran
+        ///     45 gen-2 collections per 5,000 views of 602 KB (ONNX Runtime owning views, measured 2026-11-06); booked here,
+        ///     none.</para>
+        ///     <para><b>Not a hand-out.</b> Unlike <see cref="AccountForeignAllocation"/>, a booking does not count toward the
+        ///     pool's own pacing window (the bytes handed out since the last paced collection): a booking given back at once
+        ///     is not memory the pool should collect for, and counting it made the next ordinary pool miss pace a collection
+        ///     in a loop that disposed every view (caught by the pythonnet bridge's lease test). Only the outstanding total
+        ///     and its pressure chunks move.</para>
+        ///     <para>The growth test is a heuristic over two interlocked counters: concurrent bookings can move WHICH call
+        ///     paces, never whether the books balance.</para>
+        /// </remarks>
+        /// <param name="bytes">The bytes to book (nothing for zero or less). Give exactly this count back with
+        ///     <see cref="ReturnForeign"/> when the memory is no longer kept alive by NumSharp.</param>
+        internal static void BookForeign(long bytes)
+        {
+            if (bytes <= 0)
+                return;
+            // AccountTake's outstanding half only (see "Not a hand-out" above): the coarse pressure chunks follow the
+            // outstanding total exactly as they do for the pool's own buffers.
+            long outstanding = Interlocked.Add(ref _outstandingBytes, bytes);
+            long registered = Volatile.Read(ref _registeredPressure);
+            if (outstanding - registered >= PressureChunkBytes)
+                AddPressureChunk(registered);
+            Interlocked.Add(ref _foreignOutstanding, bytes);
+            long net = Interlocked.Add(ref _foreignNetSincePace, bytes);
+            if (net < bytes)
+            {
+                // Give-backs since the last pace drove the balance below zero (the finalizers a collection ran returned more
+                // than was booked after it): restart the window from this booking, or the next window would be too long.
+                Interlocked.Exchange(ref _foreignNetSincePace, bytes);
+                net = bytes;
+            }
+            if (GcPacingEnabled && net >= PaceThresholdBytes)
+            {
+                Interlocked.Exchange(ref _foreignNetSincePace, 0);
+                PaceNow();   // collects the dropped holders; their finalizers give their bookings back
+            }
+        }
+
+        /// <summary>
+        ///     Gives back one <see cref="BookForeign"/> booking. Touches only counters (no lock, no allocation), so it is safe
+        ///     from a finalizer thread and from native callbacks.
+        /// </summary>
+        /// <param name="bytes">The count the matching <see cref="BookForeign"/> booked (nothing for zero or less).</param>
+        internal static void ReturnForeign(long bytes)
+        {
+            if (bytes <= 0)
+                return;
+            AccountReturn(bytes);   // the outstanding total and its pressure chunks, as a returned buffer moves them
+            Interlocked.Add(ref _foreignOutstanding, -bytes);
+            Interlocked.Add(ref _foreignNetSincePace, -bytes);
+        }
+
+        /// <summary>
+        ///     The bytes booked with <see cref="BookForeign"/> and not yet given back: what foreign memory NumSharp keeps
+        ///     alive or has handed out right now. A diagnostic (and the balance a leak test checks).
+        /// </summary>
+        internal static long OutstandingForeignBytes => Interlocked.Read(ref _foreignOutstanding);
 
         /// <summary>Mirror of <see cref="AccountTake"/> for the give-back side (Return / free).</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

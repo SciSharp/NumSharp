@@ -4,6 +4,7 @@ using System.Threading;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Backends.Unmanaged.Pooling;
 
 namespace NumSharp.Interop.OnnxRuntime
 {
@@ -446,19 +447,27 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <summary>Opens a lease and counts it in <see cref="NDArrayOnnxInterop.LiveImports"/>.</summary>
         /// <param name="release">What to run when the last NumSharp view over the memory is gone (dispose the OrtValue, release a pin, or only keep an object reachable until then).</param>
         /// <param name="ownedBytes">
-        ///     The native bytes this lease OWNS, reported to the GC as memory pressure for the lease's lifetime; 0 when the
-        ///     lease owns none. Only a view that owns its OrtValue passes a count: its ORT buffer lives exactly as long as
-        ///     the view, and the GC cannot see it. A non-owning view (the caller owns the value), a pinned managed array (the
-        ///     GC already counts it) and a legacy output tensor (its results collection owns the memory) pass 0; reporting
-        ///     their bytes for every view made the GC collect more often for memory no collection can free.
+        ///     The native bytes this lease OWNS, booked with NumSharp's memory accounting for the lease's lifetime
+        ///     (<see cref="SizeBucketedBufferPool.BookForeign"/>); 0 when the lease owns none. Only a view that owns its
+        ///     OrtValue passes a count: its ORT buffer lives exactly as long as the view, and the GC cannot see it. A
+        ///     non-owning view (the caller owns the value), a pinned managed array (the GC already counts it) and a legacy
+        ///     output tensor (its results collection owns the memory) pass 0; reporting their bytes for every view made the
+        ///     GC collect more often for memory no collection can free.
         /// </param>
+        /// <remarks>
+        ///     The bytes are BOOKED, not reported with <see cref="GC.AddMemoryPressure"/>: the GC counts every addition
+        ///     toward its next full collection even after the matching removal, so 5,000 owning views of 602 KB, each
+        ///     disposed at once, ran 45 gen-2 collections (47 at ORT 1.16.0); booked, none, and 9.0 us per view became 4.9
+        ///     (measured 2026-11-06, P8). A view dropped undisposed still gets collected: a growing booking paces a gen-0
+        ///     collection.
+        /// </remarks>
         internal ImportLease(Action release, long ownedBytes)
         {
             _release = release;
             _bytes = ownedBytes;
             if (_bytes > 0)
             {
-                GC.AddMemoryPressure(_bytes);
+                SizeBucketedBufferPool.BookForeign(_bytes);
                 NDArrayOnnxInterop.ImportPressureChanged(_bytes);
             }
             NDArrayOnnxInterop.ImportOpened();
@@ -503,14 +512,15 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     Takes back the memory pressure the constructor reported, if it reported any. Called exactly once, by whichever
-        ///     of <see cref="Release"/> and <see cref="Disarm"/> wins the lease's released flag.
+        ///     Gives back the booking the constructor made, if it made one. Called exactly once, by whichever of
+        ///     <see cref="Release"/> and <see cref="Disarm"/> wins the lease's released flag; counters only, so it is safe
+        ///     on the finalizer thread that may run <see cref="Release"/>.
         /// </summary>
         private void RemovePressure()
         {
             if (_bytes <= 0)
                 return;
-            GC.RemoveMemoryPressure(_bytes);
+            SizeBucketedBufferPool.ReturnForeign(_bytes);
             NDArrayOnnxInterop.ImportPressureChanged(-_bytes);
         }
     }

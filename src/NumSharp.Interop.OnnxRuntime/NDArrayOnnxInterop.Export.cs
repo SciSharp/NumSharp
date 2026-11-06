@@ -213,12 +213,22 @@ namespace NumSharp.Interop.OnnxRuntime
         ///     <para>The difference from <c>AsOrtValue(mode: OnnxCodecMode.Copy)</c> is who owns the copy: here ORT's
         ///     allocator does and the result is a bare <see cref="OrtValue"/> with no handle to keep alive; there a
         ///     NumSharp temporary does, behind an <see cref="OrtTensor"/> handle, with no 2 GB limit.</para>
+        ///
+        ///     <para><b>Lifetime.</b> Because ORT owns the copy, the value stays valid for every native holder - an
+        ///     <c>OrtIoBinding</c> it was bound to, a run's feeds - even after the managed <see cref="OrtValue"/> is disposed
+        ///     or collected. NumSharp still books the copy's bytes with its memory accounting until the caller disposes the
+        ///     value (the booking ends at once) or the GC collects it (the booking ends then), so a value the caller forgot is
+        ///     visible to the GC like a forgotten NumSharp array: 5,000 forgotten values of 602 KB peaked at about +70 MB,
+        ///     where they used to hold +2,898 MB until some unrelated collection. Dispose it when done all the same.</para>
         /// </summary>
         /// <remarks>
-        ///     Refusals come in the order of what they cost to decide: the dtype and the 2 GB limit first (they need
+        ///     <para>Refusals come in the order of what they cost to decide: the dtype and the 2 GB limit first (they need
         ///     only the dtype and the shape, so nothing is converted, copied or allocated for an array that cannot
         ///     cross), then the buffer's liveness, then the copy. A tensor past 2 GB cannot go through this verb at
-        ///     all — share it with <see cref="AsOrtValue"/>, which hands ORT a native pointer.
+        ///     all — share it with <see cref="AsOrtValue"/>, which hands ORT a native pointer.</para>
+        ///     <para>The booking needs ONNX Runtime's private <c>OrtValue._memHandle</c> slot (present from 1.16.0 to
+        ///     1.31.1); on an ONNX Runtime without it the value is returned unbooked, exactly as before bookings existed. A
+        ///     text array's string tensor is not booked: ORT keeps its strings in its own allocations of unknown size.</para>
         /// </remarks>
         /// <param name="source">The array to copy; any layout.</param>
         /// <returns>A new ORT-allocated tensor holding the array's values in logical (C) order; the caller disposes it.</returns>
@@ -284,7 +294,10 @@ namespace NumSharp.Interop.OnnxRuntime
                             new ReadOnlySpan<byte>(data, (int)nbytes).CopyTo(dst);
                         }
 
-                        return value;
+                        // ONNX Runtime owns the copy, so every native holder of the value (a binding, a run's feeds) stays
+                        // correct after the managed value is gone; NumSharp books its bytes until the caller disposes the
+                        // value or the GC collects it, so a forgotten value is no longer invisible to the GC (P8).
+                        return OrtValueBooking.Track(value, nbytes);
                     }
                     catch
                     {

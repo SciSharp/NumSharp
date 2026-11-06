@@ -201,10 +201,12 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     Only a view that OWNS its ORT buffer reports the buffer to the GC, once, and takes the report back when the
-        ///     last view over the memory is gone. A non-owning view reports nothing (the caller's OrtValue owns the bytes),
-        ///     and neither does a view of a tensor's pinned managed array. Before, every view reported its full size, so
-        ///     several views of one output multiplied the pressure.
+        ///     Only a view that OWNS its ORT buffer books the buffer with NumSharp's memory accounting, once, and gives it
+        ///     back when the last view over the memory is gone. A non-owning view books nothing (the caller's OrtValue owns
+        ///     the bytes), and neither does a view of a tensor's pinned managed array. Before, every view reported its full
+        ///     size, so several views of one output multiplied the pressure. An owning view of a value that is booked
+        ///     already - a <see cref="NDArrayOnnxInterop.ToOrtValue"/> result - books nothing either: the value's own booking
+        ///     covers the bytes, and it ends when the view disposes the value (P8, 2026-11-06).
         /// </summary>
         [TestMethod]
         public void MemoryPressure_IsReportedOnlyByAnOwningView_AndTakenBack()
@@ -221,15 +223,28 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             using (NDArray view = tensor.AsNDArray())
                 NDArrayOnnxInterop.ImportPressureBytes.Should().Be(baseline, "a pinned managed array is already counted by the GC");
 
-            OrtValue owned = src.ToOrtValue();
+            // A value ORT allocated and nobody booked: the owning view books its bytes.
+            OrtValue owned = OrtValue.CreateAllocatedTensorValue(OrtAllocator.DefaultInstance, TensorElementType.Double, new long[] { 1000 });
             NDArray owning = owned.AsNDArray(ownsValue: true);
-            NDArrayOnnxInterop.ImportPressureBytes.Should().Be(baseline + 8000, "the owning view reports its 8,000 bytes");
+            NDArrayOnnxInterop.ImportPressureBytes.Should().Be(baseline + 8000, "the owning view books its 8,000 bytes");
             NDArray slice = owning["100:200"];
             NDArrayOnnxInterop.ImportPressureBytes.Should().Be(baseline + 8000, "a derived slice shares the one lease");
             owning.Dispose();
             NDArrayOnnxInterop.ImportPressureBytes.Should().Be(baseline + 8000, "the slice still holds the memory");
             slice.Dispose();
-            NDArrayOnnxInterop.ImportPressureBytes.Should().Be(baseline, "the last view took the report back");
+            NDArrayOnnxInterop.ImportPressureBytes.Should().Be(baseline, "the last view gave the booking back");
+
+            // A ToOrtValue result is booked by its value: the owning view books nothing more, and disposing the view (which
+            // disposes the value) ends the value's booking.
+            long valueBooked = OrtValueBooking.BookedBytes;
+            OrtValue exported = src.ToOrtValue();
+            OrtValueBooking.BookedBytes.Should().Be(valueBooked + 8000, "ToOrtValue books its copy once");
+            using (NDArray view = exported.AsNDArray(ownsValue: true))
+            {
+                NDArrayOnnxInterop.ImportPressureBytes.Should().Be(baseline, "the owning view does not book bytes the value booked already");
+                OrtValueBooking.BookedBytes.Should().Be(valueBooked + 8000, "the bytes are counted once in all");
+            }
+            OrtValueBooking.BookedBytes.Should().Be(valueBooked, "the view disposed the value, which ended its booking");
         }
 
         /// <summary>

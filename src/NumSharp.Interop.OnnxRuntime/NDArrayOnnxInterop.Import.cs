@@ -215,11 +215,14 @@ namespace NumSharp.Interop.OnnxRuntime
             // Owning: the last view disposes the OrtValue. Non-owning: the closure ROOTS the OrtValue for the
             // life of the lease (the lease is referenced from the memory block's dispose hook), so the value's
             // finalizer cannot free the buffer while a view still reads it.
-            // Only the owning lease reports the buffer to the GC: its bytes live exactly as long as the view. A
-            // non-owning view's bytes belong to the caller's OrtValue, and reporting them once per view made the GC
-            // collect more for memory no collection can free.
+            // Only the owning lease books the buffer with NumSharp's accounting: its bytes live exactly as long as the view.
+            // A non-owning view's bytes belong to the caller's OrtValue, and reporting them once per view made the GC
+            // collect more for memory no collection can free. Neither books a value that carries a MemoryHandle: a
+            // ToOrtValue result is booked already (its token is that handle), and a value made over memory ORT does not own
+            // (CreateTensorValueFromMemory) is counted elsewhere or not freed with the value at all.
             Action release = ownsValue ? value.Dispose : () => GC.KeepAlive(value);
-            var lease = new ImportLease(release, ownedBytes: ownsValue ? raw.Length : 0);
+            bool booksBytes = ownsValue && !OrtValueBooking.HasMemoryHandle(value);
+            var lease = new ImportLease(release, ownedBytes: booksBytes ? raw.Length : 0);
             try
             {
                 IArraySlice slice = WrapExternal(tc, data, count, lease.Release);

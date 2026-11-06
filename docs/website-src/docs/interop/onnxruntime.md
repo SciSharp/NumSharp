@@ -304,12 +304,17 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
   Disposing the handle disposes the `OrtValue`, drops the reference and disposes the temporary copy when the
   handle holds one. While exported, `ndarray.resize(refcheck: true)` refuses - NumPy's rule for a referenced
   buffer - and works again once the handle is gone.
-- **`ToOrtValue` returns ORT's own value: dispose it.** Its copy lives in memory ORT allocated, which the
-  garbage collector does not see (ORT reports no memory pressure), so a forgotten one is freed only when a
-  collection happens to run for other reasons: a loop that dropped 20,000 copies of a 602 KB array peaked at
-  4.4 GB more private memory before the finalizers caught up. The arrays and handles of this package do not
-  have this problem (the same loop over `Run` outputs, owning views or `AsOrtValue` handles stayed within
-  60 MB), but `using` is still the rule.
+- **`ToOrtValue` returns ORT's own value: dispose it.** Its copy lives in memory ORT allocated and ORT
+  frees, so the value stays valid for every native holder - an `OrtIoBinding` it was bound to, a run's
+  feeds - after the managed `OrtValue` is disposed or collected. NumSharp books the copy's bytes with its
+  own memory accounting until you dispose the value (the booking ends at once) or the garbage collector
+  collects it, so a forgotten value is seen like a forgotten NumSharp array: a loop that dropped 5,000 copies
+  of a 602 KB array peaked at about 70 MB more private memory (unbooked, the same loop held 2.9 GB until an
+  unrelated collection ran). A value you dispose never triggers a collection. The booking uses ONNX Runtime's
+  private `OrtValue._memHandle` slot (1.16.0 through 1.31.1 have it); on a version without it the value is
+  returned unbooked, and a text array's string tensor is not booked (ORT keeps its strings in allocations of
+  unknown size). The arrays and handles of this package hold up the same way (the loop over `Run` outputs,
+  owning views or `AsOrtValue` handles stayed within 60 MB), and `using` is still the rule.
 - **Reachable means valid.** The handle and what it hands out keep each other alive: holding only
   `handle.Value`, or only `Tensor` / `Memory`, keeps the handle and its reference, so a collection never
   disposes an `OrtValue` or disables a tensor you still hold, and never lets `resize` reallocate under it. A
@@ -337,7 +342,8 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
   is disposed or collected. A non-owning view roots the `OrtValue` so it cannot be finalized under it, but
   you must not `Dispose` the `OrtValue` (or the `Run` result collection) while a view is in use - exactly
   ORT's rule for `GetTensorDataAsSpan`. With `ownsValue: true` the last view disposes the `OrtValue` and you
-  must not; a call that throws never disposes it. Only an owning view reports the buffer's size to the GC.
+  must not; a call that throws never disposes it. Only an owning view books the buffer's size with NumSharp's
+  memory accounting, and not for a `ToOrtValue` result, which the value itself has booked already.
   Views do not own their data (`owndata == false`): a size-changing `resize` refuses instead of detaching.
 - **Imports of NumSharp memory are ordinary NumSharp views.** A value this package made
   (`nd.AsOrtValue().Value.AsNDArray()`), a `tensor.AsNDArray()` of an `AsDenseTensor<T>` handle, and an
@@ -453,13 +459,14 @@ an older ORT the tests of their behaviour report Inconclusive and the test of th
 | 19 | Tensors of 2 GB or more that ORT owns are refused by both imports before anything is allocated; `ToOrtValue` refuses exactly past the span limit; `AsDenseTensor` refuses more elements than a `Memory<T>` indexes | `BoundaryTests`, `DenseTensorEdgeTests` |
 | 20 | The public surface equals the approved list (defaults included) | `ApiSurfaceTests` |
 | 21 | In every order the runtime may run their finalizers, the handles, pins, views and imports never free a buffer an alias still reaches and give each reference back exactly once | `LifetimeGcTests` |
-| 22 | A view of a value this package made is a counted alias, valid after the handle and the source; it inherits the read-only flag; only an owning view adds memory pressure | `ImportAliasTests` |
+| 22 | A view of a value this package made is a counted alias, valid after the handle and the source; it inherits the read-only flag; only an owning view books its bytes, and a `ToOrtValue` result is booked once | `ImportAliasTests` |
 | 23 | Text crosses in both directions through every route, as a copy; `View` refuses it; a trailing NUL is lost in a text array and kept by `ReadStringTensor` | `TextTests` |
 | 24 | An output that is a fed input: `RunInto` writes the fed values, the zero-copy form returns a counted view of the fed buffer, also for a temporary | `PassThroughOutputTests` |
 | 25 | The asynchronous forms: the version rule, the completion off ORT's thread, a blocking wait under a context or a single-thread scheduler, arrays disposed in flight, errors from the call and through the task, the outputs `RunAsync` can and cannot allocate | `SessionRunAsyncTests` |
 | 26 | The value of a disposed handle is refused by every import verb instead of ending the process | `ValueOwnershipTests.ValueOfADisposedHandle_IsRefused_ByEveryImportVerb_InsteadOfCrashingInOnnxRuntime` |
 | 27 | Non-tensor readers: sequences in order with their own shapes, int64- and string-keyed maps, `GetMapKeys`, each reader's refusals | `NonTensorTests` |
 | 28 | Under an `NDScope`, which disposes the bridge's own temporaries when it closes, a handle (Decimal conversion, C-order copy, zero-copy, `AsDenseTensor`) and a `Run` output that leave the scope keep their bytes; a zero-copy import left to the scope is released when it closes | `NDScopeTests` |
+| 29 | A `ToOrtValue` result books its bytes until it is disposed (at once, exactly once) or collected; forgotten values trigger collections and disposed ones never do; a value bound to an `OrtIoBinding` stays correct after the managed value is disposed or collected; a sequence that owns the value ends its booking; text and empty values are not booked | `ToOrtValueBookingTests` |
 
 ## See also
 

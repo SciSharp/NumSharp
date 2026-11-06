@@ -76,7 +76,7 @@ a `Decimal` array (a float64 conversion) and for text. No mode repairs a dtype w
 | Direction | Verb | Semantics |
 |---|---|---|
 | NumSharp → ORT | `nd.AsOrtValue(mode)` → `OrtTensor` | An `OrtValue` over the NDArray's buffer (`CreateTensorValueWithData` on NumSharp's pointer) when a view is possible; otherwise, under `Auto`, an `OrtValue` over a temporary copy that the handle owns. `handle.IsView` says which, `handle.Source` is the array ORT reads. The handle owns the `OrtValue` and a counted reference on the buffer; keep it alive across `Run`. |
-| NumSharp → ORT | `nd.ToOrtValue()` → `OrtValue` | An ORT-allocated **copy**, any layout (a view is copied in logical order); no lifetime coupling. |
+| NumSharp → ORT | `nd.ToOrtValue()` → `OrtValue` | An ORT-allocated **copy**, any layout (a view is copied in logical order); no lifetime coupling. ORT owns and frees it; NumSharp books its bytes until it is disposed or collected, so a forgotten one is seen by the GC. |
 | NumSharp → ORT | `nd.AsDenseTensor<T>(mode)` → `OrtTensor<T>` / `nd.ToDenseTensor<T>()` | The legacy `DenseTensor<T>` twins for `NamedOnnxValue.CreateFromTensor`. The view's `Buffer` is a `Memory<T>` over NumSharp's memory. The tensor is always row-major: a Fortran-ordered array is a copy under `Auto` (no ORT route reads a column-major tensor correctly). |
 | ORT → NumSharp | `ortValue.ToNDArray()` → `NDArray` | A new **owning**, C-contiguous **copy** — the safe default; dispose the `OrtValue` whenever you like. A string tensor comes back as a text array. |
 | ORT → NumSharp | `ortValue.AsNDArray(ownsValue = false, mode)` → `NDArray` | A **zero-copy view** over the tensor's buffer (CPU tensors only), mutations visible both ways. `ownsValue: true` makes the last view dispose the `OrtValue`. `mode: Copy` returns an independent copy. A string tensor cannot be viewed: `Auto` copies it, `View` throws. |
@@ -246,6 +246,14 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   `SessionOptions.AddInitializer` or `OrtValue.CreateSequence`. While exported, `ndarray.resize(refcheck: true)`
   on the source refuses (`cannot resize an array that references or is referenced by another array`), exactly
   NumPy's rule.
+- **`ToOrtValue` returns ORT's own value — dispose it.** ORT allocates and frees the copy, so the value stays
+  valid for every native holder (an `OrtIoBinding` it was bound to, a run's feeds) after the managed `OrtValue`
+  is disposed or collected. NumSharp books the copy's bytes with its own memory accounting until the caller
+  disposes the value (the booking ends at once) or the GC collects it: 5,000 forgotten values of 602 KB peaked
+  at about +70 MB of private memory (unbooked: +2.9 GB until an unrelated collection ran), and a value that is
+  disposed never triggers a collection. The booking is a token stored in ORT's private `OrtValue._memHandle`
+  slot, whose `MemoryHandle` ORT's `Dispose` releases; on an ONNX Runtime without that field (1.16.0 through
+  1.31.1 have it) the value is returned unbooked, and a string tensor is never booked.
 - **Reachable means valid.** Holding only `handle.Value`, or only `Tensor` / `Memory`, keeps the handle — and
   its reference on the buffer — alive, so a collection never disposes an `OrtValue` or disables a tensor you
   still hold. A forgotten handle is released by a finalizer safety net once nothing reaches any of them; it only
@@ -271,7 +279,8 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   is disposed or collected. A non-owning view roots the `OrtValue` (it cannot be finalized under the view) but
   the caller must not `Dispose` it while a view is in use — the rule ORT documents for `GetTensorDataAsSpan`.
   `ownsValue: true` transfers ownership: the last view disposes the `OrtValue`, and the caller must not. A
-  call that throws never disposes the value. Only an owning view reports the buffer's size to the GC. Views do
+  call that throws never disposes the value. Only an owning view books the buffer's size with NumSharp's
+  memory accounting (not for a `ToOrtValue` result, which the value has booked already). Views do
   not own their data (`flags.owndata == False`): a size-changing `resize` refuses instead of detaching.
 - **Imports of NumSharp memory are ordinary NumSharp views.** A value this package made
   (`nd.AsOrtValue().Value.AsNDArray()`), a `tensor.AsNDArray()` of an `AsDenseTensor<T>` handle and an output

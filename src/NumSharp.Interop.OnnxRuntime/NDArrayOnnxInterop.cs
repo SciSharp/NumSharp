@@ -76,16 +76,16 @@ namespace NumSharp.Interop.OnnxRuntime
         private static long _importPressureBytes;
 
         /// <summary>
-        ///     The bytes of ORT memory currently reported to the GC as memory pressure (<c>GC.AddMemoryPressure</c>) by
-        ///     import views that OWN their <see cref="OrtValue"/>. A diagnostic for the tests: the GC offers no way to read
-        ///     back what was reported, and the rule "only an owning view reports, once, and takes it back when it dies"
-        ///     has no other observable effect. A steady non-zero value with no live owning view is a pressure leak (the GC
-        ///     then collects more often for the life of the process).
+        ///     The bytes of ORT memory currently booked with NumSharp's memory accounting
+        ///     (<c>SizeBucketedBufferPool.BookForeign</c>: the GC hears about them as memory pressure) by import views that
+        ///     OWN their <see cref="OrtValue"/>. A diagnostic for the tests: the rule "only an owning view books, once, and
+        ///     gives it back when it dies" has no other observable effect. A steady non-zero value with no live owning view
+        ///     is a booking leak (the GC then collects more often for the life of the process).
         /// </summary>
         internal static long ImportPressureBytes => Interlocked.Read(ref _importPressureBytes);
 
-        /// <summary>Records memory pressure added (positive) or removed (negative) by an import lease.</summary>
-        /// <param name="delta">The byte count just passed to <c>GC.AddMemoryPressure</c>, or minus the count just passed to <c>GC.RemoveMemoryPressure</c>.</param>
+        /// <summary>Records bytes booked (positive) or given back (negative) by an import lease.</summary>
+        /// <param name="delta">The byte count just booked, or minus the count just given back.</param>
         internal static void ImportPressureChanged(long delta) => Interlocked.Add(ref _importPressureBytes, delta);
 
         // ===================================  the dtype map  ===================================

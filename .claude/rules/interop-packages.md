@@ -51,7 +51,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   `NDArrayOnnxInterop.{cs,Export.cs,Import.cs,NonTensor.cs,Text.cs}` (dtype maps, the export and import verbs,
   non-tensor outputs, text tensors), `OnnxCodecMode.cs`, `OrtTensor.cs` (the `OrtTensor` / `OrtTensor<T>` handles and the
   `ImportLease`), `OrtDisposalProbe.cs` (reads ORT's private `_disposed` flags, so a disposed session or value throws
-  `ObjectDisposedException`), `UnmanagedMemoryManager.cs` (a `Memory<T>` over the unmanaged buffer),
+  `ObjectDisposedException`), `OrtValueBooking.cs` (books a `ToOrtValue` result's bytes through an `IPinnable` token it
+  stores in ORT's private `OrtValue._memHandle`), `UnmanagedMemoryManager.cs` (a `Memory<T>` over the unmanaged buffer),
   `InferenceSessionExtensions{,.Async}.cs`, `RunOutputs.cs` (the result dictionary, an `INDArrayCarrier`), `Postprocess.cs`
   (the one public `Postprocess`: the ML.NET bridge references this package for it). ONNX Runtime's C# sources are vendored for reference at `refs/onnxruntime/csharp/` (a
   sparse submodule), its official samples at `refs/onnxruntime-inference-examples/c_sharp/`.
@@ -59,14 +60,17 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   share memory: Auto is a view when ORT can read the buffer in place (C-contiguous and a bit-exact dtype), else a copy
   the handle owns; View throws instead of copying; Copy always copies.
 - Export: `nd.AsOrtValue(mode)` (an `OrtValue` over the NumSharp buffer, held by the ARC-rooted handle `OrtTensor`, whose
-  `IsView` says view or copy), `nd.ToOrtValue()` (an ORT-allocated copy), `AsDenseTensor<T>(mode)` / `ToDenseTensor<T>`
+  `IsView` says view or copy), `nd.ToOrtValue()` (an ORT-allocated copy that ORT frees: NumSharp never frees memory a
+  native holder such as `OrtIoBinding` may still read, it only BOOKS the bytes until `Dispose(true)` releases the token's
+  `MemoryHandle` or the token's finalizer runs), `AsDenseTensor<T>(mode)` / `ToDenseTensor<T>`
   (ORT's legacy tier, always row-major).
 - Import: `ortValue.ToNDArray()` (an owning copy; the legacy tier's `DenseTensor<T>`, any `Tensor<T>` - what
   `AsTensor<T>()` is declared to return, a non-dense one densified first - and `NamedOnnxValue` copy the same way),
   `ortValue.AsNDArray(ownsValue, mode)` (a zero-copy lease over ORT's
   buffer, CPU only; a counted NumSharp alias for a value the package made). Imports of NumSharp memory (a value the
-  package made, a fed input passed through) are counted aliases that inherit read-only; only an OWNING view adds GC
-  memory pressure. Importing a tensor of 2 GB or more that ORT owns is refused up front: ORT exposes tensor memory only as
+  package made, a fed input passed through) are counted aliases that inherit read-only; only an OWNING view books its
+  bytes (`SizeBucketedBufferPool.BookForeign`), and not over a value that carries a `MemoryHandle` (a `ToOrtValue` result
+  is booked already; a `CreateTensorValueFromMemory` value's memory is counted elsewhere or not freed with it). Importing a tensor of 2 GB or more that ORT owns is refused up front: ORT exposes tensor memory only as
   an `int`-length Span.
 - `session.Run(NDArray…)`: input names from the model metadata (overridable initializers and `optional(tensor)` inputs
   included), NumPy-`casting` dtype coercion checked on every call, declared-shape validation, copy / owning-view outputs.
@@ -78,8 +82,9 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   declare it in), only: the native flavours (CPU, Gpu, DirectML) are mutually exclusive, so the consumer picks one. A
   cap below a consumer's ONNX Runtime is a restore ERROR (NU1107), and the ML.NET bridge references this package, so a
   cap would fail ML.NET users too. The bridge uses ORT's public C# API plus the private `_disposed` flags
-  `OrtDisposalProbe` reads (a missing field turns its check off), so a breaking ORT major shows at run time; CI's
-  advisory "newest" step (floating `*-*`) sees it first.
+  `OrtDisposalProbe` reads (a missing field turns its check off) and the private `OrtValue._memHandle` slot
+  `OrtValueBooking` writes (a missing or retyped field leaves `ToOrtValue` unbooked; `ToOrtValueBookingTests` asserts
+  the slot exists), so a breaking ORT major shows at run time; CI's advisory "newest" step (floating `*-*`) sees it first.
 - Dtypes: 12 zero-copy, including a Half↔Float16 bit reinterpretation; Char→UInt16; Decimal→Double through a temp the
   handle owns (Auto / Copy; `Run` needs `casting: "same_kind"`); text: fixed-width `U` / `S` ↔ ORT string tensors, always
   a copy (a trailing NUL is lost; the bridge casts no text ↔ number pair: the caller's `astype` does); a `StringDType`
