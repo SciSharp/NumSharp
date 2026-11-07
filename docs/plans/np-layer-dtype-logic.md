@@ -162,7 +162,8 @@ method), NL10 (`5ea19a4c`: np.einsum_path's IndexErrors), NL5 (`a5b0ff85`: np.ne
 np.einsum's out extent and explicit path in NumPy's order), NL9 (`4f16e102`: np.polyder's recursion) and NL11
 (`4a680b5d`: np.isscalar, 1.7–3.7× faster as well) are fixed; NL12 was fixed the same week by the parity QA (QA-30).
 NL3 is a documented divergence by decision (`095b2395`: np.prod keeps its SIMD lanes, 3.7–16× NumPy). NL5's fix found
-NL14 (np.einsum's `out=` rules), pinned. Open: NL7 and P10 item 6 (with the class-boundary re-prototype), NL8 and NL14;
+NL14 (np.einsum's `out=` rules), pinned. NL7 is fixed by the subclass redesign that replaced the class boundary
+(2026-11-07, merged from `subclass/woven-rules`: `e8a6c3cd`; see the state log). Open: P10 item 6, NL8 and NL14;
 PA5 and PA6 are deferred. Re-probing the open items (2026-11-07) widened NL14's pins to every `optimize=` route and
 found NL15 (complex np.nanmedian keeps its NaNs), pinned; every open divergence has an `[OpenBugs]` reproduction (NL8's
 fails in a Debug build only), and P10 item 6, PA5 and PA6 change no behaviour, so they have none.
@@ -170,7 +171,9 @@ fails in a Debug build only), and P10 item 6, PA5 and PA6 change no behaviour, s
 **The owner's decisions of 2026-10-31** ([§5](#5-decisions-for-the-owner), D7 to D22, asked with each option's code):
 - P7 is dropped. D7's first answer ("Rule on the result") gave it a design; in the step round the same day the owner
   skipped P7a, then dropped P7b to P7d as well: "Drop because np.* uses the lhs to pick which". The class boundary
-  keeps its depth counter and its plain regions, and B3 stays open, pinned as an `[OpenBugs]` test (NL7).
+  keeps its depth counter and its plain regions, and B3 stays open, pinned as an `[OpenBugs]` test (NL7). (Superseded
+  2026-11-07: the subclass redesign, decided 2026-11-05 outside this plan, deleted the boundary, its depth and its
+  regions; NL7 is fixed.)
 - The 61 functions without dtype logic move too (P8), the array object's internal members taking NumPy's names
   (`NDArray.vstack`, D18), and the linalg and FFT engines stop calling np.* (P6b).
 - `TensorEngine.Default` becomes the settable default engine; results and views keep the engine that made them (P9).
@@ -187,8 +190,8 @@ Order of the work left (decided 2026-10-31 in the step round, D22): the merge (d
 2026-11-01: the rename `838fccfd`, the 12 functions that compute `c046d2ca` .. `d0c7a582`, the array object's functions
 `690948f3` .. `75788048`); P9 (done 2026-11-01: `72415a24`, `55a277e5`); P10 (items 1 to 5 done 2026-11-02:
 `38bcad09`, `96411eec`, `a5fd6535`, `614b1a8a`, `4e7fca46`; item 6, the three `NDArray` homes, open); PA3; PA2; the
-pinned divergences (D24: nine fixed, NL3 kept as a documented divergence; NL7, NL8, NL14 and NL15 open). Later: PA5
-and PA6 (deferred, D24); P10 item 6 and NL7 with the class-boundary re-prototype.
+pinned divergences (D24: nine fixed, NL3 kept as a documented divergence; NL8, NL14 and NL15 open; NL7 fixed by the
+subclass redesign, 2026-11-07). Later: PA5 and PA6 (deferred, D24); P10 item 6.
 
 Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
@@ -1759,7 +1762,9 @@ The divergences pinned as `[OpenBugs]` in `test/NumSharp.Tests/OpenBugs.NpLayer.
 - NL5, fixed (`a5b0ff85`): np.nested_iters runs its converters first and raises ValueError without an operand; np.einsum
   refuses an `out=` extent before any cast check and plans an explicit path first.
 - NL6, fixed by the parity QA's QA-45 (`78b122b0`); its test is untagged.
-- NL7, open: B3, the boundary depth reaching user callbacks; it waits for the class-boundary re-prototype (D24).
+- NL7, fixed by the subclass redesign (2026-11-07, merge `e8a6c3cd`): the woven subclass paths hand plain views to
+  their computations instead of raising a depth, so a user callback is ordinary user code; its two tests are regression
+  pins without `[OpenBugs]`.
 - NL8, open (not chosen in D24): np.sum's add.reduce step leaves the NaN of NaN + NaN to the JIT (a Debug build keeps
   the pairwise sum's NaN where NumPy keeps the accumulator's).
 - NL9, fixed (`4f16e102`): np.polyder is NumPy's recursion (`len(p)`, the first axis; m + 1 products, the last
@@ -1798,6 +1803,20 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-11-07, the subclass redesign merged into `strings`.** Branch `subclass/woven-rules` (on `106b67fa`: `bcd3d9f4`,
+  `910be4c0`, `9a0ff362`, `abbafef6`) landed as the merge `e8a6c3cd` on `c2c6ee88`, followed by `d475a425` and
+  `d8e23271`, and `29c3e033` took `af191705` in. NumPy's array-subclass mechanisms are declared on the computations and
+  woven by NumSharp.Build; NDMatrixBoundary / NDCharArrayBoundary, their per-thread depth and every plain region are
+  gone, so NL7 is fixed (its two pins lose `[OpenBugs]`).
+  - NL13's matrix branch (`f56fc38e` / `6096c3c3`) was carried into that model by the owner's decisions of the day:
+    np.max / np.min reach `matrix.max` / `min` through the woven method dispatch, and np.nanmax / np.nanmin ask the
+    operand's class through C# inheritance (the virtual `NDArray.NanMax` / `NanMin`; NDMatrix's override is NumPy's
+    branch for subclasses over `NDArray.ReplaceNaN`). Both MaxMinKeywordTests pass unchanged.
+  - The class side is C# inheritance under NumPy's names (`d475a425`: `__array_priority__`, `__array_wrap__`,
+    `__array_finalize__`, `_collapse`); gaps MO06 / MO07 (np.gradient / np.meshgrid of a matrix) are closed
+    (`d8e23271`).
+  - The weaver's clashing NDW021 is NDW031.
 
 - **2026-11-07, the open items as `[OpenBugs]` reproductions (the owner: "The open items should be creating OpenBugs if
   they can reproduce, and commit to strings").** Every open item re-probed against NumPy 2.4.2 on `c2c6ee88`:
