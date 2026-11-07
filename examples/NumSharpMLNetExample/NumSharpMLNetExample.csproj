@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.ML" Version="5.0.1" />
-    <PackageReference Include="NumSharp.Interop.MLNet" Version="0.80.0-beta1" />
+    <PackageReference Include="NumSharp.Interop.MLNet" Version="0.80.0" />
   </ItemGroup>
 
 </Project>

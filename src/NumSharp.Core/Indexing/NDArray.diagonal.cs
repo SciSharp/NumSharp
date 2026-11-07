@@ -40,7 +40,7 @@ namespace NumSharp
         ///     first).</exception>
         /// <remarks>NumPy's <c>PyArray_Diagonal</c>, the C function behind np.diagonal and ndarray.diagonal. It was the
         ///     engine member <c>TensorEngine.Diagonal</c> (the np-layer dtype plan's P1b) until phase PE's E7 returned it to
-        ///     the array object before 0.71.0 shipped: building a view computes no value, so an engine has nothing to
+        ///     the array object before 0.80.0 shipped: building a view computes no value, so an engine has nothing to
         ///     override.</remarks>
         [NewSubtype("a")]
         [AsArrayFor(typeof(NDMatrix))]

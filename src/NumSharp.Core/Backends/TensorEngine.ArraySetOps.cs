@@ -52,7 +52,7 @@ namespace NumSharp
         /// <remarks>
         ///     NumPy writes isin in Python (<c>_isin</c>); DefaultEngine's override runs NumPy's path decision (table, loop
         ///     or sort) and answers each path with NumPy's membership. An override replaces <c>np.isin</c> for every array
-        ///     whose engine it is (the engine of <paramref name="element"/>). New in 0.71.0 (the np-layer dtype plan, phase
+        ///     whose engine it is (the engine of <paramref name="element"/>). New in 0.80.0 (the np-layer dtype plan, phase
         ///     PE); it was the internal class <c>IsinEngine</c>.
         /// </remarks>
         public abstract NDArray Isin(NDArray element, NDArray test_elements, bool assume_unique = false,
@@ -93,7 +93,7 @@ namespace NumSharp
         /// <remarks>
         ///     <c>np.unique</c> wraps the result in <c>np.UniqueResult</c>; both <c>NDArray.unique</c> members call this
         ///     member too (the bare one takes element 0). An override replaces all three for every array whose engine it
-        ///     is (the engine of <paramref name="ar"/>). New in 0.71.0 (the np-layer dtype plan, phase PE); it was the
+        ///     is (the engine of <paramref name="ar"/>). New in 0.80.0 (the np-layer dtype plan, phase PE); it was the
         ///     internal class <c>UniqueEngine</c>.
         /// </remarks>
         public abstract NDArray[] Unique(NDArray ar, bool return_index = false, bool return_inverse = false,
@@ -110,7 +110,7 @@ namespace NumSharp
         /// </returns>
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>
-        ///     An override replaces <c>np.unique_values</c> for every array whose engine it is. New in 0.71.0 (the np-layer
+        ///     An override replaces <c>np.unique_values</c> for every array whose engine it is. New in 0.80.0 (the np-layer
         ///     dtype plan, phase PE); it was the internal class <c>UniqueEngine</c>.
         /// </remarks>
         [ArrayWrap("x")]
@@ -127,7 +127,7 @@ namespace NumSharp
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>
         ///     <c>np.unique_counts</c> wraps the result in <c>np.UniqueCountsResult</c>. An override replaces it for every
-        ///     array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class
+        ///     array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE); it was the internal class
         ///     <c>UniqueEngine</c>.
         /// </remarks>
         public abstract NDArray[] UniqueCounts(NDArray x);
@@ -145,7 +145,7 @@ namespace NumSharp
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>
         ///     <c>np.unique_inverse</c> wraps the result in <c>np.UniqueInverseResult</c>. An override replaces it for every
-        ///     array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class
+        ///     array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE); it was the internal class
         ///     <c>UniqueEngine</c>.
         /// </remarks>
         public abstract NDArray[] UniqueInverse(NDArray x);
@@ -164,7 +164,7 @@ namespace NumSharp
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>
         ///     <c>np.unique_all</c> wraps the result in <c>np.UniqueAllResult</c>. An override replaces it for every array
-        ///     whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class
+        ///     whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE); it was the internal class
         ///     <c>UniqueEngine</c>.
         /// </remarks>
         public abstract NDArray[] UniqueAll(NDArray x);

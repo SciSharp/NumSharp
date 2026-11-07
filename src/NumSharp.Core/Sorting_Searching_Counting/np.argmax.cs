@@ -49,7 +49,7 @@ namespace NumSharp
         ///     <para>
         ///     The order of NumPy's checks (<c>_PyArray_ArgMinMaxCommon</c>): the axis, the empty length, then the out, all
         ///     before an element is compared — so an out error comes before a <c>StringDType</c> comparison's refusal
-        ///     (until 0.71.0 NumSharp compared the text first).
+        ///     (until 0.80.0 NumSharp compared the text first).
         ///     </para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand without <paramref name="out"/>: NumPy creates
@@ -121,7 +121,7 @@ namespace NumSharp
         ///     <para>
         ///     The order of NumPy's checks (<c>_PyArray_ArgMinMaxCommon</c>): the axis, the empty length, then the out, all
         ///     before an element is compared — so an out error comes before a <c>StringDType</c> comparison's refusal
-        ///     (until 0.71.0 NumSharp compared the text first).
+        ///     (until 0.80.0 NumSharp compared the text first).
         ///     </para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand without <paramref name="out"/>: NumPy creates

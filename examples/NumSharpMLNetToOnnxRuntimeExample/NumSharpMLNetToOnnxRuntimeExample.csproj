@@ -11,8 +11,8 @@
     <PackageReference Include="Microsoft.ML" Version="5.0.1" />
     <PackageReference Include="Microsoft.ML.OnnxConverter" Version="0.23.1" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
-    <PackageReference Include="NumSharp.Interop.MLNet" Version="0.80.0-beta1" />
-    <PackageReference Include="NumSharp.Interop.OnnxRuntime" Version="0.80.0-beta1" />
+    <PackageReference Include="NumSharp.Interop.MLNet" Version="0.80.0" />
+    <PackageReference Include="NumSharp.Interop.OnnxRuntime" Version="0.80.0" />
   </ItemGroup>
 
 </Project>

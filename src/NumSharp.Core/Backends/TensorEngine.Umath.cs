@@ -178,7 +178,7 @@ namespace NumSharp
         /// <exception cref="InvalidOperationException">A 0-d operand.</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> is a class without storage yet.</exception>
         /// <exception cref="NullReferenceException"><paramref name="x2"/> is null.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.matmul</c> calls this (the ufunc
+        /// <remarks>New in 0.80.0 (the np-layer dtype plan, P2): the public <c>np.matmul</c> calls this (the ufunc
         ///     mechanism answers for a subclass operand); <see cref="Matmul(NDArray, NDArray)"/> stays the product kernel
         ///     the call ends in.</remarks>
         [Ufunc]
@@ -222,7 +222,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Loop axes that do not broadcast.</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> is a class without storage yet.</exception>
         /// <exception cref="NullReferenceException"><paramref name="x2"/> is null.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.vecdot</c> calls this (the ufunc
+        /// <remarks>New in 0.80.0 (the np-layer dtype plan, P2): the public <c>np.vecdot</c> calls this (the ufunc
         ///     mechanism answers for a subclass operand).</remarks>
         [Ufunc]
         public abstract NDArray Vecdot(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
@@ -265,7 +265,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Loop axes that do not broadcast (the product's text).</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> is a class without storage yet.</exception>
         /// <exception cref="NullReferenceException"><paramref name="x2"/> is null.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.matvec</c> calls this (the ufunc
+        /// <remarks>New in 0.80.0 (the np-layer dtype plan, P2): the public <c>np.matvec</c> calls this (the ufunc
         ///     mechanism answers for a subclass operand).</remarks>
         [Ufunc]
         public abstract NDArray Matvec(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
@@ -309,7 +309,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Loop axes that do not broadcast (the product's text).</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> is a class without storage yet.</exception>
         /// <exception cref="NullReferenceException"><paramref name="x2"/> is null.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.vecmat</c> calls this (the ufunc
+        /// <remarks>New in 0.80.0 (the np-layer dtype plan, P2): the public <c>np.vecmat</c> calls this (the ufunc
         ///     mechanism answers for a subclass operand).</remarks>
         [Ufunc]
         public abstract NDArray Vecmat(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,

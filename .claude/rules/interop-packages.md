@@ -17,7 +17,7 @@ paths:
 `NumSharp.Interop.ParquetNet` (Parquet columns decoded straight into `NDArray` buffers) is unreleased: it builds, tests
 and merges like everything else, but no NuGet package is created and no release or public documentation mentions it.
 `NumSharp.Interop.OnnxRuntime` and `NumSharp.Interop.MLNet` were unreleased the same way from 2026-10-02 and ship from
-0.80.0-beta1 (the owner's decision of 2026-11-02). Unreleased is exactly three things:
+0.80.0 (the owner's decision of 2026-11-02). Unreleased is exactly three things:
 1. No package. The csproj sets `<IsPackable>false</IsPackable>`, which makes `dotnet pack` a silent no-op (exit 0, no
    `.nupkg`, not even a compile). CI still names it in the signing check and in `build-nuget`'s Build and Pack steps,
    and `create-release` lists exactly the `.nupkg` files that were packed (ids read from each nuspec), so packing,
@@ -48,7 +48,7 @@ Keep it out of release notes (`docs/releases/RELEASE_<version>.md`; when that fi
 notes from merged PR titles, so PR titles stay free of it too), the website, the root README, and the shipped XML docs
 and README of every released package: a released package's IntelliSense must not point at a bridge nobody can install.
 To release it: delete its `IsPackable` property, write its page and add its `toc.yml` entry and its `interop/index.md`
-row and "See also" link (the two packages released for 0.80.0-beta1 got theirs back from git history). CI needs no
+row and "See also" link (the two packages released for 0.80.0 got theirs back from git history). CI needs no
 edit, but the package is a NEW id on nuget.org: check before the tag that the key behind `NUGETAPIKEY` may push new
 packages (`ci-release.md`).
 
@@ -57,7 +57,7 @@ packages (`ci-release.md`).
 None of these computes NumSharp operations: each converts tensors between NumSharp and another library, so none has a
 `TensorEngine` seam, a `[ModuleInitializer]` or a native asset (like the pythonnet bridge).
 
-### `NumSharp.Interop.OnnxRuntime` (released from 0.80.0-beta1)
+### `NumSharp.Interop.OnnxRuntime` (released from 0.80.0)
 
 - `NDArrayOnnxInterop` verbs, `InferenceSessionExtensions`, `Postprocess`. Sources (`src/NumSharp.Interop.OnnxRuntime/`):
   `NDArrayOnnxInterop.{cs,Export.cs,Import.cs,NonTensor.cs,Text.cs}` (dtype maps, the export and import verbs,
@@ -145,12 +145,12 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   local feed under a pre-release version unique to the run (`openblas.md`) and run a consumer that restores them by
   `PackageReference`, so the package that ships is the one gated. Mutation runs restore a file from memory only: copy
   untracked files out of the tree before one.
-- Docs: `docs/website-src/docs/interop/onnxruntime.md` (on the site's Interoperability toc since 0.80.0-beta1).
-- Example: `examples/NumSharpOnnxRuntimeExample` (regular csproj form over the published 0.80.0-beta1; no workflow runs
+- Docs: `docs/website-src/docs/interop/onnxruntime.md` (on the site's Interoperability toc since 0.80.0).
+- Example: `examples/NumSharpOnnxRuntimeExample` (regular csproj form over the published 0.80.0; no workflow runs
   it): MobileNetV2 downloaded on the first run, SkiaSharp decoding (ImageSharp 3.1.x restores with security advisories
   and 3.2+ needs a license key to build), NumSharp preprocessing into one NCHW batch, `Postprocess`, `RunInto`.
 
-### `NumSharp.Interop.MLNet` (released from 0.80.0-beta1)
+### `NumSharp.Interop.MLNet` (released from 0.80.0)
 
 - `NDArrayMLNetInterop` verbs, `NDArrayDataView`; `Postprocess` is the ONNX Runtime bridge's, which this package
   references (`NumSharp.Interop.OnnxRuntime.Postprocess`: one public type, no CS0104 in an app that uses both). Sources
@@ -205,8 +205,8 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   numpy's `ValueError`; a `TextLoader` CSV's numbers cross the bridge as `np.loadtxt` reads them, quoted text by the
   route). The `interop-test` CI job runs it against ML.NET 2.0.1 (the floor), 5.0.1 (current) and 4.0.2 (the previous
   major), and (advisory) against the newest `Microsoft.ML` on nuget.org, previews included, with no Python.
-- Docs: `docs/website-src/docs/interop/mlnet.md` (on the site's Interoperability toc since 0.80.0-beta1).
-- Example: `examples/NumSharpMLNetExample` (regular csproj form over the published 0.80.0-beta1 and Microsoft.ML 5.0.1;
+- Docs: `docs/website-src/docs/interop/mlnet.md` (on the site's Interoperability toc since 0.80.0).
+- Example: `examples/NumSharpMLNetExample` (regular csproj form over the published 0.80.0 and Microsoft.ML 5.0.1;
   no workflow runs it): a binary classifier trained from a `(rows, 5)` array as five scalar columns with the label
   converted OUTSIDE the model (so the model scores a features-only view), L-BFGS for run-to-run identical output (SDCA
   is multi-threaded and varied), k-means on one vector column.

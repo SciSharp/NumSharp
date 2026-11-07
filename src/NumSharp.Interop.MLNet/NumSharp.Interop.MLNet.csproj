@@ -12,7 +12,7 @@
          VersionPrefix, never a number in this file, so the nuspec dependency on NumSharp and this
          package's own version cannot drift apart). -->
     <PackageId>NumSharp.Interop.MLNet</PackageId>
-    <!-- Released from 0.80.0-beta1: packable by default (no IsPackable property), packed, signed and published by
+    <!-- Released from 0.80.0: packable by default (no IsPackable property), packed, signed and published by
          the release workflow's build-nuget job with the other packages, its docs page on the site. -->
     <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
     <Product>NumSharp</Product>

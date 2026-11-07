@@ -41,7 +41,7 @@ namespace NumSharp
         /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a complex <paramref name="initial"/> for a real loop.</exception>
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
-        /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.71.0
+        /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.80.0
         ///     (the np-layer dtype plan, phase PE, E5). This is NumPy's branch for a BASE ndarray: np.nanmin asks the
         ///     operand's class first (<see cref="NDArray.NanMin"/>, virtual), which calls this member for an ndarray and
         ///     takes NumPy's branch for subclasses in a matrix's or chararray's override.</remarks>
@@ -72,7 +72,7 @@ namespace NumSharp
         /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a complex <paramref name="initial"/> for a real loop.</exception>
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
-        /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.71.0
+        /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.80.0
         ///     (the np-layer dtype plan, phase PE, E5). This is NumPy's branch for a BASE ndarray: np.nanmax asks the
         ///     operand's class first (<see cref="NDArray.NanMax"/>, virtual), which calls this member for an ndarray and
         ///     takes NumPy's branch for subclasses in a matrix's or chararray's override.</remarks>
@@ -99,7 +99,7 @@ namespace NumSharp
         /// <remarks>
         ///     NumPy writes nancumsum in Python (<c>numpy/lib/_nanfunctions_impl.py</c>); DefaultEngine's override runs
         ///     those statements over <see cref="ReduceCumAdd"/>. An override replaces <c>np.nancumsum</c> for every array
-        ///     whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE).
+        ///     whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE).
         /// </remarks>
         [ArrayWrap("a")]
         public abstract NDArray NanCumSum(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null);
@@ -122,7 +122,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape.</exception>
         /// <remarks>
         ///     DefaultEngine's override runs NumPy's statements over <see cref="ReduceCumMul"/>. An override replaces
-        ///     <c>np.nancumprod</c> for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE).
+        ///     <c>np.nancumprod</c> for every array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE).
         /// </remarks>
         [ArrayWrap("a")]
         public abstract NDArray NanCumProd(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null);
@@ -155,7 +155,7 @@ namespace NumSharp
         ///     NumPy writes nanmean in Python (<c>numpy/lib/_nanfunctions_impl.py</c>); DefaultEngine's override runs those
         ///     statements: the sum over NumPy's K-order copy in its own schedule (a float16 or float32 input sums in its own
         ///     dtype), then the division by the int64 count in the float64 loop, or Smith's complex loop for complex. An
-        ///     override replaces <c>np.nanmean</c> for every array whose engine it is. New in 0.71.0 (the np-layer dtype
+        ///     override replaces <c>np.nanmean</c> for every array whose engine it is. New in 0.80.0 (the np-layer dtype
         ///     plan, phase PE).
         /// </remarks>
         [ReducesThrough("mean", InexactMethod = "sum")]
@@ -186,7 +186,7 @@ namespace NumSharp
         ///     An input that cannot hold NaN (integer, bool, char, decimal, text) is <c>np.var</c>'s, keywords included.
         ///     DefaultEngine's override runs NumPy's <c>_nanfunctions_impl.nanvar</c> statements. An override replaces
         ///     <c>np.nanvar</c> for every array whose engine it is; <see cref="NanStd"/> is a separate member, so an engine
-        ///     that changes one should change both. New in 0.71.0 (the np-layer dtype plan, phase PE).
+        ///     that changes one should change both. New in 0.80.0 (the np-layer dtype plan, phase PE).
         /// </remarks>
         [ReducesThrough("var", InexactMethod = "sum")]
         public abstract NDArray NanVar(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false);
@@ -211,7 +211,7 @@ namespace NumSharp
         /// </exception>
         /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
         /// <remarks>
-        ///     An input that cannot hold NaN is <c>np.std</c>'s, keywords included. New in 0.71.0 (the np-layer dtype plan,
+        ///     An input that cannot hold NaN is <c>np.std</c>'s, keywords included. New in 0.80.0 (the np-layer dtype plan,
         ///     phase PE).
         /// </remarks>
         [ReducesThrough("var", InexactMethod = "sum")]
@@ -252,7 +252,7 @@ namespace NumSharp
         /// <remarks>
         ///     NumPy writes nanquantile in Python; DefaultEngine's override runs its statements in NumPy's order.
         ///     <c>np.nanquantile</c> calls it after its class rule; an override replaces it for every array whose engine it
-        ///     is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>QuantileEngine</c>.
+        ///     is. New in 0.80.0 (the np-layer dtype plan, phase PE); it was the internal class <c>QuantileEngine</c>.
         /// </remarks>
         [ReducesThrough(null)]
         public abstract NDArray NanQuantile(NDArray a, object q, int[] axis = null, NDArray @out = null,
@@ -284,7 +284,7 @@ namespace NumSharp
         /// <exception cref="InvalidCastException">A q array of a complex dtype.</exception>
         /// <remarks>
         ///     NumPy writes nanpercentile in Python; <c>np.nanpercentile</c> calls this after its class rule. An override
-        ///     replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the
+        ///     replaces it for every array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE); it was the
         ///     internal class <c>QuantileEngine</c>.
         /// </remarks>
         [ReducesThrough(null)]
@@ -319,7 +319,7 @@ namespace NumSharp
         /// <exception cref="IndexError">Data that is not empty, under keepdims, with an out NumPy cannot index.</exception>
         /// <remarks>
         ///     NumPy writes nanmedian in Python; <c>np.nanmedian</c> calls this after its class rule. An override replaces it
-        ///     for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal
+        ///     for every array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE); it was the internal
         ///     class <c>QuantileEngine</c>.
         /// </remarks>
         [ReducesThrough(null)]

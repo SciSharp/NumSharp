@@ -184,7 +184,7 @@ jobs:
     # The loop also names the UNRELEASED package (ParquetNet: <IsPackable>false</IsPackable> in its csproj,
     # "Unreleased packages" in .claude/rules/interop-packages.md). Its `dotnet pack` is a silent no-op that writes no
     # .nupkg, so today it adds nothing to verify; the day it is released by deleting that property, it is packed and
-    # verified here with no edit to this step, as OnnxRuntime and MLNet are since 0.80.0-beta1.
+    # verified here with no edit to this step, as OnnxRuntime and MLNet are since 0.80.0.
     #
     # Why it is cheap here: the Build steps above already built NumSharp.Core (compiled, woven and
     # re-signed), NumSharp.Bitmap, NumSharp.Interop.OpenBLAS and NumSharp.Build in Release with the
@@ -650,7 +650,7 @@ jobs:
     #
     # No Python, no native code: the suite crosses NDArrays of all 15 dtypes and every layout to and
     # from the BCL's Tensor<T> / TensorSpan<T> (System.Numerics.Tensors 10.x, the range the package
-    # pins), on both TFMs. The package ships from 0.71.0 (packed by build-nuget); this suite is the
+    # pins), on both TFMs. The package ships from 0.80.0 (packed by build-nuget); this suite is the
     # only place CI compiles and tests it before a release. The OpenBugs filter keeps a future
     # known-bug reproduction from failing the job, as in the main test job. Independent of every
     # suite above, like the ORT one.
@@ -916,7 +916,7 @@ jobs:
         # other package, but its csproj sets <IsPackable>false</IsPackable>, which makes its `dotnet pack` a
         # silent no-op: no .nupkg, so nothing is uploaded, published or listed in the release notes.
         # Releasing it is that property deleted ("Unreleased packages" in .claude/rules/interop-packages.md); this
-        # step and the Pack step then need no edit, as for OnnxRuntime and MLNet, released from 0.80.0-beta1.
+        # step and the Pack step then need no edit, as for OnnxRuntime and MLNet, released from 0.80.0.
         # The build stays so that switch keeps working: the Pack step runs --no-build and needs this
         # Rebuild's output the moment the package is released.
         #
@@ -941,7 +941,7 @@ jobs:
           -p:ContinuousIntegrationBuild=true
 
         # System.Numerics.Tensors interop: managed-only (depends on System.Numerics.Tensors 10.x, no
-        # native asset), so a plain Rebuild is the whole build. Released from 0.71.0.
+        # native asset), so a plain Rebuild is the whole build. Released from 0.80.0.
         dotnet build src/NumSharp.Interop.System.Numerics.Tensors/NumSharp.Interop.System.Numerics.Tensors.csproj \
           --configuration Release \
           -t:Rebuild \
@@ -1002,7 +1002,7 @@ jobs:
           -p:SourceRevisionId=${{ github.sha }} \
           -p:ContinuousIntegrationBuild=true
 
-        # Released from 0.80.0-beta1, like the MLNet pack below; the ParquetNet pack further down stays
+        # Released from 0.80.0, like the MLNet pack below; the ParquetNet pack further down stays
         # unreleased (IsPackable=false, see the Build step) and writes no .nupkg until it is released.
         dotnet pack src/NumSharp.Interop.OnnxRuntime/NumSharp.Interop.OnnxRuntime.csproj \
           --configuration Release \

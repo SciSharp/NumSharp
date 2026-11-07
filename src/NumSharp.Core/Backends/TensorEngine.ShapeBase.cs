@@ -22,7 +22,7 @@ namespace NumSharp
         /// <exception cref="NullReferenceException"><paramref name="a"/> or <paramref name="b"/> is null.</exception>
         /// <exception cref="TypeError">Operands np.multiply refuses (text has no multiply loop: NumPy's ufunc
         ///     refusal).</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.kron</c> applies the <c>numpy.matrix</c> and
+        /// <remarks>New in 0.80.0 (the np-layer dtype plan): the public <c>np.kron</c> applies the <c>numpy.matrix</c> and
         ///     <c>numpy.char.chararray</c> rules and calls this.</remarks>
         [ArrayWrap("a", "b")]
         public abstract NDArray Kron(NDArray a, NDArray b);

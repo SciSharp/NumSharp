@@ -48,7 +48,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException">A key is null.</exception>
         /// <exception cref="ValueError">The keys differ in shape (<c>all keys need to be the same shape</c>).</exception>
         /// <exception cref="AxisError">The axis is out of range.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan, phase PE, E5): the public <c>np.lexsort</c> applies its class
+        /// <remarks>New in 0.80.0 (the np-layer dtype plan, phase PE, E5): the public <c>np.lexsort</c> applies its class
         ///     boundaries and calls this.</remarks>
         [AsArray]
         public abstract NDArray LexSort(NDArray[] keys, int axis = -1);
@@ -79,7 +79,7 @@ namespace NumSharp
         ///     permitted</c>).</exception>
         /// <exception cref="NotSupportedException">Runtime code generation is unavailable (the IL kernel cannot be
         ///     emitted).</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.unravel_index(NDArray, int[], char)</c> computes
+        /// <remarks>New in 0.80.0 (the np-layer dtype plan): the public <c>np.unravel_index(NDArray, int[], char)</c> computes
         ///     a <c>numpy.matrix</c> operand as a plain array and calls this.</remarks>
         public abstract NDArray<long>[] UnravelIndex(NDArray indices, int[] shape, char order = 'C');
 
@@ -121,7 +121,7 @@ namespace NumSharp
         ///     <c>ValueError</c> text from its iterator, every coordinate shape listed).</exception>
         /// <exception cref="NotSupportedException">Runtime code generation is unavailable (the IL kernel cannot be
         ///     emitted).</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.ravel_multi_index</c> array overloads compute
+        /// <remarks>New in 0.80.0 (the np-layer dtype plan): the public <c>np.ravel_multi_index</c> array overloads compute
         ///     a <c>numpy.matrix</c> operand as a plain array and call this; the scalar overload
         ///     <c>np.ravel_multi_index(long[], int[], string, char)</c> computes its one index itself.</remarks>
         public abstract NDArray<long> RavelMultiIndex(NDArray[] multi_index, int[] dims, object mode = null, char order = 'C');
@@ -146,7 +146,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="a"/> is neither bool nor integer (<c>Expected an input array of
         ///     integer or boolean data type</c>).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="a"/>'s rank.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.packbits</c> applies the <c>numpy.matrix</c>
+        /// <remarks>New in 0.80.0 (the np-layer dtype plan): the public <c>np.packbits</c> applies the <c>numpy.matrix</c>
         ///     rule and calls this.</remarks>
         [NewSubtype("a")]
         public abstract NDArray Packbits(NDArray a, int? axis = null, string bitorder = "big");
@@ -173,7 +173,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="a"/> is not uint8 (<c>Expected an input array of unsigned byte
         ///     data type</c>).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="a"/>'s rank.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.unpackbits</c> applies the <c>numpy.matrix</c>
+        /// <remarks>New in 0.80.0 (the np-layer dtype plan): the public <c>np.unpackbits</c> applies the <c>numpy.matrix</c>
         ///     rule and calls this. An empty input with a count that asks for elements gives zeros, where NumPy leaks
         ///     uninitialised memory.</remarks>
         [NewSubtype("a")]
@@ -199,7 +199,7 @@ namespace NumSharp
         ///     weights are complex or text (NumPy's safe-cast TypeError text).</exception>
         /// <exception cref="ValueError">In NumPy's order: a negative <paramref name="minlength"/>, a negative value, weights
         ///     of another length.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.bincount</c> computes a <c>numpy.matrix</c>
+        /// <remarks>New in 0.80.0 (the np-layer dtype plan): the public <c>np.bincount</c> computes a <c>numpy.matrix</c>
         ///     operand as a plain array and calls this.</remarks>
         public abstract NDArray Bincount(NDArray x, NDArray weights = null, int minlength = 0);
     }

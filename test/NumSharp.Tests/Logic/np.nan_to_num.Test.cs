@@ -198,7 +198,7 @@ namespace NumSharp.Tests.Logic
         ///     NumPy's nan_to_num writes each fill with <c>copyto(d, fill, where=...)</c>, whose same_kind cast refuses text
         ///     into a float array: a str fill raises NumPy's TypeError text (np.copyto's house InvalidCastException here),
         ///     never a number parse, even for numeric text and even where no element is non-finite (the cast is checked
-        ///     before the mask). A non-inexact input never meets the fills. Probed against numpy 2.4.2; until 0.71.0 the text
+        ///     before the mask). A non-inexact input never meets the fills. Probed against numpy 2.4.2; until 0.80.0 the text
         ///     was parsed (".NET's FormatException", "1.5" filled 1.5).
         /// </summary>
         [TestMethod]

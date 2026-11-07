@@ -27,8 +27,8 @@ changes nothing until a verb is called.
 > Verified against ONNX Runtime **1.16.0** (the package floor) and **1.31.0** (current) on net8.0 / net10.0,
 > by `test/NumSharp.Tests.Interop.OnnxRuntime`: committed `.onnx` models that ONNX Runtime really executes,
 > with an every-dtype × every-layout matrix and property-based, metamorphic, bit-pattern-fuzz, concurrency,
-> boundary, reference-accounting, lifetime and API-approval suites. The package's first release is the
-> 0.80.0-beta1 prerelease, so its surface may still change before 0.80.0.
+> boundary, reference-accounting, lifetime and API-approval suites. The package's first release is
+> 0.80.0.
 
 ## Install
 

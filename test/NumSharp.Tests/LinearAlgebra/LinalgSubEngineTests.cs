@@ -256,7 +256,7 @@ namespace NumSharp.Tests.LinearAlgebra
         [TestMethod]
         public void TheMissingBackendMessage_NamesTheOperandsEngine_AsBeforeTheMove()
         {
-            // The kernels left TensorEngine in 0.71.0; the message still names the engine that holds the Blas property a
+            // The kernels left TensorEngine in 0.80.0; the message still names the engine that holds the Blas property a
             // backend is assigned to (DefaultEngine for every NumSharp.Core array), not the sub-engine's class.
             var sq = np.array(new double[,] {{4.0, 1.0}, {1.0, 3.0}});
             new Action(() => np.linalg.svd(sq)).Should().Throw<OpenBlasMissingBackendException>()

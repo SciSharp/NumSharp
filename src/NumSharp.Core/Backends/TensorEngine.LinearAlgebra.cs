@@ -21,7 +21,7 @@ namespace NumSharp
     ///     (<see cref="LinalgEngine"/>), whose default, <see cref="DefaultLinalgEngine"/>, runs NumPy's
     ///     <c>_linalg.py</c> statements over ten kernels that ask the same <see cref="Blas"/> property. The ten
     ///     <c>_umath_linalg</c> members this class shipped in 0.70.0 (Cholesky, Det, Slogdet, Eig, Eigh, Inv, Solve,
-    ///     Lstsq, Qr, Svd) moved there in 0.71.0 (the np-layer dtype plan's phase PE, E2) as
+    ///     Lstsq, Qr, Svd) moved there in 0.80.0 (the np-layer dtype plan's phase PE, E2) as
     ///     <c>DefaultLinalgEngine.CholeskyKernel</c> ... <c>SvdKernel</c>.
     ///     </para>
     /// </remarks>

@@ -121,7 +121,7 @@ namespace NumSharp
         ///     statements for every dtype, text included, with a fused early-exiting equality scan for two dense operands of
         ///     one dtype. <c>np.array_equal</c> and the member <see cref="NDArray.array_equal(NDArray, bool)"/> call it with
         ///     plain views of subclass operands, on the engine of the first operand that is not null; an override replaces
-        ///     both for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal
+        ///     both for every array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE); it was the internal
         ///     class <c>ArrayEqualEngine</c>.
         /// </remarks>
         public abstract bool ArrayEqual(NDArray a1, NDArray a2, bool equal_nan = false);
@@ -141,7 +141,7 @@ namespace NumSharp
         ///     NumPy writes array_equiv in Python (<c>numpy/_core/numeric.py</c>). <c>np.array_equiv</c> calls this
         ///     with plain
         ///     views of subclass operands, on the engine of the first operand that is not null; an override replaces it
-        ///     for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal
+        ///     for every array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE); it was the internal
         ///     class <c>ArrayEqualEngine</c>.
         /// </remarks>
         public abstract bool ArrayEquiv(NDArray a1, NDArray a2);
@@ -170,7 +170,7 @@ namespace NumSharp
         ///     without the OpenBLAS backend (a bounded ULP difference). Unlike <see cref="Correlate2"/>
         ///     a complex kernel is not conjugated. <c>np.convolve</c> and the member <see cref="NDArray.convolve"/> call it;
         ///     an override replaces both for every array whose engine it is (the engine of <paramref name="a"/>). New in
-        ///     0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>ConvolveEngine</c>.
+        ///     0.80.0 (the np-layer dtype plan, phase PE); it was the internal class <c>ConvolveEngine</c>.
         /// </remarks>
         public abstract NDArray Convolve(NDArray a, NDArray v, string mode = "full");
 

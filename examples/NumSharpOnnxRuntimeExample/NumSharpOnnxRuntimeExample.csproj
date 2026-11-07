@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
-    <PackageReference Include="NumSharp.Interop.OnnxRuntime" Version="0.80.0-beta1" />
+    <PackageReference Include="NumSharp.Interop.OnnxRuntime" Version="0.80.0" />
     <PackageReference Include="SkiaSharp" Version="4.154.0" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.154.0" />
   </ItemGroup>

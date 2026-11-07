@@ -146,7 +146,7 @@ namespace NumSharp.Tests.Backends.Strings
         ///     np.argmax / np.argmin check the out (its shape, then its safe cast to intp) before they compare an element
         ///     (NumPy's <c>_PyArray_ArgMinMaxCommon</c>), so a bad out is reported over a None-like NA's comparison refusal;
         ///     without an out the comparison refuses. np.nanargmax / np.nanargmin (np.argmax / np.argmin for text) agree.
-        ///     Probed against numpy 2.4.2; until 0.71.0 np.argmax / np.argmin compared first.
+        ///     Probed against numpy 2.4.2; until 0.80.0 np.argmax / np.argmin compared first.
         /// </summary>
         [TestMethod]
         public void ArgMax_Out_IsCheckedBeforeTheNAComparison()

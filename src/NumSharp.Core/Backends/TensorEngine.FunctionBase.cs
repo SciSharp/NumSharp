@@ -84,7 +84,7 @@ namespace NumSharp
         ///     check, q's checks, the weighted branch, the text routes, then <c>_ureduce</c> and the numeric quantile).
         ///     <c>np.quantile</c> calls it with plain views of subclass operands (a <c>numpy.char.chararray</c>
         ///     operand's view remembers the class, which DefaultEngine reads for NumPy's text route); an override replaces
-        ///     it for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the
+        ///     it for every array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE); it was the
         ///     internal class <c>QuantileEngine</c>.
         /// </remarks>
         [ReducesThrough(null)]
@@ -121,7 +121,7 @@ namespace NumSharp
         /// <exception cref="InvalidCastException">A q array of a complex dtype.</exception>
         /// <remarks>
         ///     NumPy writes percentile in Python; <c>np.percentile</c> calls this after its class rules. An override
-        ///     replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the
+        ///     replaces it for every array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE); it was the
         ///     internal class <c>QuantileEngine</c>.
         /// </remarks>
         [ReducesThrough(null)]
@@ -158,7 +158,7 @@ namespace NumSharp
         /// <exception cref="IndexError">keepdims with an out NumPy cannot index, before the text refusals.</exception>
         /// <remarks>
         ///     NumPy writes median in Python (<c>_ureduce</c> over <c>_median</c>); <c>np.median</c> calls this after its
-        ///     class rules. An override replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype
+        ///     class rules. An override replaces it for every array whose engine it is. New in 0.80.0 (the np-layer dtype
         ///     plan, phase PE); it was the internal class <c>QuantileEngine</c>.
         /// </remarks>
         [ReducesThrough(null)]
@@ -199,7 +199,7 @@ namespace NumSharp
         /// <remarks>
         ///     NumPy writes average in Python; DefaultEngine's override runs its statements in NumPy's order.
         ///     <c>np.average</c> and <c>np.average_returned</c> call it after the numpy.matrix rule and the null check; an
-        ///     override replaces both for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE);
+        ///     override replaces both for every array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE);
         ///     it was the internal class <c>AverageEngine</c>.
         /// </remarks>
         public abstract (NDArray avg, NDArray sumOfWeights) Average(NDArray a, int[] axis = null, NDArray weights = null,
@@ -241,7 +241,7 @@ namespace NumSharp
         ///     NumPy writes cov in Python; DefaultEngine's override runs its statements (its product goes through
         ///     <c>np.dot</c>, so the OpenBLAS backend computes it when installed). <c>np.cov</c> (and <c>np.corrcoef</c>
         ///     through it) calls this after the null check, a subclass operand handed in as its plain view; an override
-        ///     replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it
+        ///     replaces it for every array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE); it
         ///     was the internal
         ///     class <c>CovEngine</c>.
         /// </remarks>
@@ -322,7 +322,7 @@ namespace NumSharp
         ///     components are bit-identical to NumPy's. <c>np.gradient</c>'s overloads spread their spacings into one list
         ///     and call this, a subclass operand handed in as its plain view; an override replaces it for every array whose
         ///     engine it is. NumPy creates every component with <c>np.empty_like(f, dtype=otype)</c>, so each is
-        ///     <paramref name="f"/>'s class (<see cref="NDSubclassRules.Gradient"/>). New in 0.71.0 (the np-layer dtype plan,
+        ///     <paramref name="f"/>'s class (<see cref="NDSubclassRules.Gradient"/>). New in 0.80.0 (the np-layer dtype plan,
         ///     phase PE); it was the internal class <c>GradientEngine</c>.
         /// </remarks>
         [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Gradient))]
@@ -351,7 +351,7 @@ namespace NumSharp
         ///     NumPy writes trapezoid in Python; DefaultEngine's override runs its statements, the half and its sum fused
         ///     into one pass where that gives NumPy's bits. <c>np.trapezoid</c> calls this after the null check, a
         ///     subclass operand handed in as its plain view; an override replaces it for every array whose engine it is.
-        ///     New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>TrapezoidEngine</c>.
+        ///     New in 0.80.0 (the np-layer dtype plan, phase PE); it was the internal class <c>TrapezoidEngine</c>.
         /// </remarks>
         [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Trapezoid))]
         public abstract NDArray Trapezoid(NDArray y, NDArray x = null, double dx = 1.0, int axis = -1);
