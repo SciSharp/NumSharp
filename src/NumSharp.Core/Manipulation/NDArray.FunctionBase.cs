@@ -2983,7 +2983,14 @@ namespace NumSharp
                 NDArray a = xi[i] ?? throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"xi[{i}]"),
                     "meshgrid coordinate vectors must not be null.");
                 int axis = swapXY ? (i == 0 ? 1 : i == 1 ? 0 : i) : i;
-                output[i] = a.reshape(Shape.Adopt(OpenMeshShape(ndim, axis, a.size)));
+                Shape meshShape = Shape.Adopt(OpenMeshShape(ndim, axis, a.size));
+                // A matrix input is NumPy's `np.asanyarray(x).reshape(...)` of the matrix (and under 'xy' a `.shape =`
+                // assignment too), each followed by matrix.__array_finalize__, which folds every rank but two onto two axes:
+                // the open mesh of a matrix input is (1, N) unless the grid has two axes, so three matrix rows give three
+                // 1 x N matrices, as in NumPy (an empty one raises the finalize rule's reshape error, as NumPy's does).
+                if (NDSubclass.StandsForMatrix(a))
+                    meshShape = meshShape.AsMatrix();
+                output[i] = a.reshape(meshShape);
             }
 
             // Dense grids: broadcast each open-mesh axis across the full shape (np.broadcast_arrays' statement: the

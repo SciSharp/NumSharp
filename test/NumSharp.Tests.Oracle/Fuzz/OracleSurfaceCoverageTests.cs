@@ -350,6 +350,10 @@ namespace NumSharp.Tests.Fuzz
         private static readonly HashSet<string> NdarrayPropSiblingOwned = new()
         {
             "flags",    // the flags oracle (#5); each flags attribute is a surface.jsonl key (ndarray.flags.<name>)
+            // 2026-11-07: NumPy's class attribute, read by the woven subclass mechanisms to choose the wrapping operand and
+            // the subtype (the matrix-operand tier gates its effect on every function; NDMatrixOperandTests
+            // .ArrayPriority_IsNumPysPerClass pins the values 0.0 / 0.0 / 10.0).
+            "__array_priority__",
             // 2026-10-08: base, data (the memoryview), device, dtype and shape left this list — surface.jsonl gates each
             // as an ndarray.<name> key.
         };

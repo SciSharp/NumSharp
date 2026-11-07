@@ -115,8 +115,10 @@ namespace NumSharp
         /// </param>
         /// <returns>
         ///     N grids as a <see cref="MeshgridResult"/> (NumPy's tuple): implicit to <see cref="NDArray"/>
-        ///     <c>[]</c>, deconstructable, and indexable. The grid of a <c>numpy.char.chararray</c> input is a chararray
-        ///     (NumPy keeps each input's class), the grid of a plain input a plain array.
+        ///     <c>[]</c>, deconstructable, and indexable. Each grid keeps its input's class, as NumPy's does: a
+        ///     <c>numpy.matrix</c> input's grid is a matrix (the matrix finalize rule folding every reshape onto two axes, so
+        ///     three matrix rows give three 1 x N matrices), a <c>numpy.char.chararray</c> input's a chararray, a plain
+        ///     input's a plain array.
         /// </returns>
         /// <remarks>
         ///     Port of NumPy 2.x <c>numpy.meshgrid</c> (<c>numpy/lib/_function_base_impl.py</c>). Each input
@@ -137,7 +139,11 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="xi"/> is null, or one of its vectors is (the parameter is
         ///     then named <c>xi[i]</c>, after the indexing check).</exception>
         /// <exception cref="ValueError"><paramref name="indexing"/> is neither <c>"xy"</c> nor <c>"ij"</c> (<c>Valid values
-        ///     for `indexing` are 'xy' and 'ij'.</c>).</exception>
+        ///     for `indexing` are 'xy' and 'ij'.</c>); a matrix grid of more than two axes longer than 1 (<c>shape too large
+        ///     to be a matrix.</c>).</exception>
+        /// <exception cref="IncorrectShapeException">A matrix input's 1 x N open mesh does not broadcast against the higher-rank
+        ///     open meshes of plain inputs (broadcast_arrays' <c>shape mismatch: objects cannot be broadcast to a single
+        ///     shape.  Mismatch is between arg 0 with shape (1, 3) and arg 2 with shape (1, 1, 4).</c>, as in NumPy).</exception>
         public static MeshgridResult meshgrid(NDArray[] xi,
             string indexing = "xy", bool sparse = false, bool copy = true)
         {

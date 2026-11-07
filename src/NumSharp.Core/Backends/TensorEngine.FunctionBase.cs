@@ -321,9 +321,11 @@ namespace NumSharp
         ///     NumPy writes gradient in Python; DefaultEngine's override runs its statements, each in NumPy's dtype, so the
         ///     components are bit-identical to NumPy's. <c>np.gradient</c>'s overloads spread their spacings into one list
         ///     and call this, a subclass operand handed in as its plain view; an override replaces it for every array whose
-        ///     engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class
-        ///     <c>GradientEngine</c>.
+        ///     engine it is. NumPy creates every component with <c>np.empty_like(f, dtype=otype)</c>, so each is
+        ///     <paramref name="f"/>'s class (<see cref="NDSubclassRules.Gradient"/>). New in 0.71.0 (the np-layer dtype plan,
+        ///     phase PE); it was the internal class <c>GradientEngine</c>.
         /// </remarks>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Gradient))]
         public abstract np.GradientResult Gradient(NDArray f, object[] varargs, int[] axis = null, int edge_order = 1);
 
         /// <summary>

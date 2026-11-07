@@ -126,9 +126,7 @@ mapped memory ends. Two tools make it fail:
   jagged C# array, NL7 and NL13 now regression pins (fixed by the woven subclass paths), NL8: which NaN a run of NaNs keeps in a
   DEBUG build, where the JIT's reduce step differs from Release (CI runs Release), NL9: np.polyder's term count and its
   missing last product, NL10: np.einsum_path's IndexOutOfRangeException for an ellipsis without its operand, NL11:
-  np.isscalar of a Half, a BigInteger and a Type object), `OpenBugs.MatrixOperand.cs`
-  (np.gradient and np.meshgrid return plain arrays in their result structs where NumPy returns matrices, MO06 / MO07),
-  `OpenBugs.Reductions.cs` (how a reduction STARTS: flat `cumsum` loses a leading `-0.0`; the managed size-1 `dot`/`inner`
+  np.isscalar of a Half, a BigInteger and a Type object), `OpenBugs.Reductions.cs` (how a reduction STARTS: flat `cumsum` loses a leading `-0.0`; the managed size-1 `dot`/`inner`
   operands take the opposite of NumPy's scalar branch; complex one-element `prod` skips the `1+0j` identity; `median`
   returns the middle element instead of its `np.mean`; complex `cumprod` multiplies element 0 by `1+0j`; the default
   `einsum`'s zero-filled accumulator for bare products; the N-D size-1 flat `cumprod` returning 0-d; which NaN a flat sum

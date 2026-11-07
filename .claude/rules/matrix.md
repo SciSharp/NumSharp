@@ -69,7 +69,10 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
     array or a bound; `np.iscomplex` is a matrix for a complex matrix and a plain array otherwise; `np.r_` / `np.c_` /
     `np.block` cannot give a matrix entry a third axis (`np.block([[[m]]])` raises "axis -3 is out of bounds for array of
     dimension 2"); `np.block` follows NumPy's route (repeated concatenation returns a matrix, the single-allocation route
-    past 2*512*512 elements a new ndarray).
+    past 2*512*512 elements a new ndarray); `np.gradient`'s components are the operand's class (`np.empty_like(f)`,
+    `NDSubclassRules.Gradient`); `np.meshgrid`'s grids keep each input's class, and the matrix finalize rule applies at
+    NumPy's reshape steps (the computation reshapes a matrix input's open mesh with `Shape.AsMatrix()`), so three matrix
+    rows give three 1 × N matrices and a row beside plain inputs of a higher rank raises broadcast_arrays' mismatch.
   - The plain view is the whole isolation: the second call receives plain aliases, so every computation and public
     function below it meets plain arrays, and no per-thread state exists (a user callback such as
     `np.apply_along_axis`'s `func1d` is ordinary user code and gets NumPy's classes). A view remembers the class it
@@ -92,8 +95,7 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
     `[PlainReceiver]` declaration.
   - Limits (`[Misaligned]`, pinned in `Matrixlib/NDMatrixOperand.Tests.cs`): a function whose C# return type is a typed
     array cannot return a matrix (`np.isclose`, gap MO01; the typed `np.all` / `np.any` overloads, `np.nonzero` and
-    `np.flatnonzero` are plain in NumPy too); `np.gradient` and `np.meshgrid` return plain arrays in their result structs
-    (gaps MO06 / MO07, `OpenBugs.MatrixOperand.cs`); numpy.ma has no `masked_matrix` (NumPy's `ma.array(m).sum(axis=0)`
+    `np.flatnonzero` are plain in NumPy too); numpy.ma has no `masked_matrix` (NumPy's `ma.array(m).sum(axis=0)`
     is 1 × N); the `numpy.polynomial` package computes plain; a result is always a matrix VIEW of the plain result (no
     `flags.owndata` parity for the functions NumPy allocates as the subclass). Where matrix semantics leak into NumPy's
     own Python code, NumSharp does not reproduce it: gaps MO02 to MO05, `np.linalg.vector_norm(m)` (an array of `|x|` in

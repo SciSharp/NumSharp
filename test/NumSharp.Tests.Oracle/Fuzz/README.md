@@ -2379,9 +2379,12 @@ a woven result is always a matrix view of the plain result.
 | MO05 | 27 | `np.polyval`, `np.i0`, narrow-float `np.sinc`, `np.trapezoid` with a matrix x: `*` is the matrix product inside NumPy |
 
 MO02 to MO05 are NumPy ARTIFACTS: matrix semantics leak into NumPy's own Python code. NumSharp returns the plain
-result shaped by the function's declared mechanism. Two more gaps cannot be tier cases, because their results are structs
-of arrays: MO06 (`np.gradient`) and MO07 (`np.meshgrid`) return plain arrays where NumPy returns matrices; their
-repros are in `NumSharp.Tests/OpenBugs.MatrixOperand.cs`.
+result shaped by the function's declared mechanism. Two former gaps were not tier cases, because their results are
+structs of arrays: MO06 (`np.gradient`) and MO07 (`np.meshgrid`) returned plain arrays where NumPy returns matrices. Both
+are closed (2026-11-07): np.gradient's components are created as the operand's class, and np.meshgrid's grids keep each
+input's class under the matrix finalize rule at NumPy's reshape steps; their regression pins are
+`NumSharp.Tests/Matrixlib/NDMatrixOperand.Tests.cs` (`Gradient_OfAMatrix_ReturnsMatrices`,
+`Meshgrid_OfMatrixRows_ReturnsMatricesUnderTheFinalizeRule`, `Meshgrid_MatrixBesideHigherRankInputs_RaisesNumPysBroadcastError`).
 
 **The caller audit** (`MatrixOperand_LibraryNeverReachesAMatrixRule`). The woven functions rest on one contract: no
 method of the library hands a matrix OBJECT to a public function (library code is written for plain results; a

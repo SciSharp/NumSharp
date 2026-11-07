@@ -77,24 +77,50 @@ namespace NumSharp
 
         /// <summary>
         ///     <c>np.meshgrid</c>: NumPy builds grid <c>i</c> from <c>np.asanyarray(xi[i])</c> (reshape,
-        ///     <c>broadcast_arrays(subok=True)</c>, copy), so each grid keeps ITS input's class: a chararray input gives a
-        ///     chararray grid, a plain one a plain grid. A matrix input gives a plain grid (NumSharp's documented gap MO07:
-        ///     NumPy's grid is a matrix).
+        ///     <c>broadcast_arrays(subok=True)</c>, copy), so each grid keeps ITS input's class: a matrix input gives a matrix
+        ///     grid, a chararray input a chararray grid, a plain one a plain grid (<c>np.meshgrid(m[0], x)</c> is a matrix and
+        ///     an ndarray).
         /// </summary>
-        /// <param name="result">The grids computed on the plain views.</param>
+        /// <param name="result">The grids computed on the plain views. The computation already gave a matrix input's grid
+        ///     the shape NumPy's reshape steps give it under the matrix finalize rule (<see cref="NDArray"/>'s meshgrid
+        ///     statements), so the class's creation here changes no shape.</param>
         /// <param name="xi">The caller's inputs as a sequence, or <c>null</c> for the two- and three-input overloads.</param>
         /// <param name="x1">The first input of a fixed-arity overload, or <c>null</c>.</param>
         /// <param name="x2">The second input, or <c>null</c>.</param>
         /// <param name="x3">The third input, or <c>null</c>.</param>
-        /// <returns>The grids, each chararray input's as a chararray over its grid.</returns>
+        /// <returns>The grids, each subclass input's as its class over its grid.</returns>
+        /// <exception cref="ValueError">A matrix grid of more than two axes longer than 1 (a matrix input broadcast against
+        ///     plain inputs of a higher rank: <c>shape too large to be a matrix.</c>).</exception>
         internal static np.MeshgridResult Meshgrid(np.MeshgridResult result, NDArray[] xi, NDArray x1, NDArray x2, NDArray x3)
         {
             NDArray[] inputs = xi ?? new[] { x1, x2, x3 };
             NDArray[] grids = (NDArray[])result.ToArray().Clone();
             for (int i = 0; i < grids.Length && i < inputs.Length; i++)
-                if (NDSubclass.KindOf(inputs[i]) == NDSubclassKind.CharArray)
+                if (NDSubclass.KindOf(inputs[i]) != NDSubclassKind.None)
                     grids[i] = NDSubclass.NewSubtype(grids[i], null, inputs[i], keepRank: false, NewSubtypeZeroDim.Array);
             return new np.MeshgridResult(grids);
+        }
+
+        /// <summary>
+        ///     <c>np.gradient(f, *varargs, axis, edge_order)</c>: NumPy takes <c>f = np.asanyarray(f)</c> and creates every
+        ///     component with <c>out = np.empty_like(f, dtype=otype)</c>, so each one is <paramref name="f"/>'s class (two
+        ///     2 x 3 matrices for a 2 x 3 matrix; one for a single axis).
+        /// </summary>
+        /// <param name="result">The components computed on the plain view.</param>
+        /// <param name="f">The caller's operand.</param>
+        /// <returns>The components, each created as <paramref name="f"/>'s class; <paramref name="result"/> for a plain
+        ///     operand.</returns>
+        /// <remarks>The values are the plain computation's: where NumPy's own Python body would reach a matrix's
+        ///     <c>*</c> (a non-uniform spacing's coefficient times the matrix slice is <c>np.dot</c> there), NumSharp keeps
+        ///     the elementwise product, the rule of the documented gaps MO02 to MO05.</remarks>
+        internal static np.GradientResult Gradient(np.GradientResult result, NDArray f)
+        {
+            if (NDSubclass.KindOf(f) == NDSubclassKind.None)
+                return result;
+            NDArray[] components = (NDArray[])result.ToArray().Clone();
+            for (int i = 0; i < components.Length; i++)
+                components[i] = NDSubclass.NewSubtype(components[i], null, f, keepRank: false, NewSubtypeZeroDim.Array);
+            return new np.GradientResult(components, result.IsSingle);
         }
 
         /// <summary>

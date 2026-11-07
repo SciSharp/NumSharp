@@ -54,6 +54,23 @@ namespace NumSharp.Tests.Matrixlib
         // Rules NumPy's source and a direct probe gave (not in the oracle tier)
         // ================================================================================================
 
+        /// <summary>
+        ///     NumPy's <c>__array_priority__</c> per class, which the woven mechanisms read to choose the wrapping operand
+        ///     and the subtype: 0.0 for an ndarray and a chararray (NumPy's <c>np.char.chararray</c> declares none and
+        ///     inherits ndarray's), 10.0 for a matrix - read through an <see cref="NDArray"/> reference, as the virtual
+        ///     member is.
+        /// </summary>
+        [TestMethod]
+        public void ArrayPriority_IsNumPysPerClass()
+        {
+            // NumPy 2.4.2: np.array([1.]).__array_priority__ is 0.0, np.char.array(['a']).__array_priority__ 0.0,
+            // np.matrix([[1.]]).__array_priority__ 10.0.
+            A().__array_priority__.Should().Be(0.0);
+            NDArray chars = np.@char.array(new[] { "a" });
+            chars.__array_priority__.Should().Be(0.0);
+            M().__array_priority__.Should().Be(10.0);
+        }
+
         /// <summary>Functions that allocate through the operand's class or wrap their result: a matrix comes back,
         ///     and a 1-d result becomes a 1 x N row.</summary>
         [TestMethod]
@@ -338,6 +355,102 @@ namespace NumSharp.Tests.Matrixlib
             Check(np.power(in m, in two), true, 2, 3);
             Shape row = new Shape(6);
             Check(np.reshape(m, ref row), true, 1, 6);
+        }
+
+        // ================================================================================================
+        // Result structs: np.gradient and np.meshgrid (gaps MO06 / MO07, closed)
+        // ================================================================================================
+
+        /// <summary>
+        ///     Regression pin (gap MO06, closed): NumPy's np.gradient creates every component with
+        ///     <c>np.empty_like(f, dtype=otype)</c>, so a matrix operand gives matrices - a tuple of two 2 x 3 matrices,
+        ///     one 2 x 3 matrix along one axis, a 1 x 3 matrix for a row along its axis - with the plain gradient's values.
+        ///     Before, the GradientResult held plain arrays.
+        /// </summary>
+        [TestMethod]
+        public void Gradient_OfAMatrix_ReturnsMatrices()
+        {
+            // NumPy: m = np.matrix([[1., 2., 4.], [7., 11., 16.]]); np.gradient(m) is ([[6, 9, 12], [6, 9, 12]],
+            // [[1, 1.5, 2], [4, 4.5, 5]]), both matrices.
+            NDArray m = np.matrix(np.array(new double[,] { { 1, 2, 4 }, { 7, 11, 16 } }));
+            NDArray[] gradients = np.gradient(m);
+            gradients.Length.Should().Be(2);
+            Check(gradients[0], true, 2, 3);
+            gradients[0].Should().BeOfValues(6.0, 9.0, 12.0, 6.0, 9.0, 12.0);
+            Check(gradients[1], true, 2, 3);
+            gradients[1].Should().BeOfValues(1.0, 1.5, 2.0, 4.0, 4.5, 5.0);
+
+            NDArray alongRows = np.gradient(m, axis: 0);
+            Check(alongRows, true, 2, 3);
+            alongRows.Should().BeOfValues(6.0, 9.0, 12.0, 6.0, 9.0, 12.0);
+
+            NDArray row = np.gradient(np.matrix(np.array(new double[,] { { 1, 2, 3 } })), axis: 1);
+            Check(row, true, 1, 3);
+            row.Should().BeOfValues(1.0, 1.0, 1.0);
+        }
+
+        /// <summary>
+        ///     Regression pin (gap MO07, closed): NumPy's np.meshgrid reshapes each input with the input's own class
+        ///     (<c>np.asanyarray(x).reshape(...)</c>, a <c>.shape =</c> under 'xy', <c>broadcast_arrays(subok=True)</c>, copy),
+        ///     so a matrix input gives a matrix grid, a plain one a plain grid, and the matrix finalize rule folds every
+        ///     reshape onto two axes: three matrix rows give three 1 x 3 matrices. Before, the MeshgridResult held plain
+        ///     arrays (and three rows gave 3 x 3 x 3 grids).
+        /// </summary>
+        [TestMethod]
+        public void Meshgrid_OfMatrixRows_ReturnsMatricesUnderTheFinalizeRule()
+        {
+            NDArray Row() => np.matrix(np.array(new double[,] { { 1, 2, 3 } }));
+
+            // NumPy: np.meshgrid(r, r) is two 3 x 3 matrices, the first [[1, 2, 3]] * 3.
+            NDArray[] pair = np.meshgrid(Row(), Row());
+            pair.Length.Should().Be(2);
+            Check(pair[0], true, 3, 3);
+            pair[0].Should().BeOfValues(1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0);
+            Check(pair[1], true, 3, 3);
+
+            // NumPy: three rows, 'xy' and 'ij' alike - three 1 x 3 matrices [[1, 2, 3]].
+            foreach (string indexing in new[] { "xy", "ij" })
+            {
+                NDArray[] triple = np.meshgrid(new[] { Row(), Row(), Row() }, indexing);
+                triple.Length.Should().Be(3);
+                foreach (NDArray grid in triple)
+                {
+                    Check(grid, true, 1, 3);
+                    grid.Should().BeOfValues(1.0, 2.0, 3.0);
+                }
+            }
+
+            // NumPy: each grid keeps ITS input's class - a matrix and an ndarray, both 2 x 3.
+            NDArray[] mixed = np.meshgrid(Row(), np.array(new[] { 1.0, 2.0 }));
+            Check(mixed[0], true, 2, 3);
+            Check(mixed[1], false, 2, 3);
+
+            // NumPy: sparse=True is the open mesh, a 1 x 3 and a 3 x 1 matrix; indexing='ij' two 3 x 3 matrices; copy=False
+            // two 3 x 3 matrix views.
+            NDArray[] sparse = np.meshgrid(Row(), Row(), sparse: true);
+            Check(sparse[0], true, 1, 3);
+            Check(sparse[1], true, 3, 1);
+            NDArray[] ij = np.meshgrid(Row(), Row(), indexing: "ij");
+            Check(ij[0], true, 3, 3);
+            Check(ij[1], true, 3, 3);
+            NDArray[] views = np.meshgrid(Row(), Row(), copy: false);
+            Check(views[0], true, 3, 3);
+            Check(views[1], true, 3, 3);
+        }
+
+        /// <summary>
+        ///     np.meshgrid of a matrix row beside plain inputs of a higher rank: NumPy's finalized 1 x 3 matrix does not
+        ///     broadcast against the 1 x 1 x 4 open mesh of the third input, so broadcast_arrays raises its shape-mismatch
+        ///     text naming that pair, before any grid is built.
+        /// </summary>
+        [TestMethod]
+        public void Meshgrid_MatrixBesideHigherRankInputs_RaisesNumPysBroadcastError()
+        {
+            NDArray row = np.matrix(np.array(new double[,] { { 1, 2, 3 } }));
+            new Action(() => np.meshgrid(new[] { row, np.array(new[] { 1.0, 2.0 }), np.array(new[] { 1.0, 2.0, 3.0, 4.0 }) }))
+                .Should().Throw<Exception>()
+                .WithMessage("shape mismatch: objects cannot be broadcast to a single shape.  Mismatch is between arg 0 with " +
+                             "shape (1, 3) and arg 2 with shape (1, 1, 4).");
         }
 
         // ================================================================================================
