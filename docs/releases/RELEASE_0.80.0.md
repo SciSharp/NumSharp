@@ -327,6 +327,7 @@ Three optional companion packages ship for the first time, co-versioned with **N
 - The coverage inventory compares every credited API's C# overloads with NumPy's signature and joins the API diff gap map onto its rows - `f949fa17`, `b4a3b78f`.
 - `tools/facade-move/snapshot.cs` records NumSharp's own outcome for every overload of the named functions over 18 dtypes x 13 layouts, so a refactor can be shown to change nothing; two ratchets keep dtype logic out of the public facades - `4d73fcfc`.
 - Analyzer rule `NDW020` keeps exception texts culture-independent: a number, `object` or type parameter formatted without a format provider inside an exception message (an interpolation hole, a `+` operand, `ToString()`, `string.Format` / `Join`, a `StringBuilder` append, an `ArgumentOutOfRangeException` actual value, and the locals, `: base(...)` calls and helpers a message reads) is a build error in NumSharp.Core whose text lists the fixes in order; it ships in the **NumSharp** package off by default (`dotnet_diagnostic.NDW020.severity = error` in an `.editorconfig` turns it on) - `c6fcbd8c`.
+- Packages publish to nuget.org through Trusted Publishing: the release workflow trades its GitHub OIDC token for a one-hour API key (`NuGet/login`), so no long-lived API key is stored - `482d44d2`.
 
 ### 💥 Breaking Changes
 - `DType` replaces `System.Type` as the dtype currency - `c916c579`, `68a02258`.

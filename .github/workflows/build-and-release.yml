@@ -1188,6 +1188,22 @@ jobs:
     if: needs.validate-release.outputs.is_valid == 'true'
     runs-on: ubuntu-latest
 
+    # Trusted Publishing (OIDC) - no long-lived API key. GitHub mints a short-lived, signed OIDC
+    # token for this job (id-token: write); NuGet/login POSTs it to nuget.org's token endpoint, which
+    # validates the token's repository-owner / repository / workflow-file claims against the Trusted
+    # Publishing policy registered under the SciSharp owner (workflow file build-and-release.yml - nuget.org
+    # takes the file name only - no environment, scope "Push new packages and package versions", glob
+    # *NumSharp*) and returns a temporary API key valid for 1 hour. The push then uses that key.
+    #
+    # A job-level permissions block REPLACES the top-level `write-all` for THIS job, so id-token is
+    # granted explicitly (write-all's coverage of id-token is not something to rely on) and the rest
+    # is least-privilege: contents:read is unused here (no checkout) but harmless; actions:read lets
+    # download-artifact read this run's nuget-packages artifact.
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+
     steps:
     - name: Download NuGet Packages
       uses: actions/download-artifact@v8
@@ -1202,12 +1218,25 @@ jobs:
           8.0.x
           10.0.x
 
-    # Every package is pushed even when one is refused, and the step fails at the END naming each refusal. A key
-    # scoped to EXISTING packages refuses a NEW id - and the ONNX Runtime, ML.NET and ParquetNet bridges are new ids
-    # the day they are released - so stopping at the first refusal (the shell's -e) left every package after it
-    # unpublished and named only the first problem. Before tagging a release that adds a package id, check the key
-    # behind NUGETAPIKEY on nuget.org (Account > API keys): scope "Push new packages and package versions", glob
-    # "NumSharp*" (F25 / P9 of the 0.80.0-beta1 bridge QA).
+    # Exchange the GitHub OIDC token for a short-lived nuget.org API key. `user` is the nuget.org USERNAME
+    # (profile name, NOT an email) of the account that CREATED the Trusted Publishing policy - not the SciSharp
+    # organization that owns it (NuGet/login's own error text says so) - read from the NUGET_USER repository
+    # secret: without it the login fails and nothing is pushed. Requested here, immediately before the push, so
+    # the 1-hour key cannot expire before use. NuGet/login masks the key (core.setSecret) before it becomes
+    # steps.nuget-login.outputs.NUGET_API_KEY, so the rendered push script never prints it.
+    - name: NuGet login (OIDC trusted publishing)
+      uses: NuGet/login@v1
+      id: nuget-login
+      with:
+        user: ${{ secrets.NUGET_USER }}
+
+    # Every package is pushed even when one is refused, and the step fails at the END naming each refusal:
+    # stopping at the first refusal (the shell's -e) left every package after it unpublished and named only the
+    # first problem (F25 / P9 of the 0.80.0-beta1 bridge QA). What the temporary key may push is decided by the
+    # policy's scope and glob: a policy that allows only new versions of EXISTING packages refuses a NEW id - and
+    # the ONNX Runtime, ML.NET and ParquetNet bridges are new ids the day they are released. Before tagging a
+    # release that adds a package id, check the policy on nuget.org (Account > Trusted Publishing): active, scope
+    # "Push new packages and package versions", a glob that matches the new id.
     - name: Push to NuGet
       shell: bash
       run: |
@@ -1216,13 +1245,13 @@ jobs:
           echo "Pushing $package..."
           # `if !` keeps a refusal from ending the loop (an -e shell does not exit on a tested command).
           if ! dotnet nuget push "$package" \
-              --api-key ${{ secrets.NUGETAPIKEY }} \
+              --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} \
               --source https://api.nuget.org/v3/index.json \
               --skip-duplicate; then
             failed="$failed $(basename "$package")"
           fi
         done
         if [ -n "$failed" ]; then
-          echo "::error::nuget.org refused:$failed - a NEW package id needs a key scoped 'Push new packages and package versions'"
+          echo "::error::nuget.org refused:$failed - a NEW package id needs the Trusted Publishing policy's scope 'Push new packages and package versions' and a glob that matches it"
           exit 1
         fi

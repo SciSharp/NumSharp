@@ -16,10 +16,14 @@ paths:
   tag push, creates the GitHub Release and publishes to nuget.org. The `FuzzMatrix` gate runs here (it replays the
   committed corpora; no Python). The `interop-test` job builds and tests the interop packages, the unreleased ones
   included (`interop-packages.md`), with its "Package consumer:" steps last (`openblas.md`).
-- `publish-nuget` pushes EVERY package even when nuget.org refuses one, then fails naming each refusal. A key scoped to
-  existing packages refuses a NEW id, so before tagging a release that adds a package id (an unreleased bridge made
-  packable), check the key behind `NUGETAPIKEY` on nuget.org: scope "Push new packages and package versions", glob
-  `NumSharp*`.
+- `publish-nuget` publishes through nuget.org Trusted Publishing, so no API key is stored: `NuGet/login@v1` trades the
+  job's GitHub OIDC token (`id-token: write`) for a one-hour key under the policy registered on nuget.org (Account >
+  Trusted Publishing: owner SciSharp, workflow file `build-and-release.yml`, no environment). Its `user` is the
+  `NUGET_USER` repository secret: the nuget.org profile name of the account that created the policy (not an email, not
+  the SciSharp organization); without it the login fails and nothing is pushed. The job pushes EVERY package even when
+  nuget.org refuses one, then fails naming each refusal. The policy's scope decides whether a NEW id may be pushed, so
+  before tagging a release that adds a package id (an unreleased bridge made packable), check that the policy is active,
+  its scope is "Push new packages and package versions" and its glob (`*NumSharp*`) matches the id.
 - The packages embed NO README: the "No embedded package README" guard in `Directory.Build.props` fails `dotnet pack` if
   a project sets `PackageReadmeFile`, because an embedded readme would lock each version's nuget.org README tab. After a
   release publishes, the owner pastes the GitHub release markdown into every package version's README by hand
