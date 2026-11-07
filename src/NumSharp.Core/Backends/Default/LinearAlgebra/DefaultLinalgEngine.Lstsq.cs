@@ -18,7 +18,7 @@ namespace NumSharp.Backends
         {
             // A 1-D b is promoted to a single column, exactly as NumPy's `b = b[:, newaxis]`; the
             // solution is squeezed back at the end. _assert_2d then rejects any higher rank. np.expand_dims' member:
-            // np.linalg.lstsq's plain region (or its matrix rule's) already kept the facade's class rules from firing.
+            // np.linalg.lstsq's woven subclass path hands a subclass operand in as its plain view.
             bool is1d = b.ndim == 1;
             var b2 = is1d ? NDArray.expand_dims(b, -1) : b;
 

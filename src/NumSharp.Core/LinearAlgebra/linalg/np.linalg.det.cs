@@ -32,7 +32,6 @@ namespace NumSharp
             public static NDArray det(NDArray a)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 return a.TensorEngine.Linalg.Det(a);
             }
 
@@ -63,7 +62,6 @@ namespace NumSharp
             public static (NDArray sign, NDArray logabsdet) slogdet(NDArray a)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 return a.TensorEngine.Linalg.Slogdet(a);
             }
         }

@@ -26,12 +26,6 @@ namespace NumSharp
         /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
         public static NDArray roll(NDArray a, long shift, int? axis = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, shift, axis), static s => roll(s.a, s.shift, s.axis));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Kept((a, shift, axis), static s => roll(s.a, s.shift, s.axis));
 
             // NumPy's statements (the flat roll, or empty_like and the two slice copies along the axis) are the array
             // object's.
@@ -49,10 +43,6 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>'s rank.</exception>
         /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
         public static NDArray roll(NDArray a, int shift, int? axis = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, shift, axis), static s => roll(s.a, s.shift, s.axis))
-            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.Kept((a, shift, axis), static s => roll(s.a, s.shift, s.axis))
-            : NDArray.roll(a, (long)shift, axis);   // the array object's statements, the shift widened
+            => NDArray.roll(a, (long)shift, axis);   // the array object's statements, the shift widened
     }
 }

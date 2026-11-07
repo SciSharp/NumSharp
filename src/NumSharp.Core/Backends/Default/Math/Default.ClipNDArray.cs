@@ -427,9 +427,6 @@ namespace NumSharp.Backends
             bool identity = layout.IsContiguous;
             int[] perm = identity ? null : layout.DenseAxisOrder();
 
-            // The transposes below are this engine method's own views: np.transpose must not apply its matrix rule
-            // to a caller's matrix (a bound or an out; np.clip's own rule covers the clipped array).
-            using var plain = identity ? default : NDMatrixBoundary.PlainFor(new[] { lhs, min, max, @out });
             NDArray xv = identity ? lhs : lhs.TensorEngine.Transpose(lhs, perm);
             NDArray minv = minArray ? (identity ? min : min.TensorEngine.Transpose(min, perm)) : min;
             NDArray maxv = maxArray ? (identity ? max : max.TensorEngine.Transpose(max, perm)) : max;

@@ -132,10 +132,10 @@ namespace NumSharp
             // returned. The view belongs to this masked array, so no scope may dispose it (Own). A
             // numpy.char.chararray is stored the same way: NumPy's masked chararray keeps it as _baseclass (its .data
             // is a chararray and its comparisons strip), which is not modelled either.
-            _data = NDMatrixBoundary.IsMatrix(data) ? MaskedArrayModule.Own(NDMatrixBoundary.PlainOf(data))
-                : NDCharArrayBoundary.IsCharArray(data) ? MaskedArrayModule.Own(NDCharArrayBoundary.PlainViewOf(data))
-                : data;
-            _mask = NDMatrixBoundary.IsMatrix(mask) ? MaskedArrayModule.Own(NDMatrixBoundary.PlainOf(mask)) : mask;
+            _data = NDSubclass.KindOf(data) != NDSubclassKind.None ? MaskedArrayModule.Own(NDSubclass.PlainView(data)) : data;
+            _mask = NDSubclass.KindOf(mask) == NDSubclassKind.Matrix
+                ? MaskedArrayModule.Own(NDSubclass.PlainView(mask))
+                : mask;
             _fill_value = fill_value;
         }
 
@@ -3882,7 +3882,7 @@ namespace NumSharp
                 // A numpy.matrix or numpy.char.chararray operand is read as its plain view: numpy.ma's base class is
                 // not modelled (NDMaskedArray's constructor), so the module computes with plain-array semantics
                 // throughout. The view is the calling function's temporary (its scope reclaims it).
-                case NDArray nd: return NDCharArrayBoundary.PlainViewOf(NDMatrixBoundary.PlainOf(nd));
+                case NDArray nd: return NDSubclass.PlainView(nd);
                 case Array arr: return np.array(arr); // C# array-like (double[], int[,], …)
                 default: return NDArray.Scalar(a);    // boxed C# scalar (int/double/bool/…)
             }
@@ -6662,8 +6662,12 @@ namespace NumSharp
                 operand = Backends.DefaultEngine.PackPythonScalarForFloatLoop(value, x.typecode);
             else
                 // A numpy.char.chararray value is read as its plain view, as AsData reads one (numpy.ma's base class is not
-                // modelled); the view is the calling function's temporary.
-                operand = NDCharArrayBoundary.PlainViewOf(value as NDArray) ?? (value as NDMaskedArray)?._data ?? AsValueOperand(value);
+                // modelled); the view is the calling function's temporary. A numpy.matrix value is not converted here: the
+                // comparison ufunc below answers for it.
+                operand = (NDSubclass.KindOf(value as NDArray) == NDSubclassKind.CharArray
+                              ? NDSubclass.PlainView((NDArray)value)
+                              : value as NDArray)
+                          ?? (value as NDMaskedArray)?._data ?? AsValueOperand(value);
             return ufunc switch
             {
                 "equal" => np.equal(x, operand),

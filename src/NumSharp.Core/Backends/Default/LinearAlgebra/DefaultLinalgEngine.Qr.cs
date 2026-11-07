@@ -69,9 +69,8 @@ namespace NumSharp.Backends
         /// <remarks>The allocation and the assignment are np.empty_like's and np.copyto's members (a new plain array over
         ///     <see cref="Shape.NewLikeLayout"/>'s K layout of <paramref name="a"/>, then <c>UnmanagedStorage.Copyto</c>
         ///     with the <c>same_kind</c> rule, which cannot refuse: <paramref name="factored"/> has the copy's own dtype),
-        ///     neither of which has a class rule: the plain region np.empty_like's chararray rule needed (it wrapped the
-        ///     float64 copy as a chararray: "Can only create a chararray from string data.") is gone with the facade
-        ///     call.</remarks>
+        ///     neither of which answers for a subclass: np.empty_like's chararray mechanism (it would wrap the float64 copy
+        ///     as a chararray: "Can only create a chararray from string data.") never runs here.</remarks>
         private static NDArray FactoredCopy(NDArray a, NDArray factored)
         {
             // np.empty_like(a, factored.dtype): order 'K' keeps a's axis permutation; uninitialised, every element is

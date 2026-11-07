@@ -33,7 +33,7 @@ namespace NumSharp
         ///     cast check, the result's allocation in NumPy's layout, and the copy of every input into its slab (a memcpy, a
         ///     cast kernel, or the general copy). A fixed-width string anywhere takes the descriptor route
         ///     (<see cref="ConcatenateStrings"/>). The body of <see cref="np.concatenate(NDArray[], int?, NDArray, DType, string)"/>
-        ///     once its class boundary and null check have run.
+        ///     on its plain views, once its null check has run.
         /// </summary>
         /// <param name="arrays">The inputs, not null (an element may be: it is reported).</param>
         /// <param name="axis">The axis to join along, or null to join the flattened inputs.</param>
@@ -54,6 +54,7 @@ namespace NumSharp
         ///     The <c>axis=None</c> ravels are disposed here, exceptions included; a result this call allocated is returned or,
         ///     on a string input's error, disposed by the string route.
         /// </remarks>
+        [GetSubType("arrays")]
         internal static NDArray concatenate(NDArray[] arrays, int? axis, NDArray @out, DType dtype, string casting)
         {
             // PyArray_ConcatenateInto: "need at least one array to concatenate", NumPy's ValueError.
@@ -173,7 +174,9 @@ namespace NumSharp
             }
             else
             {
-                resultDescr = np.result_type(workArrays);
+                // np.result_type's computation: an operand may be a subclass object (np.bmat's blocks, np.r_'s matrix
+                // entries), which the public function would take its subclass path for.
+                resultDescr = np.ResultTypeOf(workArrays);
                 resultType = resultDescr.GetTypeCode();
             }
 
@@ -782,6 +785,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A complex literal into a real dtype, or None into an integer (or decimal) one.</exception>
         /// <remarks>An explicit 0-d array (<see cref="NDArray.IsExplicitZeroDimArray"/>) stays one through the copy, the cast
         ///     and the view: the mark is per object, so every new object receives it.</remarks>
+        [AsArray]
         internal static NDArray asarray(NDArray a, DType dtype, char order, bool? copy)
         {
             // Python's None: a Python object, so np.asarray(None, dtype) builds a NEW 0-d array of its setitem value (NaN,
@@ -879,13 +883,43 @@ namespace NumSharp
         ///     range (<see cref="asarray"/>'s Python-scalar packing).</exception>
         /// <exception cref="ValueError">A NaN literal into an integer dtype.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
-        /// <remarks>No class boundary runs here: an engine caller sits inside its public function's boundary, and the
-        ///     facade applies its numpy.matrix and numpy.char.chararray rules before it calls this.</remarks>
+        /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
+        ///     and answers for the class itself (NDSubclass).</remarks>
+        [AsArray]
         internal static NDArray ascontiguousarray(NDArray a, DType dtype)
         {
             var result = asarray(a, dtype, 'C', null);
             // NumPy guarantees ndim >= 1: a 0-D input becomes a length-one VIEW sharing the
             // scalar's storage (shape (1,), owndata=false), even when no dtype/layout copy is needed.
+            return result.ndim == 0 ? result.reshape(1) : result;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>array_asfortranarray</c> (<c>multiarraymodule.c</c>) for an array operand, the body of
+        ///     <see cref="np.asfortranarray(NDArray, DType)"/> once its null check ran:
+        ///     <c>_array_fromobject_generic(op, dtype, copy-if-needed, NPY_FORTRANORDER, subok=False, ndmin=1)</c>, the array
+        ///     itself when it already is F-contiguous in the requested dtype, else an F-ordered copy or cast, and a 0-d result
+        ///     raised to one dimension.
+        /// </summary>
+        /// <param name="a">The operand (not null).</param>
+        /// <param name="dtype">The requested dtype, or null to keep the operand's.</param>
+        /// <returns><paramref name="a"/> itself, a view of it (an equal but distinct descriptor, or the (1,) view of a
+        ///     0-d array), or a new F-contiguous array: the caller must not dispose the result unless it is not
+        ///     <paramref name="a"/> (<c>ReferenceEquals</c>), and a view keeps <paramref name="a"/>'s buffer
+        ///     alive.</returns>
+        /// <exception cref="OverflowException">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s
+        ///     range (<see cref="asarray"/>'s Python-scalar packing).</exception>
+        /// <exception cref="ValueError">A NaN literal into an integer dtype.</exception>
+        /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
+        /// <remarks>The computation of the public function, so its <c>[AsArray]</c> declaration covers the 0-d reshape too:
+        ///     NumPy's subok=False drops an array subclass (a matrix operand gives a plain array, never the matrix
+        ///     itself).</remarks>
+        [AsArray]
+        internal static NDArray asfortranarray(NDArray a, DType dtype)
+        {
+            var result = asarray(a, dtype, 'F', null);
+            // Same ndim>=1 contract as ascontiguousarray. A 0-D scalar is both C/F contiguous,
+            // so NumPy returns a length-one view rather than materializing it.
             return result.ndim == 0 ? result.reshape(1) : result;
         }
 
@@ -1075,6 +1109,38 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     <c>np.asanyarray</c> of an array subclass operand: NumPy's <c>PyArray_FromArray</c> with <c>subok</c> - the
+        ///     operand itself when its dtype and layout satisfy the request, otherwise the copy or cast created as the operand's
+        ///     class (a matrix view through the finalize rule; a chararray after its string-data check).
+        /// </summary>
+        /// <param name="operand">The matrix or chararray (a subclass operand, <see cref="NDSubclass.IsOperand(NDArray)"/>).</param>
+        /// <param name="dtype">The requested dtype, or null to keep the operand's.</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
+        /// <returns><paramref name="operand"/> itself, or a new array of its class.</returns>
+        /// <exception cref="ValueError">A chararray converted to a dtype that is not string data (<c>Can only create a
+        ///     chararray from string data.</c>), or a matrix result with more than two axes longer than 1.</exception>
+        /// <exception cref="OverflowException">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s range
+        ///     (<see cref="asarray"/>'s Python-scalar packing).</exception>
+        /// <remarks>The conversion runs on the operand's plain view (the plain route answers every dtype and layout question
+        ///     exactly as for a plain array); the scope reclaims that view and the hidden plain result, which the subclass
+        ///     object keeps alive through its own counted reference when it is created from it.</remarks>
+        private static NDArray AsAnyArrayOfSubclass(NDArray operand, DType dtype, char order)
+        {
+            NDScope scope = NDScope.Open();
+            try
+            {
+                NDArray plain = NDSubclass.Plain(operand);
+                // A conversion that needs nothing hands the plain view back: that is the caller's operand again.
+                NDArray result = NDSubclass.Unalias(asarray(plain, dtype, order, null), plain, operand);
+                return scope.Returns(NDSubclass.NewSubtype(result, null, operand, keepRank: false, NewSubtypeZeroDim.Array));
+            }
+            finally
+            {
+                scope.Dispose();
+            }
+        }
+
+        /// <summary>
         ///     NumPy's <c>_array_fromobject_generic</c> with <c>subok</c> for any C# value, the body of
         ///     <see cref="np.asanyarray(in object, DType, char, string)"/> once the device and the class boundaries were
         ///     checked: the order first (NumPy parses it with the arguments), then Python's <c>None</c>, an array
@@ -1095,6 +1161,11 @@ namespace NumSharp
         /// <exception cref="TypeError">None into an integer (or decimal) dtype, or a list item the requested dtype cannot
         ///     convert.</exception>
         /// <exception cref="OverflowException">A Python int in a list outside the requested integer dtype.</exception>
+        /// <remarks>The subclass's own conversion code (<see cref="SubclassAwareAttribute"/>): an array subclass operand
+        ///     (<see cref="NDMatrix"/>, <see cref="NDCharArray"/>) passes through as its class - itself when nothing needs
+        ///     converting, else the conversion created as the class (<see cref="AsAnyArrayOfSubclass"/>) - so a public
+        ///     function that computes with this receives the caller's objects, never plain views.</remarks>
+        [SubclassAware]
         internal static NDArray asanyarray(object a, DType dtype, char order)
         {
             // PyArray_OrderConverter runs while NumPy parses the arguments: an invalid order raises before the operand is
@@ -1108,6 +1179,9 @@ namespace NumSharp
                     if (dtype is null)
                         throw NDArray.NoneWithoutDtype("np.asanyarray");
                     return NDArray.NoneForStore(dtype);
+                case NDArray nd when NDSubclass.IsOperand(nd):
+                    // subok=True keeps the subclass, where np.asarray (the plain route below) would strip it.
+                    return AsAnyArrayOfSubclass(nd, dtype, order);
                 case NDArray nd:
                     return np.asarray(nd, dtype, order);
                 case Array textArr when Backends.UnmanagedStorage.IsTextInput(textArr, dtype):

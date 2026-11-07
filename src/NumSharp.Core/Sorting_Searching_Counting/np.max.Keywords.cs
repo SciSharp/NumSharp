@@ -29,10 +29,12 @@ namespace NumSharp
     // takes their keyword path (MaxMinNumPy). The facades make one engine call either way.
     //
     // A numpy.matrix operand follows the matrix METHOD, as in NumPy (np-layer NL13): np.max / np.amax / np.min / np.amin
-    // reach matrix.max(axis, out) / matrix.min(axis, out) through _wrapreduction with every keyword the caller passed, so
-    // keepdims= / initial= / where= are the method's TypeError and an out= gets the method's answer (MatrixExtreme).
-    // np.nanmax / np.nanmin take NumPy's branch for an operand that is not a base ndarray: _replace_nan, then np.amax /
-    // np.amin of the copy (the same method rules), then NaN written where a whole slice was NaN (MatrixNanExtreme).
+    // reach matrix.max(axis, out) / matrix.min(axis, out) through _wrapreduction with every keyword the caller passed
+    // (the woven method dispatch of TensorEngine.ReduceAMax / ReduceAMin's [WrapReduction]), so keepdims= / initial= /
+    // where= are the method's TypeError and an out= gets the method's answer. np.nanmax / np.nanmin ask the operand's
+    // class (NDArray.NanMax / NanMin, virtual): NumPy's nanmax tests `type(a) is np.ndarray`, and every other class takes
+    // its branch for subclasses - _replace_nan, then np.amax / np.amin of the copy (the same method rules), then NaN
+    // written where a whole slice was NaN - which NDMatrix's override runs (NDMatrix.Reductions.cs).
     // =============================================================================
 
     public static partial class np
@@ -99,11 +101,9 @@ namespace NumSharp
             NDArray @where = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: matrix.max(axis, out), the method NumPy hands it to
-            ? MatrixExtreme(a, axis, @out, keepdims, initial, @where, isMax: true)
             // The whole call is the engine's: TensorEngine.ReduceAMax of a's engine takes the keywords (a null a is
             // refused above).
-            : a.TensorEngine.ReduceAMax(a, axis, keepdims, null, @out, initial, @where);
+            return a.TensorEngine.ReduceAMax(a, axis, keepdims, null, @out, initial, @where);
         }
 
         /// <summary>
@@ -137,9 +137,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
         public static NDArray amax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: matrix.max(axis, out), the method NumPy hands it to
-            ? MatrixExtreme(a, axis, @out, keepdims, initial, @where, isMax: true)
-            : max(a, axis, @out, keepdims, initial, @where);
+            => max(a, axis, @out, keepdims, initial, @where);
 
         /// <summary>
         ///     Return the minimum of an array or the minimum along an axis — NumPy's <c>np.min(a, axis=None, out=None,
@@ -176,11 +174,9 @@ namespace NumSharp
             NDArray @where = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: matrix.min(axis, out), the method NumPy hands it to
-            ? MatrixExtreme(a, axis, @out, keepdims, initial, @where, isMax: false)
             // The whole call is the engine's: TensorEngine.ReduceAMin of a's engine takes the keywords (a null a is
             // refused above).
-            : a.TensorEngine.ReduceAMin(a, axis, keepdims, null, @out, initial, @where);
+            return a.TensorEngine.ReduceAMin(a, axis, keepdims, null, @out, initial, @where);
         }
 
         /// <summary>
@@ -213,9 +209,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
         public static NDArray amin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: matrix.min(axis, out), the method NumPy hands it to
-            ? MatrixExtreme(a, axis, @out, keepdims, initial, @where, isMax: false)
-            : min(a, axis, @out, keepdims, initial, @where);
+            => min(a, axis, @out, keepdims, initial, @where);
 
         /// <summary>
         ///     Return the maximum of an array or the maximum along an axis, ignoring NaNs — NumPy's <c>np.nanmax(a, axis=None,
@@ -284,11 +278,10 @@ namespace NumSharp
             NDArray @where = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: NumPy's subclass branch, ending in matrix.max
-            ? MatrixNanExtreme(a, axis, @out, keepdims, initial, @where, isMax: true)
-            // The whole call is the engine's: TensorEngine.NanMax of a's engine takes the keywords (a null a is
-            // refused above).
-            : a.TensorEngine.NanMax(a, axis, keepdims, @out, initial, @where);
+            // NumPy's nanmax tests the operand's class (`type(a) is np.ndarray`): the class's own answer is the
+            // virtual NDArray.NanMax - an ndarray's is np.fmax.reduce (the engine's NanMax), a subclass
+            // overrides it with NumPy's branch for anything that is not a base ndarray (a null a is refused above).
+            return a.NanMax(axis, @out, keepdims, initial, @where);
         }
 
         /// <summary>
@@ -351,145 +344,11 @@ namespace NumSharp
             NDArray @where = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: NumPy's subclass branch, ending in matrix.min
-            ? MatrixNanExtreme(a, axis, @out, keepdims, initial, @where, isMax: false)
-            // The whole call is the engine's: TensorEngine.NanMin of a's engine takes the keywords (a null a is
-            // refused above).
-            : a.TensorEngine.NanMin(a, axis, keepdims, @out, initial, @where);
+            // NumPy's nanmin tests the operand's class (`type(a) is np.ndarray`): the class's own answer is the
+            // virtual NDArray.NanMin - an ndarray's is np.fmin.reduce (the engine's NanMin), a subclass
+            // overrides it with NumPy's branch for anything that is not a base ndarray (a null a is refused above).
+            return a.NanMin(axis, @out, keepdims, initial, @where);
         }
 
-        /// <summary>
-        ///     NumPy's np.max / np.amax / np.min / np.amin for a <c>numpy.matrix</c> operand: <c>_wrapreduction</c> finds the
-        ///     operand's own <c>max</c> / <c>min</c> and calls <c>matrix.max(axis=axis, out=out, **passkwargs)</c>, which is
-        ///     <c>ndarray.max(self, axis, out, keepdims=True)._collapse(axis)</c>. Use it only for an operand
-        ///     <see cref="NDMatrixBoundary.Sees"/> as a matrix; a plain array never comes here.
-        /// </summary>
-        /// <param name="a">The matrix operand.</param>
-        /// <param name="axis">The axis, or <c>null</c> for the scalar of every element.</param>
-        /// <param name="out">The caller's out, or <c>null</c>.</param>
-        /// <param name="keepdims">The caller's keepdims; <c>true</c> is the method's TypeError.</param>
-        /// <param name="initial">The caller's initial; any value is the method's TypeError.</param>
-        /// <param name="where">The caller's mask; any mask is the method's TypeError.</param>
-        /// <param name="isMax"><c>true</c> for <c>matrix.max</c> (np.max / np.amax), <c>false</c> for <c>matrix.min</c>.</param>
-        /// <returns>Without <paramref name="out"/>: the 0-d scalar for a <c>null</c> axis, else a row <c>(1, N)</c> or a
-        ///     column <c>(N, 1)</c> matrix. With a matrix <paramref name="out"/>: that out along an axis, a 0-d copy of its
-        ///     element without one.</returns>
-        /// <exception cref="TypeError"><paramref name="keepdims"/> is true, or <paramref name="initial"/> or
-        ///     <paramref name="where"/> is given (<c>matrix.max() got an unexpected keyword argument 'initial'</c>), the first
-        ///     in that order, before anything is computed; or <paramref name="out"/> is a C# scalar (<c>return arrays must be of
-        ///     ArrayType</c>).</exception>
-        /// <exception cref="AttributeError"><paramref name="out"/> is a plain array: the values are stored into it first, as
-        ///     NumPy's method stores them before <c>out._collapse</c> fails.</exception>
-        /// <exception cref="ValueError">An empty reduction (<c>zero-size array to reduction operation maximum which has no
-        ///     identity</c>), or an out that is read-only or of the wrong rank (the reduction's own texts).</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <remarks>C# cannot tell an omitted keepdims from <c>keepdims: false</c>, which NumPy refuses too when it is
-        ///     passed; only <c>keepdims: true</c> raises here (as for <c>np.sum</c>).</remarks>
-        private static NDArray MatrixExtreme(NDArray a, int? axis, NDArray @out, bool keepdims, object initial, NDArray @where,
-            bool isMax)
-        {
-            string method = isMax ? "max" : "min";
-            // _wrapreduction passes the keywords the caller gave in amax's signature order (keepdims, initial, where), and
-            // the method takes none of them: the first one passed is its TypeError, before anything else is looked at.
-            if (keepdims)
-                throw NDMatrixBoundary.KeywordError(method, "keepdims");
-            if (initial is not null)
-                throw NDMatrixBoundary.KeywordError(method, "initial");
-            if (@where is not null)
-                throw NDMatrixBoundary.KeywordError(method, "where");
-
-            // matrix.max(axis, out): a matrix out gets the member's answer, a plain one the values and then the method's
-            // AttributeError (ReducedInto); the plain-out reduction is the engine's keepdims=True call of the method body.
-            if (@out is not null)
-                return isMax
-                    ? NDMatrixBoundary.ReducedInto(a, @out, axis,
-                        static (m, o, ax) => m.max(ax, o),
-                        static (m, o, ax) => m.TensorEngine.ReduceAMax(m, ax, keepdims: true, null, o))
-                    : NDMatrixBoundary.ReducedInto(a, @out, axis,
-                        static (m, o, ax) => m.min(ax, o),
-                        static (m, o, ax) => m.TensorEngine.ReduceAMin(m, ax, keepdims: true, null, o));
-
-            // a row, a column or the scalar, as NumPy's matrix method returns
-            return isMax
-                ? NDMatrixBoundary.Reduced((a, axis), static s => max(s.a, s.axis), axis, false, "max")
-                : NDMatrixBoundary.Reduced((a, axis), static s => min(s.a, s.axis), axis, false, "min");
-        }
-
-        /// <summary>
-        ///     NumPy's np.nanmax / np.nanmin for a <c>numpy.matrix</c> operand, its branch for anything that is not a base
-        ///     ndarray (numpy/lib/_nanfunctions_impl.py), statement for statement:
-        ///     <code>
-        ///     a, mask = _replace_nan(a, -np.inf)          # +np.inf for nanmin
-        ///     res = np.amax(a, axis=axis, out=out, **kwargs)
-        ///     if mask is None:
-        ///         return res
-        ///     kwargs.pop("initial", None)
-        ///     mask = np.all(mask, axis=axis, **kwargs)
-        ///     if np.any(mask):
-        ///         res = _copyto(res, np.nan, mask)
-        ///     return res
-        ///     </code>
-        ///     Use it only for an operand <see cref="NDMatrixBoundary.Sees"/> as a matrix: it is NumPy's slow route, a copy
-        ///     and two mask reductions per call, which a plain array never takes (its nanmax is <c>fmax.reduce</c>).
-        /// </summary>
-        /// <param name="a">The matrix operand.</param>
-        /// <param name="axis">The axis, or <c>null</c> for the scalar of every element.</param>
-        /// <param name="out">The caller's out, or <c>null</c>.</param>
-        /// <param name="keepdims">The caller's keepdims; <c>true</c> is the method's TypeError.</param>
-        /// <param name="initial">The caller's initial; any value is the method's TypeError.</param>
-        /// <param name="where">The caller's mask; any mask is the method's TypeError.</param>
-        /// <param name="isMax"><c>true</c> for np.nanmax (<c>-inf</c>, <c>np.amax</c>), <c>false</c> for np.nanmin
-        ///     (<c>+inf</c>, <c>np.amin</c>).</param>
-        /// <returns>What <see cref="MatrixExtreme"/> returns for the NaN-replaced copy, with every all-NaN slice set to NumPy's
-        ///     <c>np.nan</c>: a new NaN scalar of the operand's dtype for a <c>null</c> axis (a matrix out keeps the
-        ///     <c>∓inf</c> then, as NumPy's does), else NaN written into the row, the column or the matrix out.</returns>
-        /// <exception cref="TypeError">See <see cref="MatrixExtreme"/>.</exception>
-        /// <exception cref="AttributeError"><paramref name="out"/> is a plain array, after it received the replaced copy's
-        ///     extremes (<c>∓inf</c> for an all-NaN slice).</exception>
-        /// <exception cref="ValueError">An empty reduction, named after <c>maximum</c> / <c>minimum</c> (the method's
-        ///     reduction), or a read-only or misshapen out.</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        [NDScoped]
-        private static NDArray MatrixNanExtreme(NDArray a, int? axis, NDArray @out, bool keepdims, object initial,
-            NDArray @where, bool isMax)
-        {
-            // The steps below compute plain and build the matrix answer here, where NumPy's statements pass matrices from
-            // call to call: the boundary's contract is that no library method reaches a public function's matrix rule at
-            // depth zero (NDMatrixBoundary's caller audit), so every np.* call runs inside this region.
-            using var plain = NDMatrixBoundary.Inside();
-
-            // a, mask = _replace_nan(a, -inf / +inf): the array object's statement (NDArray.ReplaceNaN) makes the mask, the
-            // K-order copy and the replacement for an inexact dtype - the dtype decision lives there, below the facade
-            // (ratchet R1). Without a mask nanmax IS np.amax of the operand itself.
-            NDArray replaced = NDArray.ReplaceNaN(a, isMax ? double.NegativeInfinity : double.PositiveInfinity, out NDArray mask);
-            if (mask is null)
-                return MatrixExtreme(a, axis, @out, keepdims, initial, @where, isMax);
-
-            // res = np.amax(a, axis=axis, out=out, **kwargs): the matrix method's rules, its TypeErrors and its
-            // AttributeError for a plain out (raised before the all-NaN check below, so such an out keeps -inf / +inf). The
-            // copy reaches them as a matrix view, as NumPy's subok copy is a matrix.
-            NDArray res = MatrixExtreme(NDMatrix.FromWrapped(replaced), axis, @out, keepdims, initial, @where, isMax);
-
-            // mask = np.all(mask, axis=axis): matrix.all is ndarray.all(keepdims=True)._collapse(axis), the scalar without
-            // an axis and the kept-axis array along one, which lines up with the row / column result or the matrix out (no
-            // keywords are left: any of them raised above). np.any(mask) asks whether any slice was all NaN.
-            NDArray allNaN = axis is null ? all(mask) : all(mask, axis, keepdims: true);
-            NDArray anyAllNaN = any(allNaN);
-            if (!(bool)anyAllNaN)
-                return res;
-
-            // _copyto(res, np.nan, mask). np.nan is Python's positive quiet NaN (C#'s double.NaN carries the sign bit), cast
-            // to the result's dtype: 0x7FF8000000000000, 0x7FC00000 for float32, 0x7E00 for float16, nan+0j for complex.
-            double positiveNaN = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
-            if (axis is null)
-                // res is NumPy's scalar (matrix._collapse(None)), not an ndarray: `a = a.dtype.type(val)` makes a NEW scalar,
-                // and a matrix out keeps the -inf / +inf the method stored.
-                return NDArray.Scalar(positiveNaN, res.dtype).MarkReductionScalar();
-
-            // An ndarray result (the row / column, or the matrix out itself): np.copyto(res, np.nan, where=mask,
-            // casting='unsafe') sets the all-NaN slices in place.
-            copyto(res, positiveNaN, "unsafe", allNaN);
-            return res;
-        }
     }
 }

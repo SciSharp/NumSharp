@@ -122,7 +122,18 @@ namespace NumSharp
         /// </returns>
         /// <exception cref="ValueError">No array is given: NumPy's "at least one array or dtype is required".</exception>
         /// <exception cref="DTypePromotionError">No common dtype exists.</exception>
-        public static DType result_type(params NDArray[] arrays)
+        public static DType result_type(params NDArray[] arrays) => ResultTypeOf(arrays);
+
+        /// <summary>
+        ///     The computation behind <see cref="result_type(NDArray[])"/>: NumPy's promotion over the arrays' descriptors
+        ///     (strong participants, 0-d included). Library code calls this rather than the public function, which a
+        ///     subclass operand (a numpy.matrix block, a chararray) would send down its woven subclass path.
+        /// </summary>
+        /// <param name="arrays">One or more arrays; a null one is NumPy's <c>None</c>, the float64 descriptor.</param>
+        /// <returns>The result descriptor, its class included (see <see cref="result_type(NDArray[])"/>).</returns>
+        /// <exception cref="ValueError">No array is given: NumPy's "at least one array or dtype is required".</exception>
+        /// <exception cref="DTypePromotionError">No common dtype exists.</exception>
+        internal static DType ResultTypeOf(NDArray[] arrays)
         {
             if (arrays == null || arrays.Length == 0)
                 throw new ValueError("at least one array or dtype is required");

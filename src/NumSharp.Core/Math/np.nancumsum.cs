@@ -28,9 +28,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray nancumsum(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, axis, dtype, @out), static s => nancumsum(s.a, s.axis, s.dtype, s.@out), @out);
             // NumPy's nancumsum is _replace_nan(a, 0) then np.cumsum(a, axis, dtype, out); the whole function, its text
             // routes included, is the engine's: TensorEngine.NanCumSum.
             return a.TensorEngine.NanCumSum(a, axis, dtype, @out);

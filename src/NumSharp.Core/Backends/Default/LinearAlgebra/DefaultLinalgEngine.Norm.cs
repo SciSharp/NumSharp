@@ -13,8 +13,8 @@ namespace NumSharp.Backends
         ///     (<see cref="NormVectorBranch"/>) or two-axis (<see cref="NormMatrixBranch"/>) branch. Every main-namespace
         ///     call of those statements (ravel, real, imag, dot, sqrt, sum, abs, amax, amin, not_equal, power, reciprocal,
         ///     evaluate, transpose, moveaxis, reshape, ascontiguousarray, add, the allocations) is the member its facade
-        ///     dispatches to, on the plain operands np.linalg.norm's class boundary leaves (a numpy.matrix and a
-        ///     numpy.char.chararray operand are computed plain inside its region), and each nested norm or svdvals is this
+        ///     dispatches to, on the plain operands np.linalg.norm's woven subclass path hands in (a numpy.matrix and a
+        ///     numpy.char.chararray operand arrive as their plain views), and each nested norm or svdvals is this
         ///     engine's own member.
         /// </remarks>
         [NDScoped]

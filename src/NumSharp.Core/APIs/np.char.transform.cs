@@ -65,12 +65,14 @@ namespace NumSharp
         [NDScoped]
         public NDArray partition(object a, object sep)
         {
-            // NumPy's np.stack keeps no subclass of equal priority, so a chararray input gives a plain result whatever the
-            // parts' class: the whole body computes plain (the parts are never wrapped as chararray views, and np.stack
-            // meets no chararray rule).
-            using var plain = NDCharArrayBoundary.Inside();
             var (before, middle, after) = np.strings.partition(TextOperand(a, nameof(a)), TextOperand(sep, nameof(sep)));
-            return np.stack(new NDArray[] { before, middle, after }, -1);
+            // A chararray operand's parts come back as chararrays (np.strings' __array_wrap__); np.stack of them is the plain
+            // array NumPy returns, so they go in as their plain views (library code never hands np.stack a subclass object
+            // to answer for). This call's scope reclaims the views.
+            return np.stack(new NDArray[]
+            {
+                NDSubclass.PlainView(before), NDSubclass.PlainView(middle), NDSubclass.PlainView(after),
+            }, -1);
         }
 
         /// <summary>
@@ -92,10 +94,12 @@ namespace NumSharp
         [NDScoped]
         public NDArray rpartition(object a, object sep)
         {
-            // A plain result for a chararray input too (see partition): the body computes plain.
-            using var plain = NDCharArrayBoundary.Inside();
             var (before, middle, after) = np.strings.rpartition(TextOperand(a, nameof(a)), TextOperand(sep, nameof(sep)));
-            return np.stack(new NDArray[] { before, middle, after }, -1);
+            // The parts' plain views (see partition).
+            return np.stack(new NDArray[]
+            {
+                NDSubclass.PlainView(before), NDSubclass.PlainView(middle), NDSubclass.PlainView(after),
+            }, -1);
         }
 
         // =============================================================================================================

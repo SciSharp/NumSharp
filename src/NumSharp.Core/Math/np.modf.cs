@@ -37,9 +37,6 @@ namespace NumSharp
             NDArray x, NDArray outFrac = null, NDArray outIntegral = null, NDArray where = null, DType dtype = null)
             // The engine lays fresh outputs out in NumPy's K order (DefaultEngine.ModF, as np.frexp's); a provided
             // out owns its own layout, so it is never relabelled (its reference identity is returned untouched).
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: both outputs come back as matrices, as from NumPy
-                ? NDMatrixBoundary.WrappedPair((x, outFrac, outIntegral, where, dtype),
-                    static s => modf(s.x, s.outFrac, s.outIntegral, s.where, s.dtype), outFrac, outIntegral)
-                : x.TensorEngine.ModF(x, dtype, outFrac, outIntegral, where);
+            => x.TensorEngine.ModF(x, dtype, outFrac, outIntegral, where);
     }
 }

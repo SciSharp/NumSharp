@@ -105,12 +105,11 @@ namespace NumSharp
             if (!v.IsNdArray)
                 return Statements(basis, v).ToNDArray();
 
-            NDArray xa = v.Array;
-            // The package computes with plain arrays: a numpy.matrix x is its plain array here (NumPy's own answer would
+            // The package computes with plain arrays: a numpy.matrix x is its plain view here (NumPy's own answer would
             // apply the matrix operators — `x**2` the matrix power, `sqrt(1+x)*sqrt(1-x)` a matrix product — which no
-            // weight's definition intends; mapdomain makes the same choice).
-            using var plain = NDMatrixBoundary.PlainFor(xa);
-            return WeightOfArray(basis, xa);
+            // weight's definition intends; mapdomain makes the same choice). The weight is a new array, never the view.
+            using var plainX = NDSubclass.LeasePlainView(v.Array);
+            return WeightOfArray(basis, plainX.Array);
         }
 
         /// <summary>

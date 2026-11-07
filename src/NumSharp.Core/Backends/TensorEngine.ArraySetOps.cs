@@ -63,8 +63,8 @@ namespace NumSharp
         ///     along <paramref name="axis"/>), with the optional first-occurrence indices, reconstruction indices and counts.
         /// </summary>
         /// <param name="ar">
-        ///     The operand, a plain array (only read; <c>np.unique</c> computes a <c>numpy.matrix</c> operand as a plain one,
-        ///     and a <c>numpy.char.chararray</c> operand after its own class boundary).
+        ///     The operand, a plain array (only read; <c>np.unique</c> hands a <c>numpy.matrix</c> or
+        ///     <c>numpy.char.chararray</c> operand in as its plain view).
         /// </param>
         /// <param name="return_index">Also return the index of each value's first occurrence (along the axis, if given).</param>
         /// <param name="return_inverse">Also return the indices that rebuild <paramref name="ar"/> from the values.</param>
@@ -113,6 +113,8 @@ namespace NumSharp
         ///     An override replaces <c>np.unique_values</c> for every array whose engine it is. New in 0.71.0 (the np-layer
         ///     dtype plan, phase PE); it was the internal class <c>UniqueEngine</c>.
         /// </remarks>
+        [ArrayWrap("x")]
+        [AsArrayFor(typeof(NDMatrix))]
         public abstract NDArray UniqueValues(NDArray x);
 
         /// <summary>
@@ -228,6 +230,7 @@ namespace NumSharp
         /// <exception cref="UnicodeDecodeError">The membership test's sort path decodes <c>S</c> text holding a byte that
         ///     is not ASCII.</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> array whose sort compares a None-like NA.</exception>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Setdiff1d))]
         public abstract NDArray Setdiff1d(NDArray ar1, NDArray ar2, bool assume_unique = false);
     }
 }

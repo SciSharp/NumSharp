@@ -477,6 +477,43 @@ namespace NumSharp
         private static NDArray AtLeastNdmin(NDArray a, int ndmin) => AtLeastNdView(a, ndmin);
 
         /// <summary>
+        ///     <c>np.r_</c> / <c>np.c_</c> of a key holding an array subclass entry: the concatenation computed from the
+        ///     entries' plain views (which remember their class, so a matrix entry keeps its two axes), then NumPy's class -
+        ///     <c>np.concatenate</c>'s <c>PyArray_GetSubType</c>, where a matrix entry wins and a chararray never does.
+        /// </summary>
+        /// <param name="key">The index expression's entries, at least one a subclass operand.</param>
+        /// <param name="axis">The object's axis.</param>
+        /// <param name="matrix">The object's matrix flag.</param>
+        /// <param name="ndmin">The object's minimum rank of every entry.</param>
+        /// <param name="trans1d">Where an upgraded entry's original axes start.</param>
+        /// <returns>The matrix view of the concatenation for a matrix entry (the matrix a "r" / "c" directive builds is kept
+        ///     as it is), otherwise the plain concatenation.</returns>
+        /// <exception cref="ValueError">The errors of <see cref="AxisConcatenate"/>; a matrix result with more than two axes
+        ///     longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ArgumentNullException">A null entry.</exception>
+        /// <exception cref="OverflowException">A C# integer literal outside the adopted integer dtype.</exception>
+        /// <exception cref="DTypePromotionError">A C# number beside text.</exception>
+        /// <exception cref="ArgumentException">A malformed slice string, or np.concatenate's refusals.</exception>
+        /// <remarks>The scope reclaims the entries' plain views and the hidden plain result, which the matrix view keeps alive
+        ///     through its own counted reference.</remarks>
+        private static NDArray AxisConcatenateOfSubclass(object[] key, int axis, bool matrix, int ndmin, int trans1d)
+        {
+            NDScope scope = NDScope.Open();
+            try
+            {
+                bool matrixEntry = NDSubclass.HoldsKind(key, NDSubclassKind.Matrix);
+                NDArray result = AxisConcatenate((object[])NDSubclass.PlainNested(key), axis, matrix, ndmin, trans1d);
+                if (matrixEntry && result is not NDMatrix)
+                    result = NDMatrix.FromWrapped(result);
+                return scope.Returns(result);
+            }
+            finally
+            {
+                scope.Dispose();
+            }
+        }
+
+        /// <summary>
         ///     NumPy's <c>AxisConcatenator.__getitem__</c> for <c>np.r_</c> / <c>np.c_</c>, after the indexer's numpy.matrix
         ///     rule: a leading directive string may override the object's attributes, every other entry becomes an array (a
         ///     slice string its <c>arange</c> / <c>linspace</c>, a C# scalar a weak or strong 0-d value, anything else
@@ -500,12 +537,19 @@ namespace NumSharp
         /// <exception cref="ArgumentException">A malformed slice string, or np.concatenate's refusals (no entry, entries
         ///     of different ranks or shapes).</exception>
         /// <remarks>Scoped: the converted entries and the padded views are temporaries of this call. The parameters are the
-        ///     object's fields, passed as copies, which a leading directive overrides for this call only.</remarks>
+        ///     object's fields, passed as copies, which a leading directive overrides for this call only. The subclass's own
+        ///     handling (<see cref="SubclassAwareAttribute"/>: the entries are nested in the key, which no woven prologue
+        ///     tests): a key holding a numpy.matrix or numpy.char.chararray entry is computed from the entries' plain views
+        ///     (<see cref="AxisConcatenateOfSubclass"/>).</remarks>
         [NDScoped]
+        [SubclassAware]
         internal static NDArray AxisConcatenate(object[] key, int axis, bool matrix, int ndmin, int trans1d)
         {
             if (key is null)
                 throw new ArgumentNullException(nameof(key));
+
+            if (NDSubclass.IsNestedOperand(key))
+                return AxisConcatenateOfSubclass(key, axis, matrix, ndmin, trans1d);
 
             // The attributes arrive as copies (the object's fields): the first entry may override them.
             bool col = false;
@@ -703,7 +747,7 @@ namespace NumSharp
 
             // NumPy: array(item, subok=True, ndmin=ndmin) cannot give a numpy.matrix another axis (probed 2.4.2:
             // np.r_['0,3', m, m] joins the two matrices as they are, a (4, 3) matrix).
-            NDArray newobj = NDMatrixBoundary.IsMatrix(arr) ? arr : AtLeastNdmin(arr, ndmin);
+            NDArray newobj = NDSubclass.StandsForMatrix(arr) ? arr : AtLeastNdmin(arr, ndmin);
             if (trans1d != -1 && itemNdim < ndmin)
             {
                 int k2 = ndmin - itemNdim;
@@ -833,7 +877,7 @@ namespace NumSharp
                 {
                     // A numpy.matrix entry keeps its two axes here too (FromArrayLike); astype gives a plain
                     // array, so the class is read before the cast.
-                    bool keepsRank = NDMatrixBoundary.IsMatrix(_array);
+                    bool keepsRank = NDSubclass.StandsForMatrix(_array);
                     arr = _array.typecode == final ? _array : _array.astype(final);
                     if (keepsRank)
                         return arr;

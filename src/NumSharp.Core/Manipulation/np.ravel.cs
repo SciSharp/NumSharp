@@ -35,9 +35,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel.html</remarks>
         public static NDArray ravel(NDArray a, char order)
         {
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Kept((a, order), static s => ravel(s.a, s.order));
             return NDArray.ravel(a, order);
         }
     }

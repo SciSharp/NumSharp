@@ -12,18 +12,18 @@ namespace NumSharp
         /// <param name="axis2">Axis to be used as the second axis of the 2-D sub-arrays from which the diagonals should be taken. Defaults to 1.</param>
         /// <returns>A view onto the requested diagonal(s).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.diagonal.html</remarks>
+        [PlainReceiver]
         public NDArray diagonal(int offset = 0, int axis1 = 0, int axis2 = 1)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.diagonal(this, offset, axis1, axis2);
         }
 
         /// <summary>
         ///     The read-only view <c>np.diagonal</c> returns: <paramref name="a"/>'s storage under the layout
         ///     <see cref="Shape.Diagonal(int, int, int)"/> computes. Library code that needs a diagonal calls this (np.trace's
-        ///     engine member does); it applies no class boundary, so a <c>numpy.char.chararray</c> or <c>numpy.matrix</c>
+        ///     engine member does); it answers for no subclass, so a <c>numpy.char.chararray</c> or <c>numpy.matrix</c>
         ///     operand gives a plain view, where the public <see cref="np.diagonal(NDArray, int, int, int)"/> keeps the
-        ///     class.
+        ///     class (its declared mechanism).
         /// </summary>
         /// <param name="a">The array (at least 2-D).</param>
         /// <param name="offset">The diagonal's offset from the main one: positive above it (along
@@ -42,6 +42,8 @@ namespace NumSharp
         ///     engine member <c>TensorEngine.Diagonal</c> (the np-layer dtype plan's P1b) until phase PE's E7 returned it to
         ///     the array object before 0.71.0 shipped: building a view computes no value, so an engine has nothing to
         ///     override.</remarks>
+        [NewSubtype("a")]
+        [AsArrayFor(typeof(NDMatrix))]
         internal static NDArray diagonal(NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));

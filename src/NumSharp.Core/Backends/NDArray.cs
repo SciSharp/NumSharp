@@ -1172,6 +1172,7 @@ namespace NumSharp
         ///     by descriptor (<see cref="UnmanagedStorage.AliasAsDescr"/>): <c>U3 → U1</c>, <c>U1 → uint32</c>,
         ///     <c>uint8 → S2</c>.</para>
         /// </remarks>
+        [NewSubtype("this")]
         public NDArray view(DType dtype = null)
         {
             if (dtype is null)

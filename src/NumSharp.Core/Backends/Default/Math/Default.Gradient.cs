@@ -62,7 +62,8 @@ namespace NumSharp.Backends
     // DefaultEngine's override of TensorEngine.Gradient (TensorEngine.FunctionBase.cs): the body of NumPy's gradient - the
     // axes, the spacing per axis (scalars, or coordinate arrays reduced to their diffs), the output dtype, and per axis the
     // interior's central differences and the edges' one-sided differences, written into a fresh array. The public
-    // np.gradient overloads only spread their spacings into one list, apply the matrix boundary and call the member.
+    // np.gradient overloads only spread their spacings into one list and call the member (their woven subclass path
+    // hands a matrix operand in as its plain view).
     //
     // History: moved from Math/np.gradient.cs statement for statement by the np-layer dtype plan's P2 into the internal
     // operation class GradientEngine (decision D1: NumPy writes gradient in Python); its phase PE (E1) made that class this
@@ -76,7 +77,8 @@ namespace NumSharp.Backends
         ///     edge_order=edge_order)</c>, one fresh array per requested axis, second-order central differences inside and
         ///     first- or second-order one-sided differences at both ends.
         /// </summary>
-        /// <param name="f">The sampled values (the facade has applied the matrix boundary; null is refused here).</param>
+        /// <param name="f">The sampled values (a plain array: the facade hands a matrix operand in as its plain view; null
+        ///     is refused here).</param>
         /// <param name="varargs">NumPy's <c>*varargs</c>: no entry (unit steps), one scalar for every axis, or one entry
         ///     per requested axis, each a scalar step or a 1-D coordinate array as long as its axis.</param>
         /// <param name="axisArg">The axes to differentiate along (negative values count from the end), or null for every

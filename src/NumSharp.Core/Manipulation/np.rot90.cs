@@ -35,12 +35,6 @@ namespace NumSharp
         ///     length).</exception>
         public static NDArray rot90(NDArray m, int k = 1, int[] axes = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(m))
-                return NDMatrixBoundary.Wrapped((m, k, axes), static s => rot90(s.m, s.k, s.axes));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(m))
-                return NDCharArrayBoundary.Kept((m, k, axes), static s => rot90(s.m, s.k, s.axes));
 
             // NumPy's statements (the axes' checks, k modulo 4, the flips and the transpose) are the array object's.
             return NDArray.rot90(m, k, axes);

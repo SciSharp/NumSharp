@@ -37,7 +37,7 @@ namespace NumSharp
         {
             // The plain computation raises NumPy's earlier errors in NumPy's order; its index is never returned.
             base.argmax(null, null, false).Dispose();
-            throw NDCharArrayBoundary.FinalizeError();
+            throw FinalizeError();
         }
 
         /// <summary>
@@ -71,7 +71,7 @@ namespace NumSharp
             if (@out is not null)
                 return base.argmax(axis, @out, keepdims);
             base.argmax(axis, null, keepdims).Dispose();
-            throw NDCharArrayBoundary.FinalizeError();
+            throw FinalizeError();
         }
 
         /// <summary>NumPy's <c>chararray.argmin()</c>: always the finalize error, after the empty-sequence check.</summary>
@@ -81,7 +81,7 @@ namespace NumSharp
         public new long argmin()
         {
             base.argmin(null, null, false).Dispose();
-            throw NDCharArrayBoundary.FinalizeError();
+            throw FinalizeError();
         }
 
         /// <summary>NumPy's <c>chararray.argmin(axis, keepdims=...)</c>: the finalize error after NumPy's checks.</summary>
@@ -109,7 +109,7 @@ namespace NumSharp
             if (@out is not null)
                 return base.argmin(axis, @out, keepdims);
             base.argmin(axis, null, keepdims).Dispose();
-            throw NDCharArrayBoundary.FinalizeError();
+            throw FinalizeError();
         }
 
         #endregion
@@ -136,7 +136,7 @@ namespace NumSharp
         public new NDArray argpartition(NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
         {
             base.argpartition(kth, axis, kind, order).Dispose();
-            throw NDCharArrayBoundary.FinalizeError();
+            throw FinalizeError();
         }
 
         #endregion
@@ -207,7 +207,7 @@ namespace NumSharp
         /// <exception cref="TypeError">Always: <c>chararray.partition() got an unexpected keyword argument 'axis'</c>.</exception>
         /// <remarks>The axis has no default, so <c>c.partition(1)</c> binds the string partition, as in NumPy.</remarks>
         public new void partition(int kth, int? axis, string kind = "introselect", string order = null)
-            => throw NDCharArrayBoundary.PartitionKeywordError();
+            => throw PartitionKeywordError();
 
         /// <summary><see cref="partition(int, int?, string, string)"/> with several kth indices: NumPy's TypeError.</summary>
         /// <param name="kth">The kth indices.</param>
@@ -216,7 +216,7 @@ namespace NumSharp
         /// <param name="order">Must be null.</param>
         /// <exception cref="TypeError">Always: <c>chararray.partition() got an unexpected keyword argument 'axis'</c>.</exception>
         public new void partition(int[] kth, int? axis, string kind = "introselect", string order = null)
-            => throw NDCharArrayBoundary.PartitionKeywordError();
+            => throw PartitionKeywordError();
 
         /// <summary><see cref="partition(int, int?, string, string)"/> with the kth indices as an array: NumPy's TypeError.</summary>
         /// <param name="kth">The kth indices.</param>
@@ -225,7 +225,7 @@ namespace NumSharp
         /// <param name="order">Must be null.</param>
         /// <exception cref="TypeError">Always: <c>chararray.partition() got an unexpected keyword argument 'axis'</c>.</exception>
         public new void partition(NDArray kth, int? axis, string kind = "introselect", string order = null)
-            => throw NDCharArrayBoundary.PartitionKeywordError();
+            => throw PartitionKeywordError();
 
         #endregion
     }

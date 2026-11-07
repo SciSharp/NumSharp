@@ -456,5 +456,52 @@ namespace NumSharp
         }
 
         #endregion
+
+        #region nanmax / nanmin (numpy/lib/_nanfunctions_impl.py's branch for subclasses)
+
+        /// <summary>
+        ///     np.nanmax of a chararray: NumPy's nanmax sends any operand that is not a base ndarray down its branch for
+        ///     subclasses, and text is not inexact, so <c>_replace_nan</c> returns no mask and the answer is
+        ///     <c>np.amax(a, axis=axis, out=out, **kwargs)</c> of the chararray itself: its refusal names <c>maximum</c>, where
+        ///     a plain text array's np.nanmax names <c>fmax</c>. An element's scalar stand-in is a NumPy scalar, computed as a
+        ///     base ndarray.
+        /// </summary>
+        /// <param name="axis">The axis to reduce, or <c>null</c> for every axis.</param>
+        /// <param name="out">NumPy's <c>out=</c>, or <c>null</c>.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>, or <c>null</c>.</param>
+        /// <param name="where">NumPy's <c>where=</c> bool mask, or <c>null</c>.</param>
+        /// <returns>np.amax's answer for the chararray (its woven path decides the class).</returns>
+        /// <exception cref="TypeError">np.amax's: <c>ufunc 'maximum' did not contain a loop with signature matching
+        ///     types</c> for fixed-width text, as in NumPy.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <remarks>NumPy's own statement hands the chararray to np.amax, whose woven subclass path answers for the class;
+        ///     np.amax never comes back to this member, so the class's rule of computing on its plain view does not apply
+        ///     here.</remarks>
+        internal override NDArray NanMax(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+            => IsScalarStandIn
+                ? base.NanMax(axis, @out, keepdims, initial, @where)
+                : np.amax(this, axis, @out, keepdims, initial, @where);
+
+        /// <summary>
+        ///     np.nanmin of a chararray: NumPy's branch for subclasses, which for text (no NaN mask) is
+        ///     <c>np.amin(a, axis=axis, out=out, **kwargs)</c> of the chararray itself (see <see cref="NanMax"/>).
+        /// </summary>
+        /// <param name="axis">The axis to reduce, or <c>null</c> for every axis.</param>
+        /// <param name="out">NumPy's <c>out=</c>, or <c>null</c>.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>, or <c>null</c>.</param>
+        /// <param name="where">NumPy's <c>where=</c> bool mask, or <c>null</c>.</param>
+        /// <returns>np.amin's answer for the chararray.</returns>
+        /// <exception cref="TypeError">np.amin's: <c>ufunc 'minimum' did not contain a loop with signature matching
+        ///     types</c> for fixed-width text.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <remarks>As for <see cref="NanMax"/>, the chararray itself is NumPy's operand of np.amin.</remarks>
+        internal override NDArray NanMin(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+            => IsScalarStandIn
+                ? base.NanMin(axis, @out, keepdims, initial, @where)
+                : np.amin(this, axis, @out, keepdims, initial, @where);
+
+        #endregion
     }
 }

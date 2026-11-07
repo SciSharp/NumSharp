@@ -31,8 +31,9 @@ namespace NumSharp
         ///     against the edges' dtype (<see cref="DTypePromotionError"/>: no common DType for text and Python
         ///     numbers).</exception>
         /// <remarks>
-        ///     NumPy writes histogram_bin_edges in Python; DefaultEngine's override runs its statements. The facades open
-        ///     the matrix boundary's plain region and convert their C# <c>bins</c> form first; an override replaces it for
+        ///     NumPy writes histogram_bin_edges in Python; DefaultEngine's override runs its statements. The facades hand
+        ///     a subclass operand in as its plain view and convert their C# <c>bins</c> form first; an override
+        ///     replaces it for
         ///     every array whose engine it is (the engine of <paramref name="a"/>). New in 0.71.0 (the np-layer dtype plan,
         ///     phase PE); it was the internal class <c>HistogramEngine</c>.
         /// </remarks>
@@ -60,8 +61,8 @@ namespace NumSharp
         ///     total).</exception>
         /// <remarks>
         ///     NumPy writes histogram in Python; DefaultEngine's override runs its statements, the weighted float sums in
-        ///     NumPy's blocks of 65,536 samples (which keeps them bit-identical to NumPy's). The facades open the matrix
-        ///     boundary's plain region first; an override replaces it for every array whose engine it is. New in 0.71.0
+        ///     NumPy's blocks of 65,536 samples (which keeps them bit-identical to NumPy's). The facades hand a subclass
+        ///     operand in as its plain view; an override replaces it for every array whose engine it is. New in 0.71.0
         ///     (the np-layer dtype plan, phase PE); it was the internal class <c>HistogramEngine</c>.
         /// </remarks>
         public abstract np.HistogramResult Histogram(NDArray a, object bins, (double, double)? range = null,

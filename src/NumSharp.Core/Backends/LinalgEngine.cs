@@ -13,8 +13,9 @@ namespace NumSharp
     ///     <c>diagonal</c> and <c>matrix_transpose</c> are the array object's), plus a second C# form where NumPy's
     ///     argument is an int or a tuple (<see cref="Tensordot(NDArray, NDArray, int[], int[])"/>,
     ///     <see cref="VectorNorm(NDArray, int, bool, object)"/>). An engine reaches it through
-    ///     <see cref="TensorEngine.Linalg"/>, and every public <c>np.linalg</c> function applies NumPy's class boundary
-    ///     (<c>numpy.matrix</c>, <c>numpy.char.chararray</c>) and then calls one member.
+    ///     <see cref="TensorEngine.Linalg"/>, and every public <c>np.linalg</c> function calls one member (woven: a
+    ///     <c>numpy.matrix</c> or <c>numpy.char.chararray</c> operand arrives as its plain view, and the declared
+    ///     mechanism answers for the class).
     /// </summary>
     /// <remarks>
     ///     <para><b>The default</b> is <see cref="Backends.DefaultLinalgEngine"/>: NumPy's statements in NumPy's order (the
@@ -51,6 +52,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal, a UFuncTypeError).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty
         ///     operand or a zero-size batch needs none).</exception>
+        [ArrayWrap("a")]
         public abstract NDArray Cholesky(NDArray a, bool upper = false);
 
         /// <summary>
@@ -91,6 +93,7 @@ namespace NumSharp
         /// <exception cref="ValueError">The component axis of either operand does not have length 3, or the other axes do
         ///     not broadcast.</exception>
         /// <exception cref="TypeError">Either operand holds text (the multiply has no string loop).</exception>
+        [AsArray]
         public abstract NDArray Cross(NDArray x1, NDArray x2, int axis = -1);
 
         /// <summary>
@@ -122,6 +125,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A text operand (<c>isfinite</c> has no string loop), or a float16, decimal or char
         ///     operand.</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        [ArrayWrap("a", Outputs = "1")]
         public abstract (NDArray eigenvalues, NDArray eigenvectors) Eig(NDArray a);
 
         /// <summary>
@@ -139,6 +143,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
         /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        [ArrayWrap("a", Outputs = "1")]
         public abstract (NDArray eigenvalues, NDArray eigenvectors) Eigh(NDArray a, char UPLO = 'L');
 
         /// <summary>
@@ -179,6 +184,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
         /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <remarks>Needs no backend: without one the managed LU computes it.</remarks>
+        [ArrayWrap("a")]
         public abstract NDArray Inv(NDArray a);
 
         /// <summary>
@@ -197,6 +203,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
         /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        [ArrayWrap("b", Outputs = "0,1")]
         public abstract (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) Lstsq(
             NDArray a, NDArray b, double? rcond = null);
 
@@ -212,6 +219,7 @@ namespace NumSharp
         ///     broadcast (NumPy's gufunc texts).</exception>
         /// <exception cref="TypeError">Text operands (matmul has no string loop).</exception>
         /// <exception cref="NullReferenceException">An operand is null.</exception>
+        [Ufunc]
         public abstract NDArray Matmul(NDArray x1, NDArray x2);
 
         /// <summary>
@@ -228,6 +236,7 @@ namespace NumSharp
         /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
         /// <exception cref="OpenBlasMissingBackendException">An order 2, -2 or <c>"nuc"</c> over a non-empty matrix with no
         ///     matrix backend installed.</exception>
+        [AsArray]
         public abstract NDArray MatrixNorm(NDArray x, bool keepdims = false, object ord = null);
 
         /// <summary>
@@ -242,6 +251,7 @@ namespace NumSharp
         ///     matrix.</exception>
         /// <exception cref="TypeError">A text matrix with <c>n</c> of 2 or more (matmul has no string loop), or with a
         ///     negative <c>n</c> (inv's input cast).</exception>
+        [ArrayWrap("a")]
         public abstract NDArray MatrixPower(NDArray a, int n);
 
         /// <summary>
@@ -282,6 +292,7 @@ namespace NumSharp
         ///     aligned</c>).</exception>
         /// <exception cref="LinAlgError">With three or more arrays, an operand other than a vector end that is not
         ///     two-dimensional.</exception>
+        [GetSubType("arrays")]
         public abstract NDArray MultiDot(NDArray[] arrays, NDArray @out = null);
 
         /// <summary>
@@ -304,6 +315,7 @@ namespace NumSharp
         /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
         /// <exception cref="OpenBlasMissingBackendException">A matrix order 2, -2 or <c>"nuc"</c> over a non-empty matrix
         ///     with no matrix backend installed; every other order is a reduction and needs none.</exception>
+        [AsArray]
         public abstract NDArray Norm(NDArray x, object ord = null, int[] axis = null, bool keepdims = false);
 
         /// <summary>
@@ -338,6 +350,7 @@ namespace NumSharp
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
         /// <remarks>C# cannot tell NumPy's <c>rtol=_NoValue</c> (1e-15) from <c>rtol=None</c> (the Array-API default
         ///     <c>max(M, N) * eps</c>): with neither tolerance set, NumPy's 1e-15 applies.</remarks>
+        [ArrayWrap("a")]
         public abstract NDArray Pinv(NDArray a, double? rcond = null, bool hermitian = false, double? rtol = null);
 
         /// <summary>
@@ -356,6 +369,7 @@ namespace NumSharp
         /// <exception cref="LinAlgError">Fewer than two axes.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Qr))]
         public abstract (NDArray Q, NDArray R) Qr(NDArray a, string mode = "reduced");
 
         /// <summary>
@@ -387,6 +401,7 @@ namespace NumSharp
         ///     <paramref name="b"/> of too few axes for the matrix gufunc, or stacked axes that do not broadcast (NumPy's
         ///     gufunc texts).</exception>
         /// <remarks>Needs no backend: without one the managed LU computes it.</remarks>
+        [ArrayWrap("b")]
         public abstract NDArray Solve(NDArray a, NDArray b);
 
         /// <summary>
@@ -407,6 +422,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
         /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        [ArrayWrap("a", Outputs = "0,2")]
         public abstract (NDArray U, NDArray S, NDArray Vh) Svd(NDArray a, bool full_matrices = true, bool compute_uv = true,
             bool hermitian = false);
 
@@ -434,6 +450,7 @@ namespace NumSharp
         /// <returns>The contraction, shape <c>x1.shape[:-axes] + x2.shape[axes:]</c>.</returns>
         /// <exception cref="ValueError">The contracted extents differ (<c>shape-mismatch for sum</c>).</exception>
         /// <exception cref="IndexError">The count exceeds an operand's rank (<c>tuple index out of range</c>).</exception>
+        [AsArray]
         public abstract NDArray Tensordot(NDArray x1, NDArray x2, int axes = 2);
 
         /// <summary>
@@ -449,6 +466,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A repeated axis (<c>duplicate axes are not allowed in tensordot</c>, checked first),
         ///     or lists of unequal length or mismatched extents (<c>shape-mismatch for sum</c>).</exception>
         /// <exception cref="IndexError">A contraction axis out of range (<c>tuple index out of range</c>).</exception>
+        [AsArray]
         public abstract NDArray Tensordot(NDArray x1, NDArray x2, int[] axesA, int[] axesB);
 
         /// <summary>
@@ -484,6 +502,7 @@ namespace NumSharp
         ///     singular.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
         /// <exception cref="TypeError">A text operand (solve's gufunc input-cast refusal).</exception>
+        [ArrayWrap("a")]
         public abstract NDArray Tensorsolve(NDArray a, NDArray b, int[] axes = null);
 
         /// <summary>
@@ -515,6 +534,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <exception cref="TypeError">Text operands (no vecdot loop).</exception>
         /// <exception cref="NullReferenceException">An operand is null.</exception>
+        [Ufunc]
         public abstract NDArray Vecdot(NDArray x1, NDArray x2, int axis = -1);
 
         /// <summary>
@@ -533,6 +553,7 @@ namespace NumSharp
         /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
         /// <remarks>NumPy's int axis and its one-element tuple take different statements (the tuple is moved and merged
         ///     first), which reduce in different layouts: the int is <see cref="VectorNorm(NDArray, int, bool, object)"/>.</remarks>
+        [AsArray]
         public abstract NDArray VectorNorm(NDArray x, int[] axis = null, bool keepdims = false, object ord = null);
 
         /// <summary>
@@ -548,6 +569,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range (a 0-d operand has no axis).</exception>
         /// <exception cref="ValueError">A text order, or -inf of an empty axis.</exception>
         /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
+        [AsArray]
         public abstract NDArray VectorNorm(NDArray x, int axis, bool keepdims = false, object ord = null);
     }
 }

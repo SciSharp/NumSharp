@@ -59,12 +59,11 @@ namespace NumSharp
         ///     text out for numbers, a string <paramref name="dtype"/>.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/>'s length does not broadcast against the
         ///     diagonal (NumPy's "operands could not be broadcast together with remapped shapes" text).</exception>
-        [NDScoped] // the boundary of the plain region and the engine call (the engine reclaims its own temporaries)
+        [NDScoped] // what the engine call leaves (the engine reclaims its own temporaries)
         public static NDArray trace(
             NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1,
             DType dtype = null, NDArray @out = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             // NumPy's trace IS PyArray_Trace (the diagonal's add.reduce over its last axis with dtype= and out=), and the

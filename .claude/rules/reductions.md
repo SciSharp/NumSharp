@@ -263,7 +263,7 @@ for bool / int32 / U inputs, F, permuted, stepped, tuple axes) and the string or
 
 `TensorEngine.Average` (`TensorEngine.FunctionBase.cs`), whose `DefaultEngine` override holds NumPy's
 `numpy/lib/_function_base_impl.py` statements (`Backends/Default/Statistics/Default.Average.cs`); the facades keep the
-numpy.matrix boundary and the null check.
+null check, and their woven subclass path answers for a numpy.matrix operand (`NDSubclassRules.Average`).
 - `_weights_are_valid`: weights of another shape raise `TypeError("Axis must be specified when shapes of a and weights
   differ.")` without an axis and `ValueError("Shape of weights must be consistent with shape of a along specified
   axis.")` along one; weights along the axes are transposed and reshaped into the operand's frame. `result_dtype` is
@@ -452,8 +452,9 @@ index (`DONT_NEGATE_STRIDES`: a reversed run is visited from its high address do
 
 The ±0 sign of a tie and which NaN an all-NaN slice returns (payload intact, never canonical) match NumPy 2.4.2 on every
 non-broadcast float layout (np.evaluate's `NanMax`/`NanMin` too). A numpy.matrix operand is not a base ndarray, so it
-takes NumPy's other branch (`_replace_nan`, `np.amax` / `np.amin` through the matrix method, `np.nan` written back into
-an all-NaN slice; `matrix.md`), whose bits are maximum's / minimum's.
+takes NumPy's other branch through its class's override of the virtual `NDArray.NanMax` / `NanMin` (`_replace_nan`, the
+matrix's own `max` / `min`, `np.nan` written back into an all-NaN slice; `matrix.md`), whose bits are maximum's /
+minimum's; a chararray's override is `np.amax` / `np.amin` of itself.
 - fmax's loop has two per-element operations (the "P rules", header of `Default.Reduction.MinMax.Exact.cs`): the VECTOR
   op `npyv_maxp` (a tie keeps the later operand, two NaNs keep the FIRST) inside each inner-loop call's vector section,
   and the MSVC CRT `fmax` (a tie → bitwise AND, i.e. `+0`; fmin → OR, `-0`; two NaNs → the LAST) for the call's scalar

@@ -81,10 +81,12 @@ namespace NumSharp.Backends
             // string), and the inverse and the counts do not depend on how equal strings were ordered.
             NDArray perm = AxisSort.ArgSortText(ar, 0, stable: true);
             NDArray aux = ar[perm];
-            // A numpy.char.chararray operand of the user's call: NumPy's aux is the chararray's gather, so its
-            // `aux[1:] != aux[:-1]` is the chararray's STRIPPING comparison (compare_chararrays, rstrip=True): neighbours that
-            // differ only in trailing ASCII whitespace / NULs are one run, kept as its first (smallest) string.
-            NDArray mask = RunStarts(aux, NDCharArrayBoundary.StripUniqueRuns && a is NDCharArray);
+            // A numpy.char.chararray operand of the user's call (the plain view the subclass path handed in, which remembers
+            // the class it stands for): NumPy's aux is the chararray's gather, so its `aux[1:] != aux[:-1]` is the
+            // chararray's STRIPPING comparison (compare_chararrays, rstrip=True): neighbours that differ only in trailing
+            // ASCII whitespace / NULs are one run, kept as its first (smallest) string. This route has a return flag and no
+            // axis by construction (the values-only hash route and the row path return above), as NumPy's sort path.
+            NDArray mask = RunStarts(aux, NDSubclass.StandsForCharArray(a));
             return UniqueOutputs(aux[mask], perm, mask, return_index, return_inverse, return_counts);
         }
 

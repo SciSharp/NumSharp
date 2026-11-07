@@ -27,12 +27,11 @@
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.outer.html
         ///     <para>NumPy's statement <c>multiply(a.ravel()[:, newaxis], b.ravel()[newaxis, :], out)</c> is
-        ///     <see cref="TensorEngine.Outer"/>, on <paramref name="a"/>'s engine, called inside the matrix boundary's plain
-        ///     region (a numpy.matrix operand is computed as a plain array).</para>
+        ///     <see cref="TensorEngine.Outer"/>, on <paramref name="a"/>'s engine, called with plain views of subclass
+        ///     operands (a numpy.matrix operand is computed as a plain array).</para>
         /// </remarks>
         public static NDArray outer(NDArray a, NDArray b, NDArray @out = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, b, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a.TensorEngine.Outer(a, b, @out);
         }
     }

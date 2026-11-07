@@ -2221,10 +2221,10 @@ namespace NumSharp
             if (!x.IsNdArray || off.IsNdArray || scl.IsNdArray)
                 return PolyNumber.Binary(BinaryOp.Add, off, PolyNumber.Binary(BinaryOp.Multiply, scl, x));
 
-            NDArray xa = x.Array;
-            // The package computes with plain arrays (np.transpose and np.evaluate below): no matrix rule for a
-            // numpy.matrix x. NumPy's own answer there is its `off + scl*x` on the matrix, a matrix.
-            using var plain = NDMatrixBoundary.PlainFor(xa);
+            // The package computes with plain arrays (np.transpose and np.evaluate below): a numpy.matrix x goes in as its
+            // plain view. NumPy's own answer there is its `off + scl*x` on the matrix, a matrix.
+            using var plainX = NDSubclass.LeasePlainView(x.Array);
+            NDArray xa = plainX.Array;
             NPTypeCode t1 = scl.IsPython ? PolyNumber.WeakPromote(xa.typecode, scl.Py) : PolyTyping.Promote(scl.Dtype, xa.typecode);
             NPTypeCode t2 = off.IsPython ? PolyNumber.WeakPromote(t1, off.Py) : PolyTyping.Promote(off.Dtype, t1);
             // Both parameters enter the fused pass already converted to their operation's loop dtype — the cast the

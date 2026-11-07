@@ -72,8 +72,8 @@ namespace NumSharp.Backends
         ///     np.empty_like's allocation (a new plain array over <see cref="Shape.NewLikeLayout"/>'s K layout) and
         ///     np.copyto's <c>UnmanagedStorage.Copyto</c> with its default <c>same_kind</c> rule. None of them has a class
         ///     rule, so a numpy.char.chararray operand (the np.linalg.matrix_power facade has no chararray rule) gets the
-        ///     plain identity this function always returned, without the plain region np.empty_like's chararray rule
-        ///     needed (NumPy's empty_like keeps the chararray class: the class boundary's work, not this function's).</para>
+        ///     plain identity this function always returned (NumPy's empty_like keeps the chararray class: the woven
+        ///     function's mechanism, not this computation's).</para>
         /// </remarks>
         [NDScopedCovered /* only caller: [NDScoped] MatrixPower; the eye temp rides its scope */]
         private static NDArray Identity(NDArray a)

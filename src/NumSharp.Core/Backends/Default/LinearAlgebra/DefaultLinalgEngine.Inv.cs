@@ -134,8 +134,8 @@ namespace NumSharp.Backends
 
             // a.reshape(prod, -1): an empty operand with prod 0 is NumPy's own reshape refusal
             // ("cannot reshape array of size 0 into shape (0,newaxis)"). The array object's reshape, np.reshape's member:
-            // np.linalg.tensorinv's plain region already kept np.reshape's class rules from firing on a matrix or a
-            // numpy.char.chararray operand, so the view is the one np.reshape returned here.
+            // a numpy.matrix or numpy.char.chararray operand of np.linalg.tensorinv arrives as its plain view, so the view is
+            // the one np.reshape returns for a plain array.
             var square = a.reshape(new[] {prod, -1L});
             var inverse = Inv(square);
             // `return ia.reshape(*invshape)`: a 0-d operand's invshape is (), and Python calls reshape() with no argument,

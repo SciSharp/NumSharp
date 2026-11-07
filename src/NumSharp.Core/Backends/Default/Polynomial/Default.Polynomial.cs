@@ -83,9 +83,16 @@ namespace NumSharp.Backends
             // NumPy's `for pv in p` takes len(p) coefficients: the first axis, each coefficient a row of p.shape[1:] for an
             // N-D p (p's size would count every element).
             long n = p.Shape.dimensions[0];
-            // No coefficients — NumPy's loop never runs, so the result is zeros_like(x) (a string x included).
+            // No coefficients — NumPy's loop never runs, so the result is zeros_like(x) (a string x included; a chararray x's
+            // zeros are created as the chararray by the computation's [NewSubtype("x")]).
             if (n == 0)
                 return PolyZerosLike(x);
+
+            // A chararray x: NumPy's y = zeros_like(x) is a chararray, so the first y * x is chararray.__mul__ - that is
+            // np.char.multiply(y, x), whose count x is never an integer array here: its ValueError, not the ufunc's
+            // missing-loop error of a plain text x below.
+            if (NDSubclass.StandsForCharArray(x))
+                throw new ValueError("Can only multiply by integers");
 
             // NumPy's Horner loop starts with y = zeros_like(x) and y * x: text in x has no multiply loop. Text in p
             // meets the first add, y * x + pv, whose left side keeps x's dtype; iterating a 1-D p yields NumPy SCALARS,

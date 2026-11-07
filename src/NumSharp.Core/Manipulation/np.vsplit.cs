@@ -28,12 +28,6 @@ namespace NumSharp
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null (its rank is read first).</exception>
         public static NDArray[] vsplit(NDArray ary, int indices_or_sections)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(ary))
-                return NDMatrixBoundary.WrappedAll((ary, indices_or_sections), static s => vsplit(s.ary, s.indices_or_sections));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(ary))
-                return NDCharArrayBoundary.KeptAll((ary, indices_or_sections), static s => vsplit(s.ary, s.indices_or_sections));
 
             // NumPy's statements (the rank check, split along axis 0) are the array object's.
             return NDArray.vsplit(ary, indices_or_sections);
@@ -62,12 +56,6 @@ namespace NumSharp
         /// <exception cref="NullReferenceException"><paramref name="ary"/> is null (its rank is read first).</exception>
         public static NDArray[] vsplit(NDArray ary, int[] indices)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(ary))
-                return NDMatrixBoundary.WrappedAll((ary, indices), static s => vsplit(s.ary, s.indices));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(ary))
-                return NDCharArrayBoundary.KeptAll((ary, indices), static s => vsplit(s.ary, s.indices));
 
             // NumPy's statements (the rank check, split along axis 0) are the array object's.
             return NDArray.vsplit(ary, indices);

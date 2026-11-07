@@ -16,13 +16,12 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the input (a 0-d input counts as 1-D).</exception>
         /// <exception cref="TypeError">Fixed-width text, or a string <paramref name="typeCode"/>, where NumPy's loop resolution refuses (its verbatim text); a <c>StringDType</c> input concatenates.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape: NumPy's text for the path its accumulate takes (parity QA-31): NpyIter's <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (4,3)-&gt;(4,3) (3,4)-&gt;(3,4) </c> and its siblings along an axis of an N-D input (or with another out dtype), <c>provided out is the wrong size for the accumulation.</c> on the direct 1-D path (the flattened form included).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html. The facade holds only the matrix boundary; NumPy's whole call is <see cref="TensorEngine.ReduceCumAdd"/>.</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html. The facade only calls <see
+        ///     cref="TensorEngine.ReduceCumAdd"/>, NumPy's whole call (its declaration answers for a subclass
+        ///     operand).</remarks>
         [NDScoped]
         public static NDArray cumsum(NDArray arr, int? axis = null, DType typeCode = null, NDArray @out = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(arr))
-                return NDMatrixBoundary.Wrapped((arr, axis, typeCode, @out), static s => cumsum(s.arr, s.axis, s.typeCode, s.@out), @out);
             // np.cumsum IS np.add.accumulate, and NumPy's whole call (the text routes, the loop resolution, out=) is the
             // engine's: DefaultEngine.ReduceCumAdd.
             return arr.TensorEngine.ReduceCumAdd(arr, axis, typeCode, @out);

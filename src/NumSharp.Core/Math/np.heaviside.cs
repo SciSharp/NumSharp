@@ -37,8 +37,6 @@ namespace NumSharp
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray heaviside(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => heaviside(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : x1.TensorEngine.Heaviside(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Heaviside(x1, x2, dtype, @out, where);
     }
 }

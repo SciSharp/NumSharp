@@ -7,7 +7,7 @@ using NumSharp.Backends.Kernels;
 using SysUnsafe = System.Runtime.CompilerServices.Unsafe;
 
 // =============================================================================
-// Default.Isin.cs - DefaultEngine's np.isin, after the facade's class boundary (numpy/lib/_arraysetops_impl.py, isin / _isin)
+// Default.Isin.cs - DefaultEngine's np.isin, on the facade's plain views (numpy/lib/_arraysetops_impl.py, isin / _isin)
 // =============================================================================
 //
 // WHAT NUMPY DOES

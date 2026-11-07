@@ -40,12 +40,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray require(NDArray a, DType dtype = null, string[] requirements = null, NDArray like = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, dtype, requirements, like), static s => require(s.a, s.dtype, s.requirements, s.like));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Kept((a, dtype, requirements, like), static s => require(s.a, s.dtype, s.requirements, s.like));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
@@ -78,11 +72,7 @@ namespace NumSharp
         ///     subclass), owning its data exactly when the plain result would.
         /// </remarks>
         public static NDArray require(NDArray a, DType dtype, string requirements)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, dtype, requirements), static s => require(s.a, s.dtype, s.requirements))
-            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.Kept((a, dtype, requirements), static s => require(s.a, s.dtype, s.requirements))
-            : require(a, dtype, ToCharTokens(requirements));
+            => require(a, dtype, ToCharTokens(requirements));
 
         /// <summary>Splits a requirements string into one-character tokens (NumPy iterates a string by char).</summary>
         /// <param name="requirements">The string, or null.</param>

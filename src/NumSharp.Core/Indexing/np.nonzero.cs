@@ -22,7 +22,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nonzero.html</remarks>
         public static NDArray<long>[] nonzero(NDArray a)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a);   // plain index arrays for a matrix too (the return type is typed)
             return a.TensorEngine.NonZero(a);
         }
     }

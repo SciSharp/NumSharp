@@ -58,6 +58,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="SystemError">A <c>U</c> unit past U+10FFFF the call would put in a str.</exception>
         /// <exception cref="IncorrectShapeException">The arguments do not broadcast (NumPy's multi-iterator text).</exception>
         /// <exception cref="NotSupportedException">An argument with no NumSharp form (an object array of lists).</exception>
+        [AsArray]
         internal static NDArray Translate(NDArray a, object table, object deletechars)
         {
             var loop = NDStringMethods.ResolveOne(a);

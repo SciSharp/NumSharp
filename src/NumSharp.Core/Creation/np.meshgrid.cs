@@ -16,6 +16,7 @@ namespace NumSharp
         {
             private readonly NDArray[] _grids;
 
+            [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Meshgrid))]
             internal MeshgridResult(NDArray[] grids) => _grids = grids ?? Array.Empty<NDArray>();
 
             /// <summary>Number of coordinate grids (one per input vector).</summary>
@@ -76,11 +77,6 @@ namespace NumSharp
         public static MeshgridResult meshgrid(NDArray x1, NDArray x2,
             string indexing = "xy", bool sparse = false, bool copy = true)
         {
-            // A numpy.char.chararray operand: the array overload's rule (each grid keeps its own input's class), decided
-            // before PlainFor's region would hide the chararray.
-            if (NDCharArrayBoundary.Sees(x1, x2))
-                return meshgrid(new[] { x1, x2 }, indexing, sparse, copy);
-            using var plain = NDMatrixBoundary.PlainFor(x1, x2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return meshgrid(new[] { x1, x2 }, indexing, sparse, copy);
         }
 
@@ -91,10 +87,6 @@ namespace NumSharp
         public static MeshgridResult meshgrid(NDArray x1, NDArray x2, NDArray x3,
             string indexing = "xy", bool sparse = false, bool copy = true)
         {
-            // A numpy.char.chararray operand: the array overload's rule, decided before PlainFor's region hides it.
-            if (NDCharArrayBoundary.Sees(x1, x2, x3))
-                return meshgrid(new[] { x1, x2, x3 }, indexing, sparse, copy);
-            using var plain = NDMatrixBoundary.PlainFor(x1, x2, x3);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return meshgrid(new[] { x1, x2, x3 }, indexing, sparse, copy);
         }
 
@@ -149,13 +141,6 @@ namespace NumSharp
         public static MeshgridResult meshgrid(NDArray[] xi,
             string indexing = "xy", bool sparse = false, bool copy = true)
         {
-            // A numpy.char.chararray operand: NumPy builds grid i from np.asanyarray(xi[i]) (reshape,
-            // broadcast_arrays(subok=True), copy), so each grid keeps ITS input's class — a chararray input gives a
-            // chararray grid (owning with copy=True, a view without), a plain one a plain grid (NDCharArrayBoundary).
-            if (NDCharArrayBoundary.Sees(xi))
-                return new MeshgridResult(NDCharArrayBoundary.KeptPerOperand((xi, indexing, sparse, copy),
-                    static s => meshgrid(s.xi, s.indexing, s.sparse, s.copy).ToArray(), xi));
-            using var plain = NDMatrixBoundary.PlainFor(xi);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (xi is null)
                 throw new ArgumentNullException(nameof(xi));
 

@@ -26,9 +26,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.real.html</remarks>
         public NDArray real
         {
+            [PlainReceiver]
             get
             {
-                using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
                 return np.real(this);
             }
             // PyArray_CopyInto uses NPY_UNSAFE_CASTING; np.real(this) is the writeable target (the real
@@ -61,17 +61,17 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.imag.html</remarks>
         public NDArray imag
         {
+            [PlainReceiver]
             get
             {
-                using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
                 return np.imag(this);
             }
             // NumPy's array_imag_set (ImagSet, NDArray.TypeCheck.cs): the dtype check and the copy into the
             // imaginary lane; its scope reclaims the lane view the copy targets (a counted reference on this
             // array's buffer, see the real setter), not a finalizer's job.
+            [PlainReceiver]
             set
             {
-                using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
                 ImagSet(this, value);
             }
         }
@@ -94,9 +94,9 @@ namespace NumSharp
         ///     casting (np.copyto's, or the ufunc's out cast for a complex array).</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or its shape does not take the result.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.conjugate.html</remarks>
+        [PlainReceiver]
         public NDArray conjugate(NDArray @out = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             // NumPy's PyArray_Conjugate: the statements are the array object's (NDArray.Multiarray.cs)
             return conjugate(this, @out);
         }

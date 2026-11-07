@@ -23,12 +23,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray tile(NDArray A, params int[] reps)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(A))
-                return NDMatrixBoundary.Wrapped((A, reps), static s => tile(s.A, s.reps));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(A))
-                return NDCharArrayBoundary.Kept((A, reps), static s => tile(s.A, s.reps));
             if (A is null) throw new ArgumentNullException(nameof(A));
             if (reps is null) throw new ArgumentNullException(nameof(reps));
 
@@ -56,12 +50,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray tile(NDArray A, long[] reps)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(A))
-                return NDMatrixBoundary.Wrapped((A, reps), static s => tile(s.A, s.reps));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(A))
-                return NDCharArrayBoundary.Kept((A, reps), static s => tile(s.A, s.reps));
             if (A is null) throw new ArgumentNullException(nameof(A));
             if (reps is null) throw new ArgumentNullException(nameof(reps));
 

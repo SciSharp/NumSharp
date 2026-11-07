@@ -25,7 +25,6 @@ namespace NumSharp
         public static NDArray setxor1d(NDArray ar1, NDArray ar2, bool assume_unique = false)
         {
             if (ar1 is null) throw new ArgumentNullException(nameof(ar1));
-            using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return ar1.TensorEngine.Setxor1d(ar1, ar2, assume_unique);
         }
     }

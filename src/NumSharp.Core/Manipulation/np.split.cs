@@ -27,12 +27,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray[] split(NDArray ary, int indices_or_sections, int axis = 0)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(ary))
-                return NDMatrixBoundary.WrappedAll((ary, indices_or_sections, axis), static s => split(s.ary, s.indices_or_sections, s.axis));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(ary))
-                return NDCharArrayBoundary.KeptAll((ary, indices_or_sections, axis), static s => split(s.ary, s.indices_or_sections, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
 
             // NumPy's statements (the axis read first, the count's checks, the equal views) are the array object's.
@@ -62,12 +56,6 @@ namespace NumSharp
         /// </remarks>
         public static NDArray[] split(NDArray ary, long[] indices, int axis = 0)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(ary))
-                return NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => split(s.ary, s.indices, s.axis));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(ary))
-                return NDCharArrayBoundary.KeptAll((ary, indices, axis), static s => split(s.ary, s.indices, s.axis));
             // np.array_split's check, which this overload reached first when it called that facade.
             if (ary is null) throw new ArgumentNullException(nameof(ary));
 
@@ -98,12 +86,6 @@ namespace NumSharp
         /// </remarks>
         public static NDArray[] split(NDArray ary, int[] indices, int axis = 0)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(ary))
-                return NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => split(s.ary, s.indices, s.axis));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(ary))
-                return NDCharArrayBoundary.KeptAll((ary, indices, axis), static s => split(s.ary, s.indices, s.axis));
             // np.array_split's check, which this overload reached first when it called that facade.
             if (ary is null) throw new ArgumentNullException(nameof(ary));
 
@@ -133,12 +115,6 @@ namespace NumSharp
         ///     larger than 0.").</exception>
         public static NDArray[] array_split(NDArray ary, int indices_or_sections, int axis = 0)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(ary))
-                return NDMatrixBoundary.WrappedAll((ary, indices_or_sections, axis), static s => array_split(s.ary, s.indices_or_sections, s.axis));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(ary))
-                return NDCharArrayBoundary.KeptAll((ary, indices_or_sections, axis), static s => array_split(s.ary, s.indices_or_sections, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
 
             // NumPy's statements (`Ntotal = ary.shape[axis]`, the count's check, the sections) are the array object's.
@@ -169,12 +145,6 @@ namespace NumSharp
         /// </remarks>
         public static NDArray[] array_split(NDArray ary, long[] indices, int axis = 0)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(ary))
-                return NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => array_split(s.ary, s.indices, s.axis));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(ary))
-                return NDCharArrayBoundary.KeptAll((ary, indices, axis), static s => array_split(s.ary, s.indices, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
 
             // NumPy's statements are the array object's; it checks the points for null (every split-points route, the
@@ -206,12 +176,6 @@ namespace NumSharp
         /// </remarks>
         public static NDArray[] array_split(NDArray ary, int[] indices, int axis = 0)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(ary))
-                return NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => array_split(s.ary, s.indices, s.axis));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(ary))
-                return NDCharArrayBoundary.KeptAll((ary, indices, axis), static s => array_split(s.ary, s.indices, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
 
             // NumPy's statements are the array object's; it checks the points for null (see the long[] overload).

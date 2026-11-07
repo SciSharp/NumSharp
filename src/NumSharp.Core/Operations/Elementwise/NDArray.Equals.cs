@@ -165,9 +165,9 @@ namespace NumSharp
         /// <exception cref="TypeError">With <paramref name="equal_nan"/>, a fixed-width string operand and two different
         ///     arrays of one shape (NumPy's <c>isnan</c> has no string loop); two <c>StringDType</c> operands whose NA
         ///     objects differ (their comparison refuses the pair).</exception>
+        [PlainReceiver]
         public bool array_equal(NDArray rhs, bool equal_nan = false)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this, rhs);   // the member keeps the plain-array meaning for a matrix object
             // np.array_equal's statements, this array's TensorEngine.ArrayEqual (DefaultEngine's in
             // Backends/Default/Logic/Default.ArrayEqual.cs), for every dtype: the member answers as the function does.
             return TensorEngine.ArrayEqual(this, rhs, equal_nan);

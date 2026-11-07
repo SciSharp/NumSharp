@@ -88,9 +88,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray piecewise(NDArray x, NDArray[] condlist, object[] funclist, params object[] args)
         {
-            // a numpy.matrix operand: NumPy fills zeros_like(x), a matrix of x's shape
-            if (NDMatrixBoundary.Sees(x))
-                return NDMatrixBoundary.Wrapped((x, condlist, funclist, args), static s => piecewise(s.x, s.condlist, s.funclist, s.args));
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (condlist is null) throw new ArgumentNullException(nameof(condlist));
             if (funclist is null) throw new ArgumentNullException(nameof(funclist));
@@ -110,9 +107,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray piecewise(NDArray x, NDArray condlist, object[] funclist, params object[] args)
         {
-            // a numpy.matrix operand: NumPy fills zeros_like(x), a matrix of x's shape
-            if (NDMatrixBoundary.Sees(x))
-                return NDMatrixBoundary.Wrapped((x, condlist, funclist, args), static s => piecewise(s.x, s.condlist, s.funclist, s.args));
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (condlist is null) throw new ArgumentNullException(nameof(condlist));
             if (funclist is null) throw new ArgumentNullException(nameof(funclist));
@@ -130,9 +124,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray piecewise(NDArray x, bool condlist, object[] funclist, params object[] args)
         {
-            // a numpy.matrix operand: NumPy fills zeros_like(x), a matrix of x's shape
-            if (NDMatrixBoundary.Sees(x))
-                return NDMatrixBoundary.Wrapped((x, condlist, funclist, args), static s => piecewise(s.x, s.condlist, s.funclist, s.args));
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (funclist is null) throw new ArgumentNullException(nameof(funclist));
 

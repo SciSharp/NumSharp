@@ -16,12 +16,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray round_(NDArray x, int decimals = 0, NDArray @out = null, DType dtype = null)
-            => !NDMatrixBoundary.Sees(x) ? x.TensorEngine.Round(x, decimals, dtype, @out)
-            // a numpy.matrix operand: decimals=0 is the rint ufunc (a matrix comes back); any other decimals is
-            // ndarray.round's multiply / rint / divide route, which NumPy returns as a plain array
-            : decimals == 0
-                ? NDMatrixBoundary.Wrapped((x, decimals, @out, dtype), static s => round_(s.x, s.decimals, s.@out, s.dtype), @out)
-                : NDMatrixBoundary.Plain((x, decimals, @out, dtype), static s => round_(s.x, s.decimals, s.@out, s.dtype));
+            // ndarray.round is the engine's Round; a numpy.matrix operand's class follows decimals (the rint ufunc for 0,
+            // a plain result otherwise: the computation's rule).
+            => x.TensorEngine.Round(x, decimals, dtype, @out);
 
         /// <summary>
         ///     Evenly round to the given number of decimals (alias of <see cref="round_"/>; NumPy: <c>np.around is np.round</c>).
@@ -34,11 +31,8 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray around(NDArray x, int decimals = 0, NDArray @out = null, DType dtype = null)
-            => !NDMatrixBoundary.Sees(x) ? x.TensorEngine.Round(x, decimals, dtype, @out)
-            // a numpy.matrix operand: decimals=0 is the rint ufunc (a matrix comes back); any other decimals is
-            // ndarray.round's multiply / rint / divide route, which NumPy returns as a plain array
-            : decimals == 0
-                ? NDMatrixBoundary.Wrapped((x, decimals, @out, dtype), static s => around(s.x, s.decimals, s.@out, s.dtype), @out)
-                : NDMatrixBoundary.Plain((x, decimals, @out, dtype), static s => around(s.x, s.decimals, s.@out, s.dtype));
+            // ndarray.round is the engine's Round; a numpy.matrix operand's class follows decimals (the rint ufunc for 0,
+            // a plain result otherwise: the computation's rule).
+            => x.TensorEngine.Round(x, decimals, dtype, @out);
     }
 }

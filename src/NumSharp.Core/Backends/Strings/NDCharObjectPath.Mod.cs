@@ -116,6 +116,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="SystemError">A <c>U</c> one-unit element past U+10FFFF (CPython's scalar).</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast (NumPy's multi-iterator text).</exception>
         /// <exception cref="NotSupportedException">A value with no NumSharp form (an object array of lists).</exception>
+        [AsArray]
         internal static NDArray Mod(NDArray a, object values)
         {
             var loop = NDStringMethods.ResolveOne(a);

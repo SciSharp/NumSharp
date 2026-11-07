@@ -2333,8 +2333,9 @@ report every carved case still open.
 
 `test/oracle/gen_matrix_operand_oracle.py` writes what NumPy 2.4.2 returns when a public `np.*` function receives a
 `numpy.matrix` OPERAND. The matrix tier above holds the matrix CLASS (its members and operators); this tier holds
-the functions, which NumSharp answers at run time through `NDMatrixBoundary` (`src/NumSharp.Core/Matrixlib/`): the
-object's class decides, and the result is an `NDMatrix` typed `NDArray`.
+the functions, which NumSharp answers at run time through the mechanism declared on each function's computation and
+woven into the function by NumSharp.Build (`src/NumSharp.Core/Backends/Subclass/`): the object's class decides, and
+the result is an `NDMatrix` typed `NDArray`.
 
 **How the cases are made.** Run the generator AFTER every other one: its sources are their files. A source case
 qualifies when a plain NumPy call reproduces its recorded answer byte for byte. Each two-dimensional operand
@@ -2354,7 +2355,7 @@ axis / keepdims values), which gives 4,645 answers over 260 functions, 680 of th
 always fails. `MisalignedRegistry.Classify` returns null for a shape, threw, error-text or expected-error divergence
 of a case whose layout starts with `matrix@`, and the two NEP50 0-d blankets skip the tier. A VALUE excuse of the
 source tier still applies (the variant keeps its source's op key, params and valueclass). Ownership is not compared:
-a boundary result is always a matrix view of the plain result.
+a woven result is always a matrix view of the plain result.
 
 **The rules NumPy applies** (one per function, each read from the truth table):
 
@@ -2378,23 +2379,25 @@ a boundary result is always a matrix view of the plain result.
 | MO05 | 27 | `np.polyval`, `np.i0`, narrow-float `np.sinc`, `np.trapezoid` with a matrix x: `*` is the matrix product inside NumPy |
 
 MO02 to MO05 are NumPy ARTIFACTS: matrix semantics leak into NumPy's own Python code. NumSharp returns the plain
-result shaped by the function's matrix rule. Two more gaps cannot be tier cases, because their results are structs
+result shaped by the function's declared mechanism. Two more gaps cannot be tier cases, because their results are structs
 of arrays: MO06 (`np.gradient`) and MO07 (`np.meshgrid`) return plain arrays where NumPy returns matrices; their
 repros are in `NumSharp.Tests/OpenBugs.MatrixOperand.cs`.
 
-**The caller audit** (`MatrixOperand_LibraryNeverReachesAMatrixRule`). The boundary rests on one contract: no method
-of the library reaches the matrix rule of a public function at depth zero (library code is written for plain
-results; a 1 x N row where it expects N elements would break it). The test turns the contract into a measurement.
-It replays every corpus case that has a two-dimensional operand, with those operands typed as matrices, while
-`NDMatrixBoundary.AuditInternalCallers` is on: 311,725 cases from the ordinary tiers (`ReplayOne`), the numpy.ma
-tiers (`ReplayMaOne`, masked operands built from matrix data) and the index tiers (a matrix base, matrix index
-arrays, a matrix value). Outcomes are not compared; the set of library callers the audit records must be empty. It
-found 57 call paths when it was written. A finding is closed by a region (`NDMatrixBoundary.PlainFor` / `Inside`), by
-a rule for the calling function, or, for an object that keeps the array, by storing its plain view (`PlainOf`).
+**The caller audit** (`MatrixOperand_LibraryNeverReachesAMatrixRule`). The woven functions rest on one contract: no
+method of the library hands a matrix OBJECT to a public function (library code is written for plain results; a
+1 x N row where it expects N elements would break it, and the subclass path costs a scope and a second call). The
+test turns the contract into a measurement. It replays every corpus case that has a two-dimensional operand, with
+those operands typed as matrices, while `NDSubclass.AuditInternalCallers` is on (it records the library caller of
+every subclass path that runs): 311,725 cases from the ordinary tiers (`ReplayOne`), the numpy.ma tiers
+(`ReplayMaOne`, masked operands built from matrix data) and the index tiers (a matrix base, matrix index arrays, a
+matrix value). Outcomes are not compared; the set of library callers the audit records must be empty. A finding is
+closed by a plain view where the operand is passed on (`NDSubclass.PlainView` / `LeasePlainView`, `NDMatrix.A`), by
+calling the computation behind the facade, or by a `[PlainReceiver]` declaration for an `NDArray` member; an object
+that keeps the array stores its plain view.
 
 **Outside the truth table.** A function the generator cannot derive (tuple results, nested operands, non-deterministic
 arrangements, LAPACK) took its rule from NumPy's source and two direct probes of NumPy 2.4.2. Those rules are pinned
-by unit tests with the probed class and shape: `NumSharp.Tests/Matrixlib/NDMatrixBoundary.Tests.cs` (24) and
+by unit tests with the probed class and shape: `NumSharp.Tests/Matrixlib/NDMatrixOperand.Tests.cs` (24) and
 `NumSharp.Tests.Interop/MatrixOperandLapackTests.cs` (5: `np.linalg.qr`, `eig`, `eigh`, `svd`, `lstsq`, `pinv`,
 `cholesky`).
 

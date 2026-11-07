@@ -46,6 +46,7 @@ namespace NumSharp
             /// <summary>Per-value occurrence counts, or <c>null</c> when <c>return_counts</c> was False.</summary>
             public NDArray counts { get; }
 
+            [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Unique))]
             internal UniqueResult(NDArray[] outputs, bool hasIndex, bool hasInverse, bool hasCounts)
             {
                 _outputs = outputs;
@@ -205,19 +206,7 @@ namespace NumSharp
             bool equal_nan = true,
             bool sorted = true)
         {
-            // a numpy.char.chararray operand: _unique1d (no axis, or a 1-d operand) hands the values back through
-            // _array_converter.wrap or a boolean index — a chararray view; the index arrays stay plain, and the axis path of
-            // an N-d operand converts with np.ascontiguousarray (plain). With a return flag _unique1d sorts the CHARARRAY and
-            // finds its runs with the chararray's stripping `!=` (stripRuns); without one it hashes the plain data. Decided
-            // before the matrix region below.
-            if ((axis is null || ar.ndim == 1) && NDCharArrayBoundary.Sees(ar))
-                return new UniqueResult(NDCharArrayBoundary.WrappedFirst((ar, return_index, return_inverse, return_counts, axis, equal_nan, sorted),
-                        static s => unique(s.ar, s.return_index, s.return_inverse, s.return_counts, s.axis, s.equal_nan, s.sorted).ToArray(),
-                        stripRuns: return_index || return_inverse || return_counts),
-                    return_index, return_inverse, return_counts);
-            using var plain = NDMatrixBoundary.PlainFor(ar);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy's statements after the class boundary, TensorEngine.Unique (the text checks, the boundary scope, the
-            // computation).
+            // NumPy's statements on the plain views, TensorEngine.Unique (the text checks, the scope, the computation).
             NDArray[] outputs = ar.TensorEngine.Unique(ar, return_index, return_inverse, return_counts, axis, equal_nan, sorted);
             return new UniqueResult(outputs, return_index, return_inverse, return_counts);
         }

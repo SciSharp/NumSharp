@@ -42,12 +42,6 @@ namespace NumSharp
         /// <param name="arr">The array.</param>
         public static NDArray atleast_3d(NDArray arr)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(arr))
-                return NDMatrixBoundary.Wrapped(arr, static s => atleast_3d(s), keepRank: true);
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arr))
-                return NDCharArrayBoundary.Kept(arr, static s => atleast_3d(s));
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
@@ -108,28 +102,8 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
         /// <exception cref="NullReferenceException">A null entry.</exception>
         public static NDArray[] atleast_3d(params NDArray[] arys)
-        {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(arys))
-                return NDMatrixBoundary.WrappedAll(arys, static s => atleast_3d(s));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arys))
-                return NDCharArrayBoundary.KeptAll(arys, static s => atleast_3d(s));
-            if (arys == null)
-                throw new ArgumentNullException(nameof(arys));
-
-            // NumPy's atleast_nd(*arys) of no arrays returns the empty tuple (no error).
-            if (arys.Length == 0)
-                return Array.Empty<NDArray>();
-
-            // NumPy's loop over the arrays, each one's statements the array object's (their inner expand_dims aliases are
-            // reclaimed there; an array of three dimensions or more passes through).
-            var ret = new NDArray[arys.Length];
-            for (var i = 0; i < arys.Length; i++)
-                ret[i] = NDArray.atleast_3d(arys[i]);
-
-            return ret;
-        }
+            // NumPy's loop over the arrays is the array object's (each result keeps its own operand's class).
+            => NDArray.atleast_3d(arys);
 
         /// <summary>
         ///     View inputs as arrays with at least two dimensions.
@@ -164,9 +138,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_2d.html</remarks>
         public static NDArray atleast_2d(NDArray arr)
         {
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arr))
-                return NDCharArrayBoundary.Kept(arr, static s => atleast_2d(s));
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
@@ -219,37 +190,8 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_2d.html</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
         public static NDArray[] atleast_2d(params NDArray[] arys)
-        {
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arys))
-                return NDCharArrayBoundary.KeptAll(arys, static s => atleast_2d(s));
-            if (arys == null)
-                throw new ArgumentNullException(nameof(arys));
-
-            // NumPy's atleast_nd(*arys) of no arrays returns the empty tuple (no error).
-            if (arys.Length == 0)
-                return Array.Empty<NDArray>();
-
-            var ret = new NDArray[arys.Length];
-            for (var i = 0; i < arys.Length; i++)
-            {
-                var arr = arys[i];
-                switch (arr.ndim)
-                {
-                    case 0:
-                        ret[i] = arr.reshape(1, 1);
-                        continue;
-                    case 1:
-                        ret[i] = np.expand_dims(arr, 0);
-                        continue;
-                    default:
-                        ret[i] = arr;
-                        continue;
-                }
-            }
-
-            return ret;
-        }
+            // NumPy's loop over the arrays is the array object's (each result keeps its own operand's class).
+            => NDArray.atleast_2d(arys);
 
         /// <summary>
         ///     Convert inputs to arrays with at least one dimension.
@@ -276,9 +218,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_1d.html</remarks>
         public static NDArray atleast_1d(NDArray arr)
         {
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arr))
-                return NDCharArrayBoundary.Kept(arr, static s => atleast_1d(s));
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
@@ -331,33 +270,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_1d.html</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
         public static NDArray[] atleast_1d(params NDArray[] arys)
-        {
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arys))
-                return NDCharArrayBoundary.KeptAll(arys, static s => atleast_1d(s));
-            if (arys == null)
-                throw new ArgumentNullException(nameof(arys));
-
-            // NumPy's atleast_nd(*arys) of no arrays returns the empty tuple (no error).
-            if (arys.Length == 0)
-                return Array.Empty<NDArray>();
-
-            var ret = new NDArray[arys.Length];
-            for (var i = 0; i < arys.Length; i++)
-            {
-                var arr = arys[i];
-                switch (arr.ndim)
-                {
-                    case 0:
-                        ret[i] = arr.reshape(1);
-                        continue;
-                    default:
-                        ret[i] = arr;
-                        continue;
-                }
-            }
-
-            return ret;
-        }
+            // NumPy's loop over the arrays is the array object's (each result keeps its own operand's class).
+            => NDArray.atleast_1d(arys);
     }
 }

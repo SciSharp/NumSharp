@@ -43,7 +43,6 @@ namespace NumSharp
         public static NDArray bincount(NDArray x, NDArray weights = null, int minlength = 0)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            using var plain = NDMatrixBoundary.PlainFor(x, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return x.TensorEngine.Bincount(x, weights, minlength);
         }
     }

@@ -245,6 +245,7 @@ namespace NumSharp.Backends.Strings
         ///     <paramref name="dtype"/> with details beyond its class (<c>'U1'</c>, <c>'&gt;i8'</c>) or a <c>StringDType</c>
         ///     instance (NumPy's <c>_get_dtype</c>, checked first).</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast (no out= / where=).</exception>
+        [Ufunc]
         internal static NDArray StrLen(NDArray x, NDArray @out, NDArray where, DType dtype)
         {
             // _get_dtype runs before the arguments are converted: a dtype= with details beyond its class ('U1', '>i8') or a
@@ -320,6 +321,7 @@ namespace NumSharp.Backends.Strings
         ///     <paramref name="dtype"/> with details beyond its class (<c>'U1'</c>) or a <c>StringDType</c> instance (NumPy's
         ///     <c>_get_dtype</c>, checked first).</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast (no out= / where=).</exception>
+        [Ufunc]
         internal static NDArray Predicate(int kind, NDArray x, NDArray @out, NDArray where, DType dtype)
         {
             string ufunc = NDTextElements.PredicateName(kind);
@@ -401,6 +403,7 @@ namespace NumSharp.Backends.Strings
         ///     the first failing element; this one computes every element and raises after the loop, and the result is
         ///     discarded either way.
         /// </remarks>
+        [AsArray]
         internal static NDArray CaseMap(int map, NDArray a)
         {
             var loop = ResolveOne(a);
@@ -474,6 +477,7 @@ namespace NumSharp.Backends.Strings
         ///     refuses; a chararray input of the user's call that NumPy's trivial loop copies into <c>StringDType()</c> (0-d,
         ///     or 1-d with at most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string
         ///     data.</c>).</exception>
+        [Ufunc]
         internal static NDArray FindLike(string ufunc, TextMethodOp op, NDArray a, NDArray sub, NDArray start, NDArray end)
         {
             var loop = ResolvePair(a, sub);
@@ -744,6 +748,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">A non-text operand; a float width descriptor.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="a"/> and <paramref name="width"/> do not broadcast.</exception>
         /// <exception cref="ValueError">An empty broadcast.</exception>
+        [ArrayWrap("a")]
         internal static NDArray ZFill(NDArray a, NDArray width)
         {
             NDArray w64 = null;
@@ -870,6 +875,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="OverflowException">An expansion past 2^31 - 1 (<c>new string is too long</c>).</exception>
         /// <exception cref="ValueError">An empty broadcast.</exception>
+        [ArrayWrap("a")]
         internal static NDArray ExpandTabs(NDArray a, NDArray tabsize)
         {
             var loop = ResolveOne(a);
@@ -934,6 +940,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeEncodeError">A non-ASCII <c>old</c> / <c>new</c> cast to <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">A byte ≥ 0x80 cast to <c>U</c>.</exception>
         /// <exception cref="IncorrectShapeException">A statement's operands do not broadcast (its own shapes listed).</exception>
+        [Ufunc(Wrap = "arr")]
         internal static NDArray Replace(NDArray arr, NDArray old, NDArray @new, bool oldHasDtype, bool newHasDtype, NDArray count)
         {
             var aDt = arr.dtype;

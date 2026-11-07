@@ -11,9 +11,9 @@ namespace NumSharp
         /// <param name="out">Output array whose type is preserved and which must be of the right shape to hold the output.</param>
         /// <returns>A copy of the selected slices along the given axis.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.compress.html</remarks>
+        [PlainReceiver]
         public NDArray compress(NDArray condition, int? axis = null, NDArray @out = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.compress(condition, this, axis, @out);
         }
     }

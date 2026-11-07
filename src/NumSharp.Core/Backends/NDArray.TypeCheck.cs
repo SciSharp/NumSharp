@@ -7,7 +7,8 @@ namespace NumSharp
     ///     The array object's home for NumPy's <c>lib/_type_check_impl.py</c> (the np-layer dtype plan's Appendix D):
     ///     np.real and np.imag are <c>val.real</c> / <c>val.imag</c> there, so their statements are the ndarray
     ///     accessors' (NumPy's <c>array_real_get</c>, <c>array_imag_get</c> and <c>array_imag_set</c> in
-    ///     <c>getset.c</c>). The facades (<c>Math/np.real.cs</c>, <c>Math/np.imag.cs</c>) keep the numpy.matrix boundary;
+    ///     <c>getset.c</c>). The facades (<c>Math/np.real.cs</c>, <c>Math/np.imag.cs</c>) are woven for a numpy.matrix
+    ///     operand;
     ///     the members <see cref="real"/> and <see cref="imag"/> (<c>NDArray.ComplexAccessors.cs</c>) reach the same
     ///     statements.
     /// </remarks>
@@ -29,6 +30,7 @@ namespace NumSharp
         ///     byte-reinterpreting alias forwards its ARC to the owner), so a caller that drops it should dispose it or
         ///     create it inside a scope.
         /// </remarks>
+        [NewSubtype("val")]
         internal static NDArray real_(NDArray val)
         {
             // Complex: a strided float64 view onto the real lane (writes through, shares memory) — the
@@ -56,6 +58,7 @@ namespace NumSharp
         ///     No numpy.matrix rule here: np.imag's facade applies it. The zeros are allocated from the DESCRIPTOR, so a
         ///     text array's imaginary part is its own dtype (<c>np.imag(U3)</c> is <c>&lt;U3</c> of <c>''</c>).
         /// </remarks>
+        [NewSubtype("val")]
         internal static NDArray imag_(NDArray val)
         {
             // Complex: a strided float64 view onto the imaginary lane (writes through, shares memory).

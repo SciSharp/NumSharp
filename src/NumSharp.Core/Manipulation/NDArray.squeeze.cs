@@ -12,9 +12,9 @@ namespace NumSharp
         /// </param>
         /// <returns>A view of this array with the selected length-one axes removed. Shares memory with this array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.squeeze.html</remarks>
+        [PlainReceiver]
         public NDArray squeeze(int? axis = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return axis is null ? np.squeeze(this) : np.squeeze(this, axis.Value);
         }
     }

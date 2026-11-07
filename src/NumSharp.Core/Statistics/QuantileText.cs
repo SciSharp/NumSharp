@@ -144,7 +144,7 @@ namespace NumSharp.Statistics
             if (partitionRaises)
             {
                 DefaultEngine.ParseMethod(method);
-                throw NDCharArrayBoundary.PartitionKeywordError();
+                throw NDCharArray.PartitionKeywordError();
             }
 
             // _quantile: the axis moved first; values_count = arr.shape[0]. 'linear' with an integer q indexes

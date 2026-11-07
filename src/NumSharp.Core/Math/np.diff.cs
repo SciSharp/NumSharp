@@ -73,9 +73,6 @@ namespace NumSharp
                                    object prepend = null, object append = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, n, axis, prepend, append), static s => diff(s.a, s.n, s.axis, s.prepend, s.append));
             return a.TensorEngine.Diff(a, n, axis, prepend, append);
         }
     }

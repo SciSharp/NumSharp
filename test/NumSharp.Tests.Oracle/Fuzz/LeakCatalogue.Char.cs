@@ -1471,7 +1471,7 @@ namespace NumSharp.Tests.Fuzz
                 using var chars = pad(c, 5, null);
                 using var byWidths = pad(u, widths, "-");
                 // A StringDType fill beside a 2-d chararray: NumPy's trivial loop does not copy it, a plain StringDType
-                // result; a chararray fill beside a plain U text computes plain (the marks of PlainUfunc).
+                // result; a chararray fill beside a plain U text computes plain ([Ufunc(Wrap = "a")]: only a wraps).
                 using var plainT = pad(c2, 5, tfill);
                 using var charFill = pad(u, 6, cfill);
                 try

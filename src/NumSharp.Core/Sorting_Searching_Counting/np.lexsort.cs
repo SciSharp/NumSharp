@@ -39,12 +39,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray lexsort(NDArray[] keys, int axis = -1)
         {
-            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            if (NDMatrixBoundary.Sees(keys))
-                return NDMatrixBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
-            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(keys))
-                return NDCharArrayBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
             // NumPy's lexsort is PyArray_LexSort, the engine's: TensorEngine.LexSort of the first key's engine. A null,
             // empty or null-led list has no operand to decide, so TensorEngine.Default's member meets it and raises the
             // body's error.
@@ -72,12 +66,6 @@ namespace NumSharp
         /// </remarks>
         public static NDArray lexsort(NDArray keys, int axis = -1)
         {
-            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            if (NDMatrixBoundary.Sees(keys))
-                return NDMatrixBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
-            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(keys))
-                return NDCharArrayBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
             // A string array is a sequence of text keys, each sorted by its text (the key list below).
             if (keys is null)
                 throw new ArgumentNullException(nameof(keys));

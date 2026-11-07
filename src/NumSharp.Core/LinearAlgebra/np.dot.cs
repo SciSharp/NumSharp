@@ -35,9 +35,6 @@
         [NDScoped]
         public static NDArray dot(NDArray a, NDArray b, NDArray @out = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a, b))
-                return NDMatrixBoundary.Wrapped((a, b, @out), static s => dot(s.a, s.b, s.@out), @out);
             // NumPy's dot is PyArray_MatrixProduct2 (C): the text answers, the product and the out= check are the
             // engine's (TensorEngine.Dot).
             return a.TensorEngine.Dot(a, b, @out);

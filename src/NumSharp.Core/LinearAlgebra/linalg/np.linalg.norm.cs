@@ -47,26 +47,16 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             public static NDArray norm(NDArray x, object ord = null, int? axis = null, bool keepdims = false)
-                => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-                ? NDMatrixBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims))
-                : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-                ? NDCharArrayBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims))
-                : norm(x, ord, axis is null ? null : new[] {axis.Value}, keepdims);
+                => norm(x, ord, axis is null ? null : new[] {axis.Value}, keepdims);
 
             /// <summary>
             ///     Matrix or vector norm reduced over an explicit axis tuple.
             /// </summary>
             /// <inheritdoc cref="norm(NDArray, object, int?, bool)"/>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static NDArray norm(NDArray x, object ord, int[] axis, bool keepdims = false)
             {
                 if (x is null) throw new ArgumentNullException(nameof(x));
-                // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-                if (NDMatrixBoundary.Sees(x))
-                    return NDMatrixBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims));
-                // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
-                if (NDCharArrayBoundary.Sees(x))
-                    return NDCharArrayBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims));
                 return x.TensorEngine.Linalg.Norm(x, ord, axis, keepdims);
             }
 
@@ -94,11 +84,7 @@ namespace NumSharp
             public static NDArray vector_norm(NDArray x, int axis, bool keepdims = false, object ord = null)
             {
                 if (x is null) throw new ArgumentNullException(nameof(x));
-                return NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-                ? NDMatrixBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord))
-                : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-                ? NDCharArrayBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord))
-                : x.TensorEngine.Linalg.VectorNorm(x, axis, keepdims, ord);
+                return x.TensorEngine.Linalg.VectorNorm(x, axis, keepdims, ord);
             }
 
             /// <summary>
@@ -131,16 +117,10 @@ namespace NumSharp
             ///     to norm.".
             ///     </para>
             /// </remarks>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static NDArray vector_norm(NDArray x, int[] axis = null, bool keepdims = false, object ord = null)
             {
                 if (x is null) throw new ArgumentNullException(nameof(x));
-                // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-                if (NDMatrixBoundary.Sees(x))
-                    return NDMatrixBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord));
-                // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
-                if (NDCharArrayBoundary.Sees(x))
-                    return NDCharArrayBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord));
                 return x.TensorEngine.Linalg.VectorNorm(x, axis, keepdims, ord);
             }
 
@@ -168,11 +148,7 @@ namespace NumSharp
             public static NDArray matrix_norm(NDArray x, bool keepdims = false, object ord = null)
             {
                 if (x is null) throw new ArgumentNullException(nameof(x));
-                return NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-                ? NDMatrixBoundary.Plain((x, keepdims, ord), static s => matrix_norm(s.x, s.keepdims, s.ord))
-                : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
-                ? NDCharArrayBoundary.Plain((x, keepdims, ord), static s => matrix_norm(s.x, s.keepdims, s.ord))
-                : x.TensorEngine.Linalg.MatrixNorm(x, keepdims, ord);
+                return x.TensorEngine.Linalg.MatrixNorm(x, keepdims, ord);
             }
         }
     }

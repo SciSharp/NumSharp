@@ -12,7 +12,8 @@ namespace NumSharp.Backends
         ///     common descriptor), a fixed-width text haystack searches text (the key formatted into the common string dtype),
         ///     and a numeric haystack searches in <c>promote_types(a, int32)</c> with the key on the stack (no 0-d array: this
         ///     route is about 15x cheaper per call than the array member). Moved from the public <c>np.searchsorted</c> by the
-        ///     np-layer dtype plan's P2, statement for statement; the public function keeps the matrix boundary's plain region.
+        ///     np-layer dtype plan's P2, statement for statement; the public function hands a subclass operand in as
+        ///     its plain view.
         /// </remarks>
         public override long SearchSorted(NDArray a, int v, string side = "left", NDArray sorter = null)
         {
@@ -75,8 +76,9 @@ namespace NumSharp.Backends
         ///     in NumPy's order), then the numeric search — both operands promoted to their common dtype (the keys are never
         ///     cast DOWN to the haystack's), a 0-d key searched from the stack, and the typed IL kernel over the haystack's
         ///     stride with the keys and the sorter read where their views start. Moved from the public <c>np.searchsorted</c>
-        ///     by the np-layer dtype plan's P2, statement for statement; the public function keeps the matrix boundary's plain
-        ///     region.
+        ///     by the np-layer dtype plan's P2, statement for statement; the public function hands a subclass operand
+        ///     in as its
+        ///     plain view.
         /// </remarks>
         [NDScoped] // reclaims the promoted haystack, the contiguous keys and the int64 sorter (the result is returned)
         public override NDArray SearchSorted(NDArray a, NDArray v, string side = "left", NDArray sorter = null)

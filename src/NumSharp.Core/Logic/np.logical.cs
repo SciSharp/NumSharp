@@ -4,8 +4,8 @@ namespace NumSharp
     {
         // NumPy's logical_and/or/xor/not are C ufuncs, so their calls are TensorEngine members (LogicalAnd / LogicalOr /
         // LogicalXor / LogicalNot, Backends/Default/Logic/Default.Logical.cs: the text guard, the bool-only dtype= gate,
-        // the truth reduction and the bitwise combine). These facades keep what sits above the engine: the numpy.matrix
-        // boundary and the numpy.char.chararray boundary, which must see the operands' classes before any loop runs.
+        // the truth reduction and the bitwise combine). These facades keep what sits above the engine: they are woven, so
+        // a numpy.matrix or numpy.char.chararray operand's class is seen before any loop runs.
         // Return type is NDArray (not NDArray<bool>) to match the comparison-op shape: a plain call still yields a bool
         // array, but out=<numeric> returns that numeric out (True->1).
 
@@ -44,12 +44,6 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
         public static NDArray logical_and(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(x1, x2))
-                return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_and(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
-            // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(x1, x2, @out))
-                return NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => logical_and(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out);
             return x1.TensorEngine.LogicalAnd(x1, x2, dtype, @out, where);
         }
 
@@ -85,12 +79,6 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
         public static NDArray logical_or(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(x1, x2))
-                return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_or(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
-            // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(x1, x2, @out))
-                return NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => logical_or(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out);
             return x1.TensorEngine.LogicalOr(x1, x2, dtype, @out, where);
         }
 
@@ -126,12 +114,6 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
         public static NDArray logical_xor(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(x1, x2))
-                return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_xor(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
-            // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(x1, x2, @out))
-                return NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => logical_xor(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out);
             return x1.TensorEngine.LogicalXor(x1, x2, dtype, @out, where);
         }
 
@@ -158,9 +140,6 @@ namespace NumSharp
         ///     <paramref name="out"/> that does not broadcast with the operand.</exception>
         public static NDArray logical_not(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(x))
-                return NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => logical_not(s.x, s.@out, s.where, s.dtype), @out);
             return x.TensorEngine.LogicalNot(x, dtype, @out, where);
         }
     }

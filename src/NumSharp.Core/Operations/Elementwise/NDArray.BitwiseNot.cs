@@ -18,8 +18,11 @@ namespace NumSharp
         /// </remarks>
         public static NDArray operator ~(NDArray x)
         {
-            using var plain = NDMatrixBoundary.PlainFor(x);   // an operator keeps the plain-array meaning for a matrix object
-            return np.invert(x);
+            // An operator keeps the plain-array meaning for a subclass object seen through an NDArray reference: np.invert
+            // gets its plain view (handed the object itself it would take its subclass path and wrap the result). The lease
+            // releases that view on return (np.invert's result is a new array); a plain x is passed through untouched.
+            using var plain = NDSubclass.LeasePlainView(x);
+            return np.invert(plain.Array);
         }
     }
 }

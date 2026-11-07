@@ -17,7 +17,7 @@ namespace NumSharp.Backends
         ///     <paramref name="out"/> takes the add reduction with an out operand (<see cref="ReduceAdd"/>: the reduce
         ///     prologue's checks and the loop <c>dtype ?? promote_types(out, diagonal)</c>), and a call without one sums a
         ///     contiguous copy of the diagonal. Moved from the public <c>np.trace</c> by the np-layer dtype plan's P1b,
-        ///     statement for statement; the public function keeps the matrix boundary's plain region. The out= route is
+        ///     statement for statement; the public function hands a subclass operand in as its plain view. The out= route is
         ///     NumPy's since P1d (it summed in NEP 50's accumulator and raised its own texts for a misshapen out).
         /// </remarks>
         [NDScoped] // reclaims the diagonal view and the contig copy (the out= route's own intermediates are ReduceAdd's)

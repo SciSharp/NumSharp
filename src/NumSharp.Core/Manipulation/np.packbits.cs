@@ -30,9 +30,6 @@ namespace NumSharp
         public static NDArray packbits(NDArray a, int? axis = null, string bitorder = "big")
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, axis, bitorder), static s => packbits(s.a, s.axis, s.bitorder));
             return a.TensorEngine.Packbits(a, axis, bitorder);
         }
 
@@ -65,9 +62,6 @@ namespace NumSharp
         public static NDArray unpackbits(NDArray a, int? axis = null, long? count = null, string bitorder = "big")
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, axis, count, bitorder), static s => unpackbits(s.a, s.axis, s.count, s.bitorder));
             return a.TensorEngine.Unpackbits(a, axis, count, bitorder);
         }
     }

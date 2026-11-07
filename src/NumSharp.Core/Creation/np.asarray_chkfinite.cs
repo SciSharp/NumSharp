@@ -24,12 +24,6 @@ namespace NumSharp
         /// </remarks>
         public static NDArray asarray_chkfinite(NDArray a, DType dtype = null, char order = 'K')
         {
-            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Plain((a, dtype, order), static s => asarray_chkfinite(s.a, s.dtype, s.order));
-            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Plain((a, dtype, order), static s => asarray_chkfinite(s.a, s.dtype, s.order));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 

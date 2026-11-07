@@ -18,9 +18,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arccosh.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray arccosh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => arccosh(s.x, s.@out, s.where, s.dtype), @out)
-            : x.TensorEngine.ACosh(x, dtype, @out, where);
+            => x.TensorEngine.ACosh(x, dtype, @out, where);
 
         /// <summary>
         ///     Inverse hyperbolic cosine, element-wise (Array-API alias of <see cref="arccosh(NDArray, NDArray, NDArray, DType)"/>, added in NumPy 2.0).
@@ -28,8 +26,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.acosh.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray acosh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => acosh(s.x, s.@out, s.where, s.dtype), @out)
-            : x.TensorEngine.ACosh(x, dtype, @out, where);
+            => x.TensorEngine.ACosh(x, dtype, @out, where);
     }
 }

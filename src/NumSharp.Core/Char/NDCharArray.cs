@@ -85,10 +85,27 @@ namespace NumSharp
     ///     </para>
     /// </remarks>
     /// <seealso href="https://numpy.org/doc/stable/reference/generated/numpy.char.chararray.html"/>
+    [ArraySubclass("chararray")]
     public partial class NDCharArray : NDArray, IEnumerable
     {
         /// <summary>NumPy's <c>__array_finalize__</c> error text, verbatim.</summary>
         internal const string FinalizeText = "Can only create a chararray from string data.";
+
+        /// <summary>
+        ///     NumPy's error text when a function calls <c>a.partition(kth, axis=...)</c> on a chararray (<c>np.partition</c>,
+        ///     <c>np.median</c>, the unweighted <c>np.quantile</c> / <c>np.percentile</c>): the subclass's <c>partition</c> is the
+        ///     STRING partition, whose only parameter is the separator.
+        /// </summary>
+        internal const string PartitionKeywordText = "chararray.partition() got an unexpected keyword argument 'axis'";
+
+        /// <summary>NumPy's finalize error, for a result created as the subclass that is never string data
+        ///     (<c>np.argmax(c)</c>'s int64 index).</summary>
+        /// <returns>The exception to throw: <c>ValueError: Can only create a chararray from string data.</c></returns>
+        internal static ValueError FinalizeError() => new ValueError(FinalizeText);
+
+        /// <summary>NumPy's TypeError for <c>chararray.partition(kth, axis=...)</c> (see <see cref="PartitionKeywordText"/>).</summary>
+        /// <returns>The exception to throw, with NumPy's text.</returns>
+        internal static TypeError PartitionKeywordError() => new TypeError(PartitionKeywordText);
 
         /// <summary>
         ///     Wraps <paramref name="storage"/> as a chararray WITHOUT the finalize rule and without copying. Callers check
@@ -155,6 +172,47 @@ namespace NumSharp
         {
             Finalize(a.dtype);
             return new NDCharArray(a.Storage.Alias());
+        }
+
+        /// <summary>
+        ///     <c>chararray.__array_wrap__</c> of one result (a ufunc, <c>_array_converter.wrap</c>, an index by an array): a
+        ///     NEW chararray VIEW over a result of a string dtype (<c>dtype.char in 'SUbc'</c>), the result itself otherwise.
+        ///     The view never owns its data.
+        /// </summary>
+        /// <param name="result">The plain result, or <c>null</c> (the caller's scope reclaims its wrapper when it is
+        ///     replaced).</param>
+        /// <returns>The view, or <paramref name="result"/>.</returns>
+        /// <remarks>The wrap is <c>arr.view(type(self))</c>: a chararray result (the operand handed back) also gets a new
+        ///     object, never itself.</remarks>
+        internal static NDArray WrapResult(NDArray result)
+        {
+            if (result is null)
+                return null;
+            char code = result.dtype.@char;
+            if (code != 'S' && code != 'U' && code != 'b' && code != 'c')
+                return result;
+            return new NDCharArray(result.Storage.Alias()) { TensorEngine = result.TensorEngine };
+        }
+
+        /// <summary>
+        ///     The chararray for a result NumPy CREATES as the subclass (an ndarray method's result, <c>Py_TYPE(self)</c>): the
+        ///     finalize rule on the result's dtype, then a chararray over its storage - taken over when the result owns a buffer
+        ///     nothing else references (the chararray owns it then, as NumPy's does), an alias otherwise (a view shares its
+        ///     buffer, and a storage object is never shared by two live arrays).
+        /// </summary>
+        /// <param name="result">The plain result (the caller's scope reclaims its wrapper).</param>
+        /// <returns>The chararray.</returns>
+        /// <exception cref="ValueError">The result's dtype is not string data (<c>Can only create a chararray from string
+        ///     data.</c>).</exception>
+        internal static NDCharArray FromCreated(NDArray result)
+        {
+            Finalize(result.dtype);
+            var storage = result.Storage;
+            // An owning storage object that another live array might also wrap (an engine shortcut can hand an operand's own
+            // storage back in a second wrapper) holds more than this result's one reference: alias it then.
+            if (!storage.OwnsData || !storage.InternalArray.IsUniquelyReferenced)
+                storage = storage.Alias();
+            return new NDCharArray(storage) { TensorEngine = result.TensorEngine };
         }
 
         /// <summary>

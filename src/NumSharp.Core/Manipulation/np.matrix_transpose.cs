@@ -19,12 +19,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray matrix_transpose(NDArray x)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(x))
-                return NDMatrixBoundary.Wrapped(x, static s => matrix_transpose(s));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(x))
-                return NDCharArrayBoundary.Kept(x, static s => matrix_transpose(s));
             if (x.ndim < 2)
                 throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Input array must be at least 2-dimensional, but it is {x.ndim}"));
 

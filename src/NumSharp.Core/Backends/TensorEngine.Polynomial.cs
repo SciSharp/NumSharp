@@ -40,6 +40,7 @@ namespace NumSharp
         ///     has no multiply (in <paramref name="x"/>) or add (in <paramref name="p"/>) loop.</exception>
         /// <exception cref="IncorrectShapeException">An N-D p whose rows do not broadcast with x (the add's
         ///     <c>operands could not be broadcast together</c> text, NumPy's ValueError).</exception>
+        [NewSubtype("x")]
         public abstract NDArray Polyval(NDArray p, NDArray x);
 
         /// <summary>
@@ -85,7 +86,7 @@ namespace NumSharp
         /// <remarks>
         ///     NumPy writes polyder in Python (<c>numpy/lib/_polynomial_impl.py</c>, which also handles a poly1d - NumSharp's
         ///     poly1d calls its own derivative); DefaultEngine runs its loop over the array object's slice and multiply.
-        ///     <c>np.polyder</c> calls it inside the matrix boundary's plain region, on <paramref name="p"/>'s engine (the
+        ///     <c>np.polyder</c> calls it with plain views of subclass operands, on <paramref name="p"/>'s engine (the
         ///     default one for null); an override replaces it for every array whose engine it is.
         /// </remarks>
         public abstract NDArray Polyder(NDArray p, int m = 1);
@@ -131,7 +132,7 @@ namespace NumSharp
         ///     NumPy writes polyfit in Python; DefaultEngine runs its statements over the operand engines' <see cref="Vander"/>,
         ///     <see cref="Sum(NDArray, int?, DType, bool)"/>, <see cref="Sqrt"/>, <see cref="Dot"/>, <see cref="Outer"/> and the
         ///     <see cref="Linalg"/> sub-engine's lstsq and inv. NumPy's RankWarning for a rank-deficient fit is not modelled.
-        ///     <c>np.polyfit</c> calls it inside the matrix boundary's plain region, on <paramref name="x"/>'s engine (the
+        ///     <c>np.polyfit</c> calls it with plain views of subclass operands, on <paramref name="x"/>'s engine (the
         ///     default one for null); an override replaces it for every array whose engine it is.
         /// </remarks>
         public abstract PolyfitResult Polyfit(NDArray x, NDArray y, int deg, double? rcond = null, bool full = false,

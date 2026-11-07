@@ -25,13 +25,10 @@ namespace NumSharp
             /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or an operand holding inf / NaN.</exception>
             /// <exception cref="TypeError">A text operand, or a float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static (NDArray eigenvalues, NDArray eigenvectors) eig(NDArray a)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // a numpy.matrix operand: NumPy returns the plain eigenvalues and wrap(vt), the eigenvectors as a matrix
-                if (NDMatrixBoundary.Sees(a))
-                    return NDMatrixBoundary.WrappedPair(a, static s => eig(s), wrapFirst: false, wrapSecond: true);
                 return a.TensorEngine.Linalg.Eig(a);
             }
 
@@ -49,7 +46,6 @@ namespace NumSharp
             public static NDArray eigvals(NDArray a)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 return a.TensorEngine.Linalg.Eigvals(a);
             }
 
@@ -75,13 +71,10 @@ namespace NumSharp
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static (NDArray eigenvalues, NDArray eigenvectors) eigh(NDArray a, char UPLO = 'L')
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // a numpy.matrix operand: NumPy returns the plain eigenvalues and wrap(vt), the eigenvectors as a matrix
-                if (NDMatrixBoundary.Sees(a))
-                    return NDMatrixBoundary.WrappedPair((a, UPLO), static s => eigh(s.a, s.UPLO), wrapFirst: false, wrapSecond: true);
                 return a.TensorEngine.Linalg.Eigh(a, UPLO);
             }
 
@@ -95,7 +88,6 @@ namespace NumSharp
             public static NDArray eigvalsh(NDArray a, char UPLO = 'L')
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 return a.TensorEngine.Linalg.Eigvalsh(a, UPLO);
             }
         }

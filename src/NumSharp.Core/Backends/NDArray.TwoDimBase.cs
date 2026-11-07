@@ -110,6 +110,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">The operand is not 1- or 2-dimensional (<c>Input must be 1- or 2-d.</c>, NumPy's
         ///     ValueError), or the matrix of the 1-D branch would have more than <see cref="int.MaxValue"/> rows.</exception>
         [NDScoped]
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Diag))]
         internal static NDArray diag(NDArray v, int k)
         {
             switch (v.ndim)
@@ -135,6 +136,7 @@ namespace NumSharp
         /// <returns>A new <c>(n, n)</c> array, <c>n = v.size + |k|</c>.</returns>
         /// <exception cref="ArgumentException">The matrix would have more than <see cref="int.MaxValue"/> rows.</exception>
         [NDScoped]
+        [ArrayWrap("v")]
         internal static NDArray diagflat(NDArray v, int k) => DiagonalEmbed(v.ravel(), k);
 
         /// <summary>

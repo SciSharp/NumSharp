@@ -35,14 +35,6 @@ namespace NumSharp
         public static NDArray kron(NDArray a, NDArray b)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a, b))
-                return NDMatrixBoundary.Wrapped((a, b), static s => kron(s.a, s.b));
-            // a numpy.char.chararray operand: NumPy keeps it (asanyarray, array(subok=True)) and multiplies with
-            // subok=True, so chararray.__array_wrap__ decides the class of the product — a text result would be a
-            // chararray view (text has no multiply loop: the ufunc's TypeError), an int8 one too (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a, b))
-                return NDCharArrayBoundary.Wrapped((a, b), static s => kron(s.a, s.b));
             return a.TensorEngine.Kron(a, b);
         }
     }

@@ -12,9 +12,9 @@ namespace NumSharp
         /// <param name="mode">How out-of-bounds indices behave: "raise" (default), "wrap", or "clip".</param>
         /// <returns>The returned array has the same type as this array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.take.html</remarks>
+        [PlainReceiver]
         public NDArray take(NDArray indices, int? axis = null, NDArray @out = null, string mode = "raise")
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.take(this, indices, axis, @out, mode);
         }
 
@@ -28,9 +28,9 @@ namespace NumSharp
         /// <param name="mode">How an out-of-bounds index behaves: "raise" (default), "wrap", or "clip".</param>
         /// <returns>The returned array has the same type as this array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.take.html</remarks>
+        [PlainReceiver]
         public NDArray take(long index, int? axis = null, NDArray @out = null, string mode = "raise")
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.take(this, index, axis, @out, mode);
         }
     }

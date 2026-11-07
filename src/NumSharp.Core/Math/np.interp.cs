@@ -44,7 +44,6 @@ namespace NumSharp
             double? left = null, double? right = null, double? period = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            using var plain = NDMatrixBoundary.PlainFor(x, xp, fp);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return x.TensorEngine.Interp(x, xp, fp, left, right, period);
         }
 
@@ -80,7 +79,6 @@ namespace NumSharp
             Complex? left, Complex? right = null, double? period = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            using var plain = NDMatrixBoundary.PlainFor(x, xp, fp);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return x.TensorEngine.Interp(x, xp, fp, left, right, period);
         }
     }

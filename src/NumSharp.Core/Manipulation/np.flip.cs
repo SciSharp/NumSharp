@@ -30,13 +30,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray flip(NDArray m, int? axis = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(m))
-                return NDMatrixBoundary.Wrapped((m, axis), static s => flip(s.m, s.axis));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary): flip ends with
-            // m[indexer], chararray.__getitem__, so a 0-d operand's result is its element, stripped
-            if (NDCharArrayBoundary.Sees(m))
-                return NDCharArrayBoundary.KeptIndexed((m, axis), static s => flip(s.m, s.axis));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 
@@ -74,13 +67,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray flip(NDArray m, int[] axis)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(m))
-                return NDMatrixBoundary.Wrapped((m, axis), static s => flip(s.m, s.axis));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary): flip ends with
-            // m[indexer], chararray.__getitem__, so a 0-d operand's result is its element, stripped
-            if (NDCharArrayBoundary.Sees(m))
-                return NDCharArrayBoundary.KeptIndexed((m, axis), static s => flip(s.m, s.axis));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 
@@ -125,12 +111,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray fliplr(NDArray m)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(m))
-                return NDMatrixBoundary.Wrapped(m, static s => fliplr(s));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(m))
-                return NDCharArrayBoundary.Kept(m, static s => fliplr(s));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 
@@ -156,12 +136,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray flipud(NDArray m)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(m))
-                return NDMatrixBoundary.Wrapped(m, static s => flipud(s));
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(m))
-                return NDCharArrayBoundary.Kept(m, static s => flipud(s));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 

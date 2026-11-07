@@ -20,13 +20,6 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="tup"/> is empty ("need at least one array to concatenate").</exception>
         public static NDArray hstack(params NDArray[] tup)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(tup))
-                return NDMatrixBoundary.Wrapped(tup, static s => hstack(s));
-            // a numpy.char.chararray operand: NumPy's hstack ends with np.concatenate, which drops the class; the rule's
-            // region keeps its inner atleast_1d calls plain (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(tup))
-                return NDCharArrayBoundary.Plain(tup, static s => hstack(s));
             if (tup == null)
                 throw new ArgumentNullException(nameof(tup));
 

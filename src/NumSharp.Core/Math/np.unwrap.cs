@@ -113,11 +113,7 @@ namespace NumSharp
         public static NDArray unwrap(NDArray p, double? discont = null, int axis = -1, double period = 2 * Math.PI)
         {
             if (p is null) throw new ArgumentNullException(nameof(p));
-            return NDMatrixBoundary.Sees(p)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((p, discont, axis, period), static s => unwrap(s.p, s.discont, s.axis, s.period))
-            : NDCharArrayBoundary.Sees(p)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((p, discont, axis, period), static s => unwrap(s.p, s.discont, s.axis, s.period))
-            : p.TensorEngine.Unwrap(p, discont, axis, period);
+            return p.TensorEngine.Unwrap(p, discont, axis, period);
         }
 
         /// <summary>
@@ -164,11 +160,7 @@ namespace NumSharp
         public static NDArray unwrap(NDArray p, long period, double? discont = null, int axis = -1)
         {
             if (p is null) throw new ArgumentNullException(nameof(p));
-            return NDMatrixBoundary.Sees(p)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((p, period, discont, axis), static s => unwrap(s.p, s.period, s.discont, s.axis))
-            : NDCharArrayBoundary.Sees(p)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((p, period, discont, axis), static s => unwrap(s.p, s.period, s.discont, s.axis))
-            : p.TensorEngine.Unwrap(p, discont, axis, (object)period);
+            return p.TensorEngine.Unwrap(p, discont, axis, (object)period);
         }
     }
 }

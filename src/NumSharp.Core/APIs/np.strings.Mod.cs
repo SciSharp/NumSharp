@@ -80,8 +80,6 @@ namespace NumSharp
             /// </remarks>
             public static NDArray mod(NDArray a, object values)
             {
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Plain((a, values), static s => mod(s.a, s.values));
                 if (a is null)
                     throw new ArgumentNullException(nameof(a));
                 return NDCharObjectPath.Mod(a, values);

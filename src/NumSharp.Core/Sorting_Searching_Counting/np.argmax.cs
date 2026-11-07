@@ -17,11 +17,7 @@ namespace NumSharp
         ///     the int64 index result as the subclass (<c>Can only create a chararray from string
         ///     data.</c>), after the argument checks.</exception>
         public static NDArray argmax(NDArray a, int axis, bool keepdims = false)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => argmax(s.a, s.axis, s.keepdims), axis, keepdims, null)
-            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.IndexResult((a, axis, keepdims), static s => argmax(s.a, s.axis, s.keepdims), null)
-            : a.TensorEngine.ArgMax(a, axis: axis, keepdims: keepdims);
+            => a.TensorEngine.ArgMax(a, axis: axis, keepdims: keepdims);
 
         /// <summary>
         ///     NumPy's <c>np.argmax(a, axis=None, out=None, *, keepdims=False)</c>: the int64 indices of the
@@ -65,12 +61,6 @@ namespace NumSharp
         public static NDArray argmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => argmax(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
-            // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.IndexResult((a, axis, @out, keepdims), static s => argmax(s.a, s.axis, s.@out, s.keepdims), @out);
             return a.TensorEngine.ReduceArgMax(a, axis, keepdims, @out);
         }
 
@@ -84,9 +74,7 @@ namespace NumSharp
         ///     subclass (<c>Can only create a chararray from string data.</c>), after the argument
         ///     checks.</exception>
         public static long argmax(NDArray a)
-            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.IndexScalar(a, static s => argmax(s))
-            : (long)a.TensorEngine.ArgMax(a);
+            => (long)a.TensorEngine.ArgMax(a);
 
         /// <summary>
         ///     Returns the indices of the minimum values along an axis.
@@ -101,11 +89,7 @@ namespace NumSharp
         ///     the int64 index result as the subclass (<c>Can only create a chararray from string
         ///     data.</c>), after the argument checks.</exception>
         public static NDArray argmin(NDArray a, int axis, bool keepdims = false)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => argmin(s.a, s.axis, s.keepdims), axis, keepdims, null)
-            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.IndexResult((a, axis, keepdims), static s => argmin(s.a, s.axis, s.keepdims), null)
-            : a.TensorEngine.ArgMin(a, axis: axis, keepdims: keepdims);
+            => a.TensorEngine.ArgMin(a, axis: axis, keepdims: keepdims);
 
         /// <summary>
         ///     NumPy's <c>np.argmin(a, axis=None, out=None, *, keepdims=False)</c>: the int64 indices of the
@@ -149,12 +133,6 @@ namespace NumSharp
         public static NDArray argmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => argmin(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
-            // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.IndexResult((a, axis, @out, keepdims), static s => argmin(s.a, s.axis, s.@out, s.keepdims), @out);
             return a.TensorEngine.ReduceArgMin(a, axis, keepdims, @out);
         }
 
@@ -168,8 +146,6 @@ namespace NumSharp
         ///     subclass (<c>Can only create a chararray from string data.</c>), after the argument
         ///     checks.</exception>
         public static long argmin(NDArray a)
-            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.IndexScalar(a, static s => argmin(s))
-            : (long)a.TensorEngine.ArgMin(a);
+            => (long)a.TensorEngine.ArgMin(a);
     }
 }

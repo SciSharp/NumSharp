@@ -6,8 +6,8 @@ namespace NumSharp.Backends
     {
         // The sample-frequency helpers of numpy/fft/_helper.py — NumPy's statements over the array object's own
         // routines (np.arange's PyArray_ArangeObj, np.concatenate's NDArray.concatenate) and the operand engine's
-        // arithmetic; they compute FULLY (no kernel) and call no np.* facade, so the engine layer never re-enters the
-        // facade's class boundary. fftshift and ifftshift are not members: they roll the array object (np.fft's facades
+        // arithmetic; they compute FULLY (no kernel) and call no np.* facade, so the engine layer never re-enters a
+        // facade's subclass path. fftshift and ifftshift are not members: they roll the array object (np.fft's facades
         // over np.roll).
 
         /// <inheritdoc/>

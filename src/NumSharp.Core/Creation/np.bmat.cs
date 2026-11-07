@@ -239,7 +239,6 @@ namespace NumSharp
         /// </summary>
         private static NDArray BmatConcat(NDArray[] blocks, int axis)
         {
-            using var plain = NDMatrixBoundary.Inside();   // np.bmat builds its matrix itself from the plain join
             if (blocks.Length == 0)
                 throw new ValueError("need at least one array to concatenate");
 
@@ -258,8 +257,10 @@ namespace NumSharp
                         string.Create(CultureInfo.InvariantCulture, $"index 0 has {ndim0} dimension(s) and the array at index {k} has {ndimk} dimension(s)"));
             }
 
-            // All blocks share ndim ≥ 1 (so none is null here); concatenate does the extent check + copy.
-            return concatenate(blocks, axis);
+            // All blocks share ndim ≥ 1 (so none is null here); np.concatenate's computation does the extent check +
+            // copy. The computation, not the public function: np.bmat builds its matrix itself from the plain join (a
+            // fresh owner its matrix takes over), so a matrix block must not get np.concatenate's subclass answer here.
+            return NDArray.concatenate(blocks, axis, null, null, "same_kind");
         }
 
         /// <summary>Materialises every entry of a flat tuple <c>(A, B, …)</c> to a block.</summary>

@@ -30,9 +30,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.float_power.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray float_power(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => float_power(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : x1.TensorEngine.FloatPower(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.FloatPower(x1, x2, dtype, @out, where);
 
         /// <summary>
         ///     First array elements raised to powers from second array, element-wise, at a minimum
@@ -49,8 +47,6 @@ namespace NumSharp
         // temp and stays unscoped.
         [NDScoped]
         public static NDArray float_power(NDArray x1, object x2)
-            => NDMatrixBoundary.Sees(x1)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2), static s => float_power(s.x1, s.x2))
-            : x1.TensorEngine.FloatPower(x1, np.asanyarray(x2));
+            => x1.TensorEngine.FloatPower(x1, np.asanyarray(x2));
     }
 }

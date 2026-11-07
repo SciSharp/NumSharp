@@ -15,8 +15,8 @@ using NumSharp.Utilities;
 // the equal-width (bincount) and cumulative (sort + searchsorted) counting paths, the text routes and the density; and
 // histogramdd's per-dimension statements. np.histogramdd shares the outer edges, the edge linspace, the monotonic checks
 // and the contiguous cast (GetOuterEdges, HistogramLinspace, AnyDecreasing, TextEdgesDecrease, EnsureContiguousDtype,
-// FloatPromoteBinType). The public overloads only open the matrix boundary's plain region, convert their C# bins form
-// and call the members.
+// FloatPromoteBinType). The public overloads only convert their C# bins form and call the members (their woven subclass
+// path hands a matrix operand in as its plain view).
 //
 // Histogram, Histogramdd and Histogram2d run static bodies (HistogramFunction, HistogramddFunction,
 // Histogram2dFunction): Stone's estimator and the complex estimators call NumPy's histogram again, and histogram2d calls

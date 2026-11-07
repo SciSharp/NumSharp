@@ -1059,7 +1059,6 @@ namespace NumSharp.Backends
             // kind in "cfmM") is skipped and the mask is a plain structured `!=`, under which every
             // NaN slab is DISTINCT (nan != nan) regardless of equal_nan. Accepted for API symmetry.
             _ = equal_nan;
-            using var plain = NDMatrixBoundary.PlainFor(a);   // the member keeps the plain-array meaning for a matrix object
             var moved = axis == 0 ? a : a.TensorEngine.MoveAxis(a, new[] { axis }, new[] { 0 });   // np.moveaxis(a, axis, 0)
             long n = moved.Shape.dimensions[0];
 

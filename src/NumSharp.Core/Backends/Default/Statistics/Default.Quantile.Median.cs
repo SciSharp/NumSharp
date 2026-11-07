@@ -67,6 +67,11 @@ namespace NumSharp.Backends
         public override NDArray Median(NDArray a, int[] axis = null, NDArray @out = null, bool overwrite_input = false,
             bool keepdims = false)
         {
+            // A numpy.char.chararray operand (the plain view the woven np.median hands over remembers it): _median
+            // partitions the chararray, and chararray.partition is the STRING partition - NumPy's TypeError, or the string
+            // partition's own answer (MedianOfChararray), before anything below.
+            if (NDSubclass.StandsForCharArray(a))
+                throw MedianOfChararray(a, axis, @out, overwrite_input, keepdims);
             // Text (input or out=): NumPy's _ureduce normalizes the tuple (every axis, then repeats; a 0-d input refuses
             // every axis), then the closing mean(part, out=out) refuses on (out, part) with its verbatim text; see
             // NDStringUfuncs.ReduceError / ReduceOutError.
@@ -305,8 +310,6 @@ namespace NumSharp.Backends
         internal Exception MedianOfChararray(NDArray a, int[] axes, NDArray @out, bool overwrite_input, bool keepdims)
         {
             int nd = a.ndim;
-            // The plain view the remaining statements read: no subclass rule may run on them.
-            using var region = NDCharArrayBoundary.Inside();
             // _ureduce's prologue, the quantile family's one copy (DefaultEngine.UReduce): `axis = normalize_axis_tuple(axis,
             // nd)` (every axis checked, then the repeats), keepdims' `out[(Ellipsis,) + index_out]` (index 0 on every reduced
             // axis, every axis without one), then the merge of several reduced axes (`reshape(kept + (-1,))`, whose -1 NumPy
@@ -315,7 +318,7 @@ namespace NumSharp.Backends
             // An axis argument (the empty tuple included) reaches `np.partition(a, kth, axis=...)` or `a.partition(kth,
             // axis=axis)`, the string partition's keyword refusal; only overwrite_input without one partitions the text.
             if (!overwrite_input || axes is not null)
-                return NDCharArrayBoundary.PartitionKeywordError();
+                return NDCharArray.PartitionKeywordError();
 
             // `part = a.ravel(); part.partition(kth)`: the string partition of the flattened text around the kth indices
             // written as text — [n // 2 - 1, n // 2] for an even length, [(n - 1) // 2] for an odd one. np.strings.partition

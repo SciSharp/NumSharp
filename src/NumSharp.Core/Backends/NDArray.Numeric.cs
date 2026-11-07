@@ -187,6 +187,10 @@ namespace NumSharp
         ///     limit.</exception>
         /// <exception cref="OverflowException">A Python int outside the result's integer range
         ///     (<c>np.full_like(int8_array, 1000)</c>).</exception>
+        /// <remarks>NumPy's <c>subok=True</c>: <c>[NewSubtype("a")]</c> creates the result as the operand's class (a matrix
+        ///     view; a chararray), and a chararray operand's finalize rule runs on the result dtype here, where
+        ///     <c>empty_like</c> allocates - after the order check, before the fill.</remarks>
+        [NewSubtype("a")]
         internal static NDArray full_like(NDArray a, object fill_value, DType dtype, char order)
         {
             // NumPy's *_like contract preserves a.dtype unless dtype= is explicitly supplied.
@@ -194,6 +198,10 @@ namespace NumSharp
             var typeCode = dtype != null ? dtype.GetTypeCode() : a.typecode;
             // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation, not merely C-or-F.
             var shape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
+            // empty_like allocates the result as a chararray operand's class (subok=True) at this point: its finalize rule
+            // refuses a dtype that is not string data BEFORE the fill could raise its own error.
+            if (NDSubclass.StandsForCharArray(a))
+                NDCharArray.Finalize(dtype ?? a.dtype);
 
             // A string result (a's dtype, or a requested one — unsized means one character, NumPy's empty_like) is
             // `res = empty_like(...); copyto(res, fill_value, casting='unsafe')`: the copy truncates / converts the value.
@@ -297,7 +305,40 @@ namespace NumSharp
             return fresh;
         }
 
-        // ---------------------------- np.zeros_like / np.ones_like ----------------------------
+        // ---------------------------- np.empty_like / np.zeros_like / np.ones_like ----------------------------
+
+        /// <summary>
+        ///     NumPy's <c>np.empty_like</c> (<c>PyArray_NewLikeArrayWithShape</c>), the body of
+        ///     <see cref="np.empty_like(NDArray, DType, Shape, char, string)"/>: the argument checks in NumPy's order (the
+        ///     order's letter, then the device), the dimensions (the prototype's, or <paramref name="shape"/>'s), the layout
+        ///     (<c>'K'</c> keeps the prototype's axis permutation), then an uninitialized allocation.
+        /// </summary>
+        /// <param name="prototype">The prototype (not null): its dimensions unless <paramref name="shape"/> is given, its
+        ///     dtype unless <paramref name="dtype"/> is, and for <c>'K'</c> its axis permutation.</param>
+        /// <param name="dtype">The result dtype, or null for the prototype's.</param>
+        /// <param name="shape">The result's dimensions, or an empty <see cref="Shape"/> for the prototype's.</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c> in either case.</param>
+        /// <param name="device">Null or <c>"cpu"</c>.</param>
+        /// <returns>A new, owned array of arbitrary content.</returns>
+        /// <exception cref="ValueError"><paramref name="order"/> is not one of C, F, A, K (reported before the device);
+        ///     <paramref name="device"/> is neither null nor <c>"cpu"</c>; a byte count past the limit.</exception>
+        /// <remarks>NumPy's <c>subok=True</c>: <c>[NewSubtype("prototype")]</c> creates the result as the operand's class
+        ///     after the allocation - a matrix view, or a chararray whose finalize rule refuses a dtype that is not string
+        ///     data (empty_like fills nothing, so that error comes last, as in NumPy).</remarks>
+        [NewSubtype("prototype")]
+        internal static NDArray empty_like(NDArray prototype, DType dtype, Shape shape, char order, string device)
+        {
+            // NumPy's empty_like converts its arguments in order (npy_parse_arguments): the order's letter before the device,
+            // so an unknown order is reported first (np.zeros_like(a, order='Z', device='cuda') raises the order's ValueError,
+            // probed 2.4.2). The layout itself is resolved after the device, as before.
+            OrderResolver.Convert(order);
+            DeviceArguments.ValidateDevice(device);
+            var dims = shape.IsEmpty ? (long[])prototype.Shape.dimensions.Clone() : (long[])shape;
+            // PyArray_NewLikeArrayWithShape's layout: order='K' keeps the prototype's axis permutation (C when shape=
+            // changes the rank), not merely C-or-F.
+            var resolvedShape = Shape.NewLikeLayout(prototype.Shape, order, dims);
+            return new NDArray(dtype ?? prototype.dtype, resolvedShape, false);
+        }
 
         /// <summary>
         ///     NumPy's <c>np.zeros_like</c> (<c>numeric.py</c>: <c>res = empty_like(a, dtype, order, subok, shape, device);
@@ -316,8 +357,10 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="order"/> is not one of C, F, A, K (<c>order must be one of 'C', 'F',
         ///     'A', or 'K' (got 'Z')</c>), checked before the device; <paramref name="device"/> is neither null nor
         ///     <c>"cpu"</c>; a byte count past the limit.</exception>
-        /// <remarks>No class boundary runs here: the facade applies its rules (a matrix result wrapped, a chararray operand's
-        ///     string-data check and kept class) before it calls this.</remarks>
+        /// <remarks>NumPy's <c>subok=True</c>: <c>[NewSubtype("a")]</c> creates the result as the operand's class (a matrix
+        ///     view; a chararray), and a chararray operand's finalize rule runs on the result dtype here, where
+        ///     <c>empty_like</c> allocates - after the order and device checks, before the fill.</remarks>
+        [NewSubtype("a")]
         internal static NDArray zeros_like(NDArray a, DType dtype, char order, string device)
         {
             // NumPy's empty_like converts its arguments in order (npy_parse_arguments): the order's letter before the device,
@@ -328,6 +371,10 @@ namespace NumSharp
             // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation (a transposed a gives a transposed
             // result, a broadcast one an F result), not merely C-or-F.
             var resolvedShape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
+            // empty_like allocates the result as a chararray operand's class (subok=True) at this point: its finalize rule
+            // refuses a dtype that is not string data before the fill.
+            if (NDSubclass.StandsForCharArray(a))
+                NDCharArray.Finalize(dtype ?? a.dtype);
             // np.zeros(shape, dtype)'s statement: a zero-filled allocation, which keeps the dense layout just resolved.
             return new NDArray(dtype ?? a.dtype, resolvedShape, true);
         }
@@ -347,7 +394,10 @@ namespace NumSharp
         /// <returns>A new, owned, writeable array of ones, labelled with a requested lane-sharing C-type class.</returns>
         /// <exception cref="ValueError"><paramref name="order"/> is not one of C, F, A, K, checked before the device;
         ///     <paramref name="device"/> is neither null nor <c>"cpu"</c>; a byte count past the limit.</exception>
-        /// <remarks>No class boundary runs here: the facade applies its rules before it calls this.</remarks>
+        /// <remarks>NumPy's <c>subok=True</c>: <c>[NewSubtype("a")]</c> creates the result as the operand's class (a matrix
+        ///     view; a chararray), and a chararray operand's finalize rule runs on the result dtype here, where
+        ///     <c>empty_like</c> allocates - after the order and device checks, before the fill.</remarks>
+        [NewSubtype("a")]
         internal static NDArray ones_like(NDArray a, DType dtype, char order, string device)
         {
             // A string array (or dtype) is NumPy's empty_like + copyto(res, 1, casting='unsafe'): the text '1' in every
@@ -359,6 +409,10 @@ namespace NumSharp
             DeviceArguments.ValidateDevice(device);
             // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation, not merely C-or-F.
             var resolvedShape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
+            // empty_like allocates the result as a chararray operand's class (subok=True) at this point: its finalize rule
+            // refuses a dtype that is not string data before the fill.
+            if (NDSubclass.StandsForCharArray(a))
+                NDCharArray.Finalize(dtype ?? a.dtype);
             // np.ones(shape, dtype)'s statement: the array object's ones (np.ones' device check is the null device's).
             return ones(resolvedShape, dtype ?? a.dtype);
         }
@@ -391,8 +445,10 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>'s rank (the axis as
         ///     given).</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>: the ravel, the inner roll, and the slice views of the two copies are released;
-        ///     the result is yielded. No class boundary runs here: the facades apply their rules before they call this.</remarks>
+        ///     the result is yielded. It sees plain arrays only: the woven public function hands it the plain view of a
+        ///     subclass operand and answers for the class itself (NDSubclass).</remarks>
         [NDScoped /* the ravel and the inner roll of the flat case, and the four slice views of the copies, are released; the result is yielded */]
+        [NewSubtype("a")]
         internal static NDArray roll(NDArray a, long shift, int? axis)
         {
             if (axis == null)

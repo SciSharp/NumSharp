@@ -34,13 +34,7 @@ namespace NumSharp
         public static NDArray partition(NDArray a, int kth, int? axis = -1, string kind = "introselect", string order = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy's a.partition(kth, axis=...) is chararray.partition(sep), which takes no axis (NDCharArrayBoundary)
-            ? throw NDCharArrayBoundary.PartitionKeywordError()
-            : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
-            // NumPy's partition is fromnumeric.partition over PyArray_Partition, the engine's: TensorEngine.Partition
-            // of a's engine (a null a is refused above).
-            : a.TensorEngine.Partition(a, kth, axis, kind, order);
+            return a.TensorEngine.Partition(a, kth, axis, kind, order);
         }
 
         /// <summary>
@@ -66,11 +60,7 @@ namespace NumSharp
         public static NDArray partition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy's a.partition(kth, axis=...) is chararray.partition(sep), which takes no axis (NDCharArrayBoundary)
-            ? throw NDCharArrayBoundary.PartitionKeywordError()
-            : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
-            : a.TensorEngine.Partition(a, kth, axis, kind, order);
+            return a.TensorEngine.Partition(a, kth, axis, kind, order);
         }
 
         /// <summary>
@@ -91,11 +81,7 @@ namespace NumSharp
         public static NDArray partition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy's a.partition(kth, axis=...) is chararray.partition(sep), which takes no axis (NDCharArrayBoundary)
-            ? throw NDCharArrayBoundary.PartitionKeywordError()
-            : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
-            : a.TensorEngine.Partition(a, kth, axis, kind, order);
+            return a.TensorEngine.Partition(a, kth, axis, kind, order);
         }
     }
 

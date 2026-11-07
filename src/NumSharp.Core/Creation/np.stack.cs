@@ -29,13 +29,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray stack(NDArray[] arrays, int axis = 0)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(arrays))
-                return NDMatrixBoundary.Wrapped((arrays, axis), static s => stack(s.arrays, s.axis));
-            // a numpy.char.chararray operand: NumPy's stack ends with np.concatenate, which drops the class; the rule's
-            // region keeps its inner expand_dims calls plain (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arrays))
-                return NDCharArrayBoundary.Plain((arrays, axis), static s => stack(s.arrays, s.axis));
             if (arrays == null)
                 throw new ArgumentNullException(nameof(arrays));
 

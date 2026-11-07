@@ -67,7 +67,6 @@ namespace NumSharp
         /// </remarks>
         public static NDArray apply_over_axes(Func<NDArray, int, NDArray> func, NDArray a, int[] axes)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (func is null)
                 throw new ArgumentNullException(nameof(func));
             if (a is null)
@@ -156,7 +155,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.apply_over_axes.html</remarks>
         public static NDArray apply_over_axes(Func<NDArray, int, NDArray> func, NDArray a, int axes)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return apply_over_axes(func, a, new[] { axes });
         }
     }

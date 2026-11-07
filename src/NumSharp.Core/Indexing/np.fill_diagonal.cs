@@ -64,7 +64,6 @@ namespace NumSharp
         [NDScoped]
         public static void fill_diagonal(NDArray a, object val, bool wrap = false)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
 
             // NumPy's numpy.fill_diagonal: the statements are the array object's (NDArray.IndexTricks.cs)

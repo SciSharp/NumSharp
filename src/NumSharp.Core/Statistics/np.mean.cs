@@ -54,21 +54,6 @@ namespace NumSharp
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            if (NDMatrixBoundary.Sees(a))
-            {
-                // NumPy hands a numpy.matrix to matrix.mean(axis, dtype, out) with every keyword the caller passed; the method
-                // takes neither, so the first one passed is its TypeError.
-                if (keepdims)
-                    throw NDMatrixBoundary.KeywordError("mean", "keepdims");
-                if (@where is not null)
-                    throw NDMatrixBoundary.KeywordError("mean", "where");
-                if (@out is not null)
-                    return NDMatrixBoundary.ReducedInto(a, @out, (axis, dtype),
-                        static (m, o, s) => m.mean(s.axis, s.dtype, o),
-                        static (m, o, s) => m.TensorEngine.ReduceMean(m, s.axis, keepdims: true, s.dtype, o));
-                // a row, a column or the scalar, as NumPy's matrix method returns
-                return NDMatrixBoundary.Reduced((a, axis, dtype), static s => mean(s.a, s.axis, s.dtype), axis, false, "mean");
-            }
 
             // The whole call is the engine's: TensorEngine.ReduceMean of a's engine takes every keyword.
             return a.TensorEngine.ReduceMean(a, axis, keepdims, dtype, @out, @where);

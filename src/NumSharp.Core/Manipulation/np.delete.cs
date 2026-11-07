@@ -41,11 +41,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.delete.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray delete(NDArray arr, int obj, int? axis = null)
-            => NDMatrixBoundary.Sees(arr)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis))
-            : NDCharArrayBoundary.Sees(arr)   // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis))
-            : delete(arr, (long)obj, axis);
+            => delete(arr, (long)obj, axis);
 
         /// <summary>
         ///     Long-index overload of <see cref="delete(NDArray, int, int?)"/>.
@@ -65,12 +61,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray delete(NDArray arr, long obj, int? axis = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(arr))
-                return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
-            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arr))
-                return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
 
             // NumPy's statements after the class boundaries and the null checks: NDArray.delete (NDArray.FunctionBase.cs).
@@ -89,12 +79,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray delete(NDArray arr, Slice obj, int? axis = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(arr))
-                return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
-            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arr))
-                return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
@@ -114,12 +98,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray delete(NDArray arr, int[] obj, int? axis = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(arr))
-                return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
-            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arr))
-                return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
@@ -138,12 +116,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray delete(NDArray arr, long[] obj, int? axis = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(arr))
-                return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
-            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arr))
-                return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
@@ -170,12 +142,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray delete(NDArray arr, bool[] obj, int? axis = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(arr))
-                return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
-            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arr))
-                return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
@@ -212,12 +178,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray delete(NDArray arr, NDArray obj, int? axis = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(arr))
-                return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
-            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arr))
-                return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 

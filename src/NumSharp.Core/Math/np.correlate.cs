@@ -63,7 +63,6 @@ namespace NumSharp
         ///     object array, which NumSharp does not have).</exception>
         public static NDArray correlate(NDArray a, NDArray v, string mode = "valid")
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, v);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a.TensorEngine.Correlate2(a, v, mode);
         }
     }

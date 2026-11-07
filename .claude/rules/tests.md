@@ -123,7 +123,7 @@ mapped memory ends. Two tools make it fail:
   np-layer dtype plan's divergences, pinned and deferred, NL1 to NL11: np.copyto into StringDType under `where=`
   converting masked-off source elements, complex np.median without `_median_nancheck`, the flat float32 / float64 np.prod
   in SIMD lane order, 1-D np.polyval's complex zero, np.nested_iters / np.einsum argument order, np.array of a ragged
-  jagged C# array, the subclass boundary's depth reaching user callbacks, NL8: which NaN a run of NaNs keeps in a
+  jagged C# array, NL7 and NL13 now regression pins (fixed by the woven subclass paths), NL8: which NaN a run of NaNs keeps in a
   DEBUG build, where the JIT's reduce step differs from Release (CI runs Release), NL9: np.polyder's term count and its
   missing last product, NL10: np.einsum_path's IndexOutOfRangeException for an ellipsis without its operand, NL11:
   np.isscalar of a Half, a BigInteger and a Type object), `OpenBugs.MatrixOperand.cs`

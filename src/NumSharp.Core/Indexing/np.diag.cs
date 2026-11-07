@@ -39,10 +39,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray diag(NDArray v, int k = 0)
         {
-            // a numpy.char.chararray operand: a 2-d one is np.diagonal's chararray view; a 1-d one builds np.zeros (plain)
-            if (v is not null && v.ndim == 2 && NDCharArrayBoundary.Sees(v))
-                return NDCharArrayBoundary.Kept((v, k), static s => diag(s.v, s.k));
-            using var plain = NDMatrixBoundary.PlainFor(v);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (v is null) throw new ArgumentNullException(nameof(v));
             return NDArray.diag(v, k);
         }
@@ -75,12 +71,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray diagflat(NDArray v, int k = 0)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(v))
-                return NDMatrixBoundary.Wrapped((v, k), static s => diagflat(s.v, s.k));
-            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(v))
-                return NDCharArrayBoundary.Wrapped((v, k), static s => diagflat(s.v, s.k));
             if (v is null) throw new ArgumentNullException(nameof(v));
             return NDArray.diagflat(v, k);
         }

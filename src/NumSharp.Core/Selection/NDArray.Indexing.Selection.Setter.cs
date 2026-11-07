@@ -196,8 +196,10 @@ namespace NumSharp
             // "shape mismatch: value array ..." before anything is written (PrepareAssignedValue).
             var gridShape = mesh[0].Shape;
             NDArray v = PrepareAssignedValue(values, gridShape.dimensions);
+            // np.broadcast_to's computation (a plain read-only view): the value may be a numpy.matrix object, which the
+            // public function would take its subclass path for.
             if (!System.Linq.Enumerable.SequenceEqual(v.Shape.dimensions, gridShape.dimensions))
-                v = np.broadcast_to(v, gridShape);
+                v = broadcast_to(v, gridShape);
 
             Backends.UnmanagedStorage.MapIterSet(this, mesh, v);
             return true;
@@ -350,7 +352,8 @@ namespace NumSharp
                         : this[boolBasic].Shape.dimensions.Select(x => (long)x).ToArray();
                     selShape[boolAxis] = 0;                      // False -> empty axis
                     string Tup(long[] s) => s.Length == 1 ? string.Create(CultureInfo.InvariantCulture, $"({s[0]},)") : "(" + string.Join(",", System.Array.ConvertAll(s, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
-                    try { np.broadcast_to(values, Shape.Adopt(selShape)); }
+                    // np.broadcast_to's computation (the value may be a subclass object): only its refusal is read here.
+                    try { broadcast_to(values, Shape.Adopt(selShape)); }
                     catch (IncorrectShapeException ex)
                     {
                         throw new ValueError($"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +
@@ -384,8 +387,9 @@ namespace NumSharp
                 // NumPy's MapIter value rule (leading axes dropped, its ValueError text): PrepareAssignedValue.
                 var gridShape = multiGrid[0].Shape;
                 NDArray v = PrepareAssignedValue(values, gridShape.dimensions);
+                // np.broadcast_to's computation (a plain read-only view; the value may be a subclass object).
                 if (!System.Linq.Enumerable.SequenceEqual(v.Shape.dimensions, gridShape.dimensions))
-                    v = np.broadcast_to(v, gridShape);
+                    v = broadcast_to(v, gridShape);
                 Backends.UnmanagedStorage.MapIterSet(this, multiGrid, v);
                 return;
             }

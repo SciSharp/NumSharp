@@ -22,49 +22,67 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
   N elements. Every kernel and helper is written against `NDArray`, and a run-time dispatch would change the meaning of
   that code for a caller who passed a matrix in. `NDMatrix.Clone()` hides `NDArray.Clone()` rather than overriding it for
   the same reason.
-- The `np.*` functions follow the object: the matrix boundary (`Matrixlib/NDMatrixBoundary.cs`). A public function that
-  receives an `NDMatrix` object through its `NDArray` parameter returns the class and shape NumPy 2.4.2 returns for a
-  `numpy.matrix` operand; the result is an `NDMatrix` typed `NDArray` (cast it for the matrix members, no copy).
-  - Rules, one statement per public overload: `if (NDMatrixBoundary.Sees(a)) return NDMatrixBoundary.<Rule>((a, ...),
-    static s => f(s.a, ...));`. `Wrapped` is `__array_wrap__` / subclass allocation (ufuncs, `np.transpose`,
-    `np.concatenate`, `np.dot`, `np.linalg.inv`: a 1-d result becomes a 1 × N row, more than two long axes raise
-    `shape too large to be a matrix.`, so `np.stack((m, m))` raises). `Reduced` is the matrix METHOD NumPy calls
-    (`np.sum(m, 0)` is a 1 × N matrix, a scalar without an axis, and `keepdims: true` raises `TypeError: matrix.sum() got
-    an unexpected keyword argument 'keepdims'`). `np.sum` / `np.prod` / `np.mean` / `np.var` / `np.std` hand the method
-    `axis`, `dtype`, `out` (and `ddof`, after `correction=` folded into it), and `np.max` / `np.amax` / `np.min` /
-    `np.amin` hand `matrix.max` / `matrix.min` `axis` and `out`, so each other keyword passed (`keepdims`, `initial`,
-    `where`, `mean`) is its TypeError, the first in the function's signature order; `ReducedInto` is their `out=`: a
-    matrix out gets the method's answer, a plain out receives the values and then raises `AttributeError:
-    'numpy.ndarray' object has no attribute '_collapse'`. `np.nanmax` / `np.nanmin` take NumPy's branch for an operand
-    that is not a base ndarray (`np.max.Keywords.cs`, `MatrixNanExtreme`): the NaNs of a copy become `-inf` / `+inf`,
-    `np.amax` / `np.amin` reduce it with the method's rules, and an all-NaN slice gets `np.nan` (positive quiet, in the
-    result's dtype; `nan+0j`) — so a `±0` tie follows maximum / minimum, not fmax / fmin, an empty operand's error names
-    maximum / minimum, and a flat call's matrix out keeps the infinity while the returned scalar is NaN. `Plain` is
-    `asarray` inside (`np.cross`, `np.einsum`, the whole `np.fft`, `np.linalg.norm`). `WrappedAll` / `WrappedPair` /
-    `WrappedTriple` /
-    `WrappedFirstTwoOfFour` are the functions with several results (`np.split`, `np.divmod`, `np.linalg.qr`: Q and R;
-    `eig` / `eigh`: plain eigenvalues, matrix eigenvectors; `svd`: U and Vh; `lstsq`: x and the residuals). `WrappedIf` is
-    `np.block`, whose class follows NumPy's route (repeated concatenation returns a matrix, the single-allocation route
-    past 2*512*512 elements a new ndarray).
+- The `np.*` functions follow the object. A public function that receives an `NDMatrix` object through its `NDArray`
+  parameter returns the class and shape NumPy 2.4.2 returns for a `numpy.matrix` operand; the result is an `NDMatrix`
+  typed `NDArray` (cast it for the matrix members, no copy). NumPy's mechanism is declared once, on the computation the
+  function calls (`Backends/Subclass/NDSubclassAttributes.cs`), and NumSharp.Build weaves it into the function
+  (`tools/NumSharp.Build/SubclassWeaver.cs`): a one-branch prologue sends a call with a subclass operand to a generated
+  `<name>subclass` path, which calls the function again on PLAIN VIEWS of the operands inside an `NDScope`, gives an
+  operand that comes back to the caller as the caller's own object, and applies the mechanism (`NDSubclass`).
+  - Mechanisms: a ufunc-shaped `TensorEngine` member (only `NDArray` inputs, then `dtype`, `out`, `where`) or `[Ufunc]`
+    is `__array_wrap__` over the inputs by priority; `[ArrayWrap]` the same for a function that ends in a wrap
+    (`np.dot`, `np.linalg.inv`: a 1-d result becomes a 1 × N row, more than two long axes raise
+    `shape too large to be a matrix.`, so `np.stack((m, m))` raises); `[NewSubtype]` creates the result as the operand's
+    class (the ndarray methods: `np.transpose`, `np.reshape`, the split family); `[GetSubType]` takes the class of the
+    highest priority in a sequence (`np.concatenate`, `np.vstack`); `[AsArray]` / `[AsArrayFor]` are the plain array of an
+    `asarray`-based function (`np.cross`, `np.einsum`, the whole `np.fft`, `np.linalg.norm`); `[WrapReduction]` /
+    `[WrapFunc]` are fromnumeric's `_wrapreduction` / `_wrapfunc`, whose generated dispatch calls the matrix METHOD marked
+    `[NumPyMethod]` (`np.sum(m, 0)` is a 1 × N matrix, a scalar without an axis); `[ReducesThrough]` is the
+    nan-functions' and the quantile family's `_collapse`; `[SubclassRule]` names a documented method of
+    `NDSubclassRules` for the functions whose answer depends on their arguments (`np.average`, `np.round`, `np.divmod`,
+    `np.linalg.qr`, the unique family, ...). The functions with several results wrap the outputs NumPy wraps (`np.split`;
+    `np.linalg.qr`: Q and R; `eig` / `eigh`: plain eigenvalues, matrix eigenvectors; `svd`: U and Vh; `lstsq`: x and
+    the residuals).
+  - The method dispatch passes the method the keywords NumPy's does: `np.sum` / `np.prod` / `np.mean` / `np.var` /
+    `np.std` and the max / min family hand it `axis`, `dtype`, `out` (and `ddof`, after `correction=` folded into it),
+    so each other keyword passed (`keepdims`, `initial`, `where`, `mean`) is the method's TypeError (`matrix.sum() got
+    an unexpected keyword argument 'keepdims'`), the first in the function's signature order; a matrix `out=` gets the
+    method's answer, a plain one receives the values and then raises `AttributeError: 'numpy.ndarray' object has no
+    attribute '_collapse'`.
+  - `np.nanmax` / `np.nanmin` ask the operand's class through C# inheritance, as NumPy's nanmax tests
+    `type(a) is np.ndarray`: they call the virtual `NDArray.NanMax` / `NanMin` (`[SubclassAware]`, so not woven), whose
+    base is `np.fmax.reduce` (the engine's `NanMax`, plain views of a subclass `out=` / `where=`). `NDMatrix`'s override
+    is NumPy's branch for subclasses (`NanExtreme`): `_replace_nan` on the plain view (`NDArray.ReplaceNaN`), the copy's
+    own `max` / `min` (its keyword TypeErrors, `out=` rules and 'maximum' texts), then `np.nan` (positive quiet, in the
+    result's dtype; `nan+0j`) written into an all-NaN slice, so a `±0` tie follows maximum / minimum, not fmax / fmin,
+    and a flat call's matrix out keeps the infinity while the returned scalar is NaN. `NDCharArray`'s override is
+    `np.amax` / `np.amin` of itself (text has no NaN mask), whose refusal names `maximum`.
   - Per-function facts from NumPy's source: `np.linalg.solve` and `lstsq` take their class from `b`; `np.clip` from the
     array or a bound; `np.iscomplex` is a matrix for a complex matrix and a plain array otherwise; `np.r_` / `np.c_` /
     `np.block` cannot give a matrix entry a third axis (`np.block([[[m]]])` raises "axis -3 is out of bounds for array of
-    dimension 2").
-  - The boundary is the outermost public call. A per-thread depth counter is raised by every rule around a second call
-    of the function, and `Sees` is false while it is raised: nested public calls, `NDArray` members implemented by
-    `np.*` functions and `NDMatrix` members compute with plain-array semantics. The state is packed in a tuple and handed
-    to a `static` lambda (a capturing lambda would allocate at method entry on every call, plain arrays included).
-  - A function without a rule opens a region (`using var plain = NDMatrixBoundary.PlainFor(a, ...)`): its result is the
-    plain array NumPy's `asarray`-based functions return, and the safe answer where NumPy's is not implemented. A
-    container stores the plain view (`NDMatrixBoundary.PlainOf`): numpy.ma (the masked array's data and mask in its
-    constructor, and `AsData`) and the samplers' converted parameters (`RandomParam.Convert`), because a region cannot
-    cover calls made after it closed.
-  - The contract is measured: no method of the library may reach the matrix rule of a public function at depth zero.
+    dimension 2"); `np.block` follows NumPy's route (repeated concatenation returns a matrix, the single-allocation route
+    past 2*512*512 elements a new ndarray).
+  - The plain view is the whole isolation: the second call receives plain aliases, so every computation and public
+    function below it meets plain arrays, and no per-thread state exists (a user callback such as
+    `np.apply_along_axis`'s `func1d` is ordinary user code and gets NumPy's classes). A view remembers the class it
+    stands for (`NDArray.SubclassOrigin`) for the few answers that react to it inside the computation
+    (`NDSubclass.StandsForMatrix`: `np.average`'s kept axes, `np.block`'s and `np.r_`'s matrix leaves).
+  - `NDArray` members keep the plain-array meaning: a member that computes through public functions is
+    `[PlainReceiver]`, woven to run on plain views of its receiver and operands. `NDMatrix`'s own members and operators
+    compute on the plain base view (`A`, `NDSubclass.PlainView`) and build the matrix themselves (`From` / `FromWrapped`):
+    a member that handed `this` to a public function would take that function's subclass path, whose method dispatch can
+    call the member again.
+  - A container stores the plain view (`NDSubclass.PlainView`): numpy.ma (the masked array's data and mask in its
+    constructor, and `AsData`) and the samplers' converted parameters (`RandomParam.Convert`); the numpy.polynomial
+    package, which is not woven and computes plain by design, leases one around each public call it makes with a
+    caller's operand (`NDSubclass.LeasePlainView`).
+  - The contract is measured: no method of the library may hand a matrix object to a public function.
     `FuzzCorpusTests.MatrixOperand_LibraryNeverReachesAMatrixRule` replays every corpus case with a 2-D operand (the
-    ordinary, numpy.ma and index tiers) with those operands typed as matrices while
-    `NDMatrixBoundary.AuditInternalCallers` is on, and requires the set of library callers to stay empty. A new finding
-    is closed with a region or a rule.
-  - Limits (`[Misaligned]`, pinned in `Matrixlib/NDMatrixBoundary.Tests.cs`): a function whose C# return type is a typed
+    ordinary, numpy.ma and index tiers) with those operands typed as matrices while `NDSubclass.AuditInternalCallers` is
+    on (it records the library caller of every subclass path that runs), and requires the set to stay empty. A finding
+    is closed with a plain view where the operand is passed on, the computation behind the facade, or a
+    `[PlainReceiver]` declaration.
+  - Limits (`[Misaligned]`, pinned in `Matrixlib/NDMatrixOperand.Tests.cs`): a function whose C# return type is a typed
     array cannot return a matrix (`np.isclose`, gap MO01; the typed `np.all` / `np.any` overloads, `np.nonzero` and
     `np.flatnonzero` are plain in NumPy too); `np.gradient` and `np.meshgrid` return plain arrays in their result structs
     (gaps MO06 / MO07, `OpenBugs.MatrixOperand.cs`); numpy.ma has no `masked_matrix` (NumPy's `ma.array(m).sum(axis=0)`
@@ -73,8 +91,8 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
     own Python code, NumSharp does not reproduce it: gaps MO02 to MO05, `np.linalg.vector_norm(m)` (an array of `|x|` in
     NumPy), `np.average(m, axis=1, weights=ndarray)` (an N × N matrix in NumPy), `np.apply_along_axis` when `func1d`
     depends on the slice's rank (NumPy hands it a 1 × N matrix).
-  - Cost: plain arrays pay one type test per call; a matrix operand pays the rule (the scope that reclaims the hidden
-    plain result, the second call, the matrix view), about 300 ns, the same as the `NDMatrix` operators.
+  - Cost: plain arrays pay one or two exact type tests per operand; a matrix operand pays the subclass path (the scope,
+    the plain views, the second call, the matrix view), the same order as the `NDMatrix` operators.
 
 ## Scalars
 
@@ -185,8 +203,8 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
   matrix operand; gaps MO01–MO05 carved into `gaps/matrix_operand{,_host}_gaps.jsonl`.
 - Unit tests: `Matrixlib/NDMatrix.Tests.cs` (NumPy's `test_defmatrix.py` ported plus the design pins;
   `Scaling_EveryRoute_GivesTheUfuncBits` holds the three routes to the ufunc reference past every threshold) and
-  `Matrixlib/NDMatrixBoundary.Tests.cs` (the functions outside the matrix-operand truth table, whose rule comes from
-  NumPy's source); the LAPACK functions' matrix operands are `test/NumSharp.Tests.Interop/MatrixOperandLapackTests.cs`.
+  `Matrixlib/NDMatrixOperand.Tests.cs` (the functions outside the matrix-operand truth table, whose mechanism comes
+  from NumPy's source); the LAPACK functions' matrix operands are `test/NumSharp.Tests.Interop/MatrixOperandLapackTests.cs`.
   The leak completeness gate audits every declared member (`LeakCatalogue.Matrix.cs`).
 - Benchmarks: warm every route twice with a pause, and time two routes in one process with interleaved rounds (a cell
   warmed once reads tier-0 times).

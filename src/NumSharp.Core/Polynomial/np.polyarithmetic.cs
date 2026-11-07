@@ -10,7 +10,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polyadd.html</remarks>
         public static NDArray polyadd(NDArray a1, NDArray a2)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a1, a2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a1.TensorEngine.Polyadd(a1, a2);
         }
 
@@ -20,7 +19,6 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polysub.html</remarks>
         public static NDArray polysub(NDArray a1, NDArray a2)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a1, a2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a1.TensorEngine.Polysub(a1, a2);
         }
 
@@ -37,7 +35,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray polymul(NDArray a1, NDArray a2)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a1, a2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a1.TensorEngine.Polymul(a1, a2);
         }
 
@@ -59,7 +56,6 @@ namespace NumSharp
         [NDScoped]
         public static (NDArray q, NDArray r) polydiv(NDArray u, NDArray v)
         {
-            using var plain = NDMatrixBoundary.PlainFor(u, v);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return u.TensorEngine.Polydiv(u, v);
         }
     }

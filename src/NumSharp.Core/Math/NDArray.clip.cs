@@ -30,9 +30,9 @@ namespace NumSharp
         ///     directly, so the <c>a_min</c>/<c>min</c> keyword rule of <c>np.clip</c> does not apply here: <c>min</c> and
         ///     <c>max</c> are the only bound parameters.</para>
         /// </remarks>
+        [PlainReceiver]
         public NDArray clip(NDArray min = null, NDArray max = null, NDArray @out = null, DType dtype = null, NDArray where = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.clip(this, a_min: min, a_max: max, @out: @out, dtype: dtype, where: where);
         }
     }

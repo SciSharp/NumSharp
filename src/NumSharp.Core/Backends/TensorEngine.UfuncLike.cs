@@ -32,6 +32,7 @@ namespace NumSharp
         ///     <c>trunc</c>, as NumPy's fix leaks them) are fix's. <c>np.fix</c> calls it after its matrix rule; an override
         ///     replaces it for every array whose engine it is. Unlike a ufunc it has no <c>where=</c> / <c>dtype=</c>.
         /// </remarks>
+        [ArrayWrap("x")]
         public abstract NDArray Fix(NDArray x, NDArray @out = null);
 
         // np.isposinf / np.isneginf (numpy/lib/_ufunclike_impl.py). Not ufuncs — no

@@ -31,17 +31,12 @@ namespace NumSharp
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-            // Scope: the class boundary's temporaries; the Linalg member reclaims the two ToCommon dtype-cast temps.
+            // Scope: what the call leaves (the woven subclass path scopes its plain views); the Linalg member reclaims the
+            // two ToCommon dtype-cast temps.
             [NDScoped]
             public static NDArray solve(NDArray a, NDArray b)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // NumPy takes its wrap from b (`a, _ = _makearray(a); b, wrap = _makearray(b)`): a numpy.matrix b
-                // gives a matrix, a matrix a with a plain b a plain array (probed 2.4.2).
-                if (NDMatrixBoundary.Sees(a, b))
-                    return NDMatrixBoundary.IsMatrix(b)
-                        ? NDMatrixBoundary.Wrapped((a, b), static s => solve(s.a, s.b))
-                        : NDMatrixBoundary.Plain((a, b), static s => solve(s.a, s.b));
                 return a.TensorEngine.Linalg.Solve(a, b);
             }
 
@@ -82,16 +77,10 @@ namespace NumSharp
             /// <exception cref="TypeError">A text operand (solve's gufunc input cast, NumPy's UFuncTypeError).</exception>
             /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static NDArray tensorsolve(NDArray a, NDArray b, int[] axes = null)
             {
                 if (a is null) throw new ArgumentNullException(nameof(a));
-                // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-                if (NDMatrixBoundary.Sees(a))
-                    return NDMatrixBoundary.Wrapped((a, b, axes), static s => tensorsolve(s.a, s.b, s.axes));
-                // a numpy.char.chararray operand: NumPy's asarray(a) / asarray(b) drop the class (NDCharArrayBoundary)
-                if (NDCharArrayBoundary.Sees(a, b))
-                    return NDCharArrayBoundary.Plain((a, b, axes), static s => tensorsolve(s.a, s.b, s.axes));
                 return a.TensorEngine.Linalg.Tensorsolve(a, b, axes);
             }
         }

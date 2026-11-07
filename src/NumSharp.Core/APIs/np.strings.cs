@@ -121,10 +121,6 @@ namespace NumSharp
             ///     multiply</c> are its own (see that member's exceptions).</remarks>
             public static NDArray multiply(NDArray a, NDArray i)
             {
-                // a numpy.char.chararray operand: np.asanyarray keeps the class, np.empty_like(a, ...) makes the out a
-                // chararray, and the ufunc returns that out's __array_wrap__ view (NDCharArrayBoundary)
-                if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Wrapped((a, i), static s => multiply(s.a, s.i));
                 if (a is null)
                     throw new ArgumentNullException(nameof(a));
                 if (i is null)

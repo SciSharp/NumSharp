@@ -116,8 +116,11 @@ namespace NumSharp.Backends
             bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             using var made = QuantileQ(q, out var argument);
+            // A numpy.char.chararray operand without weights takes NumPy's text route, which meets the STRING partition
+            // (the plain view the woven np.quantile hands over remembers the class); with weights the plain call runs and the
+            // woven rule keeps the class (empty_like of the chararray).
             return QuantileFunction("quantile", a, argument, axis, @out, overwrite_input, method, keepdims, weights,
-                chararray: false);
+                chararray: weights is null && NDSubclass.StandsForCharArray(a));
         }
 
         /// <summary>
@@ -140,8 +143,11 @@ namespace NumSharp.Backends
             bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             using var made = QuantileQ(q, out var argument);
+            // A numpy.char.chararray operand without weights takes NumPy's text route, which meets the STRING partition
+            // (the plain view the woven np.percentile hands over remembers the class); with weights the plain call runs and the
+            // woven rule keeps the class (empty_like of the chararray).
             return QuantileFunction("percentile", a, argument, axis, @out, overwrite_input, method, keepdims, weights,
-                chararray: false);
+                chararray: weights is null && NDSubclass.StandsForCharArray(a));
         }
 
         /// <summary>
@@ -263,12 +269,13 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     NumPy's <c>np.quantile</c> / <c>np.percentile</c> body after the class rules: the complex check on the data,
+        ///     NumPy's <c>np.quantile</c> / <c>np.percentile</c> body on the woven function's plain views: the complex
+        ///     check on the data,
         ///     q's checks (and percentile's division by 100), the weighted branch, the text routes and the numeric quantile,
         ///     in the order every public overload runs them. <see cref="Quantile"/> and <see cref="Percentile"/> call it for
-        ///     a plain operand; the facade calls it directly, with <paramref name="chararray"/> set, for a
-        ///     <c>numpy.char.chararray</c> operand without weights (the class boundary's flag; with weights the facade's
-        ///     chararray rule runs the plain call and keeps the class).
+        ///     plain operands, with <paramref name="chararray"/> set for the plain view of a <c>numpy.char.chararray</c>
+        ///     operand without weights (<see cref="NDSubclass.StandsForCharArray"/>; with weights the call computes plain and
+        ///     the woven rule keeps the class).
         /// </summary>
         /// <param name="op">The NumPy function, <c>quantile</c> or <c>percentile</c>: percentile divides q by 100 and checks
         ///     the quotient against [0, 1] with its own text, and every refusal names the function.</param>
@@ -282,11 +289,12 @@ namespace NumSharp.Backends
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
         /// <param name="weights">NumPy's <c>weights=</c>, or null; a weighted call takes NumPy's weighted branch
         ///     (<see cref="QuantileWeighted"/>) for every dtype.</param>
-        /// <param name="chararray">True when <paramref name="a"/> is a <c>numpy.char.chararray</c> operand of the user's call,
-        ///     read by the facade before any region hid the class: NumPy's text route then meets the STRING partition
-        ///     (<see cref="QuantileText.Compute"/>), whatever the operand's dtype. A chararray with weights never arrives
-        ///     here with the flag set: the facade's <c>NDCharArrayBoundary.Kept</c> rule runs the plain call (this one,
-        ///     with the flag false) and keeps the class.</param>
+        /// <param name="chararray">True when <paramref name="a"/> stands for a <c>numpy.char.chararray</c> operand of the
+        ///     user's call (the woven function's plain view remembers the class, <see
+        ///     cref="NDSubclass.StandsForCharArray"/>):
+        ///     NumPy's text route then meets the STRING partition (<see cref="QuantileText.Compute"/>), whatever the
+        ///     operand's dtype. A chararray with weights never arrives here with the flag set: the weighted call computes
+        ///     plain (this one, with the flag false) and the woven rule keeps the class.</param>
         /// <returns>The quantiles (q's axes first); <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/>, a list or array <paramref name="q"/>, or
         ///     <paramref name="method"/> is null.</exception>
@@ -826,11 +834,10 @@ namespace NumSharp.Backends
         /// <param name="out">An optional output array.</param>
         /// <param name="method">The method name.</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
-        /// <param name="chararray">True when <paramref name="a"/> is a <c>numpy.char.chararray</c> operand of the user's call
-        ///     (<see cref="NDCharArrayBoundary.Sees(NDArray, string)"/>, read by the public overload BEFORE it opens any
-        ///     <see cref="NDMatrixBoundary.PlainFor(NDArray, NDArray)"/> region, which would hide the chararray). Such an
-        ///     operand comes here whatever its dtype (an <c>int8</c> chararray too): NumPy's statements up to the
-        ///     <c>partition</c> call do not depend on it.</param>
+        /// <param name="chararray">True when <paramref name="a"/> stands for a <c>numpy.char.chararray</c> operand of the
+        ///     user's call (<see cref="NDSubclass.StandsForCharArray"/>: the woven function's plain view remembers the
+        ///     class). Such an operand comes here whatever its dtype (an <c>int8</c> chararray too): NumPy's statements up to
+        ///     the <c>partition</c> call do not depend on it.</param>
         /// <param name="qType">q's precision (<see cref="QuantileIndexes.PrecisionOf"/>): a float16 / float32 q array
         ///     computes the virtual indexes in its own dtype, and the partition then validates them (NumPy's <c>kth(=k) out
         ///     of bounds (n)</c> for a long line).</param>

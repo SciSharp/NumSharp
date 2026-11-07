@@ -70,11 +70,14 @@ namespace NumSharp
         [NDScopedCovered]
         private static NDMatrix Product(NDArray left, NDArray right)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             if (left is null)
                 throw new ArgumentNullException(nameof(left));
             if (right is null)
                 throw new ArgumentNullException(nameof(right));
+            // The plain computation: np.dot and np.multiply get plain views of the operands (NDSubclass.PlainView, made where
+            // a call needs one). Handed a matrix object they would take their own subclass paths and wrap a second matrix
+            // around a result this member wraps itself; the class tests below and the result's identity rule read the
+            // operands as given.
 
             if (left.ndim == 0 || right.ndim == 0)
             {
@@ -84,7 +87,7 @@ namespace NumSharp
                 {
                     // __mul__: N.dot(self, asmatrix(other)). asmatrix makes the 0-d array a 1 x 1 matrix, so this
                     // is a matrix product: "shapes (2,3) and (1,1) not aligned" unless self has one column.
-                    return From(np.dot(left, ViewOf(right)), left, right);
+                    return From(np.dot(NDSubclass.PlainView(left), PlainMatrixView(right)), left, right);
                 }
                 if (left.ndim == 0 && right.ndim != 0 && left is not NDMatrix && left.IsExplicitZeroDimArray)
                 {
@@ -100,7 +103,9 @@ namespace NumSharp
                 // elementwise product (no np.dot zero-sign rule, the operand's memory order, a view of the hidden
                 // result), in the dtype two NumPy scalars promote to.
                 if (left.ndim == 0 && left is not NDMatrix && right.ndim != 0)
-                    return FromWrapped(np.multiply(left, right, dtype: np.promote_types(left.dtype, right.dtype)), left, right);
+                    return FromWrapped(np.multiply(NDSubclass.PlainView(left), NDSubclass.PlainView(right),
+                                                   dtype: np.promote_types(left.dtype, right.dtype)),
+                                       left, right);
 
                 // Every other 0-d operand is N.dot(self, scalar) / N.dot(scalar, self): a C# number on either side
                 // (the 0-d matrix stand-in), or a 0-d result of a computation on the right (m * m.sum(),
@@ -111,12 +116,35 @@ namespace NumSharp
             if (left is NDMatrix)
             {
                 // __mul__: the other operand is seen as a matrix first, which turns a 1-d array into a row.
-                NDArray other = right is NDMatrix ? right : ViewOf(right);
-                return From(np.dot(left, other), left, right);
+                NDArray other = right is NDMatrix ? NDSubclass.PlainView(right) : PlainMatrixView(right);
+                return From(np.dot(NDSubclass.PlainView(left), other), left, right);
             }
 
             // __rmul__: N.dot(other, self) with the left operand as it is; a 1-d result is folded to a row.
-            return From(np.dot(left, right), left, right);
+            return From(np.dot(NDSubclass.PlainView(left), NDSubclass.PlainView(right)), left, right);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>asmatrix(other)</c> as the plain computation sees it: a new PLAIN array over the memory of
+        ///     <paramref name="a"/> with the matrix finalize rule applied (a 1-d array becomes a row <c>(1, N)</c>, a
+        ///     0-d array
+        ///     <c>(1, 1)</c>), for an <c>np.*</c> call that must compute on the matrix shape without receiving a matrix
+        ///     object
+        ///     (it would take its own subclass path).
+        /// </summary>
+        /// <param name="a">The operand. Not disposed, not modified.</param>
+        /// <returns>The plain view; the caller's scope reclaims it (it holds its own counted reference on the
+        ///     buffer).</returns>
+        /// <exception cref="ValueError">More than two axes of <paramref name="a"/> are longer than 1 (<c>shape too
+        ///     large to be
+        ///     a matrix.</c>).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="a"/> has more than two axes and one has extent
+        ///     0.</exception>
+        private static NDArray PlainMatrixView(NDArray a)
+        {
+            Shape shape = a.Storage.Shape;
+            Backends.UnmanagedStorage alias = shape.NDim == 2 ? a.Storage.Alias() : a.Storage.Alias(shape.AsMatrix());
+            return new NDArray(alias) { TensorEngine = a.TensorEngine };
         }
 
         /// <summary>
@@ -158,11 +186,16 @@ namespace NumSharp
         [NDScopedCovered]
         private static NDMatrix Scale(NDArray left, NDArray right)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            // The plain computation (see Product): the ufunc and the fused pass get plain views (made only on those routes:
+            // the direct pass reads raw memory), and the result's identity rule reads the operands as given. A 0-d stand-in
+            // is its own plain view, so a C# literal keeps its mark.
             DType loop = np.promote_types(left.dtype, right.dtype);
             NPTypeCode code = loop.GetTypeCode();
             if (code != NPTypeCode.Single && code != NPTypeCode.Double && code != NPTypeCode.Complex)
-                return FromWrapped(np.multiply(left, right, dtype: loop), left, right, scalarStaysScalar: true);
+            {
+                NDArray product = np.multiply(NDSubclass.PlainView(left), NDSubclass.PlainView(right), dtype: loop);
+                return FromWrapped(product, left, right, scalarStaysScalar: true);
+            }
 
             // NumPy makes the scalar its second operand whichever side it stood on, so both orders give the
             // same bytes. When both operands are 0-d either choice is the scalar.
@@ -175,7 +208,7 @@ namespace NumSharp
                 // NumPy spells the textbook formula out; the ufunc's fused multiply could round differently.
                 NDArray single = code == NPTypeCode.Complex
                     ? ComplexScalarProduct(scalar, array)
-                    : np.multiply(scalar, array, dtype: loop);
+                    : np.multiply(NDSubclass.PlainView(scalar), NDSubclass.PlainView(array), dtype: loop);
                 return From(single, left, right, scalarStaysScalar: true);
             }
 
@@ -209,13 +242,14 @@ namespace NumSharp
                     NPTypeCode.Double => NDArray.Scalar(0d),
                     _ => NDArray.Scalar(Complex.Zero),
                 };
-                np.evaluate((NDExpr)array * (NDExpr)scalar + (NDExpr)zero, @out: result);
+                NDExpr operand = (NDExpr)NDSubclass.PlainView(array), factor = (NDExpr)NDSubclass.PlainView(scalar);
+                np.evaluate(operand * factor + (NDExpr)zero, @out: result);
             }
             else
             {
                 // An operand of another dtype (an integer matrix times 2.5), a small float one in another layout,
                 // or a host without dynamic code: the ufunc's loop, then the accumulator's addition in place.
-                np.multiply(array, scalar, @out: result, dtype: loop);
+                np.multiply(NDSubclass.PlainView(array), NDSubclass.PlainView(scalar), @out: result, dtype: loop);
                 AddZeroInPlace(result, code);
             }
 
@@ -521,14 +555,16 @@ namespace NumSharp
         [NDScoped]
         public NDMatrix __pow__(int n)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
             Backends.DefaultLinalgEngine.AssertStackedSquare(this);
             if (n == 1)
                 return this;
+            // The plain computation: np.linalg runs on the plain base view (handed the matrix itself it would take its own
+            // subclass path and wrap the result twice); this member wraps the result.
+            NDArray self = A;
             // a ** -1 is inv(a) itself in NumPy (the n == 1 shortcut after inverting), not a copy of it.
             if (n == -1)
-                return FromWrapped(np.linalg.inv(this), this);
-            NDArray power = np.linalg.matrix_power(this, n);
+                return FromWrapped(np.linalg.inv(self), this);
+            NDArray power = np.linalg.matrix_power(self, n);
             // n == 0 builds the identity with empty_like (the matrix owns it); every other power is a matmul
             // ufunc result, which NumPy wraps.
             return n == 0 ? From(power, this) : FromWrapped(power, this);
@@ -583,9 +619,9 @@ namespace NumSharp
         [NDScoped]
         public NDMatrix __rpow__(object other)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
+            // ndarray's power on plain views (the plain computation, see __pow__); the matrix wraps its result.
             if (other is NDArray array)
-                return Elementwise(np.power(array, (NDArray)this), array, this);
+                return Elementwise(np.power(NDSubclass.PlainView(array), A), array, this);
 
             string name = other switch
             {
@@ -725,8 +761,8 @@ namespace NumSharp
         [NDScoped]
         public static NDMatrix operator +(NDMatrix operand)
         {
-            using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
-            return Elementwise(np.positive(operand), operand);
+            // The ufunc on the plain view (a 0-d stand-in is its own); the matrix wraps its result.
+            return Elementwise(np.positive(NDSubclass.PlainView(operand)), operand);
         }
 
         #endregion

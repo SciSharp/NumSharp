@@ -36,9 +36,6 @@ namespace NumSharp
         public static NDArray ptp(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, axis, @out, keepdims), static s => ptp(s.a, s.axis, s.@out, s.keepdims), @out);
             // NumPy's ptp is _methods._ptp: subtract(maximum.reduce(a, axis, out, keepdims), minimum.reduce(a, axis,
             // keepdims), out). The whole function, its text routes included, is the engine's: TensorEngine.Ptp of a's
             // engine (a null a is refused above).
@@ -73,9 +70,6 @@ namespace NumSharp
         public static NDArray ptp(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Wrapped((a, axis, @out, keepdims), static s => ptp(s.a, s.axis, s.@out, s.keepdims), @out);
             // NumPy's ptp with a tuple axis (maximum.reduce's tuple checks first) is the engine's too: TensorEngine.Ptp
             // of a's engine (a null a is refused above).
             return a.TensorEngine.Ptp(a, axis, @out, keepdims);

@@ -26,9 +26,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray isneginf(NDArray x, NDArray @out = null)
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(x))
-                return NDMatrixBoundary.Wrapped((x, @out), static s => isneginf(s.x, s.@out), @out);
             return x.TensorEngine.IsNegInf(x, typeof(bool), @out, null);
         }
     }

@@ -581,7 +581,7 @@ namespace NumSharp
             // the str ('1.5'), where converting it to a U array first and casting that would quote the array element
             // (np.str_('1.5')). The values are the same either way.
             bool numericText = value is string && destination != NPTypeCode.String && destination != NPTypeCode.Empty;
-            // np.asanyarray(value)'s statement (an NDArray value returned above, so no class boundary applies).
+            // np.asanyarray(value)'s statement (an NDArray value returned above, so no subclass operand reaches it).
             if (!numericText && (!IsStoreScalar(value) || destination == NPTypeCode.String || destination == NPTypeCode.Empty))
                 return asanyarray(value, null, 'K');
 

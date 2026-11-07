@@ -44,12 +44,12 @@ namespace NumSharp
         ///     </para>
         ///     <para>
         ///     NumPy's <c>subok</c> and <c>signature</c> keywords are absent: <c>subok</c> concerns ndarray
-        ///     subclasses, which the numpy.matrix boundary already decides, and <c>signature</c> is what
+        ///     subclasses, which the woven subclass path already decides, and <c>signature</c> is what
         ///     <paramref name="dtype"/> does.
         ///     </para>
         ///     <para>
         ///     The whole call is the engine member <c>TensorEngine.Vecdot(x1, x2, out, axes, axis, keepdims, dtype, casting, order)</c>
-        ///     since the np-layer dtype plan's P2; this function keeps the numpy.matrix boundary.
+        ///     since the np-layer dtype plan's P2; this function's woven subclass path answers for a numpy.matrix operand.
         ///     </para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes
@@ -72,9 +72,6 @@ namespace NumSharp
             int? axis = null, bool keepdims = false, DType dtype = null, string casting = "same_kind",
             char order = 'K')
         {
-            // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            if (NDMatrixBoundary.Sees(x1, x2))
-                return NDMatrixBoundary.Wrapped((x1, x2, @out, axes, axis, keepdims, dtype, casting, order), static s => vecdot(s.x1, s.x2, s.@out, s.axes, s.axis, s.keepdims, s.dtype, s.casting, s.order), @out);
             return x1.TensorEngine.Vecdot(x1, x2, @out, axes, axis, keepdims, dtype, casting, order);
         }
     }

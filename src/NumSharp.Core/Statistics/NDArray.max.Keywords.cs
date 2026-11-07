@@ -44,9 +44,9 @@ namespace NumSharp
         ///     The member keeps the plain-array meaning for a <c>numpy.matrix</c> object (an <see cref="NDMatrix"/> declares its
         ///     own <c>max</c>). https://numpy.org/doc/stable/reference/generated/numpy.ndarray.max.html
         /// </remarks>
+        [PlainReceiver]
         public NDArray max(int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.max(this, axis, @out, keepdims, initial, @where);
         }
 
@@ -77,9 +77,9 @@ namespace NumSharp
         ///     The member keeps the plain-array meaning for a <c>numpy.matrix</c> object (an <see cref="NDMatrix"/> declares its
         ///     own <c>min</c>). https://numpy.org/doc/stable/reference/generated/numpy.ndarray.min.html
         /// </remarks>
+        [PlainReceiver]
         public NDArray min(int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return np.min(this, axis, @out, keepdims, initial, @where);
         }
     }

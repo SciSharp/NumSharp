@@ -8,7 +8,7 @@ namespace NumSharp.Tests.Matrixlib
     ///     Unit tests of <see cref="NDMatrix"/> (NumPy's <c>numpy.matrix</c>). The first half ports NumPy 2.4.2's
     ///     own <c>numpy/matrixlib/tests/test_defmatrix.py</c>; the second half pins what is specific to NumSharp's
     ///     design: members and operators follow the STATIC type while the <c>np.*</c> functions follow the object
-    ///     (<c>NDMatrixBoundaryTests</c> holds the function rules), a C# number is a 0-d matrix scalar, and every
+    ///     (<c>NDMatrixOperandTests</c> holds the function mechanisms), a C# number is a 0-d matrix scalar, and every
     ///     member result has NumPy's class, shape and ownership. Every expected value is NumPy 2.4.2's answer for the
     ///     same call. The differential gate with 26,000 cases is <c>FuzzCorpusTests.Matrix</c>.
     /// </summary>
@@ -431,7 +431,7 @@ namespace NumSharp.Tests.Matrixlib
         ///     The operators and the members follow the STATIC type: the same object is a matrix through an
         ///     <see cref="NDMatrix"/> reference and a plain 2-D array through an <see cref="NDArray"/> one. The
         ///     public <c>np.*</c> functions follow the OBJECT: they return what NumPy returns for a matrix
-        ///     operand, typed <see cref="NDArray"/> (<see cref="NDMatrixBoundary"/>).
+        ///     operand, typed <see cref="NDArray"/> (<see cref="NDSubclass"/>).
         /// </summary>
         [TestMethod]
         public void Semantics_OperatorsAndMembersFollowTheStaticType_FunctionsFollowTheObject()
@@ -873,7 +873,9 @@ namespace NumSharp.Tests.Matrixlib
         }
 
         /// <summary>A matrix reduction is always NumPy's ARRAY form: std with an integer dtype raises for
-        ///     <c>axis: null</c> too, where np.std of the plain array returns a truncated scalar.</summary>
+        ///     <c>axis: null</c> too, where np.std of the plain array returns a truncated scalar. np.std of the matrix
+        ///     object is the matrix method (NumPy's _wrapreduction dispatch), so it raises the same error; only the plain
+        ///     view (<c>m.A</c>) takes the array's route.</summary>
         [TestMethod]
         public void Std_WithAnIntegerDtype_Raises()
         {
@@ -881,7 +883,10 @@ namespace NumSharp.Tests.Matrixlib
             Action flat = () => m.std(dtype: np.int64);
             flat.Should().ThrowExactly<TypeError>().WithMessage(
                 "Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'");
-            ((long)np.std((NDArray)m, dtype: np.int64)).Should().Be(3L);
+            Action dispatched = () => np.std((NDArray)m, dtype: np.int64);
+            dispatched.Should().ThrowExactly<TypeError>().WithMessage(
+                "Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'");
+            ((long)np.std(m.A, dtype: np.int64)).Should().Be(3L);
             ((long)m.var(dtype: np.int64)).Should().Be(12L);
         }
 

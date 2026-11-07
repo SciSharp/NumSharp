@@ -951,7 +951,6 @@ namespace NumSharp.Backends
             // strided/negstride f16 flat sum strands one pooled buffer per call (caught by
             // UndisposedIntermediateTests once the instance oracle tier replayed a.sum() over
             // those layouts, 2026-09-18; the leak predated that tier).
-            using var plain = NDMatrixBoundary.PlainFor(arr);   // an engine method computes plain: np.ascontiguousarray below must not apply its matrix rule
             var c = NDArray.ascontiguousarray(arr, null);
             try
             {

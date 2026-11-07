@@ -26,7 +26,6 @@ namespace NumSharp {
         ///     NA is a NaN).</exception>
         public static bool array_equal(NDArray a, NDArray b, bool equal_nan = false)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, b);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // The body is NumPy's statements, TensorEngine.ArrayEqual (DefaultEngine's in
             // Backends/Default/Logic/Default.ArrayEqual.cs), on the engine of the first operand that is not null. Two nulls
             // are equal (NumSharp's null convention) and have no engine to ask; one null reaches the engine, whose statements

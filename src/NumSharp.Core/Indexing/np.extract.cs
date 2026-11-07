@@ -50,10 +50,6 @@ namespace NumSharp
         [NDScoped]
         public static NDArray extract(NDArray condition, NDArray arr)
         {
-            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(arr))
-                return NDCharArrayBoundary.Kept((condition, arr), static s => extract(s.condition, s.arr));
-            using var plain = NDMatrixBoundary.PlainFor(condition, arr);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (condition is null) throw new ArgumentNullException(nameof(condition));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
 

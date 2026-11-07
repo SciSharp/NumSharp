@@ -39,8 +39,8 @@ paths:
     disposed), never `MakeGeneric`: an alias reads as a view, so the gather would lose `flags.owndata`.
   - `NDCharArray` and `NDMatrix` HIDE the indexer (`new`), they do not override it: their rules (a stripped element; a
     matrix row or column) apply through their static type, while library code that receives such an object as `NDArray`
-    indexes it as a plain array (`NDMatrixBoundary` hands the matrix object itself to computations that run with
-    plain-array semantics: `np.piecewise`'s `x[cond]` would otherwise gather a `(1, K)` matrix). `NDMatrix` also keeps
+    indexes it as a plain array (an `NDArray` member reached through a subclass object computes on its plain view,
+    `[PlainReceiver]`: `np.piecewise`'s `x[cond]` would otherwise gather a `(1, K)` matrix). `NDMatrix` also keeps
     `NDArray this[long row, long column]`. `NDListArray` (not an `NDArray`) has one `NDListArray this[params object[]
     key]`: a full integer index is the list's 0-d stand-in, an index array or mask gathers the ids (the lists are shared,
     as NumPy's object pointers), the pieces come from `item()` / `tolist()`.

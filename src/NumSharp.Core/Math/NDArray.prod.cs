@@ -33,10 +33,10 @@ namespace NumSharp
         /// <exception cref="OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <remarks>The member keeps the plain-array meaning for a numpy.matrix object reached through an
         ///     <see cref="NDArray"/> reference.</remarks>
+        [PlainReceiver]
         public NDArray prod(int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
             object initial = null, NDArray @where = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
             return TensorEngine.ReduceProduct(this, axis, keepdims, dtype, @out, initial, @where);
         }
     }

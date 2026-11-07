@@ -16,10 +16,6 @@
         ///     subclass), owning its data exactly when the plain result would.
         /// </remarks>
         public static NDArray rollaxis(NDArray a, int axis, int start = 0)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, axis, start), static s => rollaxis(s.a, s.axis, s.start))
-            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.Kept((a, axis, start), static s => rollaxis(s.a, s.axis, s.start))
-            : a.TensorEngine.RollAxis(a, axis, start);
+            => a.TensorEngine.RollAxis(a, axis, start);
     }
 }

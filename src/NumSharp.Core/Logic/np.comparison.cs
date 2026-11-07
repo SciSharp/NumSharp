@@ -31,11 +31,7 @@ namespace NumSharp
         ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
         ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray equal(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => equal(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => equal(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
-            : x1.TensorEngine.Compare(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Compare(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return (x1 == x2) element-wise with scalar.
@@ -81,11 +77,7 @@ namespace NumSharp
         ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
         ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray not_equal(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => not_equal(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => not_equal(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
-            : x1.TensorEngine.NotEqual(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.NotEqual(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return (x1 != x2) element-wise with scalar.
@@ -131,11 +123,7 @@ namespace NumSharp
         ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
         ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray less(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => less(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => less(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
-            : x1.TensorEngine.Less(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Less(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return (x1 &lt; x2) element-wise with scalar.
@@ -181,11 +169,7 @@ namespace NumSharp
         ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
         ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray greater(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => greater(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => greater(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
-            : x1.TensorEngine.Greater(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.Greater(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return (x1 &gt; x2) element-wise with scalar.
@@ -231,11 +215,7 @@ namespace NumSharp
         ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
         ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray less_equal(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => less_equal(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => less_equal(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
-            : x1.TensorEngine.LessEqual(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.LessEqual(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return (x1 &lt;= x2) element-wise with scalar.
@@ -281,11 +261,7 @@ namespace NumSharp
         ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
         ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray greater_equal(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => greater_equal(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
-            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
-            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => greater_equal(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
-            : x1.TensorEngine.GreaterEqual(x1, x2, dtype, @out, where);
+            => x1.TensorEngine.GreaterEqual(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return (x1 &gt;= x2) element-wise with scalar.

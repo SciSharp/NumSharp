@@ -341,7 +341,7 @@ namespace NumSharp.Tests.Strings
         ///     defers to phase 5), sort in place, argsort and searchsorted plain. NumPy's outcomes are recorded in worker
         ///     processes replaced after every finalize error (NumPy may corrupt its heap there).
         /// </summary>
-        [TestMethod] public void CharArrayOperatorsAndMembers() => RunWithCharArrayBoundaryAudit("strcharops");
+        [TestMethod] public void CharArrayOperatorsAndMembers() => RunWithCharArrayOperandAudit("strcharops");
 
         /// <summary>
         ///     Section strcharfn (the <c>numpy.char</c> plan's phase 3): the <c>np.*</c> functions with chararray operands —
@@ -352,7 +352,7 @@ namespace NumSharp.Tests.Strings
         ///     dtype, the trivial-loop copy of a short input into bool or StringDType — and its absence for a 2-D or
         ///     8,193-element input) or meet the string partition (np.partition, median, quantile, percentile).
         /// </summary>
-        [TestMethod] public void CharArrayFunctions() => RunWithCharArrayBoundaryAudit("strcharfn");
+        [TestMethod] public void CharArrayFunctions() => RunWithCharArrayOperandAudit("strcharfn");
 
         /// <summary>
         ///     Section strcharobj (the <c>numpy.char</c> plan's phase 4): the object path — <c>np.@char.split</c> /
@@ -381,30 +381,31 @@ namespace NumSharp.Tests.Strings
         ///     <c>StringDType</c>, Python values and NumPy's refusals, and the chararray string members over them with their
         ///     return rules (<c>asarray</c>: a <c>U</c> result owns its data, an <c>S</c> result views the computed array; the
         ///     ufunc's chararray view; a plain int64 / bool array), each result's class, OWNDATA and strides compared. Run
-        ///     with the boundary audit: no library call path may reach a chararray rule.
+        ///     with the operand audit: no library call path may hand a chararray object to a public function.
         /// </summary>
-        [TestMethod] public void CharStringMethods() => RunWithCharArrayBoundaryAudit("strcharmeth");
+        [TestMethod] public void CharStringMethods() => RunWithCharArrayOperandAudit("strcharmeth");
 
         /// <summary>
-        ///     The chararray boundary's safety contract over the WHOLE string corpus: every case of every section with an
-        ///     <c>S</c> / <c>U</c> operand is replayed with those operands viewed as chararrays while
-        ///     <see cref="NDCharArrayBoundary.AuditInternalCallers"/> is on, and no method of the library itself may reach the
-        ///     chararray rule of a public function at depth zero. This reaches every string function NumSharp has, far more
+        ///     The plain-view contract over the WHOLE string corpus: every case of every section with an <c>S</c> / <c>U</c>
+        ///     operand is replayed with those operands viewed as chararrays while <see
+        ///     cref="NDSubclass.AuditInternalCallers"/>
+        ///     is on, and no method of the library itself may hand a chararray object to a public function (its subclass
+        ///     path would run for library code). This reaches every string function NumSharp has, far more
         ///     than the two chararray sections, whose NumPy answers are the only ones recorded for chararray operands: the
         ///     outcomes are not compared here, only the call paths are observed.
         /// </summary>
-        /// <exception cref="AssertFailedException">A library call path reached a chararray rule (the fix is a region —
-        ///     <c>NDMatrixBoundary.PlainFor</c> in the member or function that passes its operand on — or a rule for the
-        ///     calling function), or fewer cases than the floor were replayed (a corpus that shrank or failed to
-        ///     copy).</exception>
-        /// <remarks>The hook reads the stack on every rule that applies at depth zero, so this replay is slower than the
+        /// <exception cref="AssertFailedException">A library call path reached a subclass path (the fix is a plain view —
+        ///     <c>NDSubclass.PlainView</c> / <c>Plain</c> in the member or function that passes its operand on — or a
+        ///     <c>[PlainReceiver]</c> declaration for the member), or fewer cases than the floor were replayed (a corpus
+        ///     that shrank or failed to copy).</exception>
+        /// <remarks>The hook reads the stack on every subclass path that runs, so this replay is slower than the
         ///     sections' own; it is switched off again however the replay ends.</remarks>
         [TestMethod]
         public void CharArrayOperand_LibraryNeverReachesACharArrayRule()
         {
             int replayed = 0;
-            NDCharArrayBoundary.InternalCallers.Clear();
-            NDCharArrayBoundary.AuditInternalCallers = true;
+            NDSubclass.InternalCallers.Clear();
+            NDSubclass.AuditInternalCallers = true;
             try
             {
                 foreach (var c in Cases)
@@ -442,18 +443,18 @@ namespace NumSharp.Tests.Strings
             }
             finally
             {
-                NDCharArrayBoundary.AuditInternalCallers = false;
+                NDSubclass.AuditInternalCallers = false;
             }
 
-            var found = NDCharArrayBoundary.InternalCallers.OrderByDescending(kv => kv.Value).ToList();
-            Console.WriteLine($"[chararray boundary audit] {replayed} string cases replayed with chararray operands, " +
-                              $"{found.Count} library call paths reached a chararray rule");
+            var found = NDSubclass.InternalCallers.OrderByDescending(kv => kv.Value).ToList();
+            Console.WriteLine($"[chararray operand audit] {replayed} string cases replayed with chararray operands, " +
+                              $"{found.Count} library call paths reached a subclass path");
             foreach (var kv in found)
                 Console.WriteLine($"  {kv.Value,6} x {kv.Key}");
             Assert.IsTrue(replayed >= MinCharArrayAuditCases,
                 $"only {replayed} cases replayed (floor {MinCharArrayAuditCases}): the corpus shrank or failed to copy");
             Assert.AreEqual(0, found.Count,
-                "library methods reached the chararray rule of a public function at depth zero:\n" +
+                "library methods handed a chararray object to a public function (its subclass path ran):\n" +
                 string.Join("\n", found.Take(60).Select(kv => $"  {kv.Value,6} x {kv.Key}")));
         }
 
@@ -462,35 +463,35 @@ namespace NumSharp.Tests.Strings
         private const int MinCharArrayAuditCases = 30000;
 
         /// <summary>
-        ///     <see cref="Run"/> with <see cref="NDCharArrayBoundary.AuditInternalCallers"/> on, then the boundary's safety
-        ///     contract: no method of the library itself reached the chararray rule of a public function at depth zero. The
-        ///     rules are written for the USER's call (a library method that passes its operand on must compute plain, inside
-        ///     a region), so a recorded caller is a function that would hand a chararray result — or a finalize / partition
-        ///     error — to library code written for the plain answer.
+        ///     <see cref="Run"/> with <see cref="NDSubclass.AuditInternalCallers"/> on, then the plain-view contract: no
+        ///     method of the library itself handed a chararray object to a public function. The subclass paths answer the
+        ///     USER's call (a library method that passes its operand on passes its plain view), so a recorded caller is a
+        ///     function that would hand a chararray result — or a finalize / partition error — to library code written for
+        ///     the plain answer.
         /// </summary>
         /// <param name="section">The chararray section (<c>strcharops</c> or <c>strcharfn</c>).</param>
-        /// <exception cref="AssertFailedException">A case diverged from NumPy, or a library call path reached a chararray rule
-        ///     (the fix is an <c>NDMatrixBoundary.PlainFor</c> / <c>NDCharArrayBoundary.Inside</c> region, or a rule for the
-        ///     calling function).</exception>
-        /// <remarks>The hook reads the stack on every rule that applies, so it is on only for these two sections; it is
+        /// <exception cref="AssertFailedException">A case diverged from NumPy, or a library call path reached a subclass path
+        ///     (the fix is a plain view where the operand is passed on, or a <c>[PlainReceiver]</c> declaration).</exception>
+        /// <remarks>The hook reads the stack on every subclass path that runs, so it is on only for these sections; it is
         ///     switched off again however <see cref="Run"/> ends.</remarks>
-        private static void RunWithCharArrayBoundaryAudit(string section)
+        private static void RunWithCharArrayOperandAudit(string section)
         {
-            NDCharArrayBoundary.InternalCallers.Clear();
-            NDCharArrayBoundary.AuditInternalCallers = true;
+            NDSubclass.InternalCallers.Clear();
+            NDSubclass.AuditInternalCallers = true;
             try
             {
                 Run(section);
             }
             finally
             {
-                NDCharArrayBoundary.AuditInternalCallers = false;
+                NDSubclass.AuditInternalCallers = false;
             }
 
-            var found = NDCharArrayBoundary.InternalCallers.OrderByDescending(kv => kv.Value).ToList();
-            Console.WriteLine($"[chararray boundary audit] {section}: {found.Count} library call paths reached a chararray rule");
+            var found = NDSubclass.InternalCallers.OrderByDescending(kv => kv.Value).ToList();
+            Console.WriteLine($"[chararray operand audit] {section}: {found.Count} library call paths reached a " +
+                              "subclass path");
             Assert.AreEqual(0, found.Count,
-                "library methods reached the chararray rule of a public function at depth zero:\n" +
+                "library methods handed a chararray object to a public function (its subclass path ran):\n" +
                 string.Join("\n", found.Take(60).Select(kv => $"  {kv.Value,6} x {kv.Key}")));
         }
 

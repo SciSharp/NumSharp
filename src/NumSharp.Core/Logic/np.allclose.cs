@@ -21,7 +21,6 @@
         public static bool allclose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8,
             bool equal_nan = false)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, b);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return a.TensorEngine.AllClose(a, b, rtol, atol, equal_nan);
         }
     }

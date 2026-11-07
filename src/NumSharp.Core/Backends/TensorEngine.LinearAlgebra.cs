@@ -55,6 +55,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A fixed-width string operand otherwise: "data type must provide an itemsize" (the
         ///     string product has no item size to allocate).</exception>
         [NDAnchored]
+        [ArrayWrap("a", "b")]
         public virtual NDArray Inner(NDArray a, NDArray b)
         {
             // inner of a 0-d operand is a multiply (its string loops answer); otherwise NumPy's dot checks run on the
@@ -74,9 +75,9 @@ namespace NumSharp
         ///     complex, then a vector dot product. Always 0-d.
         /// </summary>
         [NDScoped] // engine boundary (also called directly, not only via np.vdot): the ravel/reshape/conjugate temps are reclaimed
+        [AsArray]
         public virtual NDArray Vdot(NDArray a, NDArray b)
         {
-            using var plain = NDMatrixBoundary.PlainFor(a, b);   // an engine method computes plain: np.ravel / np.reshape below must not apply its matrix rule
             // A StringDType operand: NumPy's legacy descriptor lookup refuses it, or falls back to an OBJECT product that
             // NumSharp cannot hold; VStringVdotAnswer gives NumPy's answer in NumPy's order.
             if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsVString(b))

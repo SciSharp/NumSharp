@@ -42,22 +42,6 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray[] unstack(NDArray x, int axis = 0)
         {
-            // A numpy.matrix operand: NumPy iterates np.moveaxis(x, axis, 0), and iterating a matrix yields 1 x N
-            // row matrices (probed 2.4.2: np.unstack(m) of a 2 x 3 matrix is two 1 x 3 matrices, np.unstack(m, axis=1)
-            // three 1 x 2 matrices). Each 1-d slice of the plain result is wrapped into that row.
-            if (NDMatrixBoundary.Sees(x))
-                return NDMatrixBoundary.WrappedAll((x, axis), static s => unstack(s.x, s.axis));
-            // A numpy.char.chararray operand: NumPy iterates np.moveaxis's chararray, and iteration calls
-            // chararray.__getitem__ — each row of an N-d chararray is a chararray view, each element of a 1-d one the
-            // Python str / bytes with its trailing whitespace stripped (NDCharArrayBoundary).
-            if (NDCharArrayBoundary.Sees(x))
-            {
-                if (x.ndim != 1)
-                    return NDCharArrayBoundary.KeptAll((x, axis), static s => unstack(s.x, s.axis));
-                // moveaxis' axis check first ("source: axis 1 is out of bounds ..."), then the elements.
-                Shape.check_and_adjust_axis(1, axis, "source");
-                return NDCharArrayBoundary.StrippedElements((NDCharArray)x);
-            }
             if (x is null)
                 throw new ArgumentNullException(nameof(x));
 

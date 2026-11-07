@@ -28,8 +28,9 @@ using NumSharp.Backends;
 // a function that receives a matrix OBJECT through its NDArray parameter returns what NumPy returns for a
 // numpy.matrix operand (np.sum(m, 0) is a 1 x N matrix, np.transpose(m) and np.linalg.inv(m) are matrices,
 // np.ravel(m) and np.where(m > 0, m, 0) are plain arrays, np.stack((m, m)) raises). The result is an NDMatrix
-// typed NDArray; cast it to use the matrix members. The functions compute with plain-array semantics and shape
-// only their RESULT (NDMatrixBoundary), so nothing below the public surface changes meaning. The operators, the
+// typed NDArray; cast it to use the matrix members. The functions compute on plain views and shape only their
+// RESULT (the mechanisms declared on the computations, woven by NumSharp.Build: Backends/Subclass/NDSubclass.cs), so
+// nothing below the public surface changes meaning. The operators, the
 // indexers and the members of an NDArray reference stay static: `a * a`, `a[0]` and `a.sum(0)` are the plain-array
 // operations for a matrix object too.
 //
@@ -79,7 +80,7 @@ namespace NumSharp
     ///     result is typed <see cref="NDArray"/>; cast it (<c>(NDMatrix)np.sum(m, 0)</c>) to reach the matrix
     ///     members, no copy is made. A function whose C# return type is a typed array
     ///     (<see cref="np.isclose"/>) or a struct of arrays (<c>np.gradient</c>, <c>np.meshgrid</c>) returns plain
-    ///     arrays. The rules live in <see cref="NDMatrixBoundary"/>.
+    ///     arrays. The mechanisms are declared on the computations and woven into the functions (<see cref="NDSubclass"/>).
     ///     </para>
     ///     <para>
     ///     <b>Always two-dimensional.</b> Every matrix result goes through NumPy's finalize rule
@@ -107,6 +108,7 @@ namespace NumSharp
     ///     </para>
     /// </remarks>
     /// <seealso href="https://numpy.org/doc/stable/reference/generated/numpy.matrix.html"/>
+    [ArraySubclass("matrix", Priority = NDMatrix.__array_priority__)]
     public partial class NDMatrix : NDArray, IEnumerable
     {
         /// <summary>
@@ -427,8 +429,11 @@ namespace NumSharp
                 if (dims.Length > 2)
                     throw new ValueError("too many values to unpack (expected 2)");
 
-                using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
-                NDArray inverse = dims[0] == dims[1] ? np.linalg.inv(this) : np.linalg.pinv(this);
+                // The plain computation: np.linalg runs on the plain base view (handed the matrix itself it would take
+                // its own
+                // subclass path and wrap the result twice); this member wraps the result.
+                NDArray self = A;
+                NDArray inverse = dims[0] == dims[1] ? np.linalg.inv(self) : np.linalg.pinv(self);
                 return FromWrapped(inverse, this);
             }
         }
@@ -465,7 +470,8 @@ namespace NumSharp
         ///     A deep copy that is a matrix again. It HIDES <see cref="NDArray.Clone"/> and does not override it,
         ///     on purpose: library code that clones an array it holds as <see cref="NDArray"/> must get a plain
         ///     array back. Which <c>np.*</c> function returns a matrix is decided by its rule
-        ///     (<see cref="NDMatrixBoundary"/>), never by whether its body happens to clone the operand.
+        ///     (the mechanism declared on its computation, <see cref="NDSubclass"/>), never by whether its body happens to
+        ///     clone the operand.
         /// </summary>
         /// <returns>A new matrix owning a copy of the data.</returns>
         public new NDMatrix Clone() => new NDMatrix(Storage.Clone()) { TensorEngine = TensorEngine };

@@ -76,7 +76,7 @@ namespace NumSharp
         ///     bool too), both C-ordered whatever the source's order. The new-axis view is built from the storage
         ///     (<see cref="NumSharp.Backends.UnmanagedStorage.GetView(Slice[])"/>), not through <c>np.expand_dims</c>: a public function would see
         ///     an <see cref="NDMatrix"/> object indexed through an <see cref="NDArray"/> reference as a matrix operand
-        ///     (<see cref="NDMatrixBoundary"/>). The result keeps this array's lane-sharing C-type class
+        ///     (<see cref="NDSubclass"/>). The result keeps this array's lane-sharing C-type class
         ///     (<see cref="KeepLaneSharingClass"/>).
         /// </remarks>
         private protected NDArray ZeroDBoolSelection(bool selected)

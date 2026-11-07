@@ -666,8 +666,10 @@ namespace NumSharp
             using NDArray built = scl.Kind == PolyNumberKind.Array ? null : scl.AsArrayOf(scl.Dtype);
             NPTypeCode loop = PolyTyping.Promote(t, scl.Dtype);
             NDArray operand = built ?? scl.Array;
-            using var plain = NDMatrixBoundary.PlainFor(operand);   // a caller's numpy.matrix scale: no matrix rule in np.multiply
-            np.multiply(win, operand, @out: win, dtype: loop);
+            // The package computes with plain arrays: a caller's numpy.matrix scale goes in as its plain view (np.multiply
+            // would take its subclass path for the matrix object).
+            using var plainOperand = NDSubclass.LeasePlainView(operand);
+            np.multiply(win, plainOperand.Array, @out: win, dtype: loop);
         }
 
         /// <summary>

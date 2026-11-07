@@ -111,12 +111,12 @@ namespace NumSharp
             NDArray m = NDPolyVander.Vander(PolyBasis.Chebyshev, xcheb, deg is NDArray ? deg : value);
 
             // c = np.dot(m.T, yfunc). m is np.moveaxis's view of chebvander's (deg + 1, n) buffer, so m.T is that buffer:
-            // C-contiguous, as in NumPy, and np.dot sees the same operand layout. A numpy.matrix result is computed plain
-            // (the region keeps np.dot's matrix rule out: the numpy.polynomial package computes plain).
+            // C-contiguous, as in NumPy, and np.dot sees the same operand layout. A numpy.matrix result goes in as its plain
+            // view (np.dot would take its subclass path for the matrix object: the numpy.polynomial package computes plain).
             NDArray y = DotOperand(yfunc);
             NDArray c;
-            using (NDMatrixBoundary.PlainFor(y))
-                c = np.dot(m.T, y);
+            using (var plainY = NDSubclass.LeasePlainView(y))
+                c = np.dot(m.T, plainY.Array);
 
             // c[0] /= order; c[1:] /= 0.5 * order — in place through views. The divisors' VALUES are what NumPy divides by:
             // the integer converted to the loop dtype (exact for any order a matrix of order**2 elements can have), and the

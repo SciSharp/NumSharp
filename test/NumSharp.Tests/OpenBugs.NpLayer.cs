@@ -37,10 +37,11 @@ namespace NumSharp.Tests
     //   NL6  FIXED by parity QA-45 (78b122b0): np.array of a ragged jagged C# array (int[][], double[][], ...) truncated or
     //        threw IndexOutOfRangeException where NumPy raises its inhomogeneous-shape ValueError; its test stays below as
     //        the regression pin, without [OpenBugs].
-    //   NL7  the plan's B3: user code that np.apply_along_axis / np.apply_over_axes call back runs with the subclass
-    //        boundary's depth raised, so a numpy.matrix or chararray the callback passes to an np.* function comes back
-    //        plain. P7 would have removed the depth; the owner dropped P7 the same day ("Drop because np.* uses the lhs
-    //        to pick which"), so B3 stays open and is pinned here with the six.
+    //   NL7  FIXED by the woven subclass paths: the plan's B3, user code that np.apply_along_axis / np.apply_over_axes
+    //        call back ran with the old subclass boundary's per-thread depth raised, so a numpy.matrix or chararray the
+    //        callback passed to an np.* function came back plain. The woven functions hand plain VIEWS to their
+    //        computations instead of raising a depth, so a callback is ordinary user code again; its tests stay below as
+    //        the regression pins, without [OpenBugs].
     //   NL8  np.sum's add.reduce step `*acc += pairwise_sum(call)` leaves the NaN of a NaN + NaN to the JIT: a Debug
     //        build of NumSharp.Core keeps the call's NaN where NumPy (and a Release build, by the JIT's operand order)
     //        keeps the accumulator's. Found by the journey4 merge's Debug gate, where it fails
@@ -142,19 +143,19 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // NL7 — the boundary depth reaches user callbacks (the plan's B3)
+        // NL7 — FIXED: user callbacks see NumPy's classes (the plan's B3)
         // ------------------------------------------------------------------
 
         /// <summary>
         ///     <c>np.apply_along_axis(f, 1, matrix)</c> where <c>f</c> calls <c>np.sum(other_matrix, 0)</c> and
         ///     <c>np.ravel(chararray)</c>: in NumPy the callback is ordinary user code, so it gets a 1 x 2 matrix
         ///     <c>[[4, 6]]</c> and a chararray, exactly as outside (and as NumSharp gives with a PLAIN outer operand).
-        ///     NumSharp's callback gets a plain (2,) array and a plain array: <c>NDMatrixBoundary.Wrapped</c> raises the
-        ///     per-thread depth around the whole computation, the user's callback included, and every boundary rule reads
-        ///     a raised depth as "nested library call, stay plain". The plan's Appendix B3; its fix was P7 (rules on
-        ///     results, the depth deleted), which the owner dropped on 2026-10-31.
+        ///     Regression pin (np-layer NL7, the plan's Appendix B3): the old subclass boundary raised a per-thread depth
+        ///     around the whole computation, the user's callback included, so the callback got a plain (2,) array and a
+        ///     plain array. The woven functions hand their computations plain VIEWS instead of raising a depth, so the
+        ///     callback is ordinary user code and gets NumPy's classes.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL7")]
+        [TestMethod]
         public void NpLayer_ApplyAlongAxis_MatrixOperand_CallbackShouldSeeNumPysClasses()
         {
             using var m = np.asmatrix(np.array(new double[,] { { 1, 2 }, { 3, 4 } }));
@@ -186,12 +187,12 @@ namespace NumSharp.Tests
 
         /// <summary>
         ///     <c>np.apply_over_axes(h, matrix, [0])</c> where <c>h</c> calls <c>np.sum(other_matrix, 0)</c>: NumPy's callback
-        ///     gets a 1 x 2 matrix; NumSharp's gets a plain (2,) array, because the call runs inside the boundary's plain
-        ///     region for the matrix operand (the depth raised, as in
+        ///     gets a 1 x 2 matrix, and so does NumSharp's: regression pin (np-layer NL7), where the old boundary's raised
+        ///     depth gave the callback a plain (2,) array (see
         ///     <see cref="NpLayer_ApplyAlongAxis_MatrixOperand_CallbackShouldSeeNumPysClasses"/>). The result itself agrees
         ///     (a plain (1, 3) array <c>[[5, 7, 9]]</c> in both).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL7")]
+        [TestMethod]
         public void NpLayer_ApplyOverAxes_MatrixOperand_CallbackShouldSeeNumPysClasses()
         {
             using var m = np.asmatrix(np.array(new double[,] { { 1, 2, 3 }, { 4, 5, 6 } }));

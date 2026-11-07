@@ -29,9 +29,10 @@ namespace NumSharp
         /// <exception cref="ValueError">An unknown name (<c>Cannot understand requirement 'x'</c>; NumPy raises a
         ///     KeyError), both orders (<c>Cannot specify both "C" and "F" order</c>), or the conversion's refusal of
         ///     <paramref name="dtype"/>.</exception>
-        /// <remarks>No class boundary runs here: the facade applies its rules (a matrix result wrapped, a chararray operand's
-        ///     class kept) before it calls this. ENSUREARRAY is accepted and ignored: the facade's rules decide the class,
-        ///     and a plain array is what this returns.</remarks>
+        /// <remarks>ENSUREARRAY is accepted and ignored here: this computes a plain array, and the class of a subclass
+        ///     operand's result is the computation's rule (<see cref="NDSubclassRules.Require"/>: the operand's class, a plain
+        ///     array for ENSUREARRAY - NumPy's <c>subok</c>).</remarks>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Require))]
         internal static NDArray require(NDArray a, DType dtype, string[] requirements)
         {
             // `not requirements` in NumPy is true for None AND an empty sequence. np.asanyarray(a, dtype)'s statement once

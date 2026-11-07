@@ -70,6 +70,7 @@ namespace NumSharp
         ///     (a 2-tuple) or <paramref name="where"/> is supplied the op composes the two validated
         ///     single-output ufuncs; otherwise it runs the fused kernel.
         /// </summary>
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.DivMod))]
         public abstract (NDArray Quotient, NDArray Remainder) DivMod(NDArray lhs, NDArray rhs, DType dtype = null, (NDArray Quotient, NDArray Remainder) @out = default, NDArray where = null);
 
         // Element-wise min/max ufuncs (np.maximum / np.minimum / np.fmax / np.fmin).
@@ -177,8 +178,10 @@ namespace NumSharp
         /// <exception cref="InvalidOperationException">A 0-d operand.</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> is a class without storage yet.</exception>
         /// <exception cref="NullReferenceException"><paramref name="x2"/> is null.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.matmul</c> keeps the matrix boundary and
-        ///     calls this; <see cref="Matmul(NDArray, NDArray)"/> stays the product kernel the call ends in.</remarks>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.matmul</c> calls this (the ufunc
+        ///     mechanism answers for a subclass operand); <see cref="Matmul(NDArray, NDArray)"/> stays the product kernel
+        ///     the call ends in.</remarks>
+        [Ufunc]
         public abstract NDArray Matmul(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool? keepdims,
             DType dtype, string casting, char order);
 
@@ -219,8 +222,9 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Loop axes that do not broadcast.</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> is a class without storage yet.</exception>
         /// <exception cref="NullReferenceException"><paramref name="x2"/> is null.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.vecdot</c> keeps the matrix boundary and
-        ///     calls this.</remarks>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.vecdot</c> calls this (the ufunc
+        ///     mechanism answers for a subclass operand).</remarks>
+        [Ufunc]
         public abstract NDArray Vecdot(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
             DType dtype, string casting, char order);
 
@@ -261,8 +265,9 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Loop axes that do not broadcast (the product's text).</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> is a class without storage yet.</exception>
         /// <exception cref="NullReferenceException"><paramref name="x2"/> is null.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.matvec</c> keeps the matrix boundary and
-        ///     calls this.</remarks>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.matvec</c> calls this (the ufunc
+        ///     mechanism answers for a subclass operand).</remarks>
+        [Ufunc]
         public abstract NDArray Matvec(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
             DType dtype, string casting, char order);
 
@@ -304,8 +309,9 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Loop axes that do not broadcast (the product's text).</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> is a class without storage yet.</exception>
         /// <exception cref="NullReferenceException"><paramref name="x2"/> is null.</exception>
-        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.vecmat</c> keeps the matrix boundary and
-        ///     calls this.</remarks>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.vecmat</c> calls this (the ufunc
+        ///     mechanism answers for a subclass operand).</remarks>
+        [Ufunc]
         public abstract NDArray Vecmat(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
             DType dtype, string casting, char order);
 
@@ -376,12 +382,14 @@ namespace NumSharp
         // int/bool/char promote to the narrowest float per width — bool/i8/u8->f16, i16/u16/char->f32,
         // i32+->f64; complex has no loop); outFrac/outIntegral are the two ufunc outputs (either may be
         // null to auto-allocate); where masks BOTH outputs.
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Modf))]
         public abstract (NDArray Fractional, NDArray Integral) ModF(NDArray nd, DType dtype = null,
             NDArray outFrac = null, NDArray outIntegral = null, NDArray where = null);
         // np.frexp — decompose x into (mantissa in [0.5,1), int32 exponent) with x == mantissa * 2^exponent
         // (the two-output inverse of Ldexp). The mantissa carries x's float tier; the exponent is always int32.
         // out1/out2 are the ufunc's two output operands (NumPy's positional out1,out2 / out=(o1,o2)); where= masks
         // both (masked-off out slots keep prior contents). Each out takes a same_kind cast from its loop dtype.
+        [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Frexp))]
         public abstract (NDArray Mantissa, NDArray Exponent) Frexp(NDArray x, NDArray out1 = null, NDArray out2 = null, NDArray where = null);
         // np.ldexp — compose x1 * 2^x2 (the inverse of Frexp). x1 is the float mantissa (int/bool promote to a
         // float tier), x2 an INTEGER exponent that does NOT widen x1's dtype; the result is x1's float tier.
@@ -465,7 +473,7 @@ namespace NumSharp
         ///     <paramref name="out"/> that does not broadcast with the operands (NumPy's ValueError text).</exception>
         /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
         /// <remarks>NumPy's loop is C (<c>@TYPE@_logical_and</c>), so the call is an engine member, as every ufunc's is; the
-        ///     numpy.matrix and numpy.char.chararray boundaries stay with <c>np.logical_and</c>.</remarks>
+        ///     numpy.matrix and numpy.char.chararray answers stay with <c>np.logical_and</c>'s woven subclass path.</remarks>
         public abstract NDArray LogicalAnd(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
 
         /// <summary>

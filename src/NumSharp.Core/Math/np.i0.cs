@@ -111,7 +111,6 @@ namespace NumSharp
         public static NDArray i0(NDArray x)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return x.TensorEngine.I0(x);
         }
 

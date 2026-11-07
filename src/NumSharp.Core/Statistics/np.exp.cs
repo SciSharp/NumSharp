@@ -13,9 +13,7 @@ namespace NumSharp
         /// <returns>The natural logarithm of x, element-wise. This is a scalar NDArray.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        public static NDArray exp(NDArray a) => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped(a, static s => exp(s))
-            : a.TensorEngine.Exp(a);
+        public static NDArray exp(NDArray a) => a.TensorEngine.Exp(a);
 
         /// <summary>
         ///     Calculate the exponential of all elements in the input array.
@@ -28,9 +26,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray exp(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => exp(s.a, s.@out, s.where, s.dtype), @out)
-            : a.TensorEngine.Exp(a, dtype, @out, where);
+            => a.TensorEngine.Exp(a, dtype, @out, where);
 
         /// <summary>
         ///     Mirrors NumPy's ufunc signature: <c>exp2(x, /, out=None, *, where=True, dtype=None)</c>.
@@ -42,9 +38,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp2.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray exp2(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => exp2(s.a, s.@out, s.where, s.dtype), @out)
-            : a.TensorEngine.Exp2(a, dtype, @out, where);
+            => a.TensorEngine.Exp2(a, dtype, @out, where);
 
         /// <summary>
         ///     Calculate 2**p for all p in the input array.
@@ -53,9 +47,7 @@ namespace NumSharp
         /// <returns>Element-wise 2 to the power x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp2.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        public static NDArray exp2(NDArray a) => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped(a, static s => exp2(s))
-            : a.TensorEngine.Exp2(a);        
+        public static NDArray exp2(NDArray a) => a.TensorEngine.Exp2(a);        
 
         /// <summary>
         ///     Mirrors NumPy's ufunc signature: <c>expm1(x, /, out=None, *, where=True, dtype=None)</c>.
@@ -67,9 +59,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.expm1.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray expm1(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped((a, @out, where, dtype), static s => expm1(s.a, s.@out, s.where, s.dtype), @out)
-            : a.TensorEngine.Expm1(a, dtype, @out, where);
+            => a.TensorEngine.Expm1(a, dtype, @out, where);
 
         /// <summary>
         ///     Calculate exp(x) - 1 for all elements in the array.
@@ -78,8 +68,6 @@ namespace NumSharp
         /// <returns>Element-wise exponential minus one: out = exp(x) - 1. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.expm1.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        public static NDArray expm1(NDArray a) => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
-            ? NDMatrixBoundary.Wrapped(a, static s => expm1(s))
-            : a.TensorEngine.Expm1(a);
+        public static NDArray expm1(NDArray a) => a.TensorEngine.Expm1(a);
     }
 }

@@ -40,12 +40,6 @@ namespace NumSharp
         public static NDArray sort_complex(NDArray a)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Plain(a, static s => sort_complex(s));
-            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
-            if (NDCharArrayBoundary.Sees(a))
-                return NDCharArrayBoundary.Plain(a, static s => sort_complex(s));
             return a.TensorEngine.SortComplex(a);
         }
     }

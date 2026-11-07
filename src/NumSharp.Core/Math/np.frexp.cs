@@ -40,8 +40,6 @@ namespace NumSharp
             // The engine lays fresh outputs out as NumPy's ufunc does (the K order of the input, parity QA-36: F stays
             // F, a permuted input keeps its memory order) and returns a supplied out1/out2 itself (a caller's out array
             // owns its own layout).
-            => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: both outputs come back as matrices, as from NumPy
-                ? NDMatrixBoundary.WrappedPair((x, out1, out2, where), static s => frexp(s.x, s.out1, s.out2, s.where), out1, out2)
-                : x.TensorEngine.Frexp(x, out1, out2, where);
+            => x.TensorEngine.Frexp(x, out1, out2, where);
     }
 }

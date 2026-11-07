@@ -44,6 +44,8 @@ namespace NumSharp
         ///     whose NA object is neither a string nor NaN-like (NumPy's <c>Cannot compare null that is not a nan-like
         ///     value</c>, raised after the lines before it were sorted).</exception>
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        [NewSubtype("this")]
+        [AsArrayFor(typeof(NDCharArray))]
         public NDArray argsort(int? axis = -1, string kind = null, object order = null, bool? stable = null)
             => TensorEngine.ArgSort(this, axis, kind, order, stable);
     }

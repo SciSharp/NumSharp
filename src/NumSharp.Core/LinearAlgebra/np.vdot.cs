@@ -29,10 +29,6 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         public static NDArray vdot(NDArray a, NDArray b)
-            => NDMatrixBoundary.Sees(a, b)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
-            ? NDMatrixBoundary.Plain((a, b), static s => vdot(s.a, s.b))
-            : NDCharArrayBoundary.Sees(a, b)   // a numpy.char.chararray operand too: asarray drops either class
-            ? NDCharArrayBoundary.Plain((a, b), static s => vdot(s.a, s.b))
-            : a.TensorEngine.Vdot(a, b);
+            => a.TensorEngine.Vdot(a, b);
     }
 }
