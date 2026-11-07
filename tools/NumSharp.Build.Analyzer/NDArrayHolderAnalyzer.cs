@@ -70,21 +70,40 @@ namespace NumSharp.Build.Analyzer
         public override void Initialize(AnalysisContext context)
         {
             context.EnableConcurrentExecution();
-            context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+            // Generated code is never analyzed (no Analyze flag), and a diagnostic that lands in it (a member declared in
+            // a generated part of a partial type) is dropped by CompilationFacts.Generated before it is reported:
+            // ReportDiagnostics only switches off the driver's own per-diagnostic test, whose first use per tree rescans
+            // the tree on every thread that reports into it (GeneratedCodeFilter).
+            context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.ReportDiagnostics);
             context.RegisterCompilationStartAction(start =>
             {
-                var known = KnownTypes.Resolve(start.Compilation);
-                if (known == null || known.NDArray == null)
+                // The facts are shared with the leak and target analyzers (one name index, one ownership model).
+                var facts = CompilationFacts.Get(start.Compilation);
+                if (facts == null)
                     return; // NumSharp not referenced — nothing to analyze
 
-                var model = new OwnershipModel(known, start.Compilation);
-                start.RegisterSymbolStartAction(sc => AnalyzeType(sc, model), SymbolKind.NamedType);
+                var model = facts.Model;
+                var generated = facts.Generated;
+                start.RegisterSymbolStartAction(sc => AnalyzeType(sc, model, generated), SymbolKind.NamedType);
             });
         }
 
-        private static void AnalyzeType(SymbolStartAnalysisContext sc, OwnershipModel model)
+        /// <summary>
+        ///     Analyzes one named type: its holding members, then NDW016 (not disposable) or the NDW017 Dispose-path
+        ///     scan. A type whose declaration the name index proves cannot store NDArrays is answered before any binding.
+        /// </summary>
+        /// <param name="sc">The symbol-start context of the type.</param>
+        /// <param name="model">The compilation's ownership model.</param>
+        /// <param name="generated">The compilation's generated-code test, asked before every report.</param>
+        private static void AnalyzeType(SymbolStartAnalysisContext sc, OwnershipModel model, GeneratedCodeFilter generated)
         {
             var type = (INamedTypeSymbol)sc.Symbol;
+
+            // Pay-for-play: a type that stores nothing reaching an array has no holder member, and asking the model
+            // would bind every type its members reach - in a project whose entity model never names NDArray, all of
+            // them. The name index answers from syntax; the full rules below run only for a type that may hold.
+            if (!model.SourceTypeMayHold(type))
+                return;
             if (!IsCandidate(type, model))
                 return;
 
@@ -94,11 +113,11 @@ namespace NumSharp.Build.Analyzer
 
             if (!model.IsDisposable(type))
             {
-                sc.RegisterSymbolEndAction(ec => ReportNotDisposable(ec, type, holders));
+                sc.RegisterSymbolEndAction(ec => ReportNotDisposable(ec, type, holders, generated));
                 return;
             }
 
-            var scan = new DisposeScan(type, holders, model);
+            var scan = new DisposeScan(type, holders, model, generated);
             sc.RegisterOperationBlockAction(scan.Collect);
             sc.RegisterSymbolEndAction(scan.Report);
         }
@@ -121,14 +140,24 @@ namespace NumSharp.Build.Analyzer
             return true;
         }
 
-        private static void ReportNotDisposable(SymbolAnalysisContext ec, INamedTypeSymbol type, List<OwnershipModel.HolderMember> holders)
+        /// <summary>Reports NDW016 on a type that holds NDArrays but is not disposable, unless its location is generated code.</summary>
+        /// <param name="ec">The type's symbol-end context.</param>
+        /// <param name="type">The type.</param>
+        /// <param name="holders">Its holding members (non-empty), named in the message.</param>
+        /// <param name="generated">The compilation's generated-code test (the driver's is off for this analyzer).</param>
+        private static void ReportNotDisposable(SymbolAnalysisContext ec, INamedTypeSymbol type, List<OwnershipModel.HolderMember> holders,
+            GeneratedCodeFilter generated)
         {
             string tail = type.IsRefLikeType
                 ? " (for a ref struct, a public void Dispose() is the pattern)"
                 : type.TypeKind == TypeKind.Struct
                     ? ", implement INDArrayCarrier if this struct is a transient result a scope yields through"
                     : "";
-            ec.ReportDiagnostic(Diagnostic.Create(Nw016, Loc(type), Display(type), FormatMembers(holders), tail));
+            var location = Loc(type);
+            // The first declaration of a partial type can sit in a generated file; the driver would drop the report.
+            if (generated.IsInGeneratedCode(location, ec.Options, ec.CancellationToken))
+                return;
+            ec.ReportDiagnostic(Diagnostic.Create(Nw016, location, Display(type), FormatMembers(holders), tail));
         }
 
         /// <summary><c>'a'</c> / <c>'a' and 'b'</c> / <c>'a', 'b' and 'c'</c> / <c>'a', 'b', 'c' and 2 more</c>.</summary>
@@ -178,14 +207,24 @@ namespace NumSharp.Build.Analyzer
             private readonly List<OwnershipModel.HolderMember> _holders;
             private readonly HashSet<ISymbol> _holderSymbols;
             private readonly OwnershipModel _model;
+
+            // The compilation's copy of the driver's generated-code test, asked before every NDW017.
+            private readonly GeneratedCodeFilter _generated;
             private readonly ConcurrentDictionary<IMethodSymbol, BodyFacts> _facts =
                 new ConcurrentDictionary<IMethodSymbol, BodyFacts>(SymbolEqualityComparer.Default);
 
-            public DisposeScan(INamedTypeSymbol type, List<OwnershipModel.HolderMember> holders, OwnershipModel model)
+            /// <summary>Starts the NDW017 scan of one disposable type.</summary>
+            /// <param name="type">The disposable type.</param>
+            /// <param name="holders">Its holding members (non-empty).</param>
+            /// <param name="model">The compilation's ownership model.</param>
+            /// <param name="generated">The compilation's generated-code test (the driver's is off for this analyzer).</param>
+            public DisposeScan(INamedTypeSymbol type, List<OwnershipModel.HolderMember> holders, OwnershipModel model,
+                GeneratedCodeFilter generated)
             {
                 _type = type;
                 _holders = holders;
                 _model = model;
+                _generated = generated;
                 _holderSymbols = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
                 foreach (var h in holders)
                     _holderSymbols.Add(h.Symbol);
@@ -201,6 +240,12 @@ namespace NumSharp.Build.Analyzer
                 _facts.AddOrUpdate(m.OriginalDefinition, facts, (_, old) => old.Merge(facts));
             }
 
+            /// <summary>
+            ///     At the type's symbol end: follows the Dispose roots through the same-type calls the bodies recorded and
+            ///     reports NDW017 for every holding member no reachable body disposes (unless the member is declared in
+            ///     generated code, where the driver would have dropped the report).
+            /// </summary>
+            /// <param name="ec">The type's symbol-end context.</param>
             public void Report(SymbolAnalysisContext ec)
             {
                 var roots = new List<IMethodSymbol>();
@@ -231,8 +276,11 @@ namespace NumSharp.Build.Analyzer
                 {
                     if (disposed.Contains(h.Symbol))
                         continue;
+                    var location = Loc(h.Symbol);
+                    if (_generated.IsInGeneratedCode(location, ec.Options, ec.CancellationToken))
+                        continue;
                     string hint = roots.Count == 0 ? InheritedDisposeHint() : NonDisposableHolderHint(h);
-                    ec.ReportDiagnostic(Diagnostic.Create(Nw017, Loc(h.Symbol), typeName, contract, h.Name, h.Kind, hint));
+                    ec.ReportDiagnostic(Diagnostic.Create(Nw017, location, typeName, contract, h.Name, h.Kind, hint));
                 }
             }
 

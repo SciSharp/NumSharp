@@ -26,8 +26,18 @@ namespace NumSharp.Build;
 /// </summary>
 internal static class Program
 {
+    /// <summary>The tool's entry point: parses the command line, weaves the assembly in place, and reports the outcome.</summary>
+    /// <param name="args">The assembly path, then the <c>--snk</c>, <c>--refs</c> and <c>--verbose</c> options (see <see cref="Usage"/>).</param>
+    /// <returns>
+    ///     0 on success (woven, or nothing to weave); 1 when the weave reported build errors (NDW0xx on stderr); 2 on a
+    ///     usage problem, a missing input file, or an unhandled failure (NDW099).
+    /// </returns>
     private static int Main(string[] args)
     {
+        // First, before any work: a windowless build step is otherwise scheduled as background work on a hybrid CPU's
+        // efficiency cores, which doubled the weave (see ToolQualityOfService).
+        ToolQualityOfService.OptOutOfEfficiencyMode();
+
         string assemblyPath = null;
         string snkPath = null;
         string refsPath = null;

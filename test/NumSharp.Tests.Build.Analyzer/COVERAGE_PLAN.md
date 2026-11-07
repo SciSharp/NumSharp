@@ -86,6 +86,23 @@ and configuration space — with each new case landing as a fixture tag + an in-
   local functions, async lambdas, tuples, owning disposables, constrained generics, every member body
   kind (accessors, operators, constructors, finalizers, indexers, expression bodies); `nameof`/`typeof`/
   `default` draw nothing; one leak among hundreds of methods, and concurrent files over shared types.
+- **The name index's soundness** (`NameIndexSoundnessTests`, 9): an ORACLE over every fixture and a
+  corpus of index-specific shapes - a body with any NDArray-holding operation or local (judged by an
+  ownership model WITHOUT the index) must pass the body gate, a type with a holding member the holder
+  gate, a method that inherits a scope or an `[NDScopedExit]` the inheritance gate - plus the routes
+  that reach a body naming no NumSharp type: an alias, `using static`, a referenced library's extension
+  method, a user operator, a primary-constructor parameter, a partial type's other part, a nine-element
+  tuple; LINQ calls sharing a name with NumSharp's draw nothing.
+- **The analyzers' generated-code test** (`GeneratedCodeFilterTests`, 9): a DIFFERENTIAL against
+  Roslyn's driver - a probe analyzer that keeps the driver's own test reports at every marked
+  identifier of a corpus covering every rule (generated file names, auto-generated headers, the
+  `generated_code` option both ways, `#line hidden` and the lines before the first directive,
+  `[GeneratedCode]` on every declaration kind, partial declarations, aliases, Unicode escapes, an
+  assembly-level attribute), and `GeneratedCodeFilter` must suppress exactly the marks the driver
+  suppressed; end-to-end, NDW012 / NDW016 / NDW017 stay silent in generated code.
+- **The weaver's accessor prefill** (`CecilSemanticsPrefillTests`, 5): every accessor shape C# emits,
+  and NumSharp's own assembly, read through `CecilSemanticsPrefill` give Cecil's own answers for every
+  property, event and method, and the written bytes are identical.
 
 **Not yet covered:** almost all of the control-flow, escape-nuance, scope-nuance, type-system, and
 configuration space below.

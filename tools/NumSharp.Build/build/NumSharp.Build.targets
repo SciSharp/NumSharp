@@ -46,6 +46,12 @@
                                        weaver) — set it in the project file body, or (as
                                        NumSharp.Core does) from a target that runs before
                                        NDScopeWeave: the path is expanded at execution.
+         $(NumSharpBuildToolEnvironment)  extra environment variables for the tool process
+                                       (Exec's EnvironmentVariables: NAME=value;NAME=value).
+                                       NumSharp.Core sets the server GC for its own,
+                                       multi-megabyte self-weave (about a quarter faster);
+                                       a consumer's assembly is small enough that the
+                                       default workstation GC starts faster - leave it empty.
        ================================================================================== -->
   <!-- Forward slashes + NormalizePath: the path reaches Exec's SHELL (cmd on Windows, sh on
        Linux/macOS), and a raw backslash path breaks the Unix side — same convention as the
@@ -183,8 +189,10 @@
       <_NDScopeWeaveSnkArg Condition="'$(SignAssembly)' == 'true' and '$(DelaySign)' != 'true' and '$(PublicSign)' != 'true' and '$(KeyOriginatorFile)' != '' and Exists('$(KeyOriginatorFile)')">--snk "$(KeyOriginatorFile)"</_NDScopeWeaveSnkArg>
     </PropertyGroup>
 
+    <!-- $(NumSharpBuildToolEnvironment) reaches only the tool process (empty by default: the runtime's own defaults). -->
     <Exec Condition="'$(_NDScopeWeaveHasUsage)' == 'true'"
-          Command="&quot;$(NumSharpBuildDotnetHost)&quot; exec &quot;$(NumSharpBuildToolDll)&quot; &quot;@(IntermediateAssembly)&quot; --refs &quot;$(IntermediateOutputPath)NDScopeWeave.refs.rsp&quot; $(_NDScopeWeaveSnkArg)" />
+          Command="&quot;$(NumSharpBuildDotnetHost)&quot; exec &quot;$(NumSharpBuildToolDll)&quot; &quot;@(IntermediateAssembly)&quot; --refs &quot;$(IntermediateOutputPath)NDScopeWeave.refs.rsp&quot; $(_NDScopeWeaveSnkArg)"
+          EnvironmentVariables="$(NumSharpBuildToolEnvironment)" />
 
     <!-- Opt-in IL verification of the woven output (dotnet tool install -g dotnet-ilverify). -->
     <ItemGroup Condition="'$(NDScopeWeaveILVerify)' == 'true'">

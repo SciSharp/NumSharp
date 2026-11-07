@@ -82,8 +82,21 @@ namespace NumSharp.Build.Analyzer
         ///     computes it first stores the one answer every other callback reads. Lives here because the
         ///     model is the analyzer's per-compilation state.
         /// </summary>
+        /// <remarks>
+        ///     Keyed by SYMBOL EQUALITY, not by reference: Roslyn constructs a fresh instance of a constructed generic
+        ///     type (<c>List&lt;Entity5&gt;</c>, <c>Dictionary&lt;int, T&gt;</c>) at nearly every use, so a reference-keyed
+        ///     memo misses on each and re-runs the classification (measured: a project's NDW012 time grew from 1.8 s to
+        ///     12 s). The structural hash is cheap: Roslyn hashes a named type by its definition's identity, so equal
+        ///     instances meet in one bucket without walking their type arguments.
+        /// </remarks>
         internal ConcurrentDictionary<ITypeSymbol, bool> OwnedValueTypes { get; } =
             new ConcurrentDictionary<ITypeSymbol, bool>(SymbolEqualityComparer.Default);
+
+        /// <summary>
+        ///     The compilation's name index, or null for a model that prunes nothing. A source type the index proves
+        ///     cannot store NDArrays is answered without binding its members (see <see cref="Expand"/>).
+        /// </summary>
+        private readonly NumSharpNameIndex _names;
 
         /// <summary>
         ///     Serializes the walks that decide new components. Two concurrent walks over overlapping
@@ -113,13 +126,29 @@ namespace NumSharp.Build.Analyzer
             "System.Progress`1",
             "System.WeakReference`1");
 
-        /// <summary>Creates the model for one compilation; nothing is resolved until the first question.</summary>
+        /// <summary>
+        ///     Creates the model for one compilation with its own <see cref="NumSharpNameIndex"/> (built here, from the
+        ///     compilation's syntax); nothing else is resolved until the first question. The analyzers share one model per
+        ///     compilation through <see cref="CompilationFacts"/>; this form serves a caller that has no facts.
+        /// </summary>
         /// <param name="k">The NumSharp symbols the compilation resolved (never null: the analyzers bail out before creating a model when NumSharp is not referenced).</param>
         /// <param name="compilation">The compilation whose own assembly counts as able to name NDArray.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="k"/> or <paramref name="compilation"/> is null.</exception>
         public OwnershipModel(KnownTypes k, Compilation compilation)
+            : this(k, compilation, new NumSharpNameIndex(compilation, k))
         {
-            _k = k;
-            _sourceAssembly = compilation.Assembly;
+        }
+
+        /// <summary>Creates the model for one compilation over an existing name index.</summary>
+        /// <param name="k">The NumSharp symbols the compilation resolved.</param>
+        /// <param name="compilation">The compilation whose own assembly counts as able to name NDArray.</param>
+        /// <param name="names">The compilation's name index; null makes a model that binds every type it reaches (no pruning), for a comparison against the pruned answers.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="k"/> or <paramref name="compilation"/> is null.</exception>
+        public OwnershipModel(KnownTypes k, Compilation compilation, NumSharpNameIndex names)
+        {
+            _k = k ?? throw new ArgumentNullException(nameof(k));
+            _sourceAssembly = (compilation ?? throw new ArgumentNullException(nameof(compilation))).Assembly;
+            _names = names;
         }
 
         /// <summary>The NumSharp symbols this model classifies against.</summary>
@@ -279,7 +308,35 @@ namespace NumSharp.Build.Analyzer
         /// <summary>Does a value of this type (transitively) hold an NDArray somebody must dispose?</summary>
         /// <param name="t">The type asked about; null answers false.</param>
         /// <returns>True when a value of <paramref name="t"/> can contain an NDArray it owns.</returns>
-        public bool HoldsNDArrays(ITypeSymbol t) => t != null && ComponentOf(t).Holds;
+        /// <remarks>
+        ///     A non-generic source type that the name index proves cannot store NDArrays is answered here, without the
+        ///     graph walk or its lock: the leak analyzer asks this of every disposable type its bodies touch.
+        /// </remarks>
+        public bool HoldsNDArrays(ITypeSymbol t)
+        {
+            if (t == null)
+                return false;
+            if (_names != null && t is INamedTypeSymbol named && !IsGenericOrNestedInGeneric(named) && IsInSource(named) &&
+                !_names.SourceTypeMayHold(named) && !TypeHelpers.IsNDArrayLike(named, _k))
+                return false;
+            return ComponentOf(t).Holds;
+        }
+
+        /// <summary>Whether <paramref name="named"/> or a type containing it is generic (a constructed instance can then hold through its type arguments).</summary>
+        /// <param name="named">The type.</param>
+        /// <returns>True for a generic type or a type nested in one.</returns>
+        private static bool IsGenericOrNestedInGeneric(INamedTypeSymbol named)
+        {
+            for (var g = named; g != null; g = g.ContainingType)
+                if (g.IsGenericType)
+                    return true;
+            return false;
+        }
+
+        /// <summary>The name index's verdict for a source type (true when no index prunes), for <see cref="NDArrayHolderAnalyzer"/>'s per-type gate.</summary>
+        /// <param name="type">A source type.</param>
+        /// <returns>False when the type's declaration cannot store NDArrays.</returns>
+        public bool SourceTypeMayHold(INamedTypeSymbol type) => _names == null || _names.SourceTypeMayHold(type);
 
         /// <summary>
         ///     The decided component of <paramref name="t"/>, deciding it (and every component it reaches)
@@ -611,6 +668,14 @@ namespace NumSharp.Build.Analyzer
                 if (g.IsGenericType)
                     successors.AddRange(g.TypeArguments);
 
+            // Pruned: a SOURCE type whose declaration the name index proves cannot store NDArrays (no storage,
+            // base or constraint of it names anything that holds) reaches arrays only through the type arguments
+            // just added - a member typed by a type parameter is that argument once the type is constructed. So its
+            // members are never bound, which is the cost the index exists to avoid: a model of thousands of entity
+            // types that store no array is answered by syntax.
+            if (_names != null && IsInSource(named) && !_names.SourceTypeMayHold(named))
+                return holdsItself;
+
             // A declared class/struct: its own storing members, then its base. Only an assembly that
             // can name NDArray (NumSharp, this compilation, or one referencing NumSharp) can hold one;
             // a BCL or unrelated type is answered without a member scan.
@@ -868,7 +933,9 @@ namespace NumSharp.Build.Analyzer
                 return false;
             if (IsDisposableInterface(t))
                 return true;
-            foreach (var i in t.AllInterfaces)
+            // IDisposable / IAsyncDisposable are not generic: the definition's interface set answers for every
+            // constructed instance without Roslyn substituting the whole set again for each one.
+            foreach (var i in TypeHelpers.InterfacesForNonGenericTest(t))
                 if (IsDisposableInterface(i))
                     return true;
             return t.IsRefLikeType && HasPatternDispose(t);
@@ -920,7 +987,8 @@ namespace NumSharp.Build.Analyzer
                 return false;
             if (Eq(t, _k.INDArrayCarrier))
                 return true;
-            foreach (var i in t.AllInterfaces)
+            // INDArrayCarrier is not generic: the definition's set answers for every constructed instance.
+            foreach (var i in TypeHelpers.InterfacesForNonGenericTest(t))
                 if (Eq(i, _k.INDArrayCarrier))
                     return true;
             return false;

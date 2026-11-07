@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 
 namespace NumSharp.Build.Analyzer
@@ -233,11 +234,31 @@ namespace NumSharp.Build.Analyzer
         {
             if (k.INDArrayCarrier == null || !t.IsValueType)
                 return false;
-            foreach (var i in t.AllInterfaces)
+            foreach (var i in InterfacesForNonGenericTest(t))
                 if (Eq(i, k.INDArrayCarrier))
                     return true;
             return false;
         }
+
+        /// <summary>
+        ///     The interfaces to scan when asking whether a type implements a NON-GENERIC interface
+        ///     (<c>INDArrayCarrier</c>, <c>IDisposable</c>, <c>IAsyncDisposable</c>): a named type's ORIGINAL
+        ///     DEFINITION's <c>AllInterfaces</c>, any other type's own. Never use it to test a generic interface:
+        ///     the definition's <c>IEquatable&lt;T&gt;</c> is not the constructed type's <c>IEquatable&lt;int&gt;</c>.
+        /// </summary>
+        /// <remarks>
+        ///     A constructed generic type implements a non-generic interface exactly when its definition does
+        ///     (substitution replaces type arguments, and a non-generic interface has none), so the answer is the same;
+        ///     the cost is not. Roslyn builds a constructed type's <c>AllInterfaces</c> by substituting its
+        ///     definition's whole interface set, once per INSTANCE, and it creates a fresh instance of one constructed
+        ///     type (<c>List&lt;Order&gt;</c>) at nearly every use: profiled, that substitution was half of a project's
+        ///     leak-analysis time. The definition's set is computed once and cached by its symbol. A type parameter keeps
+        ///     its own set, which comes from its constraints (substituted ones included); an array's is its own too.
+        /// </remarks>
+        /// <param name="t">A non-null type.</param>
+        /// <returns>The interface set to scan for a non-generic interface.</returns>
+        internal static ImmutableArray<INamedTypeSymbol> InterfacesForNonGenericTest(ITypeSymbol t)
+            => t is INamedTypeSymbol named ? named.OriginalDefinition.AllInterfaces : t.AllInterfaces;
 
         private static bool Eq(ISymbol a, ISymbol b)
             => b != null && SymbolEqualityComparer.Default.Equals(a, b);
