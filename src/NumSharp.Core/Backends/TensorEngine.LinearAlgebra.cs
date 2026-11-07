@@ -162,7 +162,9 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">The vectors' lengths differ (np.vdot's reshape has already refused
         ///     that: a direct call only).</exception>
         /// <exception cref="DTypePromotionError">The operands have no common dtype.</exception>
-        internal virtual NDArray VdotFunction1D(NDArray left, NDArray right)
+        /// <remarks>An engine overrides it to run its own conjugating dot (NumPy's <c>zdotc</c>) instead of the conjugated
+        ///     copy; np.vdot reaches it after flattening and checking its operands.</remarks>
+        public virtual NDArray VdotFunction1D(NDArray left, NDArray right)
             => DotFunction1D(LinAlgHelper.Conjugate(left), right);
 
         /// <summary>
@@ -176,7 +178,9 @@ namespace NumSharp
         /// <param name="stride">The flattened view's element stride (not 1).</param>
         /// <param name="n">The number of elements.</param>
         /// <returns>True to read the view in place (NumPy's bits), false to copy it first.</returns>
-        internal virtual bool VdotReadsFirstInPlace(NPTypeCode dtype, long stride, long n) => true;
+        /// <remarks>Footgun: answering false gives up NumPy's exact bits for that operand - the result is the dot function's
+        ///     over the copy, which can differ from NumPy's in the last bits.</remarks>
+        public virtual bool VdotReadsFirstInPlace(NPTypeCode dtype, long stride, long n) => true;
 
         /// <summary>
         ///     The dtype's dot function over two 1-D operands of one length: np.vdot's last step (NumPy's
@@ -188,7 +192,12 @@ namespace NumSharp
         /// <param name="left">The first vector (conjugated by np.vdot when complex).</param>
         /// <param name="right">The second vector, the same length.</param>
         /// <returns>A fresh 0-d result.</returns>
-        internal virtual NDArray DotFunction1D(NDArray left, NDArray right) => Dot(left, right);
+        /// <exception cref="IncorrectShapeException">The vectors' lengths differ (NumPy's <c>shapes (…) and (…) not
+        ///     aligned</c> text).</exception>
+        /// <exception cref="DTypePromotionError">The operands have no common dtype.</exception>
+        /// <remarks>An engine overrides it to run its own 1-D dot (a BLAS <c>dot</c>); the default's np.dot route stays correct
+        ///     for every dtype, so overriding is only for speed or NumPy's exact summation order.</remarks>
+        public virtual NDArray DotFunction1D(NDArray left, NDArray right) => Dot(left, right);
 
         /// <summary>
         ///     The <c>np.vecdot</c> gufunc <c>(n),(n)->()</c> — <paramref name="x1"/> conjugated when

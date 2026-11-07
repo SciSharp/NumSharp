@@ -79,8 +79,16 @@ namespace NumSharp.Backends.Strings
     ///     cells only while such a block exists. Measured (pinned) on <c>np.copyto(dst, b)</c> of 100,000 texts over a held
     ///     array: 62.2 → 39.6 ns a text at 20–60 bytes and 189 → 89 at 300–500 (NumPy 64.1 and 154).
     ///     </para>
+    ///     <para>
+    ///     <b>Public surface.</b> NumPy's documented C API for <c>StringDType</c> cells is public here under its names -
+    ///     <see cref="acquire_allocator"/>, <see cref="release_allocator"/>, <see cref="load"/>, <see cref="pack"/> and
+    ///     <see cref="pack_null"/> - so a bridge package can read and write an array's texts without a copy, as NumPy's C
+    ///     extensions do. Reach an array's allocator through <see cref="UnmanagedStorage.VStringSlice"/>
+    ///     (<c>.Allocator</c>); every other member stays internal, as NumPy keeps its counterparts private. Footguns: hold
+    ///     the lock across every call, and touch only cells of the buffer the allocator belongs to.
+    ///     </para>
     /// </remarks>
-    internal sealed unsafe class VStringAllocator
+    public sealed unsafe class VStringAllocator
     {
         // ------------------------------------------------------------------------------------------------------------
         // the packed cell (static_string.c, NPY_BYTE_ORDER == NPY_LITTLE_ENDIAN, sizeof(size_t) == 8)
@@ -92,34 +100,34 @@ namespace NumSharp.Backends.Strings
         ///     is the same constant as <see cref="VStringDTypeMeta.SIZEOF_NPY_PACKED_STATIC_STRING"/>; the dtype oracle
         ///     test holds both to NumPy's value, so the two cannot drift apart.
         /// </summary>
-        internal const int SIZEOF_NPY_PACKED_STATIC_STRING = 16;
+        public const int SIZEOF_NPY_PACKED_STATIC_STRING = 16;
 
         /// <summary><c>NPY_STRING_MISSING</c>: the cell is an NA value (its other flags keep the old allocation's metadata).</summary>
-        internal const byte NPY_STRING_MISSING = 0x80;
+        public const byte NPY_STRING_MISSING = 0x80;
 
         /// <summary><c>NPY_STRING_INITIALIZED</c>: the element has been written at least once.</summary>
-        internal const byte NPY_STRING_INITIALIZED = 0x40;
+        public const byte NPY_STRING_INITIALIZED = 0x40;
 
         /// <summary><c>NPY_STRING_OUTSIDE_ARENA</c>: the text is in the cell (short) or on the heap (with <see cref="NPY_STRING_LONG"/>).</summary>
-        internal const byte NPY_STRING_OUTSIDE_ARENA = 0x20;
+        public const byte NPY_STRING_OUTSIDE_ARENA = 0x20;
 
         /// <summary><c>NPY_STRING_LONG</c>: an arena string longer than 255 bytes (eight-byte prefix), or a heap string.</summary>
-        internal const byte NPY_STRING_LONG = 0x10;
+        public const byte NPY_STRING_LONG = 0x10;
 
         /// <summary><c>NPY_STRING_FLAG_MASK</c>: the high nibble of byte 15.</summary>
-        internal const byte NPY_STRING_FLAG_MASK = 0xF0;
+        public const byte NPY_STRING_FLAG_MASK = 0xF0;
 
         /// <summary><c>NPY_SHORT_STRING_SIZE_MASK</c>: the low nibble of byte 15, a short string's length.</summary>
-        internal const byte NPY_SHORT_STRING_SIZE_MASK = 0x0F;
+        public const byte NPY_SHORT_STRING_SIZE_MASK = 0x0F;
 
         /// <summary><c>NPY_SHORT_STRING_MAX_SIZE</c>: the longest text a cell holds itself (15 bytes).</summary>
-        internal const int NPY_SHORT_STRING_MAX_SIZE = SIZEOF_NPY_PACKED_STATIC_STRING - 1;
+        public const int NPY_SHORT_STRING_MAX_SIZE = SIZEOF_NPY_PACKED_STATIC_STRING - 1;
 
         /// <summary><c>NPY_MEDIUM_STRING_MAX_SIZE</c>: the longest arena string with a one-byte size prefix.</summary>
-        internal const int NPY_MEDIUM_STRING_MAX_SIZE = 0xFF;
+        public const int NPY_MEDIUM_STRING_MAX_SIZE = 0xFF;
 
         /// <summary><c>NPY_MAX_STRING_SIZE</c>: one byte of the size field is the flags, so a string has at most 2^56 − 1 bytes.</summary>
-        internal const long NPY_MAX_STRING_SIZE = (1L << 56) - 1;
+        public const long NPY_MAX_STRING_SIZE = (1L << 56) - 1;
 
         /// <summary>The mask that keeps the 56 size bits of the size field (<c>~HIGH_BYTE_MASK</c>).</summary>
         private const ulong SizeMask = 0x00FF_FFFF_FFFF_FFFFUL;
@@ -369,10 +377,18 @@ namespace NumSharp.Backends.Strings
         // ------------------------------------------------------------------------------------------------------------
 
         /// <summary>Acquires the allocator mutex (<c>NpyString_acquire_allocator</c>); pair it with exactly one <see cref="release_allocator"/>.</summary>
-        internal void acquire_allocator() => Monitor.Enter(_lock);
+        /// <remarks>
+        ///     A <see cref="Monitor"/> lock: re-entrant on the same thread, and released by the thread that took it. Footgun:
+        ///     take it in a <c>try</c> / <c>finally</c> that releases it - an exception between the two otherwise leaves every
+        ///     array over this buffer blocked for good. Taking two allocators one after the other can deadlock against a
+        ///     thread that takes them in the other order; NumPy's two-allocator form exists for that.
+        /// </remarks>
+        public void acquire_allocator() => Monitor.Enter(_lock);
 
         /// <summary>Releases the allocator mutex (<c>NpyString_release_allocator</c>).</summary>
-        internal void release_allocator() => Monitor.Exit(_lock);
+        /// <exception cref="SynchronizationLockException">The calling thread does not hold the lock (a release without its
+        ///     <see cref="acquire_allocator"/>, or from another thread).</exception>
+        public void release_allocator() => Monitor.Exit(_lock);
 
         /// <summary>
         ///     Acquires two allocators' mutexes at once (<c>NpyString_acquire_allocators</c>): the same allocator twice is locked
@@ -701,7 +717,10 @@ namespace NumSharp.Backends.Strings
         /// <param name="buf">Receives the first text byte (null for an NA value; a non-null pointer to nothing for <c>''</c>).</param>
         /// <param name="size">Receives the text size in bytes.</param>
         /// <returns>1 for an NA value, 0 for a string, -1 when an arena string's arena is missing (a corrupt cell).</returns>
-        internal int load(byte* packed, out byte* buf, out long size)
+        /// <remarks>Footgun: <paramref name="buf"/> points into this allocator's arena or heap pages - it dangles once the lock
+        ///     is released and another thread writes the cell, or once the array is disposed. Copy the bytes out before
+        ///     releasing; never write through it.</remarks>
+        public int load(byte* packed, out byte* buf, out long size)
         {
             if (isnull(packed))
             {
@@ -1260,7 +1279,9 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="s">The cell.</param>
         /// <returns>0, or -1 on failure.</returns>
-        internal int pack_null(byte* s)
+        /// <remarks>The lock must be held, and <paramref name="s"/> must be a cell of this allocator's buffer: a cell of
+        ///     another buffer has its text freed by the wrong allocator.</remarks>
+        public int pack_null(byte* s)
         {
             if (free(s) < 0)
                 return -1;
@@ -1278,7 +1299,11 @@ namespace NumSharp.Backends.Strings
         /// <param name="buf">The UTF-8 text (not inside this allocator's arena).</param>
         /// <param name="size">Its size in bytes.</param>
         /// <returns>0, or -1 on failure.</returns>
-        internal int pack(byte* s, byte* buf, long size)
+        /// <remarks>The lock must be held, and <paramref name="s"/> must be a cell of this allocator's buffer. Footgun:
+        ///     <paramref name="buf"/> must not point into this allocator's own memory (a text <see cref="load"/> returned) -
+        ///     the old text is freed before the copy, so packing a cell's own text, or a neighbour's arena text, copies freed
+        ///     bytes. Copy it out first.</remarks>
+        public int pack(byte* s, byte* buf, long size)
         {
             if (free(s) < 0)
                 return -1;

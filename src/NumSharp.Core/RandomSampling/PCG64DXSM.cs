@@ -14,7 +14,7 @@ namespace NumSharp
     ///     outputs DXSM of the PRE-iterated state and then steps with <c>state * 0xda942042e4dd58b5 + inc</c>; its
     ///     <see cref="advance"/> composes that cheap-multiplier step. The raw stream is byte-identical to NumPy's.
     /// </remarks>
-    public sealed class PCG64DXSM : BitGenerator
+    public class PCG64DXSM : BitGenerator
     {
         // The 128-bit state and increment as 64-bit limbs: the hot loops do their mod-2**128 arithmetic on ulongs
         // (Pcg128.MulAdd = Math.BigMul + two 64-bit products) because the JIT does not reliably inline UInt128's
@@ -91,14 +91,14 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        internal override string Name => "PCG64DXSM";
+        public override string Name => "PCG64DXSM";
 
         /// <inheritdoc/>
-        private protected override BitGenerator CreateFromSeed(ISeedSequence seed) => new PCG64DXSM(seed);
+        public override BitGenerator CreateFromSeed(ISeedSequence seed) => new PCG64DXSM(seed);
 
         /// <inheritdoc/>
         /// <remarks>NumPy's <c>pcg_cm_random_r</c>: DXSM output of the current state, then the cheap-multiplier step.</remarks>
-        internal override ulong NextUInt64()
+        public override ulong NextUInt64()
         {
             ulong ret = Pcg128.Dxsm(_stateHi, _stateLo);
             Pcg128.StepCheap(_stateHi, _stateLo, _incHi, _incLo, out _stateHi, out _stateLo);
@@ -114,7 +114,7 @@ namespace NumSharp
         ///     each further jump needs a FULL 128-bit multiplier, so wider unrolls are multiplier-throughput bound.
         ///     Arithmetic mod 2**128 is exact: the words are the sequential ones.
         /// </remarks>
-        internal override unsafe void FillUInt64(ulong* dst, long n)
+        public override unsafe void FillUInt64(ulong* dst, long n)
         {
             ulong sh = _stateHi, sl = _stateLo, ih = _incHi, il = _incLo;
             long i = 0;
@@ -141,19 +141,19 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        internal override unsafe void FillUInt32(uint* dst, long n) => FillUInt32From64(dst, n, ref _hasUint32, ref _uinteger);
+        public override unsafe void FillUInt32(uint* dst, long n) => FillUInt32From64(dst, n, ref _hasUint32, ref _uinteger);
 
         /// <inheritdoc/>
-        internal override unsafe void FillDouble(double* dst, long n) => FillDoubleFrom64(dst, n);
+        public override unsafe void FillDouble(double* dst, long n) => FillDoubleFrom64(dst, n);
 
         /// <inheritdoc/>
-        internal override unsafe void FillFloat(float* dst, long n) => FillFloatFrom64(dst, n, ref _hasUint32, ref _uinteger);
+        public override unsafe void FillFloat(float* dst, long n) => FillFloatFrom64(dst, n, ref _hasUint32, ref _uinteger);
 
         /// <inheritdoc/>
-        internal override unsafe void FillRaw(ulong* dst, long n) => FillUInt64(dst, n);
+        public override unsafe void FillRaw(ulong* dst, long n) => FillUInt64(dst, n);
 
         /// <inheritdoc/>
-        internal override uint NextUInt32()
+        public override uint NextUInt32()
         {
             // pcg64_cm_next32: serve the cached high half, else draw a 64-bit word and cache its high half.
             if (_hasUint32 != 0)
@@ -252,10 +252,10 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        private protected override BitGeneratorState GetStateCore() => new State(State128, Inc128, _hasUint32, _uinteger);
+        public override BitGeneratorState GetStateCore() => new State(State128, Inc128, _hasUint32, _uinteger);
 
         /// <inheritdoc/>
-        private protected override void SetStateCore(BitGeneratorState value)
+        public override void SetStateCore(BitGeneratorState value)
         {
             if (value is not State s)
                 throw new ValueError("state must be for a PCG64DXSM RNG");

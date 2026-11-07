@@ -89,7 +89,7 @@ namespace NumSharp
     {
         /// <summary>NumPy's class name (<c>chararray.__name__</c>), for its error texts; NumSharp.Build's weave reads it to
         ///     find the array subclasses and name them in the generated method dispatch.</summary>
-        internal const string __name__ = "chararray";
+        protected internal const string __name__ = "chararray";
 
         /// <summary>
         ///     NumPy's <c>chararray.__array_wrap__(arr)</c>: "we return a chararray if the result is a string dtype;
@@ -98,7 +98,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="array">The result to wrap.</param>
         /// <returns>A new chararray view of a text <paramref name="array"/>, else <paramref name="array"/>.</returns>
-        internal override NDArray __array_wrap__(NDArray array) => WrapResult(array);
+        protected internal override NDArray __array_wrap__(NDArray array) => WrapResult(array);
 
         /// <summary>
         ///     NumPy's creation of a result as a chararray (<c>Py_TYPE(self)</c>, then <c>chararray.__array_finalize__</c>,
@@ -112,7 +112,7 @@ namespace NumSharp
         /// <returns><paramref name="created"/> when it is a chararray, else the chararray (or scalar stand-in) over it.</returns>
         /// <exception cref="ValueError">The dtype is not string data (<c>Can only create a chararray from string
         ///     data.</c>).</exception>
-        internal override NDArray __array_finalize__(NDArray created, bool keepRank, NewSubtypeZeroDim zeroDim)
+        protected internal override NDArray __array_finalize__(NDArray created, bool keepRank, NewSubtypeZeroDim zeroDim)
         {
             if (created is NDCharArray)
                 return created;
@@ -134,7 +134,7 @@ namespace NumSharp
         /// <param name="dtype">The result's dtype.</param>
         /// <exception cref="ValueError">The dtype is not string data (<c>Can only create a chararray from string
         ///     data.</c>).</exception>
-        internal override void __array_finalize__(DType dtype) => Finalize(dtype);
+        protected internal override void __array_finalize__(DType dtype) => Finalize(dtype);
 
         /// <summary>NumPy's <c>__array_finalize__</c> error text, verbatim.</summary>
         internal const string FinalizeText = "Can only create a chararray from string data.";
@@ -162,7 +162,13 @@ namespace NumSharp
         /// </summary>
         /// <param name="storage">The storage to wrap; its shape becomes the chararray's shape.</param>
         /// <exception cref="NullReferenceException"><paramref name="storage"/> is <c>null</c>.</exception>
-        internal NDCharArray(UnmanagedStorage storage) : base(storage)
+        /// <remarks>
+        ///     The constructor a subclass of the chararray chains to (<c>: base(storage)</c>). To build a chararray from data,
+        ///     use <c>np.char.array</c> / <c>np.char.asarray</c>: they apply NumPy's finalize rule, which this constructor
+        ///     skips, so a numeric storage here gives a chararray NumPy refuses (<c>Can only create a chararray from string
+        ///     data.</c>).
+        /// </remarks>
+        public NDCharArray(UnmanagedStorage storage) : base(storage)
         {
         }
 
@@ -177,7 +183,7 @@ namespace NumSharp
         /// <remarks>NumPy prints a chararray as <c>chararray(['a', 'bb'], dtype='&lt;U2')</c>: the class name, with the
         ///     continuation lines indented by its length. The scalar stand-in prints as the plain 0-d array it is in
         ///     NumSharp (NumPy prints the Python str itself).</remarks>
-        internal override string ReprClassName => IsScalarStandIn ? "array" : "chararray";
+        protected internal override string ReprClassName => IsScalarStandIn ? "array" : "chararray";
 
         #region The finalize rule
 

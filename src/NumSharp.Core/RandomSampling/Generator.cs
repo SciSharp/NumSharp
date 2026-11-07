@@ -19,7 +19,7 @@ namespace NumSharp
     ///     between threads with NumPy's guarantee: each call is atomic with respect to the stream.
     ///     </para>
     /// </remarks>
-    public sealed partial class Generator
+    public partial class Generator
     {
         private readonly BitGenerator _bitGenerator;
 

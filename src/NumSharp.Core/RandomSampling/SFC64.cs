@@ -15,7 +15,7 @@ namespace NumSharp
     ///     outputs are discarded (<c>sfc64_set_seed</c>). Like NumPy, SFC64 has no <c>advance</c> or <c>jumped</c> —
     ///     use <see cref="BitGenerator.spawn"/> (or distinct seeds) for parallel streams.
     /// </remarks>
-    public sealed class SFC64 : BitGenerator
+    public class SFC64 : BitGenerator
     {
         private ulong _s0, _s1, _s2, _s3;
         private int _hasUint32;
@@ -77,10 +77,10 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        internal override string Name => "SFC64";
+        public override string Name => "SFC64";
 
         /// <inheritdoc/>
-        private protected override BitGenerator CreateFromSeed(ISeedSequence seed) => new SFC64(seed);
+        public override BitGenerator CreateFromSeed(ISeedSequence seed) => new SFC64(seed);
 
         /// <summary>NumPy's <c>sfc64_next</c>: the output is <c>a + b + counter++</c>, then the chaotic state update.</summary>
         /// <returns>The next 64-bit output.</returns>
@@ -94,11 +94,11 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        internal override ulong NextUInt64() => Next();
+        public override ulong NextUInt64() => Next();
 
         /// <inheritdoc/>
         /// <remarks>The four state words live in locals for the whole run (see <see cref="BitGenerator.FillUInt64"/>).</remarks>
-        internal override unsafe void FillUInt64(ulong* dst, long n)
+        public override unsafe void FillUInt64(ulong* dst, long n)
         {
             ulong a = _s0, b = _s1, c = _s2, counter = _s3;
             for (long i = 0; i < n; i++)
@@ -116,19 +116,19 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        internal override unsafe void FillUInt32(uint* dst, long n) => FillUInt32From64(dst, n, ref _hasUint32, ref _uinteger);
+        public override unsafe void FillUInt32(uint* dst, long n) => FillUInt32From64(dst, n, ref _hasUint32, ref _uinteger);
 
         /// <inheritdoc/>
-        internal override unsafe void FillDouble(double* dst, long n) => FillDoubleFrom64(dst, n);
+        public override unsafe void FillDouble(double* dst, long n) => FillDoubleFrom64(dst, n);
 
         /// <inheritdoc/>
-        internal override unsafe void FillFloat(float* dst, long n) => FillFloatFrom64(dst, n, ref _hasUint32, ref _uinteger);
+        public override unsafe void FillFloat(float* dst, long n) => FillFloatFrom64(dst, n, ref _hasUint32, ref _uinteger);
 
         /// <inheritdoc/>
-        internal override unsafe void FillRaw(ulong* dst, long n) => FillUInt64(dst, n);
+        public override unsafe void FillRaw(ulong* dst, long n) => FillUInt64(dst, n);
 
         /// <inheritdoc/>
-        internal override uint NextUInt32()
+        public override uint NextUInt32()
         {
             // sfc64_next32: serve the cached high half, else draw a 64-bit word and cache its high half.
             if (_hasUint32 != 0)
@@ -187,7 +187,7 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        private protected override BitGeneratorState GetStateCore() => new State(new[] { _s0, _s1, _s2, _s3 }, _hasUint32, _uinteger);
+        public override BitGeneratorState GetStateCore() => new State(new[] { _s0, _s1, _s2, _s3 }, _hasUint32, _uinteger);
 
         /// <inheritdoc/>
         /// <remarks>
@@ -196,7 +196,7 @@ namespace NumSharp
         ///     misspelt error text (the literal <c>{self.__class__.__name__}</c> — NumPy's message lacks its f-prefix) is
         ///     reproduced verbatim.
         /// </remarks>
-        private protected override void SetStateCore(BitGeneratorState value)
+        public override void SetStateCore(BitGeneratorState value)
         {
             if (value is not State s)
                 throw new ValueError("state must be for a {self.__class__.__name__} RNG");

@@ -1,6 +1,6 @@
 namespace NumSharp
 {
-    public sealed partial class MT19937
+    public partial class MT19937
     {
         /// <summary>MEXP: the Mersenne exponent — the recurrence's degree (19937).</summary>
         private const int MEXP = 19937;

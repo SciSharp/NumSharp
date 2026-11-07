@@ -12,8 +12,11 @@
 // subclass - allocated as type(self), then its __array_finalize__(obj) run on it - are one call here: the plain result
 // goes in, the result as the class comes out (__array_finalize__(created, ...)), the class's finalize rule applied.
 //
-// Only __array_priority__ is public (NumPy's ndarray exposes it, and numpy.matrix's was already public here); the others
-// are the subclass machinery's internals, called by the woven code.
+// __array_priority__ is public (NumPy's ndarray exposes it, and numpy.matrix's was already public here). The others are
+// protected internal: any subclass overrides them (from another assembly as `protected override`), and only the woven
+// code and the subclass machinery call them. Footgun: the woven dispatch (NDSubclass.KindOf) routes NDMatrix and
+// NDCharArray only, so np.* functions still return plain arrays for a subclass declared outside NumSharp.dll - its
+// overrides run when its own code calls them, not when NumPy's machinery would.
 // =============================================================================
 
 namespace NumSharp
@@ -38,7 +41,13 @@ namespace NumSharp
         /// <returns><paramref name="array"/> itself for an ndarray; the class's view of it in an override.</returns>
         /// <exception cref="ValueError">An override's finalize rule refuses the result (a matrix of more than two axes
         ///     longer than 1).</exception>
-        internal virtual NDArray __array_wrap__(NDArray array) => array;
+        /// <remarks>
+        ///     A subclass overrides it to return its own view of <paramref name="array"/> (from another assembly the override
+        ///     is <c>protected override</c>). Footgun: the woven dispatch calls it only for <see cref="NDMatrix"/> and
+        ///     <see cref="NDCharArray"/> operands today, so a subclass declared outside NumSharp.dll still gets plain results
+        ///     from np.* functions.
+        /// </remarks>
+        protected internal virtual NDArray __array_wrap__(NDArray array) => array;
 
         /// <summary>
         ///     NumPy's subtype creation: the result allocated as this array's class (<c>Py_TYPE(self)</c>), then the class's
@@ -52,7 +61,12 @@ namespace NumSharp
         /// <returns>The result as this class; <paramref name="created"/> itself for an ndarray.</returns>
         /// <exception cref="ValueError">An override's finalize rule refuses the result (a matrix of more than two axes
         ///     longer than 1; a chararray of a dtype that is not string data).</exception>
-        internal virtual NDArray __array_finalize__(NDArray created, bool keepRank, NewSubtypeZeroDim zeroDim) => created;
+        /// <remarks>
+        ///     A subclass overrides it to build itself over <paramref name="created"/> and apply its own finalize rule (from
+        ///     another assembly the override is <c>protected override</c>). The woven dispatch reaches it only for
+        ///     <see cref="NDMatrix"/> and <see cref="NDCharArray"/> today.
+        /// </remarks>
+        protected internal virtual NDArray __array_finalize__(NDArray created, bool keepRank, NewSubtypeZeroDim zeroDim) => created;
 
         /// <summary>
         ///     The dtype check of this class's <c>__array_finalize__</c>, run where NumPy creates a result of the class
@@ -62,7 +76,10 @@ namespace NumSharp
         /// <param name="dtype">The dtype of the result about to be created.</param>
         /// <exception cref="ValueError">An override refuses the dtype (a chararray of a dtype that is not string data:
         ///     <c>Can only create a chararray from string data.</c>).</exception>
-        internal virtual void __array_finalize__(DType dtype)
+        /// <remarks>A subclass whose finalize rule depends on the dtype overrides it to throw before any work is done (from
+        ///     another assembly the override is <c>protected override</c>); the woven dispatch reaches it only for
+        ///     <see cref="NDMatrix"/> and <see cref="NDCharArray"/> today.</remarks>
+        protected internal virtual void __array_finalize__(DType dtype)
         {
         }
 
@@ -74,6 +91,8 @@ namespace NumSharp
         /// <param name="result">The plain reduction (keepdims=False), unaliased.</param>
         /// <param name="axis">The caller's axis: it decides row or column for a 1-d plain result.</param>
         /// <returns><c>null</c>: this class has no <c>_collapse</c> (the reduction keeps NumPy's other answer).</returns>
-        internal virtual NDArray _collapse(NDArray result, int? axis) => null;
+        /// <remarks>Returning non-null claims the reduction's result for the class: only a subclass that collapses like
+        ///     numpy.matrix should override it (from another assembly as <c>protected override</c>).</remarks>
+        protected internal virtual NDArray _collapse(NDArray result, int? axis) => null;
     }
 }

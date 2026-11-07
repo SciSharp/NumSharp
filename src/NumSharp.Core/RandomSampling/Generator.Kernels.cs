@@ -297,7 +297,7 @@ namespace NumSharp
         }
     }
 
-    public sealed partial class Generator
+    public partial class Generator
     {
         // =============================================================================================================
         // expm1 and logfactorial

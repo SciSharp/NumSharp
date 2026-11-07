@@ -53,41 +53,44 @@ namespace NumSharp.Backends.Iteration
     /// kernels compile lazily but idempotently), shared across every root of the same structure,
     /// signature and mask.
     /// </summary>
-    internal sealed class NDExprProgram
+    /// <remarks>Public as the parameter type of <see cref="TensorEngine.Evaluate(NDExprProgram, NDArray[], NDArray, in NDEvaluateOptions)"/>
+    ///     only: outside NumSharp.dll it is an opaque handle an engine passes on (to <c>base</c>), with no member to read or
+    ///     run.</remarks>
+    public sealed class NDExprProgram
     {
         /// <summary>The tree with every array leaf rewritten to a positional <see cref="InputNode"/>.</summary>
-        public readonly NDExpr Bound;
+        internal readonly NDExpr Bound;
 
         /// <summary>Every input's dtype (iterator operands AND parameters) in input (binding) order.</summary>
-        public readonly NPTypeCode[] InputTypes;
+        internal readonly NPTypeCode[] InputTypes;
 
         /// <summary>
         /// Per input, whether it is a PARAMETER — a 0-d array the host copies into the kernel's aux
         /// block instead of streaming through the iterator (NDExpr.Params.cs). Null when no input is
         /// hoisted (the program then evaluates any shapes through the iterator).
         /// </summary>
-        public readonly bool[] IsParam;
+        internal readonly bool[] IsParam;
 
         /// <summary>Number of hoisted parameters (0 when <see cref="IsParam"/> is null).</summary>
-        public readonly int ParamCount;
+        internal readonly int ParamCount;
 
         /// <summary>True when compiled under the <see cref="NDExpr.ForceScalar"/> test hook (its own cache entry).</summary>
-        public readonly bool ForcedScalar;
+        internal readonly bool ForcedScalar;
 
         /// <summary>The fused elementwise kernel over the ITERATOR operands; null when the root is a reduction.</summary>
-        public readonly NDInnerLoopFunc Kernel;
+        internal readonly NDInnerLoopFunc Kernel;
 
         /// <summary>The tree's NumPy result dtype (the elementwise output, or the reduction's result).</summary>
-        public readonly NPTypeCode ResultType;
+        internal readonly NPTypeCode ResultType;
 
         /// <summary>The root reduction, or null for an elementwise tree.</summary>
-        public readonly ReduceNode Reduce;
+        internal readonly ReduceNode Reduce;
 
         /// <summary>The reduction's accumulator dtype (see <see cref="ReduceNode.ResolveAccType"/>).</summary>
-        public readonly NPTypeCode ReduceAccType;
+        internal readonly NPTypeCode ReduceAccType;
 
         /// <summary>The root weighted average, or null when the root is elementwise or an ordinary reduction.</summary>
-        public readonly WeightedAverageNode Average;
+        internal readonly WeightedAverageNode Average;
 
         /// <summary>
         /// Phase 6.3 (NDExpr.DirectOp.cs): the engine-kernel delegation plan when the elementwise root is
@@ -96,7 +99,7 @@ namespace NumSharp.Backends.Iteration
         /// NDIter pass for that op's own whole-array kernel — bit-exact, lower fixed cost. Always None for a
         /// reduction/average program.
         /// </summary>
-        public readonly NDExprDirectOp DirectOp;
+        internal readonly NDExprDirectOp DirectOp;
 
         /// <summary>
         /// The text half of a program whose inputs include text (S, U or StringDType; NDExpr.Text.cs): the stages that
@@ -104,7 +107,7 @@ namespace NumSharp.Backends.Iteration
         /// program carries no kernel, reduction or average of its own — the remainder's program, resolved per call, does —
         /// so every route that reads those fields must first send a text program to its plan.
         /// </summary>
-        public readonly NDExprTextPlan TextPlan;
+        internal readonly NDExprTextPlan TextPlan;
 
         /// <summary>
         /// The staged float32 / float64 fmax / fmin nodes of a numeric program (NDExpr.FMaxStages.cs): each runs per call as
@@ -113,7 +116,7 @@ namespace NumSharp.Backends.Iteration
         /// carries no kernel, reduction or average of its own, so every route that reads those fields must first send it
         /// to its plan.
         /// </summary>
-        public readonly NDExprFMaxPlan FMaxPlan;
+        internal readonly NDExprFMaxPlan FMaxPlan;
 
         private NDInnerLoopFunc _flatReduce;
         private NDInnerLoopFunc _axisReduce;
@@ -152,7 +155,7 @@ namespace NumSharp.Backends.Iteration
         /// reduction tree) and <see cref="CompiledExpression.IsReduction"/> read this, never <see cref="Reduce"/> /
         /// <see cref="Average"/> alone, which a text or staged program leaves null.
         /// </summary>
-        public bool IsReduction => Reduce is not null || Average is not null || TextPlan is { IsReduction: true }
+        internal bool IsReduction => Reduce is not null || Average is not null || TextPlan is { IsReduction: true }
                                    || FMaxPlan is { IsReduction: true };
 
         private static int CountTrue(bool[] mask)
@@ -164,11 +167,11 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>The flat (axis=None) accumulating kernel, compiled on first use.</summary>
-        public NDInnerLoopFunc FlatReduceKernel
+        internal NDInnerLoopFunc FlatReduceKernel
             => _flatReduce ??= Reduce.CompileReduceKernel(InputTypes, IsParam, out _, out _);
 
         /// <summary>The axis-aware accumulating kernel (axis-independent), compiled on first use.</summary>
-        public NDInnerLoopFunc AxisReduceKernel
+        internal NDInnerLoopFunc AxisReduceKernel
             => _axisReduce ??= Reduce.CompileAxisReduceKernel(InputTypes, IsParam, out _, out _);
 
         /// <summary>
@@ -185,7 +188,7 @@ namespace NumSharp.Backends.Iteration
         /// inputs array; <see cref="ResultType"/> of the returned program is the child expression's dtype.
         /// </para>
         /// </summary>
-        public NDExprProgram ChildElementwiseProgram
+        internal NDExprProgram ChildElementwiseProgram
             => Reduce is null
                 ? null
                 : _childElementwise ??= Build(Reduce.Child, InputTypes, IsParam);
@@ -197,7 +200,7 @@ namespace NumSharp.Backends.Iteration
         /// the child's natural dtype (<see cref="EvaluateWeightedAverage"/> then casts it to the result
         /// dtype before the product). Mirrors <see cref="ChildElementwiseProgram"/>.
         /// </summary>
-        public NDExprProgram AvgValuesProgram
+        internal NDExprProgram AvgValuesProgram
             => Average is null
                 ? null
                 : _avgValues ??= Build(Average.Values, InputTypes, IsParam);
@@ -208,7 +211,7 @@ namespace NumSharp.Backends.Iteration
         /// their natural dtype, which the host casts to the result dtype for BOTH the product and the
         /// denominator sum (<c>Σ weights</c>).
         /// </summary>
-        public NDExprProgram AvgWeightsProgram
+        internal NDExprProgram AvgWeightsProgram
             => Average is null
                 ? null
                 : _avgWeights ??= Build(Average.Weights, InputTypes, IsParam);
@@ -228,7 +231,7 @@ namespace NumSharp.Backends.Iteration
         /// same memory order, because the elementwise product of the result-dtype casts is the same IEEE value
         /// either way; the dtype casts are the widening ones <c>result_type</c> implies.
         /// </remarks>
-        public NDExprProgram AvgNumeratorProgram
+        internal NDExprProgram AvgNumeratorProgram
             => Average is null
                 ? null
                 : _avgNumerator ??= Build(
@@ -241,7 +244,7 @@ namespace NumSharp.Backends.Iteration
         /// dtype (NumPy's <c>wgt.sum(dtype=result_dtype)</c> sums the weights AT the result dtype), uncast when
         /// already there. Null when this is not a weighted average. See <see cref="AvgNumeratorProgram"/>.
         /// </summary>
-        public NDExprProgram AvgDenominatorProgram
+        internal NDExprProgram AvgDenominatorProgram
             => Average is null
                 ? null
                 : _avgDenominator ??= Build(AsResultDtype(Average.Weights, AvgWeightsProgram.ResultType), InputTypes, IsParam);
@@ -272,7 +275,7 @@ namespace NumSharp.Backends.Iteration
         /// typing walk and never compiles a kernel.
         /// </para>
         /// </remarks>
-        public NDExprProgram NonzeroBoolOperandProgram
+        internal NDExprProgram NonzeroBoolOperandProgram
         {
             get
             {
@@ -306,7 +309,7 @@ namespace NumSharp.Backends.Iteration
         /// asks for it on the integer-mean route, whose alternative was the scalar fold anyway, and it is what lets the
         /// chunked pairwise sum see exactly NumPy's float64 values in NumPy's order.
         /// </remarks>
-        public NDExprProgram ChildAsFloat64Program
+        internal NDExprProgram ChildAsFloat64Program
             => Reduce is null
                 ? null
                 : _childAsFloat64 ??= Build(NDExpr.Cast(Reduce.Child, NPTypeCode.Double), InputTypes, IsParam);
@@ -330,7 +333,7 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         /// <param name="inputs">The inputs of a call.</param>
         /// <returns>True when the program computes these inputs correctly.</returns>
-        public bool Matches(NDArray[] inputs)
+        internal bool Matches(NDArray[] inputs)
         {
             if (inputs.Length != InputTypes.Length)
                 return false;
@@ -343,7 +346,7 @@ namespace NumSharp.Backends.Iteration
         /// <summary>Is every input the program hoists as a parameter still a 0-d array? (A 0-d array can be resized in place.)</summary>
         /// <param name="inputs">The inputs the program was resolved for.</param>
         /// <returns>True when the hoisted reads are still correct.</returns>
-        public bool ParamsStillValid(NDArray[] inputs)
+        internal bool ParamsStillValid(NDArray[] inputs)
         {
             var mask = IsParam;
             if (mask is null)
@@ -358,7 +361,7 @@ namespace NumSharp.Backends.Iteration
         /// <param name="types">A dtype signature.</param>
         /// <param name="mask">A parameter mask; empty when no input is a parameter.</param>
         /// <returns>True when both agree exactly.</returns>
-        public bool SignatureEquals(ReadOnlySpan<NPTypeCode> types, ReadOnlySpan<bool> mask)
+        internal bool SignatureEquals(ReadOnlySpan<NPTypeCode> types, ReadOnlySpan<bool> mask)
         {
             if (!types.SequenceEqual(InputTypes))
                 return false;
@@ -368,7 +371,7 @@ namespace NumSharp.Backends.Iteration
         /// <summary>The inputs the iterator streams: <paramref name="inputs"/> itself without parameters, else the unflagged ones in order.</summary>
         /// <param name="inputs">Every input of the call, in input order.</param>
         /// <returns>The iterator operand list.</returns>
-        public NDArray[] IteratorOperands(NDArray[] inputs)
+        internal NDArray[] IteratorOperands(NDArray[] inputs)
         {
             if (IsParam is null)
                 return inputs;
@@ -386,7 +389,7 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         /// <param name="inputs">Every input of the call, in input order.</param>
         /// <param name="dst">Parameter slot 0 of the aux block (16 bytes per parameter).</param>
-        public unsafe void PackParams(NDArray[] inputs, byte* dst)
+        internal unsafe void PackParams(NDArray[] inputs, byte* dst)
         {
             var mask = IsParam;
             for (int i = 0, j = 0; i < mask.Length; i++)
@@ -416,7 +419,7 @@ namespace NumSharp.Backends.Iteration
         /// embeds arrays (mixed binding styles), or the mask flags every input.
         /// </exception>
         /// <exception cref="NotSupportedException">A reduction sits below the root, or nests another.</exception>
-        public static NDExprProgram Build(NDExpr root, NPTypeCode[] positionalTypes, bool[] isParam = null)
+        internal static NDExprProgram Build(NDExpr root, NPTypeCode[] positionalTypes, bool[] isParam = null)
         {
             var bind = new NDExprBindContext();
             var bound = root.BindArrays(bind);
@@ -529,7 +532,7 @@ namespace NumSharp.Backends.Iteration
         /// <summary>NumPy-style rendering of a dtype signature: <c>(float64, int32)</c>.</summary>
         /// <param name="types">The signature to render.</param>
         /// <returns>The parenthesized, comma-separated NumPy dtype names.</returns>
-        public static string SignatureText(IReadOnlyList<NPTypeCode> types)
+        internal static string SignatureText(IReadOnlyList<NPTypeCode> types)
         {
             var sb = new StringBuilder("(");
             for (int i = 0; i < types.Count; i++)

@@ -265,8 +265,20 @@ namespace NumSharp
         ///     <c>Evaluate(NDExpr, …)</c> member above resolves the program from the tree's cache and
         ///     lands here.
         /// </summary>
+        /// <param name="program">The compiled program: the bound tree, its input signature and kernel(s).</param>
+        /// <param name="operands">The arrays bound to the program's inputs, in the program's order.</param>
+        /// <param name="out">NumPy's <c>out=</c>: the array that receives the result, or <c>null</c> for a fresh one.</param>
         /// <param name="options">Resolved <c>dtype=</c>/<c>casting=</c>/<c>order=</c> keywords (plan P4.5); <c>default</c> = no override.</param>
-        internal virtual NDArray Evaluate(NDExprProgram program, NDArray[] operands, NDArray @out, in NDEvaluateOptions options = default)
+        /// <returns>The result: <paramref name="out"/> when given, else a fresh array bound to this engine.</returns>
+        /// <exception cref="NotSupportedException">This engine does not evaluate expressions (the base behaviour; an engine
+        ///     derived from <see cref="Backends.DefaultEngine"/> inherits its implementation).</exception>
+        /// <remarks>
+        ///     Public so an engine can intercept every compiled evaluation (profiling, routing to another engine) and hand it on
+        ///     to <c>base</c>. Footgun: <see cref="NDExprProgram"/> and <see cref="NDEvaluateOptions"/> are opaque outside
+        ///     NumSharp.dll - an engine NOT derived from <see cref="Backends.DefaultEngine"/> can forward them but cannot run
+        ///     them itself, so it keeps this base behaviour (the throw).
+        /// </remarks>
+        public virtual NDArray Evaluate(NDExprProgram program, NDArray[] operands, NDArray @out, in NDEvaluateOptions options = default)
             => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
     }
 }

@@ -4,7 +4,7 @@ using NumSharp.Generic;
 
 namespace NumSharp
 {
-    public sealed partial class Generator
+    public partial class Generator
     {
         /// <summary>
         ///     Return random integers from <paramref name="low"/> (inclusive) to <paramref name="high"/>
