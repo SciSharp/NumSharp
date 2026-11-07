@@ -1,0 +1,83 @@
+namespace	type	kind	visible_ctors	visible_instance_members	overridable	non_virtual	pct_overridable	internal_members	internal_virtual	file	line	overridable_members	internal_virtual_members
+NumSharp.Backends	DefaultEngine	class	1	277	254	23	91.7	152	4	src/NumSharp.Core/Backends/Default/Math/DefaultEngine.BinaryOp.cs	13	GetStorage, Cast, CreateNDArray, MoveAxis, SwapAxes, RollAxis, Transpose, Linspace, Logspace, Geomspace, Vander, Argwhere, BooleanMask, BooleanMaskSet, FlatNonZero, NonZero, CountNonZero, RavelMultiIndex, Trace, UnravelIndex, Cross, Einsum, EinsumPath, Matmul, Vecdot, Matvec, Vecmat, Kron, Outer, Tensordot, All, AllClose, Any, ArrayEqual, ArrayEquiv, IsClose, IsFinite, IsInf, IsNan, IsPosInf, +193 more	DotFunction1D, VdotFunction1D, VdotReadsFirstInPlace, Evaluate
+NumSharp	NDArray	class	14	271	7	264	2.6	195	7	src/NumSharp.Core/Backends/NDArray.cs	43	GetHashCode, ~NDArray, Clone, ToString, Equals, __array_priority__, this[]	NanMax, NanMin, __array_wrap__, __array_finalize__, _collapse, ReprClassName
+NumSharp	TensorEngine	abstract class	1	267	258	9	96.6	4	4	src/NumSharp.Core/Backends/TensorEngine.cs	18	GetStorage, CreateNDArray, Transpose, SwapAxes, MoveAxis, RollAxis, Cast, BooleanMask, BooleanMaskSet, Isin, Unique, UniqueValues, UniqueCounts, UniqueInverse, UniqueAll, Ediff1d, Union1d, Setxor1d, Setdiff1d, Linspace, Logspace, Geomspace, Evaluate, Einsum, EinsumPath, Angle, Quantile, Percentile, Median, Average, Cov, Corrcoef, Gradient, Trapezoid, Sinc, I0, Bartlett, Blackman, Hamming, Hanning, +195 more	Evaluate, VdotFunction1D, VdotReadsFirstInPlace, DotFunction1D
+NumSharp	NumPyRandom	class	4	239	1	238	0.4	6	0	src/NumSharp.Core/RandomSampling/np.random.classes.cs	6	ToString	
+NumSharp	MaskedArrayModule	class	0	236	0	236	0.0	13	0	src/NumSharp.Core/Ma/NDMaskedArray.cs	2056		
+NumSharp.Backends	UnmanagedStorage	class	28	159	0	159	0.0	103	0	src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.cs	30		
+NumSharp	NDMatrix	class	0	93	3	90	3.2	22	6	src/NumSharp.Core/Matrixlib/NDMatrix.Operators.cs	42	Equals, GetHashCode, __array_priority__	__array_wrap__, __array_finalize__, _collapse, NanMax, NanMin, ReprClassName
+NumSharp	NDCharArray	class	0	85	2	83	2.4	33	6	src/NumSharp.Core/Char/NDCharArray.Operators.cs	59	Equals, GetHashCode	__array_wrap__, __array_finalize__, NanMax, NanMin, ReprClassName
+NumSharp	NDMaskedArray	class	0	84	1	83	1.2	10	0	src/NumSharp.Core/Ma/NDMaskedArray.cs	47	ToString	
+NumSharp	NDPolyBase	abstract class	0	45	12	33	26.7	29	3	src/NumSharp.Core/Polynomial/Package/NDPolyBase.Protocol.cs	125	Equals, GetHashCode, copy, cutdeg, trim, truncate, integ, deriv, ToString, __pow__, __floordiv__, __rfloordiv__	StrTermUnicode, StrTermAscii, ReprLatexTerm
+NumSharp.Backends	DefaultLinalgEngine	class	1	41	41	0	100.0	12	0	src/NumSharp.Core/Backends/Default/LinearAlgebra/DefaultLinalgEngine.cs	46	Outer, Cross, Matmul, Tensordot, Trace, Vecdot, Cholesky, Det, Slogdet, Eig, Eigvals, Eigh, Eigvalsh, Inv, Pinv, Tensorinv, CholeskyKernel, DetKernel, SlogdetKernel, EigKernel, EighKernel, InvKernel, SolveKernel, LstsqKernel, QrKernel, SvdKernel, Lstsq, MatrixPower, MultiDot, Norm, VectorNorm, MatrixNorm, Qr, Solve, Tensorsolve, Svd, Svdvals, MatrixRank, Cond	
+NumSharp	ChebyshevModule	class	0	40	0	40	0.0	1	0	src/NumSharp.Core/Polynomial/Package/np.polynomial.chebyshev.cs	12		
+NumSharp	HermiteEModule	class	0	37	0	37	0.0	1	0	src/NumSharp.Core/Polynomial/Package/np.polynomial.hermite_e.cs	11		
+NumSharp	HermiteModule	class	0	37	0	37	0.0	1	0	src/NumSharp.Core/Polynomial/Package/np.polynomial.hermite.cs	11		
+NumSharp	LaguerreModule	class	0	37	0	37	0.0	1	0	src/NumSharp.Core/Polynomial/Package/np.polynomial.laguerre.cs	11		
+NumSharp	LegendreModule	class	0	37	0	37	0.0	1	0	src/NumSharp.Core/Polynomial/Package/np.polynomial.legendre.cs	11		
+NumSharp	DTypeMeta	abstract class	1	34	12	22	35.3	16	12	src/NumSharp.Core/DTypes/DTypeMeta.cs	65	default_descr, ensure_canonical, common_dtype, common_instance, discover_descr_from_pyobject, is_known_scalar_type, Instantiate, get_clear_loop, get_fill_zero_loop, ToString, HasReferences, ItemFlags	setitem, SetFreshItems, getitem, copyswapn, fill, nonzero, HasFill, HasScanFunc, HasFromStr, ByteOrderNotApplicable, OwnsTypeCode, OwnsScalarType
+NumSharp	PowerSeriesModule	class	0	34	0	34	0.0	1	0	src/NumSharp.Core/Polynomial/Package/np.polynomial.polynomial.cs	16		
+NumSharp	LinalgEngine	abstract class	1	31	31	0	100.0	0	0	src/NumSharp.Core/Backends/LinalgEngine.cs	37	Cholesky, Cond, Cross, Det, Eig, Eigh, Eigvals, Eigvalsh, Inv, Lstsq, Matmul, MatrixNorm, MatrixPower, MatrixRank, MultiDot, Norm, Outer, Pinv, Qr, Slogdet, Solve, Svd, Svdvals, Tensordot, Tensorinv, Tensorsolve, Trace, Vecdot, VectorNorm	
+NumSharp	np.NDIterator	class	0	31	1	30	3.2	6	0	src/NumSharp.Core/APIs/np.nditer.cs	173	~NDIterator	
+NumSharp.Utilities	ConcurrentHashset<T>	class	4	24	2	22	8.3	0	0	src/NumSharp.Core/Utilities/ConcurrentHashset`1.cs	11	Dispose, ~ConcurrentHashset	
+NumSharp	FourierModule	class	0	24	0	24	0.0	1	0	src/NumSharp.Core/Fourier/np.fft.Helper.cs	5		
+NumSharp.Utilities	Hashset<T>	class	8	24	0	24	0.0	2	0	src/NumSharp.Core/Utilities/Hashset`1.cs	53		
+NumSharp.Collections.Concurrent	ConcurrentDictionary<TKey, TValue>	class	7	22	0	22	0.0	3	0	src/NumSharp.Core/Collections/Concurrent/ConcurrentDictionary.cs	46		
+NumSharp	PolyUtilsModule	class	0	22	0	22	0.0	2	0	src/NumSharp.Core/Polynomial/Package/np.polynomial.polyutils.cs	30		
+NumSharp.Backends	DefaultFftEngine	class	1	19	19	0	100.0	9	0	src/NumSharp.Core/Backends/Default/Fourier/DefaultFftEngine.RawFft.cs	6	Fftfreq, Rfftfreq, Hfft, Ihfft, C2CKernel, R2CKernel, C2RKernel, Rfft, Irfft, Rfft2, Rfftn, Irfft2, Irfftn, Fft, Ifft, Fft2, Ifft2, Fftn, Ifftn	
+NumSharp.Generic	NDArray<TDType>	class	13	17	2	15	11.8	1	0	src/NumSharp.Core/Generics/NDArray`1.cs	28	Clone, this[]	
+NumSharp	FftEngine	abstract class	1	16	16	0	100.0	0	0	src/NumSharp.Core/Backends/FftEngine.cs	33	Fft, Ifft, Fft2, Ifft2, Fftn, Ifftn, Rfft, Irfft, Rfft2, Rfftn, Irfft2, Irfftn, Hfft, Ihfft, Fftfreq, Rfftfreq	
+NumSharp	PolynomialModule	class	0	14	0	14	0.0	1	0	src/NumSharp.Core/Polynomial/Package/np.polynomial.cs	68		
+NumSharp	np.Broadcast	class	1	12	0	12	0.0	2	0	src/NumSharp.Core/Creation/np.broadcast.cs	40		
+NumSharp.Unmanaged.Memory	StackedMemoryPool	class	2	11	1	10	9.1	0	0	src/NumSharp.Core/Backends/Unmanaged/Pooling/StackedMemoryPool.cs	18	~StackedMemoryPool	
+NumSharp	ArrayMethod	abstract class	1	9	4	5	44.4	0	0	src/NumSharp.Core/DTypes/ArrayMethod.cs	34	resolve_descriptors, get_strided_loop, ToString, casting	
+NumSharp	EmathModule	class	0	9	0	9	0.0	1	0	src/NumSharp.Core/Math/np.emath.cs	63		
+NumSharp.Backends.Iteration	NDExpr	abstract class	1	9	5	4	55.6	32	11	src/NumSharp.Core/Backends/Iterators/NDExpr.Evaluate.cs	186	EmitScalar, EmitVector, SupportsSimdAt, AppendSignature, SupportsSimd	AsDirectSingleOp, BindArrays, FirstArray, HashStructure, StructureEquals, LowerText, InferType, AdoptWeakType, CanEmitVectorV2, CanEmitVectorMixed, ContainsReduce
+NumSharp	Slice	class	3	7	3	4	42.9	1	0	src/NumSharp.Core/View/Slice.cs	58	Equals, GetHashCode, ToString	
+NumSharp	BitGenerator	abstract class	0	5	0	5	0.0	24	15	src/NumSharp.Core/RandomSampling/BitGenerator.cs	22		CreateFromSeed, GetStateCore, SetStateCore, NextUInt64, NextUInt32, NextDouble, UnitToDouble, NextFloat, NextRaw, FillUInt64, FillUInt32, FillDouble, FillFloat, FillRaw, Name
+NumSharp	np.NDEnumerate<T>	class	0	5	0	5	0.0	1	0	src/NumSharp.Core/Indexing/np.ndenumerate.cs	108		
+NumSharp	np.NDIndex	class	0	5	0	5	0.0	2	0	src/NumSharp.Core/Indexing/np.ndindex.cs	57		
+NumSharp.Utilities	NDExtendedCoordinatesIncrementor	class	2	4	0	4	0.0	0	0	src/NumSharp.Core/Utilities/Incrementors/NDExtendedCoordinatesIncrementor.cs	6		
+NumSharp	np.NDEnumerate	class	0	4	0	4	0.0	1	0	src/NumSharp.Core/Indexing/np.ndenumerate.cs	60		
+NumSharp	CastingImpl	abstract class	1	3	0	3	0.0	0	0	src/NumSharp.Core/DTypes/ArrayMethod.cs	205		
+NumSharp.Utilities	NDOffsetIncrementor	class	2	3	0	3	0.0	0	0	src/NumSharp.Core/Utilities/Incrementors/NDOffsetIncrementor.cs	5		
+NumSharp.Utilities	NDOffsetIncrementorAutoresetting	class	2	3	0	3	0.0	0	0	src/NumSharp.Core/Utilities/Incrementors/NDOffsetIncrementor.cs	57		
+NumSharp	AxisError	class	4	2	0	2	0.0	0	0	src/NumSharp.Core/Exceptions/AxisError.cs	30		
+NumSharp.Utilities	NDCoordinatesAxisIncrementor	class	4	2	0	2	0.0	0	0	src/NumSharp.Core/Utilities/Incrementors/NDCoordinatesAxisIncrementor.cs	6		
+NumSharp.Utilities	NDCoordinatesIncrementor	class	4	2	0	2	0.0	0	0	src/NumSharp.Core/Utilities/Incrementors/NDCoordinatesIncrementor.cs	6		
+NumSharp.Utilities	NDCoordinatesIncrementorAutoResetting	class	2	2	0	2	0.0	0	0	src/NumSharp.Core/Utilities/Incrementors/NDCoordinatesIncrementor.cs	88		
+NumSharp.Utilities	NDCoordinatesLeftToAxisIncrementor	class	2	2	0	2	0.0	0	0	src/NumSharp.Core/Utilities/Incrementors/NDCoordinatesLeftToAxisIncrementor.cs	7		
+NumSharp	np.AxisConcatenator	abstract class	0	2	0	2	0.0	2	0	src/NumSharp.Core/Creation/np.r_.cs	49		
+NumSharp	BitGeneratorState	abstract class	1	1	1	0	100.0	0	0	src/NumSharp.Core/RandomSampling/BitGenerator.cs	444	bit_generator	
+NumSharp	AssertionError	class	3	0	0	0		0	0	src/NumSharp.Core/Exceptions/AssertionError.cs	22		
+NumSharp	AttributeError	class	2	0	0	0		0	0	src/NumSharp.Core/Exceptions/AttributeError.cs	13		
+NumSharp	AxisOutOfRangeException	class	4	0	0	0		0	0	src/NumSharp.Core/Exceptions/AxisOutOfRangeException.cs	17		
+NumSharp.Backends	BackendFactory	class	1	0	0	0		1	0	src/NumSharp.Core/Backends/BackendFactory.cs	15		
+NumSharp	BufferError	class	3	0	0	0		0	0	src/NumSharp.Core/Exceptions/BufferError.cs	16		
+NumSharp	DTypePromotionError	class	3	0	0	0		0	0	src/NumSharp.Core/Exceptions/DTypePromotionError.cs	23		
+NumSharp	IncorrectShapeException	class	3	0	0	0		0	0	src/NumSharp.Core/Exceptions/IncorrectShapeException.cs	5		
+NumSharp	IncorrectSizeException	class	1	0	0	0		0	0	src/NumSharp.Core/Exceptions/IncorrectSizeException.cs	3		
+NumSharp	IncorrectTypeException	class	2	0	0	0		0	0	src/NumSharp.Core/Exceptions/IncorrectTypeException.cs	15		
+NumSharp	IndexError	class	3	0	0	0		0	0	src/NumSharp.Core/Exceptions/IndexError.cs	10		
+NumSharp.Utilities	InfoOf<T>	class	1	0	0	0		0	0	src/NumSharp.Core/Utilities/InfoOf.cs	26		
+NumSharp	KeyError	class	2	0	0	0		0	0	src/NumSharp.Core/Exceptions/KeyError.cs	12		
+NumSharp	LinAlgError	class	3	0	0	0		0	0	src/NumSharp.Core/Exceptions/LinAlgError.cs	26		
+NumSharp	LookupError	class	2	0	0	0		0	0	src/NumSharp.Core/Exceptions/LookupError.cs	16		
+NumSharp	MAError	class	3	0	0	0		0	0	src/NumSharp.Core/Exceptions/MAError.cs	12		
+NumSharp	MaskError	class	3	0	0	0		0	0	src/NumSharp.Core/Exceptions/MAError.cs	32		
+NumSharp	MissingBackendException	class	3	0	0	0		0	0	src/NumSharp.Core/Exceptions/MissingBackendException.cs	24		
+NumSharp	NameError	class	2	0	0	0		0	0	src/NumSharp.Core/Exceptions/NameError.cs	15		
+NumSharp	NumSharpException	class	3	0	0	0		0	0	src/NumSharp.Core/Exceptions/NumSharpException.cs	9		
+NumSharp	OSError	class	2	0	0	0		0	0	src/NumSharp.Core/Exceptions/OSError.cs	26		
+NumSharp	OpenBlasMissingBackendException	class	2	0	0	0		0	0	src/NumSharp.Core/Exceptions/OpenBlasMissingBackendException.cs	27		
+NumSharp	RuntimeError	class	2	0	0	0		0	0	src/NumSharp.Core/Exceptions/RuntimeError.cs	12		
+NumSharp.Unmanaged.Memory	ScalarMemoryPool	class	1	0	0	0		0	0	src/NumSharp.Core/Backends/Unmanaged/Pooling/ScalarMemoryPool.cs	3		
+NumSharp	SyntaxError	class	2	0	0	0		0	0	src/NumSharp.Core/Exceptions/SyntaxError.cs	21		
+NumSharp	SystemError	class	1	0	0	0		0	0	src/NumSharp.Core/Exceptions/SystemError.cs	22		
+NumSharp	TooHardError	class	2	0	0	0		0	0	src/NumSharp.Core/Exceptions/TooHardError.cs	18		
+NumSharp	TypeError	class	3	0	0	0		0	0	src/NumSharp.Core/Exceptions/TypeError.cs	9		
+NumSharp	UnicodeDecodeError	class	1	0	0	0		7	0	src/NumSharp.Core/Exceptions/UnicodeError.cs	57		
+NumSharp	UnicodeEncodeError	class	1	0	0	0		0	0	src/NumSharp.Core/Exceptions/UnicodeError.cs	41		
+NumSharp	UnicodeError	class	2	0	0	0		0	0	src/NumSharp.Core/Exceptions/UnicodeError.cs	17		
+NumSharp	ValueError	class	4	0	0	0		0	0	src/NumSharp.Core/Exceptions/ValueError.cs	16		
+NumSharp	np.typing.NBitBase	abstract class	0	0	0	0		1	0	src/NumSharp.Core/APIs/np.typing.cs	87		
