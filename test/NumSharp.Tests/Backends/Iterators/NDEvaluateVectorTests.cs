@@ -343,7 +343,10 @@ namespace NumSharp.Tests.Backends.Iterators
         /// The P5.3 same-width plan's verdicts: dtypes of one element size that are not one dtype vectorize when every
         /// crossing between them is a MASK (an int64 comparison selecting float64 lanes, a float64 NaN test anded with
         /// an int64 test, an int64 mask made 1.0 / 0.0); a VALUE crossing (int64 → float64 rounds) or two sizes keep
-        /// the tree scalar. The bool gates are the uniform plan's, so each verdict is stated against the host.
+        /// the tree scalar. Only a tree with bool I/O (a bool root or a bool input) consults the uniform plan's bool gates,
+        /// so only those verdicts are stated against the host; a mask that stays inside the tree vectorizes on every SIMD
+        /// host, a 512-bit one included (<see cref="DirectILKernelGenerator.FusedBoolLanesAvailable"/> is false there: the
+        /// windows-latest runner of 2026-11-07 was such a host and planned "where(int64 cmp, float64, 0)" vector).
         /// </summary>
         [TestMethod]
         public void VectorPlan_SameWidth_DecidesLaneAndRefusals()
@@ -351,30 +354,27 @@ namespace NumSharp.Tests.Backends.Iterators
             var i8f8 = new[] { NPTypeCode.Int64, NPTypeCode.Double };
             bool boolOut = DirectILKernelGenerator.FusedBoolLanesAvailable;
 
-            // np.where(f >= 0, price, 0): the int64 mask selects float64 lanes; W = the root's dtype.
-            Assert.AreEqual(boolOut, PlanModes(NDExpr.Where(NDExpr.GreaterEqual(NDExpr.Input(0), 0), NDExpr.Input(1), 0), i8f8,
+            // np.where(f >= 0, price, 0): the int64 mask selects float64 lanes; W = the root's dtype. No bool I/O.
+            Assert.IsTrue(PlanModes(NDExpr.Where(NDExpr.GreaterEqual(NDExpr.Input(0), 0), NDExpr.Input(1), 0), i8f8,
                 out var lane, out var mixed, out var same), "where(int64 cmp, float64, 0)");
-            if (boolOut)
-                Assert.IsTrue(lane == NPTypeCode.Double && same && !mixed);
+            Assert.IsTrue(lane == NPTypeCode.Double && same && !mixed);
             // A weak float literal lifts the multiply to float64 over an int64-only input set: the mask becomes 1.0 / 0.0.
-            Assert.AreEqual(boolOut, PlanModes(NDExpr.Greater(NDExpr.Input(0), 30) * 1.5, new[] { NPTypeCode.Int64 },
+            Assert.IsTrue(PlanModes(NDExpr.Greater(NDExpr.Input(0), 30) * 1.5, new[] { NPTypeCode.Int64 },
                 out lane, out _, out same), "(int64 > 30) * 1.5");
-            if (boolOut)
-                Assert.IsTrue(lane == NPTypeCode.Double && same);
-            // A bool root: W is the first non-bool input's dtype (any dtype of the size carries the masks).
+            Assert.IsTrue(lane == NPTypeCode.Double && same);
+            // A bool root: W is the first non-bool input's dtype (any dtype of the size carries the masks). The bool OUTPUT
+            // pack is the uniform plan's gate.
             Assert.AreEqual(boolOut, PlanModes(NDExpr.Greater(NDExpr.Input(0), 0) & NDExpr.IsNaN(NDExpr.Input(1)), i8f8,
                 out lane, out _, out same), "(int64 > 0) & isnan(float64)");
             if (boolOut)
                 Assert.IsTrue(lane == NPTypeCode.Int64 && same);
-            // 4-byte and 2-byte pairs, and two integer kinds of one size.
-            Assert.AreEqual(boolOut, PlanModes(NDExpr.Where(NDExpr.Less(NDExpr.Input(0), 5), NDExpr.Input(1), NDExpr.Input(1) * 2),
+            // 4-byte and 2-byte pairs, and two integer kinds of one size. No bool I/O.
+            Assert.IsTrue(PlanModes(NDExpr.Where(NDExpr.Less(NDExpr.Input(0), 5), NDExpr.Input(1), NDExpr.Input(1) * 2),
                 new[] { NPTypeCode.Int32, NPTypeCode.Single }, out lane, out _, out same), "where(int32 cmp, float32, float32)");
-            if (boolOut)
-                Assert.IsTrue(lane == NPTypeCode.Single && same);
-            Assert.AreEqual(boolOut, PlanModes(NDExpr.Where(NDExpr.Greater(NDExpr.Input(0), 9), NDExpr.Input(1), NDExpr.Input(1)),
+            Assert.IsTrue(lane == NPTypeCode.Single && same);
+            Assert.IsTrue(PlanModes(NDExpr.Where(NDExpr.Greater(NDExpr.Input(0), 9), NDExpr.Input(1), NDExpr.Input(1)),
                 new[] { NPTypeCode.UInt16, NPTypeCode.Int16 }, out lane, out _, out same), "where(uint16 cmp, int16, int16)");
-            if (boolOut)
-                Assert.IsTrue(lane == NPTypeCode.Int16 && same);
+            Assert.IsTrue(lane == NPTypeCode.Int16 && same);
             // A streamed bool operand needs the x86 byte → 8-byte lane expansion, as in the uniform plan.
             bool boolIn = DirectILKernelGenerator.FusedBoolInputMasksAvailable(NPTypeCode.Double);
             Assert.AreEqual(boolIn, PlanModes(NDExpr.Where(NDExpr.Input(2) & NDExpr.Greater(NDExpr.Input(0), 0), NDExpr.Input(1), 0),

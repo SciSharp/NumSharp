@@ -859,13 +859,16 @@ namespace NumSharp.Tests.Polynomial
             try
             {
                 var inf = new Complex(double.PositiveInfinity, 0);
-                // No operand holds a NaN, so every NaN below is GENERATED (inf*0, inf-inf): the CPU's default NaN, NumPy
-                // win-amd64's 000000000000f8ff on x86 and 000000000000f87f on arm64 (see HostCpu).
+                // No operand holds a NaN, so every NaN below is GENERATED (inf*0, inf-inf). The two-term product runs
+                // zdotu, whose NaN outputs NDDot's model writes as x86's default NaN on EVERY host (D23: NumPy win-amd64's
+                // bits, Z); a one-term factor runs CDOUBLE_dot's plain loop, plain arithmetic holding the CPU's own default
+                // NaN (N; arm64's is positive, see HostCpu).
+                const string Z = "000000000000f8ff";
                 string N = HostCpu.DefaultNaN64Hex;
                 var r = np.polynomial.polynomial.polymul(np.array(new[] { inf, new Complex(1, 1) }),
                                                          np.array(new[] { new Complex(1, 0), new Complex(2, -1) }));
                 AssertBytes(r, "complex128", new long[] { 3 },
-                            $"{N}{N}{N}000000000000f0ff0000000000000840000000000000f03f",
+                            $"{Z}{Z}{Z}000000000000f0ff0000000000000840000000000000f03f",
                             "zdotu's C99 result: an infinite / NaN imaginary part turns the real part into NaN");
                 var one = np.polynomial.polynomial.polymul(np.array(new[] { inf, new Complex(1, 1) }), np.array(new[] { new Complex(1, 0) }));
                 AssertBytes(one, "complex128", new long[] { 2 }, $"000000000000f07f{N}000000000000f03f000000000000f03f",

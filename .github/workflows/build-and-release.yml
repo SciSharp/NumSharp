@@ -75,12 +75,14 @@ jobs:
         [ "$SHA" = "b897629e0b20090c9219ac80392c037fa4cfcc2bdc21d3c45d9bf74b8df0f671" ] || { echo "::error::Open.snk content changed."; exit 1; }
 
     - name: Build
+      id: build_tests
       run: dotnet build test/NumSharp.Tests/NumSharp.Tests.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # The differential-fuzz ORACLE is its own project (isolated so the optional OpenBLAS engine can be
     # managed apart from the managed-kernel tiers). It carries the FuzzMatrix gate plus the host-pinned
     # matmul_parity / BlasBackendDelta tiers, so it must build and test on the release-blocking path.
     - name: Build Oracle (differential-fuzz gate)
+      id: build_oracle
       run: dotnet build test/NumSharp.Tests.Oracle/NumSharp.Tests.Oracle.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # The analyzer gate: NumSharp.Tests.Build.Analyzer runs the NDW012 leak analyzer + the NDW016/NDW017
@@ -88,6 +90,7 @@ jobs:
     # in-process over the NumSharp.Tests.Build.Analyzer.Fixtures files and asserts the diagnostics land on
     # exactly the tagged lines.
     - name: Build Analyzer tests
+      id: build_analyzer
       run: dotnet build test/NumSharp.Tests.Build.Analyzer/NumSharp.Tests.Build.Analyzer.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # Test filtering:
@@ -105,7 +108,12 @@ jobs:
     # (2026-11-02; the unit run's tests sum to 1,145 s and parallelize only about 2.8x there), so the old
     # 10-minute limit would end a 4-vCPU runner's step mid-run. A hang still ends: the oracle's per-case
     # watchdog fails a stuck case after 2 minutes, and a step that ends at its limit fails the job.
+    #
+    # Every test step runs when its own build succeeded, whatever an earlier test step did
+    # (`!cancelled()`): the first run of PR #633 (2026-11-07) failed `Test (net8.0)` on all three OSes
+    # and so never ran the net10.0 suite, the oracle or the analyzer tests, hiding their results.
     - name: Test (net8.0)
+      if: ${{ !cancelled() && steps.build_tests.outcome == 'success' }}
       shell: bash
       timeout-minutes: 25
       run: |
@@ -121,6 +129,7 @@ jobs:
           --filter "$FILTER" --logger "trx"
 
     - name: Test (net10.0)
+      if: ${{ !cancelled() && steps.build_tests.outcome == 'success' }}
       shell: bash
       timeout-minutes: 25
       run: |
@@ -139,6 +148,7 @@ jobs:
     # filter — the Oracle project carries no OpenBugs/HighMemory tiers, but the filter is harmless and
     # keeps the two suites symmetric.
     - name: Test Oracle (net8.0)
+      if: ${{ !cancelled() && steps.build_oracle.outcome == 'success' }}
       shell: bash
       timeout-minutes: 25
       run: |
@@ -151,6 +161,7 @@ jobs:
           --filter "$FILTER" --logger "trx"
 
     - name: Test Oracle (net10.0)
+      if: ${{ !cancelled() && steps.build_oracle.outcome == 'success' }}
       shell: bash
       timeout-minutes: 25
       run: |
@@ -166,6 +177,7 @@ jobs:
     # MSBuild NDW013 warning (also covered by tools/verify_build_package.sh step 17); the in-process
     # Roslyn-analyzer assertions here are the cross-platform gate.
     - name: Test Analyzer (net8.0)
+      if: ${{ !cancelled() && steps.build_analyzer.outcome == 'success' }}
       shell: bash
       timeout-minutes: 10
       run: |
@@ -174,6 +186,7 @@ jobs:
           --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=AnalyzerBuild" --logger "trx"
 
     - name: Test Analyzer (net10.0)
+      if: ${{ !cancelled() && steps.build_analyzer.outcome == 'success' }}
       shell: bash
       timeout-minutes: 10
       run: |
@@ -467,9 +480,11 @@ jobs:
           echo "=== ldd $so ==="; ldd "$so" 2>&1 | grep -i "not found" || echo "  (all deps resolved)"
         fi
 
-    # The suite runs once per Python environment, split by the PythonEcosystem category (the suite
-    # carries no OpenBugs/HighMemory tests, and every test already self-asserts a LiveExports/
-    # LiveImports leak baseline). Every test runs exactly once per TFM:
+    # The suite runs once per Python environment, split by the PythonEcosystem category (every test
+    # already self-asserts a LiveExports/LiveImports leak baseline). Both runs exclude OpenBugs, like
+    # every other test step: the suite carries known-failing reproductions since 2026-11-05 (the
+    # OpenBLAS backend's view-copying vdot and its own loops' NaN order, ProductsLiveParityTests), which
+    # turned all three legs red on the first CI run of PR #633. Every other test runs exactly once per TFM:
     #   - parity:    everything EXCEPT [PythonEcosystem] — the byte-exact live-NumPy oracle.
     #   - ecosystem: ONLY [PythonEcosystem], with NUMSHARP_PYTHONNET_REQUIRE_PACKAGES=1 so an absent
     #                or wrong-version package FAILS instead of skipping (the environment installs every
@@ -486,7 +501,7 @@ jobs:
       run: |
         dotnet test test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj \
           --configuration Release --no-build --framework net8.0 \
-          --filter "TestCategory!=PythonEcosystem" --logger "trx;LogFileName=pythonnet-parity-net8.0.trx"
+          --filter "TestCategory!=PythonEcosystem&TestCategory!=OpenBugs" --logger "trx;LogFileName=pythonnet-parity-net8.0.trx"
 
     - name: "pythonnet: Test parity (net10.0)"
       if: ${{ !cancelled() && steps.pythonnet_build.outcome == 'success' && steps.pyenv_parity.outcome == 'success' }}
@@ -497,7 +512,7 @@ jobs:
       run: |
         dotnet test test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj \
           --configuration Release --no-build --framework net10.0 \
-          --filter "TestCategory!=PythonEcosystem" --logger "trx;LogFileName=pythonnet-parity-net10.0.trx"
+          --filter "TestCategory!=PythonEcosystem&TestCategory!=OpenBugs" --logger "trx;LogFileName=pythonnet-parity-net10.0.trx"
 
     - name: "pythonnet: Test ecosystem (net8.0)"
       if: ${{ !cancelled() && steps.pythonnet_build.outcome == 'success' && steps.pyenv_ecosystem.outcome == 'success' }}
@@ -509,7 +524,7 @@ jobs:
       run: |
         dotnet test test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj \
           --configuration Release --no-build --framework net8.0 \
-          --filter "TestCategory=PythonEcosystem" --logger "trx;LogFileName=pythonnet-ecosystem-net8.0.trx"
+          --filter "TestCategory=PythonEcosystem&TestCategory!=OpenBugs" --logger "trx;LogFileName=pythonnet-ecosystem-net8.0.trx"
 
     - name: "pythonnet: Test ecosystem (net10.0)"
       if: ${{ !cancelled() && steps.pythonnet_build.outcome == 'success' && steps.pyenv_ecosystem.outcome == 'success' }}
@@ -521,7 +536,7 @@ jobs:
       run: |
         dotnet test test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj \
           --configuration Release --no-build --framework net10.0 \
-          --filter "TestCategory=PythonEcosystem" --logger "trx;LogFileName=pythonnet-ecosystem-net10.0.trx"
+          --filter "TestCategory=PythonEcosystem&TestCategory!=OpenBugs" --logger "trx;LogFileName=pythonnet-ecosystem-net10.0.trx"
 
     # ── ONNX Runtime interop (NumSharp.Interop.OnnxRuntime) ────────────────────────────────────────
     #

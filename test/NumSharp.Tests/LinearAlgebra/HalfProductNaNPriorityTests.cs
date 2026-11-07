@@ -66,8 +66,9 @@ namespace NumSharp.Tests.LinearAlgebra
             // a = [nan1, -nan2], b = [1, 1]: the sum is nan1 before -nan2 arrives -> 0x7e01 (NumSharp kept 0xfe04)
             AssertVectorPair("nan1 then -nan2", new[] { P1, N2 }, new[] { One, One }, P1);
             AssertVectorPair("-nan2 then nan1", new[] { N2, P1 }, new[] { One, One }, N2);
-            // a = [inf, nan1], b = [0, 1]: inf * 0 is x86's default NaN, negative, and it stays -> 0xfe00
-            AssertVectorPair("inf*0 then nan1", new[] { Inf, P1 }, new[] { Zero, One }, 0xFE00);
+            // a = [inf, nan1], b = [0, 1]: inf * 0 is the CPU's GENERATED NaN (x86 0xfe00, arm64 0x7e00: HostCpu), and it
+            // stays ahead of nan1
+            AssertVectorPair("inf*0 then nan1", new[] { Inf, P1 }, new[] { Zero, One }, HostCpu.DefaultNaN16Bits);
             // a = [1, nan1], b = [-nan2, 1] -> -nan2 (0xfe04)
             AssertVectorPair("-nan2 then nan1 (second factors)", new[] { One, P1 }, new[] { N2, One }, N2);
         }

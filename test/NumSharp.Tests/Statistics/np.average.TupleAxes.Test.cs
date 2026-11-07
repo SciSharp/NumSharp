@@ -124,9 +124,11 @@ namespace NumSharp.Tests.Statistics
                 Bits(f).Should().Equal(0L, 0x3FF8000000000000, unchecked((long)0xC002000000000000));
 
             var c = np.array(new[] { new Complex(double.PositiveInfinity, 1.0), new Complex(1.0, double.PositiveInfinity), new Complex(-0.0, 2.0) });
+            // The two NaNs are inf*0 inside the division by 1+0j, GENERATED: the CPU's default NaN (x86 negative, arm64
+            // positive, HostCpu); no operand holds a NaN.
+            long generated = (long)HostCpu.DefaultNaN64Bits;
             using (var z = np.average(c, Array.Empty<int>()))
-                ComplexBits(z).Should().Equal(0x7FF0000000000000, unchecked((long)0xFFF8000000000000), unchecked((long)0xFFF8000000000000),
-                    0x7FF0000000000000, 0L, 0x4000000000000000);
+                ComplexBits(z).Should().Equal(0x7FF0000000000000, generated, generated, 0x7FF0000000000000, 0L, 0x4000000000000000);
 
             using (var h = np.average(np.array(new[] { (Half)(-0.0), (Half)1.5, Half.MaxValue }), Array.Empty<int>()))
             {

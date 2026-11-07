@@ -51,8 +51,10 @@ namespace NumSharp.Tests.Math
             var fails = new List<string>();
             var c = np.array(new Complex[,] { { new Complex(double.PositiveInfinity, 2), new Complex(double.NaN, 0) },
                                               { new Complex(1, 1), new Complex(3, -1) } });
+            // The NaN is inf*0 inside the division, GENERATED: the CPU's default NaN (x86 fff8…, arm64 7ff8…, HostCpu); the
+            // skipped element's NaN never reaches the result.
             Check(fails, "nanmean c128 inf axis0", () => np.nanmean(c, 0),
-                  "complex128 (2,) 7ff0000000000000 fff8000000000000 4008000000000000 bff0000000000000");
+                  $"complex128 (2,) 7ff0000000000000 {HostCpu.DefaultNaN64Word} 4008000000000000 bff0000000000000");
             AssertNoMismatch(fails, "NumPy's nanmean divides in its complex loop");
         }
 

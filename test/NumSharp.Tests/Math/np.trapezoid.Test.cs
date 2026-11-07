@@ -553,6 +553,10 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Trapezoid_NaNSpacing_IsTheProductsFirstOperand()
         {
+            // Which of the two NaNs the product keeps is NumPy's win-amd64 operand order (an x86 contract, kernels.md); arm64
+            // keeps the spacing's (macOS CI 2026-11-07), as an x86 Debug build does. Asserted on x86 only.
+            if (!HostCpu.IsX86)
+                Assert.Inconclusive("which NaN a product of two NaNs keeps is numpy 2.4.2 win-amd64's x86 operand order");
             double nan = BitConverter.Int64BitsToDouble(0x7ff8000000000000);
             double negNan = BitConverter.Int64BitsToDouble(unchecked((long)0xfff8000000000000));
 

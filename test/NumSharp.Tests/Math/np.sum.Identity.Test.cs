@@ -582,7 +582,8 @@ namespace NumSharp.Tests.Math
         ///     A complex mean divides the sum by the count with NumPy's complex loop — Smith's algorithm with the
         ///     divisor <c>n+0j</c>: <c>((re + im*0) * (1/n), (im - re*0) * (1/n))</c>. An infinite or NaN part therefore
         ///     poisons the other part, even for one element: <c>np.mean([5+inf j])</c> is <c>(nan, inf)</c>, with the
-        ///     NaN that x86 produces for <c>inf*0</c> (the negative quiet NaN <c>0xfff8000000000000</c>).
+        ///     NaN the CPU generates for <c>inf*0</c> (x86's negative quiet NaN <c>0xfff8000000000000</c>, arm64's positive
+        ///     one: <see cref="HostCpu.DefaultNaN64Word"/>).
         /// </summary>
         /// <remarks>
         ///     <c>DefaultEngine.ComplexDivideByCountLikeNumPy</c> is the one division every complex mean route calls
@@ -598,27 +599,30 @@ namespace NumSharp.Tests.Math
             double inf = double.PositiveInfinity;
             double numpyNaN = BitConverter.UInt64BitsToDouble(0x7ff8000000000000);
             var grid = np.array(new[,] { { new Complex(5, inf), new Complex(1, 1) }, { new Complex(1, 1), new Complex(2, 2) } });
+            // Every N below is inf*0 inside the division, GENERATED: the CPU's default NaN (HostCpu). The [nan+1j] case
+            // propagates its operand's NaN instead, whose bits are the same on every CPU, so it keeps literal bits.
+            string N = HostCpu.DefaultNaN64Word;
             Check(fails, "mean [5+infj]", () => np.mean(np.array(new[] { new Complex(5, inf) })),
-                  "complex128 () fff8000000000000 7ff0000000000000");
+                  $"complex128 () {N} 7ff0000000000000");
             Check(fails, "mean [inf-2j]", () => np.mean(np.array(new[] { new Complex(inf, -2) })),
-                  "complex128 () 7ff0000000000000 fff8000000000000");
+                  $"complex128 () 7ff0000000000000 {N}");
             Check(fails, "mean [5+infj, 1+1j]", () => np.mean(np.array(new[] { new Complex(5, inf), new Complex(1, 1) })),
-                  "complex128 () fff8000000000000 7ff0000000000000");
+                  $"complex128 () {N} 7ff0000000000000");
             Check(fails, "mean (1,3) axis0", () => np.mean(np.array(new[,] { { new Complex(5, inf), new Complex(1, 1), new Complex(inf, 2) } }), axis: 0),
-                  "complex128 (3,) fff8000000000000 7ff0000000000000 3ff0000000000000 3ff0000000000000 7ff0000000000000 fff8000000000000");
+                  $"complex128 (3,) {N} 7ff0000000000000 3ff0000000000000 3ff0000000000000 7ff0000000000000 {N}");
             Check(fails, "mean (2,2) axis0", () => np.mean(grid, axis: 0),
-                  "complex128 (2,) fff8000000000000 7ff0000000000000 3ff8000000000000 3ff8000000000000");
+                  $"complex128 (2,) {N} 7ff0000000000000 3ff8000000000000 3ff8000000000000");
             Check(fails, "mean (2,2) axis1", () => np.mean(grid, axis: 1),
-                  "complex128 (2,) fff8000000000000 7ff0000000000000 3ff8000000000000 3ff8000000000000");
+                  $"complex128 (2,) {N} 7ff0000000000000 3ff8000000000000 3ff8000000000000");
             Check(fails, "average [5+infj]", () => np.average(np.array(new[] { new Complex(5, inf) })),
-                  "complex128 () fff8000000000000 7ff0000000000000");
+                  $"complex128 () {N} 7ff0000000000000");
             Check(fails, "nanmean [5+infj]", () => np.nanmean(np.array(new[] { new Complex(5, inf) })),
-                  "complex128 () fff8000000000000 7ff0000000000000");
+                  $"complex128 () {N} 7ff0000000000000");
             Check(fails, "mean [-0-0j]", () => np.mean(C128(1)), "complex128 () 0000000000000000 0000000000000000");
             Check(fails, "mean [nan+1j]", () => np.mean(np.array(new[] { new Complex(numpyNaN, 1) })),
                   "complex128 () 7ff8000000000000 7ff8000000000000");
             Check(fails, "mean 0-d 5+infj", () => np.mean(NDArray.Scalar(new Complex(5, inf))),
-                  "complex128 () fff8000000000000 7ff0000000000000");
+                  $"complex128 () {N} 7ff0000000000000");
             AssertNoMismatch(fails, "NumPy divides a complex mean with its complex loop, by n+0j");
         }
 

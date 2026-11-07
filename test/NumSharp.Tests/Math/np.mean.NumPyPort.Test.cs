@@ -41,8 +41,9 @@ namespace NumSharp.Tests.Math
             Check(fails, "mean i32 axis0 dtype=c128", () => np.mean(i32, 0, np.complex128),
                   "complex128 (2,) 4012aaaaaaaaaaaa 0000000000000000 400aaaaaaaaaaaaa 0000000000000000");
             var fi = np.array(new double[,] { { double.PositiveInfinity, 1.0 }, { 1.0, 2.0 } });
+            // The NaN is inf*0 inside the division, GENERATED: the CPU's default NaN (x86 fff8…, arm64 7ff8…, HostCpu).
             Check(fails, "mean f64 inf axis0 dtype=c128", () => np.mean(fi, 0, np.complex128),
-                  "complex128 (2,) 7ff0000000000000 fff8000000000000 3ff8000000000000 0000000000000000");
+                  $"complex128 (2,) 7ff0000000000000 {HostCpu.DefaultNaN64Word} 3ff8000000000000 0000000000000000");
             AssertNoMismatch(fails, "NumPy's complex mean divides in its complex loop");
         }
 

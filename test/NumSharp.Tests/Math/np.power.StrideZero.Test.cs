@@ -181,6 +181,9 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void OneElementExponents_FollowNumPysTrivialLoopAndIterator()
         {
+            // Its "(pow)" cells hold the UCRT's pow bits (Apple's libm rounds 757.7617475757002 ** 2 to the product's ...c1,
+            // macOS CI 2026-11-07); the loop decision they show is checked on Windows.
+            RequireWindowsCrtPow(nameof(OneElementExponents_FollowNumPysTrivialLoopAndIterator));
             var fails = new List<string>();
             var x = F64Bases();
             Check(fails, "(1,) ** (1,)", () => np.power(np.array(new[] { 757.7617475757002 }), np.array(new[] { 2.0 })),
@@ -191,8 +194,9 @@ namespace NumSharp.Tests.Math
                   "float64 (1,) 0000000000000000");
             Check(fails, "(6,) ** (1,)", () => np.power(x, np.array(new[] { 2.0 })),
                   "float64 (6,) 412185f5bb7003c1 0000000000000000 7ff0000000000000 40b45eb4aae20983 412cf304b7c7116b 7ff8000000000001", true);
+            // sqrt(-inf) is GENERATED: the CPU's default NaN (HostCpu); the sNaN base propagates its own bits.
             Check(fails, "(6,) ** (1,1)", () => np.power(x, np.array(new[,] { { 0.5 } })),
-                  "float64 (1,6) 403b870871b16d12 8000000000000000 fff8000000000000 4020fee21157aa51 403f355be0cfbd27 7ff8000000000001", true);
+                  $"float64 (1,6) 403b870871b16d12 8000000000000000 {HostCpu.DefaultNaN64Word} 4020fee21157aa51 403f355be0cfbd27 7ff8000000000001", true);
             Check(fails, "(1,) ** (1,1)", () => np.power(np.array(new[] { 757.7617475757002 }), np.array(new[,] { { 2.0 } })),
                   "float64 (1,1) 412185f5bb7003c1");
             Check(fails, "(6,) ** broadcast_to (6,)", () => np.power(x, np.broadcast_to(np.array(new[] { 2.0 }), new Shape(6))),
@@ -211,7 +215,11 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void ColumnExponents_AndCasts_FollowNumPysBufferingDecision()
         {
+            // Its buffered cells are pow (the UCRT's ...c2; Apple's libm gives ...c1): see RequireWindowsCrtPow.
+            RequireWindowsCrtPow(nameof(ColumnExponents_AndCasts_FollowNumPysBufferingDecision));
             var fails = new List<string>();
+            // The fff8 cells below are sqrt(-inf), GENERATED: the CPU's default NaN (HostCpu).
+            string n64 = HostCpu.DefaultNaN64Word;
             var xx = np.array(new[,] { { 757.7617475757002, -0.0, 3.0 }, { double.NegativeInfinity, 757.7617475757002, 5.0 } });
             var col = np.array(new[,] { { 2.0 }, { 0.5 } });
             Check(fails, "(2,3) ** (2,1) buffered", () => np.power(xx, col),
@@ -220,7 +228,7 @@ namespace NumSharp.Tests.Math
             var wide = Cycled(new[] { 757.7617475757002, -0.0, double.NegativeInfinity, 2.0 }, 2, 4097);
             var r = np.power(wide, col);
             Check(fails, "(2,4097) ** (2,1) head", () => r[":, :4"],
-                  "float64 (2,4) 412185f5bb7003c1 0000000000000000 7ff0000000000000 4010000000000000 8000000000000000 fff8000000000000 3ff6a09e667f3bcd 403b870871b16d12", true);
+                  $"float64 (2,4) 412185f5bb7003c1 0000000000000000 7ff0000000000000 4010000000000000 8000000000000000 {n64} 3ff6a09e667f3bcd 403b870871b16d12", true);
             Check(fails, "(2,4097) ** (2,1) tail", () => r[":, -1:"], "float64 (2,1) 412185f5bb7003c1 8000000000000000");
 
             long previous = np.setbufsize(256);
@@ -231,7 +239,7 @@ namespace NumSharp.Tests.Math
                       "float64 (2,3) 412185f5bb7003c2 0000000000000000 7ff0000000000000 403b870871b16d12 0000000000000000 7ff0000000000000");
                 Check(fails, "bufsize 256: (2,129) ** (2,1) per row",
                       () => np.power(Cycled(new[] { 757.7617475757002, -0.0, double.NegativeInfinity, 2.0 }, 2, 129), col)[":, :3"],
-                      "float64 (2,3) 412185f5bb7003c1 0000000000000000 7ff0000000000000 8000000000000000 fff8000000000000 3ff6a09e667f3bcd", true);
+                      $"float64 (2,3) 412185f5bb7003c1 0000000000000000 7ff0000000000000 8000000000000000 {n64} 3ff6a09e667f3bcd", true);
                 Check(fails, "bufsize 256: (256,) ** broadcast int64 (copied)",
                       () => np.power(Cycled(new[] { 757.7617475757002, 1.5 }, 256), np.broadcast_to(np.array(new[] { 2L }), new Shape(256)))[":1"],
                       "float64 (1,) 412185f5bb7003c2");
@@ -257,6 +265,8 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void OneElementCastOut_AndTheBufferStop_FollowNumPysDecision()
         {
+            // Its trivial-loop cells are pow (the UCRT's ...c2; Apple's libm gives ...c1): see RequireWindowsCrtPow.
+            RequireWindowsCrtPow(nameof(OneElementCastOut_AndTheBufferStop_FollowNumPysDecision));
             var fails = new List<string>();
             foreach (var shape in new[] { new Shape(1), new Shape(1, 1) })
             {
@@ -272,7 +282,8 @@ namespace NumSharp.Tests.Math
             long previous = np.setbufsize(256);
             try
             {
-                foreach (var (n, want) in new[] { (255, "0000000000000000 7ff0000000000000"), (256, "8000000000000000 fff8000000000000") })
+                // Rows of 256 take sqrt: sqrt(-inf) is GENERATED, the CPU's default NaN (HostCpu).
+                foreach (var (n, want) in new[] { (255, "0000000000000000 7ff0000000000000"), (256, $"8000000000000000 {HostCpu.DefaultNaN64Word}") })
                 {
                     var v = new float[2 * n];
                     Array.Fill(v, 3f);
@@ -299,9 +310,11 @@ namespace NumSharp.Tests.Math
         public void Dtype_ComparesTheExponentInTheLoopDtype()
         {
             var fails = new List<string>();
+            // FLOAT_power's sqrt: no pow cell here, so the test runs on every host; sqrt(-inf) is GENERATED, the CPU's float32
+            // default NaN (HostCpu).
             Check(fails, "f64 ** 0.50000001 dtype=f32",
                   () => np.power(np.array(new[] { 892.0480346679688, -0.0, double.NegativeInfinity }), NDArray.Scalar(0.50000001), dtype: np.float32),
-                  "float32 (3,) 41eeeff9 80000000 ffc00000", true);
+                  $"float32 (3,) 41eeeff9 80000000 {HostCpu.DefaultNaN32Word}", true);
             Check(fails, "int8 ** 0.5 (float64 loop)", () => np.power(np.array(new sbyte[] { 4, 9, 2 }), NDArray.Scalar(0.5)),
                   "float64 (3,) 4000000000000000 4008000000000000 3ff6a09e667f3bcd");
             Check(fails, "int32 (3,) ** (1,1)", () => np.power(np.array(new[] { 1, 2, 3 }), np.array(new[,] { { 2 } })),

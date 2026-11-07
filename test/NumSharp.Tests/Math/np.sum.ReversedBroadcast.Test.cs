@@ -157,6 +157,10 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Sum_BroadcastColumn_AlongTheBroadcastAxis_KeepsNumPysNaNPerRegion()
         {
+            // The body / tail split is NumPy's AVX2 block of two 32-byte vectors: a host without X86_V3 (arm64, 16-byte
+            // vectors) splits elsewhere on both sides, so the probed win-amd64 regions are no contract there.
+            if (!HostCpu.IsX86V3)
+                Assert.Inconclusive("the scalar-broadcast region rule is numpy 2.4.2 win-amd64's AVX2 block split; this host has no X86_V3");
             var fails = new List<string>();
             var col = np.array(new[,] { { Nan(1) }, { Nan(2) }, { 3.0 } });
             Check(fails, "f64 m=20", () => np.sum(np.broadcast_to(col, new Shape(3, 20)), 0), F64Regions(20, 16, 2, 1), rawNaN: true);
@@ -256,9 +260,11 @@ namespace NumSharp.Tests.Math
                 g[i, 14] = -0.0;
             g[0, 15] = 1e308; g[1, 15] = 1e308;
             var a = np.array(g);
+            // Column 13 is +inf + -inf with no NaN after it: the CPU's GENERATED NaN (x86 fff8…, arm64 7ff8…, HostCpu); every
+            // other NaN below is an input's payload, propagated, the same on every CPU.
             Check(fails, "f64 a[::-1] axis0", () => np.sum(a["::-1"], 0),
                   "float64 (37,) 7ff800000000000b 4027800000000000 401f000000000000 4024000000000000 c341c37937e07ffb 7ff8000000000014 4004000000000000 4341c37937e08005" +
-                  " 4027800000000000 401f000000000000 4024000000000000 c341c37937e07ffb 7ff8000000000046 fff8000000000000 0000000000000000 7ff0000000000000" +
+                  $" 4027800000000000 401f000000000000 4024000000000000 c341c37937e07ffb 7ff8000000000046 {HostCpu.DefaultNaN64Word} 0000000000000000 7ff0000000000000" +
                   " 401f000000000000 7ff800000000001f c341c37937e07ffb 401b000000000000 4004000000000000 4341c37937e08005 4027800000000000 401f000000000000" +
                   " 4024000000000000 c341c37937e07ffb 401b000000000000 4004000000000000 4341c37937e08005 4027800000000000 401f000000000000 4024000000000000" +
                   " c341c37937e07ffb 7ff800000000002a 4004000000000000 4341c37937e08005 7ff8000000000033", rawNaN: true);
@@ -403,13 +409,16 @@ namespace NumSharp.Tests.Math
             g[0, 7] = (Half)60000.0; g[3, 7] = (Half)60000.0;
             g[1, 8] = H(0x0001); g[2, 8] = H(0x0003);
             var h = np.array(g);
+            // Column 5's inf + -inf is the CPU's GENERATED NaN (x86 fe00, arm64 7e00, HostCpu); the 7exx NaNs are the inputs'
+            // payloads, propagated by HALF_add's second-operand rule, the same on every CPU.
+            string n16 = HostCpu.DefaultNaN16Word;
             Check(fails, "f16 h[::-1] axis0", () => np.sum(h["::-1"], 0),
-                  "float16 (21,) 7e0b e7f5 45c0 7e01 48e0 fe00 0000 7c00" +
+                  $"float16 (21,) 7e0b e7f5 45c0 7e01 48e0 {n16} 0000 7c00" +
                   " e7fd 7e14 4000 48e0 4860 3800 6805 e7f5" +
                   " 45c0 4000 48e0 7e1f 3800", rawNaN: true);
             Check(fails, "f16 h[:, ::-1] axis0", () => np.sum(h[":, ::-1"], 0),
                   "float16 (21,) 3c00 7e1f 48e0 4000 4600 e7f4 6804 3c00" +
-                  " 4880 48e0 4000 7e14 e7fc 7c00 0000 fe00" +
+                  $" 4880 48e0 4000 7e14 e7fc 7c00 0000 {n16}" +
                   " 48e0 7e01 4600 e7f4 7e0e", rawNaN: true);
             Check(fails, "f16 h[::-1, ::2] axis0", () => np.sum(h["::-1, ::2"], 0),
                   "float16 (11,) 7e0b 45c0 48e0 0000 e7fd 4000 4860 6805" +

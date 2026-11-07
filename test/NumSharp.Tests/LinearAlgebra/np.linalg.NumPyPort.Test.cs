@@ -202,12 +202,17 @@ namespace NumSharp.Tests.LinearAlgebra
             // np.linalg.norm(v, 0.5, keepdims=True) the product's 0x1.185f5bb7003c1p+19.
             const double x = 757.7617475757002;
             var v = np.array(new[] { x * x });
-            Assert.AreEqual(0x412185F5BB7003C2L, BitConverter.DoubleToInt64Bits(np.linalg.norm(v, 0.5).GetDouble()));
+            // The two pow results are the CRT's: the UCRT's ...c2 bit for bit on the pinned host, within HostLibm's ULP budget
+            // elsewhere (Apple's libm rounds this pow to the product's ...c1, macOS CI 2026-11-07, as NumPy there does). The
+            // fast path's product is the same on every host.
+            double powPinned = BitConverter.Int64BitsToDouble(0x412185F5BB7003C2L);
+            double normPow = np.linalg.norm(v, 0.5).GetDouble();
+            Assert.IsTrue(HostLibm.Matches(powPinned, normPow), HostLibm.Describe("norm(v, 0.5)", powPinned, normPow));
             Assert.AreEqual(0x412185F5BB7003C1L,
                 BitConverter.DoubleToInt64Bits(np.linalg.norm(v, 0.5, (int?)null, true).GetDouble(0)));
             // vector_norm never hands keepdims to norm: np.linalg.vector_norm(v, ord=0.5, keepdims=True) is the scalar's pow.
-            Assert.AreEqual(0x412185F5BB7003C2L,
-                BitConverter.DoubleToInt64Bits(np.linalg.vector_norm(v, (int[])null, true, 0.5).GetDouble(0)));
+            double vectorPow = np.linalg.vector_norm(v, (int[])null, true, 0.5).GetDouble(0);
+            Assert.IsTrue(HostLibm.Matches(powPinned, vectorPow), HostLibm.Describe("vector_norm(v, 0.5, keepdims)", powPinned, vectorPow));
 
             // An array result keeps the dtype: np.linalg.norm(a32, 1.1, axis=1) is float32 (3,), 5241af40 274a0741 fd131541.
             var a32 = np.array(new[] { 3f, -1, 2, 0, 5, -4, 1, 7, -2 }).reshape(3, 3);

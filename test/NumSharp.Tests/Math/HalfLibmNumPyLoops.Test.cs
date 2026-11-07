@@ -18,7 +18,9 @@ namespace NumSharp.Tests.Math
     ///     once (13 float16 arctan2, 2 log1p and 2 expm1 results one ULP off; 116 of 2M float32 arctan2 pairs), quieted
     ///     every signalling NaN NumPy keeps and gave log1p's domain error a negative NaN. The exhaustive tests compare a
     ///     SHA-256 of every output with NumPy's (computed by the probe over the same inputs), so a single changed bit over
-    ///     the 65,536 float16 inputs or the 1,048,576 float32 pairs fails.
+    ///     the 65,536 float16 inputs or the 1,048,576 float32 pairs fails. The float32 bits and the float16 arctan2 digest
+    ///     belong to the UCRT and are asserted on win-amd64 only (<see cref="HostLibm"/>); the float16 values and the log1p /
+    ///     expm1 digests held on glibc and Apple's libm as well (CI, 2026-11-07) and run everywhere.
     /// </remarks>
     [TestClass]
     public class HalfLibmNumPyLoopsTests
@@ -75,10 +77,15 @@ namespace NumSharp.Tests.Math
             using var expm1b = np.expm1(q2);
             Bits(expm1b).Should().Be(0x2878);
 
-            using var y32 = np.array(new[] { BitConverter.UInt32BitsToSingle(0xF5B024C4) });
-            using var x32 = np.array(new[] { BitConverter.UInt32BitsToSingle(0x7C96E3DC) });
-            using var arctan32 = np.arctan2(y32, x32);
-            BitConverter.SingleToUInt32Bits(arctan32.GetAtIndex<float>(0)).Should().Be(0xB8956C2E);
+            // float32 arctan2 IS atan2f's result, unnarrowed, so its last bit belongs to the C library: glibc and Apple's libm
+            // return 0xB8956C2D (CI 2026-11-07), as NumPy built on them does. The float16 values above passed on both.
+            if (HostLibm.IsPinnedHost)
+            {
+                using var y32 = np.array(new[] { BitConverter.UInt32BitsToSingle(0xF5B024C4) });
+                using var x32 = np.array(new[] { BitConverter.UInt32BitsToSingle(0x7C96E3DC) });
+                using var arctan32 = np.arctan2(y32, x32);
+                BitConverter.SingleToUInt32Bits(arctan32.GetAtIndex<float>(0)).Should().Be(0xB8956C2E);
+            }
         }
 
         /// <summary>
@@ -119,10 +126,14 @@ namespace NumSharp.Tests.Math
             using var a0 = np.arctan2(y0, x0);
             BitConverter.HalfToUInt16Bits(a0.GetAtIndex<Half>(0)).Should().Be(0x3E48, "0-d float16");
 
-            using var y1 = NDArray.Scalar(BitConverter.UInt32BitsToSingle(0xF5B024C4));
-            using var x1 = NDArray.Scalar(BitConverter.UInt32BitsToSingle(0x7C96E3DC));
-            using var a1 = np.arctan2(y1, x1);
-            BitConverter.SingleToUInt32Bits(a1.GetAtIndex<float>(0)).Should().Be(0xB8956C2E, "0-d float32");
+            // The float32 0-d result is atan2f's own bits: the win-amd64 UCRT's (see FindingValues_AreNumPys).
+            if (HostLibm.IsPinnedHost)
+            {
+                using var y1 = NDArray.Scalar(BitConverter.UInt32BitsToSingle(0xF5B024C4));
+                using var x1 = NDArray.Scalar(BitConverter.UInt32BitsToSingle(0x7C96E3DC));
+                using var a1 = np.arctan2(y1, x1);
+                BitConverter.SingleToUInt32Bits(a1.GetAtIndex<float>(0)).Should().Be(0xB8956C2E, "0-d float32");
+            }
 
             using var y = H(0x4E8B);
             using var x = H(0x87AC);
@@ -155,8 +166,14 @@ namespace NumSharp.Tests.Math
             Sha256<Half>(log1p).Should().Be("941AA909B1129E7E10A6C39BBB5292A36A388D60E21B78076E7723085B4912EF");
             using var expm1 = np.expm1(h);
             Sha256<Half>(expm1).Should().Be("A0E24C5105BCFC9EF1DFA222B382AAC56A8D03809C6C8533AC780D04CD328FE7");
-            using var arctan2 = np.arctan2(h, x);
-            Sha256<Half>(arctan2).Should().Be("99940207A2B1FCDB2216EDABF1E8B7011EE6E81711E37B849635EDDF7F05A65A");
+            // Over 65,536 pairs some atan2f result sits close enough to a float16 midpoint that a C library one ULP apart
+            // narrows it the other way: Apple's libm does (macOS CI 2026-11-07), so this digest is the UCRT's. The log1p and
+            // expm1 digests above held on glibc and Apple's libm too.
+            if (HostLibm.IsPinnedHost)
+            {
+                using var arctan2 = np.arctan2(h, x);
+                Sha256<Half>(arctan2).Should().Be("99940207A2B1FCDB2216EDABF1E8B7011EE6E81711E37B849635EDDF7F05A65A");
+            }
 
             // The strided route: log1p of the reversed view, reversed back, is the same 65,536 results.
             using var rev = h["::-1"];
@@ -172,6 +189,9 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Float32_Arctan2_HashesToNumPys()
         {
+            // Every one of the 1,048,576 results is atan2f's own float32 bits, so the digest is the win-amd64 UCRT's; glibc's
+            // and Apple's atan2f differ in some last bits (CI 2026-11-07).
+            HostLibm.RequirePinnedHost(nameof(Float32_Arctan2_HashesToNumPys), "atan2f's float32 results");
             const int n = 1 << 20;
             var ab = new uint[n];
             var bb = new uint[n];

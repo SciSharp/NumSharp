@@ -162,5 +162,30 @@ namespace NumSharp.Tests
                 Assert.Inconclusive(why + " — this random stream passes through the platform libm (values and accept/reject " +
                                     "decisions), so its NumPy 2.4.2 bytes are contractual only on the pinned win-amd64 CRT host.");
         }
+
+        /// <summary>
+        /// Ends the running test as <b>Inconclusive</b> off the pinned host, BEFORE it asserts anything: for a test whose
+        /// every assertion is a libm bit pattern that no ULP budget can judge, such as a SHA-256 digest over a grid of
+        /// libm results (one element one ULP apart changes the whole digest). Does nothing on the pinned host, where the
+        /// test then runs in full.
+        /// </summary>
+        /// <param name="test">The test's name, which leads the Inconclusive message.</param>
+        /// <param name="what">What the pinned bits are (the libm call and the route), quoted in the message.</param>
+        /// <exception cref="AssertInconclusiveException">Always, when <see cref="IsPinnedHost"/> is false.</exception>
+        /// <remarks>
+        /// Prefer the narrower tools when they fit, because this one checks nothing off the pinned host: a single double
+        /// goes through <see cref="Matches(double, double)"/> (exact here, ULP-close elsewhere); a test mixing pinned and
+        /// portable assertions branches on <see cref="IsPinnedHost"/> around the pinned lines only, so the rest keeps
+        /// running on Linux and macOS; a random stream uses <see cref="InconclusiveOffPinnedHost"/> after the per-value
+        /// budget. Measured cause of the 2026-11-07 uses: glibc's and Apple's <c>atan2f</c>, <c>log</c> and <c>exp</c>
+        /// differ from the UCRT's somewhere in 100,000-element grids (PR #633's first CI run).
+        /// </remarks>
+        public static void RequirePinnedHost(string test, string what)
+        {
+            if (!IsPinnedHost)
+                Assert.Inconclusive($"{test} pins {what} as the win-amd64 CRT returns them (NumPy 2.4.2's wheel); this host's " +
+                                    $"libm ({RuntimeInformation.OSDescription}) rounds some of the same calls one ULP apart, " +
+                                    "so the bits are contractual only on the pinned host.");
+        }
     }
 }

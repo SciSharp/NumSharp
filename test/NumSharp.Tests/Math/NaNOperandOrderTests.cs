@@ -129,6 +129,28 @@ public class NaNOperandOrderTests
     }
 
     /// <summary>
+    ///     Ends the calling test as Inconclusive unless the host is x86 with NumPy's X86_V3 target
+    ///     (<see cref="HostCpu.IsX86V3"/>): for a pattern shaped by the AVX2 scalar-broadcast loop's
+    ///     blocks of two 32-byte vectors.
+    /// </summary>
+    /// <param name="test">The test's name, quoted in the Inconclusive message.</param>
+    /// <remarks>
+    ///     The region rule's block length is twice the vector width NumPy's dispatcher picks, and
+    ///     NumSharp derives it from the same feature set, so a host without X86_V3 (16-byte vectors)
+    ///     splits at 4 float64 / 8 float32 lanes instead of 8 / 16, and arm64's NumPy orders the
+    ///     operands differently anyway: the probed win-amd64 patterns are no contract there (macOS
+    ///     arm64 CI, 2026-11-07: "aaaabbb" for "bbbbbbb"). The oracle's nan_order tier is gated the
+    ///     same way. The tests of this class that no block shapes stay portable.
+    /// </remarks>
+    /// <exception cref="AssertInconclusiveException">On a host without X86_V3.</exception>
+    private static void RequireX86V3RegionRule(string test)
+    {
+        if (!HostCpu.IsX86V3)
+            Assert.Inconclusive($"{test} pins numpy 2.4.2 win-amd64's AVX2 region rule (blocks of two 32-byte vectors); " +
+                                "this host has no X86_V3, so NumPy and NumSharp both split elsewhere.");
+    }
+
+    /// <summary>
     ///     Contiguous operands of every length class (scalar loop, 4x-unrolled SIMD body, vector
     ///     remainder, scalar tail) keep the second operand's NaN for add / multiply and the first
     ///     operand's for subtract / divide, at float64 and float32.
@@ -161,6 +183,7 @@ public class NaNOperandOrderTests
     [TestMethod]
     public void ScalarBroadcast_Float64_RegionRule()
     {
+        RequireX86V3RegionRule(nameof(ScalarBroadcast_Float64_RegionRule));
         // (n, left-broadcast pattern, right-broadcast pattern), probed numpy 2.4.2 win-amd64.
         var probed = new (long n, string left, string right)[]
         {
@@ -193,6 +216,7 @@ public class NaNOperandOrderTests
     [TestMethod]
     public void ScalarBroadcast_Float32_RegionRuleBlocksOf16()
     {
+        RequireX86V3RegionRule(nameof(ScalarBroadcast_Float32_RegionRuleBlocksOf16));
         var probed = new (long n, string left, string right)[]
         {
             (9, "bbbbbbbbb", "bbbbbbbbb"),
@@ -257,6 +281,7 @@ public class NaNOperandOrderTests
     [TestMethod]
     public void WhereRuns_RegionRuleRestartsPerRun()
     {
+        RequireX86V3RegionRule(nameof(WhereRuns_RegionRuleRestartsPerRun));
         var runs = new bool[40];
         foreach (var (start, stop) in new[] { (0, 12), (13, 14), (15, 35), (36, 40) })
             for (int i = start; i < stop; i++)

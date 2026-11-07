@@ -59,8 +59,9 @@ namespace NumSharp.Tests.Math
         }
 
         /// <summary>
-        ///     A uint16 65535 is inf in a float16 loop (it rounds past float16's 65504), and inf times 0 is NumPy's default
-        ///     NaN (0xFE00 on x86): the column products are [inf, NaN, NaN, 0].
+        ///     A uint16 65535 is inf in a float16 loop (it rounds past float16's 65504), and inf times 0 is the CPU's
+        ///     generated NaN (0xFE00 on x86, 0x7E00 on arm64: <see cref="HostCpu.DefaultNaN16Bits"/>): the column products
+        ///     are [inf, NaN, NaN, 0].
         /// </summary>
         [TestMethod]
         public void AxisProduct_IntoAFloat16Loop_RoundsEachElementFirst()
@@ -71,7 +72,7 @@ namespace NumSharp.Tests.Math
             var bits = new ushort[4];
             for (int i = 0; i < 4; i++)
                 bits[i] = BitConverter.HalfToUInt16Bits(r.GetAtIndex<Half>(i));
-            bits.Should().Equal((ushort)0x7C00, (ushort)0xFE00, (ushort)0xFE00, (ushort)0x0000);
+            bits.Should().Equal((ushort)0x7C00, HostCpu.DefaultNaN16Bits, HostCpu.DefaultNaN16Bits, (ushort)0x0000);
         }
 
         /// <summary>A complex input in a float64 loop keeps its real parts: each row's product is -0.0 here.</summary>

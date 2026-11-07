@@ -67,7 +67,8 @@ public class np_quantile_family_Precision_Tests
     ///     The rounding can carry an index past the line: over 2052 elements <c>n - 1 = 2051</c> is 2052 in float16, so
     ///     'lower' partitions at 2052 and raises the partition's <c>kth(=2052) out of bounds (2052)</c>, while 'linear'
     ///     clips the index (<c>vi &gt;= n - 1</c>) and answers 2051.0. From 65520 elements on <c>n - 1</c> is inf in float16:
-    ///     <c>inf * 0.5 - floor(inf)</c> is NaN, and the result is x86's default NaN (negative, <c>0xFFF8...</c>).
+    ///     <c>inf * 0.5 - floor(inf)</c> is NaN, and the result is the CPU's generated NaN (x86's negative <c>0xFFF8...</c>,
+    ///     arm64's positive one: <see cref="HostCpu.DefaultNaN64Bits"/>).
     /// </summary>
     [TestMethod]
     public void FloatQ_RoundedIndexPastTheEnd()
@@ -82,7 +83,7 @@ public class np_quantile_family_Precision_Tests
         using var huge = np.arange(70000.0);
         using var half = Q16(0.5);
         using var nan = np.quantile(huge, half);
-        Bits(D(nan)[0]).Should().Be(0xFFF8000000000000UL);
+        Bits(D(nan)[0]).Should().Be(HostCpu.DefaultNaN64Bits, "inf - inf is generated, so its sign is the CPU's");
     }
 
     /// <summary>

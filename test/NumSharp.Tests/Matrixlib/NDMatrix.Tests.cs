@@ -587,25 +587,35 @@ namespace NumSharp.Tests.Matrixlib
         }
 
         /// <summary>Asserts that two arrays of one float dtype and shape hold the same bit patterns, element by
-        ///     element in logical order (so a zero's sign and a NaN's payload count).</summary>
+        ///     element in logical order (so a zero's sign and a NaN's payload count). Off x86 a NaN matches any NaN.</summary>
         /// <param name="actual">The array under test: float32, float64 or complex128.</param>
         /// <param name="expected">The reference, of the same dtype and size.</param>
         /// <param name="where">The case description for a failure message.</param>
+        /// <remarks>Which NaN a route ends with (sign, payload) is a win-amd64 contract: where one route's NaN is the
+        ///     CPU's (an invalid operation's) and another's is modelled on x86, the two agree on x86 only, and on arm64
+        ///     (positive default NaN) a complex128 NaN part came out with the other sign (emulated arm64, .NET 10,
+        ///     2026-11-07). Off x86 a NaN therefore matches any NaN; every other value keeps its exact bits.</remarks>
         private static void AssertSameBits(NDArray actual, NDArray expected, string where)
         {
             actual.size.Should().Be(expected.size, where);
+            bool nanToken = !HostCpu.IsX86;
+            // Same bits, or (off x86) both NaN.
+            bool Same64(double a, double e) => BitConverter.DoubleToInt64Bits(a) == BitConverter.DoubleToInt64Bits(e)
+                                               || (nanToken && double.IsNaN(a) && double.IsNaN(e));
             for (long i = 0; i < expected.size; i++)
             {
                 bool same;
                 if (expected.typecode == NPTypeCode.Single)
-                    same = BitConverter.SingleToInt32Bits(actual.GetAtIndex<float>(i)) == BitConverter.SingleToInt32Bits(expected.GetAtIndex<float>(i));
+                {
+                    float a = actual.GetAtIndex<float>(i), e = expected.GetAtIndex<float>(i);
+                    same = BitConverter.SingleToInt32Bits(a) == BitConverter.SingleToInt32Bits(e) || (nanToken && float.IsNaN(a) && float.IsNaN(e));
+                }
                 else if (expected.typecode == NPTypeCode.Double)
-                    same = BitConverter.DoubleToInt64Bits(actual.GetAtIndex<double>(i)) == BitConverter.DoubleToInt64Bits(expected.GetAtIndex<double>(i));
+                    same = Same64(actual.GetAtIndex<double>(i), expected.GetAtIndex<double>(i));
                 else
                 {
                     Complex a = actual.GetAtIndex<Complex>(i), e = expected.GetAtIndex<Complex>(i);
-                    same = BitConverter.DoubleToInt64Bits(a.Real) == BitConverter.DoubleToInt64Bits(e.Real)
-                           && BitConverter.DoubleToInt64Bits(a.Imaginary) == BitConverter.DoubleToInt64Bits(e.Imaginary);
+                    same = Same64(a.Real, e.Real) && Same64(a.Imaginary, e.Imaginary);
                 }
 
                 if (!same)

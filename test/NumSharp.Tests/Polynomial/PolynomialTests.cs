@@ -103,7 +103,9 @@ namespace NumSharp.Tests.Polynomial
         public void Polyval_FirstProduct_IsInXsDtype()
         {
             static (long, long) Bits(Complex z) => (BitConverter.DoubleToInt64Bits(z.Real), BitConverter.DoubleToInt64Bits(z.Imaginary));
-            const long NumPyNaN = unchecked((long)0xFFF8000000000000);   // x86's default NaN: 0 * inf
+            // 0 * inf is GENERATED, so its NaN is the CPU's default (x86 0xFFF8..., arm64 0x7FF8...); the later products only
+            // propagate it. No operand holds a NaN.
+            long NumPyNaN = (long)HostCpu.DefaultNaN64Bits;
             using (var r = np.polyval(np.array(new[] { new Complex(1, 1) }), np.array(new[] { double.PositiveInfinity })))
                 Bits((Complex)r.GetValue(0)).Should().Be((NumPyNaN, BitConverter.DoubleToInt64Bits(1.0)), "[1+1j] at [inf] is nan+1j");
             using (var r = np.polyval(np.array(new[] { new Complex(1, 0) }), np.array(new[] { double.PositiveInfinity })))

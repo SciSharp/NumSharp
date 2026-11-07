@@ -615,7 +615,25 @@ namespace NumSharp.Tests.Polynomial
                         continue;
                     }
                     Assert.AreEqual(statements.dtype.name, fused.dtype.name, label);
-                    Assert.AreEqual(Hex(statements), Hex(fused), label);
+                    // On x86 the two routes agree byte for byte. Off it a NaN's sign is no contract: herme(complex128)'s
+                    // statements and fused pass generate their NaNs at different operations, and arm64's positive default
+                    // NaN gave them opposite signs in 8 slots (emulated arm64, .NET 10, 2026-11-07). NaN slots are tokens
+                    // there; every other byte must still agree.
+                    int width = statements.dtype.name switch { "float16" => 2, "float32" => 4, "float64" or "complex128" => 8, _ => 0 };
+                    if (HostCpu.IsX86 || width == 0)
+                    {
+                        Assert.AreEqual(Hex(statements), Hex(fused), label);
+                        continue;
+                    }
+                    byte[] sb = Convert.FromHexString(Hex(statements)), fb = Convert.FromHexString(Hex(fused));
+                    Assert.AreEqual(sb.Length, fb.Length, label);
+                    for (int i = 0; i < sb.Length; i += width)
+                    {
+                        long s = width switch { 2 => BitConverter.ToInt16(sb, i), 4 => BitConverter.ToInt32(sb, i), _ => BitConverter.ToInt64(sb, i) };
+                        long f = width switch { 2 => BitConverter.ToInt16(fb, i), 4 => BitConverter.ToInt32(fb, i), _ => BitConverter.ToInt64(fb, i) };
+                        if (!(IsNaNBits(s, width) && IsNaNBits(f, width)))
+                            Assert.AreEqual(s, f, $"{label}: byte {i}");
+                    }
                 }
         }
 
@@ -632,7 +650,11 @@ namespace NumSharp.Tests.Polynomial
             static double D(long bits) => BitConverter.Int64BitsToDouble(bits);
             static long Bits(in PyScalar p) => BitConverter.DoubleToInt64Bits(p.F);
 
-            Assert.AreEqual(0x76e594495e2c9536L, Bits(PyScalar.PowTwo(PyScalar.Float(2.3315311434106746e+132))), "pow, not the product");
+            // ucrtbase's pow rounds this square one ULP below the product; Apple's libm rounds it to the product (…537, macOS
+            // CI 2026-11-07), and CPython there prints that too: bit for bit on the pinned host, within HostLibm's ULP budget
+            // elsewhere.
+            double powPinned = D(0x76e594495e2c9536L), powGot = PyScalar.PowTwo(PyScalar.Float(2.3315311434106746e+132)).F;
+            Assert.IsTrue(HostLibm.Matches(powPinned, powGot), HostLibm.Describe("pow, not the product", powPinned, powGot));
             Assert.AreEqual(0x7ff4000000000001L, Bits(PyScalar.PowTwo(PyScalar.Float(D(0x7ff4000000000001L)))), "a signalling NaN is returned as it is");
             Assert.AreEqual(0L, Bits(PyScalar.PowTwo(PyScalar.Float(-0.0))), "(-0.0)**2 is +0.0");
             Assert.AreEqual(double.PositiveInfinity, PyScalar.PowTwo(PyScalar.Float(double.NegativeInfinity)).F);
@@ -644,8 +666,10 @@ namespace NumSharp.Tests.Polynomial
 
             var inf2 = PyScalar.PowTwo(PyScalar.Cplx(new Complex(double.PositiveInfinity, 0)));
             Assert.AreEqual(PyKind.Complex, inf2.Kind);
-            Assert.AreEqual(unchecked((long)0xfff8000000000000UL), BitConverter.DoubleToInt64Bits(inf2.C.Real), "(inf+0j)**2: default NaN");
-            Assert.AreEqual(unchecked((long)0xfff8000000000000UL), BitConverter.DoubleToInt64Bits(inf2.C.Imaginary));
+            // c_powu's products meet inf*0 (GENERATED), and the other part only propagates that NaN: both parts are the CPU's
+            // default NaN (x86 negative, arm64 positive, HostCpu).
+            Assert.AreEqual((long)HostCpu.DefaultNaN64Bits, BitConverter.DoubleToInt64Bits(inf2.C.Real), "(inf+0j)**2: default NaN");
+            Assert.AreEqual((long)HostCpu.DefaultNaN64Bits, BitConverter.DoubleToInt64Bits(inf2.C.Imaginary));
             var c = Assert.ThrowsException<OverflowException>(() => PyScalar.PowTwo(PyScalar.Cplx(new Complex(0, 1.4e154))));
             Assert.AreEqual("complex exponentiation", c.Message);
 
@@ -668,7 +692,10 @@ namespace NumSharp.Tests.Polynomial
         {
             static string H(in PolyNumber p) => Hex(p.ToNDArray()) + " " + p.ToNDArray().dtype.name;
 
-            Assert.AreEqual("36952c5e4994e576 float64", H(PolyNumber.PowTwo(PolyNumber.FromScalar(2.3315311434106746e+132))));
+            // The float64 square is scalarmath's pow, and this expectation is ucrtbase's (one ULP below the product); Apple's
+            // libm gives the product (37952c5e4994e576, macOS CI 2026-11-07), as NumPy built there does: gated on the UCRT.
+            if (HostLibm.IsPinnedHost)
+                Assert.AreEqual("36952c5e4994e576 float64", H(PolyNumber.PowTwo(PolyNumber.FromScalar(2.3315311434106746e+132))));
             // The float32 square is scalarmath's powf, and this expectation is the win-amd64 UCRT's: powf(2.9465066e-23f, 2)
             // underflows to 0 there, where glibc rounds the true square to the smallest subnormal (01000000 under WSL,
             // 2026-11-02), as NumPy built on glibc does. The bits belong to the C library, so they are gated on Windows only.
@@ -818,10 +845,19 @@ namespace NumSharp.Tests.Polynomial
         /// <summary>
         ///     Asserts a dump: dtype, shape, element strides (when NumPy's are listed) and bytes. The exp-based weights' float64
         ///     / float16 / complex128 values come out of the C runtime on both sides; off win-amd64 (whose ucrtbase made NumPy's
-        ///     dump) each element is held to 2 ULP instead of its exact bits.
+        ///     dump) each element is held to 2 ULP instead of its exact bits. Off x86 a NaN slot matches any NaN (see the
+        ///     remarks); on x86 every byte is compared.
         /// </summary>
         /// <param name="c">The dump.</param>
         /// <param name="r">NumSharp's result.</param>
+        /// <remarks>
+        ///     No input of the table holds a NaN, so every NaN slot in a dump was GENERATED by an invalid operation (sqrt of a
+        ///     negative, <c>inf * 0</c>, <c>inf - inf</c>), sometimes negated on the way (herm's <c>-x**2</c> turns x86's
+        ///     negative default NaN into the positive one its dump shows). The sign is therefore the CPU's default NaN's,
+        ///     flipped once per negation: arm64's default NaN is positive, so its NumPy writes the opposite sign in every such
+        ///     slot. Off x86 a NaN slot is a token (NaN where NumPy has NaN, as the oracle compares NaN off its x86 host),
+        ///     and every other slot keeps its exact (or 2-ULP) comparison.
+        /// </remarks>
         private static void AssertCase(Case c, NDArray r)
         {
             Assert.AreEqual(c.Dtype, r.dtype.name, $"{c.Label}: dtype");
@@ -829,20 +865,43 @@ namespace NumSharp.Tests.Polynomial
             if (c.Strides.Length > 0)
                 CollectionAssert.AreEqual(c.Strides, r.Shape.Strides, $"{c.Label}: element strides");
             bool hostLibm = c.Weight is "lag" or "herm" or "herme" && c.Dtype is "float64" or "float16" or "complex128";
-            if (!hostLibm || OperatingSystem.IsWindows())
+            // The width of one real slot (a complex128 element is two); 0 for the dtypes that hold no NaN.
+            int width = c.Dtype switch { "float16" => 2, "float32" => 4, "float64" or "complex128" => 8, _ => 0 };
+            bool nanToken = width != 0 && !HostCpu.IsX86;
+            if ((!hostLibm || OperatingSystem.IsWindows()) && !nanToken)
             {
                 Assert.AreEqual(c.Hex, Hex(r), $"{c.Label}: bytes");
                 return;
             }
             byte[] expected = Convert.FromHexString(c.Hex), actual = Convert.FromHexString(Hex(r));
-            int width = c.Dtype == "float16" ? 2 : 8;
+            Assert.AreEqual(expected.Length, actual.Length, $"{c.Label}: byte count");
+            bool ulp = hostLibm && !OperatingSystem.IsWindows();
             for (int i = 0; i < expected.Length; i += width)
             {
-                long e = width == 2 ? BitConverter.ToInt16(expected, i) : BitConverter.ToInt64(expected, i);
-                long a = width == 2 ? BitConverter.ToInt16(actual, i) : BitConverter.ToInt64(actual, i);
-                Assert.IsTrue(UlpDistance(a, e) <= 2, $"{c.Label}: element at byte {i} differs by more than 2 ULP");
+                // Signed reads: UlpDistance orders sign-magnitude patterns through the sign extension.
+                long e = width switch { 2 => BitConverter.ToInt16(expected, i), 4 => BitConverter.ToInt32(expected, i), _ => BitConverter.ToInt64(expected, i) };
+                long a = width switch { 2 => BitConverter.ToInt16(actual, i), 4 => BitConverter.ToInt32(actual, i), _ => BitConverter.ToInt64(actual, i) };
+                if (nanToken && IsNaNBits(e, width) && IsNaNBits(a, width))
+                    continue;
+                if (ulp)
+                    Assert.IsTrue(UlpDistance(a, e) <= 2, $"{c.Label}: element at byte {i} differs by more than 2 ULP");
+                else
+                    Assert.AreEqual(e, a, $"{c.Label}: element at byte {i}");
             }
         }
+
+        /// <summary>Whether a <paramref name="width"/>-byte IEEE bit pattern (sign-extended into a long) is a NaN: an all-ones
+        ///     exponent with a non-zero mantissa, whatever the sign and payload.</summary>
+        /// <param name="bits">The pattern, as <see cref="BitConverter.ToInt16(byte[], int)"/> / <c>ToInt32</c> / <c>ToInt64</c>
+        ///     read it.</param>
+        /// <param name="width">2 (float16), 4 (float32) or 8 (float64, a complex128 part).</param>
+        /// <returns>True for a NaN of that width.</returns>
+        private static bool IsNaNBits(long bits, int width) => width switch
+        {
+            2 => (bits & 0x7C00) == 0x7C00 && (bits & 0x03FF) != 0,
+            4 => (bits & 0x7F800000) == 0x7F800000 && (bits & 0x007FFFFF) != 0,
+            _ => (bits & 0x7FF0000000000000) == 0x7FF0000000000000 && (bits & 0x000FFFFFFFFFFFFF) != 0,
+        };
 
         /// <summary>The distance in units in the last place between two same-width IEEE bit patterns read as signed
         ///     integers (NaN to NaN is 0; a sign difference is the sum of both distances from zero).</summary>

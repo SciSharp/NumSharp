@@ -51,7 +51,10 @@ namespace NumSharp.Tests.Backends.Kernels
             foreach (var (kind, n, xHex, want) in NumPyPins)
             {
                 double[] x = FromHex(xHex);
-                Assert.AreEqual(want, ToHex(Run(kind, x, n)), $"{kind} n={n}");
+                // The pins are win-amd64's bytes. Their 000000000000f8ff slots are inf - inf, GENERATED, so they hold the
+                // CPU's default NaN (arm64's is positive); the points' own NaNs carry payloads (0x123, 0x456, 0xabcd) and
+                // propagate unchanged, so the splice cannot touch them.
+                Assert.AreEqual(HostCpu.WithHostDefaultNaN(want, 8), ToHex(Run(kind, x, n)), $"{kind} n={n}");
             }
         }
 

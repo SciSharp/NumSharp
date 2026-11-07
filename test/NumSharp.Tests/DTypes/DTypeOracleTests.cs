@@ -79,6 +79,17 @@ namespace NumSharp.Tests.DTypes
         /// <returns>The records.</returns>
         private static List<JsonElement> Of(string kind) => Corpus.Value.TryGetValue(kind, out var l) ? l : new List<JsonElement>();
 
+        /// <summary>
+        ///     Whether an error text is NumPy's "not understood" for a spelling of Linux's 16-byte long double width
+        ///     (<c>'f16'</c>, <c>'c32'</c>, <c>'float128'</c>, <c>'complex256'</c>): what NumPy and NumSharp both raise for
+        ///     those names on a host whose C long double is 8 bytes.
+        /// </summary>
+        /// <param name="message">The exception's message.</param>
+        /// <returns>True for exactly those four messages; any other "not understood" is a real mismatch.</returns>
+        private static bool NamesLinuxLongDoubleWidth(string message)
+            => message is "data type 'f16' not understood" or "data type 'c32' not understood"
+                       or "data type 'float128' not understood" or "data type 'complex256' not understood";
+
         // ---------------------------------------------------------------------------------------------------------
         // The corpus itself
         // ---------------------------------------------------------------------------------------------------------
@@ -751,6 +762,11 @@ namespace NumSharp.Tests.DTypes
                 string cls = numpy.GetProperty("cls").GetString();
                 if (AbsentClasses.ContainsKey(cls))
                 {
+                    // A sub-array of Linux's 16-byte long double ('2f16', '2c32': VoidDType there) replayed on a host whose
+                    // long double is 8 bytes (Apple arm64 reads the lp64 records) names a width NumPy has no dtype for there:
+                    // the field is NumPy's "not understood", as in NumSharp. The LongDoubleClasses rule below, for a field.
+                    if (DTypeRegistry.CLongDoubleSize != 16 && error is TypeError && NamesLinuxLongDoubleWidth(error.Message))
+                        continue;
                     if (error is not NotSupportedException)
                         problems.Add($"{id}: NumPy's {cls} has no NumSharp storage, so it must raise NotSupportedException; got {(error == null ? d.ToString(true) : ErrorText(error))}");
                     continue;

@@ -293,6 +293,11 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void SumProd_NaNPayloads_AreNumPys()
         {
+            // Which of two NaNs survives is the order MSVC compiled NumPy's x86 loops in, and NumSharp's reduce loops leave it
+            // to RyuJIT's operand order: x86's Release JIT gives NumPy's choice, arm64's another (p2 for the sum, macOS CI
+            // 2026-11-07), and an x86 Debug build another again. A win-amd64 contract (kernels.md): asserted on x86 only.
+            if (!HostCpu.IsX86)
+                Assert.Inconclusive("which NaN payload a sum / product keeps is numpy 2.4.2 win-amd64's x86 operand order");
             const ulong p1 = 0x7FF8000000000111, p2 = 0x7FF8000000000222;
             var pair = np.array(new[] { FromBits(p1), FromBits(p2) });
             var all = np.array(new[] { true, true });

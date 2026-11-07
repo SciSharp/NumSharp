@@ -993,6 +993,11 @@ namespace NumSharp.Tests.Backends.Iterators
         [TestMethod]
         public void ShortRows_SeveralNaNs_KeepTheRunningSumsNaN()
         {
+            // Which of several NaNs a sum keeps is an x86 contract (MSVC's loop, win-amd64), and np.sum's own route still
+            // leaves it to RyuJIT's operand order: arm64 keeps another payload there (macOS CI 2026-11-07), as an x86 Debug
+            // build does. Asserted on x86 only.
+            if (!HostCpu.IsX86)
+                Assert.Inconclusive("which NaN payload a short row's sum keeps is numpy 2.4.2 win-amd64's x86 operand order");
             static double N64(long p) => BitConverter.Int64BitsToDouble(0x7FF8000000000000 | p);
             static float N32(int p) => BitConverter.Int32BitsToSingle(0x7FC00000 | p);
             static byte[] Bytes(NDArray r) => np.ascontiguousarray(r).Unsafe.ReadOnlyBytes().ToArray();

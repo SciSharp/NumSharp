@@ -20,7 +20,10 @@ namespace NumSharp.Tests.Math
     ///     <c>Log(1 + x)</c>, which cancel near zero (<c>expm1(1e-300)</c> and <c>log1p(1e-300)</c> were 0, <c>-0.0</c> came back
     ///     <c>+0.0</c>), and logaddexp ran an fdlibm <c>log1p</c> one ULP off the UCRT's, which the final addition amplified
     ///     to 64-16,384 ULP where the result cancels toward zero. The digest tests compare a SHA-256 of 100,000 results with
-    ///     NumPy's over inputs both sides build with exact arithmetic, so one changed bit fails.
+    ///     NumPy's over inputs both sides build with exact arithmetic, so one changed bit fails. The models run over the
+    ///     HOST's <c>log</c> / <c>exp</c>, so the digests and the exp-based edges are asserted on win-amd64 only
+    ///     (<see cref="HostLibm"/>); the point values of log1p, the in-band expm1 bounds, the NaN pass-through and the
+    ///     logaddexp pairs held on glibc and Apple's libm too (CI, 2026-11-07) and run everywhere.
     /// </remarks>
     [TestClass]
     public class Log1pExpm1NumPyLoopsTests
@@ -99,6 +102,9 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Log1p_Grids_DigestEqualNumPy()
         {
+            // The model is Goldberg's correction over the HOST's log, which is the UCRT's only on win-amd64: over 100,000
+            // results glibc's and Apple's log differ somewhere (CI 2026-11-07), as NumPy's log1p on those hosts does.
+            HostLibm.RequirePinnedHost(nameof(Log1p_Grids_DigestEqualNumPy), "log1p grids over the UCRT's log");
             using var g = Grid();
             var w = new double[100000];
             for (int k = 0; k < w.Length; k++)
@@ -129,10 +135,16 @@ namespace NumSharp.Tests.Math
             using var band = np.array(new[] { 1e-8, 0.1, -0.5 });
 
             outside.size.Should().Be(98297);
-            Sha(np.expm1(outside)).Should().Be("B88D8012E1210FAAC2768F30525CF460F6570E7D77B91C4457A0005FEFB32CA4");
-            Bits64(np.expm1(x)).Should().Equal(0x01A56E1FC2F8F359UL, 0x8000000000000000UL, 0x0000000000000001UL,
-                0x3FFB7E151628AED2UL, 0xBFE43A54E4E98864UL, 0x40D5825DCF950560UL, 0xBFEFFFA0CA192A6EUL, 0x7F0D945DF4F8EC8EUL,
-                0xBFF0000000000000UL, 0x7FF0000000000000UL, 0xBFF0000000000000UL);
+            // Outside the band the model is the HOST's exp(x) - 1, the UCRT's only on win-amd64 (glibc's and Apple's exp
+            // differ in some of the 98,297 last bits, CI 2026-11-07): the digest and the exp-based edges are its bits. The
+            // in-band check below is Sun's s_expm1, plain arithmetic, and runs everywhere.
+            if (HostLibm.IsPinnedHost)
+            {
+                Sha(np.expm1(outside)).Should().Be("B88D8012E1210FAAC2768F30525CF460F6570E7D77B91C4457A0005FEFB32CA4");
+                Bits64(np.expm1(x)).Should().Equal(0x01A56E1FC2F8F359UL, 0x8000000000000000UL, 0x0000000000000001UL,
+                    0x3FFB7E151628AED2UL, 0xBFE43A54E4E98864UL, 0x40D5825DCF950560UL, 0xBFEFFFA0CA192A6EUL, 0x7F0D945DF4F8EC8EUL,
+                    0xBFF0000000000000UL, 0x7FF0000000000000UL, 0xBFF0000000000000UL);
+            }
             var got = Bits64(np.expm1(band));
             ulong[] numpy = { 0x3E45798EE3FDB763UL, 0x3FBAEC7B35A00D3AUL, 0xBFD92E9A0720D3EDUL };
             for (int k = 0; k < numpy.Length; k++)
@@ -196,8 +208,13 @@ namespace NumSharp.Tests.Math
             Bits64(np.logaddexp(np.array(new[] { -3.0742855 }), np.array(new[] { -0.048163086 }))).Should().Equal(0xBF4A312E0D8F95C0UL);
             Bits64(np.logaddexp2(np.array(new[] { -1.0835713039595367 }), np.array(new[] { -0.9211879047455193 })))
                 .Should().Equal(0xBF19357A0EE92000UL);
-            Sha(np.logaddexp(xa, ya)).Should().Be("BA878F85548E77B81F060D508767DCF790640A81D088D73AD67E57C98EFE825D");
-            Sha(np.logaddexp(xa.astype(np.float32), ya.astype(np.float32))).Should().Be("AB2C0BA4285ECAAE5E41BCA3BC6A498B9F85396573333882494CC01B9425BD07");
+            // The pinned pairs above held on glibc and Apple's libm too; the 100,000-pair digests run the host's exp and log
+            // over every pair, so they are the UCRT's (CI 2026-11-07: both other libms differ somewhere).
+            if (HostLibm.IsPinnedHost)
+            {
+                Sha(np.logaddexp(xa, ya)).Should().Be("BA878F85548E77B81F060D508767DCF790640A81D088D73AD67E57C98EFE825D");
+                Sha(np.logaddexp(xa.astype(np.float32), ya.astype(np.float32))).Should().Be("AB2C0BA4285ECAAE5E41BCA3BC6A498B9F85396573333882494CC01B9425BD07");
+            }
         }
     }
 }
