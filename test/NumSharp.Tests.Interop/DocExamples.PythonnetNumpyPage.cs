@@ -179,13 +179,22 @@ namespace NumSharp.Tests.Interop
         ///     "View verbs are flat in *n*; copy verbs are linear." Absolute timings are never gated
         ///     (spec §8.4) — the ordering across a 10⁴× size step is.
         /// </summary>
+        /// <remarks>
+        ///     Each verb is timed as the fastest of 10 calls after one warm-up, and a view verb may grow up to 100× across the
+        ///     10⁴× size step. A copy verb grows about 600× there (its small case is overhead), so 100× still tells O(1) from
+        ///     O(n) with a wide margin, while leaving room for the fixed bookkeeping a view of a large foreign buffer pays:
+        ///     a shared macOS runner measured <c>ToNDArrayView</c> at 0.0175 → 0.4766 ms on .NET 8 (27×, red against the old
+        ///     20× bound, PR #633's second CI run) where the same leg passed one run earlier and on .NET 10.
+        /// </remarks>
         [TestMethod]
         public void Costs_ViewVerbsAreFlat_CopyVerbsScale()
         {
+            // The fastest of 10 timed calls after a warm-up: a scheduler hiccup on a shared runner can slow a few calls,
+            // not all ten.
             long BestTicks(Action a)
             {
                 long best = long.MaxValue;
-                for (int i = 0; i < 5; i++)
+                for (int i = 0; i < 11; i++)
                 {
                     var sw = Stopwatch.StartNew();
                     a();
@@ -217,8 +226,8 @@ namespace NumSharp.Tests.Interop
             string report = $"ToNumpy {ms(viewSmall):F4}->{ms(viewLarge):F4}, ToNumpyCopy {ms(copySmall):F4}->{ms(copyLarge):F4}, " +
                             $"ToNDArrayView {ms(leaseSmall):F4}->{ms(leaseLarge):F4}, ToNDArray {ms(importSmall):F4}->{ms(importLarge):F4} ms";
 
-            (viewLarge < viewSmall * 20).Should().BeTrue($"ToNumpy must be flat in n ({report})");
-            (leaseLarge < leaseSmall * 20).Should().BeTrue($"ToNDArrayView must be flat in n ({report})");
+            (viewLarge < viewSmall * 100).Should().BeTrue($"ToNumpy must be flat in n ({report})");
+            (leaseLarge < leaseSmall * 100).Should().BeTrue($"ToNDArrayView must be flat in n ({report})");
             (copyLarge > copySmall * 50).Should().BeTrue($"ToNumpyCopy must scale with n ({report})");
             (importLarge > importSmall * 50).Should().BeTrue($"ToNDArray must scale with n ({report})");
 

@@ -53,6 +53,31 @@ namespace NumSharp.Backends.Printing
         /// </summary>
         private const int MaxUsefulGeneralPrecision = 1100;
 
+        /// <summary>
+        ///     The longest string .NET can hold, in UTF-16 units (<c>0x3FFFFFDF</c>, the runtime's string length limit on the
+        ///     64-bit platforms it supports). A padded field longer than this is CPython's <c>MemoryError</c>.
+        /// </summary>
+        private const int MaxNetStringLength = 0x3FFFFFDF;
+
+        /// <summary>
+        ///     Raises CPython's <c>MemoryError</c> (<see cref="OutOfMemoryException"/>) BEFORE a pad allocates, when the padded
+        ///     field could not be a .NET string. Call it with the field's final length in every pad helper.
+        /// </summary>
+        /// <param name="length">The length the padded field would have, in UTF-16 units (a long, so no sum of a body
+        ///     length and a width can wrap).</param>
+        /// <exception cref="OutOfMemoryException"><paramref name="length"/> exceeds <see cref="MaxNetStringLength"/>.</exception>
+        /// <remarks>
+        ///     Leaving it to the allocation is platform-dependent: <c>new string(' ', n)</c> for an <c>n</c> past the limit
+        ///     throws <see cref="OutOfMemoryException"/> on x64, but <see cref="OverflowException"/> on arm64 under .NET 10
+        ///     (macOS CI and emulated linux-arm64, 2026-11-07), which no Python-facing caller maps to <c>MemoryError</c>.
+        ///     Checking first makes <c>'%9223372036854775807d' % 1</c> the same error everywhere, and fast.
+        /// </remarks>
+        private static void RequireStringFits(long length)
+        {
+            if (length > MaxNetStringLength)
+                throw new OutOfMemoryException();
+        }
+
         /// <summary>Compiles a Python <c>%</c> format once, for a writer that applies it many times.</summary>
         /// <param name="format">The format string.</param>
         /// <returns>The compiled format (<see cref="PercentFormat.Compile"/>).</returns>
@@ -458,6 +483,7 @@ namespace NumSharp.Backends.Printing
             int deficit = width - PyRepr.CodePointLength(body);
             if (deficit <= 0)
                 return body;
+            RequireStringFits((long)body.Length + deficit);
             return left ? body + new string(' ', deficit) : new string(' ', deficit) + body;
         }
 
@@ -504,7 +530,12 @@ namespace NumSharp.Backends.Printing
             // for 0 is "0", so ".0" never shrinks it ("%.0d" % 0 == "0"). Unlike C, Python still honors the
             // '0' flag together with a precision ("%08.3d" % 7 == "00000007").
             if (precision >= 0 && digits.Length < precision)
+            {
+                // The zero run is as long as the precision: past .NET's longest string it is CPython's MemoryError on
+                // every platform, not the runtime's own refusal (see RequireStringFits).
+                RequireStringFits(precision);
                 digits = new string('0', precision - digits.Length) + digits;
+            }
 
             string prefix = "";
             if (alt)
@@ -529,6 +560,7 @@ namespace NumSharp.Backends.Printing
                 return sign + prefix + digits;
 
             int deficit = width - len;
+            RequireStringFits((long)len + deficit);
             if (left)
                 return sign + prefix + digits + new string(' ', deficit);
             if (zero)
@@ -725,6 +757,7 @@ namespace NumSharp.Backends.Printing
                 return full;
 
             int deficit = width - full.Length;
+            RequireStringFits((long)full.Length + deficit);
             if (left)
                 return full + new string(' ', deficit);
             if (zero)

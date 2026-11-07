@@ -918,6 +918,57 @@ namespace NumSharp.Tests.Strings
         private static readonly bool HostCommitsLazily = !OperatingSystem.IsWindows();
 
         /// <summary>
+        ///     True on an x86 / x64 process, whose generated NaN (an invalid operation's: <c>0 / 0</c>, <c>inf - inf</c>) is
+        ///     the NEGATIVE one the corpus recorded on win-amd64. Off x86 a float NaN's sign and payload hold no contract, and
+        ///     the comparison takes a NaN as a token (<see cref="EqualWithNaNTokens"/>). The same host rule as the fuzz gate's
+        ///     <c>FuzzCorpusTests.NanSignIsX86Reference</c>.
+        /// </summary>
+        /// <remarks>arm64's default NaN is positive: macOS CI (2026-11-07) failed 466 cases of TextSurface,
+        ///     StringDTypeSurface, CharListArrayMembers and QuantilePrecisionAndOut on exactly that sign (np.var / np.std /
+        ///     np.mean of an empty slice, np.histogram's density over an empty range, a float16 index past the end), every
+        ///     other byte NumPy's.</remarks>
+        private static readonly bool NanSignIsX86Reference =
+            System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture
+                is System.Runtime.InteropServices.Architecture.X86 or System.Runtime.InteropServices.Architecture.X64;
+
+        /// <summary>
+        ///     Whether two C-order hex dumps of one float result agree once every slot where BOTH hold a NaN counts as equal,
+        ///     whatever its sign and payload; every other slot must match byte for byte.
+        /// </summary>
+        /// <param name="gotHex">NumSharp's bytes, lowercase hex.</param>
+        /// <param name="wantHex">NumPy's bytes, lowercase hex.</param>
+        /// <param name="tc">The result's dtype: float16, float32, float64 or complex128 (two float64 slots per element).</param>
+        /// <returns>False for any other dtype (nothing to tokenize), for dumps of different lengths, and for any slot that
+        ///     differs while not NaN on both sides.</returns>
+        private static bool EqualWithNaNTokens(string gotHex, string wantHex, NPTypeCode tc)
+        {
+            int width = tc switch
+            {
+                NPTypeCode.Half => 2,
+                NPTypeCode.Single => 4,
+                NPTypeCode.Double or NPTypeCode.Complex => 8,
+                _ => 0,
+            };
+            if (width == 0 || gotHex.Length != wantHex.Length || gotHex.Length % (2 * width) != 0)
+                return false;
+            byte[] got = Convert.FromHexString(gotHex), want = Convert.FromHexString(wantHex);
+            for (int i = 0; i < got.Length; i += width)
+            {
+                if (got.AsSpan(i, width).SequenceEqual(want.AsSpan(i, width)))
+                    continue;
+                bool bothNaN = width switch
+                {
+                    2 => Half.IsNaN(BitConverter.ToHalf(got, i)) && Half.IsNaN(BitConverter.ToHalf(want, i)),
+                    4 => float.IsNaN(BitConverter.ToSingle(got, i)) && float.IsNaN(BitConverter.ToSingle(want, i)),
+                    _ => double.IsNaN(BitConverter.ToDouble(got, i)) && double.IsNaN(BitConverter.ToDouble(want, i)),
+                };
+                if (!bothNaN)
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>
         ///     Whether a case's recorded answer is a <c>StringDType</c> allocator failure, an outcome that depends on the
         ///     host's commit policy rather than on NumPy's or NumSharp's code (see <see cref="HostCommitsLazily"/>).
         /// </summary>
@@ -1633,8 +1684,11 @@ namespace NumSharp.Tests.Strings
                         break;
                     }
                     var baseHex = Convert.ToHexString(StringOracleCorpus.BaseBytes(ops[k])).ToLowerInvariant();
-                    if (baseHex != exp.GetProperty("base").GetString())
-                        diffs.Add($"base buffer {Shorten(baseHex)} != NumPy {Shorten(exp.GetProperty("base").GetString())}");
+                    var wantBase = exp.GetProperty("base").GetString();
+                    // The out's whole buffer: off x86 a float NaN slot in it is a token too (an out= quantile of float16
+                    // stores the CPU's default NaN, positive on arm64), as in CompareArray.
+                    if (baseHex != wantBase && (NanSignIsX86Reference || !EqualWithNaNTokens(baseHex, wantBase, ops[k].typecode)))
+                        diffs.Add($"base buffer {Shorten(baseHex)} != NumPy {Shorten(wantBase)}");
                     break;
                 }
                 case "value":
@@ -1929,7 +1983,9 @@ namespace NumSharp.Tests.Strings
                 // shape are NumPy's.
                 var wantBuffer = exp.GetProperty("buffer");
                 var gotHex = Convert.ToHexString(StringOracleCorpus.CBytes(m.data)).ToLowerInvariant();
-                if (wantBuffer.ValueKind != JsonValueKind.Null && gotHex != wantBuffer.GetString())
+                // Off x86 a float NaN slot of the data is a token, as in CompareArray (EqualWithNaNTokens).
+                if (wantBuffer.ValueKind != JsonValueKind.Null && gotHex != wantBuffer.GetString()
+                    && (NanSignIsX86Reference || !EqualWithNaNTokens(gotHex, wantBuffer.GetString(), m.data.typecode)))
                     diffs.Add($"data bytes {Shorten(gotHex)} != NumPy {Shorten(wantBuffer.GetString())} (as text: {Show(Text(m.data))})");
             }
             var wantMask = exp.GetProperty("mask");
@@ -2040,7 +2096,8 @@ namespace NumSharp.Tests.Strings
                 // descriptor, shape and layout are NumPy's.
                 var gotHex = Convert.ToHexString(StringOracleCorpus.CBytes(r)).ToLowerInvariant();
                 var wantHex = exp.GetProperty("buffer").GetString();
-                if (gotHex != wantHex)
+                // Off x86 a float NaN slot is a token: its sign is the CPU's default NaN's (EqualWithNaNTokens).
+                if (gotHex != wantHex && (NanSignIsX86Reference || !EqualWithNaNTokens(gotHex, wantHex, r.typecode)))
                     diffs.Add($"{prefix}bytes {Shorten(gotHex)} != NumPy {Shorten(wantHex)} (as text: {Show(Text(r))})");
             }
             if (!compareLayout)

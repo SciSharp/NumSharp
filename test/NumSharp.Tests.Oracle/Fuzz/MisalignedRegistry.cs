@@ -301,11 +301,69 @@ namespace NumSharp.Tests.Fuzz
                                   && BitDiff.WithinUlp(expected, actual, d.Index, tc, 2));
         }
 
+        /// <summary>
+        ///     The (H2) predicate: a float32 / float64 <c>arctan2</c> slot whose every differing element is within 2 ULP of the
+        ///     reference, on a host that is not the corpus's libm reference host.
+        /// </summary>
+        /// <remarks>
+        ///     <para><c>arctan2</c> is the platform C library's on both sides, at every element: NumPy's float loops call
+        ///     <c>npy_atan2f</c> / <c>npy_atan2</c>, which are the CRT's <c>atan2f</c> / <c>atan2</c>, and NumSharp calls
+        ///     <see cref="MathF.Atan2"/> / <see cref="Math.Atan2"/>, the same functions (parity QA-24 made float32 the CRT's
+        ///     <c>atan2f</c> instead of a narrowed double). So the corpus's ucrtbase bits are reproducible only on the reference
+        ///     host. Apple's libm and some glibc builds return the float32 quadrant constants <c>±pi</c> / <c>±pi/2</c> one ULP
+        ///     away (<c>0x40490fda</c> where ucrtbase gives <c>0x40490fdb</c>): macOS CI 2026-11-07, 11 + 11 + 14 + 76 + 3 + 3
+        ///     cases of the logic / weak-scalar / relayout / out_where / specials / matrix-operand tiers, and a glibc 2.39 replay
+        ///     under WSL.</para>
+        ///     <para>Unlike (H1) every lane is the platform's, so no lane is a bit-exact port to keep out of reach: the guard is
+        ///     the bound. Never on the reference host, only <c>arctan2</c> (the plain op, the <c>out_binary</c> ufunc and the
+        ///     <c>weak_scalar</c> function), only a value divergence, and every differing element within 2 ULP: a wrong
+        ///     quadrant, a sign or a NaN where NumPy has a number still fails on every host.</para>
+        /// </remarks>
+        /// <param name="c">The case; <c>params.ufunc</c> names the ufunc of an <c>out_binary</c> case, <c>params.fn</c> that
+        ///     of a <c>weak_scalar</c> case.</param>
+        /// <param name="kind">How the case diverged; only <see cref="DivergenceKind.Value"/> can qualify.</param>
+        /// <param name="expected">The reference (NumPy) bytes of the compared slot.</param>
+        /// <param name="actual">NumSharp's bytes of the same slot.</param>
+        /// <param name="tc">The slot's element type; only <see cref="NPTypeCode.Single"/> and <see cref="NPTypeCode.Double"/>
+        ///     can qualify.</param>
+        /// <param name="diffs">Every differing element of the slot; an empty list never qualifies.</param>
+        /// <param name="libmReferenceHost">True on the corpus's reference host, where nothing is excused.</param>
+        /// <returns>True when the divergence is entirely this host's atan2 rounding within 2 ULP; false otherwise.</returns>
+        internal static bool IsHostLibmAtan2(
+            FuzzCorpus.Case c, DivergenceKind kind, byte[] expected, byte[] actual, NPTypeCode tc,
+            IReadOnlyList<BitDiff.Diff> diffs, bool libmReferenceHost)
+        {
+            if (libmReferenceHost || kind != DivergenceKind.Value || (tc != NPTypeCode.Single && tc != NPTypeCode.Double)
+                || diffs == null || diffs.Count == 0 || expected == null || actual == null)
+                return false;
+
+            // The ufunc behind the case: the op itself, or the parameter the out= / weak-scalar tiers name it with.
+            string paramName = c.Op switch { "out_binary" => "ufunc", "weak_scalar" => "fn", _ => null };
+            string ufunc = paramName == null
+                ? c.Op
+                : c.Params != null && c.Params.TryGetValue(paramName, out var u) && u.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? u.GetString()
+                    : null;
+            if (ufunc != "arctan2")
+                return false;
+
+            return diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2));
+        }
+
         public static string Classify(
             FuzzCorpus.Case c, DivergenceKind kind,
             byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs,
             byte[] truth = null)
         {
+            // (H2) arctan2 IS the platform libm's atan2 / atan2f on both sides, at every element (IsHostLibmAtan2), so off
+            //      the reference host a differing element within 2 ULP is that host's rounding: Apple's libm puts float32
+            //      +-pi one ULP below ucrtbase's. It is checked FIRST, ahead of the zero-excuse tiers below (weak_scalar is
+            //      one), because it excuses the platform, not NumSharp: NumPy on that host prints the same bits, as the
+            //      RunHostLibmCorpus pin says for whole tiers. Never on the reference host, where every cell stays bit-exact.
+            if (IsHostLibmAtan2(c, kind, expected, actual, tc, diffs, IsLibmReferenceHost))
+                return "arctan2 is the platform libm's atan2 on both sides; this host's libm rounds it within 2 ULP of the "
+                     + "win-amd64 ucrtbase reference [host-libm pin]";
+
             // The numpy.polynomial package (polyeval U3, polyseries U1) is held to ZERO excuses: every one of
             // its answers is NumPy's own arithmetic reproduced op for op (scalarmath, CPython, the ufunc loops),
             // so no branch below describes a divergence it is allowed to have. The blanket branches were the

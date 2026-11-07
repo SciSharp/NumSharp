@@ -175,7 +175,7 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
     call expression, and a stress thread collects, drains finalizers and poisons the buffers they return. A control must
     be caught or the run is inconclusive. Release only: a Debug build keeps every local live, so the tests are
     inconclusive there (`dotnet test -c Release`; CI does).
-  - Gate `LifetimeOracleTests.Lifetime` (`[FuzzMatrix]`): its cases PIN the fixed gaps LT01–LT30
+  - Gate `LifetimeOracleTests.Lifetime` (`[FuzzMatrix]`): its cases PIN the fixed gaps LT01–LT31
     (`Lifetime_CorpusContract`; a red pinned case reads `FIXED gaps regressed: LTnn`); open gaps (none) are carved into
     `lifetime_gaps.jsonl` (`GAPS` in the generator, `FIXED` the rest). The scaled tier
     (`Fuzz/Lifetime/LifetimeScaled.cs`, gate `LifetimeScaled_EveryOpKey`) runs every op key of the ordinary and

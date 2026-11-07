@@ -40,7 +40,8 @@ FFT twiddles; the replay checks them against NumPy only on win-amd64.
 Carving and pinning (house rule: real product bugs are carved and pinned, never excused): ``_site_of`` names the
 lost-anchor site a case reaches. A site that is an OPEN gap (``GAPS``) carves the case into ``lifetime_gaps.jsonl``
 with its gap id, and the [OpenBugs] replays in ``LifetimeOracleTests`` fail while the gap is open. A site that was a gap
-and is FIXED (``FIXED``: every one of the 28 gaps this tier found, closed 2026-10-09 by the weaver's operand roots) keeps
+and is FIXED (``FIXED``: the 28 gaps this tier found first, closed 2026-10-09 by the weaver's operand roots, LT29 and LT30,
+found elsewhere, and LT31, which this tier's gate found on CI's Linux and macOS legs on 2026-11-07) keeps
 its case in the gate with ``pin`` set to the old id, and keeps every one-operand-at-a-time variant, so a regression names
 the operand it loses. Both files live in ``Fuzz/Lifetime/corpus/`` (see ``CORPUS``). ``--uncarved DIR`` writes every
 case to one gate file in DIR, without carves or pins (how the rules were drawn, and how to re-probe a site).
@@ -866,7 +867,7 @@ TARGET_OPS = {"put", "place", "putmask", "put_along_axis", "copyto", "copyto_whe
 #: later use of the operand, the operands it loses). A variant is carved when one of the operands the site loses is
 #: temporary, whether or not a given replay caught it (detection is a race; the code is not). The [OpenBugs] test named
 #: after each id in Fuzz/Lifetime/LifetimeOracleTests.cs replays its cases. Empty since 2026-10-09: every gap below was
-#: fixed. A new site gets the next id (LT31), a rule in ``_site_of`` and an [OpenBugs] test.
+#: fixed. A new site gets the next id (LT32), a rule in ``_site_of`` and an [OpenBugs] test.
 GAPS = {}
 
 #: The FIXED gaps: id -> (the site that lost its operand, what roots the operand now). The 28 sites were drawn from three
@@ -919,6 +920,10 @@ FIXED = {
             "and never reads the operand again (wrong sums, or an access violation in NanReduceContiguousAxis) — found "
             "by the Oracle's leak sweep on 2026-10-25 (the net8.0 test host ended there once), not by this oracle; "
             "rooted by [NDAnchored] on DefaultEngine.NanSum, NanProd and NanMinMax (np.nanmax / np.nanmin)",
+    "LT31": "numpy.polynomial polyval / chebval (every {p}val): NDPolyEval.Evaluate runs the recurrence kernel over the raw "
+            "addresses of x and c, and NDPolyEval.Val, the overload every {p}val reaches it through, opened no scope — "
+            "found by this gate on 2026-11-07 (PR #633's CI: the tail of the 262,144-element polyval and chebval results "
+            "differed on the Linux and macOS legs; the Windows leg passed); rooted by [NDAnchored] on NDPolyEval.Val",
 }
 
 #: The dtypes np.unique_values and np.unique_counts send through the hash path (UniqueHashSortedInt /
@@ -959,6 +964,8 @@ def _site_of(op, tag, args, params):
         "correlate": ("LT22", {0, 1}), "polyder": ("LT23", {0}),
         "polyvander": ("LT24", {0}), "op_not": ("LT25", {0}), "to_multidim": ("LT27", {0}),
         "tolist_str": ("LT29", {0}), "tolist_f64": ("LT29", {0}), "as_string_array": ("LT29", {0}),
+        # NDPolyEval.Evaluate reads both the points and the coefficients through raw addresses.
+        "polyval": ("LT31", {0, 1}), "chebval": ("LT31", {0, 1}),
     }
     if op in simple:
         gap, lost = simple[op]

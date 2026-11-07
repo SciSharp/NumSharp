@@ -10,10 +10,10 @@ namespace NumSharp.Tests.Lifetime
 {
     /// <summary>
     ///     The OPERAND ROOTS of the woven NumSharp.Core, checked in its IL — the deterministic half of the fix for the lost
-    ///     GC anchors the lifetime oracle found (LT01–LT30, <c>test/NumSharp.Tests.Oracle/Fuzz/Lifetime</c>). Every method
+    ///     GC anchors the lifetime oracle found (LT01–LT31, <c>test/NumSharp.Tests.Oracle/Fuzz/Lifetime</c>). Every method
     ///     that opens an <see cref="NDScope"/> and takes an <see cref="NDArray"/> must call <see cref="NDScope.Anchor"/>
     ///     (the weaver roots its operands), every <see cref="NDAnchoredAttribute"/> method must, and so must the entry point
-    ///     of each of the 30 fixed sites.
+    ///     of each of the 31 fixed sites.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -76,12 +76,12 @@ namespace NumSharp.Tests.Lifetime
         }
 
         /// <summary>
-        ///     The entry point of each of the 30 sites the lifetime oracle found roots its operands: the method that held the
+        ///     The entry point of each of the 31 sites the lifetime oracle found roots its operands: the method that held the
         ///     operand while its kernel ran (or the scoped frame above it) now calls <see cref="NDScope.Anchor"/>.
         /// </summary>
         /// <param name="gap">The fixed gap id (for the failure message).</param>
         /// <param name="owner">The declaring type's name: <c>np</c>, <c>np.linalg</c>, <c>NDArray</c>, <c>DefaultEngine</c>,
-        ///     <c>TensorEngine</c>, <c>NDIter</c>, <c>PowerSeriesModule</c>, <c>StringArraySlice</c> or
+        ///     <c>TensorEngine</c>, <c>NDIter</c>, <c>PowerSeriesModule</c>, <c>NDPolyEval</c>, <c>StringArraySlice</c> or
         ///     <c>UnmanagedStorage</c>.</param>
         /// <param name="name">The method name.</param>
         /// <param name="signature">The parameter type names, comma-separated (<c>Nullable`1</c> for an <c>int?</c>).</param>
@@ -132,6 +132,9 @@ namespace NumSharp.Tests.Lifetime
         [DataRow("LT30", "DefaultEngine", "NanSum", "NDArray,Nullable`1,Boolean")]
         [DataRow("LT30", "DefaultEngine", "NanProd", "NDArray,Nullable`1,Boolean")]
         [DataRow("LT30", "DefaultEngine", "NanMinMax", "NDArray,Nullable`1,Boolean,MinMaxOp")]
+        // LT31 (2026-11-07, PR #633's CI: the lifetime oracle's polyval / chebval cases on Linux and macOS): every {p}val
+        // reaches its recurrence kernel through this overload.
+        [DataRow("LT31", "NDPolyEval", "Val", "PolyBasis,Object,NDArray,Boolean")]
         public void FixedSite_RootsItsOperands(string gap, string owner, string name, string signature)
         {
             var type = owner switch
@@ -143,6 +146,7 @@ namespace NumSharp.Tests.Lifetime
                 "TensorEngine" => typeof(TensorEngine),
                 "NDIter" => typeof(NDIter),
                 "PowerSeriesModule" => typeof(NDArray).Assembly.GetTypes().Single(t => t.Name == "PowerSeriesModule"),
+                "NDPolyEval" => typeof(NDArray).Assembly.GetTypes().Single(t => t.Name == "NDPolyEval"),
                 "StringArraySlice" => typeof(NumSharp.Backends.Unmanaged.StringArraySlice),
                 "UnmanagedStorage" => typeof(NumSharp.Backends.UnmanagedStorage),
                 _ => throw new AssertFailedException($"unknown owner {owner}")

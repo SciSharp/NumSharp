@@ -147,6 +147,13 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">A non-empty text series, or text points (an S / U / <c>StringDType</c>
         ///     array, a Python str), once the recurrence would compute with the strings
         ///     (<see cref="NDPolySeries.TextArithmeticRefusal(NDArray)"/>).</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/> (lost GC anchor LT31, found by the lifetime oracle's polyval /
+        ///     chebval cases on CI's Linux and macOS legs, 2026-11-07: the tail of a 262,144-element result differed from
+        ///     the reference): <see cref="Evaluate"/> runs the recurrence kernel over the raw addresses of the caller's
+        ///     <paramref name="x"/> and <paramref name="c"/>, and every <c>{p}val</c> reaches it through this method, which
+        ///     opens no scope. Optimized code could drop a caller's temporary at its pointer read and a collection mid-kernel
+        ///     then released its buffer under the kernel; the weaver roots both operands until this method returns.</remarks>
+        [NDAnchored]
         internal static NDArray Val(PolyBasis basis, object x, NDArray c, bool tensor)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));

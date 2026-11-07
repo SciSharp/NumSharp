@@ -969,5 +969,89 @@ namespace NumSharp.Tests
                 BitConverter.GetBytes(0.25), BitConverter.GetBytes(UlpUp(0.25)), NPTypeCode.Double,
                 OneDiff, libmReferenceHost: false).Should().BeFalse();
         }
+
+        /// <summary>
+        /// An arctan2 case for the (H2) predicate, in the three shapes the corpus spells it: the plain op (the logic,
+        /// relayout, specials and matrix-operand tiers), the <c>out_binary</c> ufunc (<c>params.ufunc</c>) and the
+        /// <c>weak_scalar</c> function (<c>params.fn</c>).
+        /// </summary>
+        /// <param name="shape"><c>op</c>, <c>out_binary</c> or <c>weak_scalar</c>.</param>
+        /// <param name="ufunc">The ufunc the case names (arctan2 for the positive cases).</param>
+        /// <returns>The case, with the operands its shape carries in the corpus (two inputs; plus the out for
+        ///     <c>out_binary</c>; one array beside the Python scalar for <c>weak_scalar</c>), each a two-element float32
+        ///     buffer: (H2) reads none of them, but <see cref="MisalignedRegistry.Classify"/>'s later branches do.</returns>
+        private static FuzzCorpus.Case Atan2Case(string shape, string ufunc)
+        {
+            FuzzCorpus.Operand Operand() => new FuzzCorpus.Operand
+            {
+                Dtype = "float32", Shape = new long[] { 2 }, Strides = new long[] { 1 }, Offset = 0, BufferSize = 2,
+                Buffer = Convert.ToHexString(F32(1f).Concat(F32(.5f)).ToArray()),
+            };
+            if (shape == "op")
+                return new FuzzCorpus.Case
+                    { Id = "selftest/" + ufunc, Op = ufunc, Layout = "selftest", Operands = new[] { Operand(), Operand() } };
+            string key = shape == "out_binary" ? "ufunc" : "fn";
+            using var doc = System.Text.Json.JsonDocument.Parse($"{{\"{key}\":\"{ufunc}\"}}");
+            return new FuzzCorpus.Case
+            {
+                Id = $"selftest/{shape}/{ufunc}", Op = shape, Layout = "selftest",
+                Params = new System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>
+                    { [key] = doc.RootElement.GetProperty(key).Clone() },
+                Operands = shape == "out_binary" ? new[] { Operand(), Operand(), Operand() } : new[] { Operand() },
+            };
+        }
+
+        /// <summary>
+        /// The macOS shape of the divergence: float32 arctan2 returns +pi one ULP below ucrtbase's (Apple's atan2f), and so
+        /// does float64 on a libm that rounds the other way. Excused off the reference host and NEVER on it, in all three
+        /// case shapes; <see cref="MisalignedRegistry.Classify"/> follows whichever host this is, the zero-excuse
+        /// weak_scalar tier included (H2 runs before it).
+        /// </summary>
+        [TestMethod]
+        public void H2_Atan2WithinTwoUlp_ExcusedOnlyOffTheReferenceHost()
+        {
+            foreach (var shape in new[] { "op", "out_binary", "weak_scalar" })
+            {
+                var c = Atan2Case(shape, "arctan2");
+                var expected32 = F32(MathF.PI).Concat(F32(.5f)).ToArray();
+                var actual32 = F32(MathF.PI, -1).Concat(F32(.5f)).ToArray();
+                var diffs = new[] { new BitDiff.Diff(0, "ref", "host") };
+
+                MisalignedRegistry.IsHostLibmAtan2(c, DivergenceKind.Value, expected32, actual32, NPTypeCode.Single, diffs,
+                    libmReferenceHost: false).Should().BeTrue($"{shape}: atan2f is the host libm on both sides");
+                MisalignedRegistry.IsHostLibmAtan2(c, DivergenceKind.Value, expected32, actual32, NPTypeCode.Single, diffs,
+                    libmReferenceHost: true).Should().BeFalse("the reference host reproduces ucrtbase exactly, so it stays strict");
+                MisalignedRegistry.IsHostLibmAtan2(c, DivergenceKind.Value, BitConverter.GetBytes(Math.PI),
+                    BitConverter.GetBytes(UlpUp(Math.PI)), NPTypeCode.Double, OneDiff, libmReferenceHost: false)
+                    .Should().BeTrue($"{shape}: float64 atan2 is the host libm on both sides too");
+                (MisalignedRegistry.Classify(c, DivergenceKind.Value, expected32, actual32, NPTypeCode.Single, diffs) != null)
+                    .Should().Be(!MisalignedRegistry.IsLibmReferenceHost,
+                    $"{shape}: Classify applies H2 exactly when this is not the libm reference host");
+            }
+        }
+
+        /// <summary>
+        /// The negative space of (H2): a miss past 2 ULP (a wrong quadrant or constant), another op, another dtype and a
+        /// non-value divergence are never excused, on any host.
+        /// </summary>
+        [TestMethod]
+        public void H2_GrossMiss_OtherOp_OtherDtype_OtherKind_NotExcused()
+        {
+            var c = Atan2Case("op", "arctan2");
+            var diffs = new[] { new BitDiff.Diff(0, "ref", "host") };
+
+            MisalignedRegistry.IsHostLibmAtan2(c, DivergenceKind.Value, F32(MathF.PI), F32(MathF.PI, -3), NPTypeCode.Single,
+                diffs, libmReferenceHost: false).Should().BeFalse("3 ULP is no libm rounding of the same call");
+            MisalignedRegistry.IsHostLibmAtan2(Atan2Case("op", "hypot"), DivergenceKind.Value, F32(1.5f), F32(1.5f, 1),
+                NPTypeCode.Single, diffs, libmReferenceHost: false).Should().BeFalse("only arctan2 is covered");
+            MisalignedRegistry.IsHostLibmAtan2(Atan2Case("out_binary", "add"), DivergenceKind.Value, F32(1.5f), F32(1.5f, 1),
+                NPTypeCode.Single, diffs, libmReferenceHost: false).Should().BeFalse("the out tier's ufunc decides");
+            MisalignedRegistry.IsHostLibmAtan2(Atan2Case("weak_scalar", "multiply"), DivergenceKind.Value, F32(1.5f),
+                F32(1.5f, 1), NPTypeCode.Single, diffs, libmReferenceHost: false).Should().BeFalse("the weak-scalar fn decides");
+            MisalignedRegistry.IsHostLibmAtan2(c, DivergenceKind.Value, new byte[] { 0, 0x3c }, new byte[] { 1, 0x3c },
+                NPTypeCode.Half, diffs, libmReferenceHost: false).Should().BeFalse("float16 arctan2 narrows NumPy's own bits");
+            MisalignedRegistry.IsHostLibmAtan2(c, DivergenceKind.Dtype, F32(MathF.PI), F32(MathF.PI, -1), NPTypeCode.Single,
+                diffs, libmReferenceHost: false).Should().BeFalse("a dtype divergence is never a rounding");
+        }
     }
 }
