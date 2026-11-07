@@ -27,7 +27,7 @@ src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	998	int	n
 src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	998	uint	no	elementType == typeof(ushort) || elementType == typeof(int) || elementType == typeof(uint) ||
 src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	999	long	no	elementType == typeof(long) || elementType == typeof(ulong);
 src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	999	ulong	no	elementType == typeof(long) || elementType == typeof(ulong);
-src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.cs	1345	TOut	no	if (typeof(TOut) == sourceArray.GetType().GetElementType()) return (ArraySlice<TOut>)sourceArray;
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.cs	1354	TOut	no	if (typeof(TOut) == sourceArray.GetType().GetElementType()) return (ArraySlice<TOut>)sourceArray;
 src/NumSharp.Core/Casting/NDArrayFromMultiDimArr.cs	39	T	no	if (elem != typeof(T))
 src/NumSharp.Core/Creation/NDArray.Multiarray.cs	1052	object	no	return elementType == typeof(object) || typeof(NDArray).IsAssignableFrom(elementType);
 src/NumSharp.Core/Creation/NDArray.Multiarray.cs	1232	decimal	no	if (type.IsPrimitive || type == typeof(decimal) || type == typeof(Half) || type == typeof(System.Numerics.Complex))
@@ -55,5 +55,5 @@ src/NumSharp.Core/RandomSampling/SeedSequence.cs	272	uint[]	no	case uint[] words
 src/NumSharp.Core/RandomSampling/SeedSequence.cs	935	uint[]	no	case uint[] u when u.GetType() == typeof(uint[]):
 src/NumSharp.Core/Utilities/SpanSource/UnmanagedSpan.cs	47	T[]	no	if (!typeof(T).IsValueType && array.GetType() != typeof(T[]))
 src/NumSharp.Core/Utilities/SpanSource/UnmanagedSpan.cs	76	T[]	no	if (!typeof(T).IsValueType && array.GetType() != typeof(T[]))
-src/NumSharp.Core/View/Shape.cs	1716	?	yes	if (obj.GetType() != this.GetType())
+src/NumSharp.Core/View/Shape.cs	1748	?	yes	if (obj.GetType() != this.GetType())
 src/NumSharp.Core/View/Slice.cs	369	Slice	yes	if (obj.GetType() != typeof(Slice))

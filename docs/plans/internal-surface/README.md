@@ -1,14 +1,16 @@
 # NumSharp.dll internal surface map
 
 Every internal class and member of `NumSharp.dll` (`src/NumSharp.Core`), and which of them stop a consumer from
-extending or inheriting NumSharp. Measured on `strings` at `b10afc49` (2026-11-07), the line 0.80.0 ships from.
+extending or inheriting NumSharp. The tables describe `strings` at `34e48e16` with the access changes of `687fb94f`
+(2026-11-07), which opened the seams the owner decided on (see [Decisions](#decisions-2026-11-07)). The map from before
+those changes is the first commit of this folder, `62570760`.
 
 | File | Holds |
 |------|-------|
 | [tables.md](tables.md) | The generated summary: totals, areas, findings by category, virtuality, friend usage, exact type tests, and every internal type by area with its summary and source link |
-| [internal-types.tsv](internal-types.tsv) | One row per internal type (493): area, kind, file:line, member counts, the friend packages that name it, doc summary |
-| [internal-members.tsv](internal-members.tsv) | One row per internal member (6,091): declared access, modifiers, C# signature, file:line, friend use, doc summary |
-| [extensibility-findings.tsv](extensibility-findings.tsv) | One row per way a visible type is closed to a consumer (470) |
+| [internal-types.tsv](internal-types.tsv) | One row per internal type (489): area, kind, file:line, member counts, the friend packages that name it, doc summary |
+| [internal-members.tsv](internal-members.tsv) | One row per internal member (5,939): declared access, modifiers, C# signature, file:line, friend use, doc summary |
+| [extensibility-findings.tsv](extensibility-findings.tsv) | One row per way a visible type is closed to a consumer (405) |
 | [virtuality.tsv](virtuality.tsv) | Per visible non-sealed class: visible constructors, how much of its instance surface can be overridden, which members |
 | [friend-internals-usage.tsv](friend-internals-usage.tsv) | Every internal type / member the six `InternalsVisibleTo` packages name, with sites and callers |
 | [exact-type-checks.tsv](exact-type-checks.tsv) | The `GetType()` equality tests in Core's source |
@@ -20,12 +22,13 @@ extending or inheriting NumSharp. Measured on `strings` at `b10afc49` (2026-11-0
 assembly with Mono.Cecil instead of grepping source, so every accessibility answer is the compiler's:
 
 - **Reach** is effective: a public member of an internal type is internal, a `private protected` member is internal (only
-  a subclass inside NumSharp.dll sees it), a nested type takes the narrowest access of its chain. Lambdas, iterators,
-  backing fields, file-local types and records' synthesized members are excluded.
+  a subclass inside NumSharp.dll sees it), a `protected internal` member is open to every subclass, and a nested type
+  takes the narrowest access of its chain. Lambdas, iterators, backing fields, file-local types and records' synthesized
+  members are excluded.
 - **Locations** come from the portable PDB (moved from the first sequence point to the signature line); fields, constants
   and abstract members, which have no IL body, are found by a keyword-checked search of every file of their partial type.
-  Every one of the 6,091 lines was checked to declare its member; the 34 implicit parameterless constructors C# supplies
-  have no declaration of their own and link their type's.
+  Every one of the 5,939 lines was checked to declare its member; the implicit parameterless constructors C# supplies have
+  no declaration of their own and link their type's.
 - **Summaries** are the first sentence of each member's XML `<summary>`.
 - **Friend usage** walks the IL of every `InternalsVisibleTo` friend that builds from `src/` (OpenBLAS, pythonnet,
   OnnxRuntime, MLNet, System.Numerics.Tensors, ParquetNet): calls, field accesses, signatures, locals, base types,
@@ -39,74 +42,101 @@ for p in src/NumSharp.Interop.*/; do dotnet build "$p" -f net10.0; done
 dotnet run tools/internal-surface-map/SurfaceMap.cs -- --repo . --out docs/plans/internal-surface --label "<branch> <commit>"
 ```
 
+## Decisions (2026-11-07)
+
+The owner decided the seams the first map listed, group by group; `687fb94f` applies them.
+
+| Seam | The owner's words | Now |
+|---|---|---|
+| Subclass protocol | "Make all protected internal" | `NDArray.__array_wrap__`, both `__array_finalize__` overloads, `_collapse`, `NanMax`, `NanMin`, `ReprClassName` and the two `__name__` constants are `protected internal` (with their `NDMatrix` / `NDCharArray` overrides); `NewSubtypeZeroDim` is public, because a `protected internal` member cannot take an internal type |
+| Subclass constructors | "make subclasses all public and their constructors"; `NDMaskedConstant`: "Public" | `NDMatrix(UnmanagedStorage)`, `NDCharArray(UnmanagedStorage)`, `NDMaskedArray(data, mask, fill_value)`, `NDMaskedConstant()`, `NDPolyFitResult(...)`, `NDArray<T>(Shape, bool, TensorEngine)` and `NDArray(DType, Shape, bool, TensorEngine)` are public; the last binds `TensorEngine.Default` for a null engine |
+| Bridge surface | "Public" | `SizeBucketedBufferPool.BookForeign` / `ReturnForeign`, both `ArraySlice.WrapShared` forms, `VStringAllocator` with NumPy's documented `NpyString` API (`acquire_allocator`, `release_allocator`, `load`, `pack`, `pack_null`) and its 10 NumPy layout constants, `VStringArraySlice.Allocator`, `UnmanagedStorage.VStringSlice` / `StringSlice`, `Shape(dims, strides, offset, bufferSize)` |
+| Bit generators | "Public and the core ones also virtual and classes have clean proper constructors"; follow-up: "Unseal the classes" | `BitGenerator`'s primitives are public (`abstract` / `virtual` as they were), its seeding and fill helpers public, its constructor `protected`; `Generator`, `MT19937`, `PCG64`, `PCG64DXSM`, `Philox` and `SFC64` are unsealed |
+| Shape | "Shape - all public" | The raw fields `dimensions`, `strides`, `offset`, `size`, `bufferSize` are public (read-only by contract: the arrays are shared) |
+| Engine hooks | "all public" | `TensorEngine.Evaluate(NDExprProgram, ...)`, `DotFunction1D`, `VdotFunction1D`, `VdotReadsFirstInPlace` are `public virtual`, as are `DefaultEngine`'s overrides |
+| Iterators | "public" | The constructors of `np.NDEnumerate`, `np.NDEnumerate<T>`, `np.NDIndex` and `np.NDIterator` |
+| Storage state | "public"; follow-up: "Public read, internal write" | `OwnsData`, `IsDataAligned`, `ItemBytes` are public; `WriteProtected` / `ExternalBase` are `public { get; internal set; }` |
+
+Where an instruction met a technical limit, the call made:
+
+- `NDExprProgram` and `NDEvaluateOptions` are public types with internal members, an opaque handle and bundle. Three of
+  the program's fields have internal plan types, and the options' constructor would let a caller pass keywords the engine
+  never validated. An engine overrides `Evaluate(program, ...)` to observe or reroute and calls `base`; an engine not
+  derived from `DefaultEngine` cannot run a program itself.
+- `UnmanagedStorage._baseStorage` stays internal: `BaseStorage` is its public read form, and a public setter is the
+  use-after-free its own docs rule out.
+- `Shape.Adopt` stays internal: the owner's `journey4` commit `278e9862` replaces it with public
+  `Shape(dims, order, copy)` and `Shape(dims, strides, copy)` constructors, NumPy's `copy` keyword being the public
+  no-copy route.
+- `DTypeMeta`'s element slots were not decided and stay internal.
+
 ## The numbers
 
 | | Public | Internal | Private (nested) | Total |
 |---|---:|---:|---:|---:|
-| Types (no protected nested type exists) | 524 | 493 | 282 | 1,299 |
+| Types (no protected nested type exists) | 528 | 489 | 282 | 1,299 |
 
 | Internal members | Count |
 |---|---:|
-| Declared `internal` / `private protected` on one of 170 visible types | 1,908 |
-| Non-private members of internal types | 4,183 |
-| **Total** | **6,091** |
+| Declared `internal` / `private protected` on one of 164 visible types | 1,851 |
+| Non-private members of internal types | 4,088 |
+| **Total** | **5,939** |
 
 Where they are (internal types / their members / internal members declared on the area's visible types):
 
 | Area | Types | Members | On visible types |
 |---|---:|---:|---:|
-| Backends/Strings | 68 | 811 | 0 |
+| Backends/Strings | 67 | 758 | 38 |
 | Utilities/Maths | 1 | 726 | 0 |
 | Backends/Kernels | 109 | 542 | 494 |
-| Backends/Default | 73 | 515 | 173 |
-| Backends/Iterators | 48 | 302 | 264 |
-| RandomSampling | 22 | 246 | 143 |
-| Polynomial/Package | 26 | 212 | 47 |
+| Backends/Default | 73 | 515 | 169 |
+| Backends/Iterators | 46 | 260 | 306 |
+| RandomSampling | 22 | 246 | 64 |
+| Polynomial/Package | 26 | 212 | 46 |
 | IO/TextReading | 24 | 130 | 0 |
-| Backends/Subclass | 18 | 112 | 0 |
-| Backends/Printing | 22 | 104 | 4 |
+| Backends/Subclass | 17 | 112 | 0 |
 
 The one type in `Utilities/Maths` is
 [`Operator`](../../../src/NumSharp.Core/Utilities/Maths/Operator.cs#L11): 726 members and no caller anywhere in `src/` or
 `test/`, so it is dead code.
 
 The public types carrying the most internal members are `DirectILKernelGenerator` (395 internal beside 110 visible),
-`NDArray` (195 / 408), `DefaultEngine` (152 / 292), `UnmanagedStorage` (103 / 201) and `Shape` (68 / 104).
+`NDArray` (187 / 416), `DefaultEngine` (148 / 296), `UnmanagedStorage` (96 / 208) and `Shape` (62 / 110).
 
 ## Extension scenarios
 
 | Scenario | Verdict | What decides it |
 |---|---|---|
-| [Replace or extend the compute engine](#engines-open) | **Open** | Engines are 92-100% overridable; `TensorEngine.Default` is settable |
+| [Replace or extend the compute engine](#engines-open) | **Open** | `TensorEngine` 262 of 271 members overridable; `TensorEngine.Default` is settable |
 | [Plug a BLAS / LAPACK / FFT provider](#engines-open) | **Open** | `IBlasBackend`, `LinalgEngine`, `FftEngine` are public and fully virtual |
-| [Subclass `NDArray`](#ndarray-subclass-compiles-but-every-operation-drops-the-class) | **Compiles, class lost** | 11 of 11 operations return plain `NDArray` (NumPy: 0 of 11); protocol hooks internal; closed-world dispatch |
-| [Subclass `NDMatrix` / `NDCharArray` / `NDMaskedArray`](#ndmatrix-ndchararray-ndmaskedarray-closed) | **Closed** | Every constructor is internal |
-| [Specialise storage](#storage-wrap-yes-specialise-no) | **Wrap yes, specialise no** | `UnmanagedStorage`: 28 public or protected constructors, 0 of 159 members overridable |
-| [Write a zero-copy bridge package](#a-bridge-package-what-our-own-packages-need) | **Partly** | Our six packages use 32 internals; foreign-memory booking, lifetime-safe aliases and StringDType cells have no public route |
+| [Subclass `NDArray`](#ndarray-subclass-hooks-open-dispatch-closed) | **Hooks open, class still lost** | The protocol hooks can be overridden, but the dispatch routes two classes: 11 of 11 operations return plain `NDArray` (NumPy: 0 of 11) |
+| [Subclass `NDMatrix` / `NDCharArray` / `NDMaskedArray`](#ndmatrix-ndchararray-ndmaskedarray-constructible) | **Constructible** | Public constructors; a subclass of `NDMatrix` / `NDCharArray` is plain to np.* functions, for the same dispatch reason |
+| [Specialise storage](#storage-wrap-and-read-yes-specialise-no) | **Wrap and read yes, specialise no** | `UnmanagedStorage`: state readable, 0 of 166 members overridable |
+| [Write a zero-copy bridge package](#a-bridge-package) | **Open** | The ONNX Runtime, ML.NET and Tensors bridges now use no internal; the rest have public routes or are allocator details NumPy keeps private too |
 | [Add a dtype](#user-dtypes-registration-public-storage-closed) | **Closed** | Registration is public, but `setitem` / `getitem` / `copyswapn` / `fill` / `nonzero` are `internal virtual` |
-| [Write a bit generator](#random-closed) | **Closed** | `BitGenerator`: `private protected` constructor, `internal abstract` primitives |
-| [Write a polynomial basis](#polynomial-series-closed) | **Closed** | `NDPolyBase`: `private protected` constructor; the six series classes are sealed |
+| [Write a bit generator](#random-open) | **Open** | `BitGenerator`'s contract is public; `Generator` and the built-in generators are unsealed |
+| [Write a polynomial basis](#polynomial-series-closed) | **Closed** | `NDPolyBase`'s constructor is `private protected` and the basis math is picked by an internal enum |
 | [Add an expression node](#expression-nodes-closed-call-out-open) | **Closed by design** | `NDExpr` has 7 internal abstract members; `NDExpr.Call(Delegate)` is the open route |
 
 ### Engines: open
 
-[`TensorEngine`](../../../src/NumSharp.Core/Backends/TensorEngine.cs) has a protected constructor and 258 of its 267
-visible instance members are abstract or virtual; `DefaultEngine` 254 of 277; `LinalgEngine`, `DefaultLinalgEngine`,
-`FftEngine` and `DefaultFftEngine` all of theirs. [`TensorEngine.Default`](../../../src/NumSharp.Core/Backends/TensorEngine.cs#L50)
-has a public setter, so every array created after an assignment binds a consumer's engine, and `NDArray.TensorEngine` moves
-a single array. Nothing a consumer must implement is hidden: no engine-side interface or abstract class has an internal
-abstract member.
+[`TensorEngine`](../../../src/NumSharp.Core/Backends/TensorEngine.cs) has a protected constructor and 262 of its 271
+visible instance members are abstract or virtual; `LinalgEngine`, `DefaultLinalgEngine`, `FftEngine` and
+`DefaultFftEngine` all of theirs. [`TensorEngine.Default`](../../../src/NumSharp.Core/Backends/TensorEngine.cs#L50) has a
+public setter, so every array created after an assignment binds a consumer's engine, and `NDArray.TensorEngine` moves a
+single array. No engine-side interface or abstract class has an internal abstract member, and none has an internal
+virtual member left: `Evaluate(NDExprProgram, ...)` and the three 1-D dot hooks are public. The compiled program is
+opaque outside NumSharp.dll, so an engine that does not derive from `DefaultEngine` can forward it but not run it.
 
-The four internal virtual members of `TensorEngine` are all optional:
-[`Evaluate(NDExprProgram, ...)`](../../../src/NumSharp.Core/Backends/TensorEngine.cs#L269) (a `CompiledExpression` runs
-only on an engine derived from `DefaultEngine`; the base throws `NotSupportedException`), and `DotFunction1D`,
-`VdotFunction1D`, `VdotReadsFirstInPlace` (`DefaultEngine`'s 1-D dot paths; a consumer overrides the public `Dot` /
-`Vdot` instead).
+### NDArray subclass: hooks open, dispatch closed
 
-### NDArray subclass: compiles, but every operation drops the class
+`NDArray` has 15 public or protected constructors and a `protected internal Storage`, and its subclass protocol is now
+open to every subclass: [`__array_wrap__`](../../../src/NumSharp.Core/Backends/NDArray.SubclassHooks.cs#L50), both
+`__array_finalize__` overloads, `_collapse`, `NanMax` / `NanMin` and `ReprClassName` are `protected internal` (overridden
+from another assembly as `protected override`), beside the public `__array_priority__`. 14 of its 278 visible instance
+members can be overridden.
 
-`NDArray` has 14 public or protected constructors and a `protected internal Storage`, so a consumer can derive from it. The
-[probe](probe/subclass_probe.cs) does, with `__array_priority__ = 20`, and checks the class of each result:
+The [probe](probe/subclass_probe.cs) still measures 11 of 11:
 
 | Operation | NumSharp | NumPy 2.4.2 |
 |---|---|---|
@@ -115,93 +145,94 @@ only on an engine derived from `DefaultEngine`; the base throws `NotSupportedExc
 | `np.sum(x, 0)`, `np.concatenate([x, x])`, `x.copy()` | `NDArray` | `MyArray` |
 | `np.asanyarray(x)` | the same object | the same object |
 
-Three things make it so:
+The hooks are reachable, but nothing calls them for a consumer's class:
 
-1. **The protocol hooks are internal.**
-   [`__array_wrap__`](../../../src/NumSharp.Core/Backends/NDArray.SubclassHooks.cs#L41), both
-   [`__array_finalize__`](../../../src/NumSharp.Core/Backends/NDArray.SubclassHooks.cs#L55) overloads and
-   [`_collapse`](../../../src/NumSharp.Core/Backends/NDArray.SubclassHooks.cs#L77) are `internal virtual`, as are
-   [`NanMax` / `NanMin`](../../../src/NumSharp.Core/Backends/NDArray.NanFunctions.cs#L94) and
-   [`ReprClassName`](../../../src/NumSharp.Core/Casting/NDArray.ToString.cs#L51). Only `__array_priority__` is public,
-   and nothing reads it for a class the library does not know.
-2. **The runtime dispatch is closed-world.**
+1. **The runtime dispatch is closed-world.**
    [`NDSubclass.KindOf`](../../../src/NumSharp.Core/Backends/Subclass/NDSubclass.cs#L82) tests `GetType()` exactly against
-   `NDMatrix` and `NDCharArray`; any other class is a plain array.
-3. **The woven dispatch is fixed at NumSharp's own build.**
+   `NDMatrix` and `NDCharArray`; any other class, a subclass of those two included, is a plain array.
+2. **The woven dispatch is fixed at NumSharp's own build.**
    [`SubclassWeaver`](../../../tools/NumSharp.Build/SubclassWeaver.cs#L330) generates arms for the `NDArray` subclasses it
-   finds in NumSharp.dll (an `internal const string __name__`); a consumer's assembly is not in that set.
+   finds in NumSharp.dll (a `__name__` constant); a consumer's assembly is not in that set.
 
-Of the 271 visible instance members, 7 can be overridden: `__array_priority__`, the indexer, `ToString`, `Equals`,
-`GetHashCode`, `Clone` and the finalizer. `NDArray<T>` is in the same position (13 public or protected constructors, 2 of 17
-members overridable).
+The exception is `NanMax` / `NanMin`: `np.nanmax` / `np.nanmin` reach them by plain virtual dispatch, so a consumer's
+override answers there.
 
-### NDMatrix, NDCharArray, NDMaskedArray: closed
+### NDMatrix, NDCharArray, NDMaskedArray: constructible
 
-Their only constructors are internal:
-[`NDMatrix(UnmanagedStorage)`](../../../src/NumSharp.Core/Matrixlib/NDMatrix.cs#L180),
-[`NDCharArray(UnmanagedStorage)`](../../../src/NumSharp.Core/Char/NDCharArray.cs#L165),
-[`NDMaskedArray(NDArray, NDArray, NDArray)`](../../../src/NumSharp.Core/Ma/NDMaskedArray.cs#L124). `numpy.matrix`,
-`numpy.char.chararray` and `numpy.ma.MaskedArray` are ordinary Python classes a user can subclass.
+Their constructors are public:
+[`NDMatrix(UnmanagedStorage)`](../../../src/NumSharp.Core/Matrixlib/NDMatrix.cs#L185),
+[`NDCharArray(UnmanagedStorage)`](../../../src/NumSharp.Core/Char/NDCharArray.cs#L171),
+[`NDMaskedArray(NDArray, NDArray, NDArray)`](../../../src/NumSharp.Core/Ma/NDMaskedArray.cs#L130). The first two skip
+NumPy's finalize rule (`np.asmatrix`, `np.char.array` apply it) and the third validates nothing but its data
+(`np.ma.array` checks, broadcasts and converts); each documents that. A subclass of `NDMatrix` or `NDCharArray` keeps
+the members it inherits, but np.* functions treat it as a plain array (the exact type tests above). `NDMaskedArray`
+wraps an array instead of deriving from one, so a subclass of it is an ordinary masked array.
 
-### Storage: wrap yes, specialise no
+`NDMaskedConstant()` is public too. NumPy's `MaskedConstant()` returns the existing `np.ma.masked`, while a C#
+constructor builds a new object, and the library recognises `np.ma.masked` by five type tests and nine reference
+identity tests (var, std, average, the set operations). A second instance passes the first kind only.
 
-`UnmanagedStorage` has 28 public or protected constructors and none of its 159 visible instance members is virtual, so
+### Storage: wrap and read yes, specialise no
+
+`UnmanagedStorage` has 28 public or protected constructors and none of its 166 visible instance members is virtual, so
 a subclass changes nothing; an engine can still hand out its own storage from the virtual `GetStorage(DType)`. Its state
-is internal:
-`OwnsData`, `IsDataAligned`, `ItemBytes`, `WriteProtected`, `ExternalBase`, `_baseStorage`, `StringSlice`,
-`VStringSlice`. Foreign memory can be wrapped publicly: `ArraySlice.Wrap<T>(void*, long)` (counts nothing) and
+is readable: `OwnsData`, `IsDataAligned`, `ItemBytes`, `StringSlice`, `VStringSlice`, `BaseStorage`, and
+`WriteProtected` / `ExternalBase`, which only NumSharp sets (when it creates a storage over foreign memory). Foreign
+memory can be wrapped publicly with `ArraySlice.Wrap<T>(void*, long)` (counts nothing),
 [`UnmanagedMemoryBlock<T>(T*, long, Action dispose)`](../../../src/NumSharp.Core/Backends/Unmanaged/UnmanagedMemoryBlock%601.cs#L103)
-with `ArraySlice.FromMemoryBlock`.
+or `ArraySlice.WrapShared` (an alias that keeps its owner's buffer alive).
 
-### A bridge package: what our own packages need
+### A bridge package
 
-Our six `InternalsVisibleTo` packages name 32 distinct internal types and members (47 package-by-member pairs) at 410 IL
-sites. A third-party package of the same kind can reach none of them:
+What our six `InternalsVisibleTo` packages needed is public now:
+[`SizeBucketedBufferPool.BookForeign` / `ReturnForeign`](../../../src/NumSharp.Core/Backends/Unmanaged/Pooling/SizeBucketedBufferPool.cs#L701),
+[`ArraySlice.WrapShared`](../../../src/NumSharp.Core/Backends/Unmanaged/ArraySlice.cs#L558), the
+[`StringDType` allocator](../../../src/NumSharp.Core/Backends/Strings/VStringAllocator.cs#L91)'s `NpyString` API, and
+`Shape`'s raw layout ([fields](../../../src/NumSharp.Core/View/Shape.cs#L71) and the
+[view constructor](../../../src/NumSharp.Core/View/Shape.cs#L654)). The ONNX Runtime, ML.NET and System.Numerics.Tensors
+bridges use no internal at all. The 16 internals still named (68 IL sites):
 
-| Internal | Used by (sites) | Public route |
-|---|---|---|
-| `Shape.dimensions` / `strides` fields | OpenBLAS (127 / 74), Tensors, pythonnet | [`Shape.Dimensions` / `Strides`](../../../src/NumSharp.Core/View/Shape.cs#L515): a new array on every read |
-| `Shape.offset` / `size` / `bufferSize` fields | OpenBLAS (59 / 6), Tensors, pythonnet | `Shape.Offset` / `Size` / `BufferSize`: the same values |
-| [`Shape(dims, strides, offset, bufferSize)`](../../../src/NumSharp.Core/View/Shape.cs#L622), [`Shape.Adopt(dims)`](../../../src/NumSharp.Core/View/Shape.cs#L870) | ORT, Tensors, pythonnet / OpenBLAS (13) | `Shape(dims, strides)`: copies, and takes no offset or buffer size |
-| `NDArray.GetTypeCode` | OpenBLAS (27) | `NDArray.typecode`: the same value |
-| `np._FindCommonArrayType` | OpenBLAS (6) | `np.result_type` / `np.promote_types` |
-| [`SizeBucketedBufferPool.BookForeign` / `ReturnForeign`](../../../src/NumSharp.Core/Backends/Unmanaged/Pooling/SizeBucketedBufferPool.cs#L696) | ORT, MLNet, Tensors, pythonnet | **None**: a third party's foreign buffers never pace the collection that finalizes their dropped holders |
-| [`ArraySlice.WrapShared`](../../../src/NumSharp.Core/Backends/Unmanaged/ArraySlice.cs#L552) | ORT (14) | **None**: `Wrap` counts nothing, so an alias cannot keep its owner's buffer alive |
-| `VStringAllocator`, `VStringParameters`, `UnmanagedStorage.VStringSlice`, `DType.VString` | pythonnet (53) | **None**: StringDType cells cannot be read or written zero-copy from outside |
-| `NDArray.ForOverwrite` | pythonnet (1) | `np.empty` (on the default engine) |
-| `ReductionInitial.PackStore` | ParquetNet (1, unreleased) | (a reduction helper) |
-
-Where a public route exists it costs a third party at most an allocation per read (`Dimensions` / `Strides`) or a copy
-(`Shape(dims, strides)`); the three **None** rows are capabilities only a friend has.
+| Package | Internal | Sites | Public route |
+|---|---|---:|---|
+| OpenBLAS | `NDArray.GetTypeCode` | 27 | `NDArray.typecode`: the same value |
+| OpenBLAS | `Shape.Adopt(dims)` | 13 | `Shape(dims)` today; `Shape(dims, copy: false)` once `278e9862` reaches `strings` |
+| OpenBLAS | `np._FindCommonArrayType` | 6 | `np.promote_types` / `np.result_type` |
+| pythonnet | `VStringAllocator.isnull`, `size`, `newsize`, `TryReserve`, `ArenaBytesForDuplicate` | 9 | `load` (its return value is the null test, its `size` the length) and `pack`; the other three are the allocator's private arithmetic, private in NumPy too |
+| pythonnet | `VStringParameters` (`coerce`, `HasNAObject`, `na_object`), `DType.VString` | 10 | `DType.coerce` / `DType.na_object` |
+| pythonnet | `NDArray.ForOverwrite` | 1 | `np.empty` (on the default engine) |
+| ParquetNet (unreleased) | `ReductionInitial` / `PackStore` | 2 | (a reduction helper) |
 
 ### User dtypes: registration public, storage closed
 
-The registration path is public: a protected [`DTypeMeta`](../../../src/NumSharp.Core/DTypes/DTypeMeta.cs#L134)
-constructor, [`DTypeRegistry.Register`](../../../src/NumSharp.Core/DTypes/DTypeRegistry.cs#L654) ("Registers a new DType
-class (a user dtype)") and `DTypeRegistry.AddCastingImpl` over the public abstract `CastingImpl`. The element slots are
+Not decided, unchanged. The registration path is public: a protected
+[`DTypeMeta`](../../../src/NumSharp.Core/DTypes/DTypeMeta.cs#L134) constructor,
+[`DTypeRegistry.Register`](../../../src/NumSharp.Core/DTypes/DTypeRegistry.cs#L654) ("Registers a new DType class (a user
+dtype)") and `DTypeRegistry.AddCastingImpl` over the public abstract `CastingImpl`. The element slots are
 `internal virtual`: [`setitem`](../../../src/NumSharp.Core/DTypes/DTypeMeta.cs#L394) and
 [`getitem`](../../../src/NumSharp.Core/DTypes/DTypeMeta.cs#L450) throw "no slot" in the base, and `SetFreshItems`,
 `copyswapn`, `fill`, `nonzero`, `HasFill`, `HasScanFunc`, `HasFromStr`, `ByteOrderNotApplicable`, `OwnsTypeCode` and
-`OwnsScalarType` cannot be overridden either. A registered user dtype can neither store nor read an element.
+`OwnsScalarType` cannot be overridden either. A registered user dtype can neither store nor read an element. Opening the
+slots would not finish the job: storage is keyed by `NPTypeCode`, a closed enum that every kernel switches on, and ufunc
+loops have no per-dtype registry (`ArrayMethod` serves casts only).
 
-Opening the slots would not finish the job: storage is keyed by `NPTypeCode`, a closed enum that every kernel switches
-on, and ufunc loops have no per-dtype registry (`ArrayMethod` serves casts only).
+### Random: open
 
-### Random: closed
-
-[`BitGenerator`](../../../src/NumSharp.Core/RandomSampling/BitGenerator.cs#L32) has a `private protected` constructor,
-`internal abstract` [`NextUInt64` / `NextUInt32`](../../../src/NumSharp.Core/RandomSampling/BitGenerator.cs#L242) and
-`Name`, `private protected abstract` `CreateFromSeed` / `GetStateCore` / `SetStateCore`, and 9 `internal virtual` draws
-and bulk fills. `Generator`, `MT19937`, `PCG64`, `PCG64DXSM`, `Philox`, `SFC64` and `SeedSequence` are sealed. NumPy's
-`Generator` takes a user-provided bit generator that exports the `bitgen_t` capsule (NumPy's "Extending: New
-BitGenerators"). `NumPyRandom` can be subclassed (4 public or protected constructors), but only `ToString` of its 239
-members is virtual.
+[`BitGenerator`](../../../src/NumSharp.Core/RandomSampling/BitGenerator.cs) is a public contract: a subclass passes its
+seed sequence to the `protected` constructor, implements `NextUInt64`, `NextUInt32`, `Name`, `CreateFromSeed`,
+`GetStateCore` and `SetStateCore`, and may override `NextDouble`, `UnitToDouble`, `NextFloat`, `NextRaw` and the five
+bulk fills for speed, with `SeedWords32` / `SeedWords64` (NumPy's `generate_state`) and the `FillDoubleFrom64` /
+`FillUInt32From64` / `FillFloatFrom64` helpers to build them. `Generator`, `MT19937`, `PCG64`, `PCG64DXSM`, `Philox` and
+`SFC64` are unsealed: a subclass of a built-in generator inherits its engine and overrides `CreateFromSeed` so that
+`spawn` returns its own type. NumPy subclasses `Generator` and `PCG64` the same way, and takes user bit generators through
+its `bitgen_t` capsule.
 
 ### Polynomial series: closed
 
 [`NDPolyBase`](../../../src/NumSharp.Core/Polynomial/Package/NDPolyBase.cs#L138) has 23 `private protected` members, its
 constructor among them, and `NDPolynomial`, `NDChebyshev`, `NDLegendre`, `NDLaguerre`, `NDHermite`, `NDHermiteE` and
-`poly1d` are sealed. In NumPy the six series classes are ordinary subclasses of the abstract `ABCPolyBase`
+`poly1d` are sealed. Opening the constructor would not help: the math of each basis is picked by the internal `PolyBasis`
+enum inside `NDPolyClass`, whose constructor is internal too, and `NDPolyBase` has no abstract member a new basis could
+implement. In NumPy the six series classes are ordinary subclasses of the abstract `ABCPolyBase`
 (`numpy/polynomial/_polybase.py`), which any Python class can derive from too.
 
 ### Expression nodes: closed, call-out open
@@ -221,7 +252,7 @@ other 53 dispatch on CLR element types, where exact and `is` agree.
 
 ## What the internals are
 
-The TSVs classify nothing; read by kind, the 6,091 members fall into five groups:
+The TSVs classify nothing; read by kind, the 5,939 members fall into five groups:
 
 - **Machinery**: the IL kernel generators and their delegates (`Backends/Kernels`, 109 types plus 494 members on public
   kernel classes), NDIter and its buffers (`Backends/Iterators`), printing, text codecs and the string engine
@@ -232,21 +263,16 @@ The TSVs classify nothing; read by kind, the 6,091 members fall into five groups
   math. The public route exists.
 - **NumPy-semantics bookkeeping**: NEP 50 operand marks on `NDArray` (`WasPythonLiteral`, `Nep50Operand`,
   `WasScalarArgument`, ...), ownership tracking (`TrackingScope`, `TrackingIndex`), the subclass dispatcher
-  (`Backends/Subclass`, 18 types).
-- **Extension seams kept internal**: the list below.
+  (`Backends/Subclass`, 17 types).
+- **Seams still closed**: the list below.
 - **Dead code**: `Operator` (726 members).
 
-## Seams to decide on
+## Still closed
 
-Each row opens one scenario above. Nothing here is implemented; the order is by how much NumPy-shaped extension each
-unlocks.
-
-| # | Seam | Unlocks | Today |
-|---|---|---|---|
-| 1 | The subclass protocol: `__array_wrap__`, `__array_finalize__`, `_collapse` overridable outside, and a dispatch that routes any `NDArray` subclass (not only the two the weaver saw) | Consumer subclasses that keep their class, as in NumPy | `internal virtual`; `KindOf` exact-tests two classes |
-| 2 | Protected constructors on `NDMatrix`, `NDCharArray`, `NDMaskedArray` (after 1) | Subclasses of NumPy's own subclasses | Internal constructors |
-| 3 | A public bridge surface: foreign-byte booking, `WrapShared`, a `Shape` built from dims / strides / offset / buffer size, allocation-free dims / strides reads | Third-party zero-copy bridges on par with ours | Friend-only |
-| 4 | `BitGenerator`'s primitives and seeding helpers | User bit generators | `internal abstract` / `private protected` |
-| 5 | `NDPolyBase`'s constructor and helpers, unsealed series classes | User polynomial bases | `private protected`, sealed |
-| 6 | `DTypeMeta`'s element slots | User dtypes that store and read values (computing needs a loop registry as well) | `internal virtual` |
-| 7 | `TensorEngine.Evaluate(NDExprProgram, ...)` | Compiled expressions on engines not derived from `DefaultEngine` | `internal virtual` |
+| Seam | Why | What would open it |
+|---|---|---|
+| The subclass dispatch | `NDSubclass.KindOf` exact-tests two classes; the weaver's arms are built at NumSharp's own build | A dispatch that routes any `NDArray` subclass through its now-overridable hooks |
+| `DTypeMeta`'s element slots | Not decided | `protected internal virtual` slots, plus a per-dtype loop registry for a user dtype to compute |
+| `NDPolyBase` | The basis math is an internal enum, not a member a subclass implements | A design with virtual basis operations |
+| `NDExpr` nodes | By design | (`NDExpr.Call` is the extension route) |
+| `Shape.Adopt` | Replaced on `journey4` by public `Shape(dims, ..., copy)` constructors (`278e9862`) | That refactor reaching `strings` |
