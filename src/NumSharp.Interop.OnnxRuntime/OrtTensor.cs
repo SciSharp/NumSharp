@@ -110,6 +110,10 @@ namespace NumSharp.Interop.OnnxRuntime
             _shape = shape;
             try
             {
+                // The value carries its ARC from birth (OrtValueBooking; no booking: the memory is NumSharp's, or a text
+                // tensor's strings): a Dispose of the value itself - by this handle, by a caller holding Value, on any number
+                // of threads at once - releases the native value exactly once.
+                OrtValueBooking.Track(value, bytes: 0);
                 ValueOwners.AddOrUpdate(value, this);
             }
             catch

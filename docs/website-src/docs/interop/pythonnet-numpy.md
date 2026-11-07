@@ -474,7 +474,12 @@ tuple of the **same** arity; a length mismatch or a `list` is declined, never tr
 Every conversion verb **acquires the GIL itself**, re-entrantly - nesting inside your own
 `Py.GIL()` block is fine, and calling from a thread that never touched Python is fine. What you
 still own is your `PyObject`s: create and dispose them inside a `Py.GIL()` scope, because
-pythonnet's final decref needs it.
+pythonnet's final decref needs it - and because the GIL is the only guard `PyObject.Dispose` has. It
+takes the object's pointer and decrements its reference count with no lock of its own, so two threads
+disposing one `PyObject` without the GIL can both release it (1 crash in 397 races of a probe); under
+`Py.GIL()` the second one finds it disposed (400 of 400 released exactly one reference). A
+`using (PyObject p = ...)` whose scope ends outside `Py.GIL()` disposes without it - a `ToNumpy` result
+included.
 
 For a hot loop, lift the per-call acquisition:
 

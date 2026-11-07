@@ -45,7 +45,11 @@ namespace NumSharp.Interop.PythonNet
         ///     <c>false</c>: no GIL management — the calling thread must ALREADY hold the GIL;
         ///     <c>null</c> (default): follow <see cref="RequireGIL"/>.
         /// </param>
-        /// <returns>The numpy view (owned by the caller; disposing it never frees the NumSharp buffer).</returns>
+        /// <returns>
+        ///     The numpy view (owned by the caller; disposing it never frees the NumSharp buffer). Dispose it while
+        ///     holding the GIL: pythonnet's <c>PyObject.Dispose</c> has no guard of its own, so two threads disposing
+        ///     one without the GIL can both release it.
+        /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="NotSupportedException">The array is a <c>StringDType</c> array, which has no buffer
         ///     form (the message names <see cref="ToNumpyCopy"/>).</exception>
@@ -181,7 +185,7 @@ namespace NumSharp.Interop.PythonNet
         ///     <c>np.ascontiguousarray</c> on the result when a consumer needs C order.
         /// </remarks>
         /// <inheritdoc cref="ToNumpy(NDArray, bool?)" path="/param"/>
-        /// <returns>The independent numpy array (owned by the caller).</returns>
+        /// <returns>The independent numpy array (owned by the caller; dispose it while holding the GIL, as any <c>PyObject</c>).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="ObjectDisposedException">The NumSharp buffer was already released.</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> array whose <c>na_object</c> has no Python

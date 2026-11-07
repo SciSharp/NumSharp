@@ -63,8 +63,11 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   `NDArrayOnnxInterop.{cs,Export.cs,Import.cs,NonTensor.cs,Text.cs}` (dtype maps, the export and import verbs,
   non-tensor outputs, text tensors), `OnnxCodecMode.cs`, `OrtTensor.cs` (the `OrtTensor` / `OrtTensor<T>` handles and the
   `ImportLease`), `OrtDisposalProbe.cs` (reads ORT's private `_disposed` flags, so a disposed session or value throws
-  `ObjectDisposedException`), `OrtValueBooking.cs` (books a `ToOrtValue` result's bytes through an `IPinnable` token it
-  stores in ORT's private `OrtValue._memHandle`), `UnmanagedMemoryManager.cs` (a `Memory<T>` over the unmanaged buffer),
+  `ObjectDisposedException`), `OrtValueBooking.cs` (the ARC token of every value the bridge touches, an `IPinnable` it
+  stores in ORT's private `OrtValue._memHandle`: books a `ToOrtValue` result's bytes, counts call and view leases, and
+  takes ORT's native release over so it happens once, after the last lease), `NDInferenceSession.cs` (the session
+  whose `Dispose` waits for the bridge's runs, and the `SessionLease` the four `Run` verbs take),
+  `UnmanagedMemoryManager.cs` (a `Memory<T>` over the unmanaged buffer),
   `InferenceSessionExtensions{,.Async}.cs`, `RunOutputs.cs` (the result dictionary, an `INDArrayCarrier`), `Postprocess.cs`
   (the one public `Postprocess`: the ML.NET bridge references this package for it). ONNX Runtime's C# sources are vendored for reference at `refs/onnxruntime/csharp/` (a
   sparse submodule), its official samples at `refs/onnxruntime-inference-examples/c_sharp/`.
@@ -98,9 +101,11 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   declare it in), only: the native flavours (CPU, Gpu, DirectML) are mutually exclusive, so the consumer picks one. A
   cap below a consumer's ONNX Runtime is a restore ERROR (NU1107), and the ML.NET bridge references this package, so a
   cap would fail ML.NET users too. The bridge uses ORT's public C# API plus the private `_disposed` flags
-  `OrtDisposalProbe` reads (a missing field turns its check off) and the private `OrtValue._memHandle` slot
+  `OrtDisposalProbe` reads (a missing field turns its check off), the private `OrtValue._memHandle` slot
   `OrtValueBooking` writes (a missing or retyped field leaves `ToOrtValue` unbooked; `ToOrtValueBookingTests` asserts
-  the slot exists), so a breaking ORT major shows at run time; CI's advisory "newest" step (floating `*-*`) sees it first.
+  the slot exists) and the members its takeover needs (`_handle`, `_disposed`, the internal `(IntPtr, OnnxValueType)`
+  constructor; `_owned` and `_compositeMembers` where they exist; any one missing turns the leases off and leaves ORT's
+  own rules, `OrtValueArcTests.Arc_HooksIntoTheLoadedOnnxRuntime` asserts them), so a breaking ORT major shows at run time; CI's advisory "newest" step (floating `*-*`) sees it first.
 - Dtypes: 12 zero-copy, including a Half↔Float16 bit reinterpretation; Char→UInt16; Decimal→Double through a temp the
   handle owns (Auto / Copy; `Run` needs `casting: "same_kind"`); text: fixed-width `U` / `S` ↔ ORT string tensors, always
   a copy (a trailing NUL is lost; the bridge casts no text ↔ number pair: the caller's `astype` does); a `StringDType`
@@ -124,12 +129,30 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   managed assembly carries AssemblyVersion 0.0.0.0, so only the NuGet range sets the floor.
 - Lifetime: finalizers abandon, never free eagerly; an `OrtValue` keeps its handle alive through a ConditionalWeakTable,
   and a tensor's memory manager keeps it by back-reference.
+- Threads (the owner's decisions of 2026-11-07, `docs/plans/interop-onnx-mlnet-release-qa.md` section 10): ORT's own
+  `Dispose` takes no lock (two disposers of a value or a session corrupted the heap; a `Dispose` during a verb or the
+  bridge's `Run` was an access violation; a view read after its value's `Dispose` returned another value's data 400 of
+  400). Every value the bridge touches carries an ARC token: from birth for `ToOrtValue` / `AsOrtValue` / `GetMapKeys`
+  results, adopted by the first public verb for a value ORT allocated (never: a slot already holding a
+  `MemoryHandle`, `_owned == false`, `_compositeMembers` set; nor the `Run` tier's outputs and the readers' elements,
+  which pass `adopt: false`). A verb holds a CALL lease (`OrtValueBooking.Enter`, which also makes the disposal checks)
+  while it calls ORT; a view holds a VIEW lease for its life. The token's `Unpin` runs inside ORT's `Dispose(true)`
+  before ORT's own release: it waits for the calls, moves the native value into a shadow `OrtValue` (ORT's internal
+  constructor), zeroes `_handle` (ORT's own release becomes a no-op) and sets `_disposed`; the shadow is disposed at
+  once or by the last view, and the booking ends then. Never dispose a value under its own call lease (it waits for
+  itself): the owning verbs dispose after theirs. Sessions: `NDInferenceSession` (sealed, ORT's eight constructors)
+  overrides `Dispose(bool)` with a once-guard and a run count; the four `Run` verbs take a `SessionLease`, the
+  asynchronous ones until `PendingRun.Finish`, whose release hops to the thread pool. Not covered: ORT's own calls
+  (its `Run` overloads on any session, `GetTensorDataAsSpan`, `OrtIoBinding`), a plain `InferenceSession` (its
+  `Dispose` frees the runs' name buffers before any hook), and a `Dispose` racing a value's FIRST verb (adoption is a
+  plain struct store). Diagnostics: `OrtValueBooking.TakenOverReleases` / `HasToken`, `NDInferenceSession.Releases`.
 - Gate: `test/NumSharp.Tests.Interop.OnnxRuntime`, over committed `.onnx` models from `test/oracle/gen_onnx_models.py`
   (which takes model names, so a new model does not rewrite the committed ones): the every-dtype × layout export matrix
   (a cell per mode), property-based, metamorphic, ORT-consumer (six feed routes through ORT's own Identity), bit-pattern
   fuzz, concurrency stress, ARC/fault injection, boundary and API-approval suites, `LifetimeGcTests` (every finalization
   order of eight scenarios as a staged real collection), and `SessionRunModeTests`, `ImportAliasTests`, `TextTests`,
-  `PassThroughOutputTests`, `SessionRunAsyncTests`, `ValueOwnershipTests`, `MemoryManagerTests`, and `TextModelsEndToEndTests`
+  `PassThroughOutputTests`, `SessionRunAsyncTests`, `ValueOwnershipTests`, `MemoryManagerTests`, `OrtValueArcTests` and
+  `NDInferenceSessionTests` (every race above, 8 threads disposing one value or one session included), and `TextModelsEndToEndTests`
   (text through eleven string models - Concat, Transpose, Gather, Reshape, Slice, Unique, Where, Expand, Tile,
   StringNormalizer, LabelEncoder - held to NumSharp's numpy-verified twins and to `np.array(list)`'s width; Python
   onnxruntime's edges pinned `[Misaligned]`: an embedded NUL survives where it truncates, U+FFFD where it raises on a
@@ -216,7 +239,10 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 - `NDArrayTensorsInterop` verbs, `TensorSpanHandle<T>`.
 - `nd.AsTensorSpan<T>()` → `TensorSpanHandle<T>`: a zero-copy `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` over the
   NumSharp buffer for any non-negative-stride layout (strided, transposed and broadcast included), ARC-pinned. `.Span` /
-  `.ReadOnlySpan` are rebuilt on each access, because a ref struct cannot be stored.
+  `.ReadOnlySpan` are rebuilt on each access, because a ref struct cannot be stored. A span holds no reference of its own:
+  the handle or the source must stay undisposed for its whole life (read after both were disposed, it read another
+  array's data 800 / 800; the owner chose to document the rule, 2026-11-07: "NDArray can wrap Unsafe memory but has
+  to be disposed in the duration of the life of the span").
 - `nd.ToTensor<T>()` (a dense copy), `tensor.ToNDArray()` (an owning copy), `tensor.AsNDArray()` (a zero-copy view over
   the tensor's pinned buffer; its `ImportLease` in `TensorSpanHandle.cs` books the pinned bytes with `BookForeign` until
   the last view releases the pin), `span.ToNDArray()` (a copy).

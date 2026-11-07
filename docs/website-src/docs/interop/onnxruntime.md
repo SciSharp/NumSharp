@@ -307,8 +307,9 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
 - **`ToOrtValue` returns ORT's own value: dispose it.** Its copy lives in memory ORT allocated and ORT
   frees, so the value stays valid for every native holder - an `OrtIoBinding` it was bound to, a run's
   feeds - after the managed `OrtValue` is disposed or collected. NumSharp books the copy's bytes with its
-  own memory accounting until you dispose the value (the booking ends at once) or the garbage collector
-  collects it, so a forgotten value is seen like a forgotten NumSharp array: a loop that dropped 5,000 copies
+  own memory accounting until ONNX Runtime releases it - at your `Dispose`, or after the last view of it is gone
+  (see [Threads and disposal](#threads-and-disposal)) - or the garbage collector collects it, so a forgotten value
+  is seen like a forgotten NumSharp array: a loop that dropped 5,000 copies
   of a 602 KB array peaked at about 70 MB more private memory (unbooked, the same loop held 2.9 GB until an
   unrelated collection ran). A value you dispose never triggers a collection. The booking uses ONNX Runtime's
   private `OrtValue._memHandle` slot (1.16.0 through 1.31.1 have it); on a version without it the value is
@@ -325,8 +326,8 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
   that takes an `OrtValue` throws `ObjectDisposedException` for such a value instead. The same holds for a
   value you disposed yourself (a `ToOrtValue` result, a value of ORT's own `Run`) and for a disposed
   `InferenceSession`, where every `Run` form throws `ObjectDisposedException` instead of ending the process:
-  the bridge reads ONNX Runtime's own disposal flag. A session disposed by another thread DURING a run is
-  not covered - ORT itself does not survive that.
+  the bridge reads ONNX Runtime's own disposal flag. A `Dispose` on another thread DURING a verb or a run is
+  covered by the leases: see [Threads and disposal](#threads-and-disposal).
 - **Pins outlive the handle.** Whoever pins an `AsDenseTensor<T>` handle's `Memory<T>` - ORT's
   `CreateTensorValueFromMemory`, any `Memory<T>.Pin()` - takes its own reference on the NumSharp buffer,
   given back exactly once: when the pin is disposed (two copies of one `MemoryHandle` count once), or when
@@ -339,10 +340,11 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
   and the shape come first, so nothing is converted, copied or allocated for an array that cannot cross.
 - **Imports of a buffer ORT owns.** `AsNDArray` leases the buffer through NumSharp's memory-block reference
   count: the lease fires when the *last* NumSharp view over the memory - slices derived from it included -
-  is disposed or collected. A non-owning view roots the `OrtValue` so it cannot be finalized under it, but
-  you must not `Dispose` the `OrtValue` (or the `Run` result collection) while a view is in use - exactly
-  ORT's rule for `GetTensorDataAsSpan`. With `ownsValue: true` the last view disposes the `OrtValue` and you
-  must not; a call that throws never disposes it. An owning view books the buffer's size with NumSharp's
+  is disposed or collected. A non-owning view holds a lease on the `OrtValue`: you may dispose the value (or
+  the `Run` result collection) at any time, on any thread, and its memory stays valid until the last view is
+  gone (see [Threads and disposal](#threads-and-disposal)); a value the lease cannot cover keeps ORT's rule for
+  `GetTensorDataAsSpan` (do not dispose it while a view is in use). With `ownsValue: true` the last view
+  disposes the `OrtValue`; a call that throws never disposes it. An owning view books the buffer's size with NumSharp's
   memory accounting (not for a `ToOrtValue` result, which the value itself has booked already), and so does a
   `DenseTensor<T>` view of a managed array, whose pin keeps the array alive until the last view is gone: a
   forgotten view is then collected like a forgotten NumSharp array (5,000 forgotten views of fresh 602 KB
@@ -369,6 +371,44 @@ bytes)` on `slice.Address + Shape.Offset × itemsize`; the import takes the poin
   native code reads it; the same holds for anything that keeps a value past a call (`OrtIoBinding`,
   `SessionOptions.AddInitializer`, `OrtValue.CreateSequence`). `session.Run(NDArray…)` does this for you.
   The full lifetime and garbage-collection analysis: `docs/plans/interop-lifetime-gc-analysis.md`.
+
+## Threads and disposal
+
+ONNX Runtime's own `Dispose` takes no lock. Two threads disposing one `OrtValue` or one `InferenceSession` both
+release it (heap corruption), a `Dispose` during a call releases what the call reads (an access violation), and a view
+read after its value's `Dispose` returns whatever ORT's allocator put there next. The bridge makes its own verbs safe
+against all three:
+
+- **Values: an ARC on every value the bridge touches.** A `ToOrtValue` result, the value of an `AsOrtValue` handle and
+  a `GetMapKeys` result carry it from birth; a value ORT allocated (an output of ORT's own `Run`,
+  `CreateAllocatedTensorValue`, an element read with `GetValue`) gets it at its first bridge verb. A verb holds a lease
+  while it calls ORT on the value, a view - and every slice of it - for its whole life. `Dispose`, on any thread and any
+  number of times at once, waits for the verbs in flight, and then ONNX Runtime releases the value exactly once: at
+  once, or when its last view is gone. A verb that starts after the `Dispose` began throws `ObjectDisposedException`.
+  So a view stays valid after its value's `Dispose` (its bytes are booked from then on), in both directions: NumSharp
+  viewing ORT's memory, and ORT's value over NumSharp memory, whose `Dispose` by the handle and by you at once is still
+  one release.
+- **Sessions: `NDInferenceSession`.** A sealed drop-in subclass of `InferenceSession` with ORT's eight constructors:
+  its `Dispose` releases the native session exactly once, however many threads call it, and only after every
+  `Run` / `RunInto` / `RunAsync` / `RunIntoAsync` of the bridge on it returned; a run after the `Dispose` began throws
+  `ObjectDisposedException`, and `IsDisposed` turns true at once. The release after an asynchronous run runs on the
+  .NET thread pool, never on ORT's intra-op thread (where it would never return). A plain `InferenceSession` cannot be
+  made safe from outside - its `Dispose` frees the name buffers every run reads before anything could hook it - so it
+  keeps ORT's rule: dispose it once, after every run returned.
+- **What stays ORT's rule.** ORT's own calls take no lease: its own `Run` overloads (on any session),
+  `GetTensorDataAsSpan`, an `OrtIoBinding`. Dispose a value or a session only after those returned. A value over
+  memory ORT does not own (`CreateTensorValueFromMemory`), a value that does not own its native value, and a value
+  built from members (`CreateSequence` / `CreateMap`) keep ORT's rules too. Adoption is a plain store into ORT's
+  value, so a `Dispose` racing a value's FIRST bridge verb is not covered: give a value that crosses threads its first
+  verb on the thread that made it.
+
+Measured on ORT 1.31.1, 800 races each, before and after: a double `Dispose` of a value or of a session corrupted
+the heap, and a `Dispose` during `ToNDArray`, `AsNDArray` or the bridge's `Run` was an access violation; 400 of 400
+reads of a view after its value's `Dispose` returned another value's data. With the leases: 0 crashes and 0 wrong
+values, one release per value and per session - also with 8 threads disposing one value, 8 disposing one session, and
+8 each disposing their own session and a neighbour's. Concurrent USE was safe before and stays safe (two threads
+running one session, or reading one value: 0 wrong in 400). A lease costs within noise of the verb (`ToNDArray` of
+16 KB: +17..+58 ns on 1.8 us).
 
 ## Post-processing
 
@@ -469,7 +509,10 @@ an older ORT the tests of their behaviour report Inconclusive and the test of th
 | 26 | The value of a disposed handle is refused by every import verb instead of ending the process | `ValueOwnershipTests.ValueOfADisposedHandle_IsRefused_ByEveryImportVerb_InsteadOfCrashingInOnnxRuntime` |
 | 27 | Non-tensor readers: sequences in order with their own shapes, int64- and string-keyed maps, `GetMapKeys`, each reader's refusals | `NonTensorTests` |
 | 28 | Under an `NDScope`, which disposes the bridge's own temporaries when it closes, a handle (Decimal conversion, C-order copy, zero-copy, `AsDenseTensor`) and a `Run` output that leave the scope keep their bytes; a zero-copy import left to the scope is released when it closes | `NDScopeTests` |
-| 29 | A `ToOrtValue` result books its bytes until it is disposed (at once, exactly once) or collected; forgotten values trigger collections and disposed ones never do; a value bound to an `OrtIoBinding` stays correct after the managed value is disposed or collected; a sequence that owns the value ends its booking; text and empty values are not booked | `ToOrtValueBookingTests` |
+| 29 | A `ToOrtValue` result books its bytes until ONNX Runtime releases it (at its `Dispose`, or after its last view) or it is collected; forgotten values trigger collections and disposed ones never do; a value bound to an `OrtIoBinding` stays correct after the managed value is disposed or collected; a sequence that owns the value ends its booking; text and empty values are not booked | `ToOrtValueBookingTests` |
+
+| 30 | Any number of threads disposing a value at once, during a verb, or while views of it live: one native release after the last lease, every read right or refused; a view outlives its value's `Dispose` while ORT reuses the block; ORT's own outputs are adopted by their first verb; what cannot be leased is not adopted | `OrtValueArcTests` |
+| 31 | `NDInferenceSession`: its eight constructors; one release however many threads dispose it; the bridge's runs in flight finish first (synchronous and asynchronous, the asynchronous release on the thread pool); runs after the `Dispose` are refused; ORT's own `Run` works on it | `NDInferenceSessionTests` |
 
 ## See also
 

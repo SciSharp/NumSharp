@@ -249,7 +249,8 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
 - **`ToOrtValue` returns ORT's own value — dispose it.** ORT allocates and frees the copy, so the value stays
   valid for every native holder (an `OrtIoBinding` it was bound to, a run's feeds) after the managed `OrtValue`
   is disposed or collected. NumSharp books the copy's bytes with its own memory accounting until the caller
-  disposes the value (the booking ends at once) or the GC collects it: 5,000 forgotten values of 602 KB peaked
+  disposes the value (the booking ends when ONNX Runtime releases it: at once, or after the last view of it) or
+  the GC collects it: 5,000 forgotten values of 602 KB peaked
   at about +70 MB of private memory (unbooked: +2.9 GB until an unrelated collection ran), and a value that is
   disposed never triggers a collection. The booking is a token stored in ORT's private `OrtValue._memHandle`
   slot, whose `MemoryHandle` ORT's `Dispose` releases; on an ONNX Runtime without that field (1.16.0 through
@@ -264,6 +265,16 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   Every verb that takes an `OrtValue` throws `ObjectDisposedException` for such a value. So does a value you
   disposed yourself, and every `Run` form on a disposed `InferenceSession` (both were access violations): the
   bridge reads ONNX Runtime's own private disposal flag, and skips the check on a version without it.
+- **A `Dispose` on another thread is safe for the bridge's verbs.** ONNX Runtime's own `Dispose` takes no lock
+  (two disposers corrupted the heap; a `Dispose` during a verb was an access violation). Every value the bridge
+  touches carries an ARC: a verb holds a lease while it calls ORT on the value, a view for its whole life, and a
+  `Dispose` - from any thread, any number of times at once - waits for the verbs in flight and releases the value
+  once, after its last view. A `ToOrtValue` result and an `AsOrtValue` value have it from birth; a value ORT
+  allocated (a `Run` output of ORT's own API) gets it at its first bridge verb. For sessions, use
+  **`NDInferenceSession`** (a drop-in `InferenceSession` with ORT's eight constructors): its `Dispose` releases the
+  native session once, after the bridge's runs on it returned (the asynchronous release runs on the thread pool),
+  and refuses new runs. ORT's own calls (its `Run` overloads, `GetTensorDataAsSpan`, an `OrtIoBinding`) take no
+  lease: dispose only after those returned.
 - **Pins of an `AsDenseTensor<T>` handle's `Memory<T>` outlive the handle.** Whoever pins that memory —
   ORT's `CreateTensorValueFromMemory`, any `Memory<T>.Pin()` — takes a reference of its own on the NumSharp
   buffer, given back exactly once: when the pin is disposed (two copies of one `MemoryHandle` count once) or
@@ -276,8 +287,9 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   nothing is converted, copied or allocated for an array that cannot cross.
 - **Imports of a buffer ORT owns** (`AsNDArray` of a run output) lease it through NumSharp's memory-block
   reference counting: the lease fires when the last NumSharp view over the memory — derived slices included —
-  is disposed or collected. A non-owning view roots the `OrtValue` (it cannot be finalized under the view) but
-  the caller must not `Dispose` it while a view is in use — the rule ORT documents for `GetTensorDataAsSpan`.
+  is disposed or collected. A non-owning view holds a lease on the `OrtValue`: the caller may dispose it at any
+  time and the memory stays valid until the last view is gone (a value over memory ORT does not own, or built
+  from members, keeps ORT's rule for `GetTensorDataAsSpan`: do not dispose it while a view is in use).
   `ownsValue: true` transfers ownership: the last view disposes the `OrtValue`, and the caller must not. A
   call that throws never disposes the value. An owning view books the buffer's size with NumSharp's memory
   accounting (not for a `ToOrtValue` result, which the value has booked already), and so does a `DenseTensor<T>`

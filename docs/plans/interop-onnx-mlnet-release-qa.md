@@ -56,6 +56,12 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
   over a pinned managed array (ML.NET, Tensors, and ORT's `DenseTensor<T>` view, which reported nothing) books it the
   same way - forgotten views of fresh 602 KB arrays held +2.3-2.7 GB unbooked and +96-299 MB booked, and disposed
   views pay no collection where per-lease pressure ran 12-41 gen-2 collections per 5,000 (section 5, P8).
+- **ONNX Runtime under threads (2026-11-07, the owner's decisions; branch `qa/ort-concurrency`, not merged)**: every
+  value the ONNX Runtime bridge touches carries an ARC (a verb's call lease, a view's view lease, ONE native
+  release after the last), and `NDInferenceSession` releases a session once, after the bridge's runs on it: a
+  double `Dispose`, a `Dispose` during a verb or a run, and a view read after its value's `Dispose` were heap
+  corruption, access violations or another value's data; 0 crashes and 0 wrong values in 9,600 races after
+  (section 10).
 - **Deferred, documented**: P3, P15 (section 5; both re-asked and deferred again on 2026-11-05). P5 done (NDW021; NDW020 until the merge into strings, where parity QA-41's culture rule had taken that id); P19 done on branch `qa/ufunc-keeporder` (`ecd70236`, not merged): every fresh ufunc result takes
   NumPy's layout, so an elementwise result of a permuted view keeps the permutation (parity QA-36). F79's
   `Postprocess.Softmax` / `LogSoftmax` check is not re-run yet: this branch does not carry the Core change.
@@ -783,7 +789,10 @@ which it references. Still to add, for whoever keeps the notes: Core's breaking 
 (+68 MB instead of +2,898 MB for 5,000 of 602 KB; `OrtIoBinding` and every native holder unchanged, since ORT still owns
 and frees the copy), and every import lease books the memory it keeps alive instead of one `GC.AddMemoryPressure` per
 lease, in all four bridges (Tensors and pythonnet are released packages: their lines are fixes); the ONNX Runtime
-bridge's P2 + P12, P7, P11, P21 and F71; the ML.NET bridge's P1, P17 and P18 (a repeated column name refused).
+bridge's P2 + P12, P7, P11, P21 and F71; the ML.NET bridge's P1, P17 and P18 (a repeated column name refused); and,
+once `qa/ort-concurrency` is merged, section 10: every value the ONNX Runtime bridge touches is released once after
+its last lease (a double `Dispose`, a `Dispose` during a verb and a view read after `Dispose` were crashes or another
+value's data), and the new `NDInferenceSession`.
 
 **Merged into `strings` (2026-11-03, on the owner's request).** The 84 commits after `1c001253` were replayed with
 `cherry-pick -x` onto `strings` `b154d164` (branch `qa/interop-onto-strings`) and merged into `strings` with a merge
@@ -874,6 +883,139 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
   (the Run forms' XML docs), P17 after P1 (the cursor's constructor). Their resolutions are the merge commits
   `fa99e1c4`, `ddb979f8` and `1cb2deff` of `qa/proposals-all` (`git show <merge>` prints the combined diff); this
   clone's rerere cache holds all three.
+
+## 10. ONNX Runtime under threads (the owner's decisions of 2026-11-07)
+
+**The brief.** After the P8 merge, the owner read the closing caveat "ORT's own Dispose isn't thread-safe. Two threads
+disposing the same value at once both release it. That's ORT's contract; our code neither causes nor worsens it." and
+answered: "We should be tackling this from C#, what if we concurrently work with ORT?"
+
+**What concurrent work did (ORT 1.31.1, before; probes `race.cs` / `race_harness.sh`, 4 processes of 200 races each).**
+Concurrent USE was safe: two threads running the bridge's `Run` on one session (2s and 3s fed, each checking its own),
+or copying and viewing one value, 0 wrong in 400 each. Concurrent DISPOSAL was not, in every form:
+
+| Race | Before |
+|---|---|
+| 2 threads dispose one `ToOrtValue` result | heap corruption (`0xC0000374`), 4 of 4 processes |
+| `ToNDArray` loop vs `Dispose` | access violation in `GetTensorTypeAndShape` (P11's check-then-act) |
+| `AsNDArray` + view reads vs `Dispose` | access violation, 4 of 4 processes in their first two races |
+| one thread: a view read after its value's `Dispose`, ORT reusing the block | 400 of 400 reads returned another value's data |
+| 2 threads dispose one `InferenceSession` | heap corruption (ORT frees the session's UTF-8 name buffers twice) |
+| the bridge's `Run` loop vs `Dispose` | access violation in `InferenceSession.RunImpl` |
+| ORT's own `Run` over an `AsOrtValue` value vs the handle's `Dispose` | 0 crashes in 100, `ObjectDisposedException` from `Value` 2-4 per 25 (the window between `Value` and the native copy of the feeds remains) |
+
+**The hooks ORT leaves (decompiled 1.16.0 and 1.31.1).** `OrtValue` cannot be subclassed (every constructor internal),
+and its `Dispose(true)` disposes `_memHandle` BEFORE `OrtReleaseValue(_handle)` - the P8 token's slot, so the token can
+take the release over: wait for the bridge's calls in flight, move the native value into a shadow `OrtValue` (ORT's
+internal `(IntPtr, OnnxValueType)` constructor, which makes no native call), zero `_handle` (ORT's own release becomes
+`OrtReleaseValue(nullptr)`, a no-op) and set `_disposed`. `InferenceSession` has public constructors and a
+`protected virtual Dispose(bool)`, and nothing else to hook: its `DisposeImpl` frees `_namesMemoryPtrs` (the UTF-8
+names every run passes to the native session) first, then the options, then the native session. So a session can only
+be made safe as a subclass. ORT's own `Run` methods (22) are not virtual.
+
+**The prototype** (`race_arc.cs`, the token and an `InferenceSession` subclass around the bridge's verbs): the five
+crashing races 0 crashes in 800 each, one native release per object, the reuse probe 0 wrong in 400; the lease's cost
++17..+58 ns on a 16 KB `ToNDArray` (1.83-1.85 us) and -6..-13 ns on `AsNDArray` (1.62-1.64 us), within noise, on two
+pinned CPUs. Two defects of the draft were fixed before it ran: a missing `unsafe`, and a release-store followed by a
+load in the hand-over (the dispose and the last view could both miss each other and leak the value): both sides need a
+full fence.
+
+**The owner's decisions** (AskUserHtmlQuestion, the coloured-diff pages, `probes/ortconc/pages`):
+
+| Question | Answer (verbatim) |
+|---|---|
+| OrtValue: a Dispose racing a verb, a view or a second Dispose | "ARC over every value it touches (Recommended)", note: "This should allow us viewing of Ort and viewing through NumSharp" |
+| InferenceSession: two Disposes, a Dispose during the bridge's Run | Other: "I wanna go with NDINferenceSession but my question is why are we not doing this in the InferenceSession in first place or its not ours and so we will want to use NDInferenceSession / Also corruption will still work if we multithread dispose many?" |
+
+**Done** (branch `qa/ort-concurrency`, from `strings` `c2c6ee88`):
+- `OrtValueBooking`: the P8 token is every touched value's ARC. From birth for `ToOrtValue` (text and empty results
+  included, unbooked), the value of every `AsOrtValue` handle (ORT's view of NumSharp memory: the handle's `Dispose` and
+  a caller's direct `Dispose` of `Value`, at once, release once) and `GetMapKeys`; adopted by the first public verb for a
+  value ORT allocated (never a value whose slot holds a `MemoryHandle`, one with `_owned == false`, one built from
+  members; never the `Run` tier's outputs or the readers' elements, which nothing outside the call reaches). Every verb
+  over an `OrtValue` opens a call lease in place of its disposal check (`OrtValueBooking.Enter`); a view holds a view
+  lease for its life (so NumSharp's views of ORT's memory, slices included, stay valid after the value's `Dispose`, and
+  the bytes they keep alive are booked from then on). The owning verbs that need nothing from their value (Copy mode,
+  text, empty) dispose it after their lease, never under it.
+- `NDInferenceSession` (new public type, sealed, ORT's eight constructors, `IsDisposed`): `Dispose(bool)` with a
+  once-guard and a run count; the bridge's `Run` / `RunInto` take a `SessionLease`, `RunAsync` / `RunIntoAsync` hold
+  one until `PendingRun.Finish`, whose release is queued to the thread pool (ORT's intra-op thread never returns from a
+  session release); `SessionLease.ThrowIfDisposed` gives the asynchronous forms the session's own early message.
+
+**The owner's two questions, answered.** (1) `InferenceSession` is ONNX Runtime's class, not NumSharp's: its code cannot
+be changed from here, and it cannot be hooked from outside, because its `Dispose` frees the buffers a run reads before
+it calls anything a caller could intercept. `Dispose(bool)` is the one virtual member, so a subclass is the only place
+for the once-guard and the run count - hence `NDInferenceSession`, which IS an `InferenceSession` and goes everywhere
+one goes. The same fix inside ORT's own class would be an upstream change to onnxruntime (a guard and a run count in
+`InferenceSession.Dispose`). (2) No corruption when many threads dispose at once: the guards are interlocked, so any
+number of threads disposing one value or one session release it once - measured with 8 threads on one value and 8 on
+one session (800 races each), and 8 threads each disposing their own session and a neighbour's (800 races, 1,600 of
+1,600 sessions released once). Many DIFFERENT objects disposed at once were always safe. A plain `InferenceSession`
+disposed by two threads still corrupts the heap: that one stays ORT's rule.
+
+**Verified.** The product code against twelve races (`race_prod.cs`, 4 processes of 200 each): 0 crashes and 0 wrong
+values in all 9,600, one release per value and per session, `ObjectDisposedException` only for verbs and runs that
+started after the `Dispose` (an adopted `Run` output's first view read the output's data after the results' `Dispose`;
+`RunIntoAsync` vs `Dispose` released 200 of 200 sessions on the pool). Tests: `OrtValueArcTests` (11) and
+`NDInferenceSessionTests` (7); the ORT suite 384 / 384 at 1.31.1 (net10.0) and 360 + 24 Inconclusive at 1.16.0 (net8.0
+and net10.0; the asynchronous tests need 1.30.0), 384 / 384 under `NUMSHARP_DEBUG_GUARD_PAGES=1`; ML.NET 241 / 241. Ten
+mutants (`mutants.py`), each removing one guarantee, all killed: seven crash the test host (no once-guard, a Dispose that
+ignores runs, no takeover, no wait for calls, verbs without leases, `Run` and `RunIntoAsync` without the session lease),
+three fail an assertion (the asynchronous release inline on ORT's thread times out; views that are not counted;
+no adoption).
+
+**What stays ONNX Runtime's rule.** ORT's own calls take no lease (its `Run` overloads on any session,
+`GetTensorDataAsSpan`, `OrtIoBinding`), a plain `InferenceSession`, a value over memory ORT does not own, and a
+`Dispose` racing a value's FIRST verb (adoption is a plain store into ORT's struct field). ORT's own `Run` reading an
+`AsOrtValue` buffer that a `Dispose` releases mid-run needs ORT to report its last native reference: the C-API deleter
+(ORT 1.22 and newer, not in the 1.31.1 managed API), P8's R5 - still deferred.
+
+## 11. The other bridges under the same races (the owner's decisions of 2026-11-07)
+
+**The question.** After section 10: "Is any other bridges suffer from similar? what about python"
+
+**Measured** (the section-10 race shapes against the bridges as they are on `strings`; `qa/interop-probes`
+`ortconc-2026-11-07/`: `bridges_race.cs`, `py_race.cs`, 4 processes of 200 or 100 races each):
+
+| Bridge | What races | Result |
+|---|---|---|
+| ML.NET | 8 threads dispose one `NDArrayDataView`; cursors read while the view AND the source are disposed and the pool reused; cursors opened during the dispose | safe: 0 crashes, 0 wrong in 2,400 (every cursor holds its own pin; a cursor opened after the dispose gets `ObjectDisposedException`) |
+| System.Numerics.Tensors | 8 threads dispose one `TensorSpanHandle` | safe: 0 in 800 |
+| System.Numerics.Tensors | a `TensorSpan` read after the handle AND the source are disposed and the pool reused | 800 of 800 read another array's data: a span (a `ref struct`) holds no reference |
+| OpenBLAS | `Disable()` + `Enable()` of the same library during `np.dot` | safe: 0 in 200 (`Disable` never frees) |
+| OpenBLAS | `Enable(library: another)` during `np.dot` | access violation, 4 of 4 processes: `OpenBlasNative.Load` frees the replaced library under the running call |
+| pythonnet | exports and imports while C# disposes, Python collects and both sides reuse memory; 8 threads disposing one view; 8 converting at once | safe: 0 wrong in 2,000 (the export keeper, the lease's `PyBuffer`, the GIL-serialized drain) |
+| pythonnet | 2 threads dispose one `PyObject`, each under `Py.GIL()` / without the GIL | under the GIL exactly one reference released, 400 of 400; without it 1 crash in 397 (pythonnet's `Dispose` takes the pointer and decrefs with no guard; its constructors are internal, no hook) |
+| pythonnet | a NumSharp view of numpy memory read after `PythonEngine.Shutdown` | 8 of 8 read other data (4 KB arrays); an access violation 3 of 3 with 64 KB / 4 MB arrays: the shutdown handler force-releases the leases live views use |
+
+Prototypes, each re-run against its race: OpenBLAS keeping a replaced library loaded, 0 crashes in 200; pythonnet
+keeping live leases' references across the engine's death, 0 of 8 wrong (the view races still clean).
+
+**The owner's decisions** (two rounds of decision pages):
+
+| Question | Answer (verbatim) |
+|---|---|
+| OpenBLAS: `Enable(library: another)` frees the replaced library under running calls | "Document the rule only" (the recommendation was to keep a replaced library loaded) |
+| pythonnet: views read after `PythonEngine.Shutdown` | "Keep viewed memory alive (Recommended)", note: "But even if we shut down, you think the memory wont be taken by another - prove and ask again."; re-asked with the proof below: "Defer (skip for now)" |
+| Tensors: a `TensorSpan` read after its handle and source are disposed | "State the span rule (Recommended)", note: "NDArray can wrap Unsafe memory but has to be disposed in the duration of the life of the span" |
+| pythonnet: `PyObject.Dispose` without the GIL | "State the GIL rule (Recommended)" |
+
+**The proof asked for** (`py_proof.cs`): views over numpy arrays of 4 KB, 64 KB and 4 MB, each array's last reference
+held by the view's lease; `PythonEngine.Shutdown`; then 200,000 CRT `malloc` blocks of 16 B-4 MB with 2,000 live
+(numpy's own allocator), 100,000 `AllocHGlobal` blocks and 3,000 NumSharp arrays, every allocation checked by address
+against the views and the views re-read after each round. Today's code: reading the views is an access violation (3 of
+3 runs), and by address 365 / 866, 189 / 271 and 10 / 30 allocations landed on their memory. With the leases' references
+kept: 0 overlaps in 303,000 allocations per run, 0 wrong elements of 1,065,984 after every round, 3 of 3 runs. A second
+interpreter cannot exist: pythonnet 3.0.5 cannot initialize again after `Shutdown` in one process
+(`NotImplementedException`). Why nothing can take the block: numpy frees an array's data only in its dealloc, at
+reference count 0; the kept reference holds it at 1 or more; CPython's finalization leaks a still-referenced object;
+the heap hands out only freed blocks.
+
+**Done** (`qa/ort-concurrency`): the three rules documented where each library is used - OpenBLAS (the OpenBLAS page,
+`OpenBlasEngine.Enable`'s remarks, `.claude/rules/openblas.md`), the span rule (the Tensors page's lifetime section,
+`TensorSpanHandle`'s class and accessor remarks, `.claude/rules/interop-packages.md`), the GIL rule for `Dispose` (the
+pythonnet page's GIL section, the `ToNumpy` / `ToNumpyCopy` returns, the bridge README). Deferred: the shutdown fix
+(its prototype and proof stay on `qa/interop-probes`).
 
 ## 7. Log
 
@@ -975,3 +1117,5 @@ The proposals (section 5) are separate, each the owner's to accept or drop:
 | 2026-11-06 19:10 | P8 decided and done on `qa/p8-booking` (from `95ea3e0e`). The owner asked why NumSharp cannot own the disposal itself; the answer (the side whose reference count ends a buffer's use must hold the counted reference, and ORT's native holders are invisible to managed counters) and three decision pages: Q1 R7 "NumSharp manages ORT's value", Q2 "Book with the pool" for the ORT owning-view and pythonnet leases, Q3 the ML.NET / Tensors managed-array leases deferred with "why would we want to report mem pressure". R7: ORT frees, a token in `OrtValue._memHandle` books until `Dispose(true)` or collection; forgotten +68 / +72 MB (was +2,898), disposed paces nothing, +0.3-0.6 us; the leases' gen-2 churn (45-47 ORT, 8-15 pythonnet per 5,000 disposed views) gone. Suites green: Core unit, ORT 1.31.1 and 1.16.0 on both TFMs, ML.NET floor, pythonnet 787 / 787. Section 5, P8. |
 | 2026-11-06 20:14 | P8 Q3 measured for and against (the owner: "why would we want to report mem pressure"), re-asked and done. For: a forgotten view's pin keeps a LARGE managed array alive past the gen-2 that found the view dead, so 5,000 forgotten views of fresh 602 KB arrays held +2.3-2.7 GB unreported (+1.9-2.4 GB through ORT's `DenseTensor<T>` view, which reported nothing). Against per-lease pressure: double counting, 12-41 gen-2s per 5,000 disposed views (CoreCLR never subtracts removals), no help in a tight loop over a big heap. The owner chose "Book with the pool" and asked whether large NumSharp arrays bypass the pool and whether disposal still happens: yes to both (64 MiB+ skips the buckets, every size is accounted; booking is accounting only, the release runs as before). ML.NET + Tensors leases book, ORT's `DenseTensor<T>` view books its managed array; probes `qa/interop-probes` `63899e7c` + `09911042`. Section 5, P8. |
 | 2026-11-06 21:15 | P8 verified on the owner's "are we good? Prove it" (`qa/p8-verify`): ORT never dereferences `_memHandle` (1.16.0 / 1.29.0 / 1.31.1); new concurrency tests in Core, ORT, ML.NET, Tensors and pythonnet green on both TFMs (a non-atomic-counter mutant fails them); every bridge suite green under guard pages; the soak shows disposing code at 0 paced / 1 gen-2 in 40 s, forgotten views plateauing at +145 MB, and the mixed phase's gen-2 load matching a no-view control; holding 976 MB of live views costs 60 paced gen-0 and 3-4 gen-2. Section 5, P8. |
+| 2026-11-07 06:10 | Section 10: ONNX Runtime under threads, on the owner's "We should be tackling this from C#, what if we concurrently work with ORT?". Measured: concurrent use safe, concurrent disposal a crash in every form (values and sessions), a view read after its value's Dispose another value's data 400 / 400. Decided on two pages: ARC over every value the bridge touches, and `NDInferenceSession`. Done on `qa/ort-concurrency`: 12 races x 800 with 0 crashes and 0 wrong values, ORT 384 / 384 (1.31.1) and 360 + 24 (1.16.0, both TFMs), guard pages 384 / 384, ten mutants killed. Not merged. |
+| 2026-11-07 09:45 | Section 11: the other bridges under section 10's races, on the owner's "Is any other bridges suffer from similar? what about python". ML.NET and pythonnet (under the GIL) safe; OpenBLAS crashes when `Enable` swaps libraries under a running call; a `TensorSpan` reads freed memory after its handle and source are disposed; pythonnet's views read freed memory after `PythonEngine.Shutdown`. Decided: OpenBLAS, the span rule and the GIL rule documented; the shutdown fix deferred after the proof the owner asked for (0 of 303,000 allocations reused kept memory). |
