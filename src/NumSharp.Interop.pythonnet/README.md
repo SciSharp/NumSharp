@@ -217,7 +217,9 @@ Import views also **do not own their data** (like `np.frombuffer(...)`, whose `f
 
 ## Rules & limits
 
-- **GIL**: every method acquires the GIL itself (re-entrant). Your own `PyObject` usage still follows pythonnet's rules.
+- **GIL**: every method acquires the GIL itself (re-entrant). Your own `PyObject` usage still follows pythonnet's rules:
+  dispose a `PyObject` (a `ToNumpy` result included) inside `Py.GIL()`. pythonnet's `Dispose` has no guard of its own,
+  so two threads disposing one without the GIL can both release it (1 crash in 397 races of a probe; 0 under the GIL).
 - **GIL opt-out**: every conversion verb takes a nullable `requireGIL` parameter; `null` (the default) follows the process-wide `NDArrayPythonInterop.RequireGIL` (default `true`). An effective `false` replaces `Py.GIL()` with a shared no-op guard — the calling thread must **already hold the GIL** (an enclosing `Py.GIL()` block); converting GIL-less without holding it is an immediate access violation. **Trap:** a .NET method/delegate body invoked *from* Python does **not** hold the GIL — pythonnet's binder releases it around managed bodies (probed on 3.0.5/3.1.0: `PyGILState_Check() == 0` inside the body) — so keep GIL management on inside Python→.NET callbacks. The interop's background machinery (deferred lease disposal, shutdown drain) always manages the GIL itself, regardless of the policy.
 
   ```csharp

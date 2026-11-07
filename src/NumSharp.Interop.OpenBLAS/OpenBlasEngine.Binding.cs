@@ -121,11 +121,16 @@ namespace NumSharp.Interop.OpenBLAS
         ///     so a parity run must pin both sides to the same count.
         /// </param>
         /// <remarks>
-        ///     <b>A failed call is a no-op.</b> When the requested library cannot be loaded this
+        ///     <para><b>A failed call is a no-op.</b> When the requested library cannot be loaded this
         ///     throws having changed nothing — an already-working parity setup keeps working, and a
         ///     process that had none still has none. (It used to unload the good library first, so
         ///     a mistyped path demoted every subsequent product back to the managed kernels while
-        ///     <see cref="Enabled"/> still said true.)
+        ///     <see cref="Enabled"/> still said true.)</para>
+        ///     <para><b>Switch libraries only while no other thread computes.</b> Naming another file than
+        ///     the one loaded frees the library it replaces once the new one is bound, and a BLAS call that
+        ///     another thread is still executing in it is an access violation that ends the process (4 of 4
+        ///     processes in a race probe, 2026-11-07). <see cref="Disable"/> never frees a library, so it is
+        ///     safe at any time; re-enabling the library already loaded frees nothing.</para>
         /// </remarks>
         /// <param name="coreType">
         ///     The OpenBLAS <c>DYNAMIC_ARCH</c> micro-kernel to force (e.g. <see cref="CoreType"/>),

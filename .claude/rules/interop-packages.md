@@ -239,7 +239,10 @@ None of these computes NumSharp operations: each converts tensors between NumSha
 - `NDArrayTensorsInterop` verbs, `TensorSpanHandle<T>`.
 - `nd.AsTensorSpan<T>()` → `TensorSpanHandle<T>`: a zero-copy `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` over the
   NumSharp buffer for any non-negative-stride layout (strided, transposed and broadcast included), ARC-pinned. `.Span` /
-  `.ReadOnlySpan` are rebuilt on each access, because a ref struct cannot be stored.
+  `.ReadOnlySpan` are rebuilt on each access, because a ref struct cannot be stored. A span holds no reference of its own:
+  the handle or the source must stay undisposed for its whole life (read after both were disposed, it read another
+  array's data 800 / 800; the owner chose to document the rule, 2026-11-07: "NDArray can wrap Unsafe memory but has
+  to be disposed in the duration of the life of the span").
 - `nd.ToTensor<T>()` (a dense copy), `tensor.ToNDArray()` (an owning copy), `tensor.AsNDArray()` (a zero-copy view over
   the tensor's pinned buffer; its `ImportLease` in `TensorSpanHandle.cs` books the pinned bytes with `BookForeign` until
   the last view releases the pin), `span.ToNDArray()` (a copy).

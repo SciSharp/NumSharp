@@ -970,6 +970,53 @@ no adoption).
 `AsOrtValue` buffer that a `Dispose` releases mid-run needs ORT to report its last native reference: the C-API deleter
 (ORT 1.22 and newer, not in the 1.31.1 managed API), P8's R5 - still deferred.
 
+## 11. The other bridges under the same races (the owner's decisions of 2026-11-07)
+
+**The question.** After section 10: "Is any other bridges suffer from similar? what about python"
+
+**Measured** (the section-10 race shapes against the bridges as they are on `strings`; `qa/interop-probes`
+`ortconc-2026-11-07/`: `bridges_race.cs`, `py_race.cs`, 4 processes of 200 or 100 races each):
+
+| Bridge | What races | Result |
+|---|---|---|
+| ML.NET | 8 threads dispose one `NDArrayDataView`; cursors read while the view AND the source are disposed and the pool reused; cursors opened during the dispose | safe: 0 crashes, 0 wrong in 2,400 (every cursor holds its own pin; a cursor opened after the dispose gets `ObjectDisposedException`) |
+| System.Numerics.Tensors | 8 threads dispose one `TensorSpanHandle` | safe: 0 in 800 |
+| System.Numerics.Tensors | a `TensorSpan` read after the handle AND the source are disposed and the pool reused | 800 of 800 read another array's data: a span (a `ref struct`) holds no reference |
+| OpenBLAS | `Disable()` + `Enable()` of the same library during `np.dot` | safe: 0 in 200 (`Disable` never frees) |
+| OpenBLAS | `Enable(library: another)` during `np.dot` | access violation, 4 of 4 processes: `OpenBlasNative.Load` frees the replaced library under the running call |
+| pythonnet | exports and imports while C# disposes, Python collects and both sides reuse memory; 8 threads disposing one view; 8 converting at once | safe: 0 wrong in 2,000 (the export keeper, the lease's `PyBuffer`, the GIL-serialized drain) |
+| pythonnet | 2 threads dispose one `PyObject`, each under `Py.GIL()` / without the GIL | under the GIL exactly one reference released, 400 of 400; without it 1 crash in 397 (pythonnet's `Dispose` takes the pointer and decrefs with no guard; its constructors are internal, no hook) |
+| pythonnet | a NumSharp view of numpy memory read after `PythonEngine.Shutdown` | 8 of 8 read other data (4 KB arrays); an access violation 3 of 3 with 64 KB / 4 MB arrays: the shutdown handler force-releases the leases live views use |
+
+Prototypes, each re-run against its race: OpenBLAS keeping a replaced library loaded, 0 crashes in 200; pythonnet
+keeping live leases' references across the engine's death, 0 of 8 wrong (the view races still clean).
+
+**The owner's decisions** (two rounds of decision pages):
+
+| Question | Answer (verbatim) |
+|---|---|
+| OpenBLAS: `Enable(library: another)` frees the replaced library under running calls | "Document the rule only" (the recommendation was to keep a replaced library loaded) |
+| pythonnet: views read after `PythonEngine.Shutdown` | "Keep viewed memory alive (Recommended)", note: "But even if we shut down, you think the memory wont be taken by another - prove and ask again."; re-asked with the proof below: "Defer (skip for now)" |
+| Tensors: a `TensorSpan` read after its handle and source are disposed | "State the span rule (Recommended)", note: "NDArray can wrap Unsafe memory but has to be disposed in the duration of the life of the span" |
+| pythonnet: `PyObject.Dispose` without the GIL | "State the GIL rule (Recommended)" |
+
+**The proof asked for** (`py_proof.cs`): views over numpy arrays of 4 KB, 64 KB and 4 MB, each array's last reference
+held by the view's lease; `PythonEngine.Shutdown`; then 200,000 CRT `malloc` blocks of 16 B-4 MB with 2,000 live
+(numpy's own allocator), 100,000 `AllocHGlobal` blocks and 3,000 NumSharp arrays, every allocation checked by address
+against the views and the views re-read after each round. Today's code: reading the views is an access violation (3 of
+3 runs), and by address 365 / 866, 189 / 271 and 10 / 30 allocations landed on their memory. With the leases' references
+kept: 0 overlaps in 303,000 allocations per run, 0 wrong elements of 1,065,984 after every round, 3 of 3 runs. A second
+interpreter cannot exist: pythonnet 3.0.5 cannot initialize again after `Shutdown` in one process
+(`NotImplementedException`). Why nothing can take the block: numpy frees an array's data only in its dealloc, at
+reference count 0; the kept reference holds it at 1 or more; CPython's finalization leaks a still-referenced object;
+the heap hands out only freed blocks.
+
+**Done** (`qa/ort-concurrency`): the three rules documented where each library is used - OpenBLAS (the OpenBLAS page,
+`OpenBlasEngine.Enable`'s remarks, `.claude/rules/openblas.md`), the span rule (the Tensors page's lifetime section,
+`TensorSpanHandle`'s class and accessor remarks, `.claude/rules/interop-packages.md`), the GIL rule for `Dispose` (the
+pythonnet page's GIL section, the `ToNumpy` / `ToNumpyCopy` returns, the bridge README). Deferred: the shutdown fix
+(its prototype and proof stay on `qa/interop-probes`).
+
 ## 7. Log
 
 | Time (+0200) | Entry |
@@ -1071,3 +1118,4 @@ no adoption).
 | 2026-11-06 20:14 | P8 Q3 measured for and against (the owner: "why would we want to report mem pressure"), re-asked and done. For: a forgotten view's pin keeps a LARGE managed array alive past the gen-2 that found the view dead, so 5,000 forgotten views of fresh 602 KB arrays held +2.3-2.7 GB unreported (+1.9-2.4 GB through ORT's `DenseTensor<T>` view, which reported nothing). Against per-lease pressure: double counting, 12-41 gen-2s per 5,000 disposed views (CoreCLR never subtracts removals), no help in a tight loop over a big heap. The owner chose "Book with the pool" and asked whether large NumSharp arrays bypass the pool and whether disposal still happens: yes to both (64 MiB+ skips the buckets, every size is accounted; booking is accounting only, the release runs as before). ML.NET + Tensors leases book, ORT's `DenseTensor<T>` view books its managed array; probes `qa/interop-probes` `63899e7c` + `09911042`. Section 5, P8. |
 | 2026-11-06 21:15 | P8 verified on the owner's "are we good? Prove it" (`qa/p8-verify`): ORT never dereferences `_memHandle` (1.16.0 / 1.29.0 / 1.31.1); new concurrency tests in Core, ORT, ML.NET, Tensors and pythonnet green on both TFMs (a non-atomic-counter mutant fails them); every bridge suite green under guard pages; the soak shows disposing code at 0 paced / 1 gen-2 in 40 s, forgotten views plateauing at +145 MB, and the mixed phase's gen-2 load matching a no-view control; holding 976 MB of live views costs 60 paced gen-0 and 3-4 gen-2. Section 5, P8. |
 | 2026-11-07 06:10 | Section 10: ONNX Runtime under threads, on the owner's "We should be tackling this from C#, what if we concurrently work with ORT?". Measured: concurrent use safe, concurrent disposal a crash in every form (values and sessions), a view read after its value's Dispose another value's data 400 / 400. Decided on two pages: ARC over every value the bridge touches, and `NDInferenceSession`. Done on `qa/ort-concurrency`: 12 races x 800 with 0 crashes and 0 wrong values, ORT 384 / 384 (1.31.1) and 360 + 24 (1.16.0, both TFMs), guard pages 384 / 384, ten mutants killed. Not merged. |
+| 2026-11-07 09:45 | Section 11: the other bridges under section 10's races, on the owner's "Is any other bridges suffer from similar? what about python". ML.NET and pythonnet (under the GIL) safe; OpenBLAS crashes when `Enable` swaps libraries under a running call; a `TensorSpan` reads freed memory after its handle and source are disposed; pythonnet's views read freed memory after `PythonEngine.Shutdown`. Decided: OpenBLAS, the span rule and the GIL rule documented; the shutdown fix deferred after the proof the owner asked for (0 of 303,000 allocations reused kept memory). |

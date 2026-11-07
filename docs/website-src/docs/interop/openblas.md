@@ -180,6 +180,11 @@ but non-binding**:
 OpenBlasEngine.Enable(@"C:\opt\openblas\libopenblas.dll");   // binding - exactly this file, or throw
 ```
 
+Switch libraries only while no other thread computes. `Enable(path)` with another file than the one
+loaded frees the library it replaces, and a BLAS call that another thread is still executing in it is an
+access violation that ends the process (4 of 4 processes in a race probe). `Disable()` never frees a
+library, so it is safe at any time, and re-enabling the library that is already loaded frees nothing.
+
 ```bash
 NUMSHARP_OPENBLAS_LIBRARY=/opt/blas/libopenblas.so ./app   # binding - the env spelling of the same
 NUMSHARP_OPENBLAS_SEARCH_PATH=/opt/myblas ./app              # tried before the bundle, falls through
