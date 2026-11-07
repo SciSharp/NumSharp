@@ -108,15 +108,66 @@ namespace NumSharp
     ///     </para>
     /// </remarks>
     /// <seealso href="https://numpy.org/doc/stable/reference/generated/numpy.matrix.html"/>
-    [ArraySubclass("matrix", Priority = NDMatrix.__array_priority__)]
     public partial class NDMatrix : NDArray, IEnumerable
     {
+        /// <summary>NumPy's class name (<c>matrix.__name__</c>), for its error texts; NumSharp.Build's weave reads it to
+        ///     find the array subclasses and name them in the generated method dispatch.</summary>
+        internal const string __name__ = "matrix";
+
         /// <summary>
-        ///     NumPy's <c>matrix.__array_priority__</c>: the value that makes a mixed <c>ndarray</c> / <c>matrix</c>
-        ///     operation return a matrix. NumSharp resolves that at compile time through the operators of this
-        ///     class, so the constant is informational; it exists so ported code that reads it compiles.
+        ///     NumPy's <c>matrix.__array_priority__</c>, 10.0: above an ndarray's and a chararray's 0.0, so the class wrap of a
+        ///     ufunc result and the subtype of a sequence function (<c>np.concatenate</c>) are a matrix whenever one operand
+        ///     is. The operators of this class resolve a mixed operation at compile time; the public functions read it at
+        ///     run time.
         /// </summary>
-        public const double __array_priority__ = 10.0;
+        public override double __array_priority__ => 10.0;
+
+        /// <summary>
+        ///     NumPy's <c>__array_wrap__</c> for a matrix, which is ndarray's (<c>array.view(type(self))</c>) followed by
+        ///     <c>matrix.__array_finalize__</c>: a matrix view of <paramref name="array"/> under the finalize rule (a 1-d result
+        ///     is a 1 x N row). An array that already is a matrix comes back itself (a matrix out=, an operand handed back).
+        /// </summary>
+        /// <param name="array">The result to wrap.</param>
+        /// <returns><paramref name="array"/> when it is a matrix, else a new matrix view of it (never an owner).</returns>
+        /// <exception cref="ValueError">More than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        internal override NDArray __array_wrap__(NDArray array) => array is NDMatrix ? array : FromWrapped(array);
+
+        /// <summary>
+        ///     NumPy's creation of a result as a matrix (<c>Py_TYPE(self)</c>, then <c>matrix.__array_finalize__</c>): a matrix
+        ///     view of <paramref name="created"/> under the finalize rule, or WITHOUT it for a result NumPy made by indexing
+        ///     the matrix with a new axis (<c>np.atleast_3d(m)</c> is the 3-d matrix object <c>m[:, :, newaxis]</c>, whose
+        ///     <c>_getitem</c> flag switches the rule off).
+        /// </summary>
+        /// <param name="created">The result computed plain.</param>
+        /// <param name="keepRank">Skip the finalize rule (the indexing case).</param>
+        /// <param name="zeroDim">Unused: a matrix's 0-d result is the finalize rule's 1 x 1 matrix.</param>
+        /// <returns><paramref name="created"/> when it is a matrix, else a new matrix view of it.</returns>
+        /// <exception cref="ValueError">More than two axes longer than 1, unless <paramref name="keepRank"/>.</exception>
+        internal override NDArray __array_finalize__(NDArray created, bool keepRank, NewSubtypeZeroDim zeroDim)
+            => created is NDMatrix ? created : keepRank ? new NDMatrix(created.Storage.Alias()) : FromWrapped(created);
+
+        /// <summary>
+        ///     NumPy's <c>matrix._collapse(axis)</c> (<c>self[0, 0] if axis is None else self</c>) after a
+        ///     <c>keepdims=True</c> reduction, applied to the plain reduction (keepdims=False) NumPy's function computed: the
+        ///     scalar without an axis, a column <c>(N, 1)</c> along the last axis, a row or the matrix itself otherwise.
+        /// </summary>
+        /// <param name="result">The plain reduction, unaliased (a matrix result, or <c>null</c>, comes back itself).</param>
+        /// <param name="axis">The caller's axis: it decides row or column for a 1-d plain result.</param>
+        /// <returns>The 0-d result, a matrix view of it, or <paramref name="result"/>.</returns>
+        /// <exception cref="ValueError">More than two axes longer than 1.</exception>
+        internal override NDArray _collapse(NDArray result, int? axis)
+        {
+            if (result is null || result is NDMatrix)
+                return result;
+            Shape shape = result.Storage.Shape;
+            if (shape.NDim == 0)
+                return result;   // _collapse(None): self[0, 0], the scalar
+            // The reduced axis stays with extent 1 under keepdims=True; the plain reduction dropped it, so a 1-d result is put
+            // back as a column for the last axis and as a row for the first.
+            if (shape.NDim == 1 && axis is int along && (along == 1 || along == -1))
+                return new NDMatrix(result.Storage.Alias(shape.AsMatrixColumn()));
+            return FromWrapped(result);
+        }
 
         /// <summary>
         ///     Wraps <paramref name="storage"/> as a matrix WITHOUT applying the finalize rule and without copying.

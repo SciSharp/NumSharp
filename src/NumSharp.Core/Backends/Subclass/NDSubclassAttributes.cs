@@ -18,8 +18,9 @@ using System;
 // SubclassWeaver): a subclass operand takes the woven path, which hands the computation plain views and applies the
 // declared mechanism to the result.
 //
-// The subclasses state their own NumPy facts: [ArraySubclass] (the Python name and __array_priority__) and [NumPyMethod]
-// on each method NumPy's subclass defines (matrix.sum, chararray.partition), which the generated method dispatch calls.
+// The subclasses state their own NumPy facts as NumPy does, on the class: their __name__ and the virtual members of NDArray
+// they override (__array_priority__, __array_wrap__, __array_finalize__, _collapse; NDArray.SubclassHooks.cs), and
+// [NumPyMethod] on each method NumPy's subclass defines (matrix.sum), which the generated method dispatch calls.
 //
 // Every attribute here is INERT at run time: it is a build input of NumSharp.Build's self-weave, and nothing reads it by
 // reflection but the test-time caller audit, which reads [SubclassAware] off the stack (NDSubclass.Audit).
@@ -335,24 +336,6 @@ namespace NumSharp
 
         /// <summary>The entry check's name in <see cref="Type"/>, or <c>null</c>.</summary>
         public string Check { get; set; }
-    }
-
-    /// <summary>
-    ///     Declares a class as one of NumPy's array subclasses: its Python class name (for NumPy's error texts) and its
-    ///     <c>__array_priority__</c> (the order the wrap and the subtype selection follow).
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-    internal sealed class ArraySubclassAttribute : Attribute
-    {
-        /// <summary>Declares the class.</summary>
-        /// <param name="name">NumPy's class name (<c>matrix</c>, <c>chararray</c>).</param>
-        internal ArraySubclassAttribute(string name) => Name = name;
-
-        /// <summary>NumPy's class name.</summary>
-        internal string Name { get; }
-
-        /// <summary>The class's <c>__array_priority__</c> (0.0, ndarray's, when NumPy's class declares none).</summary>
-        public double Priority { get; set; }
     }
 
     /// <summary>

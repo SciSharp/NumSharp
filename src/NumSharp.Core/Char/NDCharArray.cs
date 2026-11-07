@@ -85,9 +85,57 @@ namespace NumSharp
     ///     </para>
     /// </remarks>
     /// <seealso href="https://numpy.org/doc/stable/reference/generated/numpy.char.chararray.html"/>
-    [ArraySubclass("chararray")]
     public partial class NDCharArray : NDArray, IEnumerable
     {
+        /// <summary>NumPy's class name (<c>chararray.__name__</c>), for its error texts; NumSharp.Build's weave reads it to
+        ///     find the array subclasses and name them in the generated method dispatch.</summary>
+        internal const string __name__ = "chararray";
+
+        /// <summary>
+        ///     NumPy's <c>chararray.__array_wrap__(arr)</c>: "we return a chararray if the result is a string dtype;
+        ///     otherwise a plain ndarray" - a NEW chararray view of a text result (also of an operand or out= handed back,
+        ///     <c>np.add(c, c, out=co) is co</c> is False), any other result unchanged.
+        /// </summary>
+        /// <param name="array">The result to wrap.</param>
+        /// <returns>A new chararray view of a text <paramref name="array"/>, else <paramref name="array"/>.</returns>
+        internal override NDArray __array_wrap__(NDArray array) => WrapResult(array);
+
+        /// <summary>
+        ///     NumPy's creation of a result as a chararray (<c>Py_TYPE(self)</c>, then <c>chararray.__array_finalize__</c>,
+        ///     which refuses a dtype that is not string data): a chararray over <paramref name="created"/>, owning its data
+        ///     exactly when the result does; a 0-d result as NumPy hands it back (<see cref="NewSubtypeZeroDim"/>).
+        /// </summary>
+        /// <param name="created">The result computed plain.</param>
+        /// <param name="keepRank">Unused: the chararray finalize rule changes no shape.</param>
+        /// <param name="zeroDim">How a 0-d result reaches the caller: a 0-d chararray, the unstripped NumPy scalar
+        ///     (<c>PyArray_Return</c>), or the stripped element (<c>__getitem__</c>).</param>
+        /// <returns><paramref name="created"/> when it is a chararray, else the chararray (or scalar stand-in) over it.</returns>
+        /// <exception cref="ValueError">The dtype is not string data (<c>Can only create a chararray from string
+        ///     data.</c>).</exception>
+        internal override NDArray __array_finalize__(NDArray created, bool keepRank, NewSubtypeZeroDim zeroDim)
+        {
+            if (created is NDCharArray)
+                return created;
+            if (created.ndim == 0 && zeroDim != NewSubtypeZeroDim.Array)
+            {
+                // PyArray_Return creates the 0-d result as the subclass first (the finalize rule reads its dtype), then hands
+                // back the unstripped NumPy scalar; __getitem__ hands back the stripped element.
+                if (zeroDim == NewSubtypeZeroDim.Scalar)
+                    Finalize(created.dtype);
+                return ScalarOf(created.Storage, strip: zeroDim == NewSubtypeZeroDim.Element);
+            }
+            return FromCreated(created);
+        }
+
+        /// <summary>
+        ///     <c>chararray.__array_finalize__</c>'s dtype check for a result about to be created as a chararray
+        ///     (<c>np.zeros_like(c, dtype)</c>, <c>np.argmax(c)</c>'s int64 index).
+        /// </summary>
+        /// <param name="dtype">The result's dtype.</param>
+        /// <exception cref="ValueError">The dtype is not string data (<c>Can only create a chararray from string
+        ///     data.</c>).</exception>
+        internal override void __array_finalize__(DType dtype) => Finalize(dtype);
+
         /// <summary>NumPy's <c>__array_finalize__</c> error text, verbatim.</summary>
         internal const string FinalizeText = "Can only create a chararray from string data.";
 

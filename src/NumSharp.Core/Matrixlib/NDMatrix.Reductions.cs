@@ -623,11 +623,11 @@ namespace NumSharp
             // answer too - the copy _replace_nan makes first is not observable.
             string method = isMax ? "max" : "min";
             if (keepdims)
-                throw NDSubclass.KeywordError("matrix", method, "keepdims");
+                throw NDSubclass.KeywordError(__name__, method, "keepdims");
             if (initial is not null)
-                throw NDSubclass.KeywordError("matrix", method, "initial");
+                throw NDSubclass.KeywordError(__name__, method, "initial");
             if (@where is not null)
-                throw NDSubclass.KeywordError("matrix", method, "where");
+                throw NDSubclass.KeywordError(__name__, method, "where");
 
             // a, mask = _replace_nan(a, -inf / +inf): the array object's statement, on this matrix's plain view (the dtype
             // decision lives there, below the facades - ratchet R1). An inexact matrix gives the NaN mask and the replaced

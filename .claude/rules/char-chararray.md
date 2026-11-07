@@ -88,7 +88,9 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
   0-d array; `isdecimal` / `isnumeric` refuse an `S` chararray (no bytes loop); `encode` / `decode` return the function's
   PLAIN `S` / `U` result as it is.
 - The np.* FUNCTIONS find a chararray at run time: the woven prologue sends the call to the generated subclass path, which
-  computes on plain views and applies the mechanism declared on the function's computation (`matrix.md`):
+  computes on plain views and applies the mechanism declared on the function's computation (`matrix.md`), through the
+  class's own overrides of NDArray's virtual `__array_wrap__` (`WrapResult`) and `__array_finalize__` (the string-data
+  check, then `FromCreated` / the 0-d stand-ins):
   - kept (`[NewSubtype]`, a method or an `np.asanyarray` view: `reshape`, `ravel`, `transpose`, `squeeze`, `sort`,
     `repeat`, `tile`, the split family, the `*_like` family where a numeric dtype is the finalize error,
     `np.copy(subok=True)`, `np.take` (0-d: the unstripped scalar), `np.flip` (0-d: the stripped element), `np.meshgrid`

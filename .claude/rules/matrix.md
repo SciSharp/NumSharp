@@ -43,6 +43,14 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
     `np.linalg.qr`, the unique family, ...). The functions with several results wrap the outputs NumPy wraps (`np.split`;
     `np.linalg.qr`: Q and R; `eig` / `eigh`: plain eigenvalues, matrix eigenvectors; `svd`: U and Vh; `lstsq`: x and
     the residuals).
+  - The class side is C# inheritance under NumPy's names (`Backends/NDArray.SubclassHooks.cs`): NDArray's virtual
+    `__array_priority__` (public, 0.0; a matrix's is 10.0), `__array_wrap__`, `__array_finalize__` and `_collapse`,
+    overridden by `NDMatrix` (the finalize rule's view; matrix's `_collapse`) and `NDCharArray` (its `__array_wrap__`
+    view of a text result; creation under the string-data check). A mechanism picks the operand NumPy's machinery picks
+    and calls its member, so nothing switches on the class. C# cannot retype an object, so `__array_finalize__(created,
+    ...)` is NumPy's creation as `type(self)` plus the hook in one call: the plain result in, the class's object out. A
+    class's `internal const string __name__` (`"matrix"`, `"chararray"`) names it in NumPy's texts and is how
+    NumSharp.Build finds the array subclasses for the generated dispatch.
   - The method dispatch passes the method the keywords NumPy's does: `np.sum` / `np.prod` / `np.mean` / `np.var` /
     `np.std` and the max / min family hand it `axis`, `dtype`, `out` (and `ddof`, after `correction=` folded into it),
     so each other keyword passed (`keepdims`, `initial`, `where`, `mean`) is the method's TypeError (`matrix.sum() got

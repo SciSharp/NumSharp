@@ -73,7 +73,6 @@ internal static class SubclassWeaver
     private const string ReducesThroughAttr = "NumSharp.ReducesThroughAttribute";
     private const string SubclassRuleAttr = "NumSharp.SubclassRuleAttribute";
     private const string SubclassAwareAttr = "NumSharp.SubclassAwareAttribute";
-    private const string ArraySubclassAttr = "NumSharp.ArraySubclassAttribute";
     private const string NumPyMethodAttr = "NumSharp.NumPyMethodAttribute";
     private const string PlainReceiverAttr = "NumSharp.PlainReceiverAttribute";
     private const string ModuleNameAttr = "NumSharp.ModuleNameAttribute";
@@ -262,7 +261,8 @@ internal static class SubclassWeaver
         /// <summary>Where the build errors go.</summary>
         public TextWriter Stderr = null!;
 
-        /// <summary>The <c>[ArraySubclass]</c> classes, in declaration order (the dispatch arms' order).</summary>
+        /// <summary>The array subclasses (NDArray classes with a <c>__name__</c> constant), in declaration order (the
+        ///     dispatch arms' order).</summary>
         public List<Subclass> Subclasses = new();
 
         /// <summary>The memoized resolutions: a computation shared by many functions is resolved once.</summary>
@@ -327,9 +327,13 @@ internal static class SubclassWeaver
         ctx.NDArrayArray = new ArrayType(ctx.NDArray);
         foreach (var t in AllTypes(module))
         {
-            var declared = t.CustomAttributes.FirstOrDefault(a => a.AttributeType.FullName == ArraySubclassAttr);
-            if (declared is not null)
-                ctx.Subclasses.Add(new Subclass(t, (string)declared.ConstructorArguments[0].Value));
+            // An array subclass derives from NDArray and states NumPy's class name as its own `__name__` constant
+            // (matrix.__name__), which the generated dispatch's TypeError texts read.
+            if (t.BaseType?.FullName != NDArrayFullName)
+                continue;
+            var name = t.Fields.FirstOrDefault(f => f.Name == "__name__" && f.IsStatic && f.HasConstant && f.Constant is string);
+            if (name is not null)
+                ctx.Subclasses.Add(new Subclass(t, (string)name.Constant));
         }
 
         // Collect first: the weave adds methods to the types being enumerated.

@@ -42,8 +42,9 @@ using System.Runtime.CompilerServices;
 // counted reference on the buffer).
 //
 // THE MECHANISMS below are NumPy's class selection (npy_find_array_wrap's priorities, PyArray_GetSubType's) followed by
-// the chosen class's own construction (NDMatrix.FromWrapped for a matrix, the chararray's finalize rule and view). They
-// return the plain result unchanged when no operand of their kind is a subclass.
+// the chosen operand's own class members, as NumPy puts them on its classes: NDArray's virtual __array_priority__,
+// __array_wrap__, __array_finalize__ and _collapse (NDArray.SubclassHooks.cs), which NDMatrix and NDCharArray override.
+// No mechanism switches on the class. They return the plain result unchanged when no operand is a subclass.
 //
 // THE CLASS'S OWN CODE computes the same way. An NDMatrix / NDCharArray member or operator that computes its answer itself
 // hands the public functions it calls its plain view (NDMatrix.A, PlainView, Plain, PlainUfuncInput), never `this`: the
@@ -65,12 +66,6 @@ namespace NumSharp
     /// </remarks>
     internal static class NDSubclass
     {
-        /// <summary><c>numpy.matrix.__array_priority__</c> (defmatrix.py).</summary>
-        internal const double MatrixPriority = 10.0;
-
-        /// <summary><c>numpy.char.chararray</c> declares none: ndarray's <c>NPY_PRIORITY</c>, 0.0.</summary>
-        internal const double CharArrayPriority = 0.0;
-
         #region Operand tests
 
         /// <summary>
@@ -521,8 +516,10 @@ namespace NumSharp
         {
             if (result is null)
                 return null;
+            // A result that is out= is wrapped by out's own class: a matrix out comes back itself, a chararray out as a
+            // NEW chararray view (chararray.__array_wrap__).
             if (@out is not null && ReferenceEquals(result, @out))
-                return KindOf(@out) == NDSubclassKind.CharArray ? NDCharArray.ViewOf(@out) : @out;
+                return KindOf(@out) == NDSubclassKind.None ? @out : @out.__array_wrap__(@out);
             return WrapBy(result, FindWrap(x1, x2, x3));
         }
 
@@ -637,18 +634,9 @@ namespace NumSharp
         /// <param name="priority">The priority of the current choice (-inf before any).</param>
         private static void Consider(NDArray x, ref NDArray wrapper, ref double priority)
         {
-            double current;
-            switch (KindOf(x))
-            {
-                case NDSubclassKind.Matrix:
-                    current = MatrixPriority;
-                    break;
-                case NDSubclassKind.CharArray:
-                    current = CharArrayPriority;
-                    break;
-                default:
-                    return;   // an exact ndarray has no wrap; it never displaces a subclass
-            }
+            if (KindOf(x) == NDSubclassKind.None)
+                return;   // an exact ndarray has no wrap; it never displaces a subclass
+            double current = x.__array_priority__;
             if (wrapper is null || priority < current)
             {
                 wrapper = x;
@@ -659,19 +647,11 @@ namespace NumSharp
         /// <summary>The chosen operand's <c>__array_wrap__</c> of one result.</summary>
         /// <param name="result">The plain result (or the caller's operand handed back), or <c>null</c>.</param>
         /// <param name="wrapper">The operand whose class wraps, or <c>null</c> (nothing wraps).</param>
-        /// <returns>The matrix view, the chararray view of a text result, or <paramref name="result"/>.</returns>
+        /// <returns>The wrapping operand's <c>__array_wrap__</c> of the result (a matrix view, the chararray view of a text
+        ///     result), or <paramref name="result"/> when nothing wraps.</returns>
         /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
         private static NDArray WrapBy(NDArray result, NDArray wrapper)
-        {
-            if (result is null || wrapper is null)
-                return result;
-            if (KindOf(wrapper) == NDSubclassKind.Matrix)
-                // ndarray.__array_wrap__ as the matrix class, then the finalize rule; an operand handed back stays itself.
-                return result is NDMatrix ? result : NDMatrix.FromWrapped(result);
-            // chararray.__array_wrap__ is arr.view(type(self)): a NEW view of a text result (OWNDATA False) - also of the
-            // operand itself when the computation handed it back - and any other result unchanged.
-            return NDCharArray.WrapResult(result);
-        }
+            => result is null || wrapper is null ? result : wrapper.__array_wrap__(result);
 
         #endregion
 
@@ -696,28 +676,9 @@ namespace NumSharp
         {
             if (result is null || @out is not null && ReferenceEquals(result, @out))
                 return result;
-            switch (KindOf(self))
-            {
-                case NDSubclassKind.Matrix:
-                    if (result is NDMatrix)
-                        return result;
-                    // np.atleast_3d is matrix.__getitem__ with a new axis: the finalize rule is off, the rank stays.
-                    return keepRank ? new NDMatrix(result.Storage.Alias()) : NDMatrix.FromWrapped(result);
-                case NDSubclassKind.CharArray:
-                    if (result is NDCharArray)
-                        return result;
-                    if (result.ndim == 0 && zeroDim != NewSubtypeZeroDim.Array)
-                    {
-                        // PyArray_Return creates the 0-d result as the subclass first (the finalize rule reads its dtype),
-                        // then hands back the unstripped NumPy scalar; __getitem__ hands back the stripped element.
-                        if (zeroDim == NewSubtypeZeroDim.Scalar)
-                            NDCharArray.Finalize(result.dtype);
-                        return NDCharArray.ScalarOf(result.Storage, strip: zeroDim == NewSubtypeZeroDim.Element);
-                    }
-                    return NDCharArray.FromCreated(result);
-                default:
-                    return result;
-            }
+            // Py_TYPE(self) creation and its __array_finalize__: the operand's class member (a plain operand creates
+            // nothing).
+            return KindOf(self) == NDSubclassKind.None ? result : self.__array_finalize__(result, keepRank, zeroDim);
         }
 
         /// <summary><see cref="NewSubtype(NDArray, NDArray, NDArray, bool, NewSubtypeZeroDim)"/> for each element of a
@@ -752,8 +713,9 @@ namespace NumSharp
         ///     data.</c>), raised after the computation's own checks, as in NumPy.</exception>
         internal static long NewSubtype(long result, NDArray self)
         {
-            if (KindOf(self) == NDSubclassKind.CharArray)
-                NDCharArray.Finalize(DType.Int64);
+            // The 0-d int64 result created as the operand's class: its finalize check (a chararray's refuses it).
+            if (KindOf(self) != NDSubclassKind.None)
+                self.__array_finalize__(DType.Int64);
             return result;
         }
 
@@ -766,8 +728,8 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="self"/> is a chararray and the dtype is not string data.</exception>
         internal static void FinalizeFirst(NDArray self, DType dtype)
         {
-            if (KindOf(self) == NDSubclassKind.CharArray)
-                NDCharArray.Finalize(dtype ?? self.dtype);
+            if (KindOf(self) != NDSubclassKind.None)
+                self.__array_finalize__(dtype ?? self.dtype);
         }
 
         #endregion
@@ -788,10 +750,19 @@ namespace NumSharp
         {
             if (result is null || arrays is null || @out is not null && ReferenceEquals(result, @out))
                 return result;
+            // The subtype of STRICTLY the highest __array_priority__ above ndarray's NPY_PRIORITY (0.0): a chararray never
+            // wins, a matrix does; the first of equal priorities is kept.
+            NDArray subtype = null;
+            double priority = 0.0;
             for (int i = 0; i < arrays.Length; i++)
-                if (KindOf(arrays[i]) == NDSubclassKind.Matrix)
-                    return result is NDMatrix ? result : NDMatrix.FromWrapped(result);
-            return result;
+            {
+                NDArray candidate = arrays[i];
+                if (KindOf(candidate) == NDSubclassKind.None || candidate.__array_priority__ <= priority)
+                    continue;
+                subtype = candidate;
+                priority = candidate.__array_priority__;
+            }
+            return subtype is null ? result : subtype.__array_finalize__(result, keepRank: false, NewSubtypeZeroDim.Array);
         }
 
         #endregion
@@ -805,17 +776,11 @@ namespace NumSharp
         /// <param name="result">The function's result on the plain views (unaliased).</param>
         /// <returns>The plain answer.</returns>
         internal static NDArray AsArray(NDArray result)
-        {
-            switch (KindOf(result))
-            {
-                case NDSubclassKind.Matrix:
-                    return ((NDMatrix)result).A;
-                case NDSubclassKind.CharArray:
-                    return new NDArray(result.Storage.Alias()) { TensorEngine = result.TensorEngine };
-                default:
-                    return result;
-            }
-        }
+            // array(a, copy=False, subok=False) of a subclass object: a base-class view of its storage (a matrix's A is the
+            // same view), never the object itself.
+            => KindOf(result) == NDSubclassKind.None
+                ? result
+                : new NDArray(result.Storage.Alias()) { TensorEngine = result.TensorEngine };
 
         /// <summary><see cref="AsArray(NDArray)"/> for each element of a multi-array result, in place.</summary>
         /// <param name="result">The results on the plain views (a new array).</param>
@@ -861,7 +826,7 @@ namespace NumSharp
                 ? inexactMethod
                 : method;
             if (reached is not null)
-                throw KeywordError("matrix", reached, "keepdims");
+                throw KeywordError(NDMatrix.__name__, reached, "keepdims");
         }
 
         /// <summary>
@@ -883,19 +848,12 @@ namespace NumSharp
         internal static NDArray Collapse(NDArray result, NDArray @out, NDArray self, int? axis, bool subtypeOthers,
                                          NewSubtypeZeroDim zeroDim)
         {
-            NDSubclassKind kind = KindOf(self);
-            if (kind != NDSubclassKind.Matrix)
-                return subtypeOthers && kind != NDSubclassKind.None ? NewSubtype(result, @out, self, false, zeroDim) : result;
-            if (result is null || result is NDMatrix)
+            if (KindOf(self) == NDSubclassKind.None)
                 return result;
-            Shape shape = result.Storage.Shape;
-            if (shape.NDim == 0)
-                return result;   // matrix._collapse(None): the scalar
-            // The reduced axis stays with extent 1 under keepdims=True; a plain reduction dropped it, so a 1-d result is put
-            // back as a column for the last axis and as a row for the first.
-            if (shape.NDim == 1 && axis is int along && (along == 1 || along == -1))
-                return new NDMatrix(result.Storage.Alias(shape.AsMatrixColumn()));
-            return NDMatrix.FromWrapped(result);
+            // The class's _collapse (numpy.matrix's), else the class NumPy's body creates its result as (a chararray's
+            // subtype copy) or the plain result.
+            return self._collapse(result, axis)
+                   ?? (subtypeOthers ? NewSubtype(result, @out, self, false, zeroDim) : result);
         }
 
         /// <summary>
