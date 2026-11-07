@@ -76,7 +76,12 @@ namespace NumSharp.Tests
     //        last contraction step (bmm_einsum / c_einsum), which accepts an int32 out of a float64 contraction under
     //        casting='safe' and refuses a misshapen out with "could not broadcast input array from shape (2,4) into shape
     //        (2,5)". NumSharp keeps the C parser's texts (linalg-einsum.md) and c_einsum's out checks for every optimize=;
-    //        an explicit path is planned first since NL5. Found by NL5's fix (2026-11-06).
+    //        an explicit path is planned first since NL5, and its out still meets c_einsum's checks, as optimize=True's and
+    //        'greedy''s do. Found by NL5's fix (2026-11-06).
+    //   NL15 complex np.nanmedian keeps the NaNs NumPy's _nanmedian removes (_remove_nan_1d over a flat slice, np.ma.median
+    //        along an axis shorter than 600): a slice holding a NaN gets another median (NumPy's [1+2j, nan+1j, 3, 4+1j] is
+    //        3+0j, NumSharp's 2+1j), and an all-NaN slice is nan+nanj where NumPy returns its last element (1+nanj for
+    //        [nan+1j, 1+nanj]). Found re-probing D24's open items (2026-11-07), next to NL2's complex np.median fix.
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call (probed on win-amd64). EXPECTED (when fixed):
     // each test passes; remove its [OpenBugs], move it next to its API's tests, and drop the oracle excuse named in its
@@ -306,6 +311,102 @@ namespace NumSharp.Tests
 
             new Action(() => np.einsum("ij->i", new[] { a, b }, optimize: true))
                 .Should().Throw<ValueError>().WithMessage("Number of einsum subscripts must be equal to the number of operands.");
+        }
+
+        /// <summary>
+        ///     Every <c>optimize=</c> but False takes the same out route in NumPy - <c>True</c>, <c>'greedy'</c> and an explicit
+        ///     path alike: the last contraction step (<c>bmm_einsum</c>) assigns into the out, so a misshapen out is that
+        ///     assignment's <c>could not broadcast input array from shape (2,4) into shape (3,)</c> / <c>... (2,5)</c>, and a
+        ///     float32 out of a float64 contraction is accepted (probed for <c>einsum('ij,jk-&gt;ik', ones((2, 3)),
+        ///     ones((3, 4)), out=...)</c>). NumSharp answers all three with c_einsum's checks: the out's rank (<c>out parameter
+        ///     does not have the correct number of dimensions, has 1 but should have 2</c>), its contraction-shape text, and
+        ///     the cast's <see cref="TypeError"/> (<c>Iterator requested dtype could not be cast from dtype('float64') to
+        ///     dtype('float32') ... 'safe'</c>). The tests compare the messages only: the fix decides the house types.
+        /// </summary>
+        /// <remarks>Root cause: <c>DefaultEngine.Einsum</c> (Backends/Default/LinearAlgebra/Default.Einsum.cs) checks the out
+        ///     as c_einsum's iterator does whatever optimize= says.</remarks>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL14")]
+        public void NpLayer_Einsum_EveryOptimizeRoute_HandsTheOutToTheLastStep()
+        {
+            using var a = np.ones(new Shape(2, 3));
+            using var b = np.ones(new Shape(3, 4));
+
+            foreach (var optimize in new object[] { true, "greedy", new object[] { "einsum_path", new[] { 0, 1 } } })
+            {
+                string route = optimize is object[] ? "an explicit path" : optimize.ToString();
+                new Action(() => np.einsum("ij,jk->ik", new[] { a, b }, @out: np.empty(new Shape(3)), optimize: optimize))
+                    .Should().Throw<Exception>().WithMessage("could not broadcast input array from shape (2,4) into shape (3,)", route);
+                new Action(() => np.einsum("ij,jk->ik", new[] { a, b }, @out: np.empty(new Shape(2, 5)), optimize: optimize))
+                    .Should().Throw<Exception>().WithMessage("could not broadcast input array from shape (2,4) into shape (2,5)", route);
+
+                using var o32 = np.zeros(new Shape(2, 4), np.float32);
+                np.einsum("ij,jk->ik", new[] { a, b }, @out: o32, optimize: optimize);
+                o32.ToArray<float>().Should().AllBeEquivalentTo(3f, route);
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // NL15 — complex np.nanmedian keeps the NaNs NumPy removes
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>_nanmedian1d</c> drops a flat slice's NaNs before the median (<c>_remove_nan_1d</c>: the trailing
+        ///     non-NaN values move into the NaN slots, then <c>arr1d[:-s.size]</c>), so complex
+        ///     <c>np.nanmedian([1+2j, nan+1j, 3, 4+1j])</c> is the median of <c>[1+2j, 4+1j, 3]</c>, <c>3+0j</c>, and
+        ///     <c>np.nanmedian([nan+1j, 1+2j, 1+nanj, 3])</c> the median of <c>[3, 1+2j]</c>, <c>2+1j</c> (probed). NumSharp
+        ///     keeps the NaN and sorts it first, so the first gives <c>2+1j</c> (the mean of <c>1+2j</c> and <c>3</c>). A NaN-free
+        ///     slice already agrees (<c>[1+2j, 3, 4+1j, 2]</c> is <c>2.5+0j</c> on both sides).
+        /// </summary>
+        /// <remarks>Root cause: <c>DefaultEngine.QuantileCompute</c> (Backends/Default/Statistics/Default.Quantile.cs) sends
+        ///     complex data, the NaN-ignoring forms included, to <c>ComputeComplexQuantile</c>, which removes no NaN.</remarks>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL15")]
+        public void NpLayer_NanMedian_Complex_ShouldDropTheNaNs()
+        {
+            double nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
+            using var oneNaN = np.array(new[] { new Complex(1, 2), new Complex(nan, 1), new Complex(3, 0), new Complex(4, 1) });
+            using var twoNaNs = np.array(new[] { new Complex(nan, 1), new Complex(1, 2), new Complex(1, nan), new Complex(3, 0) });
+            using var noNaN = np.array(new[] { new Complex(1, 2), new Complex(3, 0), new Complex(4, 1), new Complex(2, 0) });
+
+            np.nanmedian(noNaN).GetAtIndex<Complex>(0).Should().Be(new Complex(2.5, 0), "a NaN-free slice already agrees");
+            np.nanmedian(oneNaN).GetAtIndex<Complex>(0).Should().Be(new Complex(3, 0), "NumPy drops the NaN: the median of [1+2j, 4+1j, 3]");
+            np.nanmedian(twoNaNs).GetAtIndex<Complex>(0).Should().Be(new Complex(2, 1), "NumPy drops both: the median of [3, 1+2j]");
+        }
+
+        /// <summary>
+        ///     An all-NaN complex slice: NumPy's <c>_nanmedian1d</c> returns <c>arr1d[-1]</c>, the slice's LAST element
+        ///     (<c>np.nanmedian([nan+1j, 1+nanj])</c> is <c>1+nanj</c>, probed), so a complex NaN keeps its real part. NumSharp
+        ///     returns <c>nan+nanj</c>.
+        /// </summary>
+        /// <remarks>Root cause: as <see cref="NpLayer_NanMedian_Complex_ShouldDropTheNaNs"/>; the all-NaN path writes a
+        ///     NaN of its own instead of the slice's last element.</remarks>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL15")]
+        public void NpLayer_NanMedian_Complex_AllNaNSlice_ShouldBeItsLastElement()
+        {
+            double nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
+            using var allNaN = np.array(new[] { new Complex(nan, 1), new Complex(1, nan) });
+
+            Complex r = np.nanmedian(allNaN).GetAtIndex<Complex>(0);
+            r.Real.Should().Be(1.0, "NumPy returns the last element, 1+nanj");
+            double.IsNaN(r.Imaginary).Should().BeTrue();
+        }
+
+        /// <summary>
+        ///     Along an axis shorter than 600 NumPy's <c>_nanmedian_small</c> takes <c>np.ma.median</c> of the data masked by
+        ///     <c>isnan</c>, so <c>np.nanmedian([[1+2j, nan+1j], [3, 4+1j]], axis=0)</c> is <c>[2+1j, 4+1j]</c>, along axis 1
+        ///     <c>[1+2j, 3.5+0.5j]</c>, and <c>np.nanmedian([[nan+2j, nan+1j], [3, 4+1j]], axis=0)</c> is <c>[3+0j, 4+1j]</c>
+        ///     (probed). NumSharp gives <c>nan+nanj</c> for every slice holding a NaN.
+        /// </summary>
+        /// <remarks>Root cause: as <see cref="NpLayer_NanMedian_Complex_ShouldDropTheNaNs"/>.</remarks>
+        [TestMethod, OpenBugs(IssueUrl = "np-layer-NL15")]
+        public void NpLayer_NanMedian_Complex_AlongAnAxis_ShouldMaskTheNaNs()
+        {
+            double nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
+            using var x = np.array(new[,] { { new Complex(1, 2), new Complex(nan, 1) }, { new Complex(3, 0), new Complex(4, 1) } });
+            using var y = np.array(new[,] { { new Complex(nan, 2), new Complex(nan, 1) }, { new Complex(3, 0), new Complex(4, 1) } });
+
+            np.nanmedian(x, 0).ToArray<Complex>().Should().Equal(new Complex(2, 1), new Complex(4, 1));
+            np.nanmedian(x, 1).ToArray<Complex>().Should().Equal(new Complex(1, 2), new Complex(3.5, 0.5));
+            np.nanmedian(y, 0).ToArray<Complex>().Should().Equal(new Complex(3, 0), new Complex(4, 1));
         }
     }
 }

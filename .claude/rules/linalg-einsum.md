@@ -153,8 +153,9 @@ parser).
   produces (…)`) where NumPy leaks NpyIter's "remapped shapes" text; an extent that conflicts with an output label's
   (one other than 1) is refused right after the read-only check, before every cast check, as NumPy's iterator broadcasts
   the out first. Open (`OpenBugs.NpLayer.cs`, NL14): NumPy broadcasts an output label of extent 1 up to the out's
-  extent, and with `optimize=` other than False hands the out to its last contraction step (an int32 out of a float64
-  contraction is accepted there).
+  extent, and with `optimize=` other than False (True, 'greedy' or an explicit path) hands the out to its last
+  contraction step: an int32 or float32 out of a float64 contraction is accepted there, and a misshapen out is the
+  assignment's `could not broadcast input array from shape (2,4) into shape (3,)`.
 - `order=` resolves the computed result's layout: `'A'` and `'K'` give F-contiguous when every input is F-contiguous (an
   all-F matmul, hadamard or 3-operand chain is F even at the default `'K'`), C otherwise.
 - The grammar half of the parse is cached by `(subscripts, operand ranks)` in a 4096-entry `ConcurrentDictionary`

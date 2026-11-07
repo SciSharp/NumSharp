@@ -163,7 +163,9 @@ np.einsum's out extent and explicit path in NumPy's order), NL9 (`4f16e102`: np.
 (`4a680b5d`: np.isscalar, 1.7–3.7× faster as well) are fixed; NL12 was fixed the same week by the parity QA (QA-30).
 NL3 is a documented divergence by decision (`095b2395`: np.prod keeps its SIMD lanes, 3.7–16× NumPy). NL5's fix found
 NL14 (np.einsum's `out=` rules), pinned. Open: NL7 and P10 item 6 (with the class-boundary re-prototype), NL8 and NL14;
-PA5 and PA6 are deferred.
+PA5 and PA6 are deferred. Re-probing the open items (2026-11-07) widened NL14's pins to every `optimize=` route and
+found NL15 (complex np.nanmedian keeps its NaNs), pinned; every open divergence has an `[OpenBugs]` reproduction (NL8's
+fails in a Debug build only), and P10 item 6, PA5 and PA6 change no behaviour, so they have none.
 
 **The owner's decisions of 2026-10-31** ([§5](#5-decisions-for-the-owner), D7 to D22, asked with each option's code):
 - P7 is dropped. D7's first answer ("Rule on the result") gave it a design; in the step round the same day the owner
@@ -185,8 +187,8 @@ Order of the work left (decided 2026-10-31 in the step round, D22): the merge (d
 2026-11-01: the rename `838fccfd`, the 12 functions that compute `c046d2ca` .. `d0c7a582`, the array object's functions
 `690948f3` .. `75788048`); P9 (done 2026-11-01: `72415a24`, `55a277e5`); P10 (items 1 to 5 done 2026-11-02:
 `38bcad09`, `96411eec`, `a5fd6535`, `614b1a8a`, `4e7fca46`; item 6, the three `NDArray` homes, open); PA3; PA2; the
-pinned divergences (D24: nine fixed, NL3 kept as a documented divergence; NL7, NL8 and NL14 open). Later: PA5 and PA6
-(deferred, D24); P10 item 6 and NL7 with the class-boundary re-prototype.
+pinned divergences (D24: nine fixed, NL3 kept as a documented divergence; NL7, NL8, NL14 and NL15 open). Later: PA5
+and PA6 (deferred, D24); P10 item 6 and NL7 with the class-boundary re-prototype.
 
 Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
@@ -1771,8 +1773,11 @@ The divergences pinned as `[OpenBugs]` in `test/NumSharp.Tests/OpenBugs.NpLayer.
 - NL13, fixed (`f56fc38e`): the max / min family with a numpy.matrix operand follows `matrix.max` / `matrix.min`, and
   np.nanmax / np.nanmin take NumPy's subclass branch.
 - NL14, open (found by NL5's fix): np.einsum's `out=` rules are c_einsum's minus its broadcast whatever `optimize=` says
-  (an output label of extent 1 is not broadcast up to the out; with `optimize=` NumPy hands the out to its last
-  contraction step).
+  (an output label of extent 1 is not broadcast up to the out; with `optimize=` - True, 'greedy' or an explicit path -
+  NumPy hands the out to its last contraction step).
+- NL15, open (found 2026-11-07 re-probing the open items): complex np.nanmedian keeps the NaNs NumPy's `_nanmedian`
+  removes (`_remove_nan_1d` flat, `np.ma.median` along an axis shorter than 600); an all-NaN slice is `nan+nanj` where
+  NumPy returns its last element.
 
 The ten array-object members `TensorEngine` shipped in 0.70.0 (E7) stay (decided 2026-10-31, D13): removing them
 breaks a subclass or a direct caller for a layering reason alone.
@@ -1793,6 +1798,22 @@ breaks a subclass or a direct caller for a layering reason alone.
 ---
 
 ## 9. State log
+
+- **2026-11-07, the open items as `[OpenBugs]` reproductions (the owner: "The open items should be creating OpenBugs if
+  they can reproduce, and commit to strings").** Every open item re-probed against NumPy 2.4.2 on `c2c6ee88`:
+  - Pinned before and still failing: NL7 (2 tests), NL14 (2), NL8 (1, failing in a Debug build of NumSharp.Core only, as
+    its summary says).
+  - NL14 widened (`NpLayer_Einsum_EveryOptimizeRoute_HandsTheOutToTheLastStep`): True, 'greedy' and an explicit path
+    each give NumPy's assignment texts for a misshapen out (`could not broadcast input array from shape (2,4) into shape
+    (3,)` / `(2,5)`) and accept a float32 out; NumSharp answers with c_einsum's checks on every route.
+  - NL15, new (three tests): complex np.nanmedian keeps its NaNs - `[1+2j, nan+1j, 3, 4+1j]` is `3+0j` in NumPy and
+    `2+1j` here, an all-NaN slice NumPy's last element (`1+nanj`) and `nan+nanj` here, and along an axis a column with
+    a NaN `nan+nanj` where NumPy masks it (`_nanmedian_small`).
+  - Probed and equal to NumPy, nothing to pin: np.polyder over `U` / `S` / `StringDType` at m = 0, 1, 2 (the `out`-kwarg
+    TypeError; StringDType repeats its strings); np.max / np.nanmax / np.sum of a matrix into a misshapen matrix out
+    (NumPy's iterator texts); complex np.nanpercentile's TypeError.
+  - No reproduction possible: P10 item 6 (where three functions live), PA5 (reuse of existing kernels) and PA6 (a
+    ratchet) change no behaviour.
 
 - **2026-11-06, the divergence round (D24): NL1, NL2, NL4, NL5, NL9, NL10, NL11 and NL13 fixed, NL3 kept as a
   documented divergence, NL14 pinned.** Eleven commits on `strings`, `d7177a61` .. `da8c1714` on `a88da1d0`.
