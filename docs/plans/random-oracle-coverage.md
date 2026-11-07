@@ -216,11 +216,12 @@ x coverage catalog) whenever the member set changes.
 | `NativeRandomState(byte[])` | obsolete NumSharp constructor that always throws; no NumPy counterpart | unit tests |
 | `NumPyRandom.Seed` | NumSharp bookkeeping property, not NumPy API | unit tests |
 | `BitGenerator.lock` | a threading primitive; nothing NumPy-observable | unit tests (lock identity, concurrency) |
+| `BitGenerator`'s engine contract — `NextUInt64`, `NextUInt32`, `NextDouble`, `NextRaw`, `NextFloat`, `UnitToDouble`, the `Fill*` bulk forms and their `*From64` split-word helpers, `SeedWords32`/`SeedWords64`, `CreateFromSeed`, `GetStateCore`/`SetStateCore`, `Name` — and the five engines' overrides of it | public since 2026-11-07 so a user's own bit generator can plug in; NumPy keeps the same contract in C (`bitgen_t`, which Python reaches only as the `ctypes`/`cffi` function pointers), so no Python call can record it. Exempt by NAME (`RandomApiCoverageTests.EngineContractMembers`, the generator's `ENGINE_CONTRACT`): a new bit-generator member still needs a case | every `Generator`/`RandomState` stream case draws through it on every engine; the leak catalogue runs each member on all six owners |
 | legacy `zipf(a >= 1025)`, legacy `vonmises(kappa >= 2**511)` | NumPy never returns | `RandomBroadcast.Test.cs` |
 | `SeedSequence.spawn` past `2**32` children | NumPy hangs (uint32 loop variable wraps) | `BitGeneratorFamily.Test.cs` |
 | `randint(dtype='l')` (the explicit C-long char) | `np.dtype('l')` is the HOST's C long in both libraries (int32 on Windows, int64 on Linux), so no portable expectation exists; the omitted dtype (NumSharp's LP64 long) is covered | `RandomTypeParity.Test.cs` |
 | `multivariate_hypergeometric(method='count')` with `sum(colors)` near `10**9` | both libraries fill a `sum(colors)`-entry index array (8 GB); the corpus keeps it at `10**6` and pins the pre-allocation limits | — |
-| `BitGenerator.capsule` / `.cffi` / `.ctypes` (NumPy) | C-level interop handles; NumSharp has no counterpart members (the catalog lists them as missing) | — |
+| `BitGenerator.capsule` / `.cffi` / `.ctypes` (NumPy) | C-level interop handles to the `bitgen_t` contract; NumSharp has no handle members (the catalog lists them as missing) — it exposes the contract itself as public C# members instead (the engine-contract row above) | — |
 | `MT19937.jumped` with large jump counts | NumPy loops one polynomial jump per count (`for i in range(jumps)`), seconds per thousand; the corpus uses 0, 1, 2 and a negative count for MT19937 (every count for the counter-based engines) | — |
 
 How a C# argument maps to the Python value NumPy receives, where the choice is not forced by the type:
@@ -267,6 +268,17 @@ every replay):
 
 ## 9. State log
 
+- **2026-11-07 (the engine contract goes public)** — The extension-seams change (`687fb94f`,
+  `docs/plans/internal-surface/`) made `BitGenerator`'s engine contract public, its constructor protected, and
+  `Generator` and the five engines unsealed, so a user's own bit generator can plug in. The G1 inventory grew by 78
+  members (BitGenerator's 20, the engines' 58 overrides) to 571. None has a Python counterpart: NumPy keeps the contract
+  in C (`bitgen_t`), so all 78 are exempt by member name (§7). The exemption covers only members that `BitGenerator` or
+  an engine declares, so any other new member still needs a case. The gates read it through one lookup
+  (`RandomApiCoverageTests.ExemptionOf`), so G2 to G5 and the parameter-name gate agree. An entry whose member
+  BitGenerator no longer declares, or which NumPy's signature table turns out to have, fails the gate. The generator
+  mirrors it (`ENGINE_CONTRACT`) and refuses a stale name. The regenerated corpus is byte-identical in all four tiers,
+  and the signature table is unchanged (130). The leak catalogue runs every contract member on all six owners
+  (`LeakCatalogue.AddBitGeneratorContract`, 114 entries): zero pool traffic.
 - **2026-09-27 (wholeness pass — every NumPy call spelling compiles and binds)** — Asked for "another pass validating
   and confirming the random APIs are whole and fully supported, including edge cases". The oracle cannot answer that
   alone: it resolves each overload by reflection, so a NumPy call that does not COMPILE in C#, or binds a different

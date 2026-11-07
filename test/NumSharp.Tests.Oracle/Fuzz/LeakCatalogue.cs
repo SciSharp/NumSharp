@@ -720,6 +720,132 @@ namespace NumSharp.Tests.Fuzz
         // ============================ object surfaces (object_surfaces.py owners) ===========
 
         /// <summary>
+        ///     The bit generators' engine contract on every bit-generator owner: NumPy's <c>bitgen_t</c> draws
+        ///     (<c>NextUInt64</c> / <c>NextUInt32</c> / <c>NextDouble</c> / <c>NextRaw</c>, with <c>NextFloat</c> and
+        ///     <c>UnitToDouble</c>), the bulk fills and their split-word helpers, the seeding helpers, <c>CreateFromSeed</c> and
+        ///     the unlocked state halves. Public since 2026-11-07 so a user's own <see cref="BitGenerator"/> subclass can plug
+        ///     in; no corpus row reaches them (NumPy keeps the contract in C, so the random-API oracle exempts it:
+        ///     <c>RandomApiCoverageTests.EngineContractMembers</c>).
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        /// <remarks>
+        ///     The surface flattens <see cref="BitGenerator"/>'s members onto every engine, so each owner carries the whole
+        ///     contract, and each owner's entries run on that owner's engine (<c>BitGenerator</c> through a base-typed PCG64,
+        ///     the way a Generator reaches it). An entry builds its engine and its destination itself — a managed array,
+        ///     pinned for the pointer fills — so a re-execution sees the same state and the same pool traffic: none, which is
+        ///     what these entries prove (the draws never touch an NDArray). The fill counts are odd, and the two chunked
+        ///     helpers run past one chunk (256 words; 512 split halves), so every tail and chunk boundary is driven.
+        /// </remarks>
+        private static unsafe void AddBitGeneratorContract(List<LeakCase> l)
+        {
+            var engines = new (string Owner, Func<BitGenerator> New)[]
+            {
+                ("BitGenerator", () => new PCG64(3)),
+                ("PCG64", () => new PCG64(3)),
+                ("PCG64DXSM", () => new PCG64DXSM(3)),
+                ("Philox", () => new Philox(3)),
+                ("SFC64", () => new SFC64(3)),
+                ("MT19937", () => new MT19937(3)),
+            };
+            foreach (var (owner, make) in engines)
+            {
+                // The per-draw primitives. NextUInt32 draws twice: a fresh word's low half, then the buffered high half.
+                E(l, owner + ".NextUInt64", "one word", f => Box(make().NextUInt64()));
+                E(l, owner + ".NextUInt32", "fresh word + buffered half", f =>
+                {
+                    var g = make();
+                    g.NextUInt32();
+                    return Box(g.NextUInt32());
+                });
+                E(l, owner + ".NextDouble", "one draw", f => Box(make().NextDouble()));
+                E(l, owner + ".NextFloat", "one draw", f => Box(make().NextFloat()));
+                E(l, owner + ".NextRaw", "one word", f => Box(make().NextRaw()));
+                E(l, owner + ".UnitToDouble", "a fixed word (pure)", f => Box(make().UnitToDouble(0x9E3779B97F4A7C15UL)));
+
+                // The bulk fills (virtual: each engine's own loop).
+                E(l, owner + ".FillUInt64", "9 words", f =>
+                {
+                    var w = new ulong[9];
+                    fixed (ulong* p = w)
+                        make().FillUInt64(p, w.Length);
+                    return Box(w[^1]);
+                });
+                E(l, owner + ".FillUInt32", "9 words (an odd tail)", f =>
+                {
+                    var w = new uint[9];
+                    fixed (uint* p = w)
+                        make().FillUInt32(p, w.Length);
+                    return Box(w[^1]);
+                });
+                E(l, owner + ".FillDouble", "9 draws", f =>
+                {
+                    var d = new double[9];
+                    fixed (double* p = d)
+                        make().FillDouble(p, d.Length);
+                    return Box(d[^1]);
+                });
+                E(l, owner + ".FillFloat", "9 draws (an odd tail)", f =>
+                {
+                    var x = new float[9];
+                    fixed (float* p = x)
+                        make().FillFloat(p, x.Length);
+                    return Box(x[^1]);
+                });
+                E(l, owner + ".FillRaw", "9 words", f =>
+                {
+                    var w = new ulong[9];
+                    fixed (ulong* p = w)
+                        make().FillRaw(p, w.Length);
+                    return Box(w[^1]);
+                });
+
+                // The split-word helpers a custom 64-bit engine's fills return (non-virtual, run here on every engine).
+                E(l, owner + ".FillDoubleFrom64", "301 draws (past one chunk)", f =>
+                {
+                    var d = new double[301];
+                    fixed (double* p = d)
+                        make().FillDoubleFrom64(p, d.Length);
+                    return Box(d[^1]);
+                });
+                E(l, owner + ".FillUInt32From64", "1 draw, then 6 (a pending half, whole words, an odd tail)", f =>
+                {
+                    var g = make();
+                    int hasUint32 = 0;
+                    uint uinteger = 0;
+                    var w = new uint[7];
+                    fixed (uint* p = w)
+                    {
+                        g.FillUInt32From64(p, 1, ref hasUint32, ref uinteger);
+                        g.FillUInt32From64(p + 1, 6, ref hasUint32, ref uinteger);
+                    }
+                    return Box(w[^1]);
+                });
+                E(l, owner + ".FillFloatFrom64", "601 draws (past one chunk)", f =>
+                {
+                    int hasUint32 = 0;
+                    uint uinteger = 0;
+                    var x = new float[601];
+                    fixed (float* p = x)
+                        make().FillFloatFrom64(p, x.Length, ref hasUint32, ref uinteger);
+                    return Box(x[^1]);
+                });
+
+                // Seeding, spawning and the unlocked state halves (static helpers reached through the base type, as the
+                // surface lists them on every owner).
+                E(l, owner + ".SeedWords32", "a SeedSequence (MT19937's path)", f => BitGenerator.SeedWords32(new SeedSequence(5), 4));
+                E(l, owner + ".SeedWords64", "a SeedSequence (the 64-bit engines' path)", f => BitGenerator.SeedWords64(new SeedSequence(5), 4));
+                E(l, owner + ".CreateFromSeed", "a fresh SeedSequence", f => Box(make().CreateFromSeed(new SeedSequence(5)).Name));
+                E(l, owner + ".GetStateCore", "snapshot", f => Box(make().GetStateCore()));
+                E(l, owner + ".SetStateCore", "its own snapshot back", f =>
+                {
+                    var g = make();
+                    g.SetStateCore(g.GetStateCore());
+                    return Box(0);
+                });
+            }
+        }
+
+        /// <summary>
         ///     Methods of the NumPy object types the coverage artifact maps to CLR owners
         ///     (<c>coverage/object_surfaces.py</c>): Generator, SeedSequence, MT19937, the iterator
         ///     objects, DType/finfo/iinfo, NDArrayFlags, poly1d and NpzFile. (Their properties are
@@ -789,6 +915,7 @@ namespace NumSharp.Tests.Fuzz
             E(l, "Philox.spawn", "two children", f => Box(new Philox(3).spawn(2).Length));
             E(l, "SFC64.random_raw", "sized", f => new SFC64(3).random_raw(new Shape(8)));
             E(l, "SFC64.spawn", "two children", f => Box(new SFC64(3).spawn(2).Length));
+            AddBitGeneratorContract(l);
 
             // ---- np.nditer's NDIterator ----
             E(l, "NDIterator.iternext", "walk", f =>

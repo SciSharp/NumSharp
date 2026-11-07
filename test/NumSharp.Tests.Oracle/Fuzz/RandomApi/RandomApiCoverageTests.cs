@@ -51,7 +51,9 @@ namespace NumSharp.Tests.Fuzz.RandomApi
 
         /// <summary>
         ///     G2's exemptions: members with no NumPy counterpart (plan §7), by exact signature. Mirrors the generator's
-        ///     <c>exempt(...)</c> calls; the gate fails when an entry gains a case or names a removed member.
+        ///     <c>exempt(...)</c> calls; the gate fails when an entry gains a case or names a removed member. The bit generators'
+        ///     engine contract is exempt by NAME instead (<see cref="EngineContractMembers"/>); the gates read both through
+        ///     <see cref="ExemptionOf"/>.
         /// </summary>
         internal static readonly Dictionary<string, string> OverloadExemptions = new(StringComparer.Ordinal)
         {
@@ -60,6 +62,74 @@ namespace NumSharp.Tests.Fuzz.RandomApi
             ["NumPyRandom.Seed.set"] = "NumSharp bookkeeping of the last legacy integer seed; no NumPy attribute",
             ["BitGenerator.lock.get"] = "a threading primitive; nothing NumPy-observable (unit-tested: lock identity, concurrency)",
         };
+
+        /// <summary>
+        ///     The bit generators' engine contract, by member name: G2's exemptions and the parameter-name gate's NumSharp-only
+        ///     allow-list for every member of that name that <c>BitGenerator</c> or one of the five <see cref="Engines"/> declares
+        ///     (an engine's override IS the contract member, so it is not listed per engine). Mirrors the generator's
+        ///     <c>ENGINE_CONTRACT</c>.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     Public since 2026-11-07 so a user's own <see cref="BitGenerator"/> subclass can plug in. NumPy keeps the same
+        ///     contract in C — <c>bitgen_t</c>'s <c>next_uint64</c> / <c>next_uint32</c> / <c>next_double</c> / <c>next_raw</c>,
+        ///     which Python reaches only as the function pointers of <c>BitGenerator.ctypes</c> / <c>.cffi</c> — so no case can
+        ///     record NumPy running them. Every <c>Generator</c> and <c>RandomState</c> stream case replays NumPy's draws THROUGH
+        ///     them on every engine, and the leak catalogue (<c>LeakCatalogue.AddBitGeneratorContract</c>) runs each one directly.
+        ///     </para>
+        ///     <para>
+        ///     Self-retiring like the other tables: an entry whose member <c>BitGenerator</c> no longer declares, one that gains a
+        ///     case, or one NumPy's signature table turns out to have fails the gates. A NEW public member of a bit generator is
+        ///     not covered by a name listed here, so it still fails G2 until it gains a case or an entry.
+        ///     </para>
+        /// </remarks>
+        internal static readonly Dictionary<string, string> EngineContractMembers = new(StringComparer.Ordinal)
+        {
+            ["NextUInt64"] = "bitgen_t's next_uint64, C only (Python sees a ctypes/cffi function pointer); the stream cases draw through it",
+            ["NextUInt32"] = "bitgen_t's next_uint32, C only, buffered half included; the 32-bit stream cases draw through it",
+            ["NextDouble"] = "bitgen_t's next_double, C only; the double stream cases draw through it",
+            ["NextRaw"] = "bitgen_t's next_raw, C only; the random_raw cases draw through it",
+            ["NextFloat"] = "distributions.c's next_float, C only (no function pointer); the float32 stream cases draw through it",
+            ["UnitToDouble"] = "next_double's word conversion (uint64_to_double), C only; the read-ahead buffer converts through it",
+            ["FillUInt64"] = "a bulk next_uint64 (NumPy loops the C call per element); the samplers fill through it",
+            ["FillUInt32"] = "a bulk next_uint32 (NumPy loops the C call per element); the samplers fill through it",
+            ["FillDouble"] = "a bulk next_double (NumPy loops the C call per element); the samplers fill through it",
+            ["FillFloat"] = "a bulk next_float (NumPy loops the C call per element); the float32 samplers fill through it",
+            ["FillRaw"] = "a bulk next_raw (NumPy loops the C call per element); random_raw fills through it",
+            ["FillDoubleFrom64"] = "the 64-bit engines' chunked bulk next_double over FillUInt64; their double streams fill through it",
+            ["FillUInt32From64"] = "the 64-bit engines' split-word bulk next_uint32; their 32-bit streams fill through it",
+            ["FillFloatFrom64"] = "the 64-bit engines' split-word bulk next_float; their float32 streams fill through it",
+            ["SeedWords32"] = "seed_seq.generate_state(n, np.uint32) as MT19937's C constructor reads it; its constructor cases seed through it",
+            ["SeedWords64"] = "seed_seq.generate_state(n, np.uint64) as the 64-bit engines' C constructors read it; their constructor cases seed through it",
+            ["CreateFromSeed"] = "type(self)(seed=child) inside BitGenerator.spawn; the spawn cases build every child through it",
+            ["GetStateCore"] = "the unlocked half of the state getter; the state-getter cases read through it",
+            ["SetStateCore"] = "the unlocked half of the state setter; the state-setter cases write through it",
+            ["Name"] = "the class name Generator's repr and the state refusals print; the repr and foreign-state cases show it",
+        };
+
+        /// <summary>
+        ///     Whether <paramref name="m"/> is an engine-contract member (<see cref="EngineContractMembers"/>): declared by
+        ///     <c>BitGenerator</c> or by one of the five engines, under a contract name.
+        /// </summary>
+        /// <param name="m">An inventory member.</param>
+        /// <returns>True for the contract's members and the engines' overrides of them; false for every other member, so a
+        ///     same-named member of an unrelated type (a sampler's <c>Name</c>, say) is never excused by this table.</returns>
+        internal static bool IsEngineContract(RandomApiSurface.Member m)
+            => (m.DeclaringType == "BitGenerator" || Engines.Contains(m.DeclaringType)) && EngineContractMembers.ContainsKey(m.Name);
+
+        /// <summary>
+        ///     The reason <paramref name="m"/> has no case — its <see cref="OverloadExemptions"/> entry, else its
+        ///     <see cref="EngineContractMembers"/> entry — or null when the gates demand cases for it. The single lookup G2–G5
+        ///     share, so the two tables cannot excuse a member in one gate and demand it in another.
+        /// </summary>
+        /// <param name="m">An inventory member.</param>
+        /// <returns>The exemption reason, or null.</returns>
+        internal static string ExemptionOf(RandomApiSurface.Member m)
+        {
+            if (OverloadExemptions.TryGetValue(m.Sig, out var reason))
+                return reason;
+            return IsEngineContract(m) ? EngineContractMembers[m.Name] : null;
+        }
 
         /// <summary>
         ///     Members whose result does not depend on the receiver they are invoked on — the factories on <c>np.random</c>
@@ -181,7 +251,7 @@ namespace NumSharp.Tests.Fuzz.RandomApi
             foreach (var m in Surface.Value)
             {
                 int n = bySig.TryGetValue(m.Sig, out var cs) ? cs.Count : 0;
-                if (OverloadExemptions.TryGetValue(m.Sig, out var reason))
+                if (ExemptionOf(m) is { } reason)
                 {
                     if (n > 0)
                         problems.Add($"{m.Sig}: exempt ({reason}) but {n} case(s) exercise it — remove the exemption");
@@ -195,6 +265,11 @@ namespace NumSharp.Tests.Fuzz.RandomApi
             foreach (var sig in OverloadExemptions.Keys)
                 if (!inventory.Contains(sig))
                     problems.Add($"{sig}: exemption for a member that no longer exists");
+            // The contract is BitGenerator's: a name it no longer declares (renamed, removed, or made non-public) is stale even
+            // when an engine still happens to declare a member of that name.
+            foreach (var name in EngineContractMembers.Keys)
+                if (!Surface.Value.Any(m => m.DeclaringType == "BitGenerator" && m.Name == name))
+                    problems.Add($"BitGenerator.{name}: engine-contract entry for a member BitGenerator no longer declares");
             Report("G2 overload coverage", problems);
         }
 
@@ -216,7 +291,7 @@ namespace NumSharp.Tests.Fuzz.RandomApi
             var satisfiedExemptions = new List<string>();
             foreach (var m in Surface.Value)
             {
-                if (OverloadExemptions.ContainsKey(m.Sig) || m.Parameters.Count == 0)
+                if (ExemptionOf(m) != null || m.Parameters.Count == 0)
                     continue;
                 var cases = Corpus.Value.BySig[m.Sig];
                 var infos = ParameterInfos(m);
@@ -342,7 +417,7 @@ namespace NumSharp.Tests.Fuzz.RandomApi
                 string key = $"{m.DeclaringType}.{m.Name}";
                 if (!table.TryGetValue(key, out var np))
                 {
-                    if (!NumSharpOnlyMembers.ContainsKey(key))
+                    if (!NumSharpOnlyMembers.ContainsKey(key) && !IsEngineContract(m))
                         problems.Add($"{m.Sig}: no NumPy counterpart in the signature table and not allow-listed as NumSharp-only");
                     continue;
                 }
@@ -370,6 +445,10 @@ namespace NumSharp.Tests.Fuzz.RandomApi
             foreach (var key in NumSharpOnlyMembers.Keys)
                 if (table.ContainsKey(key))
                     problems.Add($"{key}: allow-listed as NumSharp-only, but NumPy has it — remove the allow-list entry");
+            foreach (var name in EngineContractMembers.Keys)
+                foreach (var type in Engines.Prepend("BitGenerator"))
+                    if (table.ContainsKey($"{type}.{name}"))
+                        problems.Add($"{type}.{name}: an engine-contract member, but NumPy has it — remove the contract entry");
             foreach (var sig in ParameterNameExemptions.Keys)
             {
                 var m = Surface.Value.FirstOrDefault(x => x.Sig == sig);
@@ -400,7 +479,7 @@ namespace NumSharp.Tests.Fuzz.RandomApi
             var legacyAndEngines = new[] { "legacy" }.Concat(Engines).ToArray();
             foreach (var m in Surface.Value)
             {
-                if (OverloadExemptions.ContainsKey(m.Sig))
+                if (ExemptionOf(m) != null)
                     continue;
                 var cases = Corpus.Value.BySig[m.Sig];
                 string owner = $"{m.DeclaringType}.{m.Name}";
@@ -461,7 +540,7 @@ namespace NumSharp.Tests.Fuzz.RandomApi
             var problems = new List<string>();
             foreach (var m in Surface.Value)
             {
-                if (OverloadExemptions.ContainsKey(m.Sig) || ReceiverIndependent.ContainsKey($"{m.DeclaringType}.{m.Name}"))
+                if (ExemptionOf(m) != null || ReceiverIndependent.ContainsKey($"{m.DeclaringType}.{m.Name}"))
                     continue;
                 var groups = Corpus.Value.BySig[m.Sig]
                     .Where(c => !c.Throws && StreamReceivers.Contains(c.RecvKind))
