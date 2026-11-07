@@ -413,7 +413,7 @@ namespace NumSharp.Backends.Strings
             if (loop == TextLoop.VString)
                 return NDVStringMethods.CaseMap(map, a);
             // PyArray_SimpleNewFromDescr: C order whatever the operand's layout; the kernel writes every byte.
-            var result = NDArray.ForOverwrite(a.dtype, new Shape(a.Shape.dimensions));
+            var result = NDArray.ForOverwrite(a.dtype, new Shape(a.Shape.dimensions, copy: false));
             try
             {
                 // The call's state: D14's escalation word (U), the error status, the tables (read once here).

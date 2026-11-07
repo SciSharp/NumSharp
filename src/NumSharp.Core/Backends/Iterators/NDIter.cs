@@ -5063,7 +5063,7 @@ namespace NumSharp.Backends.Iteration
             // where a rebuild cloned the dimensions and recomputed the strides on every copy. Its flags are the source's;
             // the allocator re-sets what a fresh buffer reports (writeable, owner, aligned). Any other source gets
             // Clean()'s new C layout — the same as new Shape(dims, 'C', copy: false).
-            return physical == 'C' ? srcShape.AsClean() : new Shape((long[])srcShape.dimensions.Clone(), physical, copy: false);
+            return physical == 'C' ? srcShape.AsClean() : new Shape(srcShape.dimensions, physical, copy: false);
         }
 
         /// <inheritdoc cref="Copy(NDArray, NDArray)"/>

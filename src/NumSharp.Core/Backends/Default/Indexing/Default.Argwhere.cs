@@ -70,7 +70,7 @@ namespace NumSharp.Backends
                 var full = ArgwhereContiguousOrMaterialize(promoted);
                 promoted.Dispose(); // 1-element view wrapper of the scalar's buffer
                 var fs = full.Shape;
-                var sliced = new Shape(new long[] { fs.dimensions[0], 0 }, (long[])fs.strides.Clone(), fs.offset, fs.bufferSize);
+                var sliced = new Shape(new long[] { fs.dimensions[0], 0 }, fs.strides, fs.offset, fs.bufferSize);
                 var view = new NDArray(full.Storage.Alias(sliced)) { TensorEngine = full.TensorEngine };
                 full.Dispose(); // the sliced view holds its own counted reference on the buffer
                 return view;

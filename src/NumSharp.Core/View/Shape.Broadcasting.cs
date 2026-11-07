@@ -228,7 +228,7 @@ namespace NumSharp
                 // Create immutable shape via constructor
                 long bufSize = ogiter.bufferSize > 0 ? ogiter.bufferSize : ogiter.size;
                 ret[i] = new Shape(
-                    (long[])mitDims.Clone(),
+                    mitDims,
                     broadcastStrides,
                     ogiter.offset,
                     bufSize
@@ -274,7 +274,7 @@ namespace NumSharp
                 var zeroStrides = new long[rightShape.NDim];
                 long leftBufSize = leftShape.bufferSize > 0 ? leftShape.bufferSize : leftShape.size;
                 var left = new Shape(
-                    (long[])rightShape.dimensions.Clone(),
+                    rightShape.dimensions,
                     zeroStrides,
                     leftShape.offset,
                     leftBufSize
@@ -290,7 +290,7 @@ namespace NumSharp
                 var zeroStrides = new long[leftShape.NDim];
                 long rightBufSize = rightShape.bufferSize > 0 ? rightShape.bufferSize : rightShape.size;
                 var right = new Shape(
-                    (long[])leftShape.dimensions.Clone(),
+                    leftShape.dimensions,
                     zeroStrides,
                     rightShape.offset,
                     rightBufSize
@@ -361,7 +361,7 @@ namespace NumSharp
             long rightBufSize2 = rightShape.bufferSize > 0 ? rightShape.bufferSize : rightShape.size;
 
             var leftResult = new Shape(mitDims, leftStrides, leftShape.offset, leftBufSize2);
-            var rightResult = new Shape((long[])mitDims.Clone(), rightStrides, rightShape.offset, rightBufSize2);
+            var rightResult = new Shape(mitDims, rightStrides, rightShape.offset, rightBufSize2);
 
             return (leftResult, rightResult);
         }

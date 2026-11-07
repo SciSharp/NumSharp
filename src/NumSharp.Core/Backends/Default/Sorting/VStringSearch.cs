@@ -65,7 +65,7 @@ namespace NumSharp.Backends.Sorting
         internal static NDArray SearchSorted(NDArray haystack, NDArray keys, bool left, NDArray sorter, DType common)
         {
             var result = new NDArray(NPTypeCode.Int64,
-                keys.ndim == 0 ? Shape.NewScalar() : new Shape((long[])keys.Shape.dimensions.Clone(), copy: false), false);
+                keys.ndim == 0 ? Shape.NewScalar() : new Shape(keys.Shape.dimensions, copy: false), false);
             long m = keys.size;
             if (m == 0)
                 return result;
@@ -262,7 +262,7 @@ namespace NumSharp.Backends.Sorting
         internal static NDArray SearchSortedObjects(NDArray haystack, NDArray keys, bool left, NDArray sorter)
         {
             var result = new NDArray(NPTypeCode.Int64,
-                keys.ndim == 0 ? Shape.NewScalar() : new Shape((long[])keys.Shape.dimensions.Clone(), copy: false), false);
+                keys.ndim == 0 ? Shape.NewScalar() : new Shape(keys.Shape.dimensions, copy: false), false);
             long m = keys.size;
             if (m == 0)
                 return result;

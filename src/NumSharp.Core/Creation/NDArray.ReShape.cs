@@ -184,7 +184,7 @@ namespace NumSharp
             // ---- _attempt_nocopy_reshape: express the reshape over the existing strides ----
             if (src.TryNocopyReshape(resolvedDims, order == 'F', out var nocopyStrides))
             {
-                var viewShape = new Shape((long[])resolvedDims.Clone(), nocopyStrides, src.offset,
+                var viewShape = new Shape(resolvedDims, nocopyStrides, src.offset,
                     src.bufferSize > 0 ? src.bufferSize : src.size);
                 return new NDArray(Storage.Alias(viewShape)) { TensorEngine = TensorEngine };
             }

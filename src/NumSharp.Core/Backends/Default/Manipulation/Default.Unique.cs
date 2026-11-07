@@ -219,7 +219,7 @@ namespace NumSharp.Backends
         private static void ReshapeFlatInverseToInput(NDArray a, NDArray[] outputs, int at)
         {
             var inverse = outputs[at];
-            outputs[at] = inverse.reshape(new Shape((long[])a.Shape.dimensions.Clone(), copy: false));
+            outputs[at] = inverse.reshape(new Shape(a.Shape.dimensions, copy: false));
             // The view holds its own reference to the inverse's buffer; the flat wrapper is released.
             inverse.Dispose();
         }

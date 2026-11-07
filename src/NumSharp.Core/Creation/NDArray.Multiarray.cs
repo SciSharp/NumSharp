@@ -1105,7 +1105,7 @@ namespace NumSharp
             var dims = new long[grid.Rank];
             for (int d = 0; d < dims.Length; d++)
                 dims[d] = grid.GetLength(d);
-            return np.zeros(new Shape(dims), dtype ?? NumSharp.DType.Double);
+            return np.zeros(new Shape(dims, copy: false), dtype ?? NumSharp.DType.Double);
         }
 
         /// <summary>
@@ -1455,7 +1455,7 @@ namespace NumSharp
             Shape resultLayout = Backends.DefaultEngine.TryKOrderPlan(dims, new[] { condition.Shape, x.Shape, y.Shape },
                 out var kLayout, out _)
                 ? kLayout
-                : new Shape((long[])dims.Clone(), copy: false);
+                : new Shape(dims, copy: false);
 
             // Coerce the condition to boolean using NumPy's truthiness rules
             // (0/0.0 → False, everything else including NaN/±Inf → True). The

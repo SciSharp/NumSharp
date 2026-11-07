@@ -153,7 +153,7 @@ namespace NumSharp.Backends.Strings
 
             var dstShape = dst.Shape;
             int nd = dstShape.NDim;
-            using var spread = NDArray.broadcast_to(bad, new Shape((long[])dstShape.dimensions.Clone()));
+            using var spread = NDArray.broadcast_to(bad, new Shape(dstShape.dimensions, copy: false));
             using var hit = where is null ? spread.view() : spread.TensorEngine.LogicalAnd(spread, where);
 
             // NumPy's visiting order: axes by |dst stride| descending (stable: ties keep ascending axis), negative strides
@@ -243,7 +243,7 @@ namespace NumSharp.Backends.Strings
             for (int d = 0; d < compact.Length; d++)
                 if (strides[d] == 0)
                     compact[d] = 1;
-            var view = new Shape(compact, (long[])strides.Clone(), shape.offset, shape.bufferSize);
+            var view = new Shape(compact, strides, shape.offset, shape.bufferSize);
             if (!shape.IsWriteable && view.IsWriteable)
                 view = view.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
             return src.Alias(view);
@@ -316,7 +316,7 @@ namespace NumSharp.Backends.Strings
             var shape = units.Shape;
             var dims = (long[])shape.dimensions.Clone();
             dims[dims.Length - 1] = count;
-            var narrowed = new Shape(dims, (long[])shape.strides.Clone(), shape.offset + start, shape.bufferSize);
+            var narrowed = new Shape(dims, shape.strides, shape.offset + start, shape.bufferSize);
             if (!shape.IsWriteable && narrowed.IsWriteable)
                 narrowed = narrowed.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
             return units.Alias(narrowed);

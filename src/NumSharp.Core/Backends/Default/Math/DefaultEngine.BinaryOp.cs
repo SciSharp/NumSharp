@@ -375,7 +375,7 @@ namespace NumSharp.Backends
             bool allStrictF = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
             bool walkReversed = allStrictF && HasNonScalarBroadcastOperand(lhs, rhs, cleanShape);
             Shape resultShape = allStrictF
-                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F', copy: false)
+                ? new Shape(cleanShape.dimensions, 'F', copy: false)
                 : cleanShape;
 
             // Allocate result
@@ -564,7 +564,7 @@ namespace NumSharp.Backends
             // post-kernel "looser-F" copy step rectify when needed.
             bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
             Shape resultShape = allStrictFContig
-                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F', copy: false)
+                ? new Shape(cleanShape.dimensions, 'F', copy: false)
                 : cleanShape;
 
             var result = NewArray(resultType, resultShape, false);

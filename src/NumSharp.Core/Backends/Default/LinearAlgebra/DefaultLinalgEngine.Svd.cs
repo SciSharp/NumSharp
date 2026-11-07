@@ -317,7 +317,7 @@ namespace NumSharp.Backends
                 }
             }
 
-            return inverses.reshape(new Shape((long[])x.Shape.dimensions.Clone(), copy: false));
+            return inverses.reshape(new Shape(x.Shape.dimensions, copy: false));
         }
 
         /// <summary>Whether an order is the number <paramref name="value"/> (NumPy's <c>p in {2, -2}</c> and <c>p == -2</c>).</summary>

@@ -964,7 +964,7 @@ namespace NumSharp
         {
             if (s.NDim == 0) return Shape.NewScalar();
             if (!s.IsContiguous && !s.IsFContiguous) return s.KeepOrder();
-            return new Shape((long[])s.dimensions.Clone(), OrderResolver.Resolve('K', s), copy: false);
+            return new Shape(s.dimensions, OrderResolver.Resolve('K', s), copy: false);
         }
 
         /// <summary>

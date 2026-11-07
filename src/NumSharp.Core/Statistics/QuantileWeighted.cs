@@ -567,7 +567,7 @@ namespace NumSharp.Statistics
             // range check; float64), and the dtype NumPy's searchsorted compares the float64 cdf with them in.
             NDArray values = np.asarray(q, np.float64, 'C');
             NDArray indices = new NDArray(NPTypeCode.Int64,
-                q.ndim == 0 ? Shape.Scalar : new Shape((long[])q.Shape.dimensions.Clone(), copy: false), false);
+                q.ndim == 0 ? Shape.Scalar : new Shape(q.Shape.dimensions, copy: false), false);
             double* sums = (double*)cumulative.Address + cumulative.Shape.offset;
             double* v = (double*)values.Address + values.Shape.offset;
             long* found = (long*)indices.Address;
@@ -722,7 +722,7 @@ namespace NumSharp.Statistics
                 var position = new long[kept];
                 var target = new Slice[1 + kept];
                 target[0] = Slice.Ellipsis;
-                var qShape = new Shape((long[])q.Shape.dimensions.Clone(), copy: false);
+                var qShape = new Shape(q.Shape.dimensions, copy: false);
                 for (long k = 0; k < rows; k++)
                 {
                     using var row = picked[Slice.Index(k)];
@@ -940,7 +940,7 @@ namespace NumSharp.Statistics
         ///     object); otherwise a view of the full array (<c>[()]</c> of an array is a view of all of it).</returns>
         private static NDArray AllNaN(DType dtype, NDArray q)
         {
-            var shape = q.ndim == 0 ? Shape.Scalar : new Shape((long[])q.Shape.dimensions.Clone(), copy: false);
+            var shape = q.ndim == 0 ? Shape.Scalar : new Shape(q.Shape.dimensions, copy: false);
             var full = new NDArray(dtype, shape, true);
             using (var nanLiteral = NDArray.PythonLiteral(PositiveNaN))
             {

@@ -51,7 +51,7 @@ namespace NumSharp.Backends.Strings
         internal static NDArray CaseMap(int map, NDArray a)
         {
             // _vec_string allocates PyArray_SimpleNewFromDescr: C order whatever a's layout, cells all zero.
-            var result = new NDArray(SameNA(a.dtype), new Shape(a.Shape.dimensions), true);
+            var result = new NDArray(SameNA(a.dtype), new Shape(a.Shape.dimensions, copy: false), true);
             try
             {
                 var input = a.Storage.VStringSlice;

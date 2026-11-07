@@ -38,7 +38,7 @@ namespace NumSharp.Backends.Kernels
             var shape = a.Shape;
             long n = a.size;
             // Fresh C-contiguous output; every element is written below, so skip the zero-fill.
-            var ret = new NDArray(a.typecode, new Shape((long[])shape.dimensions.Clone(), copy: false), false);
+            var ret = new NDArray(a.typecode, new Shape(shape.dimensions, copy: false), false);
             byte* src = (byte*)a.Address + shape.offset * (long)a.dtypesize;
 
             if (a.typecode == NPTypeCode.Double)

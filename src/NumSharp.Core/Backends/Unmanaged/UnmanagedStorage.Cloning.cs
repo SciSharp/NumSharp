@@ -462,7 +462,7 @@ namespace NumSharp.Backends
                 dstr[i] = cstr[i] * 2;
 
             long laneOffset = _shape.offset * 2 + (imaginary ? 1 : 0);
-            var laneShape = new Shape((long[])_shape.dimensions.Clone(), dstr, laneOffset, doubleCount);
+            var laneShape = new Shape(_shape.dimensions, dstr, laneOffset, doubleCount);
 
             // Inherit read-only-ness: a lane of a non-writeable Complex must not become writeable
             // (the internal Shape ctor defaults WRITEABLE on). Same guard as Alias(Shape).
@@ -598,7 +598,7 @@ namespace NumSharp.Backends
         {
             Shape outShape = _shape.NDim == 0
                 ? Shape.NewScalar()
-                : new Shape((long[])_shape.dimensions.Clone(), 'C', copy: false);
+                : new Shape(_shape.dimensions, 'C', copy: false);
 
             var dst = new UnmanagedStorage(ArraySlice.Allocate(typeCode, outShape.size, false), outShape) { Engine = Engine };
             NDIter.Copy(dst, this);

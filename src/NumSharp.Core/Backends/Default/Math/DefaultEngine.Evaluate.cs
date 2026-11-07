@@ -432,7 +432,7 @@ namespace NumSharp.Backends
             bool allStrictFContig = AreAllInputsStrictFContig(ops, iterShape);
             bool wantFOrder = @out is null && ResolveEvalOrder(options.Order, allStrictFContig);
             Shape targetShape = wantFOrder
-                ? new Shape((long[])iterShape.dimensions.Clone(), 'F', copy: false)
+                ? new Shape(iterShape.dimensions, 'F', copy: false)
                 : iterShape;
             // order='K' (the default) is NumPy's ufunc output rule, not the strict-F heuristic: the fresh result is laid
             // out in NpyIter's K order over the call's operands (KeepOrderLayout) - C for C operands, F for F operands
@@ -687,7 +687,7 @@ namespace NumSharp.Backends
                 strides[mem[i]] = acc;
                 acc *= dims[mem[i]];
             }
-            return new Shape((long[])dims.Clone(), strides, copy: false);
+            return new Shape(dims, strides, copy: false);
         }
 
         /// <summary>
@@ -912,14 +912,14 @@ namespace NumSharp.Backends
             // ownership can differ (np.evaluate reshaped its 0-d answer).
             Shape want;
             if (axis is null || argReduction || childOps.Length == 0)
-                want = new Shape((long[])result.Shape.dimensions.Clone(), copy: false);
+                want = new Shape(result.Shape.dimensions, copy: false);
             else
             {
                 want = NumPyReduceLayout(childOps, axis.Value, keepdims);
                 // A 0-d child's axis 0 / -1 is the flat reduction (ZeroDimAxisIsFlat), and an all-0-d child set has no
                 // axis to place: keep the result's own dims then.
                 if (want.NDim != result.ndim)
-                    want = new Shape((long[])result.Shape.dimensions.Clone(), copy: false);
+                    want = new Shape(result.Shape.dimensions, copy: false);
             }
 
             var have = result.Shape;

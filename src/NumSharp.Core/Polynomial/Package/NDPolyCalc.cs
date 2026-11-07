@@ -1127,7 +1127,7 @@ namespace NumSharp
             long first = Math.Min(1, cd[0]);
             cd[0] = first;
             int[] perm = Shape.MultiSortedStridePerm(new[] { new Shape(cd, cs, copy: false) }, cd.Length);
-            var r = new NDArray(t, new Shape((long[])cd.Clone(), Shape.StridesForPerm(cd, perm), copy: false), false);
+            var r = new NDArray(t, new Shape(cd, Shape.StridesForPerm(cd, perm), copy: false), false);
             if (r.size > 0)
             {
                 sd[0] = first;

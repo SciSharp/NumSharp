@@ -189,7 +189,7 @@ namespace NumSharp
                 keys ??= owned;
                 SorterIndices(sorter, size);
                 if (size == 0 || keys.size == 0)
-                    return new NDArray(NPTypeCode.Int64, new Shape((long[])keys.Shape.dimensions.Clone(), copy: false), true);
+                    return new NDArray(NPTypeCode.Int64, new Shape(keys.Shape.dimensions, copy: false), true);
                 // OBJECT_compare(list, key) runs Py_LT first, whichever side is asked for.
                 _ = right;
                 throw new TypeError($"'<' not supported between instances of 'list' and '{PyElementTypeName(keys.dtype)}'");
@@ -221,7 +221,7 @@ namespace NumSharp
             }
             bool right = SearchSide(side);
             CheckHaystack(sorter);
-            var result = new NDArray(NPTypeCode.Int64, new Shape((long[])v.Ids.Shape.dimensions.Clone(), copy: false), false);
+            var result = new NDArray(NPTypeCode.Int64, new Shape(v.Ids.Shape.dimensions, copy: false), false);
             try
             {
                 using var keys = v.Ids.flatten();
@@ -337,7 +337,7 @@ namespace NumSharp
         {
             ThrowIfDisposed();
             // argmax: zeros with a 1 per winner; argmin: ones with a 0 per winner (uninitialized, then filled).
-            using var mask = new NDArray(NPTypeCode.Byte, new Shape((long[])Ids.Shape.dimensions.Clone(), copy: false), greatest);
+            using var mask = new NDArray(NPTypeCode.Byte, new Shape(Ids.Shape.dimensions, copy: false), greatest);
             byte loser = greatest ? (byte)0 : (byte)1, winner = greatest ? (byte)1 : (byte)0;
             if (!greatest && size > 0)
                 System.Runtime.InteropServices.NativeMemory.Fill((void*)mask.Address, (nuint)size, loser);
@@ -405,7 +405,7 @@ namespace NumSharp
         internal unsafe NDArray Ranks()
         {
             ThrowIfDisposed();
-            var result = new NDArray(NPTypeCode.Int64, new Shape((long[])Ids.Shape.dimensions.Clone(), copy: false), false);
+            var result = new NDArray(NPTypeCode.Int64, new Shape(Ids.Shape.dimensions, copy: false), false);
             if (size == 0)
                 return result;
             try
@@ -560,7 +560,7 @@ namespace NumSharp
             }
             using (flatRanks)
             {
-                var result = new NDArray(NPTypeCode.Int64, new Shape((long[])source.Shape.dimensions.Clone(), copy: false), false);
+                var result = new NDArray(NPTypeCode.Int64, new Shape(source.Shape.dimensions, copy: false), false);
                 long* r = (long*)source.Address;
                 long* o = (long*)result.Address;
                 var outLines = new List<long>();

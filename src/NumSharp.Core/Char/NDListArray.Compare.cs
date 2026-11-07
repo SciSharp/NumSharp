@@ -562,7 +562,7 @@ namespace NumSharp
                 texts[i] = buffer.ToString();
             }
             using var c = np.array(texts, dtype);
-            using var shaped = c.reshape(new Shape((long[])Ids.Shape.dimensions.Clone(), copy: false));
+            using var shaped = c.reshape(new Shape(Ids.Shape.dimensions, copy: false));
             var result = new NDArray(dtype, layout, true);
             try
             {

@@ -1402,7 +1402,7 @@ namespace NumSharp.Backends.Strings
                 target = outView.Shape.dimensions[ax] == count ? outView : AxisPrefixView(outView, ax, count);
                 NDArray src = input;
                 if (!SameDims(target, input))
-                    src = broadcastInput = NDArray.broadcast_to(input, new Shape((long[])target.Shape.dimensions.Clone()));
+                    src = broadcastInput = NDArray.broadcast_to(input, new Shape(target.Shape.dimensions, copy: false));
                 // The iterator's buffered input cast: every shape check passed, so the cells the accumulation reads are cast
                 // to the default StringDType() now (a U input and a StringDType out never share memory).
                 DType inputDescr = a.dtype;
@@ -1426,7 +1426,7 @@ namespace NumSharp.Backends.Strings
                 }
                 // A U out: the accumulation runs into a default StringDType() temporary of the written cells, then NumPy's
                 // write-back casts it in (the iterator casts unsafely).
-                result = new NDArray(loopDescr, new Shape((long[])target.Shape.dimensions.Clone()), true);
+                result = new NDArray(loopDescr, new Shape(target.Shape.dimensions, copy: false), true);
                 RunCumSum(src, result, ax, loopDescr, inputDescr, fresh: true);
                 UnmanagedStorage.Copyto(target, result, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return @out;

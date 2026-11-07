@@ -377,8 +377,8 @@ namespace NumSharp.Backends
             dims1[axis] = m;
             var dims2 = (long[])dims1.Clone();
             long start = len - m;                    // 1 for a non-empty axis, 0 for an empty one
-            return (new Shape(dims1, (long[])s.strides.Clone(), s.offset + start * s.strides[axis], s.bufferSize),
-                    new Shape(dims2, (long[])s.strides.Clone(), s.offset, s.bufferSize));
+            return (new Shape(dims1, s.strides, s.offset + start * s.strides[axis], s.bufferSize),
+                    new Shape(dims2, s.strides, s.offset, s.bufferSize));
         }
 
         /// <summary>

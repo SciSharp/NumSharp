@@ -326,7 +326,7 @@ namespace NumSharp.Backends
             using var picked = TakeFrom(flatSource, sourceNumbers, null, null, ClipModes.ClipModeRaise);
             using var values = picked.astype(to, true, 'K', "unsafe");
             // The values at their destination positions (a C-ordered staging array), written back under the same selection.
-            using var staged = new NDArray(to, new Shape((long[])dst.Shape.dimensions.Clone(), copy: false), true);
+            using var staged = new NDArray(to, new Shape(dst.Shape.dimensions, copy: false), true);
             PutTo(staged, positions, values, "raise");
             Copyto(dst, staged, NPY_CASTING.NPY_UNSAFE_CASTING, selected);
         }

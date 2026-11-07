@@ -371,7 +371,7 @@ namespace NumSharp.Backends
 
             // Nothing compared: an empty result, or every key's insertion point 0 in an empty haystack.
             if (v.size == 0 || a.size == 0)
-                return NewArray(NPTypeCode.Int64, v.ndim == 0 ? Shape.NewScalar() : new Shape((long[])v.Shape.dimensions.Clone(), copy: false), true);
+                return NewArray(NPTypeCode.Int64, v.ndim == 0 ? Shape.NewScalar() : new Shape(v.Shape.dimensions, copy: false), true);
 
             NDArray sorterTyped = sorter is null ? null : EnsureContiguousInt64(sorter);
             return Sorting.TextSearch.SearchSorted(haystack, keys, side == "left", sorterTyped);

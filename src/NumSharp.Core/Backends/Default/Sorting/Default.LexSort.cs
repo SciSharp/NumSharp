@@ -96,7 +96,7 @@ namespace NumSharp.Backends
                 lineShape[d] = d == axis ? dims[d] : 1;
             // arange along the axis, broadcast over the other axes and materialized (the pass rewrites it in place).
             using var line = UnmanagedStorage.ArangeObj(0L, dims[axis], 1L, null).reshape(new Shape(lineShape, copy: false));
-            using var broadcast = NDArray.broadcast_to(line, new Shape((long[])dims.Clone(), copy: false));
+            using var broadcast = NDArray.broadcast_to(line, new Shape(dims, copy: false));
             return broadcast.copy();
         }
     }

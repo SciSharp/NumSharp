@@ -683,7 +683,7 @@ namespace NumSharp
                 long dr = d < n - r.Length ? 1 : r[d - (n - r.Length)];
                 if (dx != dr && dx != 1 && dr != 1)
                     throw new IncorrectShapeException(
-                        $"operands could not be broadcast together with shapes {new Shape(x).ToPythonTuple()} {new Shape(r).ToPythonTuple()} ");
+                        $"operands could not be broadcast together with shapes {new Shape(x, copy: false).ToPythonTuple()} {new Shape(r, copy: false).ToPythonTuple()} ");
                 b[d] = dx == 1 ? dr : dx;
             }
             return b;

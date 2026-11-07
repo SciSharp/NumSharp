@@ -473,7 +473,7 @@ namespace NumSharp.Backends
             // reversed reduced dims) is exactly the order the streams below write it in. Disposed on an exception
             // so a failing kernel does not strand its buffer.
             var result = fOrder && reducedShape.NDim > 1
-                ? NewArray(childType, new Shape((long[])reducedShape.dimensions.Clone(), 'F', copy: false), false)
+                ? NewArray(childType, new Shape(reducedShape.dimensions, 'F', copy: false), false)
                 : NewArray(childType, reducedShape, false);
             NDExpr.StreamingReductions++;
             try
@@ -917,7 +917,7 @@ namespace NumSharp.Backends
             // UNINITIALIZED: every output is written (Any / All seed their slab, the count clears its own). Disposed on an
             // exception so a failing kernel does not strand its buffer.
             var result = fOrder && reducedShape.NDim > 1
-                ? NewArray(accType, new Shape((long[])reducedShape.dimensions.Clone(), 'F', copy: false), false)
+                ? NewArray(accType, new Shape(reducedShape.dimensions, 'F', copy: false), false)
                 : NewArray(accType, reducedShape, false);
             NDExpr.StreamingReductions++;
             try

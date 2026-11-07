@@ -150,7 +150,7 @@ namespace NumSharp
                     {
                         Shape outLayout = Shape.NpyIterOutputShape((long[])xs.dimensions.Clone(), new ReadOnlySpan<Shape>(in xs));
                         var r = new NDArray(wc.typecode, outLayout, false);
-                        using var spread = np.broadcast_to(wc, new Shape((long[])xs.dimensions.Clone(), copy: false));
+                        using var spread = np.broadcast_to(wc, new Shape(xs.dimensions, copy: false));
                         np.copyto(r, spread);
                         return r;
                     }

@@ -169,7 +169,7 @@ namespace NumSharp
                 return new NDArray(typeCode, new Shape(Broadcast(a, b, c), copy: false), false);
 
             // np.empty(size) first: the allocation guard rejects a negative or overflowing size in NumPy's left-to-right order.
-            var ret = new NDArray(typeCode, new Shape((long[])(size.dimensions ?? Array.Empty<long>()).Clone(), copy: false), false);
+            var ret = new NDArray(typeCode, new Shape((size.dimensions ?? Array.Empty<long>()), copy: false), false);
             try
             {
                 // Then MultiIterNew(randoms, a, b, c) + validate_output_shape over the output's own (fresh) shape.

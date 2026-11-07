@@ -464,7 +464,7 @@ namespace NumSharp.Backends
             // The source seen through the destination's axes, each distinct element once.
             var aligned = source.Alias(new Shape(dims, (long[])srcStrides.Clone(), source.Shape.offset, source.Shape.bufferSize));
 
-            var stage = NDArray.ForOverwrite(dst.dtype, new Shape(dims)); // CopyUnchecked writes every element
+            var stage = NDArray.ForOverwrite(dst.dtype, new Shape(dims, copy: false)); // CopyUnchecked writes every element
             try
             {
                 NDStringCopy.CopyUnchecked(stage.Storage, aligned);

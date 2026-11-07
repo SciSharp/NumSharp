@@ -1268,7 +1268,7 @@ namespace NumSharp
             // The copy is a fresh C-ordered buffer, so the reshape is a relabel in place (a reshape VIEW would leave the
             // copy's own NDArray holding the buffer).
             if (mask is not null && !mask.Shape.dimensions.AsSpan().SequenceEqual(indices.Shape.dimensions))
-                mask.Storage.Reshape(new Shape((long[])indices.Shape.dimensions.Clone(), copy: false));
+                mask.Storage.Reshape(new Shape(indices.Shape.dimensions, copy: false));
             return new NDMaskedArray(indices, mask).FinalizeFrom(this);
         }
 
@@ -7436,7 +7436,7 @@ namespace NumSharp
             // `shape = list(a.shape); shape[axis] = 1` — d.shape is already a copy of the dimensions.
             var shape = d.shape;
             shape[DefaultEngine.NormalizeAxis(axis, d.ndim)] = 1;
-            return np.broadcast_to(v, new Shape(shape));
+            return np.broadcast_to(v, new Shape(shape, copy: false));
         }
 
         /// <summary>Drops one element from the front (<paramref name="dropFirst"/>) or back of <paramref name="a"/>
@@ -7603,7 +7603,7 @@ namespace NumSharp
                 var shp = Enumerable.Repeat(1L, am.ndim).ToArray();
                 shp[ax.Value] = am.Shape.dimensions[ax.Value];
                 wgt = new NDMaskedArray(np.reshape(wgt._data, new Shape(shp, copy: false)),
-                    wgt._mask is null ? null : np.reshape(wgt._mask, new Shape((long[])shp.Clone(), copy: false)));
+                    wgt._mask is null ? null : np.reshape(wgt._mask, new Shape(shp, copy: false)));
             }
             if (mask is not null)
             {

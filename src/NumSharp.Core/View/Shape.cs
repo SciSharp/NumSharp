@@ -1893,7 +1893,7 @@ namespace NumSharp
                 return this; // readonly struct copy
 
             if (unview || unbroadcast)
-                return new Shape((long[])this.dimensions.Clone(), copy: false);
+                return new Shape(this.dimensions, copy: false);
 
             // Deep clone via copy constructor
             if (deep)
@@ -1910,7 +1910,7 @@ namespace NumSharp
             if (IsScalar)
                 return NewScalar();
 
-            return new Shape((long[])this.dimensions.Clone(), copy: false);
+            return new Shape(this.dimensions, copy: false);
         }
     }
 }

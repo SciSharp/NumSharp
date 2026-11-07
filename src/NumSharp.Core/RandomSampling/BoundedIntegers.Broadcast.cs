@@ -513,7 +513,7 @@ namespace NumSharp
                 values[i] = unchecked((ulong)(long)(v - subtract));
             }
 
-            var ret = new NDArray(DType.From(tc), new Shape((long[])x.Shape.dimensions.Clone(), copy: false), false);
+            var ret = new NDArray(DType.From(tc), new Shape(x.Shape.dimensions, copy: false), false);
             var dst = (ulong*)ret.Address;
             long[] mem = KeepOrderMemoryIndex(x.Shape);
             if (mem is null)

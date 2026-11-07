@@ -43,7 +43,7 @@ namespace NumSharp.Backends
             if (Backends.Strings.NDStringUfuncs.IsString(x))
             {
                 if (x.size == 0 || bins.size == 0)
-                    return NewArray(NPTypeCode.Int64, new Shape((long[])x.Shape.dimensions.Clone(), copy: false), true);
+                    return NewArray(NPTypeCode.Int64, new Shape(x.Shape.dimensions, copy: false), true);
                 string textSide = right ? "left" : "right";
                 if (mono == -1)
                     return NewScalar((long)bins.Shape.dimensions[0]) - SearchSorted(bins["::-1"], x, textSide);

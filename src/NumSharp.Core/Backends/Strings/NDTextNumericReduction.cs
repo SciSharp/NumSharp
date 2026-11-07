@@ -123,7 +123,7 @@ namespace NumSharp.Backends.Strings
             NDArray target = outView.Shape.dimensions[ax] == count ? outView : NDVStringReduction.AxisPrefixView(outView, ax, count);
             NDArray src = input;
             if (!SameDims(target, input))
-                src = NDArray.broadcast_to(input, new Shape((long[])target.Shape.dimensions.Clone()));
+                src = NDArray.broadcast_to(input, new Shape(target.Shape.dimensions, copy: false));
 
             // UPDATEIFCOPY: the out's cells are converted into the loop dtype BEFORE the input (NpyIter allocates its
             // operands in order) — '' does not parse, so NumPy's zeros-initialized text outs refuse here. The converted

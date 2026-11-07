@@ -660,8 +660,8 @@ namespace NumSharp.Backends
                 }
                 return;
             }
-            using (var proxy = new NDArray(NPTypeCode.Byte, new Shape((long[])src.Shape.dimensions.Clone()), true))
-            using (var valueProxy = NDArray.ones(new Shape((long[])values.Shape.dimensions.Clone()), NPTypeCode.Byte))
+            using (var proxy = new NDArray(NPTypeCode.Byte, new Shape(src.Shape.dimensions, copy: false), true))
+            using (var valueProxy = NDArray.ones(new Shape(values.Shape.dimensions, copy: false), NPTypeCode.Byte))
             {
                 MapIterSet(proxy, (NDArray[])indices.Clone(), valueProxy);
                 if (!proxy.TensorEngine.Any(proxy))

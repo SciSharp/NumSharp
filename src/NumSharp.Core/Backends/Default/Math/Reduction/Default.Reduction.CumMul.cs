@@ -177,7 +177,7 @@ namespace NumSharp.Backends
             // A scan axis that is not innermost in memory over a dense operand of the accumulator's own dtype runs by whole
             // rows (TryScanRows), straight into that layout: the same per-position products, streamed instead of one
             // strided walk per position.
-            if (TryScanRows(arr, axis, retTypeCode, permuted ? kLayout : new Shape((long[])shape.dimensions.Clone(), copy: false),
+            if (TryScanRows(arr, axis, retTypeCode, permuted ? kLayout : new Shape(shape.dimensions, copy: false),
                     multiply: true, out var rows))
                 return rows;
 

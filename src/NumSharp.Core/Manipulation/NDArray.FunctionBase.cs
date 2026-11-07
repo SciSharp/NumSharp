@@ -2225,7 +2225,7 @@ namespace NumSharp
             if (!anyString && TrySelectFused(condlist, mats, n, dtype, resultDims, out var fused))
                 return fused;
 
-            var result = new NDArray(stringDescr ?? (DType)dtype, new Shape((long[])resultDims.Clone(), copy: false), false);
+            var result = new NDArray(stringDescr ?? (DType)dtype, new Shape(resultDims, copy: false), false);
 
             // Composition fallback (NumPy's own structure): burn the default across the whole result
             // (unsafe cast, matching np.full's copyto), then overlay each choice where its condition is
@@ -2844,7 +2844,7 @@ namespace NumSharp
             object seed = hasDefault ? funclist[n] : (object)0;   // funclist[n] is the default
             WriteCoercedScalar(fvals + n * elemSize, seed, dtype, elemSize);
 
-            var res = new NDArray(dtype, new Shape((long[])x.Shape.dimensions.Clone(), copy: false), false);
+            var res = new NDArray(dtype, new Shape(x.Shape.dimensions, copy: false), false);
 
             bool** condPtrs = stackalloc bool*[n];
             for (int k = 0; k < n; k++)

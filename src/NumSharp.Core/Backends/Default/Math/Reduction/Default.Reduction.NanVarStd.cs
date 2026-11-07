@@ -227,7 +227,7 @@ namespace NumSharp.Backends
             bool scalarResult = var.ndim == 0;
             if (!var.Shape.IsWriteable)
                 var = var.copy();
-            var cntOut = keepdims ? cnt : cnt.reshape(new Shape((long[])var.Shape.dimensions.Clone(), copy: false));
+            var cntOut = keepdims ? cnt : cnt.reshape(new Shape(var.Shape.dimensions, copy: false));
             var dof = engine.Subtract(cntOut, NewScalar((long)ddof));
             DivideByCountsLikeNumPy(var, dof);
 

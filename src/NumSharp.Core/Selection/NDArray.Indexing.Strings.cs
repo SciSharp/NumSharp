@@ -139,7 +139,7 @@ namespace NumSharp
             }
             catch (Exception e) when (IsReplayable(e))
             {
-                using (var proxy = np.broadcast_to(NDArray.Scalar((byte)0), new Shape((long[])Shape.dimensions.Clone())))
+                using (var proxy = np.broadcast_to(NDArray.Scalar((byte)0), new Shape(Shape.dimensions, copy: false)))
                     onProxy(proxy)?.Dispose();
                 throw; // the proxy accepted the index: the unit route's own error stands
             }
@@ -256,8 +256,8 @@ namespace NumSharp
                 }
                 catch (Exception e) when (IsReplayable(e))
                 {
-                    using (var proxy = np.zeros(new Shape((long[])Shape.dimensions.Clone()), NPTypeCode.Byte))
-                    using (var valueProxy = np.zeros(new Shape((long[])converted.Shape.dimensions.Clone()), NPTypeCode.Byte))
+                    using (var proxy = np.zeros(new Shape(Shape.dimensions, copy: false), NPTypeCode.Byte))
+                    using (var valueProxy = np.zeros(new Shape(converted.Shape.dimensions, copy: false), NPTypeCode.Byte))
                         onProxy(proxy, valueProxy);
                     throw;
                 }
@@ -283,8 +283,8 @@ namespace NumSharp
         ///     selection is written (another string class or width, or numbers) — never by the same-dtype route.</remarks>
         private bool ProxySelectionWrites(NDArray value, Action<NDArray, NDArray> onProxy)
         {
-            using var proxy = np.zeros(new Shape((long[])Shape.dimensions.Clone()), NPTypeCode.Byte);
-            using var valueProxy = np.ones(new Shape((long[])value.Shape.dimensions.Clone()), NPTypeCode.Byte);
+            using var proxy = np.zeros(new Shape(Shape.dimensions, copy: false), NPTypeCode.Byte);
+            using var valueProxy = np.ones(new Shape(value.Shape.dimensions, copy: false), NPTypeCode.Byte);
             onProxy(proxy, valueProxy);
             return np.any(proxy);
         }
@@ -501,7 +501,7 @@ namespace NumSharp
         {
             if (selection.Length > ndim)
             {
-                using (var proxy = np.broadcast_to(NDArray.Scalar((byte)0), new Shape((long[])Shape.dimensions.Clone())))
+                using (var proxy = np.broadcast_to(NDArray.Scalar((byte)0), new Shape(Shape.dimensions, copy: false)))
                     Backends.UnmanagedStorage.MapIterGet(proxy, selection, null, true)?.Dispose();
                 throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {ndim}-dimensional, but {selection.Length} were indexed"));
             }
@@ -519,7 +519,7 @@ namespace NumSharp
         {
             if (selection.Length > ndim)
             {
-                using (var proxy = np.zeros(new Shape((long[])Shape.dimensions.Clone()), NPTypeCode.Byte))
+                using (var proxy = np.zeros(new Shape(Shape.dimensions, copy: false), NPTypeCode.Byte))
                     Backends.UnmanagedStorage.MapIterSet(proxy, selection, NDArray.Scalar((byte)0));
                 throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {ndim}-dimensional, but {selection.Length} were indexed"));
             }

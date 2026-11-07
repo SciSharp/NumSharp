@@ -937,8 +937,8 @@ namespace NumSharp.IO
             // in the same order as in NumPy and the cells come out identical.
             bool fortran = isFortran && shape.Length > 1;
             NDArray result = fortran
-                ? np.empty(new Shape((long[])shape.Clone(), copy: false), 'F', descr)
-                : np.empty(new Shape((long[])shape.Clone(), copy: false), descr);
+                ? np.empty(new Shape(shape, copy: false), 'F', descr)
+                : np.empty(new Shape(shape, copy: false), descr);
             try
             {
                 StoreElements((VStringArraySlice)result.Storage.InternalArray, items, reader, shape, fortran);

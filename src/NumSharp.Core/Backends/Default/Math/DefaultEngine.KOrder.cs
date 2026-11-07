@@ -240,7 +240,7 @@ namespace NumSharp.Backends
         {
             Shape layout = TryKOrderPlan(x.Shape.dimensions, new[] { x.Shape }, out var kLayout, out _)
                 ? kLayout
-                : new Shape((long[])x.Shape.dimensions.Clone(), copy: false);
+                : new Shape(x.Shape.dimensions, copy: false);
             var r = new NDArray(to, layout, false);
             try
             {

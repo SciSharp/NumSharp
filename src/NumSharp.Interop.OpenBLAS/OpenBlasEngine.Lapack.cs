@@ -426,7 +426,7 @@ namespace NumSharp.Interop.OpenBLAS
             long m = shape.dimensions[nd - 1];
 
             // fillZeros:false: Delinearize writes every cell, so pre-zeroing is wasted (see the file header note).
-            var result = new NDArray(InfoOf<T>.NPTypeCode, new Shape((long[])shape.dimensions.Clone(), copy: false), fillZeros: false);
+            var result = new NDArray(InfoOf<T>.NPTypeCode, new Shape(shape.dimensions, copy: false), fillZeros: false);
             if (result.size == 0)
                 return result; // (…,0,0) → empty inverse, matching NumPy
 

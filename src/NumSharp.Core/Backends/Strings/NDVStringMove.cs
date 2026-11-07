@@ -101,7 +101,7 @@ namespace NumSharp.Backends.Strings
                 return false;
             var rs = raw.Shape;
             long baseCells = (rawStart - bufferStart) / VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
-            var shape = new Shape((long[])rs.dimensions.Clone(), (long[])rs.strides.Clone(), rs.offset + baseCells, count);
+            var shape = new Shape(rs.dimensions, rs.strides, rs.offset + baseCells, count);
             if (!rs.IsWriteable && shape.IsWriteable)
                 shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
             view = new NDArray(src.Alias(shape)) { TensorEngine = source.TensorEngine };
@@ -185,11 +185,11 @@ namespace NumSharp.Backends.Strings
             // The view's first element as a cell index of the temporary's buffer: a contiguous slice re-seats Address (offset
             // 0), a strided view keeps the buffer's address and a non-zero offset; the sum is right for both.
             long first = ((byte*)rs.Address - (byte*)rs.InternalArray.Address) / VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING + raw.Shape.offset;
-            var baseArray = new NDArray(descr, new Shape(new[] { count }), true);
+            var baseArray = new NDArray(descr, new Shape(new[] { count }, copy: false), true);
             NDArray view = null;
             try
             {
-                var shape = new Shape((long[])raw.Shape.dimensions.Clone(), (long[])raw.Shape.strides.Clone(), first, count);
+                var shape = new Shape(raw.Shape.dimensions, raw.Shape.strides, first, count);
                 if (!raw.Shape.IsWriteable && shape.IsWriteable)
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 view = new NDArray(baseArray.Storage.Alias(shape)) { TensorEngine = raw.TensorEngine };
@@ -246,7 +246,7 @@ namespace NumSharp.Backends.Strings
         internal static NDArray Flatten(NDArray t, char order)
         {
             bool fortran = order == 'F' || order == 'f';
-            var result = new NDArray(t.dtype, new Shape((long[])t.Shape.dimensions.Clone(), fortran ? 'F' : 'C', copy: false), true);
+            var result = new NDArray(t.dtype, new Shape(t.Shape.dimensions, fortran ? 'F' : 'C', copy: false), true);
             if (result.size == 0)
                 return result;
             try
@@ -731,7 +731,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="dst">The destination (only its shape is read).</param>
         /// <returns>The marks the caller disposes.</returns>
         internal static NDArray NewMarks(NDArray dst)
-            => NDArray.full(new Shape((long[])dst.Shape.dimensions.Clone()), -1L, NPTypeCode.Int64);
+            => NDArray.full(new Shape(dst.Shape.dimensions, copy: false), -1L, NPTypeCode.Int64);
 
         /// <summary>
         ///     Applies a scatter decided on MARKS: for every element of <paramref name="dst"/> whose mark is not -1, the old string

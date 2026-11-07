@@ -360,7 +360,7 @@ namespace NumSharp.Backends
             }
 
             var result = fOrder && reducedShape.NDim > 1
-                ? NewArray(t, new Shape((long[])reducedShape.dimensions.Clone(), 'F', copy: false), false)
+                ? NewArray(t, new Shape(reducedShape.dimensions, 'F', copy: false), false)
                 : NewArray(t, reducedShape, false);
             try
             {

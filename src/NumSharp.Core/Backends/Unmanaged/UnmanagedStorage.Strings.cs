@@ -431,7 +431,7 @@ namespace NumSharp.Backends
             var bytes = ArraySlice.WrapShared<byte>(first, elements * descr.itemsize, units.InternalArray);
 
             var storage = new UnmanagedStorage();
-            storage._Allocate(nd == 0 ? Shape.NewScalar() : new Shape(dims), new StringArraySlice(bytes, descr));
+            storage._Allocate(nd == 0 ? Shape.NewScalar() : new Shape(dims, copy: false), new StringArraySlice(bytes, descr));
             storage.Engine = units.Engine;
             return storage;
         }

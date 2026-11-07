@@ -229,7 +229,7 @@ namespace NumSharp.Backends
         private static Shape AccumulateOutputLayout(in Shape input)
             => TryKOrderPlan(input.dimensions, new[] { input }, out var layout, out _)
                 ? layout
-                : new Shape((long[])input.dimensions.Clone(), copy: false);
+                : new Shape(input.dimensions, copy: false);
 
         /// <summary>
         ///     Moves a C-ordered scan result into <paramref name="layout"/> when that is not C: the defensive fallbacks of

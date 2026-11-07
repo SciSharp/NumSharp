@@ -443,7 +443,7 @@ namespace NumSharp
             // np.zeros(shape, dtype)'s statement below: a zero-filled allocation of m's descriptor.
             long size = m.size;
             if (size == 0 || cols == 0)
-                return new NDArray(m.dtype, new Shape((long[])m.Shape.dimensions.Clone(), copy: false), true);
+                return new NDArray(m.dtype, new Shape(m.Shape.dimensions, copy: false), true);
 
             int elemSize = m.dtypesize; // the descriptor's itemsize (a string's width), not the lane's
             bool writeOnce = SizeBucketedBufferPool.PrefersWriteOnce(size * elemSize);
@@ -452,8 +452,8 @@ namespace NumSharp
             // write every byte of every row exactly once (zeros, retained run, zeros). Above it
             // np.zeros rides free OS zero-pages and only the retained run is worth touching.
             var res = writeOnce
-                ? new NDArray(m.dtype, new Shape((long[])m.Shape.dimensions.Clone(), copy: false), false)
-                : new NDArray(m.dtype, new Shape((long[])m.Shape.dimensions.Clone(), copy: false), true);
+                ? new NDArray(m.dtype, new Shape(m.Shape.dimensions, copy: false), false)
+                : new NDArray(m.dtype, new Shape(m.Shape.dimensions, copy: false), true);
             byte* src = m.Storage.Address;
             byte* dst = res.Storage.Address + res.Shape.Offset * elemSize;
 

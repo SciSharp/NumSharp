@@ -227,7 +227,7 @@ namespace NumSharp.Backends
             {
                 // NumPy returns `res[()]` of `res = zeros(shape, bool)`: for an array that is a VIEW of the fresh buffer
                 // (flags.owndata false), for a 0-d input the scalar; the view takes its own reference on the buffer.
-                var res = NewArray(NPTypeCode.Boolean, new Shape((long[])a.Shape.dimensions.Clone(), copy: false), true);
+                var res = NewArray(NPTypeCode.Boolean, new Shape(a.Shape.dimensions, copy: false), true);
                 if (res.ndim == 0)
                     return res;
                 var view = new NDArray(res.Storage.Alias(res.Shape));

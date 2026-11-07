@@ -1150,7 +1150,7 @@ namespace NumSharp.Backends
             {
                 // Text into numbers (a 0-d text array, or a list of strings — an ndarray of text failed the 'safe' rule
                 // above) is parsed, numbers into text formatted, every value now, before the mask is read.
-                var result = NDArray.ForOverwrite(target.dtype, new Shape((long[])values.Shape.dimensions.Clone(), copy: false));
+                var result = NDArray.ForOverwrite(target.dtype, new Shape(values.Shape.dimensions, copy: false));
                 try
                 {
                     if (result.size > 0)

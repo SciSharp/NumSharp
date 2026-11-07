@@ -600,7 +600,7 @@ namespace NumSharp.Backends
             if (!fortran)
                 return result;   // 'C': the kernels allocate exact C strides; 'K': the loop layout is already NumPy's
 
-            var layout = new Shape((long[])result.Shape.dimensions.Clone(), 'F', copy: false);
+            var layout = new Shape(result.Shape.dimensions, 'F', copy: false);
             // A product that is C- and F-contiguous at once has at most one axis longer than 1, so C and F order
             // address its elements alike: relabel it with exact F strides (NumPy's for its extent-1 axes) and keep the
             // buffer. Any other product is copied into the F layout.
@@ -640,7 +640,7 @@ namespace NumSharp.Backends
                 // Both orders at once (at most one axis longer than 1): C and F address the elements alike, so relabel
                 // with exact F strides and keep the buffer, as ApplyMatmulOrder does.
                 return result.Shape.IsContiguous
-                    ? NDArray.AdoptLayout(result, new Shape((long[])result.Shape.dimensions.Clone(), 'F', copy: false))
+                    ? NDArray.AdoptLayout(result, new Shape(result.Shape.dimensions, 'F', copy: false))
                     : result;
             }
 

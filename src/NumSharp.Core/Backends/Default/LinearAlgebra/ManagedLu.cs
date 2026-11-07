@@ -413,7 +413,7 @@ namespace NumSharp.Backends
             int nd = shape.NDim;
             long m = shape.dimensions[nd - 1];
 
-            var result = a.TensorEngine.NewArray(InfoOf<T>.NPTypeCode, new Shape((long[])shape.dimensions.Clone(), copy: false), fillZeros: false);
+            var result = a.TensorEngine.NewArray(InfoOf<T>.NPTypeCode, new Shape(shape.dimensions, copy: false), fillZeros: false);
             if (result.size == 0)
                 return result; // (…,0,0) → empty inverse, matching NumPy
 
