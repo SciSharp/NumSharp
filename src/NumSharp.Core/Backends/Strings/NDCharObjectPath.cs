@@ -184,7 +184,7 @@ namespace NumSharp.Backends.Strings
                 if (TryObjectList(value, out var dims, out var items))
                 {
                     var handles = UnmanagedStorage.ArangeObj(0L, (long)items.Length, 1L, null);
-                    var shaped = dims.Length == 1 ? handles : handles.reshape(Shape.Adopt(dims));
+                    var shaped = dims.Length == 1 ? handles : handles.reshape(new Shape(dims, copy: false));
                     if (!ReferenceEquals(shaped, handles))
                         handles.Dispose();
                     return new VecArg(shaped, true, objects: items);
@@ -448,7 +448,7 @@ namespace NumSharp.Backends.Strings
                     array = flat;
                     return true;
                 }
-                array = flat.reshape(Shape.Adopt(dims.ToArray()));
+                array = flat.reshape(new Shape(dims.ToArray(), copy: false));
                 if (!ReferenceEquals(array, flat))
                     flat.Dispose();
                 return true;

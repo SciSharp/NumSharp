@@ -281,7 +281,7 @@ namespace NumSharp.Backends
                     ValidateWhereMask(options.Where);
                     var dims = ResolveUfuncIterationShape(current.Shape.Clean(), operands, null, options.Where).dimensions;
                     char order = ResolveFreshOrder(current, options.Order);
-                    var fresh = new NDArray(current.dtype, Shape.Adopt((long[])dims.Clone(), order), true);
+                    var fresh = new NDArray(current.dtype, new Shape((long[])dims.Clone(), order, copy: false), true);
                     try
                     {
                         UnmanagedStorage.Copyto(fresh, current, NPY_CASTING.NPY_UNSAFE_CASTING, options.Where);

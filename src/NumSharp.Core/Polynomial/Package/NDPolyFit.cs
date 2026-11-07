@@ -187,7 +187,7 @@ namespace NumSharp
                 dims[0] = rows;
                 for (int d = 1; d < q.ndim; d++)
                     dims[d] = q.Shape.dimensions[d];
-                coef = np.zeros(Shape.Adopt(dims), q.dtype);
+                coef = np.zeros(new Shape(dims, copy: false), q.dtype);
                 coef[sorted] = q;
             }
 

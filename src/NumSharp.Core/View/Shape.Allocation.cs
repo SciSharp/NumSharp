@@ -190,7 +190,7 @@ namespace NumSharp
             // Clean() clones the dimensions and computes C strides. The F layout takes this shape's dimension array as it
             // is: a Shape's arrays are immutable (no setter, copying getters, copying public constructors - plan
             // view-shape-open-bugs.md, bug 2), so sharing it cannot let the caller's later writes reach the new array.
-            return fortran ? Shape.Adopt(dimensions, 'F') : Clean();
+            return fortran ? new Shape(dimensions, 'F', copy: false) : Clean();
         }
 
         /// <summary>

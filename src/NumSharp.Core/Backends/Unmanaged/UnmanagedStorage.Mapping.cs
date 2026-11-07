@@ -279,7 +279,7 @@ namespace NumSharp.Backends
                 {
                     // Allocated at the FINAL retShape (fresh, C-contiguous, owned — flags.owndata=True
                     // like NumPy's fancy result); the kernel fills it flat.
-                    var gathered = new NDArray<T>(Shape.Adopt(retShape), false);
+                    var gathered = new NDArray<T>(new Shape(retShape, copy: false), false);
                     byte* srcBase = (byte*)source.Storage.Address + srcShape.offset * InfoOf<T>.Size;
                     long fail = FancyIndexKernelRoute.Gather(srcBase, kernelIdxPtr, kernelIdx32, indexCount, axisLength, slabBytes, (byte*)gathered.Address);
                     if (fail == -1)
@@ -351,7 +351,7 @@ namespace NumSharp.Backends
                 // Allocate at the FINAL retShape and fill flat (the fresh buffer is C-contiguous either
                 // way) — a terminal dst.reshape(retShape) would hand back a VIEW of the hidden temp and
                 // misreport flags.owndata=False, where NumPy's fancy result OWNS its data.
-                var dst = new NDArray<T>(Shape.Adopt(retShape ?? new[] { computedOffsets.size }), false);
+                var dst = new NDArray<T>(new Shape(retShape ?? new[] { computedOffsets.size }, copy: false), false);
                 T* dstAddr = dst.Address;
                 //indices point to a scalar
                 var len = dst.size;
@@ -407,7 +407,7 @@ namespace NumSharp.Backends
 
             NDArray dst;
             if (@out is null)
-                dst = new NDArray<T>(Shape.Adopt(retShape), false);
+                dst = new NDArray<T>(new Shape(retShape, copy: false), false);
             else
             {
                 //compare computed retShape vs given @out
@@ -486,7 +486,7 @@ namespace NumSharp.Backends
 
             NDArray<T> ret;
             if (@out is null)
-                ret = new NDArray<T>(Shape.Adopt(retShape), false);
+                ret = new NDArray<T>(new Shape(retShape, copy: false), false);
             else
             {
                 //compare computed retShape vs given @out
@@ -1040,7 +1040,7 @@ namespace NumSharp.Backends
                     string Tup(long[] s) => s.Length == 1 ? string.Create(CultureInfo.InvariantCulture, $"({s[0]},)") : "(" + string.Join(",", Array.ConvertAll(s, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
                     try
                     {
-                        valuesTyped = NDArray.broadcast_to(valuesTyped, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
+                        valuesTyped = NDArray.broadcast_to(valuesTyped, new Shape(retShape, copy: false)).copy().MakeGeneric<T>();
                     }
                     catch (IncorrectShapeException ex)
                     {
@@ -1068,7 +1068,7 @@ namespace NumSharp.Backends
                 {
                     try
                     {
-                        typedValues = NDArray.broadcast_to(typedValues, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
+                        typedValues = NDArray.broadcast_to(typedValues, new Shape(retShape, copy: false)).copy().MakeGeneric<T>();
                     }
                     catch (IncorrectShapeException ex)
                     {
@@ -1151,7 +1151,7 @@ namespace NumSharp.Backends
                 // exactly retShape (the same ValueError texts as the general route, per branch).
                 try
                 {
-                    typed = NDArray.broadcast_to(typed, Shape.Adopt(retShape)).copy().MakeGeneric<T>();
+                    typed = NDArray.broadcast_to(typed, new Shape(retShape, copy: false)).copy().MakeGeneric<T>();
                 }
                 catch (IncorrectShapeException ex)
                 {

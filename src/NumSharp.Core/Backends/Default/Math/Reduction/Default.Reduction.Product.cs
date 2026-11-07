@@ -123,17 +123,17 @@ namespace NumSharp.Backends
                 {
                     var emptyType = typeCode ?? arr.typecode.GetAccumulatingType();
                     var r = NewScalar(emptyType.GetOneValue());
-                    if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
+                    if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
                     return r.MarkReductionScalar();
                 }
                 var axis = NormalizeAxis(axis_.Value, arr.ndim);
                 var resultShape = Shape.GetAxis(shape, axis);
-                var result = NDArray.ones(Shape.Adopt(resultShape), typeCode ?? arr.GetTypeCode.GetAccumulatingType());
+                var result = NDArray.ones(new Shape(resultShape, copy: false), typeCode ?? arr.GetTypeCode.GetAccumulatingType());
                 if (keepdims)
                 {
                     var ks = new long[arr.ndim];
                     for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                    result.Storage.Reshape(Shape.Adopt(ks));
+                    result.Storage.Reshape(new Shape(ks, copy: false));
                 }
                 // A 1-D input along its only axis gives the 0-d identity, NumPy's scalar as for a non-empty input (this
                 // exit returned it writeable); a no-op for an array result.
@@ -152,7 +152,7 @@ namespace NumSharp.Backends
             {
                 var result = prod_elementwise_il(arr, typeCode);
                 var r = NewScalar(result);
-                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
+                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
                 return r.MarkReductionScalar();
             }

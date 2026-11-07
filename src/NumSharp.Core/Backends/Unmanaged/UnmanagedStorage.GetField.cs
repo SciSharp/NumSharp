@@ -78,7 +78,7 @@ namespace NumSharp.Backends
             // the new dtype that is still a VIEW of this one (EmptyFieldView) is the observable result.
             if (_shape.size == 0 || InternalArray == null)
             {
-                var emptyShape = ndim == 0 ? Shape.NewScalar() : Shape.Adopt((long[])dims.Clone(), 'C');
+                var emptyShape = ndim == 0 ? Shape.NewScalar() : new Shape((long[])dims.Clone(), 'C', copy: false);
                 return EmptyFieldView(ArraySlice.Allocate(InfoOf<T>.NPTypeCode, emptyShape.size, false), emptyShape);
             }
 
@@ -206,7 +206,7 @@ namespace NumSharp.Backends
             // of this one (the numeric path's answer, EmptyFieldView; NumPy's empty view addresses nothing either).
             if (_shape.size == 0 || InternalArray == null)
             {
-                var emptyShape = ndim == 0 ? Shape.NewScalar() : Shape.Adopt((long[])dims.Clone(), 'C');
+                var emptyShape = ndim == 0 ? Shape.NewScalar() : new Shape((long[])dims.Clone(), 'C', copy: false);
                 IArraySlice emptySlice = stringField
                     ? StringArraySlice.Allocate(descr, emptyShape.size, false)
                     : ArraySlice.Allocate(fieldCode, emptyShape.size, false);

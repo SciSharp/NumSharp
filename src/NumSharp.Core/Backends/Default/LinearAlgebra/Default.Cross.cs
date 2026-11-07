@@ -144,7 +144,7 @@ namespace NumSharp.Backends
                 return Shape.NewScalar();
             var leading = new long[dims.Length - 1];
             System.Array.Copy(dims, leading, leading.Length);
-            return Shape.Adopt(leading);
+            return new Shape(leading, copy: false);
         }
 
         /// <summary>

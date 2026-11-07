@@ -320,7 +320,7 @@ namespace NumSharp
             if (kept.Length > ndim)
                 throw new ValueError($"could not broadcast input array from shape {PyShapeTuple(kept)} " +
                                      $"into shape {PyShapeTuple(destination.dimensions)}");
-            return value.reshape(Shape.Adopt(kept));
+            return value.reshape(new Shape(kept, copy: false));
         }
 
         /// <summary>

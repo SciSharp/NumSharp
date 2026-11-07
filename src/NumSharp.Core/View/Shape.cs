@@ -482,7 +482,7 @@ namespace NumSharp
         /// <summary>
         ///     Singleton instance of a <see cref="Shape"/> that represents a scalar.
         /// </summary>
-        public static readonly Shape Scalar = Shape.Adopt(Array.Empty<long>());
+        public static readonly Shape Scalar = new Shape(Array.Empty<long>(), copy: false);
 
         /// <summary>
         ///     Create a new scalar shape
@@ -738,26 +738,36 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     A shape with explicit element <paramref name="strides"/> over COPIES of the caller's arrays, at offset 0 over
-        ///     a buffer of exactly <c>size</c> elements. Changing either array afterwards never changes this shape or an array
-        ///     built on it (NumPy copies every shape or strides sequence it is given; plan
+        ///     A shape with explicit element <paramref name="strides"/>, at offset 0 over a buffer of exactly <c>size</c>
+        ///     elements. By default it keeps COPIES of both arrays, so changing either array afterwards never changes this
+        ///     shape or an array built on it (NumPy copies every shape or strides sequence it is given; plan
         ///     <c>docs/plans/view-shape-open-bugs.md</c>, bug 2d).
         /// </summary>
-        /// <param name="dims">The extent of every axis. Copied.</param>
+        /// <param name="dims">The extent of every axis. Copied unless <paramref name="copy"/> is <c>false</c>.</param>
         /// <param name="strides">The stride of every axis, in ELEMENTS (0 for a broadcast axis, negative for a reversed
-        ///     one). Copied. Not validated against a buffer: an array that installs this shape must own enough memory.</param>
+        ///     one). Copied unless <paramref name="copy"/> is <c>false</c>. Not validated against a buffer: an array that
+        ///     installs this shape must own enough memory.</param>
+        /// <param name="copy"><c>true</c> (the default, NumPy's behaviour): the shape keeps copies of both arrays.
+        ///     <c>false</c>: the shape keeps the two arrays themselves and saves two small allocations; the caller must never
+        ///     write into either of them again (see remarks).</param>
         /// <exception cref="ArgumentNullException"><paramref name="dims"/> or <paramref name="strides"/> is
         ///     <c>null</c>.</exception>
         /// <exception cref="ArgumentException">The two arrays differ in length.</exception>
         /// <remarks>
-        ///     The copy costs two small allocations. Code inside NumSharp that built both arrays itself hands them over with
-        ///     the internal <see cref="Adopt(long[], long[])"/> instead.
+        ///     <c>copy: false</c> is for arrays nothing will write into: ones the caller just built, or another shape's own
+        ///     (a shape never writes into its arrays). The shape caches its size and flags when it is built, and every array
+        ///     built on it shares the two arrays, so a later write into one passed with <c>copy: false</c> changes those
+        ///     arrays' layout but not their size or buffer: indexing then reads and writes past the buffer. NumPy has no
+        ///     such mode; its arrays always own their dimensions and strides.
         /// </remarks>
-        public Shape(long[] dims, long[] strides)
+        public Shape(long[] dims, long[] strides, bool copy = true)
         {
-            // The checks run before anything is copied, so a bad argument costs no allocation.
+            // The checks run before anything is copied, so a bad argument costs no allocation, and they run for
+            // copy: false too, because the adopting core trusts both arrays as they are.
             ValidateDimsAndStrides(dims, strides);
-            this = new Shape(CopyOf(dims), CopyOf(strides), AdoptTag.Owned);
+            this = copy
+                ? new Shape(CopyOf(dims), CopyOf(strides), AdoptTag.Owned)
+                : new Shape(dims, strides, AdoptTag.Owned);
         }
 
         /// <summary>
@@ -796,8 +806,9 @@ namespace NumSharp
         ///     </para>
         ///     <para>
         ///     Inline values (<c>new Shape(3, 4)</c>) bind the <see cref="Shape(ReadOnlySpan{long})"/> overload, which
-        ///     allocates the one array this shape keeps. An array argument costs one copy; code inside NumSharp that built
-        ///     the array itself hands it over with the internal <see cref="Adopt(long[])"/> instead.
+        ///     allocates the one array this shape keeps; a C# 12 caller, which has no span <c>params</c>, binds this one. An
+        ///     array argument costs one copy. A caller that built the array itself and will never write into it again
+        ///     skips the copy with <see cref="Shape(long[], char, bool)"/>: <c>new Shape(dims, copy: false)</c>.
         ///     </para>
         /// </remarks>
         [MethodImpl(Optimize)]
@@ -818,7 +829,8 @@ namespace NumSharp
 
         /// <summary>
         ///     Marks the private constructors that take OWNERSHIP of the arrays they are given (no copy), so their
-        ///     signatures cannot collide with the public constructors, which copy.
+        ///     signatures cannot collide with the public constructors, which take the same arrays and copy them unless told
+        ///     <c>copy: false</c>.
         /// </summary>
         private enum AdoptTag : byte
         {
@@ -884,51 +896,6 @@ namespace NumSharp
             this.bufferSize = size;
             this.IsScalar = _hashCode == int.MinValue;
             this._flags = ComputeFlagsStatic(ownedDims, strides);
-        }
-
-        /// <summary>
-        ///     A C-contiguous shape that ADOPTS <paramref name="dims"/>: the array becomes the shape's own, with no copy.
-        ///     NumSharp's internal counterpart of <see cref="Shape(long[])"/> for an array it just built.
-        /// </summary>
-        /// <param name="dims">An array nothing else will write into (a fresh one, or another shape's, which is
-        ///     immutable); <c>null</c> is the 0-d shape.</param>
-        /// <returns>The shape, sharing <paramref name="dims"/>.</returns>
-        /// <remarks>
-        ///     Never pass a caller's array (a public parameter): the caller could change it afterwards and the shape, its
-        ///     cached size and every array built on it would disagree (bug 2d). Public entry points copy through the public
-        ///     constructors.
-        /// </remarks>
-        [MethodImpl(OptimizeAndInline)]
-        internal static Shape Adopt(long[] dims) => new Shape(dims ?? Array.Empty<long>(), AdoptTag.Owned);
-
-        /// <summary>
-        ///     A C- or F-contiguous shape that ADOPTS <paramref name="dims"/> (no copy). NumSharp's internal counterpart of
-        ///     <see cref="Shape(long[], char)"/> for an array it just built.
-        /// </summary>
-        /// <param name="dims">An array nothing else will write into; <c>null</c> is the 0-d shape.</param>
-        /// <param name="order">Physical memory order: 'C' or 'F'.</param>
-        /// <returns>The shape, sharing <paramref name="dims"/>.</returns>
-        /// <exception cref="ArgumentException"><paramref name="order"/> is not 'C' or 'F'.</exception>
-        /// <remarks>Never pass a caller's array; see <see cref="Adopt(long[])"/>.</remarks>
-        [MethodImpl(OptimizeAndInline)]
-        internal static Shape Adopt(long[] dims, char order) => new Shape(ValidPhysicalOrder(order), dims ?? Array.Empty<long>(), AdoptTag.Owned);
-
-        /// <summary>
-        ///     A shape with explicit element strides that ADOPTS both arrays (no copy), at offset 0 over a buffer of exactly
-        ///     <c>size</c> elements. NumSharp's internal counterpart of <see cref="Shape(long[], long[])"/> for arrays it
-        ///     just built.
-        /// </summary>
-        /// <param name="dims">The dimensions; nothing else may write into the array.</param>
-        /// <param name="strides">The element strides; nothing else may write into the array.</param>
-        /// <returns>The shape, sharing both arrays.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="dims"/> or <paramref name="strides"/> is
-        ///     <c>null</c>.</exception>
-        /// <exception cref="ArgumentException">The two arrays differ in length.</exception>
-        /// <remarks>Never pass a caller's array; see <see cref="Adopt(long[])"/>.</remarks>
-        internal static Shape Adopt(long[] dims, long[] strides)
-        {
-            ValidateDimsAndStrides(dims, strides);
-            return new Shape(dims, strides, AdoptTag.Owned);
         }
 
         /// <summary>
@@ -1021,22 +988,41 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Constructs a Shape with a specified physical memory order over a COPY of the caller's dimensions.
-        ///     Only 'C' (row-major) and 'F' (column-major) are valid — logical orders
-        ///     ('A', 'K') must be resolved to a physical order first via OrderResolver. Changing
-        ///     <paramref name="dims"/> afterwards never changes this shape (bug 2d).
+        ///     A C- or F-contiguous shape (NumPy's <c>np.empty(shape, order=order)</c> layout). By default it keeps a COPY of
+        ///     <paramref name="dims"/>, so changing the array afterwards never changes this shape or an array built on it
+        ///     (NumPy copies every shape sequence it is given; bug 2d). <c>copy: false</c> keeps the array itself, for one
+        ///     nothing will write into.
         /// </summary>
-        /// <param name="dims">Dimension sizes; <c>null</c> is the 0-d shape. Copied.</param>
-        /// <param name="order">Physical memory order: 'C' or 'F'.</param>
-        /// <exception cref="ArgumentException">Thrown if order is not 'C' or 'F' (checked before anything is
+        /// <param name="dims">The extent of every axis; <c>null</c> or empty is the 0-d shape. Copied unless
+        ///     <paramref name="copy"/> is <c>false</c>.</param>
+        /// <param name="order">Physical memory order: 'C' (row-major, the default) or 'F' (column-major). A logical order
+        ///     ('A', 'K') must be resolved to a physical one first, through <c>OrderResolver</c>.</param>
+        /// <param name="copy"><c>true</c> (the default, NumPy's behaviour): the shape keeps a copy of
+        ///     <paramref name="dims"/>. <c>false</c>: the shape keeps <paramref name="dims"/> itself and saves one small
+        ///     allocation; the caller must never write into the array again (see remarks). Pass it by name,
+        ///     <c>new Shape(dims, copy: false)</c>: a positional <c>false</c> lands on <paramref name="order"/> and does not
+        ///     compile.</param>
+        /// <exception cref="ArgumentException"><paramref name="order"/> is not 'C' or 'F' (checked before anything is
         ///     copied).</exception>
         /// <remarks>
-        ///     Code inside NumSharp that built the array itself hands it over with the internal
-        ///     <see cref="Adopt(long[], char)"/> instead of paying for the copy.
+        ///     <para>
+        ///     <c>new Shape(dims)</c> binds <see cref="Shape(long[])"/> and copies; this overload serves an explicit order,
+        ///     <c>copy: false</c>, or both.
+        ///     </para>
+        ///     <para>
+        ///     <b>copy: false.</b> For an array nothing will write into: one the caller just built, or another shape's own (a
+        ///     shape never writes into its arrays). The shape caches its size and flags when it is built, and every array
+        ///     built on it shares <paramref name="dims"/>, so a later write into it changes those arrays' dimensions but not
+        ///     their size or buffer: <c>long[] s = {3, 4}; var a = np.zeros(new Shape(s, copy: false)); s[0] = 100;</c>
+        ///     makes <c>a</c> <c>(100, 4)</c> over its 12 elements, and <c>a[99, 3]</c> addresses element 399. NumPy has no
+        ///     such mode; its arrays always own their dimensions.
+        ///     </para>
         /// </remarks>
         [MethodImpl(Optimize)]
-        public Shape(long[] dims, char order) : this(ValidPhysicalOrder(order), CopyOf(dims), AdoptTag.Owned)
+        public Shape(long[] dims, char order = 'C', bool copy = true)
+            : this(ValidPhysicalOrder(order), copy ? CopyOf(dims) : (dims ?? Array.Empty<long>()), AdoptTag.Owned)
         {
+            // ValidPhysicalOrder is the first argument, so a bad order throws before the copy is made.
         }
 
 #endregion
@@ -1263,7 +1249,7 @@ namespace NumSharp
 
             //TODO! This is not full support of sliced,
             //TODO! when sliced it usually diverts from this function but it would be better if we add support for sliced arrays too.
-            return (Shape.Adopt(innerShape), offset);
+            return (new Shape(innerShape, copy: false), offset);
         }
 
         /// <summary>
@@ -1907,7 +1893,7 @@ namespace NumSharp
                 return this; // readonly struct copy
 
             if (unview || unbroadcast)
-                return Shape.Adopt((long[])this.dimensions.Clone());
+                return new Shape((long[])this.dimensions.Clone(), copy: false);
 
             // Deep clone via copy constructor
             if (deep)
@@ -1924,7 +1910,7 @@ namespace NumSharp
             if (IsScalar)
                 return NewScalar();
 
-            return Shape.Adopt((long[])this.dimensions.Clone());
+            return new Shape((long[])this.dimensions.Clone(), copy: false);
         }
     }
 }

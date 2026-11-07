@@ -98,13 +98,13 @@ namespace NumSharp.Backends
             long[] batch = BroadcastStackDims(batchA, batchB);
 
             // Broadcast each operand's stack dims up to the common batch, keeping its matrix dims.
-            var lhsFull = Shape.Adopt(batch.Concat(new[] { n, k }).ToArray());
-            var rhsFull = Shape.Adopt(batch.Concat(new[] { k, m }).ToArray());
+            var lhsFull = new Shape(batch.Concat(new[] { n, k }).ToArray(), copy: false);
+            var rhsFull = new Shape(batch.Concat(new[] { k, m }).ToArray(), copy: false);
             var lhsB = NDArray.broadcast_to(lhs, lhsFull);
             var rhsB = NDArray.broadcast_to(rhs, rhsFull);
 
             var resultType = np._FindCommonArrayType(lhs.GetTypeCode, rhs.GetTypeCode);
-            var resultShape = Shape.Adopt(batch.Concat(new[] { n, m }).ToArray());
+            var resultShape = new Shape(batch.Concat(new[] { n, m }).ToArray(), copy: false);
             // fillZeros is the ctor default, but it is spelled out because the k == 0 branch below
             // RELIES on it: there, no kernel runs and this allocation is the only thing that ever
             // writes the result. (The ordinary path does not need it — every 2-D kernel clears C
@@ -140,7 +140,7 @@ namespace NumSharp.Backends
             // GetData(coords) is COORDINATE (sub-array) access — a raw long[] passed to the
             // this[...] indexer is now FANCY indexing (NumPy parity), so the batch sub-matrix
             // must be taken via GetData, not nd[index].
-            var iterShape = Shape.Adopt(batch.Length == 0 ? new long[] { 1 } : batch);
+            var iterShape = new Shape(batch.Length == 0 ? new long[] { 1 } : batch, copy: false);
             var len = iterShape.size;
             var incr = new ValueCoordinatesIncrementor(ref iterShape);
             var index = incr.Index;

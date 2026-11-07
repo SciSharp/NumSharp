@@ -430,7 +430,7 @@ namespace NumSharp.Backends
             var result = sum_elementwise_il(arr, typeCode);
             if (@out is not null) { @out.SetAtIndex(result, 0); return @out; }
             var r = NewScalar(result);
-            if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
+            if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
             else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
             return r.MarkReductionScalar();
         }
@@ -470,7 +470,7 @@ namespace NumSharp.Backends
             var outputDims = new long[arr.ndim - 1];
             for (int d = 0, od = 0; d < arr.ndim; d++) if (d != axis) outputDims[od++] = shape.dimensions[d];
 
-            var outputShape = outputDims.Length > 0 ? Shape.Adopt(outputDims) : Shape.Scalar;
+            var outputShape = outputDims.Length > 0 ? new Shape(outputDims, copy: false) : Shape.Scalar;
             NDArray result;
             if (@out is not null) { if (@out.Shape != outputShape) throw new IncorrectShapeException($"Output shape mismatch"); result = @out; }
             else result = AllocateReductionResult(outputType, outputDims, shape, axis);
@@ -520,7 +520,7 @@ namespace NumSharp.Backends
                 return NewArray(outputType, Shape.Scalar, false);
             // A 1-D result has one layout, and a C-contiguous input's order is C's (NpyIter's sort keeps it).
             if (outputDims.Length == 1 || inputShape.IsContiguous)
-                return NewArray(outputType, Shape.Adopt(outputDims), false);
+                return NewArray(outputType, new Shape(outputDims, copy: false), false);
             return NewArray(outputType, Shape.ReductionOutputShape(outputDims, inputShape, axis), false);
         }
 
@@ -534,7 +534,7 @@ namespace NumSharp.Backends
         internal NDArray AllocateReductionZeros(NPTypeCode outputType, long[] dims, Shape inputShape)
         {
             var order = dims.Length >= 2 ? OrderResolver.Resolve('K', inputShape) : 'C';
-            var zeroShape = order == 'F' ? Shape.Adopt(dims, 'F') : Shape.Adopt(dims);
+            var zeroShape = order == 'F' ? new Shape(dims, 'F', copy: false) : new Shape(dims, copy: false);
             return NewArray(outputType, zeroShape, true);
         }
 
@@ -627,7 +627,7 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
             var outputDims = new long[arr.ndim - 1];
             for (int d = 0, od = 0; d < arr.ndim; d++) if (d != axis) outputDims[od++] = shape.dimensions[d];
-            var outputShape = outputDims.Length > 0 ? Shape.Adopt(outputDims) : Shape.Scalar;
+            var outputShape = outputDims.Length > 0 ? new Shape(outputDims, copy: false) : Shape.Scalar;
 
             NDArray result;
             if (@out is not null)
@@ -688,14 +688,14 @@ namespace NumSharp.Backends
             // return an empty array of the correct shape
             var resultShape = Shape.GetAxis(shape, axis);
             var outputType = typeCode ?? arr.GetTypeCode;
-            var result = NewArray(outputType, Shape.Adopt(resultShape), false);
+            var result = NewArray(outputType, new Shape(resultShape, copy: false), false);
 
             if (keepdims)
             {
                 var ks = new long[arr.ndim];
                 for (int d = 0, sd = 0; d < arr.ndim; d++)
                     ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                result.Storage.Reshape(Shape.Adopt(ks));
+                result.Storage.Reshape(new Shape(ks, copy: false));
             }
             return result;
         }
@@ -727,18 +727,18 @@ namespace NumSharp.Backends
                 var defaultVal = defaultType.GetDefaultValue();
                 if (@out is not null) { @out.SetAtIndex(defaultVal, 0); return @out; }
                 var r = NewScalar(defaultVal);
-                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
+                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
                 return r.MarkReductionScalar();
             }
             var axis = NormalizeAxis(axis_.Value, arr.ndim);
             var resultShape = Shape.GetAxis(shape, axis);
             var outputType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
-            var result = NewArray(outputType, Shape.Adopt(resultShape), true);
+            var result = NewArray(outputType, new Shape(resultShape, copy: false), true);
             if (keepdims)
             {
                 var ks = new long[arr.ndim];
                 for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                result.Storage.Reshape(Shape.Adopt(ks));
+                result.Storage.Reshape(new Shape(ks, copy: false));
             }
             if (@out is not null) { UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_SAME_KIND_CASTING); return @out; }
             // A 1-D input reduced along its only axis leaves a 0-d result, which NumPy hands back as a scalar
@@ -767,7 +767,7 @@ namespace NumSharp.Backends
         {
             var r = typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
             if (@out is not null) { @out.SetAtIndex(r.GetAtIndex(0), 0); return @out; }
-            if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
+            if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
             else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
             // A 0-d exit — including keepdims over a 0-d input, whose (1,)*0 reshape is still
             // 0-d — is a numpy SCALAR (read-only); (1,) keepdims results pass through writeable.

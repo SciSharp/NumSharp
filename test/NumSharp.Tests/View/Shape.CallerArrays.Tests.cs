@@ -9,7 +9,9 @@ namespace NumSharp.Tests.View
     ///     array's or a shape's own. NumPy copies every shape sequence it is given (<c>PyArray_IntpConverter</c>) and an array
     ///     owns its dimensions (<c>PyArray_NewFromDescr_int</c>), so changing the caller's list afterwards changes nothing:
     ///     <c>s = [2, 3]; a = np.zeros(s); s[0] = 100; a.shape == (2, 3)</c>. The C# analog of NumPy's list is the caller's
-    ///     own <c>long[]</c>.
+    ///     own <c>long[]</c>. The one exception is asked for by name: <c>new Shape(dims, copy: false)</c> (and the order and
+    ///     strides forms) keeps the array, for one nothing will write into again; the <c>CopyFalse_*</c> and
+    ///     <c>CopyParameter_*</c> tests pin that contract.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -238,8 +240,9 @@ namespace NumSharp.Tests.View
         ///     The values are locals on purpose. For CONSTANT values the compiler builds the span from static data
         ///     (<c>ldtoken</c> + <c>CreateSpan</c>), which allocates nothing in optimized code but a 72-byte field-handle stub
         ///     per call in an unoptimized (Debug) build, so a constant form would make this test depend on the configuration.
-        ///     Measured in Release on 2026-10-05: <c>new Shape(2, 3)</c>, <c>new Shape(n, 3)</c> and
-        ///     <c>Shape.Adopt(new long[] { 2, 3 })</c> all allocate 80 bytes.
+        ///     Measured in Release on 2026-10-05: <c>new Shape(2, 3)</c>, <c>new Shape(n, 3)</c> and the adopting form all
+        ///     allocate 80 bytes; on 2026-11-07 the adopting form became <c>new Shape(new long[] { 2, 3 }, copy: false)</c>,
+        ///     with the same bytes (a pre-built two-element array: 40 bytes, the strides alone).
         /// </remarks>
         [TestMethod]
         public void InlineValues_AllocateOnlyTheShapesOwnArrays()
@@ -256,7 +259,7 @@ namespace NumSharp.Tests.View
 
             long rows = 2, cols = 3;
             long inline = Measure(() => new Shape(rows, cols));
-            long adopted = Measure(() => Shape.Adopt(new long[] { rows, cols }));
+            long adopted = Measure(() => new Shape(new long[] { rows, cols }, copy: false));
 
             inline.Should().Be(adopted, "the inline form copies the values into the one array the shape keeps");
             new Shape(2, 3).Dimensions.Should().Equal(Expected);
@@ -288,17 +291,17 @@ namespace NumSharp.Tests.View
             using var b = np.arange(6);
 
             Measure(() => { using var r = a.reshape(rows, cols); })
-                .Should().Be(Measure(() => { using var r = a.reshape(Shape.Adopt(new long[] { rows, cols })); }), "reshape");
+                .Should().Be(Measure(() => { using var r = a.reshape(new Shape(new long[] { rows, cols }, copy: false)); }), "reshape");
             Measure(() => { using var r = a.reshape_unsafe(rows, cols); })
-                .Should().Be(Measure(() => { using var r = a.reshape_unsafe(Shape.Adopt(new long[] { rows, cols })); }),
+                .Should().Be(Measure(() => { using var r = a.reshape_unsafe(new Shape(new long[] { rows, cols }, copy: false)); }),
                     "reshape_unsafe");
             Measure(() => { using var r = t.reshape(rows, cols); })
-                .Should().Be(Measure(() => { using var r = t.reshape(Shape.Adopt(new long[] { rows, cols })); }), "typed reshape");
+                .Should().Be(Measure(() => { using var r = t.reshape(new Shape(new long[] { rows, cols }, copy: false)); }), "typed reshape");
             Measure(() => { using var r = t.reshape_unsafe(rows, cols); })
-                .Should().Be(Measure(() => { using var r = t.reshape_unsafe(Shape.Adopt(new long[] { rows, cols })); }),
+                .Should().Be(Measure(() => { using var r = t.reshape_unsafe(new Shape(new long[] { rows, cols }, copy: false)); }),
                     "typed reshape_unsafe");
             Measure(() => b.resize(rows, cols))
-                .Should().Be(Measure(() => b.resize(Shape.Adopt(new long[] { rows, cols }))), "resize");
+                .Should().Be(Measure(() => b.resize(new Shape(new long[] { rows, cols }, copy: false))), "resize");
         }
 
         /// <summary>
@@ -334,22 +337,109 @@ namespace NumSharp.Tests.View
         }
 
         /// <summary>
-        ///     The internal <see cref="Shape.Adopt(long[])"/> family takes the array as it is (no copy): the form NumSharp
-        ///     uses for arrays it built itself, which the public constructors copy.
+        ///     <c>copy: false</c> keeps the caller's arrays as they are (the form NumSharp uses for arrays it built itself),
+        ///     while the default, and an explicit <c>copy: true</c>, keep copies.
         /// </summary>
         [TestMethod]
-        public void Adopt_SharesTheArray_ThePublicConstructorDoesNot()
+        public void CopyFalse_KeepsTheArray_TheDefaultCopies()
         {
             long[] d = { 2, 3 };
-            ReferenceEquals(Shape.Adopt(d).dimensions, d).Should().BeTrue();
-            ReferenceEquals(Shape.Adopt(d, 'F').dimensions, d).Should().BeTrue();
             long[] s = { 3, 1 };
-            var both = Shape.Adopt(d, s);
-            ReferenceEquals(both.dimensions, d).Should().BeTrue();
-            ReferenceEquals(both.strides, s).Should().BeTrue();
+            ReferenceEquals(new Shape(d, copy: false).dimensions, d).Should().BeTrue("copy: false keeps dims");
+            ReferenceEquals(new Shape(d, 'F', copy: false).dimensions, d).Should().BeTrue("copy: false keeps dims, F order");
+            var both = new Shape(d, s, copy: false);
+            ReferenceEquals(both.dimensions, d).Should().BeTrue("copy: false keeps dims, strides form");
+            ReferenceEquals(both.strides, s).Should().BeTrue("copy: false keeps strides");
 
-            ReferenceEquals(new Shape(d).dimensions, d).Should().BeFalse();
-            ReferenceEquals(new Shape(d, s).strides, s).Should().BeFalse();
+            ReferenceEquals(new Shape(d).dimensions, d).Should().BeFalse("new Shape(dims) copies");
+            ReferenceEquals(new Shape(d, 'F').dimensions, d).Should().BeFalse("the order form copies by default");
+            ReferenceEquals(new Shape(d, copy: true).dimensions, d).Should().BeFalse("copy: true copies");
+            var copied = new Shape(d, s);
+            ReferenceEquals(copied.dimensions, d).Should().BeFalse("the strides form copies dims by default");
+            ReferenceEquals(copied.strides, s).Should().BeFalse("the strides form copies strides by default");
+            ReferenceEquals(new Shape(d, s, copy: true).strides, s).Should().BeFalse("copy: true copies strides");
+        }
+
+        /// <summary>
+        ///     <c>copy: false</c> changes only who owns the arrays: the shape it builds is field for field the one the copying
+        ///     form builds (dimensions, strides, size, buffer size, offset, flags, hash and the 0-d mark), for C and F
+        ///     orders, the 0-d shape (from <c>null</c> and from an empty array), a zero extent, and explicit strides with a
+        ///     broadcast (stride 0) and a reversed (negative) axis.
+        /// </summary>
+        [TestMethod]
+        public void CopyFalse_BuildsTheSameShapeAsTheCopy()
+        {
+            static void Same(Shape kept, Shape copied, string because)
+            {
+                kept.dimensions.Should().Equal(copied.dimensions, because);
+                kept.strides.Should().Equal(copied.strides, because);
+                kept.size.Should().Be(copied.size, because);
+                kept.bufferSize.Should().Be(copied.bufferSize, because);
+                kept.offset.Should().Be(copied.offset, because);
+                kept._flags.Should().Be(copied._flags, because);
+                kept._hashCode.Should().Be(copied._hashCode, because);
+                kept.IsScalar.Should().Be(copied.IsScalar, because);
+            }
+
+            foreach (var dims in new[] { new long[] { 2, 3 }, new long[] { 4 }, new long[] { 2, 0, 3 }, new long[] { 2, 3, 4 } })
+            {
+                string name = "(" + string.Join(", ", dims) + ")";
+                Same(new Shape((long[])dims.Clone(), copy: false), new Shape(dims), name + " C");
+                Same(new Shape((long[])dims.Clone(), 'F', copy: false), new Shape(dims, 'F'), name + " F");
+            }
+
+            Same(new Shape((long[])null, copy: false), new Shape((long[])null), "null dims");
+            Same(new Shape(new long[0], copy: false), new Shape(new long[0]), "empty dims");
+            Same(new Shape((long[])null, copy: false), Shape.Scalar, "null dims is the 0-d shape");
+
+            long[] bd = { 3, 4 }, bs = { 0, 1 };
+            Same(new Shape((long[])bd.Clone(), (long[])bs.Clone(), copy: false), new Shape(bd, bs), "broadcast axis");
+            long[] rd = { 2, 3 }, rs = { -3, 1 };
+            Same(new Shape((long[])rd.Clone(), (long[])rs.Clone(), copy: false), new Shape(rd, rs), "reversed axis");
+        }
+
+        /// <summary>
+        ///     <c>copy</c> defaults to <c>true</c> on both constructors that take it, and <c>order</c> to <c>'C'</c>: a
+        ///     default of <c>false</c> would silently bring bug 2d back to every <c>new Shape(dims, 'F')</c> and
+        ///     <c>new Shape(dims, strides)</c> call. The two-parameter forms they replaced are gone, not kept beside them.
+        /// </summary>
+        [TestMethod]
+        public void CopyParameter_DefaultsToTrue()
+        {
+            var ordered = typeof(Shape).GetConstructor(new[] { typeof(long[]), typeof(char), typeof(bool) });
+            var strided = typeof(Shape).GetConstructor(new[] { typeof(long[]), typeof(long[]), typeof(bool) });
+            ordered.Should().NotBeNull("Shape(long[] dims, char order = 'C', bool copy = true)");
+            strided.Should().NotBeNull("Shape(long[] dims, long[] strides, bool copy = true)");
+
+            var op = ordered.GetParameters();
+            op[1].Name.Should().Be("order");
+            op[1].DefaultValue.Should().Be('C');
+            op[2].Name.Should().Be("copy");
+            op[2].DefaultValue.Should().Be(true);
+            var sp = strided.GetParameters();
+            sp[2].Name.Should().Be("copy");
+            sp[2].DefaultValue.Should().Be(true);
+
+            typeof(Shape).GetConstructor(new[] { typeof(long[]), typeof(char) }).Should().BeNull("replaced, not kept");
+            typeof(Shape).GetConstructor(new[] { typeof(long[]), typeof(long[]) }).Should().BeNull("replaced, not kept");
+        }
+
+        /// <summary>
+        ///     <c>copy: false</c> runs the same argument checks as the copying form, with the same types and messages: the
+        ///     adopting core trusts the arrays it is given, so a null or mismatched pair must never reach it.
+        /// </summary>
+        [TestMethod]
+        public void CopyFalse_ArgumentChecks_MatchTheCopyingForm()
+        {
+            Action nullDims = () => new Shape(null, new long[] { 1 }, copy: false);
+            Action nullStrides = () => new Shape(new long[] { 1 }, (long[])null, copy: false);
+            Action mismatch = () => new Shape(new long[] { 2, 3 }, new long[] { 1 }, copy: false);
+            Action logicalOrder = () => new Shape(new long[] { 2, 3 }, 'K', copy: false);
+
+            nullDims.Should().Throw<ArgumentNullException>();
+            nullStrides.Should().Throw<ArgumentNullException>();
+            mismatch.Should().Throw<ArgumentException>().WithMessage("*does not match size (2 != 1)*");
+            logicalOrder.Should().Throw<ArgumentException>().WithMessage("Physical order must be 'C' or 'F' (got 'K')*");
         }
 
         /// <summary>

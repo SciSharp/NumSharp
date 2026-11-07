@@ -185,7 +185,7 @@ namespace NumSharp.Backends.Strings
                     throw vError;
                 var vDims = BroadcastDims(x1, x2, @out, where);
                 if (ShapeSize(vDims) == 0)
-                    return @out ?? new NDArray(vComputed, vDims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(vDims), true);
+                    return @out ?? new NDArray(vComputed, vDims.Length == 0 ? Shape.NewScalar() : new Shape(vDims, copy: false), true);
                 return VStringCompute(ufunc, x1, x2, @out, where, vComputed);
             }
             if (!IsString(x1) && !IsString(x2))
@@ -197,7 +197,7 @@ namespace NumSharp.Backends.Strings
             // broadcast computes nothing; the comparisons, the logical ufuncs, the concatenation and the repetition run.
             var dims = BroadcastDims(x1, x2, @out, where);
             if (ShapeSize(dims) == 0)
-                return @out ?? new NDArray(computed, dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims), true);
+                return @out ?? new NDArray(computed, dims.Length == 0 ? Shape.NewScalar() : new Shape(dims, copy: false), true);
             // A text out= receives the bool results FORMATTED ('True' / 'False', truncated to its width, NumPy's
             // output cast): the bools are computed into a temporary and cast into out= under where= (the guard
             // already checked the bool → text cast and the broadcast).

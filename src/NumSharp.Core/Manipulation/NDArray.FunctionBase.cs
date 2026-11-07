@@ -679,7 +679,7 @@ namespace NumSharp
                 var resultDims = (long[])arr.Shape.dimensions.Clone();
                 resultDims[axis] = count;
                 throw new ValueError($"shape mismatch: value array of shape {arr.Shape.ToPythonTuple()} could not be " +
-                                     $"broadcast to indexing result of shape {Shape.Adopt(resultDims).ToPythonTuple()}");
+                                     $"broadcast to indexing result of shape {new Shape(resultDims, copy: false).ToPythonTuple()}");
             }
 
             // No value slot (an empty index): the array alone, NumPy's copy.
@@ -740,7 +740,7 @@ namespace NumSharp
                 return SliceAlongAxis(arr, axis, start, start + length);
             var dims = (long[])arr.Shape.dimensions.Clone();
             dims[axis] = length;
-            return np.broadcast_to(arr, Shape.Adopt(dims));
+            return np.broadcast_to(arr, new Shape(dims, copy: false));
         }
 
         /// <summary>
@@ -984,7 +984,7 @@ namespace NumSharp
                 int prefix = targetNDim - v.ndim;
                 for (int i = 0; i < prefix; i++) newDims[i] = 1;
                 for (int i = 0; i < v.ndim; i++) newDims[prefix + i] = v.Shape.dimensions[i];
-                var reshaped = v.reshape(Shape.Adopt(newDims));
+                var reshaped = v.reshape(new Shape(newDims, copy: false));
                 v = reshaped;
             }
 
@@ -1049,7 +1049,7 @@ namespace NumSharp
             if (values.ndim > targetDims.Length)
                 values = new NDArray(values.Storage.AliasWithoutLeadingAxes(targetDims.Length));
 
-            var bcast = np.broadcast_to(values, Shape.Adopt(targetDims));
+            var bcast = np.broadcast_to(values, new Shape(targetDims, copy: false));
             // Materialise to a contig owning copy — broadcast_to returns a
             // stride-0 read-only view that confuses np.take and SliceAlongAxis.
             var contig = np.ascontiguousarray(bcast);
@@ -1102,7 +1102,7 @@ namespace NumSharp
             var targetDims = new long[arr.ndim];
             for (int i = 0; i < arr.ndim; i++) targetDims[i] = arr.Shape.dimensions[i];
             targetDims[axis] = numNew;
-            var targetShape = Shape.Adopt(targetDims);
+            var targetShape = new Shape(targetDims, copy: false);
 
             // NumPy writes them with new[..., indices, ...] = values, a fancy assignment: MapIter drops a value's extra
             // leading axes (they must hold one element in total) and requires a right-aligned broadcast to the indexing
@@ -1138,7 +1138,7 @@ namespace NumSharp
                 int prefix = targetNDim - v.ndim;
                 for (int i = 0; i < prefix; i++) newDims[i] = 1;
                 for (int i = 0; i < v.ndim; i++) newDims[prefix + i] = v.Shape.dimensions[i];
-                var reshaped = v.reshape(Shape.Adopt(newDims));
+                var reshaped = v.reshape(new Shape(newDims, copy: false));
                 v = reshaped;
             }
 
@@ -1650,7 +1650,7 @@ namespace NumSharp
                 var emptyDims = new long[arr.ndim];
                 for (int d = 0; d < arr.ndim; d++) emptyDims[d] = arr.Shape.dimensions[d];
                 emptyDims[axis] = 0;
-                return new NDArray(arr.dtype, Shape.Adopt(emptyDims), false);
+                return new NDArray(arr.dtype, new Shape(emptyDims, copy: false), false);
             }
 
             return np.concatenate(chunks.ToArray(), axis);
@@ -2225,7 +2225,7 @@ namespace NumSharp
             if (!anyString && TrySelectFused(condlist, mats, n, dtype, resultDims, out var fused))
                 return fused;
 
-            var result = new NDArray(stringDescr ?? (DType)dtype, Shape.Adopt((long[])resultDims.Clone()), false);
+            var result = new NDArray(stringDescr ?? (DType)dtype, new Shape((long[])resultDims.Clone(), copy: false), false);
 
             // Composition fallback (NumPy's own structure): burn the default across the whole result
             // (unsafe cast, matching np.full's copyto), then overlay each choice where its condition is
@@ -2379,7 +2379,7 @@ namespace NumSharp
             if (kernel == null)
                 return false;
 
-            var res = new NDArray(dtype, Shape.Adopt((long[])resultDims.Clone()), false);
+            var res = new NDArray(dtype, new Shape((long[])resultDims.Clone(), copy: false), false);
             SelectFusedInvoke(kernel, condlist, mats, defArr, defScalar, res, n, dtype);
             result = res;
             return true;
@@ -2844,7 +2844,7 @@ namespace NumSharp
             object seed = hasDefault ? funclist[n] : (object)0;   // funclist[n] is the default
             WriteCoercedScalar(fvals + n * elemSize, seed, dtype, elemSize);
 
-            var res = new NDArray(dtype, Shape.Adopt((long[])x.Shape.dimensions.Clone()), false);
+            var res = new NDArray(dtype, new Shape((long[])x.Shape.dimensions.Clone(), copy: false), false);
 
             bool** condPtrs = stackalloc bool*[n];
             for (int k = 0; k < n; k++)
@@ -2983,7 +2983,7 @@ namespace NumSharp
                 NDArray a = xi[i] ?? throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"xi[{i}]"),
                     "meshgrid coordinate vectors must not be null.");
                 int axis = swapXY ? (i == 0 ? 1 : i == 1 ? 0 : i) : i;
-                Shape meshShape = Shape.Adopt(OpenMeshShape(ndim, axis, a.size));
+                Shape meshShape = new Shape(OpenMeshShape(ndim, axis, a.size), copy: false);
                 // A matrix input is NumPy's `np.asanyarray(x).reshape(...)` of the matrix (and under 'xy' a `.shape =`
                 // assignment too), each followed by matrix.__array_finalize__, which folds every rank but two onto two axes:
                 // the open mesh of a matrix input is (1, N) unless the grid has two axes, so three matrix rows give three
@@ -3010,7 +3010,8 @@ namespace NumSharp
         /// <param name="ndim">The grid's rank.</param>
         /// <param name="axis">The vector's axis in the grid.</param>
         /// <param name="size">The vector's element count.</param>
-        /// <returns>A new dims array (handed to <see cref="Shape.Adopt(long[])"/>, so never written after).</returns>
+        /// <returns>A new dims array (handed to <see cref="Shape(long[], char, bool)"/> with <c>copy: false</c>, so never
+        ///     written after).</returns>
         private static long[] OpenMeshShape(int ndim, int axis, long size)
         {
             var shape = new long[ndim];

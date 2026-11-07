@@ -44,7 +44,7 @@ namespace NumSharp.Backends
             Array.Copy(rshape, 0, retShape, lshape.Length, rshape.Length);
 
             var resultType = np._FindCommonArrayType(lhs.typecode, rhs.typecode);
-            var result = NewArray(resultType, Shape.Adopt(retShape), true);
+            var result = NewArray(resultType, new Shape(retShape, copy: false), true);
 
             // NumPy's N-D route (PyArray_MatrixProduct2): both operands converted to the result dtype (PyArray_FromAny),
             // then the dtype's dot function once per output element over the contracted axes (DotNDMDStrided). An operand

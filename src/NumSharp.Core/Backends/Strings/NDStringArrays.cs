@@ -57,7 +57,7 @@ namespace NumSharp.Backends.Strings
             var descr = dtype ?? value.dtype;
             // The shape's own layout is kept when it describes a fresh buffer (np.full_like's KEEPORDER / F layouts); the
             // allocator re-lays a view's layout out in C order (Shape.ForFreshAllocation).
-            var layout = shape.IsEmpty ? Shape.Adopt(Array.Empty<long>()) : shape;
+            var layout = shape.IsEmpty ? new Shape(Array.Empty<long>(), copy: false) : shape;
             // The broadcast copy writes every element, so a U result skips the NEEDS_INIT zero fill; a failing conversion
             // disposes it.
             var result = NDArray.ForOverwrite(descr, layout);
@@ -380,7 +380,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>A fresh C-ordered array of <paramref name="a"/>'s dimensions.</returns>
         private static NDArray ConvertUnchecked(NDArray a, DType descr)
         {
-            var r = NDArray.ForOverwrite(descr, Shape.Adopt((long[])a.Shape.dimensions.Clone())); // fully written below
+            var r = NDArray.ForOverwrite(descr, new Shape((long[])a.Shape.dimensions.Clone(), copy: false)); // fully written below
             NDStringCopy.CopyUnchecked(r.Storage, a.Storage);
             return r;
         }
@@ -424,8 +424,8 @@ namespace NumSharp.Backends.Strings
             }
 
             // Element by element: the taken element of a bytes operand is the only one converted.
-            using var condInLayout = new NDArray(NPTypeCode.Boolean, Shape.Adopt((long[])layout.dimensions.Clone(), (long[])layout.strides.Clone()), false);
-            using (var cb = NDArray.broadcast_to(cond, Shape.Adopt((long[])dims.Clone())))
+            using var condInLayout = new NDArray(NPTypeCode.Boolean, new Shape((long[])layout.dimensions.Clone(), (long[])layout.strides.Clone(), copy: false), false);
+            using (var cb = NDArray.broadcast_to(cond, new Shape((long[])dims.Clone(), copy: false)))
                 Iteration.NDIter.Copy(condInLayout.Storage, cb.Storage);
             long first = FirstTakenBad(condInLayout, xBad, yBad);
             if (first >= 0)
@@ -461,8 +461,8 @@ namespace NumSharp.Backends.Strings
             // Each element's largest unit: maximum.reduce over the unit axis (np.amax(units, -1)'s engine member).
             using var max = units.TensorEngine.ReduceAMax(units, -1);
             using var bad = max >= (byte)0x80;
-            using var spread = NDArray.broadcast_to(bad, Shape.Adopt((long[])dims.Clone()));
-            var laid = new NDArray(NPTypeCode.Boolean, Shape.Adopt((long[])layout.dimensions.Clone(), (long[])layout.strides.Clone()), false);
+            using var spread = NDArray.broadcast_to(bad, new Shape((long[])dims.Clone(), copy: false));
+            var laid = new NDArray(NPTypeCode.Boolean, new Shape((long[])layout.dimensions.Clone(), (long[])layout.strides.Clone(), copy: false), false);
             Iteration.NDIter.Copy(laid.Storage, spread.Storage);
             return laid;
         }
@@ -532,7 +532,7 @@ namespace NumSharp.Backends.Strings
             long flat = 0;
             for (int d = 0; d < dims.Length; d++)
                 flat = flat * dims[d] + coords[d];
-            using var spread = NDArray.broadcast_to(a, Shape.Adopt((long[])dims.Clone()));
+            using var spread = NDArray.broadcast_to(a, new Shape((long[])dims.Clone(), copy: false));
             var value = (byte[])spread.Storage.GetAtIndex(flat);
             for (int i = 0; i < value.Length; i++)
                 if (value[i] >= 0x80)

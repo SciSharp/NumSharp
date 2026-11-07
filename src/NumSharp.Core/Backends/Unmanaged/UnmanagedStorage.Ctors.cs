@@ -489,7 +489,7 @@ namespace NumSharp.Backends
             if (strides is null)
             {
                 // np.empty's allocation in C or F order. The shape's dimension array is immutable, so it is shared.
-                var nd = new NDArray(dtype, Shape.Adopt(dims, fortran ? 'F' : 'C'), fillZeros: false);
+                var nd = new NDArray(dtype, new Shape(dims, fortran ? 'F' : 'C', copy: false), fillZeros: false);
                 // NumPy zeroes every stride of an array it allocates empty (ctors.c: "Make sure all the strides are 0").
                 if (size == 0 && dims.Length > 0)
                     nd.Storage.SetShapeUnsafe(new Shape(dims, new long[dims.Length], 0, 0));

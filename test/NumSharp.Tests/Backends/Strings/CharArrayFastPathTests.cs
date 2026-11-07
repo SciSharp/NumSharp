@@ -471,7 +471,7 @@ namespace NumSharp.Tests.Backends.Strings
                 copy.GetInt64(0).Should().Be(2);
             }
 
-            NDIter.CopyAsShape(Shape.Adopt(new long[] { 1, 5 }, new long[] { 0, 1 }), 'C').strides.Should().Equal(5L, 1L);
+            NDIter.CopyAsShape(new Shape(new long[] { 1, 5 }, new long[] { 0, 1 }, copy: false), 'C').strides.Should().Equal(5L, 1L);
         }
 
         // ------------------------------------------------------------------ np.char.array of floats

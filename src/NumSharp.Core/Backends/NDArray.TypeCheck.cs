@@ -75,7 +75,7 @@ namespace NumSharp
             // The layout is array_imag_get's PyArray_ISFORTRAN(self): F order for an F-contiguous array that is not also
             // C-contiguous (a transposed C block's imaginary part is F-contiguous), C otherwise.
             bool fortran = val.Shape.IsFContiguous && !val.Shape.IsContiguous;
-            var zeros = new NDArray(val.dtype, Shape.Adopt(val.Shape.dimensions, fortran ? 'F' : 'C'), true);
+            var zeros = new NDArray(val.dtype, new Shape(val.Shape.dimensions, fortran ? 'F' : 'C', copy: false), true);
             zeros.Storage.SetShapeUnsafe(zeros.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
             return zeros;
         }

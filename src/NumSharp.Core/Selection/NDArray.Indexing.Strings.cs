@@ -106,7 +106,7 @@ namespace NumSharp
             dims[0] = rows;
             for (int d = k; d < units.ndim; d++)
                 dims[1 + d - k] = units.Shape.dimensions[d];
-            using var flat = units.reshape(Shape.Adopt(dims)); // a view: the unit view is C-contiguous
+            using var flat = units.reshape(new Shape(dims, copy: false)); // a view: the unit view is C-contiguous
             using var picks = np.flatnonzero(mask);
             return flat[picks];
         }
@@ -416,7 +416,7 @@ namespace NumSharp
             resultDims[0] = count;
             for (int d = lead; d < dims.Length; d++)
                 resultDims[1 + d - lead] = dims[d];
-            var picked = ForOverwrite(dtype, Shape.Adopt(resultDims));
+            var picked = ForOverwrite(dtype, new Shape(resultDims, copy: false));
             picked.TensorEngine = TensorEngine;
             kernel(slice.Address + Shape.offset * (long)slice.ItemSize, maskPtr, mask.size, slabBytes, (byte*)picked.Storage.Address);
             result = picked;
@@ -458,7 +458,7 @@ namespace NumSharp
             System.Array.Copy(dims, 1, resultDims, indexDims.Length, dims.Length - 1);
             // Every element is written unless an index is out of bounds, and then the result is released, never returned: a
             // U result skips its zero fill.
-            var picked = ForOverwrite(dtype, Shape.Adopt(resultDims));
+            var picked = ForOverwrite(dtype, new Shape(resultDims, copy: false));
             long fail = FancyIndexKernelRoute.Gather(slice.Address + Shape.offset * (long)slice.ItemSize, indexPtr, index32,
                                                      index.size, dims[0], slabBytes, (byte*)picked.Storage.Address);
             if (fail == -1)

@@ -162,7 +162,7 @@ namespace NumSharp.Backends
             shape[0] = distinct.Shape.dimensions[0];
             for (int d = 1; d < movedDims.Length; d++)
                 shape[d] = movedDims[d];
-            NDArray reshaped = distinct.reshape(Shape.Adopt(shape));
+            NDArray reshaped = distinct.reshape(new Shape(shape, copy: false));
             NDArray values = reshaped.TensorEngine.MoveAxis(reshaped, new[] { 0 }, new[] { axis });
             return UniqueOutputs(values, perm, mask, return_index, return_inverse, return_counts);
         }

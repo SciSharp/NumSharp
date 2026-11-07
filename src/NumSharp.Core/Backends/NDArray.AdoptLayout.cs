@@ -112,7 +112,7 @@ namespace NumSharp
                 }
             }
 
-            r.Storage.SetShapeUnsafe(Shape.Adopt(newDims, newStrides));
+            r.Storage.SetShapeUnsafe(new Shape(newDims, newStrides, copy: false));
             return r;
         }
 
@@ -148,7 +148,7 @@ namespace NumSharp
                 newStrides[j++] = strides[i];
             }
 
-            r.Storage.SetShapeUnsafe(Shape.Adopt(newDims, newStrides));
+            r.Storage.SetShapeUnsafe(new Shape(newDims, newStrides, copy: false));
             return r;
         }
 

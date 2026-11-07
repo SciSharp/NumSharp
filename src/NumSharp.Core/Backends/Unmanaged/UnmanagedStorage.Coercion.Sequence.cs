@@ -257,7 +257,7 @@ namespace NumSharp.Backends
             System.Array.Copy(d.Shape, dims, dims.Length);
             // No cell of these classes holds a reference (the text classes took the cast above), and the fill writes every
             // element: the buffer is not zeroed first.
-            var r = NDArray.ForOverwrite(requested, Shape.Adopt(dims));
+            var r = NDArray.ForOverwrite(requested, new Shape(dims, copy: false));
             try
             {
                 // The ALLOCATED descriptor stores: NumSharp allocates the native form of a byte-swapped request.
@@ -327,7 +327,7 @@ namespace NumSharp.Backends
             NPTypeCode t = d.Dtype == NPTypeCode.Empty ? NPTypeCode.Double : d.Dtype;
             var dims = new long[d.MaxDims];
             System.Array.Copy(d.Shape, dims, dims.Length);
-            var r = new NDArray(t, Shape.Adopt(dims), false);
+            var r = new NDArray(t, new Shape(dims, copy: false), false);
             try
             {
                 int size = r.dtypesize;
@@ -864,8 +864,8 @@ namespace NumSharp.Backends
             {
                 var sd = new long[Math.Max(slot, 0)];
                 System.Array.Copy(dims, depth, sd, 0, sd.Length);
-                throw new ValueError($"could not broadcast input array from shape {Shape.Adopt(ld).ToPythonTuple()} " +
-                                     $"into shape {Shape.Adopt(sd).ToPythonTuple()}");
+                throw new ValueError($"could not broadcast input array from shape {new Shape(ld, copy: false).ToPythonTuple()} " +
+                                     $"into shape {new Shape(sd, copy: false).ToPythonTuple()}");
             }
             if (slot == 0)
             {

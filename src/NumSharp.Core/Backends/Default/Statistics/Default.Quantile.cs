@@ -405,7 +405,7 @@ namespace NumSharp.Backends
                 for (int i = 0; i < outerDims; i++) outShape[qDims.Length + i] = staged.Shape.dimensions[i];
             }
             int qNdim = qDims.Length;
-            Shape resultShape = outShape.Length == 0 ? new Shape() : Shape.Adopt(outShape);
+            Shape resultShape = outShape.Length == 0 ? new Shape() : new Shape(outShape, copy: false);
 
             // ── np.median's empty reduction axis: NaN (its mean of nothing). ──
             if (n == 0 && emptyReturnsNaN)
@@ -656,7 +656,7 @@ namespace NumSharp.Backends
         {
             if (outerSize == 1)
                 return AllNaN(staged);
-            using var lines = staged.reshape(Shape.Adopt(new[] { outerSize, (long)n }));
+            using var lines = staged.reshape(new Shape(new[] { outerSize, (long)n }, copy: false));
             using var first = lines[0];
             return AllNaN(first);
         }
@@ -709,7 +709,7 @@ namespace NumSharp.Backends
                     if (!reduced.Contains(i))
                         dims.Add(a.Shape.dimensions[i]);
             }
-            var result = NewArray(a.typecode, Shape.Adopt(dims.ToArray()), true);
+            var result = NewArray(a.typecode, new Shape(dims.ToArray(), copy: false), true);
             FillWithNumPyNaN(result, a.typecode);
             if (numpyAxis is int axis && dims.Count > qShape.Length)
                 // Along an axis (a kept axis exists): np.apply_along_axis's buffer and nanquantile's moveaxis.
@@ -910,7 +910,7 @@ namespace NumSharp.Backends
 
             NDArray result = shapeArr.Length == 0
                 ? NewArray(tc, new Shape(), true)
-                : NewArray(tc, Shape.Adopt(shapeArr), true);
+                : NewArray(tc, new Shape(shapeArr, copy: false), true);
             FillWithNaN(result, tc);
 
             if (@out is not null)
@@ -1259,7 +1259,7 @@ namespace NumSharp.Backends
                     else outShape[qDim + i] = result.Shape.dimensions[srcIdx++];
                 }
             }
-            return result.reshape(Shape.Adopt(outShape));
+            return result.reshape(new Shape(outShape, copy: false));
         }
 
         /// <summary>

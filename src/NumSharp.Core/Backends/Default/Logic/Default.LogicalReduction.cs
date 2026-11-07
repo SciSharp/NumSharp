@@ -59,7 +59,7 @@ namespace NumSharp.Backends
             {
                 var dims = new long[nd.ndim];
                 for (int i = 0; i < dims.Length; i++) dims[i] = 1;
-                shape = Shape.Adopt(dims);
+                shape = new Shape(dims, copy: false);
             }
             // A typed array allocated directly owns its buffer, as NumPy's result does (a MakeGeneric wrapper over a
             // temporary 0-d array reported OWNDATA False).
@@ -220,7 +220,7 @@ namespace NumSharp.Backends
                 return Shape.Scalar;
             // A 1-D result has one layout, and a C-contiguous input's order is C's (NpyIter's sort keeps it).
             if (reducedDims.Length == 1 || input.IsContiguous)
-                return Shape.Adopt(reducedDims);
+                return new Shape(reducedDims, copy: false);
             return Shape.ReductionOutputShape(reducedDims, input, axis);
         }
 
@@ -274,7 +274,7 @@ namespace NumSharp.Backends
                 {
                     var dims = new long[ndim];
                     for (int i = 0; i < ndim; i++) dims[i] = 1;
-                    result.Storage.Reshape(Shape.Adopt(dims));
+                    result.Storage.Reshape(new Shape(dims, copy: false));
                 }
                 return result;
             }
@@ -319,7 +319,7 @@ namespace NumSharp.Backends
 
                 // Removing extent-1 axes never moves an element (each is read at index 0 only), so the buffer is
                 // described exactly by the remaining dims and strides; the storage keeps its ownership (SetShapeUnsafe).
-                Shape newShape = newDims.Count == 0 ? Shape.Scalar : Shape.Adopt(newDims.ToArray(), newStrides.ToArray());
+                Shape newShape = newDims.Count == 0 ? Shape.Scalar : new Shape(newDims.ToArray(), newStrides.ToArray(), copy: false);
                 chained.Storage.SetShapeUnsafe(newShape);
             }
 
@@ -359,14 +359,14 @@ namespace NumSharp.Backends
             for (int i = lastAxis + 1; i < ndim; i++) newDims[w++] = origDims[i];
 
             // Reshape is a view on C-contig data (no copy).
-            NDArray reshaped = nd.reshape(Shape.Adopt(newDims));
+            NDArray reshaped = nd.reshape(new Shape(newDims, copy: false));
             NDArray<bool> reduced = ReduceLogicalAxis(reshaped, firstAxis, keepdims: false, reduceAll: reduceAll);
 
             if (keepdims)
             {
                 var dimsKD = (long[])origDims.Clone();
                 foreach (int a in sortedAxes) dimsKD[a] = 1;
-                reduced.Storage.Reshape(Shape.Adopt(dimsKD));
+                reduced.Storage.Reshape(new Shape(dimsKD, copy: false));
             }
 
             return reduced;

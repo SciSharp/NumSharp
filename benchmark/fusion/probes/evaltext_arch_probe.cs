@@ -120,7 +120,7 @@ unsafe
             var proxy = NDExpr.BitwiseAnd(NDExpr.Arr(dummyBool), NDExpr.Greater(age, NDExpr.Const(30)));
             _ = proxy.GetProgram(null, out _);
             var dims = (long[])names.Shape.dimensions.Clone();
-            var result = new NDArray(NPTypeCode.Boolean, Shape.Adopt(dims), false);
+            var result = new NDArray(NPTypeCode.Boolean, new Shape(dims, copy: false), false);
             // Set only for StringDType (the promoted literal and the two locked allocators); null for S / U.
             NDArray? tlit = null;
             VStringAllocator? a1 = null, a2 = null;

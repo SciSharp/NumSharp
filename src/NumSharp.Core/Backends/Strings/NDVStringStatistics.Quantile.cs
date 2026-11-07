@@ -454,7 +454,7 @@ namespace NumSharp.Backends.Strings
             if (nans == line.size)
             {
                 // Only a NaN-like NA is a NaN, so the line's descriptor has one: np.full stores its Python float nan as the NA.
-                var full = new NDArray(line.dtype, qShape.Length == 0 ? Shape.Scalar : Shape.Adopt((long[])qShape.Clone()), true);
+                var full = new NDArray(line.dtype, qShape.Length == 0 ? Shape.Scalar : new Shape((long[])qShape.Clone(), copy: false), true);
                 using (var nanLiteral = NDArray.PythonLiteral(PositiveNaN))
                 using (var na = NDArray.PackForVStringStore(nanLiteral, line.dtype))
                     UnmanagedStorage.Copyto(full, na, NPY_CASTING.NPY_UNSAFE_CASTING);

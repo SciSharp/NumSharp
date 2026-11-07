@@ -82,7 +82,7 @@ namespace NumSharp.Backends
             // Result is shaped like element in C-order. Build the shape from the DIMENSIONS (a fresh
             // C-contiguous shape) — reusing element.Shape would carry a view's strides and scramble the
             // contiguous membership buffer on reshape (transposed/strided/negative-stride element).
-            Shape outShape = Shape.Adopt(element.Shape.dimensions);
+            Shape outShape = new Shape(element.Shape.dimensions, copy: false);
             NDArray ar1 = NDArray.ravel(element, 'C');        // C-order flatten (NumPy: np.asarray(element).ravel())
             NDArray ar2 = NDArray.ravel(test_elements, 'C');  // test values are always flattened
 
@@ -192,7 +192,7 @@ namespace NumSharp.Backends
                 throw new ValueError("The 'table' method is only supported for boolean or integer arrays. "
                     + "Please select 'sort' or None for kind.");
             var dims = (long[])element.Shape.dimensions.Clone();
-            Shape shape = dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims);
+            Shape shape = dims.Length == 0 ? Shape.NewScalar() : new Shape(dims, copy: false);
             // NumPy reshapes _isin's 1-D answer to element's shape: the result is a view of it (flags.owndata False). The
             // view holds its own reference to the flat buffer.
             using NDArray flat = IsinTextFlat(element, test_elements, assume_unique, invert);

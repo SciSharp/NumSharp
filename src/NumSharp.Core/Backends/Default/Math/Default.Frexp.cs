@@ -88,7 +88,7 @@ namespace NumSharp.Backends
             // outputs share one fresh C-contiguous layout: writing them in place off an F-contiguous Cast copy
             // would misalign the mantissa and exponent buffers (Cast preserves the input's contiguity, but a
             // fresh int32 exponent is always C-contiguous). Frexp relabels both into NumPy's layout together.
-            var cShape = Shape.Adopt(x.Shape.dimensions);
+            var cShape = new Shape(x.Shape.dimensions, copy: false);
             var src = MaterializeContiguous(x, cShape, floatType);
             var mant = NewArray(floatType, cShape, fillZeros: false);
             var exp = NewArray(NPTypeCode.Int32, cShape, fillZeros: false);

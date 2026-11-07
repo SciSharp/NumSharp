@@ -736,7 +736,7 @@ namespace NumSharp
                 && x.ndim != y.ndim && x.size == 1 && y.size == 1)
             {
                 // NpyIter's single-element loop (output stride 0): CDOUBLE_multiply's contracted loop_scalar.
-                var shape = Shape.Adopt(x.ndim > y.ndim ? x.Shape.dimensions : y.Shape.dimensions);
+                var shape = new Shape(x.ndim > y.ndim ? x.Shape.dimensions : y.Shape.dimensions, copy: false);
                 var r = new NDArray(NPTypeCode.Complex, shape, false);
                 Complex p = ILKernelGenerator.PolyLoopScalarComplexMultiply(x.GetAtIndex<Complex>(0), y.GetAtIndex<Complex>(0));
                 r.SetAtIndex(p, 0);
@@ -1219,7 +1219,7 @@ namespace NumSharp
             var dims = new long[first.Length + 1];
             dims[0] = items.Length;
             System.Array.Copy(first, 0, dims, 1, first.Length);
-            var stacked = new NDArray(t, Shape.Adopt(dims), false);
+            var stacked = new NDArray(t, new Shape(dims, copy: false), false);
             for (int i = 0; i < items.Length; i++)
             {
                 var src = items[i].Array;

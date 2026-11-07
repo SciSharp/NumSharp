@@ -71,7 +71,7 @@ namespace NumSharp.Backends
 
             // An empty core sums nothing: every dot function writes +0 (complex (+0, +0)), so a zeroed result is the
             // answer and no operand is read or cast.
-            var result = NewArray(loop, Shape.Adopt(dims), n == 0);
+            var result = NewArray(loop, new Shape(dims, copy: false), n == 0);
             if (result.size == 0 || n == 0)
                 return result;
 

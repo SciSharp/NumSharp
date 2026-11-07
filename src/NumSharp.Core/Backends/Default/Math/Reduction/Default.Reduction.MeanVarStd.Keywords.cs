@@ -291,7 +291,7 @@ namespace NumSharp.Backends
         /// <returns>The divisors.</returns>
         private unsafe NDArray CountsMinusDdof(NDArray counts, int ddof)
         {
-            var divisors = NewArray(NPTypeCode.Int64, counts.ndim == 0 ? Shape.Scalar : Shape.Adopt((long[])counts.Shape.dimensions.Clone()), false);
+            var divisors = NewArray(NPTypeCode.Int64, counts.ndim == 0 ? Shape.Scalar : new Shape((long[])counts.Shape.dimensions.Clone(), copy: false), false);
             NDIter.Copy(divisors, counts);
             // The fresh array is dense C, offset 0: one pass over its buffer.
             long* p = (long*)divisors.Address;

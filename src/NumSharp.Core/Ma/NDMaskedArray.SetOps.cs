@@ -541,7 +541,7 @@ namespace NumSharp
                 // `check = np.where(mask, compare(smask, omask), check)`: nomask is NumPy's np.False_.
                 var maskCompare = compare(smask ?? NDArray.Scalar(false), omask ?? NDArray.Scalar(false));
                 check = np.all(mask)
-                    ? np.broadcast_to(maskCompare, Shape.Adopt(mask.Shape.dimensions)).copy()
+                    ? np.broadcast_to(maskCompare, new Shape(mask.Shape.dimensions, copy: false)).copy()
                     : np.where(mask, maskCompare, compare(self._data, other._data));
             }
             else

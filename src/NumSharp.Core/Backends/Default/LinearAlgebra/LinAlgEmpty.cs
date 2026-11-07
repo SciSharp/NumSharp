@@ -36,7 +36,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="a">The operand, cast to <c>result_t</c>, with <c>a.size == 0</c> (validated square by the caller).</param>
         /// <returns>A fresh zero-size array of <paramref name="a"/>'s shape and dtype.</returns>
-        internal static NDArray Cholesky(NDArray a) => new NDArray(a.typecode, Shape.Adopt(a.shape), true);
+        internal static NDArray Cholesky(NDArray a) => new NDArray(a.typecode, new Shape(a.shape, copy: false), true);
 
         /// <summary>
         ///     <c>np.linalg.eig</c> / <c>eigvals</c> of an empty operand, as the <c>geev</c> seam returns it: complex128
@@ -65,7 +65,7 @@ namespace NumSharp.Backends
         {
             long n = a.Shape.dimensions[a.ndim - 1];
             var w = new NDArray(RealOf(a.typecode), Stacked(a, n), true);
-            var v = computeVectors ? new NDArray(a.typecode, Shape.Adopt(a.shape), true) : null;
+            var v = computeVectors ? new NDArray(a.typecode, new Shape(a.shape, copy: false), true) : null;
             return (w, v);
         }
 
@@ -137,7 +137,7 @@ namespace NumSharp.Backends
                 case "raw":
                     return (new NDArray(tc, Stacked(a, n, m), true), new NDArray(tc, Stacked(a, k), true));
                 case "economic":
-                    return (new NDArray(tc, Shape.Adopt(a.shape), true), null);
+                    return (new NDArray(tc, new Shape(a.shape, copy: false), true), null);
                 default:
                     throw new ArgumentException($"Unrecognized mode '{mode}'");
             }
@@ -167,8 +167,8 @@ namespace NumSharp.Backends
             long m = a.Shape.dimensions[0];
             long n = a.Shape.dimensions[1];
             long nrhs = b.Shape.dimensions[1];
-            var x = new NDArray(a.typecode, Shape.Adopt(new[] { n, nrhs }), true);
-            var s = new NDArray(NPTypeCode.Double, Shape.Adopt(new long[] { 0 }), true);
+            var x = new NDArray(a.typecode, new Shape(new[] { n, nrhs }, copy: false), true);
+            var s = new NDArray(NPTypeCode.Double, new Shape(new long[] { 0 }, copy: false), true);
             var rank = NDArray.Scalar(0);
             NDArray resids;
             if (n == 0 && m > 0)
@@ -181,7 +181,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                resids = new NDArray(NPTypeCode.Double, Shape.Adopt(new[] { nrhs }), true);
+                resids = new NDArray(NPTypeCode.Double, new Shape(new[] { nrhs }, copy: false), true);
             }
             return (x, resids, rank, s);
         }
@@ -243,7 +243,7 @@ namespace NumSharp.Backends
             for (int i = 0; i < nb; i++)
                 dims[i] = a.Shape.dimensions[i];
             Array.Copy(core, 0, dims, nb, core.Length);
-            return Shape.Adopt(dims);
+            return new Shape(dims, copy: false);
         }
 
         /// <summary>The real counterpart of a <c>result_t</c>: float64 for complex128, the dtype itself otherwise.</summary>

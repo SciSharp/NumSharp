@@ -92,7 +92,7 @@ namespace NumSharp
             }
 
             // We don't need to mark it as IsBroadcasted because technically, it has not broadcasted strides.
-            return Shape.Adopt(mit); // mit is built here, so the shape takes it as is
+            return new Shape(mit, copy: false); // mit is built here, so the shape takes it as is
         }
 
         /// <summary>
@@ -600,7 +600,7 @@ namespace NumSharp
             // for pos in range(64, len(args), 63): b = broadcast_to(0, b.shape); b = np.broadcast(b, *args[pos:pos + 63])
             for (int pos = MaxBroadcastArgs; pos < count; pos += MaxBroadcastArgs - 1)
                 dims = MultiIterDims(dims, shapes, pos, Math.Min(count, pos + MaxBroadcastArgs - 1));
-            return Shape.Adopt(dims);
+            return new Shape(dims, copy: false);
         }
 
         /// <summary>
@@ -622,7 +622,7 @@ namespace NumSharp
         ///     numbered from 0 here, where <c>_broadcast_shape</c> regroups them and numbers within each group.
         /// </remarks>
         internal static Shape MultiIterShape(Shape[] shapes)
-            => Shape.Adopt(MultiIterDims(null, shapes, 0, shapes?.Length ?? 0));
+            => new Shape(MultiIterDims(null, shapes, 0, shapes?.Length ?? 0), copy: false);
 
         /// <summary>
         ///     One <c>np.broadcast</c> call of <see cref="BroadcastShape"/>: <c>PyArray_Broadcast</c>'s scan over an optional

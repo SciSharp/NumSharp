@@ -1060,7 +1060,7 @@ namespace NumSharp
             // axis (real step 1, start 0) is skipped: nn[k] * 1 + 0 leaves int64 coordinates as they are, and float64
             // ones too (a coordinate is >= 0, so even a -0.0 start adds to +0.0) - the common np.mgrid[0:a, 0:b] case is
             // the single indices fill.
-            var fullShape = Shape.Adopt(dims);
+            var fullShape = new Shape(dims, copy: false);
 
             for (int k = 0; k < n; k++)
             {
@@ -1076,7 +1076,7 @@ namespace NumSharp
                     lineShape[d] = 1L;
                 lineShape[k] = dims[k];
 
-                np.copyto(grid[k], np.broadcast_to(line.reshape(Shape.Adopt(lineShape)), fullShape));
+                np.copyto(grid[k], np.broadcast_to(line.reshape(new Shape(lineShape, copy: false)), fullShape));
             }
 
             return grid;
@@ -1597,7 +1597,7 @@ namespace NumSharp
                     shape[d] = 1L;
                 shape[k] = lines[k].size;
 
-                @out[k] = lines[k].reshape(Shape.Adopt(shape));
+                @out[k] = lines[k].reshape(new Shape(shape, copy: false));
             }
 
             return @out;

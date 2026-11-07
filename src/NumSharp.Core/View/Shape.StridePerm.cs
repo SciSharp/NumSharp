@@ -139,7 +139,7 @@ namespace NumSharp
         internal readonly Shape KeepOrder()
         {
             var dims = (long[])dimensions.Clone();
-            return Shape.Adopt(dims, StridesForPerm(dims, SortedStridePerm(strides)));
+            return new Shape(dims, StridesForPerm(dims, SortedStridePerm(strides)), copy: false);
         }
 
         /// <summary>
@@ -168,21 +168,21 @@ namespace NumSharp
             {
                 case 'C':
                 case 'c':
-                    return Shape.Adopt(dims);
+                    return new Shape(dims, copy: false);
                 case 'F':
                 case 'f':
-                    return Shape.Adopt(dims, 'F');
+                    return new Shape(dims, 'F', copy: false);
                 case 'A':
                 case 'a':
-                    return Shape.Adopt(dims, prototype.IsFContiguous && !prototype.IsContiguous ? 'F' : 'C');
+                    return new Shape(dims, prototype.IsFContiguous && !prototype.IsContiguous ? 'F' : 'C', copy: false);
                 case 'K':
                 case 'k':
                     // NumPy's "simple KEEPORDER" cases first; only a neither-contiguous prototype of the same rank sorts.
                     if (prototype.IsContiguous || dims.Length != prototype.NDim)
-                        return Shape.Adopt(dims);
+                        return new Shape(dims, copy: false);
                     if (prototype.IsFContiguous)
-                        return Shape.Adopt(dims, 'F');
-                    return Shape.Adopt(dims, StridesForPerm(dims, SortedStridePerm(prototype.strides)));
+                        return new Shape(dims, 'F', copy: false);
+                    return new Shape(dims, StridesForPerm(dims, SortedStridePerm(prototype.strides)), copy: false);
                 default:
                     // The house error for an unknown order code.
                     OrderResolver.Resolve(order, prototype);
@@ -213,9 +213,9 @@ namespace NumSharp
 
             var dims = (long[])outDims.Clone();
             if (allC)
-                return Shape.Adopt(dims);
+                return new Shape(dims, copy: false);
 
-            return Shape.Adopt(dims, StridesForPerm(dims, MultiSortedStridePerm(inputs, dims.Length)));
+            return new Shape(dims, StridesForPerm(dims, MultiSortedStridePerm(inputs, dims.Length)), copy: false);
         }
 
         /// <summary>
@@ -338,7 +338,7 @@ namespace NumSharp
                 stride *= dims[ax];
             }
 
-            return Shape.Adopt(dims, strides);
+            return new Shape(dims, strides, copy: false);
         }
 
         /// <summary>
@@ -403,7 +403,7 @@ namespace NumSharp
                 stride *= outputDims[r];
             }
 
-            return Adopt(outputDims, strides);
+            return new Shape(outputDims, strides, copy: false);
         }
 
         /// <summary>

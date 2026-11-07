@@ -342,7 +342,7 @@ namespace NumSharp
                 // any-False -> that axis is empty (keeps all other axes).
                 var emptyDims = (long[])boolResult.Shape.dimensions.Clone();
                 emptyDims[boolAxis] = 0;
-                return np.empty(Shape.Adopt(emptyDims), dtype);
+                return np.empty(new Shape(emptyDims, copy: false), dtype);
             }
 
             // A LEADING boolean mask (any ndim) followed only by basic indices —
@@ -1212,7 +1212,7 @@ namespace NumSharp
                         var shp = new long[outRank];
                         for (int d = 0; d < outRank; d++) shp[d] = 1;
                         for (int d = 0; d < m; d++) shp[blockStart + d] = bshape[d];
-                        axisIndex[a] = advB[advBOf[i]].reshape(Shape.Adopt(shp));
+                        axisIndex[a] = advB[advBOf[i]].reshape(new Shape(shp, copy: false));
                         break;
                     }
                     // ZeroBool (0-d bool) consumes no source axis; it only shaped the block above.
@@ -1220,7 +1220,7 @@ namespace NumSharp
                     {
                         var shp = new long[outRank];
                         for (int d = 0; d < outRank; d++) shp[d] = 1;
-                        axisIndex[a] = np.array(new long[] { items[i].iv }, copy: false).reshape(Shape.Adopt(shp));
+                        axisIndex[a] = np.array(new long[] { items[i].iv }, copy: false).reshape(new Shape(shp, copy: false));
                         break;
                     }
                     case MixKind.Slice:
@@ -1228,7 +1228,7 @@ namespace NumSharp
                         var shp = new long[outRank];
                         for (int d = 0; d < outRank; d++) shp[d] = 1;
                         shp[slicePos[i]] = sliceIndex[i].size;
-                        axisIndex[a] = sliceIndex[i].reshape(Shape.Adopt(shp));
+                        axisIndex[a] = sliceIndex[i].reshape(new Shape(shp, copy: false));
                         break;
                     }
                     // NewAxis consumes no source axis (its size-1 output dim is implicit
@@ -1254,7 +1254,7 @@ namespace NumSharp
             var outShapeArr = outShape.ToArray();
             if (!grid[0].Shape.dimensions.SequenceEqual(outShapeArr))
                 for (int i = 0; i < grid.Length; i++)
-                    grid[i] = np.broadcast_to(grid[i], Shape.Adopt(outShapeArr));
+                    grid[i] = np.broadcast_to(grid[i], new Shape(outShapeArr, copy: false));
             return true;
         }
 

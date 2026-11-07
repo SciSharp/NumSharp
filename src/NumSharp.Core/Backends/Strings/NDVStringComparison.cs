@@ -144,7 +144,7 @@ namespace NumSharp.Backends.Strings
         internal static NDArray ToDefaultVString(NDArray u)
         {
             var dims = (long[])u.Shape.dimensions.Clone();
-            var t = new NDArray(DTypeRegistry.VString.default_descr(), dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims), true);
+            var t = new NDArray(DTypeRegistry.VString.default_descr(), dims.Length == 0 ? Shape.NewScalar() : new Shape(dims, copy: false), true);
             try
             {
                 NDVStringCasting.Copy(t.Storage, u.Storage);

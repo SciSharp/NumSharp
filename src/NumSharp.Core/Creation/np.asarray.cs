@@ -25,7 +25,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
         public static NDArray asarray<T>(T data) where T : struct
         {
-            var nd = new NDArray(typeof(T), Shape.Adopt(Array.Empty<long>()));
+            var nd = new NDArray(typeof(T), new Shape(Array.Empty<long>(), copy: false));
             nd.ReplaceData(new T[] {data});
             return nd.MarkExplicitZeroDimArray();
         }

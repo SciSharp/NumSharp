@@ -297,9 +297,9 @@ namespace NumSharp.Backends
             long m = x.Shape.dimensions[nd - 1];
             // a singular matrix was found, so there is at least one element: m > 0 and the matrix count is size / m^2
             long count = x.size / (m * m);
-            var matrices = x.reshape(Shape.Adopt(new[] {count, m, m}));
+            var matrices = x.reshape(new Shape(new[] {count, m, m}, copy: false));
             // np.empty(shape, x.dtype)'s own allocation: uninitialised, every matrix is written by the loop below.
-            var inverses = x.TensorEngine.NewArray(x.dtype, Shape.Adopt(new[] {count, m, m}), false);
+            var inverses = x.TensorEngine.NewArray(x.dtype, new Shape(new[] {count, m, m}, copy: false), false);
             double nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000L); // NPY_NAN; .NET's double.NaN is negative
             var nanValue = x.typecode == NPTypeCode.Complex
                 ? NDArray.Scalar(new System.Numerics.Complex(nan, nan))
@@ -317,7 +317,7 @@ namespace NumSharp.Backends
                 }
             }
 
-            return inverses.reshape(Shape.Adopt((long[])x.Shape.dimensions.Clone()));
+            return inverses.reshape(new Shape((long[])x.Shape.dimensions.Clone(), copy: false));
         }
 
         /// <summary>Whether an order is the number <paramref name="value"/> (NumPy's <c>p in {2, -2}</c> and <c>p == -2</c>).</summary>

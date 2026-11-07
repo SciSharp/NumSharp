@@ -268,7 +268,7 @@ namespace NumSharp
         internal static NDArray ones(Shape shape, char order, DType dtype)
         {
             char physical = OrderResolver.Resolve(order);
-            var orderedShape = Shape.Adopt(shape.dimensions, physical);
+            var orderedShape = new Shape(shape.dimensions, physical, copy: false);
             // The text routes as in Ones(Shape, DType): text has no lane fill.
             if (dtype is not null && (dtype.Meta.HasReferences || Backends.Strings.NDStringStorage.IsString(dtype)))
                 return OnesOfText(orderedShape, dtype);
@@ -452,7 +452,7 @@ namespace NumSharp
         internal static NDArray roll(NDArray a, long shift, int? axis)
         {
             if (axis == null)
-                return roll(a.ravel(), shift, 0).reshape(Shape.Adopt(a.Shape.dimensions));
+                return roll(a.ravel(), shift, 0).reshape(new Shape(a.Shape.dimensions, copy: false));
 
             // normalize_axis_tuple(axis, a.ndim, allow_duplicate=True): NumPy's AxisError, the axis as given.
             int ax = Shape.check_and_adjust_axis(a.ndim, axis.Value);
@@ -543,7 +543,7 @@ namespace NumSharp
             resultShape[0] = ndim;
             for (int d = 0; d < ndim; d++)
                 resultShape[d + 1] = dimensions[d];
-            var res = new NDArray(descr, Shape.Adopt(resultShape), false);
+            var res = new NDArray(descr, new Shape(resultShape, copy: false), false);
             if (ndim == 0)
                 return res;
 
@@ -561,7 +561,7 @@ namespace NumSharp
                         for (int k = 0; k < ndim; k++)
                             axisShape[k] = k == i ? dimensions[i] : 1;
                         // `res[i] = idx.reshape(...)`: the coordinate runs along axis i and broadcasts along the others.
-                        using var line = idx.reshape(Shape.Adopt(axisShape));
+                        using var line = idx.reshape(new Shape(axisShape, copy: false));
                         using var slab = res[i];
                         UnmanagedStorage.Copyto(slab, line, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
                     }

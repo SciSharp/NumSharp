@@ -187,7 +187,7 @@ namespace NumSharp
                 else throw new IndexError(BuildBroadcastMismatchMessage(arrShape, idxShape, ax));
             }
 
-            var result = new NDArray(arr.dtype, Shape.Adopt(resultDims), false); // descriptor: a string's width
+            var result = new NDArray(arr.dtype, new Shape(resultDims, copy: false), false); // descriptor: a string's width
 
             long totalSize = result.size;
             if (totalSize == 0)
@@ -652,7 +652,7 @@ namespace NumSharp
             var bufDims = new long[leadingLen + resNd];
             System.Array.Copy(leading, 0, bufDims, 0, leadingLen);
             System.Array.Copy(resDims, 0, bufDims, leadingLen, resNd);
-            NDArray buff = new NDArray(res0.dtype, Shape.Adopt(bufDims), true);
+            NDArray buff = new NDArray(res0.dtype, new Shape(bufDims, copy: false), true);
 
             // Because ndindex walks the leading dims in C-order and `buff` is C-contiguous, the k-th
             // slice's slot is exactly the k-th contiguous block of `buff`'s bytes — NumPy's "each
@@ -1691,7 +1691,7 @@ namespace NumSharp
             for (int i = 0; i < outDim; i++) if (tup[i] != 1) { allOnes = false; break; }
             if (allOnes)
             {
-                var c = aDim == outDim ? A.copy('K') : A.reshape(Shape.Adopt(aShape)).copy('K');
+                var c = aDim == outDim ? A.copy('K') : A.reshape(new Shape(aShape, copy: false)).copy('K');
                 return c;
             }
 
@@ -1703,11 +1703,11 @@ namespace NumSharp
             {
                 if (A.size == 0)
                 {
-                    var c = aDim == outDim ? A : A.reshape(Shape.Adopt(aShape));
-                    return c.reshape(Shape.Adopt(outShape));
+                    var c = aDim == outDim ? A : A.reshape(new Shape(aShape, copy: false));
+                    return c.reshape(new Shape(outShape, copy: false));
                 }
                 // np.zeros(shape, dtype)'s statement: a zero-filled allocation of A's dtype.
-                var fresh = new NDArray(A.dtype, Shape.Adopt(outShape), true);
+                var fresh = new NDArray(A.dtype, new Shape(outShape, copy: false), true);
                 return new NDArray(fresh.Storage.Alias(fresh.Shape)) { TensorEngine = A.TensorEngine };
             }
 
@@ -1737,10 +1737,10 @@ namespace NumSharp
             // reshape doesn't keep, released by this method's scope — the returned
             // NDArray shares contiguous's storage but holds its own ARC ref via
             // InitializeArc, so releasing contiguous does not free that buffer.
-            var promoted = A.reshape(Shape.Adopt(interleaved));
-            var broadcasted = broadcast_to(promoted, Shape.Adopt(broadcastTarget));
+            var promoted = A.reshape(new Shape(interleaved, copy: false));
+            var broadcasted = broadcast_to(promoted, new Shape(broadcastTarget, copy: false));
             var contiguous = broadcasted.copy();
-            return contiguous.reshape(Shape.Adopt(outShape));
+            return contiguous.reshape(new Shape(outShape, copy: false));
         }
     }
 }

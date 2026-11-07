@@ -307,7 +307,7 @@ namespace NumSharp.Backends
             if (weights is not null && weights.ndim == 1 && xy.size > 0 && Backends.Strings.NDStringUfuncs.IsText(weights))
                 throw new TypeError($"Cannot cast array data from {weights.dtype.ToString(true)} to dtype('float64') according to the rule 'safe'");
             NDArray flat = xy.TensorEngine.Bincount(xy, weights, (int)minlen);
-            NDArray hist = flat.reshape(Shape.Adopt(ToLongShape(nbin)));
+            NDArray hist = flat.reshape(new Shape(ToLongShape(nbin), copy: false));
             hist = hist.astype(NPTypeCode.Double); // NumPy: hist.astype(float, casting='safe') — H is always float64
 
             // Strip the leading/trailing outlier bin on every dimension: hist[1:-1, 1:-1, ...]. NumPy returns that slice as a
@@ -325,7 +325,7 @@ namespace NumSharp.Backends
                     long[] shape = new long[D];
                     for (int d = 0; d < D; d++) shape[d] = 1;
                     shape[i] = nbin[i] - 2;
-                    hist = hist / dedges[i].reshape(Shape.Adopt(shape));
+                    hist = hist / dedges[i].reshape(new Shape(shape, copy: false));
                 }
                 hist = hist / s;
             }

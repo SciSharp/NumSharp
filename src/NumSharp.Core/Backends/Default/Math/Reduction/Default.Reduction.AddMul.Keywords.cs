@@ -235,7 +235,7 @@ namespace NumSharp.Backends
                 // The result: the out, or a fresh array in the loop dtype laid out in the iteration order
                 // (npyiter_new_temp_array). raw_array_assign_scalar then sets every output to the start value, cast from the
                 // loop dtype into the result's (an int8 out of an int16 loop holds the initial wrapped, as NumPy's does).
-                result = @out ?? NewArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : Shape.Adopt(it.ResultDims, it.ResultStrides), false);
+                result = @out ?? NewArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : new Shape(it.ResultDims, it.ResultStrides, copy: false), false);
                 using (var init = NewArray(loop, Shape.Scalar, false))
                 {
                     Buffer.MemoryCopy(seed, (byte*)init.Address, loop.SizeOf(), loop.SizeOf());

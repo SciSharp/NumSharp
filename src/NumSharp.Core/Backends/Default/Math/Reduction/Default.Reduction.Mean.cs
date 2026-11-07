@@ -88,7 +88,7 @@ namespace NumSharp.Backends
                 if (axis_ == null)
                 {
                     var r = NewScalar(nan, nanType);
-                    if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
+                    if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
                     return r.MarkReductionScalar();
                 }
                 var axis = NormalizeAxis(axis_.Value, arr.ndim);
@@ -97,15 +97,15 @@ namespace NumSharp.Backends
                 NDArray result;
                 if (shape[axis] == 0)
                 {
-                    result = NewArray(outputType, Shape.Adopt(resultShape), false);
+                    result = NewArray(outputType, new Shape(resultShape, copy: false), false);
                     for (long i = 0; i < result.size; i++) result.SetAtIndex(nan, i);
                 }
-                else result = NewArray(outputType, Shape.Adopt(resultShape), false);
+                else result = NewArray(outputType, new Shape(resultShape, copy: false), false);
                 if (keepdims)
                 {
                     var ks = new long[arr.ndim];
                     for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                    result.Storage.Reshape(Shape.Adopt(ks));
+                    result.Storage.Reshape(new Shape(ks, copy: false));
                 }
                 // A 1-D input along its only axis gives the 0-d NaN, which NumPy returns as a scalar like any 0-d mean
                 // (this exit returned it writeable); a no-op for an array result.
@@ -162,7 +162,7 @@ namespace NumSharp.Backends
 
                 var result = mean_elementwise_il(arr, typeCode);
                 var r = NewScalar(result);
-                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }
+                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
                 return r.MarkReductionScalar();
             }

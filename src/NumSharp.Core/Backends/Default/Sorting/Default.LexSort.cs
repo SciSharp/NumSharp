@@ -49,7 +49,7 @@ namespace NumSharp.Backends
             if (nd == 0)
                 return NewScalar(0L);
             if (first.size <= 1)
-                return NewArray(NPTypeCode.Int64, Shape.Adopt(first.Shape.dimensions), true); // [0] for one element, [] for none
+                return NewArray(NPTypeCode.Int64, new Shape(first.Shape.dimensions, copy: false), true); // [0] for one element, [] for none
 
             // First pass over an identity permutation IS the first key's stable argsort;
             // every later key re-sorts the permutation it receives (stably), so the LAST
@@ -95,8 +95,8 @@ namespace NumSharp.Backends
             for (int d = 0; d < dims.Length; d++)
                 lineShape[d] = d == axis ? dims[d] : 1;
             // arange along the axis, broadcast over the other axes and materialized (the pass rewrites it in place).
-            using var line = UnmanagedStorage.ArangeObj(0L, dims[axis], 1L, null).reshape(Shape.Adopt(lineShape));
-            using var broadcast = NDArray.broadcast_to(line, Shape.Adopt((long[])dims.Clone()));
+            using var line = UnmanagedStorage.ArangeObj(0L, dims[axis], 1L, null).reshape(new Shape(lineShape, copy: false));
+            using var broadcast = NDArray.broadcast_to(line, new Shape((long[])dims.Clone(), copy: false));
             return broadcast.copy();
         }
     }

@@ -166,7 +166,7 @@ namespace NumSharp.Backends
                 for (int i = 0; i < a.ndim; i++)
                     if (!flags[i])
                         kept.Add(a.Shape.dimensions[i]);
-                resultShape = Shape.Adopt(kept.ToArray());
+                resultShape = new Shape(kept.ToArray(), copy: false);
             }
 
             if (@out is not null)

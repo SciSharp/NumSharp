@@ -54,8 +54,8 @@ namespace NumSharp.Backends
 
             if (padded)
             {
-                x = a.TensorEngine.NewArray(common, Shape.Adopt(new long[] {n, 0}), true);            // x[..., :0]
-                resids = a.TensorEngine.NewArray(NPTypeCode.Double, Shape.Adopt(new long[] {0}), true); // resids[..., :0]
+                x = a.TensorEngine.NewArray(common, new Shape(new long[] {n, 0}, copy: false), true);            // x[..., :0]
+                resids = a.TensorEngine.NewArray(NPTypeCode.Double, new Shape(new long[] {0}, copy: false), true); // resids[..., :0]
             }
 
             if (is1d)
@@ -65,7 +65,7 @@ namespace NumSharp.Backends
             // discards them otherwise, replacing them with an empty array of the real result type.
             long rankVal = Convert.ToInt64(rank.GetAtIndex(0));
             if (rankVal != n || m <= n)
-                resids = a.TensorEngine.NewArray(realCommon, Shape.Adopt(new long[] {0}), true);
+                resids = a.TensorEngine.NewArray(realCommon, new Shape(new long[] {0}, copy: false), true);
             else
                 resids = resids.astype(realCommon);
 

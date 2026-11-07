@@ -1043,7 +1043,7 @@ namespace NumSharp
             for (int i = 0; i < ndim; i++) yShape[i] = i == axis ? width : 1L;
             using var counts = UnmanagedStorage.ArangeObj(0L, width, 1L, null);   // np.arange(width)
             using var countsTyped = counts.astype(computeType);
-            using var y = countsTyped.reshape(Shape.Adopt(yShape));
+            using var y = countsTyped.reshape(new Shape(yShape, copy: false));
 
             // any_step_zero over the whole call: the subnormal guard's order for every element, or the plain one for all.
             bool anyStepZero;
@@ -1124,7 +1124,7 @@ namespace NumSharp
 
             // NumPy: order = 'F' if array.flags.fnc else 'C'  (F-contig and NOT also C).
             char order = (array.Shape.IsFContiguous && !array.Shape.IsContiguous) ? 'F' : 'C';
-            var padded = new NDArray(array.dtype, Shape.Adopt(newDims, order), false);
+            var padded = new NDArray(array.dtype, new Shape(newDims, order, copy: false), false);
 
             if (fillValue != null)
             {
