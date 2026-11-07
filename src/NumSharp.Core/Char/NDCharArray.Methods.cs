@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 
 // =============================================================================
@@ -475,9 +476,19 @@ namespace NumSharp
         /// <exception cref="TypeError">np.amax's: <c>ufunc 'maximum' did not contain a loop with signature matching
         ///     types</c> for fixed-width text, as in NumPy.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <remarks>NumPy's own statement hands the chararray to np.amax, whose woven subclass path answers for the class;
+        /// <remarks>
+        ///     <para>NumPy's own statement hands the chararray to np.amax, whose woven subclass path answers for the class;
         ///     np.amax never comes back to this member, so the class's rule of computing on its plain view does not apply
-        ///     here.</remarks>
+        ///     here.</para>
+        ///     <para><see cref="MethodImplOptions.NoInlining"/> | <see cref="MethodImplOptions.NoOptimization"/>: this frame
+        ///     is where the test-time caller audit (<c>NDSubclass.Audit</c>) stops, since an override of a
+        ///     <see cref="SubclassAwareAttribute"/> member hands the chararray on by design. Optimized code inlines np.amax
+        ///     here and turns the call into a tail jump to <c>np.&lt;amax&gt;subclass</c>, which takes this frame off the
+        ///     stack, and the audit then reports np.nanmax as a library caller: PR #633's CI, ubuntu net10.0, once this
+        ///     member reached tier 1 (<c>tail.jmp</c> in its JIT listing on linux-x64). Unoptimized, the call stays a
+        ///     call; the cost is nil, as the text case always ends in np.amax's TypeError.</para>
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
         protected internal override NDArray NanMax(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => IsScalarStandIn
                 ? base.NanMax(axis, @out, keepdims, initial, @where)
@@ -496,7 +507,10 @@ namespace NumSharp
         /// <exception cref="TypeError">np.amin's: <c>ufunc 'minimum' did not contain a loop with signature matching
         ///     types</c> for fixed-width text.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <remarks>As for <see cref="NanMax"/>, the chararray itself is NumPy's operand of np.amin.</remarks>
+        /// <remarks>As for <see cref="NanMax"/>, the chararray itself is NumPy's operand of np.amin, and this frame must
+        ///     stay on the stack for the caller audit (the same <see cref="MethodImplAttribute"/>, for the same tail
+        ///     jump to <c>np.&lt;amin&gt;subclass</c>).</remarks>
+        [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
         protected internal override NDArray NanMin(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => IsScalarStandIn
                 ? base.NanMin(axis, @out, keepdims, initial, @where)

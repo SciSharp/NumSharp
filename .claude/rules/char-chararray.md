@@ -116,7 +116,11 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
   chararray operands and must find no library caller. The audit skips the frames of the function itself and of
   `NDCharArray` / `NDMatrix`, so a function that forwards a chararray to a DIFFERENTLY named public function passes its
   plain view (`np.char.partition` → `np.stack` stacks the parts' views), and a member that computes its function's
-  array itself calls it on `NDSubclass.Plain(this)`. A comparison operator's typed result must share the driver
+  array itself calls it on `NDSubclass.Plain(this)`. The walk sees only the frames optimized code keeps, and it stops
+  at an override of a `[SubclassAware]` member (`NanMax` / `NanMin`, which hand the chararray to `np.amax` / `np.amin`
+  as NumPy does): each such override carries `[MethodImpl(NoInlining | NoOptimization)]` (guard
+  `SubclassAuditFrameTests`), since at tier 1 `NanMax` inlined `np.amax` and tail-jumped to `np.<amax>subclass`, and the
+  audit reported `np.nanmax` (PR #633's CI, ubuntu net10.0 only). A comparison operator's typed result must share the driver
   result's storage (`AsGeneric` inside `using`): an untyped wrapper left to the finalizer stranded one buffer per
   comparison, and `MakeGeneric` reports OWNDATA False.
 - Divergences (`[Misaligned]`, `CharArrayBehaviorTests`): the static rule; `c == null`; `np.squeeze`'s identity; a view of

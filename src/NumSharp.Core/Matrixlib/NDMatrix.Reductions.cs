@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 
 // =============================================================================
@@ -551,6 +552,12 @@ namespace NumSharp
         /// <exception cref="AttributeError">See <see cref="NanExtreme"/>.</exception>
         /// <exception cref="ValueError">See <see cref="NanExtreme"/>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <remarks><see cref="MethodImplOptions.NoInlining"/> | <see cref="MethodImplOptions.NoOptimization"/>, like every
+        ///     override of a <see cref="SubclassAwareAttribute"/> member: the test-time caller audit stops its stack walk at
+        ///     this frame, and optimized code may tail-call <see cref="NanExtreme"/> and take the frame off the stack, which
+        ///     makes np.nanmax look like a library caller (the chararray override's failure on PR #633's CI). The guard
+        ///     test <c>SubclassAuditFrameTests</c> holds every override to it.</remarks>
+        [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
         protected internal override NDArray NanMax(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => Storage.Shape.NDim == 0
                 ? base.NanMax(axis, @out, keepdims, initial, @where)
@@ -570,6 +577,8 @@ namespace NumSharp
         /// <exception cref="AttributeError">See <see cref="NanExtreme"/>.</exception>
         /// <exception cref="ValueError">See <see cref="NanExtreme"/>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <remarks>The frame stays on the stack for the caller audit, as for <see cref="NanMax"/>.</remarks>
+        [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
         protected internal override NDArray NanMin(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => Storage.Shape.NDim == 0
                 ? base.NanMin(axis, @out, keepdims, initial, @where)

@@ -92,7 +92,9 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
     ordinary, numpy.ma and index tiers) with those operands typed as matrices while `NDSubclass.AuditInternalCallers` is
     on (it records the library caller of every subclass path that runs), and requires the set to stay empty. A finding
     is closed with a plain view where the operand is passed on, the computation behind the facade, or a
-    `[PlainReceiver]` declaration.
+    `[PlainReceiver]` declaration. The stack walk stops at an override of a `[SubclassAware]` member, so each one keeps
+    its frame with `[MethodImpl(NoInlining | NoOptimization)]` (guard `SubclassAuditFrameTests`; optimized code inlines
+    and tail-jumps it away otherwise, `char-chararray.md`).
   - Limits (`[Misaligned]`, pinned in `Matrixlib/NDMatrixOperand.Tests.cs`): a function whose C# return type is a typed
     array cannot return a matrix (`np.isclose`, gap MO01; the typed `np.all` / `np.any` overloads, `np.nonzero` and
     `np.flatnonzero` are plain in NumPy too); numpy.ma has no `masked_matrix` (NumPy's `ma.array(m).sum(axis=0)`

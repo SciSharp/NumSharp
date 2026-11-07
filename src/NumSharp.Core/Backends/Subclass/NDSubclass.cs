@@ -956,6 +956,12 @@ namespace NumSharp
         ///     as <see cref="NDCharArray"/>'s <c>NanMax</c>, which hands the chararray to np.amax as NumPy's nanmax does - is
         ///     NumPy's own class-reading code passing the object on by design, so the walk ends there and records nothing; it
         ///     is the one reader of that attribute at run time.
+        ///     <para>The walk sees only the frames optimized code keeps: an inlined method has none, and a call in tail position
+        ///     can become a jump that replaces the caller's frame. So every override of a <see cref="SubclassAwareAttribute"/>
+        ///     member carries <see cref="MethodImplOptions.NoInlining"/> | <see cref="MethodImplOptions.NoOptimization"/>
+        ///     (held by the guard test <c>SubclassAuditFrameTests</c>): <see cref="NDCharArray"/>'s <c>NanMax</c>, once at tier
+        ///     1, inlined np.amax and tail-jumped to its subclass path, and np.nanmax was recorded as the caller (PR #633's CI,
+        ///     2026-11-07, ubuntu net10.0 only, as tiering timing decides when a method is optimized).</para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void Audit(string function)
