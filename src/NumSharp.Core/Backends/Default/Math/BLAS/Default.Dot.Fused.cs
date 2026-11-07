@@ -96,7 +96,7 @@ namespace NumSharp.Backends
         ///     conjugates inside its sums. A conjugated copy through this function gives the same values (negating every
         ///     imaginary part of x negates the two sums that use it exactly) but flips a NaN imaginary part's sign.
         /// </remarks>
-        internal override unsafe NDArray DotFunction1D(NDArray left, NDArray right)
+        public override unsafe NDArray DotFunction1D(NDArray left, NDArray right)
         {
             long n = left.Shape.dimensions[0];
             if (right.Shape.dimensions[0] != n)
@@ -144,7 +144,7 @@ namespace NumSharp.Backends
         /// <remarks>Why: the former route conjugated a copy of the first operand and ran zdotu - the same sums, but the
         ///     copy flipped a NaN imaginary part's sign (NumPy: <c>np.vdot([1+nan j], [2+3j])</c> is the positive NaN in
         ///     both parts) and cost a pass and an allocation.</remarks>
-        internal override unsafe NDArray VdotFunction1D(NDArray left, NDArray right)
+        public override unsafe NDArray VdotFunction1D(NDArray left, NDArray right)
         {
             if (left.typecode == NPTypeCode.Complex && right.typecode == NPTypeCode.Complex)
             {
@@ -180,7 +180,7 @@ namespace NumSharp.Backends
         ///     result is the dot function's over the copy, not NumPy's over the view (D23: a slower cell keeps its
         ///     code).</para>
         /// </remarks>
-        internal override bool VdotReadsFirstInPlace(NPTypeCode dtype, long stride, long n)
+        public override bool VdotReadsFirstInPlace(NPTypeCode dtype, long stride, long n)
         {
             if (dtype != NPTypeCode.Single && dtype != NPTypeCode.Double)
                 return true;

@@ -20,13 +20,15 @@ namespace NumSharp
     ///     DIFFERENT stream (<c>1608637542, …</c>) and discards <see cref="BitGenerator.seed_seq"/>.
     ///     </para>
     ///     <para>
-    ///     The per-draw primitives are the internal engine contract (<c>next_uint32</c> = one tempered word,
-    ///     <c>next_uint64</c> = two words high-first, <c>next_double</c> = 27+26 bits, <c>next_raw</c> = the 32-bit
-    ///     word widened); the public surface is NumPy's: <see cref="BitGenerator.random_raw"/>, <see cref="state"/>,
-    ///     <see cref="BitGenerator.seed_seq"/>, <see cref="jumped"/>, <see cref="_legacy_seeding(long)"/>.
+    ///     The per-draw primitives are the <see cref="BitGenerator"/> engine contract (<c>next_uint32</c> = one tempered
+    ///     word, <c>next_uint64</c> = two words high-first, <c>next_double</c> = 27+26 bits, <c>next_raw</c> = the 32-bit
+    ///     word widened), public and overridable; NumPy's own surface is <see cref="BitGenerator.random_raw"/>,
+    ///     <see cref="state"/>, <see cref="BitGenerator.seed_seq"/>, <see cref="jumped"/>, <see cref="_legacy_seeding(long)"/>.
+    ///     The class is not sealed: a subclass inherits the engine and overrides <see cref="BitGenerator.CreateFromSeed"/>
+    ///     to make <see cref="BitGenerator.spawn"/> return its own type.
     ///     </para>
     /// </remarks>
-    public sealed partial class MT19937 : BitGenerator
+    public partial class MT19937 : BitGenerator
     {
         // Period parameters (mt19937.h).
         private const int N = 624;
@@ -114,10 +116,10 @@ namespace NumSharp
         internal static MT19937 LegacySeeded(uint seed) => new MT19937(seed, true);
 
         /// <inheritdoc/>
-        internal override string Name => "MT19937";
+        public override string Name => "MT19937";
 
         /// <inheritdoc/>
-        private protected override BitGenerator CreateFromSeed(ISeedSequence seed) => new MT19937(seed);
+        public override BitGenerator CreateFromSeed(ISeedSequence seed) => new MT19937(seed);
 
         /// <summary>NumPy's <c>MT19937.__init__</c> seeding body (and the <c>seed=None</c> branch of legacy seeding).</summary>
         /// <param name="seedSeq">The sequence supplying 624 words.</param>
@@ -278,7 +280,7 @@ namespace NumSharp
 
         /// <inheritdoc/>
         /// <remarks>Tempers the key a run at a time (vectorized), twisting whenever it is exhausted — the per-draw stream exactly.</remarks>
-        internal override unsafe void FillUInt32(uint* dst, long n)
+        public override unsafe void FillUInt32(uint* dst, long n)
         {
             long i = 0;
             fixed (uint* key = _key)
@@ -303,7 +305,7 @@ namespace NumSharp
         ///     <c>mt19937_next64</c> is <c>(first &lt;&lt; 32) | second</c>: the two words land in the slot little-endian
         ///     (first in the LOW half), so each slot is rotated by 32 to put the first word high.
         /// </remarks>
-        internal override unsafe void FillUInt64(ulong* dst, long n)
+        public override unsafe void FillUInt64(ulong* dst, long n)
         {
             if (!BitConverter.IsLittleEndian)
             {
@@ -324,7 +326,7 @@ namespace NumSharp
 
         /// <inheritdoc/>
         /// <remarks><c>mt19937_next_double</c> from word pairs drawn into each slot: <c>((a &gt;&gt; 5) * 2**26 + (b &gt;&gt; 6)) / 2**53</c>, a the first word.</remarks>
-        internal override unsafe void FillDouble(double* dst, long n)
+        public override unsafe void FillDouble(double* dst, long n)
         {
             if (!BitConverter.IsLittleEndian)
             {
@@ -351,7 +353,7 @@ namespace NumSharp
 
         /// <inheritdoc/>
         /// <remarks><c>next_float</c> = <c>(next_uint32 &gt;&gt; 8) * 2**-24</c>, converted in place after a vectorized word fill.</remarks>
-        internal override unsafe void FillFloat(float* dst, long n)
+        public override unsafe void FillFloat(float* dst, long n)
         {
             var words = (uint*)dst;
             while (n > 0)
@@ -368,7 +370,7 @@ namespace NumSharp
 
         /// <inheritdoc/>
         /// <remarks>The 32-bit words drawn into the front half of the buffer, then widened back to front (a slot is only rewritten after the words it covers were read).</remarks>
-        internal override unsafe void FillRaw(ulong* dst, long n)
+        public override unsafe void FillRaw(ulong* dst, long n)
         {
             if (n <= 0)
                 return;
@@ -380,7 +382,7 @@ namespace NumSharp
 
         /// <inheritdoc/>
         /// <remarks>NumPy's <c>mt19937_next</c>: twist when the key is exhausted, then temper the next word.</remarks>
-        internal override uint NextUInt32()
+        public override uint NextUInt32()
         {
             if (_pos == N)
                 Generate();
@@ -395,7 +397,7 @@ namespace NumSharp
 
         /// <inheritdoc/>
         /// <remarks>NumPy's <c>mt19937_next64</c>: <c>(next32 &lt;&lt; 32) | next32</c> — the HIGH half is drawn first.</remarks>
-        internal override ulong NextUInt64()
+        public override ulong NextUInt64()
         {
             ulong hi = NextUInt32();
             return (hi << 32) | NextUInt32();
@@ -406,7 +408,7 @@ namespace NumSharp
         ///     NumPy's <c>mt19937_next_double</c>: 27 bits of one word and 26 of the next — NOT the 53 top bits of a
         ///     64-bit word the base formula uses (the value is identical to RandomState's <c>random_sample</c>).
         /// </remarks>
-        internal override double NextDouble()
+        public override double NextDouble()
         {
             int a = (int)(NextUInt32() >> 5);
             int b = (int)(NextUInt32() >> 6);
@@ -415,14 +417,14 @@ namespace NumSharp
 
         /// <inheritdoc/>
         /// <remarks>NumPy's <c>mt19937_raw</c>: the 32-bit word, widened.</remarks>
-        internal override ulong NextRaw() => NextUInt32();
+        public override ulong NextRaw() => NextUInt32();
 
         /// <inheritdoc/>
         /// <remarks>
         ///     A unit is <c>(first &lt;&lt; 32) | second</c> (<see cref="NextUInt64"/>), and <c>mt19937_next_double</c> consumes the
         ///     same two words as <c>(first &gt;&gt; 5, second &gt;&gt; 6)</c> — so the double is rebuilt from the unit's halves.
         /// </remarks>
-        internal override double UnitToDouble(ulong unit)
+        public override double UnitToDouble(ulong unit)
         {
             int a = (int)((uint)(unit >> 32) >> 5);
             int b = (int)((uint)unit >> 6);
@@ -640,10 +642,10 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        private protected override BitGeneratorState GetStateCore() => new State((uint[])_key.Clone(), _pos);
+        public override BitGeneratorState GetStateCore() => new State((uint[])_key.Clone(), _pos);
 
         /// <inheritdoc/>
-        private protected override void SetStateCore(BitGeneratorState value)
+        public override void SetStateCore(BitGeneratorState value)
         {
             if (value is not State s)
                 throw new ValueError("state must be for a MT19937 PRNG");

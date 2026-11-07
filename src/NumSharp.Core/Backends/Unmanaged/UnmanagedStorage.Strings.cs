@@ -36,11 +36,16 @@ namespace NumSharp.Backends
         /// <exception cref="NotSupportedException">This storage holds <c>StringDType</c> text: every caller of this property is a
         ///     fixed-width route (unit views, the byte codec, width arithmetic), and <c>StringDType</c> text takes its own routes
         ///     (<see cref="VStringSlice"/>), so it refuses here rather than reading the 16-byte cells as fixed-width text.</exception>
-        internal StringArraySlice StringSlice
+        /// <remarks>The slice covers the whole buffer: a view's elements start at its <see cref="Shape"/>'s offset and follow its
+        ///     strides, both counted in elements of the slice's width.</remarks>
+        public StringArraySlice StringSlice
             => InternalArray as StringArraySlice ?? (InternalArray is VStringArraySlice v ? throw VStringNotSupported(v.Descr) : null);
 
         /// <summary>The <see cref="VStringArraySlice"/> of a <c>StringDType</c> storage (null for every other storage).</summary>
-        internal VStringArraySlice VStringSlice => InternalArray as VStringArraySlice;
+        /// <remarks>The route from an array to its texts: <c>.Cells</c> are the 16-byte cells of the whole buffer (a view's
+        ///     elements start at its <see cref="Shape"/>'s offset), and <c>.Allocator</c> is the one allocator that may read or
+        ///     write them.</remarks>
+        public VStringArraySlice VStringSlice => InternalArray as VStringArraySlice;
 
         /// <summary>
         ///     The loud refusal of a raw or fixed-width route reached by a <c>StringDType</c> operand: a

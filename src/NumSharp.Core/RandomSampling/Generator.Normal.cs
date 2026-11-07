@@ -2,7 +2,7 @@ using System;
 
 namespace NumSharp
 {
-    public sealed partial class Generator
+    public partial class Generator
     {
         /// <summary>
         ///     Draw samples from a standard Normal distribution (mean 0, stdev 1).

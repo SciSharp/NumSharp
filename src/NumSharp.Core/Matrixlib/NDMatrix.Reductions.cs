@@ -551,7 +551,7 @@ namespace NumSharp
         /// <exception cref="AttributeError">See <see cref="NanExtreme"/>.</exception>
         /// <exception cref="ValueError">See <see cref="NanExtreme"/>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        internal override NDArray NanMax(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal override NDArray NanMax(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => Storage.Shape.NDim == 0
                 ? base.NanMax(axis, @out, keepdims, initial, @where)
                 : NanExtreme(axis, @out, keepdims, initial, @where, isMax: true);
@@ -570,7 +570,7 @@ namespace NumSharp
         /// <exception cref="AttributeError">See <see cref="NanExtreme"/>.</exception>
         /// <exception cref="ValueError">See <see cref="NanExtreme"/>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        internal override NDArray NanMin(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal override NDArray NanMin(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => Storage.Shape.NDim == 0
                 ? base.NanMin(axis, @out, keepdims, initial, @where)
                 : NanExtreme(axis, @out, keepdims, initial, @where, isMax: false);

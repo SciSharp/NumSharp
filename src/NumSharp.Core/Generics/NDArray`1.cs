@@ -176,9 +176,12 @@ namespace NumSharp.Generic
         /// </summary>
         /// <param name="shape">The dimensions (a view's layout is laid out again in C order, as for every allocation).</param>
         /// <param name="fillZeros">Zero the buffer; false leaves pool noise the caller must overwrite completely.</param>
-        /// <param name="engine">The engine the array binds (the engine computing the result it will hold); not null.</param>
+        /// <param name="engine">The engine the array binds (the engine computing the result it will hold), or <c>null</c>
+        ///     for <see cref="NumSharp.TensorEngine.Default"/> as it is now.</param>
         /// <exception cref="ValueError">A dimension is negative, or the byte count overflows.</exception>
-        internal NDArray(Shape shape, bool fillZeros, TensorEngine engine) : base(InfoOf<TDType>.NPTypeCode, shape, fillZeros, engine) { }
+        /// <remarks>Footgun: <paramref name="fillZeros"/> <c>false</c> hands out whatever bytes the buffer pool held - the
+        ///     caller must overwrite every element before anything reads the array.</remarks>
+        public NDArray(Shape shape, bool fillZeros, TensorEngine engine) : base(InfoOf<TDType>.NPTypeCode, shape, fillZeros, engine) { }
 
         /// <summary>
         /// Clone the array while preserving the typed NDArray wrapper.

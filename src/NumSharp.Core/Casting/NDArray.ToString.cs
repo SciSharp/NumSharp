@@ -48,7 +48,9 @@ namespace NumSharp
         ///     changes the layout of the whole repr, not the first word alone.
         /// </summary>
         /// <returns>The name without the parenthesis. Never <c>null</c> or empty.</returns>
-        internal virtual string ReprClassName => "array";
+        /// <remarks>A subclass declared outside NumSharp.dll overrides it as <c>protected override</c>; NumPy prints a
+        ///     user subclass under its own <c>__name__</c>, which is what such an override should return.</remarks>
+        protected internal virtual string ReprClassName => "array";
 
         #region legacy char/string rendering
 

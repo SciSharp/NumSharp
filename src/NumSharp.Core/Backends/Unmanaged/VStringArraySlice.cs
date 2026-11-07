@@ -117,7 +117,10 @@ namespace NumSharp.Backends.Unmanaged
         public ArraySlice<byte> Cells { get; }
 
         /// <summary>The allocator of the buffer these cells belong to (shared by every view of it).</summary>
-        internal VStringAllocator Allocator { get; }
+        /// <remarks>The one allocator <see cref="Cells"/> may be read and written with: lock it
+        ///     (<see cref="VStringAllocator.acquire_allocator"/>) around every <c>load</c> / <c>pack</c>, and never use it with
+        ///     cells of another buffer.</remarks>
+        public VStringAllocator Allocator { get; }
 
         /// <summary>The element descriptor (a <c>StringDType</c> instance: its <c>na_object</c> and <c>coerce</c>).</summary>
         public DType Descr { get; }

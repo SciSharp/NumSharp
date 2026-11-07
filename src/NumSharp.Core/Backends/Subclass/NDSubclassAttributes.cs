@@ -86,9 +86,13 @@ namespace NumSharp
     }
 
     /// <summary>
-    ///     How an ndarray method's 0-d result reaches the caller (<see cref="NewSubtypeAttribute.ZeroDim"/>).
+    ///     How an ndarray method's 0-d result reaches the caller (<see cref="NewSubtypeAttribute.ZeroDim"/>): the third
+    ///     argument of <see cref="NDArray.__array_finalize__(NDArray, bool, NewSubtypeZeroDim)"/>, which a subclass reads to
+    ///     decide whether a 0-d result stays an array of its class or becomes the element it stands for.
     /// </summary>
-    internal enum NewSubtypeZeroDim
+    /// <remarks>Public because the hook it is passed to can be overridden outside NumSharp.dll; a subclass that has no
+    ///     scalar form of its own treats every value as <see cref="Array"/>.</remarks>
+    public enum NewSubtypeZeroDim
     {
         /// <summary>A 0-d result is a 0-d array of the class, like any other rank.</summary>
         Array = 0,

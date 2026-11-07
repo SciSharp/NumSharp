@@ -690,10 +690,15 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         ///     and its pressure chunks move.</para>
         ///     <para>The growth test is a heuristic over two interlocked counters: concurrent bookings can move WHICH call
         ///     paces, never whether the books balance.</para>
+        ///     <para><b>For a bridge package.</b> Book when your holder (a view, a lease, a wrapper) starts keeping the foreign
+        ///     memory alive and give the same count back exactly once when it stops - in <c>Dispose</c> AND in its finalizer,
+        ///     guarded so only one of them returns it. Footgun: a booking never given back stays in the outstanding total
+        ///     for the life of the process, keeps its pressure chunks registered and makes every later growth window pace a
+        ///     collection sooner; a give-back without its booking drives the counters below the truth.</para>
         /// </remarks>
         /// <param name="bytes">The bytes to book (nothing for zero or less). Give exactly this count back with
         ///     <see cref="ReturnForeign"/> when the memory is no longer kept alive by NumSharp.</param>
-        internal static void BookForeign(long bytes)
+        public static void BookForeign(long bytes)
         {
             if (bytes <= 0)
                 return;
@@ -724,7 +729,9 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         ///     from a finalizer thread and from native callbacks.
         /// </summary>
         /// <param name="bytes">The count the matching <see cref="BookForeign"/> booked (nothing for zero or less).</param>
-        internal static void ReturnForeign(long bytes)
+        /// <remarks>Call it once per booking: the counters cannot tell a second give-back from a real one, so a double return
+        ///     (a <c>Dispose</c> and a finalizer both returning) leaves the outstanding total below what is really held.</remarks>
+        public static void ReturnForeign(long bytes)
         {
             if (bytes <= 0)
                 return;

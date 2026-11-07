@@ -2,7 +2,7 @@ using System;
 
 namespace NumSharp
 {
-    public sealed partial class Generator
+    public partial class Generator
     {
         // Random output is always a fresh C-contiguous owning array; these fill it sequentially
         // (RNG draws carry a strict data dependency through the engine state, exactly as NumPy fills a

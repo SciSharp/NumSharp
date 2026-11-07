@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace NumSharp
 {
-    public sealed partial class Generator
+    public partial class Generator
     {
         /// <summary>
         ///     The Generator's binomial setup cache (NumPy's <c>self._binomial</c>), shared by <see cref="binomial"/> and

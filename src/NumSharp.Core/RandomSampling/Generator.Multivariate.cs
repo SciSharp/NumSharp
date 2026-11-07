@@ -10,7 +10,7 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
-    public sealed partial class Generator
+    public partial class Generator
     {
         // =============================================================================================================
         // multinomial

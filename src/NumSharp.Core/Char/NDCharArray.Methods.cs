@@ -478,7 +478,7 @@ namespace NumSharp
         /// <remarks>NumPy's own statement hands the chararray to np.amax, whose woven subclass path answers for the class;
         ///     np.amax never comes back to this member, so the class's rule of computing on its plain view does not apply
         ///     here.</remarks>
-        internal override NDArray NanMax(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal override NDArray NanMax(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => IsScalarStandIn
                 ? base.NanMax(axis, @out, keepdims, initial, @where)
                 : np.amax(this, axis, @out, keepdims, initial, @where);
@@ -497,7 +497,7 @@ namespace NumSharp
         ///     types</c> for fixed-width text.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <remarks>As for <see cref="NanMax"/>, the chararray itself is NumPy's operand of np.amin.</remarks>
-        internal override NDArray NanMin(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal override NDArray NanMin(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => IsScalarStandIn
                 ? base.NanMin(axis, @out, keepdims, initial, @where)
                 : np.amin(this, axis, @out, keepdims, initial, @where);

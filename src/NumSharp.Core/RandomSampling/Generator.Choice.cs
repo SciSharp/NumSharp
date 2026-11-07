@@ -2,7 +2,7 @@ using System;
 
 namespace NumSharp
 {
-    public sealed partial class Generator
+    public partial class Generator
     {
         /// <summary>
         ///     Modify an array in-place by shuffling its contents along the given axis.

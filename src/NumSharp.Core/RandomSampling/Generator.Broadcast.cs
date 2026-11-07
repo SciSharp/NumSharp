@@ -4,7 +4,7 @@ using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
-    public sealed partial class Generator
+    public partial class Generator
     {
         // =============================================================================================================
         // Array-valued parameters (NumPy's cont / disc broadcast paths, _common.pyx)

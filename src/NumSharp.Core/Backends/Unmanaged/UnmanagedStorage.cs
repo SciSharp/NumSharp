@@ -172,8 +172,12 @@ namespace NumSharp.Backends
         ///     (<c>NDIterRef.CurrentView</c>): their NumPy base is the iterator, an object that exports no buffer at all,
         ///     so a write flag cleared on one cannot be set again.
         ///     </para>
+        ///     <para>
+        ///     Readable by everyone, set only inside NumSharp (where the storage over the foreign memory is created):
+        ///     clearing it on a read-only mapping would let the next write reach PROT_READ pages.
+        ///     </para>
         /// </remarks>
-        internal bool WriteProtected;
+        public bool WriteProtected { get; internal set; }
 
         /// <summary>
         ///     Set when this storage's memory belongs to a FOREIGN owner even though no
@@ -183,15 +187,19 @@ namespace NumSharp.Backends
         ///     memmap does, in every mode) and <c>np.require(…, "O")</c> copies them.
         /// </summary>
         /// <remarks>Orthogonal to <see cref="WriteProtected"/>: an <c>'r+'</c> memmap is externally based
-        /// yet writable; an <c>'r'</c> memmap is both.</remarks>
-        internal bool ExternalBase;
+        /// yet writable; an <c>'r'</c> memmap is both. Readable by everyone, set only inside NumSharp when the storage is
+        /// created: the shape's cached OWNDATA bit is computed from it then, so a later change would leave
+        /// <c>flags.owndata</c> stale.</remarks>
+        public bool ExternalBase { get; internal set; }
 
         /// <summary>
         ///     Does this storage own the memory it addresses — NumPy's <c>OWNDATA</c>: no base storage
         ///     (<see cref="_baseStorage"/>) and no foreign owner (<see cref="ExternalBase"/>). Read by
         ///     <c>ndarray.flags.owndata</c> and <c>np.require("O")</c>.
         /// </summary>
-        internal bool OwnsData => _baseStorage is null && !ExternalBase;
+        /// <remarks>Answers for the storage object itself: a view's storage reports <c>false</c> even when the array it views
+        ///     owns its buffer.</remarks>
+        public bool OwnsData => _baseStorage is null && !ExternalBase;
 
         /// <summary>
         ///     Is every element of this storage's array aligned for its dtype — the memory half of NumPy's
@@ -213,8 +221,9 @@ namespace NumSharp.Backends
         ///     view at an odd byte offset (<c>getfield</c>), and every view of such an array shares its address, so the
         ///     flag follows to every view without each view path computing it.
         ///     </para>
+        ///     <para>Recomputed on every read (one address test), so it follows the storage as it is now.</para>
         /// </remarks>
-        internal unsafe bool IsDataAligned
+        public unsafe bool IsDataAligned
         {
             get
             {
@@ -403,7 +412,7 @@ namespace NumSharp.Backends
         ///     overlap test). A route that copies or reinterprets elements must read <see cref="DTypeSize"/>, which refuses a
         ///     <c>StringDType</c> storage.
         /// </remarks>
-        internal int ItemBytes => InternalArray is VStringArraySlice ? VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING : DTypeSize;
+        public int ItemBytes => InternalArray is VStringArraySlice ? VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING : DTypeSize;
 
         /// <summary>
         ///     The shape representing the data in this storage.

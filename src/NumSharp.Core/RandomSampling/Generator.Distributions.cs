@@ -2,7 +2,7 @@ using System;
 
 namespace NumSharp
 {
-    public sealed partial class Generator
+    public partial class Generator
     {
         // Bit-exact log1p: Math.Log matches ucrtbase log on win-amd64 (NumPy's npy_log = log), and
         // the Kahan/Goldberg correction recovers the log1p precision the raw Math.Log(1+x) loses.

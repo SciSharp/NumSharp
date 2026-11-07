@@ -73,12 +73,18 @@ namespace NumSharp
                 return ret;
             }
 
+            /// <summary>
+            ///     NumPy's <c>np.ndindex(*shape)</c> constructor: a cursor over every index of <paramref name="shape"/> in C
+            ///     order, the same object <c>np.ndindex</c> returns.
+            /// </summary>
             /// <param name="shape">Dimension sizes; may be null/empty (a 0-d index space).</param>
             /// <exception cref="ArgumentException">
             ///     A dimension is negative — NumPy's
             ///     <c>ValueError("negative dimensions are not allowed")</c>.
             /// </exception>
-            internal NDIndex(long[] shape)
+            /// <remarks>The dimensions are copied, so changing <paramref name="shape"/> afterwards does not move the
+            ///     cursor.</remarks>
+            public NDIndex(long[] shape)
             {
                 shape ??= Array.Empty<long>();
 

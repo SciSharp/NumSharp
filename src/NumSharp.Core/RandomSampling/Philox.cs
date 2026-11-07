@@ -20,7 +20,7 @@ namespace NumSharp
     ///     and <see cref="BitGenerator.spawn"/> is unavailable, as in NumPy. <see cref="advance"/> adds to the counter
     ///     (mod 2**256); <see cref="jumped(long)"/> advances by <c>2**128</c> per jump.
     /// </remarks>
-    public sealed class Philox : BitGenerator
+    public class Philox : BitGenerator
     {
         // Philox 4x64 round multipliers and Weyl key-schedule increments (philox.h).
         private const ulong PHILOX_M4x64_0 = 0xD2E7470EE14C6C93UL;
@@ -158,10 +158,10 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        internal override string Name => "Philox";
+        public override string Name => "Philox";
 
         /// <inheritdoc/>
-        private protected override BitGenerator CreateFromSeed(ISeedSequence seed) => new Philox(seed);
+        public override BitGenerator CreateFromSeed(ISeedSequence seed) => new Philox(seed);
 
         /// <summary>NumPy's <c>_reset_state_variables</c>: no buffered 32-bit half, and an exhausted, zeroed block buffer.</summary>
         private void ResetStateVariables()
@@ -174,7 +174,7 @@ namespace NumSharp
 
         /// <inheritdoc/>
         /// <remarks>NumPy's <c>philox_next</c>: serve the buffered block, else increment the counter and encrypt a new one.</remarks>
-        internal override ulong NextUInt64()
+        public override ulong NextUInt64()
         {
             if (_bufferPos < BufferSize)
                 return _buffer[_bufferPos++];
@@ -189,7 +189,7 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        internal override uint NextUInt32()
+        public override uint NextUInt32()
         {
             // philox_next32: serve the cached high half, else draw a 64-bit word and cache its high half.
             if (_hasUint32 != 0)
@@ -257,7 +257,7 @@ namespace NumSharp
         ///     per-draw one: the buffer holds the last block encrypted and <c>buffer_pos</c> indexes its next unread
         ///     word (4 when a whole block was just consumed).
         /// </remarks>
-        internal override unsafe void FillUInt64(ulong* dst, long n)
+        public override unsafe void FillUInt64(ulong* dst, long n)
         {
             long i = 0;
             while (i < n && _bufferPos < BufferSize)
@@ -298,16 +298,16 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        internal override unsafe void FillUInt32(uint* dst, long n) => FillUInt32From64(dst, n, ref _hasUint32, ref _uinteger);
+        public override unsafe void FillUInt32(uint* dst, long n) => FillUInt32From64(dst, n, ref _hasUint32, ref _uinteger);
 
         /// <inheritdoc/>
-        internal override unsafe void FillDouble(double* dst, long n) => FillDoubleFrom64(dst, n);
+        public override unsafe void FillDouble(double* dst, long n) => FillDoubleFrom64(dst, n);
 
         /// <inheritdoc/>
-        internal override unsafe void FillFloat(float* dst, long n) => FillFloatFrom64(dst, n, ref _hasUint32, ref _uinteger);
+        public override unsafe void FillFloat(float* dst, long n) => FillFloatFrom64(dst, n, ref _hasUint32, ref _uinteger);
 
         /// <inheritdoc/>
-        internal override unsafe void FillRaw(ulong* dst, long n) => FillUInt64(dst, n);
+        public override unsafe void FillRaw(ulong* dst, long n) => FillUInt64(dst, n);
 
         /// <summary>
         ///     Advance the underlying RNG as if <paramref name="delta"/> draws had occurred (NumPy's <c>Philox.advance</c>)
@@ -641,7 +641,7 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        private protected override BitGeneratorState GetStateCore()
+        public override BitGeneratorState GetStateCore()
             => new State(new[] { _c0, _c1, _c2, _c3 }, new[] { _k0, _k1 }, (ulong[])_buffer.Clone(), _bufferPos, _hasUint32, _uinteger);
 
         /// <inheritdoc/>
@@ -653,7 +653,7 @@ namespace NumSharp
         ///     the failure written). A negative <c>buffer_pos</c> is refused: NumPy would read memory before its buffer
         ///     (undefined behavior).
         /// </remarks>
-        private protected override void SetStateCore(BitGeneratorState value)
+        public override void SetStateCore(BitGeneratorState value)
         {
             if (value is not State s)
                 throw new ValueError("state must be for a Philox PRNG");

@@ -223,7 +223,18 @@ namespace NumSharp.Backends
         /// against <paramref name="operands"/> (the program's own embedded arrays, or a positional list
         /// the handle has already matched to the compiled dtype signature).
         /// </summary>
-        internal override NDArray Evaluate(NDExprProgram program, NDArray[] operands, NDArray @out, in NDEvaluateOptions options = default)
+        /// <param name="program">The compiled program.</param>
+        /// <param name="operands">The arrays bound to the program's inputs, in the program's order.</param>
+        /// <param name="out">NumPy's <c>out=</c>, or <c>null</c> for a fresh result.</param>
+        /// <param name="options">The resolved <c>dtype=</c> / <c>casting=</c> / <c>order=</c> keywords; <c>default</c> for none.</param>
+        /// <returns><paramref name="out"/> when given, else a fresh array bound to this engine.</returns>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast together.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> or a keyword is refused by NumPy's rules for the program's
+        ///     ufuncs.</exception>
+        /// <exception cref="NotSupportedException">A node the fused path does not evaluate for these dtypes.</exception>
+        /// <remarks>An engine derived from this one overrides it to observe or reroute compiled evaluations and calls
+        ///     <c>base</c> to run them.</remarks>
+        public override NDArray Evaluate(NDExprProgram program, NDArray[] operands, NDArray @out, in NDEvaluateOptions options = default)
             => EvaluateCore(program, operands, @out, options);
 
         /// <summary>True when every operand has exactly the same dimensions (no broadcasting to resolve).</summary>
