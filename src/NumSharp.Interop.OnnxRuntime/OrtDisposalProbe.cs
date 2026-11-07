@@ -20,9 +20,14 @@ namespace NumSharp.Interop.OnnxRuntime
     ///     private field the same way).</para>
     ///     <para>A version without the field gets no check (the getter is null): the guard can only remove crashes, never
     ///     refuse a live object. That is what lets the package's ONNX Runtime dependency stay open above (no upper
-    ///     bound): a future ORT that renames the field loses this check, not the call. It does not make a concurrent
-    ///     <c>Dispose</c> safe - a session disposed by another thread between the check and the native call still
-    ///     crashes, as it does in ONNX Runtime itself.</para>
+    ///     bound): a future ORT that renames the field loses this check, not the call.</para>
+    ///     <para>A check alone cannot make a concurrent <c>Dispose</c> safe: a session or a value disposed by another
+    ///     thread between the check and the native call is released under it. That is what the leases are for. Every
+    ///     value the import verbs touch carries an ARC token (<see cref="OrtValueBooking"/>): a <c>Dispose</c> on any
+    ///     thread waits for the verbs in flight and releases the value once, after its last view. A session is safe to
+    ///     dispose under this package's runs when it is an <see cref="NDInferenceSession"/>; a plain
+    ///     <see cref="InferenceSession"/> keeps this check only, and with it ONNX Runtime's rule (dispose once, after
+    ///     every run returned).</para>
     /// </remarks>
     internal static class OrtDisposalProbe
     {

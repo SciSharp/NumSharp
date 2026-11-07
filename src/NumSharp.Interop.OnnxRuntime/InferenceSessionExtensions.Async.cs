@@ -121,7 +121,7 @@ namespace NumSharp.Interop.OnnxRuntime
             if (outputs is null)
                 throw new ArgumentNullException(nameof(outputs));
             EnsureRunAsyncSupported(nameof(RunIntoAsync), nameof(RunInto));
-            OrtDisposalProbe.ThrowIfDisposed(session, nameof(RunIntoAsync));   // see Run: a disposed session would end the process
+            SessionLease.ThrowIfDisposed(session, nameof(RunIntoAsync));   // see Run: a disposed session would end the process (the lease comes with the run)
             NPY_CASTING rule = DTypeCasting.ParseCasting(casting);
             NDArrayOnnxInterop.EnsureDefined(mode);
             if (outputs.Count == 0)
@@ -132,6 +132,9 @@ namespace NumSharp.Interop.OnnxRuntime
             var run = new PendingRun(session, runOptions, inputs.Count, outputs.Count, allocated: null);
             try
             {
+                // An NDInferenceSession is leased until the run completes (its Dispose waits for it); Abort ends the lease of a
+                // run that never started.
+                run.EnterSession(nameof(RunIntoAsync));
                 run.PrepareInputs(inputs, rule, casting, mode);
                 int j = 0;
                 foreach (KeyValuePair<string, NDArray> output in outputs)
@@ -212,7 +215,7 @@ namespace NumSharp.Interop.OnnxRuntime
             if (inputs is null)
                 throw new ArgumentNullException(nameof(inputs));
             EnsureRunAsyncSupported(nameof(RunAsync), nameof(Run));
-            OrtDisposalProbe.ThrowIfDisposed(session, nameof(RunAsync));   // see Run: a disposed session would end the process
+            SessionLease.ThrowIfDisposed(session, nameof(RunAsync));   // see Run: a disposed session would end the process (the lease comes with the run)
             NPY_CASTING rule = DTypeCasting.ParseCasting(casting);
             NDArrayOnnxInterop.EnsureDefined(mode);
 
@@ -234,6 +237,9 @@ namespace NumSharp.Interop.OnnxRuntime
             var run = new PendingRun(session, runOptions, inputs.Count, names.Length, allocated);
             try
             {
+                // An NDInferenceSession is leased until the run completes (its Dispose waits for it); Abort ends the lease of a
+                // run that never started.
+                run.EnterSession(nameof(RunAsync));
                 run.PrepareInputs(inputs, rule, casting, mode);
                 for (int j = 0; j < names.Length; j++)
                 {
@@ -497,6 +503,10 @@ namespace NumSharp.Interop.OnnxRuntime
             private OrtTensor[] _passedThrough;
             private int _started;
 
+            // The run's lease on its session: an NDInferenceSession's Dispose waits until Finish (or Abort) ends it. Default
+            // (nothing to end) until EnterSession, and for a plain InferenceSession.
+            private SessionLease _sessionLease;
+
             /// <summary>Creates the run's empty slots.</summary>
             /// <param name="session">The session that runs.</param>
             /// <param name="runOptions">The caller's run options, or null.</param>
@@ -513,6 +523,15 @@ namespace NumSharp.Interop.OnnxRuntime
                 OutNames = new string[outputCount];
                 OutHandles = new OrtTensor[outputCount];
             }
+
+            /// <summary>
+            ///     Opens the run's lease on its session, before anything of the run is prepared: an
+            ///     <see cref="NDInferenceSession"/> is refused once its <c>Dispose</c> began, and otherwise waits for this run to
+            ///     complete before it releases the native session; a plain session gets ONNX Runtime's disposal check.
+            /// </summary>
+            /// <param name="verb">The public verb, named in a refusal.</param>
+            /// <exception cref="ObjectDisposedException">The session has been disposed, or is being disposed.</exception>
+            internal void EnterSession(string verb) => _sessionLease = SessionLease.Enter(_session, verb);
 
             /// <summary>Prepares every input as the synchronous forms do (name, dtype rule, declared shape, mode).</summary>
             /// <param name="inputs">Model input name → array.</param>
@@ -618,6 +637,7 @@ namespace NumSharp.Interop.OnnxRuntime
                     return;
                 DisposeHandles();
                 DisposeAllocated();
+                _sessionLease.Dispose();   // after the handles: a session this releases outlives every handle of the run
             }
 
             /// <summary>
@@ -662,6 +682,18 @@ namespace NumSharp.Interop.OnnxRuntime
                     {
                         cleanupFailure ??= e;
                     }
+                }
+
+                // The session is no longer this run's: an NDInferenceSession disposed meanwhile is released now - on the thread
+                // pool, because this may be ONNX Runtime's own intra-op thread, where releasing the session never returns. Before
+                // the task completes, so a caller that continues after it finds the run's lease gone.
+                try
+                {
+                    _sessionLease.ExitFromOrtThread();
+                }
+                catch (Exception e)
+                {
+                    cleanupFailure ??= e;
                 }
 
                 // ORT 1.30 and newer keep the session and the options referenced for the run; this keeps the rule

@@ -21,6 +21,10 @@ namespace NumSharp.Interop.OnnxRuntime
         // they count in LiveImports until they are disposed (or collected), and the source OrtValue may still be disposed
         // the moment the reader returns, because the elements do not point into it. A text part is the exception: it
         // cannot be viewed, so it is an ordinary owning array and ORT's copy of it is disposed at once.
+        //
+        // Threads: each reader holds a call lease on the container while it reads (OrtValueBooking), so a Dispose on another
+        // thread waits for the reader and then releases the container once; a reader that starts after the Dispose began
+        // throws ObjectDisposedException. The elements are the reader's own until an array owns them, so they are not adopted.
 
         /// <summary>
         ///     Read a SEQUENCE <see cref="OrtValue"/> whose elements are dense tensors into one <see cref="NDArray"/> per
@@ -31,7 +35,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="sequence">A sequence OrtValue whose elements are dense tensors.</param>
         /// <returns>One array per element, in sequence order; dispose each one to free ORT's copy of its element.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="sequence"/> is null.</exception>
-        /// <exception cref="ObjectDisposedException">The value has been disposed, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
+        /// <exception cref="ObjectDisposedException">The value has been disposed, is being disposed by another thread, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
         /// <exception cref="NotSupportedException">
         ///     Not a sequence, or an element is not a dense tensor (a sequence of MAPs — the ZipMap shape — is
         ///     read with <see cref="ToMaps"/> instead), or an element's element type has no NumSharp dtype.
@@ -44,7 +48,8 @@ namespace NumSharp.Interop.OnnxRuntime
         {
             if (sequence is null)
                 throw new ArgumentNullException(nameof(sequence));
-            EnsureNotOfADisposedHandle(sequence, nameof(ToNDArrays));
+            // The disposal checks, then a call lease for every native call on the sequence below.
+            using OrtValueBooking.Lease lease = OrtValueBooking.Enter(sequence, nameof(ToNDArrays), adopt: true);
             if (sequence.OnnxType != OnnxValueType.ONNX_TYPE_SEQUENCE)
                 throw new NotSupportedException(
                     $"ToNDArrays needs a sequence OrtValue, but this value is {sequence.OnnxType}. A dense tensor is read with " +
@@ -64,7 +69,8 @@ namespace NumSharp.Interop.OnnxRuntime
                             throw new NotSupportedException(
                                 $"ToNDArrays: sequence element {i} is {element.OnnxType}, not a dense tensor. A sequence of maps " +
                                 "(e.g. a scikit-learn ZipMap output) is read with ToMaps.");
-                        result[i] = element.AsNDArray(ownsValue: true);   // the array owns ORT's copy from here on
+                        // The array owns ORT's copy from here on; the element is this reader's alone, so it is not adopted.
+                        result[i] = AsNDArrayCore(element, ownsValue: true, OnnxCodecMode.Auto, adopt: false);
                     }
                     catch
                     {
@@ -94,18 +100,31 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="map">A map OrtValue.</param>
         /// <returns>The keys and the values, each a 1-D array; dispose both.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="map"/> is null.</exception>
-        /// <exception cref="ObjectDisposedException">The value has been disposed, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
+        /// <exception cref="ObjectDisposedException">The value has been disposed, is being disposed by another thread, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
         /// <exception cref="NotSupportedException">Not a map, or its keys or its values are of a type NumSharp lacks (BFloat16).</exception>
         /// <remarks>
         ///     A failure converting the values disposes the keys array already made, so a refused map leaves no array
         ///     behind, and ORT's copies of both tensors are freed. String-keyed and string-valued maps used to be refused
         ///     (NumSharp had no text dtype); they are read now.
         /// </remarks>
-        public static (NDArray keys, NDArray values) ToMap(this OrtValue map)
+        public static (NDArray keys, NDArray values) ToMap(this OrtValue map) => ToMapCore(map, adopt: true);
+
+        /// <summary>
+        ///     <see cref="ToMap"/> with the adoption choice: the public verb adopts a map a caller handed over; <see cref="ToMaps"/>
+        ///     passes <c>false</c> for the map elements it reads, which are its own transient copies.
+        /// </summary>
+        /// <param name="map">A map OrtValue.</param>
+        /// <param name="adopt">Whether a map without a token is adopted (see <c>OrtValueBooking.Enter</c>).</param>
+        /// <returns>The keys and the values, each a 1-D array; dispose both.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="map"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">The map has been disposed, is being disposed, or belongs to a disposed <see cref="OrtTensor"/> handle.</exception>
+        /// <exception cref="NotSupportedException">Not a map, or its keys or its values are of a type NumSharp lacks (BFloat16).</exception>
+        private static (NDArray keys, NDArray values) ToMapCore(OrtValue map, bool adopt)
         {
             if (map is null)
                 throw new ArgumentNullException(nameof(map));
-            EnsureNotOfADisposedHandle(map, nameof(ToMap));
+            // The disposal checks, then a call lease for every native call on the map below.
+            using OrtValueBooking.Lease lease = OrtValueBooking.Enter(map, nameof(ToMap), adopt);
             if (map.OnnxType != OnnxValueType.ONNX_TYPE_MAP)
                 throw new NotSupportedException($"ToMap needs a map OrtValue, but this value is {map.OnnxType}.");
 
@@ -122,9 +141,10 @@ namespace NumSharp.Interop.OnnxRuntime
 
                 // Owning either way: a numeric tensor becomes a view that owns ORT's copy, a string tensor becomes a text
                 // array and ORT's copy is disposed at once (AsNDArray's default mode copies what it cannot view).
-                keyArray = keys.AsNDArray(ownsValue: true);
+                // The two tensors are this reader's alone until an array owns them, so they are not adopted.
+                keyArray = AsNDArrayCore(keys, ownsValue: true, OnnxCodecMode.Auto, adopt: false);
                 keys = null;
-                NDArray valueArray = values.AsNDArray(ownsValue: true);
+                NDArray valueArray = AsNDArrayCore(values, ownsValue: true, OnnxCodecMode.Auto, adopt: false);
                 values = null;
                 return (keyArray, valueArray);
             }
@@ -151,14 +171,15 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="sequenceOfMaps">A sequence OrtValue whose elements are maps.</param>
         /// <returns>One (keys, values) pair per element, in sequence order.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="sequenceOfMaps"/> is null.</exception>
-        /// <exception cref="ObjectDisposedException">The value has been disposed, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
+        /// <exception cref="ObjectDisposedException">The value has been disposed, is being disposed by another thread, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
         /// <exception cref="NotSupportedException">Not a sequence, an element is not a map, or a map is refused by <see cref="ToMap"/>.</exception>
         /// <remarks>All or nothing, like <see cref="ToNDArrays"/>: a failing element disposes the pairs already read.</remarks>
         public static (NDArray keys, NDArray values)[] ToMaps(this OrtValue sequenceOfMaps)
         {
             if (sequenceOfMaps is null)
                 throw new ArgumentNullException(nameof(sequenceOfMaps));
-            EnsureNotOfADisposedHandle(sequenceOfMaps, nameof(ToMaps));
+            // The disposal checks, then a call lease for every native call on the sequence below.
+            using OrtValueBooking.Lease lease = OrtValueBooking.Enter(sequenceOfMaps, nameof(ToMaps), adopt: true);
             if (sequenceOfMaps.OnnxType != OnnxValueType.ONNX_TYPE_SEQUENCE)
                 throw new NotSupportedException($"ToMaps needs a sequence OrtValue, but this value is {sequenceOfMaps.OnnxType}.");
 
@@ -173,7 +194,7 @@ namespace NumSharp.Interop.OnnxRuntime
                     if (element.OnnxType != OnnxValueType.ONNX_TYPE_MAP)
                         throw new NotSupportedException(
                             $"ToMaps: sequence element {i} is {element.OnnxType}, not a map. A sequence of tensors is read with ToNDArrays.");
-                    result[i] = element.ToMap();
+                    result[i] = ToMapCore(element, adopt: false);   // the element is this reader's own copy
                 }
                 return result;
             }
@@ -197,16 +218,27 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="map">A map OrtValue.</param>
         /// <returns>ORT's copy of the keys tensor; the caller disposes it.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="map"/> is null.</exception>
-        /// <exception cref="ObjectDisposedException">The value has been disposed, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
+        /// <exception cref="ObjectDisposedException">The value has been disposed, is being disposed by another thread, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
         /// <exception cref="NotSupportedException">Not a map.</exception>
         public static OrtValue GetMapKeys(this OrtValue map)
         {
             if (map is null)
                 throw new ArgumentNullException(nameof(map));
-            EnsureNotOfADisposedHandle(map, nameof(GetMapKeys));
+            // The disposal checks, then a call lease for the native call on the map below.
+            using OrtValueBooking.Lease lease = OrtValueBooking.Enter(map, nameof(GetMapKeys), adopt: true);
             if (map.OnnxType != OnnxValueType.ONNX_TYPE_MAP)
                 throw new NotSupportedException($"GetMapKeys needs a map OrtValue, but this value is {map.OnnxType}.");
-            return map.GetValue(0, OrtAllocator.DefaultInstance);
+            OrtValue keys = map.GetValue(0, OrtAllocator.DefaultInstance);
+            try
+            {
+                // The caller's new value carries its ARC from birth (no booking: it is ORT's copy, as a Run output is).
+                return OrtValueBooking.Track(keys, bytes: 0);
+            }
+            catch
+            {
+                keys.Dispose();   // never handed out: nobody else could free ORT's copy
+                throw;
+            }
         }
 
         /// <summary>
@@ -218,13 +250,14 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="tensor">A string tensor.</param>
         /// <returns>The strings in row-major order.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="tensor"/> is null.</exception>
-        /// <exception cref="ObjectDisposedException">The value has been disposed, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
+        /// <exception cref="ObjectDisposedException">The value has been disposed, is being disposed by another thread, or belongs to a disposed <see cref="OrtTensor"/> handle: refused before any native call (ONNX Runtime does not check it, and reading a released value ends the process).</exception>
         /// <exception cref="NotSupportedException">Not a tensor, or not a string tensor (a numeric tensor reads with <see cref="ToNDArray(OrtValue)"/>).</exception>
         public static string[] ReadStringTensor(this OrtValue tensor)
         {
             if (tensor is null)
                 throw new ArgumentNullException(nameof(tensor));
-            EnsureNotOfADisposedHandle(tensor, nameof(ReadStringTensor));
+            // The disposal checks, then a call lease for every native call on the tensor below.
+            using OrtValueBooking.Lease lease = OrtValueBooking.Enter(tensor, nameof(ReadStringTensor), adopt: true);
             if (tensor.OnnxType != OnnxValueType.ONNX_TYPE_TENSOR)
                 throw new NotSupportedException($"ReadStringTensor needs a tensor OrtValue, but this value is {tensor.OnnxType}.");
             if (!tensor.GetTensorTypeAndShape().IsString)
