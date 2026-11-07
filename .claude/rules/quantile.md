@@ -65,6 +65,10 @@ one builder per precision (`DirectILKernelGenerator.QuantilePlan`, cached per dt
   data's own NaN. The nan forms' q-axis order over merged axes follows NumPy, which moves q's axes from the UNnormalized
   -1 (`UReduced.NumPyAxis`); over all-NaN data they write a positive NaN through views and the layout NumPy's broadcast
   store gives (`FillWithNumPyNaN`).
+- Open (`OpenBugs.NpLayer.cs`, NL15): complex np.nanmedian keeps the NaNs NumPy's `_nanmedian` removes
+  (`_remove_nan_1d` over a flat slice, `np.ma.median` along an axis shorter than 600): `ComputeComplexQuantile` removes
+  none, so a slice holding a NaN gets another median and an all-NaN slice `nan+nanj` where NumPy returns its last
+  element.
 
 ## `weights=`
 
