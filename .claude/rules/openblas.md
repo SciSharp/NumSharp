@@ -47,6 +47,10 @@ public abstract partial class TensorEngine
   first); an engine assigned to `TensorEngine.Default` later has its own `Blas` (null until set), so copy it over.
 - Read `Blas` into a local before calling it: test-then-call on a settable property races a concurrent `Disable()`.
 - A failed `OpenBlasEngine.Enable` is a no-op: the library already loaded stays loaded.
+- `Enable` with ANOTHER library frees the replaced one (`OpenBlasNative.Load` frees `previous` once the new one is
+  bound), so it is not safe while another thread computes: a BLAS call still executing in the replaced library is an
+  access violation (4 of 4 processes, race probe of 2026-11-07). `Disable()` never frees. The owner chose to document
+  the rule rather than keep replaced libraries loaded (2026-11-07; the 0-crash prototype is on `qa/interop-probes`).
 - A backend needs no `InternalsVisibleTo`: read operands as `(T*)a.GetData().Address + a.Shape.Offset` with
   `a.Shape.Strides` (all public). `a.GetData<T>().Address` densifies a non-contiguous view, so never pair it with strides.
 - `TryMatMulBatched` takes a whole stacked product, so per-product setup is hoisted out of the loop as NumPy hoists it

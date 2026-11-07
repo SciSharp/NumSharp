@@ -152,8 +152,9 @@ namespace NumSharp.Interop.OnnxRuntime
             // EVERY call: the rule name used to be checked only when some input needed a cast, so a misspelled rule
             // went unnoticed until the first input of another dtype.
             // A disposed session is refused before anything reaches native code: ONNX Runtime's own Run on one ends the
-            // process with an access violation (OrtDisposalProbe).
-            OrtDisposalProbe.ThrowIfDisposed(session, nameof(Run));
+            // process with an access violation (OrtDisposalProbe). An NDInferenceSession is leased for the whole run
+            // instead: its Dispose, on any thread, waits for this run, and the run is refused once a Dispose began.
+            using SessionLease lease = SessionLease.Enter(session, nameof(Run));
             NPY_CASTING rule = DTypeCasting.ParseCasting(casting);
             NDArrayOnnxInterop.EnsureDefined(mode);
             outputNames ??= session.OutputNames;
@@ -245,7 +246,7 @@ namespace NumSharp.Interop.OnnxRuntime
                 throw new ArgumentNullException(nameof(inputs));
             if (outputs is null)
                 throw new ArgumentNullException(nameof(outputs));
-            OrtDisposalProbe.ThrowIfDisposed(session, nameof(RunInto));   // see Run: a disposed session would end the process
+            using SessionLease lease = SessionLease.Enter(session, nameof(RunInto));   // see Run: the disposal check, or the lease of an NDInferenceSession
             NPY_CASTING rule = DTypeCasting.ParseCasting(casting);
             NDArrayOnnxInterop.EnsureDefined(mode);
             // A required input the feed leaves out is refused before anything is read (it used to fail inside the graph).
@@ -489,7 +490,8 @@ namespace NumSharp.Interop.OnnxRuntime
                     foreach (string name in outputNames)
                     {
                         OrtTensor fed = FedTensor(name, inNames, inHandles);
-                        result[name] = fed is null ? outputs[j].ToNDArray() : NDArrayOnnxInterop.CopyExportedValue(fed);
+                        // The run's own outputs: nothing outside this call can reach them, so they are not adopted.
+                        result[name] = fed is null ? NDArrayOnnxInterop.ToNDArrayCore(outputs[j], adopt: false) : NDArrayOnnxInterop.CopyExportedValue(fed);
                         j++;
                     }
                 }
@@ -538,7 +540,8 @@ namespace NumSharp.Interop.OnnxRuntime
                     OrtTensor fed = FedTensor(name, inNames, inHandles);
                     if (fed is null)
                     {
-                        result[name] = outputs[j].AsNDArray(ownsValue: true);
+                        // The view owns the run's output from here on, and nothing else can reach it: not adopted.
+                        result[name] = NDArrayOnnxInterop.AsNDArrayCore(outputs[j], ownsValue: true, OnnxCodecMode.Auto, adopt: false);
                     }
                     else
                     {

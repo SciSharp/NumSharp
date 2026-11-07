@@ -159,6 +159,12 @@ element, so they import as the empty vector `(0,)`, never as a one-element 0-d a
   with NumSharp's memory accounting: the GC counts the backing array, but a forgotten view's pin keeps it
   alive past the collection that found the view dead, and 5,000 forgotten views of fresh 602 KB tensors held
   2.6 GB with nothing booked and 96 MB booked. Views you dispose cost nothing: the booking ends with the pin.
+- **A span holds no reference of its own.** A `TensorSpan<T>` is a `ref struct`, so it cannot take a reference on
+  the buffer the way the handle does: it reads the handle's memory the way an `NDArray` can wrap
+  [unsafe memory](../buffering.md), and that memory must outlive it. Keep the `TensorSpanHandle<T>` - or the source
+  array - undisposed for the whole life of every span you take from it, on every thread, and dispose them only after
+  the last span is done. A span read after both were disposed reads whatever the pool handed the buffer to next
+  (800 of 800 reads in a race probe returned another array's data).
 - **No GIL, no interpreter, no native handles.** The verbs are plain managed calls; the one rule is the
   handle rule - **keep the `TensorSpanHandle<T>` alive while you use its span, and dispose it.**
 

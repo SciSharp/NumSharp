@@ -243,9 +243,22 @@ namespace NumSharp.Interop.OnnxRuntime
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
 
-            // Text crosses as a string tensor (a copy of every string; see NDArrayOnnxInterop.Text.cs).
+            // Text crosses as a string tensor (a copy of every string; see NDArrayOnnxInterop.Text.cs). Its strings are not
+            // booked (they are many small native objects, not one buffer), but the value carries its ARC from birth: a
+            // Dispose from any number of threads releases it once.
             if (IsText(source))
-                return TextToOrtValue(source, nameof(ToOrtValue));
+            {
+                OrtValue text = TextToOrtValue(source, nameof(ToOrtValue));
+                try
+                {
+                    return OrtValueBooking.Track(text, bytes: 0);
+                }
+                catch
+                {
+                    text.Dispose();   // never handed out: nobody else could free ORT's copy
+                    throw;
+                }
+            }
 
             // Decide everything the dtype and the shape alone decide BEFORE the source is read. The 2 GB check used
             // to run after the source had been converted and densified and ORT had allocated the tensor, so a large

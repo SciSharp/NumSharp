@@ -27,6 +27,12 @@ namespace NumSharp.Interop.Tensors
     ///     disposing the handle releases the reference. The finalizer is a leak-prevention safety net, not a
     ///     lifetime model — dispose it deterministically.</para>
     ///
+    ///     <para><b>A span holds no reference of its own</b> (a <c>ref struct</c> cannot): like an
+    ///     <see cref="NDArray"/> over unsafe memory, it reads memory something else keeps alive - this handle, or
+    ///     the source array. Keep one of them undisposed for the whole life of every span taken from it, on every
+    ///     thread: a span read after both were disposed reads whatever the pool handed the buffer to next (800 of
+    ///     800 reads in a race probe returned another array's data).</para>
+    ///
     ///     <para><b>Writeability.</b> <see cref="Span"/> (the mutable <see cref="TensorSpan{T}"/>) is available
     ///     only when the source array is writeable; a broadcast / read-only NumSharp view exposes
     ///     <see cref="ReadOnlySpan"/> only, and <see cref="Span"/> throws — writing through overlapping
@@ -66,9 +72,11 @@ namespace NumSharp.Interop.Tensors
         ///     each access (the span is a <c>ref struct</c> and cannot be cached).
         /// </summary>
         /// <remarks>
-        ///     For an empty array the span keeps the array's shape, with every stride 0, and fronts an empty managed
+        ///     <para>For an empty array the span keeps the array's shape, with every stride 0, and fronts an empty managed
         ///     array instead of the NumSharp buffer: it has no element to address, so where it points is unobservable,
-        ///     and it does not depend on what address NumSharp gives a zero-size buffer.
+        ///     and it does not depend on what address NumSharp gives a zero-size buffer.</para>
+        ///     <para>The span holds no reference of its own: it is valid while this handle or the source array is
+        ///     undisposed (see the class remarks).</para>
         /// </remarks>
         /// <value>A <see cref="TensorSpan{T}"/> with the array's lengths and element strides.</value>
         /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
@@ -89,7 +97,8 @@ namespace NumSharp.Interop.Tensors
         }
 
         /// <summary>The read-only tensor view over the NumSharp buffer. Available for every layout, broadcast included. Rebuilt on each access.</summary>
-        /// <remarks>An empty array's span keeps its shape, with every stride 0 (see <see cref="Span"/>).</remarks>
+        /// <remarks>An empty array's span keeps its shape, with every stride 0 (see <see cref="Span"/>). The span holds no
+        /// reference of its own: it is valid while this handle or the source array is undisposed.</remarks>
         /// <value>A <see cref="ReadOnlyTensorSpan{T}"/> with the array's lengths and element strides.</value>
         /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
         public ReadOnlyTensorSpan<T> ReadOnlySpan
