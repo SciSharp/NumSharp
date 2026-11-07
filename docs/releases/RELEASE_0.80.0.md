@@ -13,7 +13,7 @@
 - **Reductions on NumPy's own schedules** - `max`, `min`, `ptp`, `nanmax`, `nanmin`, `argmax`, the flat `sum` / `mean` and the fused `np.evaluate` reductions match NumPy bit for bit, down to the sign of a ±0 tie and a NaN's payload; `mean`, `var`, `std` and their NaN-aware forms are NumPy's own statements; and most of them run faster.
 - **NumPy's structure for the engine** - every computing `np.*` function is a `TensorEngine` member named after its NumPy source file, `numpy.linalg` and `numpy.fft` are replaceable sub-engines, and the default engine is settable.
 - **The 2026-11-02 parity QA** - 53 of its 55 findings fixed on the owner's decisions (one kept as a documented divergence, one deferred), and NumPy's own dot functions behind `np.dot` / `np.vdot` / `np.vecdot`.
-- **83 NumPy-parity, memory-safety and tooling fixes**, **40 measured speedups** and **41 breaking changes** - every line traced to one of 429 cited commits out of the release's 1,524.
+- **85 NumPy-parity, memory-safety and tooling fixes**, **40 measured speedups** and **43 breaking changes** - every line traced to one of 439 cited commits out of the release's 1,586.
 - **3 new NuGet packages** - **NumSharp.Interop.System.Numerics.Tensors**, **NumSharp.Interop.OnnxRuntime** and **NumSharp.Interop.MLNet**.
 - **1,119,305 NumPy 2.4.2 oracle test cases** (0.70.0: 119,517) and 20,478 test methods (0.70.0: 14,416).
 
