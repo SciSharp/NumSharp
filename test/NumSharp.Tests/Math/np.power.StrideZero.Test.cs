@@ -47,12 +47,42 @@ namespace NumSharp.Tests.Math
             }).view(np.float32);
 
         /// <summary>
+        ///     Ends a test whose expected strings hold the win-amd64 C runtime's <c>pow</c> / <c>powf</c> bits as Inconclusive
+        ///     on any other operating system.
+        /// </summary>
+        /// <param name="test">The test's name, quoted in the Inconclusive message.</param>
+        /// <remarks>
+        ///     <para>
+        ///         The "(pow)" cells of these tests are NumPy 2.4.2's win-amd64 output, where DOUBLE_power / FLOAT_power /
+        ///         HALF_power call the UCRT's <c>pow</c> / <c>powf</c>, which rounds the chosen bases one ULP away from the
+        ///         fast path on purpose (that is what makes each cell show which loop ran). glibc rounds the same calls
+        ///         correctly, so on Linux they give the fast path's bits and the bases stop discriminating: measured
+        ///         2026-11-02 under WSL, <c>pow(72.21291942905373, -1)</c> is <c>...483</c> there (UCRT <c>...482</c>) and
+        ///         <c>powf(-9.390325f, 2)</c> is <c>42b05b3d</c> (UCRT <c>42b05b3c</c>), and float16's NaN results carry
+        ///         another sign. NumPy on that host would print those bits too, so the cells hold no cross-platform byte
+        ///         contract: the oracle's <c>RunHostLibmCorpus</c> rule.
+        ///     </para>
+        ///     <para>
+        ///         Nothing is lost on Windows CI, which runs the strict gate: NumSharp's choice of loop (what these tests
+        ///         pin) does not depend on the operating system, only the C library's rounding of the pow calls does.
+        ///     </para>
+        /// </remarks>
+        /// <exception cref="AssertInconclusiveException">On every operating system but Windows.</exception>
+        private static void RequireWindowsCrtPow(string test)
+        {
+            if (!OperatingSystem.IsWindows())
+                Assert.Inconclusive($"{test} pins NumPy's win-amd64 pow / powf bits (the UCRT); this host's C library rounds " +
+                                    "the discriminating bases differently, so its cells hold no byte contract here.");
+        }
+
+        /// <summary>
         ///     <c>x ** scalar</c>: the plain route takes NumPy's fast path for -1, 0, 0.5, 1 and 2 (a 0-d exponent has
         ///     step 0 on every route) and pow for 3; a full-shape exponent is pow for every value.
         /// </summary>
         [TestMethod]
         public void Plain_ZeroDExponent_TakesTheFastPath_AFullExponentDoesNot()
         {
+            RequireWindowsCrtPow(nameof(Plain_ZeroDExponent_TakesTheFastPath_AFullExponentDoesNot));
             var fails = new List<string>();
             var x = F64Bases();
             Check(fails, "f64 ** 2", () => np.power(x, NDArray.Scalar(2.0)),
@@ -84,6 +114,7 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Plain_Float32_ZeroDExponent_TakesTheFastPath_AFullExponentDoesNot()
         {
+            RequireWindowsCrtPow(nameof(Plain_Float32_ZeroDExponent_TakesTheFastPath_AFullExponentDoesNot));
             var fails = new List<string>();
             var x = F32Bases();
             Check(fails, "f32 ** 2", () => np.power(x, NDArray.Scalar(2.0f)), "float32 (6,) 42b05b3d 00000000 7f800000 46bdec0e 4942465b 7fc00001", true);
@@ -286,6 +317,7 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Float16_IsPowfWithoutAFastPath()
         {
+            RequireWindowsCrtPow(nameof(Float16_IsPowfWithoutAFastPath));
             var fails = new List<string>();
             var h = np.array(new ushort[] { 0x8000, 0xFC00, 0x7C01, 0xFC01, 0x7A4E }).view(np.float16);
             Check(fails, "f16 ** 0.5", () => np.power(h, NDArray.Scalar((Half)0.5)), "float16 (5,) 0000 7c00 7e01 fe01 5b1a", true);
@@ -303,6 +335,7 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void FloatPower_NeverTakesTheFastPath()
         {
+            RequireWindowsCrtPow(nameof(FloatPower_NeverTakesTheFastPath));
             var fails = new List<string>();
             var x = F64Bases();
             Check(fails, "float_power 2", () => np.float_power(x, NDArray.Scalar(2.0)),

@@ -888,6 +888,9 @@ namespace NumSharp.Tests.Strings
             var failures = new List<string>();
             foreach (var c in cases)
             {
+                // The same host rule as the committed sections (Run): a recorded allocator failure is Windows-only.
+                if (HostCommitsLazily && IsHostCommitDependent(c))
+                    continue;
                 if (ReplayOne(c, out var message) == Outcome.Failed)
                     failures.Add($"{c.Id} [{c.Layout}]: {message}");
             }
@@ -898,20 +901,60 @@ namespace NumSharp.Tests.Strings
                 Assert.Fail($"{failures.Count}/{cases.Count} soak cases diverged from NumPy:\n  " + string.Join("\n  ", failures.Take(80)));
         }
 
+        /// <summary>
+        ///     True on a host whose allocator commits memory lazily, so a request the corpus recorded as NumPy's
+        ///     <c>MemoryError</c> is granted there and then written page by page.
+        /// </summary>
+        /// <remarks>
+        ///     The corpus is recorded by NumPy 2.4.2 on win-amd64, where a request above the commit limit fails at once
+        ///     (<c>Failed to allocate string in multiply</c> for a <c>StringDType</c> text repeated 2^40 times). Linux
+        ///     with overcommit and macOS grant the same terabyte request as address space, so the replay writes the
+        ///     repeated text until the kernel's out-of-memory killer ends the process: measured 2026-11-02 under WSL
+        ///     (<c>vm.overcommit_memory=1</c>), where <c>StringDTypeArithmetic</c>'s test host was killed at 31 GB resident.
+        ///     The same replay passed with <c>vm.overcommit_memory=0</c> (GitHub's Ubuntu runners refuse such a request),
+        ///     but the rule cannot depend on a kernel setting, so every non-Windows host skips these cases; Windows keeps
+        ///     the strict gate.
+        /// </remarks>
+        private static readonly bool HostCommitsLazily = !OperatingSystem.IsWindows();
+
+        /// <summary>
+        ///     Whether a case's recorded answer is a <c>StringDType</c> allocator failure, an outcome that depends on the
+        ///     host's commit policy rather than on NumPy's or NumSharp's code (see <see cref="HostCommitsLazily"/>).
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>True for NumPy's <c>MemoryError: Failed to allocate string in …</c>.</returns>
+        /// <remarks>
+        ///     Only the allocator's own text is matched: a <c>MemoryError</c> NumPy raises from a size check before any
+        ///     allocation (a Python list repeated 2^62 times in section strcharlist) answers the same on every host and
+        ///     stays gated everywhere.
+        /// </remarks>
+        private static bool IsHostCommitDependent(StringOracleCorpus.Case c)
+            => c.Error is { Type: "MemoryError", Text: { } text } && text.StartsWith("Failed to allocate string", StringComparison.Ordinal);
+
         /// <summary>Replays every case of one section and fails with the list of divergences.</summary>
         /// <param name="section">The section prefix of the case ids.</param>
+        /// <exception cref="AssertFailedException">A case of the section diverged from NumPy.</exception>
         private static void Run(string section)
         {
             var failures = new List<string>();
-            int total = 0;
+            int total = 0, hostSkipped = 0;
             foreach (var c in Cases)
             {
                 if (!c.Id.StartsWith(section + "/", StringComparison.Ordinal))
                     continue;
                 total++;
+                // Off Windows a recorded allocator failure would be a granted terabyte that the replay writes until the
+                // out-of-memory killer ends the whole test run (see HostCommitsLazily), so the case is skipped.
+                if (HostCommitsLazily && IsHostCommitDependent(c))
+                {
+                    hostSkipped++;
+                    continue;
+                }
                 if (ReplayOne(c, out var message) == Outcome.Failed)
                     failures.Add($"{c.Id} [{c.Layout}]: {message}");
             }
+            if (hostSkipped > 0)
+                Console.WriteLine($"[strings/{section}] {hostSkipped} allocator-failure case(s) skipped: this host commits memory lazily");
             int excused = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedLayouts.ContainsKey(c.Id));
             int excusedClass = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedClasses.ContainsKey(c.Id));
             int excusedOrder = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedOrders.ContainsKey(c.Id));

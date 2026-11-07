@@ -98,9 +98,16 @@ jobs:
     #     where/place matrices + the seeded FuzzRandom corpus + FuzzRegression). These replay the
     #     committed offline corpora under test/.../Fuzz/corpus/ and need no Python. The "millions of
     #     cases" tail (Python-generated) runs nightly in fuzz-soak.yml.
+    #
+    # Timeouts: these four steps allow 25 minutes. With the string dtypes the suites grew (about 21,000
+    # unit tests, the 273,117-case string oracle), and a replay of this job on Ubuntu under WSL took
+    # 6 m 46 s / 7 m 07 s for the two unit runs and 5 m 19 s for the oracle on a 32-core machine
+    # (2026-11-02; the unit run's tests sum to 1,145 s and parallelize only about 2.8x there), so the old
+    # 10-minute limit would end a 4-vCPU runner's step mid-run. A hang still ends: the oracle's per-case
+    # watchdog fails a stuck case after 2 minutes, and a step that ends at its limit fails the job.
     - name: Test (net8.0)
       shell: bash
-      timeout-minutes: 10
+      timeout-minutes: 25
       run: |
         echo "Starting test run (net8.0)..."
         echo "dotnet version: $(dotnet --version)"
@@ -115,7 +122,7 @@ jobs:
 
     - name: Test (net10.0)
       shell: bash
-      timeout-minutes: 10
+      timeout-minutes: 25
       run: |
         echo "Starting test run (net10.0)..."
         echo "dotnet version: $(dotnet --version)"
@@ -133,7 +140,7 @@ jobs:
     # keeps the two suites symmetric.
     - name: Test Oracle (net8.0)
       shell: bash
-      timeout-minutes: 10
+      timeout-minutes: 25
       run: |
         FILTER="TestCategory!=OpenBugs&TestCategory!=HighMemory"
         if [[ "$RUNNER_OS" != "Windows" ]]; then
@@ -145,7 +152,7 @@ jobs:
 
     - name: Test Oracle (net10.0)
       shell: bash
-      timeout-minutes: 10
+      timeout-minutes: 25
       run: |
         FILTER="TestCategory!=OpenBugs&TestCategory!=HighMemory"
         if [[ "$RUNNER_OS" != "Windows" ]]; then

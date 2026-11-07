@@ -669,7 +669,11 @@ namespace NumSharp.Tests.Polynomial
             static string H(in PolyNumber p) => Hex(p.ToNDArray()) + " " + p.ToNDArray().dtype.name;
 
             Assert.AreEqual("36952c5e4994e576 float64", H(PolyNumber.PowTwo(PolyNumber.FromScalar(2.3315311434106746e+132))));
-            Assert.AreEqual("00000000 float32", H(PolyNumber.PowTwo(PolyNumber.FromScalar(2.9465066e-23f))));
+            // The float32 square is scalarmath's powf, and this expectation is the win-amd64 UCRT's: powf(2.9465066e-23f, 2)
+            // underflows to 0 there, where glibc rounds the true square to the smallest subnormal (01000000 under WSL,
+            // 2026-11-02), as NumPy built on glibc does. The bits belong to the C library, so they are gated on Windows only.
+            if (OperatingSystem.IsWindows())
+                Assert.AreEqual("00000000 float32", H(PolyNumber.PowTwo(PolyNumber.FromScalar(2.9465066e-23f))));
             Assert.AreEqual("007c float16", H(PolyNumber.PowTwo(PolyNumber.FromScalar((Half)300))));
             Assert.AreEqual("905f char", H(PolyNumber.PowTwo(PolyNumber.FromScalar((char)300))));
             Assert.AreEqual("90 int8", H(PolyNumber.PowTwo(PolyNumber.FromScalar((sbyte)12))));
