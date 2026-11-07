@@ -134,7 +134,7 @@ namespace NumSharp.Backends
             // even when empty (cumsum(empty int32) is int64). axis=None ravels to 1-D (NumPy shape
             // (0,)); with an axis the shape is preserved.
             if (shape.IsEmpty || shape.size == 0)
-                return NewArray(retTypeCode, axis_ == null ? Shape.Vector(shape.size) : Shape.Adopt(shape.dimensions), false);
+                return NewArray(retTypeCode, axis_ == null ? Shape.Vector(shape.size) : new Shape(shape.dimensions, copy: false), false);
 
             // 0-d scalar or single-element 1-D: cumsum is the value itself, promoted to the
             // accumulator dtype and shaped 1-D — cumsum NEVER returns 0-d (NumPy: cumsum(0-d) -> (1,),
@@ -190,7 +190,7 @@ namespace NumSharp.Backends
                     // NDIter accumulate construction fails for an exotic view; the legacy path
                     // allocates a C-contiguous output, so relay it into NumPy's layout when that is not C.
                     System.Diagnostics.Debug.WriteLine($"[cumsum] AccumulateAxis fallback: {ex.GetType().Name}: {ex.Message}");
-                    var ret = NewArray(retTypeCode, Shape.Adopt(shape.dimensions), false);
+                    var ret = NewArray(retTypeCode, new Shape(shape.dimensions, copy: false), false);
                     if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
                     {
                         bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.Shape.strides[axis] == 1);
@@ -229,7 +229,7 @@ namespace NumSharp.Backends
         private static Shape AccumulateOutputLayout(in Shape input)
             => TryKOrderPlan(input.dimensions, new[] { input }, out var layout, out _)
                 ? layout
-                : Shape.Adopt((long[])input.dimensions.Clone());
+                : new Shape((long[])input.dimensions.Clone(), copy: false);
 
         /// <summary>
         ///     Moves a C-ordered scan result into <paramref name="layout"/> when that is not C: the defensive fallbacks of

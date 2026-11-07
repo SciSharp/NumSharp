@@ -132,7 +132,7 @@ namespace NumSharp.Backends
             {
                 var emptyRetType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
 
-                return NewArray(emptyRetType, axis_ == null ? Shape.Vector(shape.size) : Shape.Adopt(shape.dimensions), false);
+                return NewArray(emptyRetType, axis_ == null ? Shape.Vector(shape.size) : new Shape(shape.dimensions, copy: false), false);
             }
 
             // 0-d scalar or single-element 1-D: cumprod is the value itself, promoted to the
@@ -177,7 +177,7 @@ namespace NumSharp.Backends
             // A scan axis that is not innermost in memory over a dense operand of the accumulator's own dtype runs by whole
             // rows (TryScanRows), straight into that layout: the same per-position products, streamed instead of one
             // strided walk per position.
-            if (TryScanRows(arr, axis, retTypeCode, permuted ? kLayout : Shape.Adopt((long[])shape.dimensions.Clone()),
+            if (TryScanRows(arr, axis, retTypeCode, permuted ? kLayout : new Shape((long[])shape.dimensions.Clone(), copy: false),
                     multiply: true, out var rows))
                 return rows;
 
@@ -217,7 +217,7 @@ namespace NumSharp.Backends
             NDArray inputArr = arr;
 
             // Create output with CONTIGUOUS strides even if input is broadcast.
-            var outputShape = Shape.Adopt(shape.dimensions);  // Fresh contiguous shape
+            var outputShape = new Shape(shape.dimensions, copy: false);  // Fresh contiguous shape
             var ret = NewArray(retTypeCode, outputShape, false);
 
             // Fast path: use IL-generated axis kernel when available

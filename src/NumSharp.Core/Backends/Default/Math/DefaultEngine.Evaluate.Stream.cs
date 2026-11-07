@@ -473,7 +473,7 @@ namespace NumSharp.Backends
             // reversed reduced dims) is exactly the order the streams below write it in. Disposed on an exception
             // so a failing kernel does not strand its buffer.
             var result = fOrder && reducedShape.NDim > 1
-                ? NewArray(childType, Shape.Adopt((long[])reducedShape.dimensions.Clone(), 'F'), false)
+                ? NewArray(childType, new Shape((long[])reducedShape.dimensions.Clone(), 'F', copy: false), false)
                 : NewArray(childType, reducedShape, false);
             NDExpr.StreamingReductions++;
             try
@@ -583,7 +583,7 @@ namespace NumSharp.Backends
             int ax = Shape.check_and_adjust_axis(nd, avg.Axis.Value, "axis");
             var reducedDims = new long[nd - 1];
             for (int d = 0, rd = 0; d < nd; d++) if (d != ax) reducedDims[rd++] = ops[0].Shape.dimensions[d];
-            Shape reducedShape = reducedDims.Length > 0 ? Shape.Adopt(reducedDims) : Shape.NewScalar();
+            Shape reducedShape = reducedDims.Length > 0 ? new Shape(reducedDims, copy: false) : Shape.NewScalar();
 
             var numArr = TryStreamAxisReduce(numProgram, inputs, ax, sequentialProd: false, reducedShape);
             if (numArr is null)
@@ -917,7 +917,7 @@ namespace NumSharp.Backends
             // UNINITIALIZED: every output is written (Any / All seed their slab, the count clears its own). Disposed on an
             // exception so a failing kernel does not strand its buffer.
             var result = fOrder && reducedShape.NDim > 1
-                ? NewArray(accType, Shape.Adopt((long[])reducedShape.dimensions.Clone(), 'F'), false)
+                ? NewArray(accType, new Shape((long[])reducedShape.dimensions.Clone(), 'F', copy: false), false)
                 : NewArray(accType, reducedShape, false);
             NDExpr.StreamingReductions++;
             try

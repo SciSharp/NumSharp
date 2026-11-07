@@ -966,7 +966,7 @@ namespace NumSharp.Backends
                     if (mask[i]) rank++;
                     invDst[perm[i]] = rank;
                 }
-                var invShape = a.ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(a.Storage.Shape.dimensions);
+                var invShape = a.ndim <= 1 ? Shape.Vector(n) : new Shape(a.Storage.Shape.dimensions, copy: false);
                 results[outPos++] = new NDArray(invSlice, invShape) { TensorEngine = this };
             }
 
@@ -1108,7 +1108,7 @@ namespace NumSharp.Backends
             for (int d = 1; d < moved.ndim; d++)
                 resultShapeDims[d] = moved.Shape.dimensions[d];
 
-            var values = GatherSlabs(movedCopy, sortedKeepIdx.ToArray(), slabSize, Shape.Adopt(resultShapeDims));
+            var values = GatherSlabs(movedCopy, sortedKeepIdx.ToArray(), slabSize, new Shape(resultShapeDims, copy: false));
 
             // NumPy's reshape_uniq: `np.moveaxis(uniq, 0, axis)` for every axis, axis 0 included, so the values are always
             // a VIEW of the gathered rows' buffer (flags.owndata False). The gathered owner is left to the caller's scope
@@ -1882,7 +1882,7 @@ namespace NumSharp.Backends
                         if (mask[i] != 0) rank++;
                         invDst[kp[i].Perm] = rank;
                     }
-                    var invShape = a.ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(a.Storage.Shape.dimensions);
+                    var invShape = a.ndim <= 1 ? Shape.Vector(n) : new Shape(a.Storage.Shape.dimensions, copy: false);
                     results[outPos++] = new NDArray(invSlice, invShape) { TensorEngine = this };
                 }
 
@@ -2132,7 +2132,7 @@ namespace NumSharp.Backends
                     if (mask[i] != 0) rank++;
                     invDst[kp[i].Perm] = rank;
                 }
-                var invShape = a.ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(a.Storage.Shape.dimensions);
+                var invShape = a.ndim <= 1 ? Shape.Vector(n) : new Shape(a.Storage.Shape.dimensions, copy: false);
                 results[outPos++] = new NDArray(invSlice, invShape) { TensorEngine = this };
             }
 

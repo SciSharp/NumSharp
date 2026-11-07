@@ -202,10 +202,10 @@ namespace NumSharp.Backends
             // Text: imag(x) is the empty string, and `'' == 0` has no comparison loop, so NumPy's == answers False
             // everywhere (_failed_comparison_workaround) — a string array is never "real" (probed 2.4.2).
             if (a.GetTypeCode == NPTypeCode.String)
-                return NewArray(NPTypeCode.Boolean, Shape.Adopt(a.Shape.dimensions), true);
+                return NewArray(NPTypeCode.Boolean, new Shape(a.Shape.dimensions, copy: false), true);
 
             if (a.GetTypeCode != NPTypeCode.Complex)
-                return NDArray.ones(Shape.Adopt(a.Shape.dimensions), NPTypeCode.Boolean);
+                return NDArray.ones(new Shape(a.Shape.dimensions, copy: false), NPTypeCode.Boolean);
 
             // Complex: the imaginary lane (a strided float64 view via np.imag) compared to zero.
             // IEEE `==` gives NumPy's semantics exactly: -0.0 == 0 (real), NaN/Inf != 0 (not real).
@@ -227,7 +227,7 @@ namespace NumSharp.Backends
             {
                 // NumPy returns `res[()]` of `res = zeros(shape, bool)`: for an array that is a VIEW of the fresh buffer
                 // (flags.owndata false), for a 0-d input the scalar; the view takes its own reference on the buffer.
-                var res = NewArray(NPTypeCode.Boolean, Shape.Adopt((long[])a.Shape.dimensions.Clone()), true);
+                var res = NewArray(NPTypeCode.Boolean, new Shape((long[])a.Shape.dimensions.Clone(), copy: false), true);
                 if (res.ndim == 0)
                     return res;
                 var view = new NDArray(res.Storage.Alias(res.Shape));

@@ -1601,7 +1601,7 @@ namespace NumSharp.Backends
                 {
                     r = engine.TryExactFlatMinMaxScalar(a, op, seed);
                     if (r is not null && keepdims && shape.NDim > 0)
-                        r.Storage.Reshape(Shape.Adopt(OnesDims(shape.NDim)));
+                        r.Storage.Reshape(new Shape(OnesDims(shape.NDim), copy: false));
                 }
                 else
                 {
@@ -1714,7 +1714,7 @@ namespace NumSharp.Backends
             for (int d = 0; d < flags.Length; d++)
                 if (!flags[d] || keepdims)
                     partDims[pd++] = flags[d] ? 1 : one.Shape.dimensions[d];
-            using var part = NewArray(loop, pd == 0 ? Shape.Scalar : Shape.Adopt(partDims[..pd]), false);
+            using var part = NewArray(loop, pd == 0 ? Shape.Scalar : new Shape(partDims[..pd], copy: false), false);
             MaxMinNumPy(one, axis, part, keepdims, initial, null, op);
             if (@out is not null)
             {
@@ -1724,7 +1724,7 @@ namespace NumSharp.Backends
 
             var it = NumPyReduceIterator.Build(a.Shape, flags, keepdims, null, null, false, a.GetTypeCode != loop,
                 NDIterBufferManager.CurrentBufferSize);
-            var result = NewArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : Shape.Adopt(it.ResultDims, it.ResultStrides), false);
+            var result = NewArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : new Shape(it.ResultDims, it.ResultStrides, copy: false), false);
             UnmanagedStorage.Copyto(result, part, NPY_CASTING.NPY_SAME_KIND_CASTING);
             return result;
         }
@@ -1830,7 +1830,7 @@ namespace NumSharp.Backends
 
                 // The result: the out, or a fresh array in the loop dtype laid out in the iteration order
                 // (npyiter_new_temp_array).
-                result = @out ?? NewArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : Shape.Adopt(it.ResultDims, it.ResultStrides), false);
+                result = @out ?? NewArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : new Shape(it.ResultDims, it.ResultStrides, copy: false), false);
                 long skip = 0;
                 if (seed != null)
                 {

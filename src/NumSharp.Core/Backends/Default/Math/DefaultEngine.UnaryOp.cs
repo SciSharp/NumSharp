@@ -610,7 +610,7 @@ namespace NumSharp.Backends
                                  && cleanShape.NDim > 1 && cleanShape.size > 1
                                  && !nd.Shape.IsScalar;
             Shape resultShape = inputStrictF
-                ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
+                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F', copy: false)
                 : cleanShape;
             var result = NewArray(outputType, resultShape, false);
 

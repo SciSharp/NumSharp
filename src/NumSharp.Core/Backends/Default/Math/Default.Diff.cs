@@ -148,7 +148,7 @@ namespace NumSharp.Backends
             }
             outDims[nd - 1] = inLen - 1;
 
-            var outp = NewArray(a.dtype, Shape.Adopt(outDims), false);
+            var outp = NewArray(a.dtype, new Shape(outDims, copy: false), false);
             if (outp.size == 0) return outp;
 
             int elemSize = a.dtypesize;
@@ -181,7 +181,7 @@ namespace NumSharp.Backends
                 long[] dims = new long[a.ndim];
                 for (int i = 0; i < a.ndim; i++) dims[i] = a.Shape.dimensions[i];
                 dims[axis] = 1;
-                var bcast = NDArray.broadcast_to(v, Shape.Adopt(dims));
+                var bcast = NDArray.broadcast_to(v, new Shape(dims, copy: false));
                 toDispose.Add(bcast);
                 return bcast;
             }
@@ -225,7 +225,7 @@ namespace NumSharp.Backends
             long[] dims = new long[nd];
             for (int i = 0; i < nd; i++) dims[i] = hi.Shape.dimensions[i];
             var outp = NewArray(hi.dtype,
-                TryKOrderPlan(dims, new[] { hi.Shape, lo.Shape }, out var kLayout, out _) ? kLayout : Shape.Adopt(dims), false);
+                TryKOrderPlan(dims, new[] { hi.Shape, lo.Shape }, out var kLayout, out _) ? kLayout : new Shape(dims, copy: false), false);
 
             // Empty result: the NDIter element-wise path must not run over zero
             // elements (it walks broadcast dims as if non-empty). Nothing to do.

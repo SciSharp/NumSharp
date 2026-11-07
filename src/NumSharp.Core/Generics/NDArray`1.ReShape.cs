@@ -57,7 +57,7 @@ namespace NumSharp.Generic
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public new NDArray<TDType> reshape(int[] shape)
         {
-            return reshape(Shape.Adopt(Shape.ComputeLongShape(shape)));
+            return reshape(new Shape(Shape.ComputeLongShape(shape), copy: false));
         }
 
         /// <summary>
@@ -134,7 +134,7 @@ namespace NumSharp.Generic
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public new NDArray<TDType> reshape_unsafe(int[] shape)
         {
-            return reshape_unsafe(Shape.Adopt(Shape.ComputeLongShape(shape)));
+            return reshape_unsafe(new Shape(Shape.ComputeLongShape(shape), copy: false));
         }
 
         /// <summary>

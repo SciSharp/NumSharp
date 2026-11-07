@@ -947,7 +947,7 @@ namespace NumSharp.IO
                     throw new FormatException("negative dimensions are not allowed");
 
             long count = header.Count;
-            var result = header.Dtype.Allocate(Shape.Adopt(header.Shape));
+            var result = header.Dtype.Allocate(new Shape(header.Shape, copy: false));
 
             if (count > 0)
                 ReadArrayData(stream, result, header.Dtype, count);
@@ -959,7 +959,7 @@ namespace NumSharp.IO
                 var reversed = new long[header.Shape.Length];
                 for (int i = 0; i < header.Shape.Length; i++)
                     reversed[i] = header.Shape[header.Shape.Length - 1 - i];
-                result = result.reshape(Shape.Adopt(reversed)).T;
+                result = result.reshape(new Shape(reversed, copy: false)).T;
             }
 
             return result;
@@ -1107,7 +1107,7 @@ namespace NumSharp.IO
                     // No element bytes to point at — return a plain empty array and drop the handle.
                     fs.Dispose();
                     transferred = true;
-                    var empty = header.Dtype.Allocate(Shape.Adopt(header.Shape));
+                    var empty = header.Dtype.Allocate(new Shape(header.Shape, copy: false));
                     // NumPy's memmap reports owndata=False in EVERY mode (its base is the mmap object).
                     empty.Storage.ExternalBase = true;
                     empty.Storage.OnReshaped(); // drop the allocating ctor's OWNDATA bit
@@ -1206,8 +1206,8 @@ namespace NumSharp.IO
             // A string file's elements are its descriptor's width: the mapped bytes become a string slice of that
             // descriptor (the lane alone cannot size them); every other dtype wraps a typed block.
             NDArray nd = header.Dtype.Descr != null
-                ? WrapMappedStrings(header.Dtype.Descr, (byte*)dataPtr, count, free, Shape.Adopt(header.Shape))
-                : WrapMappedBlock(header.Dtype.TypeCode, (void*)dataPtr, count, free, Shape.Adopt(header.Shape));
+                ? WrapMappedStrings(header.Dtype.Descr, (byte*)dataPtr, count, free, new Shape(header.Shape, copy: false))
+                : WrapMappedBlock(header.Dtype.TypeCode, (void*)dataPtr, count, free, new Shape(header.Shape, copy: false));
 
             // The mapped memory belongs to the file mapping, not the array — NumPy's memmap has the mmap
             // object as its (non-array) base and reports owndata=False in EVERY mode ('r'/'r+'/'c').
@@ -1234,7 +1234,7 @@ namespace NumSharp.IO
                 var reversed = new long[header.Shape.Length];
                 for (int i = 0; i < header.Shape.Length; i++)
                     reversed[i] = header.Shape[header.Shape.Length - 1 - i];
-                nd = nd.reshape(Shape.Adopt(reversed)).T;
+                nd = nd.reshape(new Shape(reversed, copy: false)).T;
             }
 
             // Defensive: the wrap-storage clear above already propagates through reshape/transpose.

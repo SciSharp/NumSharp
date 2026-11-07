@@ -74,7 +74,7 @@ namespace NumSharp.Tests.LinearAlgebra
             {
                 CholeskyCalls++;
                 LastOperandType = a.typecode;
-                return np.full(Shape.Adopt((long[])a.Shape.dimensions.Clone()), 42.0, a.dtype);
+                return np.full(new Shape((long[])a.Shape.dimensions.Clone(), copy: false), 42.0, a.dtype);
             }
 
             protected override (NDArray eigenvalues, NDArray eigenvectors) EigKernel(NDArray a, bool computeVectors)

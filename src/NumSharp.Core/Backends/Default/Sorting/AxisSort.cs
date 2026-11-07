@@ -226,7 +226,7 @@ namespace NumSharp.Backends.Sorting
             }
             int ax = NormalizeAxis(axis.Value, a.ndim);
             var src = a.Shape.IsContiguous ? a : a.copy('C');
-            var ret = a.TensorEngine.NewArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
+            var ret = a.TensorEngine.NewArray(NPTypeCode.Int64, new Shape((long[])a.Shape.dimensions.Clone(), copy: false), false);
             ArgSortInto(src, ret, ax);
             return ret;
         }
@@ -281,7 +281,7 @@ namespace NumSharp.Backends.Sorting
                 return outFlat;
             }
             int ax = NormalizeAxis(axis.Value, a.ndim);
-            var ret = a.TensorEngine.NewArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
+            var ret = a.TensorEngine.NewArray(NPTypeCode.Int64, new Shape((long[])a.Shape.dimensions.Clone(), copy: false), false);
             TextSort.ArgSortLines(a, ret, ax, stable);
             return ret;
         }
@@ -338,7 +338,7 @@ namespace NumSharp.Backends.Sorting
                 return outFlat;
             }
             int ax = NormalizeAxis(axis.Value, a.ndim);
-            var ret = a.TensorEngine.NewArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
+            var ret = a.TensorEngine.NewArray(NPTypeCode.Int64, new Shape((long[])a.Shape.dimensions.Clone(), copy: false), false);
             VStringSort.ArgSortLines(a, ret, ax, stable);
             return ret;
         }

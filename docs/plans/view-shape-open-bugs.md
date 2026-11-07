@@ -447,6 +447,12 @@ Gates (on `4d06d591` + 2d, the OpenBLAS binary staged):
 - `[OpenBugs]`: 78 tests fail. On `4d06d591` 81 fail (`264e3793` added 15 pins); the difference is exactly the three
   moved pins.
 
+Follow-up (2026-11-07): the internal `Shape.Adopt` factories are gone. The no-copy route is now a public, named opt-out
+on the constructors: `Shape(long[] dims, char order = 'C', bool copy = true)` and
+`Shape(long[] dims, long[] strides, bool copy = true)` replace the two-parameter forms, and Core's 374 sites call
+`new Shape(arr, copy: false)`. The default still copies, so everything above holds, and allocations are byte-identical
+to `Shape.Adopt`'s.
+
 ---
 
 ## Bug 3 — `choice` without replacement returns a view

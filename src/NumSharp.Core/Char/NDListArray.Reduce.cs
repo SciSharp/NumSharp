@@ -345,7 +345,7 @@ namespace NumSharp
             // An output is NPY_ITER_NO_BROADCAST: it must have the broadcast shape itself.
             if (@out is not null && !@out.Ids.Shape.dimensions.AsSpan().SequenceEqual(dims))
                 throw new ValueError($"non-broadcastable output operand with shape {@out.Ids.Shape.ToPythonTuple()} doesn't match " +
-                                     $"the broadcast shape {Shape.Adopt((long[])dims.Clone()).ToPythonTuple()}");
+                                     $"the broadcast shape {new Shape((long[])dims.Clone(), copy: false).ToPythonTuple()}");
             long count = 1;
             foreach (var d in dims)
                 count *= d;
@@ -356,7 +356,7 @@ namespace NumSharp
                 bool anyRun = count > 0, anyMasked = false;
                 if (mask is not null && count > 0)
                 {
-                    maskView = np.broadcast_to(mask, Shape.Adopt((long[])dims.Clone()));
+                    maskView = np.broadcast_to(mask, new Shape((long[])dims.Clone(), copy: false));
                     long selected = np.count_nonzero(maskView);
                     anyRun = selected > 0;
                     anyMasked = selected < count;
@@ -394,7 +394,7 @@ namespace NumSharp
                 // out=: the loop writes the selected positions; every other element of out keeps its list.
                 if (!anyRun)
                     return @out;
-                using (var computed = ClipCore(lo, hi, dims, Shape.Adopt((long[])dims.Clone()), maskView))
+                using (var computed = ClipCore(lo, hi, dims, new Shape((long[])dims.Clone(), copy: false), maskView))
                     @out.AssignWhere(@out.Ids, computed, maskView);
                 return @out;
             }
@@ -682,7 +682,7 @@ namespace NumSharp
                                         long divisor, bool sqrt, bool dtypeChecked)
         {
             // The zero-size stand-in of x carries only its shape (the prologue reads nothing else).
-            using var x = new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])deviations.Clone()), false);
+            using var x = new NDArray(NPTypeCode.Int64, new Shape((long[])deviations.Clone(), copy: false), false);
             if (dtype is not null && !dtypeChecked)
                 CheckUfuncDtype(dtype, typeNumberOnly: false);
             ReductionArguments.ValidateParsedArguments(@out, mask);
@@ -737,7 +737,7 @@ namespace NumSharp
             }
             // A numeric loop: the dtype's 0 per output, divided in NumPy's arithmetic (an array in place, a scalar through
             // dtype.type(ret / rcount): the same unsafe cast), then the square root (an array's same_kind refusal).
-            var ret = new NDArray(dtype, Shape.Adopt(outDims.ToArray()), true);
+            var ret = new NDArray(dtype, new Shape(outDims.ToArray(), copy: false), true);
             try
             {
                 DefaultEngine.DivideByCountLikeNumPy(ret, divisor);
@@ -805,7 +805,7 @@ namespace NumSharp
         ///     <paramref name="out"/>.</returns>
         private NDArray MaskedMeanInLoop(NDArray converted, int? axis, DType dtype, NDArray @out, bool keepdims, NDArray mask)
         {
-            using var maskView = np.broadcast_to(mask, Shape.Adopt((long[])Ids.Shape.dimensions.Clone()));
+            using var maskView = np.broadcast_to(mask, new Shape((long[])Ids.Shape.dimensions.Clone(), copy: false));
             // The masked-off elements hold the add identity (0 cast to the loop: False for bool), so the plain reduction
             // over them is the masked one.
             using (var off = np.logical_not(maskView))
@@ -863,7 +863,7 @@ namespace NumSharp
                         throw new TypeError("unsupported operand type(s) for +: 'bool' and 'list'");
                     // One list per output: its truth, divided by 1 (unchanged).
                     using var truth = Truth('C');
-                    using var shaped = truth.reshape(Shape.Adopt((long[])@out.Shape.dimensions.Clone()));
+                    using var shaped = truth.reshape(new Shape((long[])@out.Shape.dimensions.Clone(), copy: false));
                     np.copyto(@out, shaped);
                     return @out;
                 }
@@ -919,7 +919,7 @@ namespace NumSharp
             {
                 // The mask broadcast to the input (the prologue proved it broadcasts that way).
                 if (mask is not null)
-                    maskView = np.broadcast_to(mask, Shape.Adopt((long[])Ids.Shape.dimensions.Clone()));
+                    maskView = np.broadcast_to(mask, new Shape((long[])Ids.Shape.dimensions.Clone(), copy: false));
                 NDListArray computed;
                 if (maskView is null && TrySelectAlongAxis(fold, reduced, start, out var selected))
                 {
@@ -1431,10 +1431,10 @@ namespace NumSharp
             var od = outDims.ToArray();
             Shape layout = axis >= 0 && od.Length > 0 && Array.IndexOf(reduced, false) >= 0
                 ? Shape.ReductionOutputShape(od, Ids.Shape, axis)
-                : Shape.Adopt(od);
+                : new Shape(od, copy: false);
             var ids = new NDArray(NPTypeCode.Int64, layout, false);
             // The outputs come in C order over the kept axes: write them through a C-ordered view of the result.
-            using (var flat = ids.reshape(Shape.Adopt((long[])ids.Shape.dimensions.Clone())))
+            using (var flat = ids.reshape(new Shape((long[])ids.Shape.dimensions.Clone(), copy: false)))
             {
                 for (long i = 0; i < resultIds.Length; i++)
                     flat.SetAtIndex(resultIds[i], i);
@@ -1643,7 +1643,7 @@ namespace NumSharp
                     b = s[d];
                 else if (s[d] != b && s[d] != 1)
                     throw new ValueError("operands could not be broadcast together with remapped shapes [original->remapped]: " +
-                                         $"{outIds.Shape.ToPythonTuple()}->{Shape.Adopt(mapped).ToPythonTuple()} " +
+                                         $"{outIds.Shape.ToPythonTuple()}->{new Shape(mapped, copy: false).ToPythonTuple()} " +
                                          $"{source.Shape.ToPythonTuple()}->{source.Shape.ToPythonTuple()} ");
                 broadcast[d] = b;
             }
@@ -1655,8 +1655,8 @@ namespace NumSharp
                     var reversed = (long[])mapped.Clone();
                     Array.Reverse(reversed);
                     throw new ValueError($"non-broadcastable output operand with shape {outIds.Shape.ToPythonTuple()} " +
-                                         $"[remapped to {Shape.Adopt(reversed).ToPythonTuple()}] doesn't match the broadcast shape " +
-                                         $"{Shape.Adopt(broadcast).ToPythonTuple()}");
+                                         $"[remapped to {new Shape(reversed, copy: false).ToPythonTuple()}] doesn't match the broadcast shape " +
+                                         $"{new Shape(broadcast, copy: false).ToPythonTuple()}");
                 }
             }
             // The zero-size returns, after the iterator was built.
@@ -1700,14 +1700,14 @@ namespace NumSharp
             var memo = new Dictionary<(NDListHeap, long), long>();
             try
             {
-                using var a = np.broadcast_to(Ids, Shape.Adopt((long[])dims.Clone()));
-                using var bl = lo.Present ? np.broadcast_to(lo.Lists.Ids, Shape.Adopt((long[])dims.Clone())) : null;
-                using var bh = hi.Present ? np.broadcast_to(hi.Lists.Ids, Shape.Adopt((long[])dims.Clone())) : null;
+                using var a = np.broadcast_to(Ids, new Shape((long[])dims.Clone(), copy: false));
+                using var bl = lo.Present ? np.broadcast_to(lo.Lists.Ids, new Shape((long[])dims.Clone(), copy: false)) : null;
+                using var bh = hi.Present ? np.broadcast_to(hi.Lists.Ids, new Shape((long[])dims.Clone(), copy: false)) : null;
                 using var flatA = a.flatten();
                 using var flatL = bl?.flatten();
                 using var flatH = bh?.flatten();
                 using var flatMask = maskView?.flatten();
-                using var flatOut = ids.reshape(Shape.Adopt((long[])dims.Clone()));
+                using var flatOut = ids.reshape(new Shape((long[])dims.Clone(), copy: false));
                 // One empty list stands at the masked-off positions (created the first time one is met).
                 long placeholder = -1;
                 for (long i = 0; i < count; i++)
@@ -1856,7 +1856,7 @@ namespace NumSharp
             if (mask is not null)
             {
                 // broadcast_to(where, arr.shape) runs before any reduction, whatever the mask's dtype.
-                using var spread = np.broadcast_to(mask, Shape.Adopt((long[])Ids.Shape.dimensions.Clone()));
+                using var spread = np.broadcast_to(mask, new Shape((long[])Ids.Shape.dimensions.Clone(), copy: false));
                 if (size == 0)
                     items = 0;
             }
@@ -2229,7 +2229,7 @@ namespace NumSharp
                 return b;
             }
             using var converted = PythonOperand(value);
-            b.Shape = Shape.Adopt((long[])converted.Shape.dimensions.Clone());
+            b.Shape = new Shape((long[])converted.Shape.dimensions.Clone(), copy: false);
             b.TypeName = PyElementTypeName(converted.dtype);
             return b;
         }

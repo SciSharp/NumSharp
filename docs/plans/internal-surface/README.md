@@ -65,9 +65,9 @@ Where an instruction met a technical limit, the call made:
   derived from `DefaultEngine` cannot run a program itself.
 - `UnmanagedStorage._baseStorage` stays internal: `BaseStorage` is its public read form, and a public setter is the
   use-after-free its own docs rule out.
-- `Shape.Adopt` stays internal: the owner's `journey4` commit `278e9862` replaces it with public
-  `Shape(dims, order, copy)` and `Shape(dims, strides, copy)` constructors, NumPy's `copy` keyword being the public
-  no-copy route.
+- `Shape.Adopt` is gone: the owner's `journey4` commit `278e9862`, re-derived on `release-0.80.0`, replaces it with
+  public `Shape(dims, order, copy)` and `Shape(dims, strides, copy)` constructors, NumPy's `copy` keyword being the
+  public no-copy route.
 - `DTypeMeta`'s element slots were not decided and stay internal.
 
 ## The numbers
@@ -195,7 +195,7 @@ bridges use no internal at all. The 16 internals still named (68 IL sites):
 | Package | Internal | Sites | Public route |
 |---|---|---:|---|
 | OpenBLAS | `NDArray.GetTypeCode` | 27 | `NDArray.typecode`: the same value |
-| OpenBLAS | `Shape.Adopt(dims)` | 13 | `Shape(dims)` today; `Shape(dims, copy: false)` once `278e9862` reaches `strings` |
+| OpenBLAS | `Shape.Adopt(dims)` | 13 | `Shape(dims, copy: false)`, which the 13 sites now call (`278e9862` on `release-0.80.0`) |
 | OpenBLAS | `np._FindCommonArrayType` | 6 | `np.promote_types` / `np.result_type` |
 | pythonnet | `VStringAllocator.isnull`, `size`, `newsize`, `TryReserve`, `ArenaBytesForDuplicate` | 9 | `load` (its return value is the null test, its `size` the length) and `pack`; the other three are the allocator's private arithmetic, private in NumPy too |
 | pythonnet | `VStringParameters` (`coerce`, `HasNAObject`, `na_object`), `DType.VString` | 10 | `DType.coerce` / `DType.na_object` |
@@ -275,4 +275,4 @@ The TSVs classify nothing; read by kind, the 5,939 members fall into five groups
 | `DTypeMeta`'s element slots | Not decided | `protected internal virtual` slots, plus a per-dtype loop registry for a user dtype to compute |
 | `NDPolyBase` | The basis math is an internal enum, not a member a subclass implements | A design with virtual basis operations |
 | `NDExpr` nodes | By design | (`NDExpr.Call` is the extension route) |
-| `Shape.Adopt` | Replaced on `journey4` by public `Shape(dims, ..., copy)` constructors (`278e9862`) | That refactor reaching `strings` |
+| `Shape.Adopt` | Replaced by public `Shape(dims, ..., copy)` constructors (`278e9862` on `journey4`, re-derived on `release-0.80.0`) | Done; `strings` still has `Shape.Adopt` |

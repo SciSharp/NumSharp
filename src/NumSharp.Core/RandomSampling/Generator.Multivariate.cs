@@ -167,7 +167,7 @@ namespace NumSharp
 
             // The plain path: shape (d,) or (*size, d), np.zeros so untouched categories stay 0.
             long[] dims = OutputDimsWithTrailing(size, d);
-            var multin = new NDArray(NPTypeCode.Int64, Shape.Adopt(dims), true);
+            var multin = new NDArray(NPTypeCode.Int64, new Shape(dims, copy: false), true);
             long ni = on.GetInt64();
             // NumPy validates n only after the output exists (so a bad size is reported first); the output never leaves
             // this call when the check fails, so it is released before the error propagates.
@@ -251,8 +251,8 @@ namespace NumSharp
             try
             {
                 itShape = IsNoSize(size)
-                    ? np.broadcast_shapes(on.Shape, Shape.Adopt(rowShape))
-                    : np.broadcast_shapes(on.Shape, Shape.Adopt(rowShape), Shape.Adopt(size.dimensions));
+                    ? np.broadcast_shapes(on.Shape, new Shape(rowShape, copy: false))
+                    : np.broadcast_shapes(on.Shape, new Shape(rowShape, copy: false), new Shape(size.dimensions, copy: false));
             }
             catch (IncorrectShapeException e)
             {
@@ -271,11 +271,11 @@ namespace NumSharp
             // strides (NumPy's MultiIter walk) — nothing is materialized. Every intermediate here is private to this call
             // and released when it returns (or throws).
             using var offsets = np.arange(0L, parr.size, d);
-            using var offsetRows = offsets.reshape(Shape.Adopt(rowShape));
+            using var offsetRows = offsets.reshape(new Shape(rowShape, copy: false));
             using var nView = np.broadcast_to(on, itShape);
             using var oView = np.broadcast_to(offsetRows, itShape);
 
-            var multin = new NDArray(NPTypeCode.Int64, Shape.Adopt(outDims), true);
+            var multin = new NDArray(NPTypeCode.Int64, new Shape(outDims, copy: false), true);
             if (positions == 0)
                 return multin;
             var mnix = (long*)multin.Address;
@@ -429,7 +429,7 @@ namespace NumSharp
                 if (alpha[j] < 0)
                     throw new ValueError("alpha < 0");
 
-            var diric = new NDArray(NPTypeCode.Double, Shape.Adopt(OutputDimsWithTrailing(size, k)), true);
+            var diric = new NDArray(NPTypeCode.Double, new Shape(OutputDimsWithTrailing(size, k), copy: false), true);
             var val = (double*)diric.Address;
             long totsize = diric.size;
             if (totsize == 0)
@@ -617,7 +617,7 @@ namespace NumSharp
                 throw new ValueError("nsample > sum(colors)");
 
             long numColors = colors.Length;
-            var variates = new NDArray(NPTypeCode.Int64, Shape.Adopt(OutputDimsWithTrailing(size, numColors)), true);
+            var variates = new NDArray(NPTypeCode.Int64, new Shape(OutputDimsWithTrailing(size, numColors), copy: false), true);
             if (numColors == 0)
                 return variates;
 
@@ -1207,7 +1207,7 @@ namespace NumSharp
             long n = mean.Shape.dimensions[0];
             long[] finalShape = OutputDimsWithTrailing(size, n);
             // The normals are drawn BEFORE the factorisation, so a later failure has already advanced the stream.
-            NDArray normals = standard_normal(Shape.Adopt(finalShape));
+            NDArray normals = standard_normal(new Shape(finalShape, copy: false));
             // x.reshape(-1, 0) cannot infer -1 from a zero-size array: NumPy leaks that reshape's ValueError (after the
             // empty draw), and NumSharp's own reshape would raise its house IncorrectShapeException with the same text.
             if (n == 0)
@@ -1246,7 +1246,7 @@ namespace NumSharp
             // its data. reshape() would return a view (owndata False, and a size-changing resize would refuse).
             // The shape setter would copy finalShape (it cannot tell a caller's array from this one, bug 2d); the array
             // is built here and already shared with `normals`' shape, so the Shape setter adopts it.
-            result.Shape = Shape.Adopt(finalShape);
+            result.Shape = new Shape(finalShape, copy: false);
             return result;
         }
 

@@ -133,7 +133,7 @@ namespace NumSharp.Backends
             bool nothingWritten = l == 0;
             for (int j = 0; j < dims.Length; j++)
                 nothingWritten |= dims[j] == 0;
-            var res = NewArray(tc, Shape.Adopt(dims), nothingWritten);
+            var res = NewArray(tc, new Shape(dims, copy: false), nothingWritten);
             result = res;
             if (nothingWritten)
                 return true;

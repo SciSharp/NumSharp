@@ -85,7 +85,7 @@ namespace NumSharp.Tests.Fourier
                     return base.C2CKernel(a, n, axis, forward, fct, @out, singlePrecision, unitFactor);
                 var dims = (long[])a.Shape.dimensions.Clone();
                 dims[axis] = n;
-                return np.full(Shape.Adopt(dims), new Complex(k, 0), np.complex128);
+                return np.full(new Shape(dims, copy: false), new Complex(k, 0), np.complex128);
             }
 
             /// <inheritdoc/>

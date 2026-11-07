@@ -622,7 +622,7 @@ namespace NumSharp.Backends
             long[] shp = new long[N];
             for (int i = 0; i < N; i++) shp[i] = 1;
             shp[axis] = a.Shape.dimensions[0];
-            var r = a.reshape(Shape.Adopt(shp));
+            var r = a.reshape(new Shape(shp, copy: false));
             a.Dispose();
             return r;
         }

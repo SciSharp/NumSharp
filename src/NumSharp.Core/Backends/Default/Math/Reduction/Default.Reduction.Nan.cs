@@ -392,7 +392,7 @@ namespace NumSharp.Backends
                             var ks = new long[arr.ndim];
                             for (int i = 0; i < arr.ndim; i++)
                                 ks[i] = 1;
-                            r.Storage.Reshape(Shape.Adopt(ks));
+                            r.Storage.Reshape(new Shape(ks, copy: false));
                         }
 
                         return r.MarkReductionScalar();
@@ -487,7 +487,7 @@ namespace NumSharp.Backends
                     var keepdimsShape = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShape[i] = 1;
-                    r.Storage.Reshape(Shape.Adopt(keepdimsShape));
+                    r.Storage.Reshape(new Shape(keepdimsShape, copy: false));
                 }
                 return r.MarkReductionScalar();
             }
@@ -525,7 +525,7 @@ namespace NumSharp.Backends
                 var keepdimsShape = new long[arr.ndim];
                 for (int i = 0; i < arr.ndim; i++)
                     keepdimsShape[i] = 1;
-                r.Storage.Reshape(Shape.Adopt(keepdimsShape));
+                r.Storage.Reshape(new Shape(keepdimsShape, copy: false));
             }
             return r.MarkReductionScalar();
         }
@@ -981,7 +981,7 @@ namespace NumSharp.Backends
                 {
                     var ks = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++) ks[i] = 1;
-                    r.Storage.Reshape(Shape.Adopt(ks));
+                    r.Storage.Reshape(new Shape(ks, copy: false));
                 }
                 return r.MarkReductionScalar();
             }

@@ -60,7 +60,7 @@ namespace NumSharp.Backends
                 emptyDims[nd - 1] = m0;
                 // np.zeros(shape, a.dtype)'s own allocation (a zero-filled owner of the operand's dtype, text included),
                 // without the call up into np.*.
-                return a.TensorEngine.NewArray(a.dtype, Shape.Adopt(emptyDims), true);
+                return a.TensorEngine.NewArray(a.dtype, new Shape(emptyDims, copy: false), true);
             }
 
             // NumPy's `a = a.conjugate()` is next: ndarray.conjugate refuses a non-numeric dtype before svd

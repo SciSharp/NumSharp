@@ -279,7 +279,7 @@ namespace NumSharp.Backends.Strings
 
             var dims = BroadcastDims(x1, x2, @out, where);
             if (ShapeSize(dims) == 0)
-                return @out ?? new NDArray(result, dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims), true);
+                return @out ?? new NDArray(result, dims.Length == 0 ? Shape.NewScalar() : new Shape(dims, copy: false), true);
 
             NDArray t1 = null, t2 = null;
             try
@@ -662,7 +662,7 @@ namespace NumSharp.Backends.Strings
             if (@out is not null && !SameDimensions(full, @out.Shape.dimensions ?? Array.Empty<long>()))
                 return new ArgumentException(
                     $"non-broadcastable output operand with shape {@out.Shape.ToPythonTuple()} doesn't match the broadcast shape " +
-                    $"{Shape.Adopt(full).ToPythonTuple()}");
+                    $"{new Shape(full, copy: false).ToPythonTuple()}");
             return null;
         }
 

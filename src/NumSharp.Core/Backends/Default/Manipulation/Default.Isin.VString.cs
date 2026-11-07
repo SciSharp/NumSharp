@@ -62,7 +62,7 @@ namespace NumSharp.Backends
                 throw new ValueError("The 'table' method is only supported for boolean or integer arrays. "
                     + "Please select 'sort' or None for kind.");
             var dims = (long[])element.Shape.dimensions.Clone();
-            Shape shape = dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims);
+            Shape shape = dims.Length == 0 ? Shape.NewScalar() : new Shape(dims, copy: false);
             using NDArray flat = IsinVStringFlat(element, test_elements, invert);
             return flat.reshape(shape);
         }

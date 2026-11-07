@@ -246,7 +246,7 @@ namespace NumSharp.Backends.Strings
         internal static NDArray Flatten(NDArray t, char order)
         {
             bool fortran = order == 'F' || order == 'f';
-            var result = new NDArray(t.dtype, Shape.Adopt((long[])t.Shape.dimensions.Clone(), fortran ? 'F' : 'C'), true);
+            var result = new NDArray(t.dtype, new Shape((long[])t.Shape.dimensions.Clone(), fortran ? 'F' : 'C', copy: false), true);
             if (result.size == 0)
                 return result;
             try
@@ -561,7 +561,7 @@ namespace NumSharp.Backends.Strings
                     var dims = new long[arr.Rank];
                     for (int d = 0; d < dims.Length; d++)
                         dims[d] = arr.GetLongLength(d);
-                    var result = new NDArray(descr, Shape.Adopt(dims), true);
+                    var result = new NDArray(descr, new Shape(dims, copy: false), true);
                     try
                     {
                         var slice = result.Storage.VStringSlice;
@@ -636,7 +636,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="System.Exception">The cast's own errors (a non-UTF-8 <c>bytes</c> value).</exception>
         internal static NDArray Full(Shape shape, object fillValue, DType descr)
         {
-            var layout = shape.IsEmpty ? Shape.Adopt(Array.Empty<long>()) : shape;
+            var layout = shape.IsEmpty ? new Shape(Array.Empty<long>(), copy: false) : shape;
             var result = new NDArray(descr, layout, true);
             try
             {
@@ -721,7 +721,7 @@ namespace NumSharp.Backends.Strings
         {
             var dims = (long[])values.Shape.dimensions.Clone();
             using var flat = UnmanagedStorage.ArangeObj(0L, values.size, 1L, null);
-            return flat.reshape(Shape.Adopt(dims)).copy();
+            return flat.reshape(new Shape(dims, copy: false)).copy();
         }
 
         /// <summary>
@@ -848,8 +848,8 @@ namespace NumSharp.Backends.Strings
         {
             var dims = (long[])raw.dimensions.Clone();
             if (raw.offset == 0 && raw.bufferSize == raw.size && !raw.IsBroadcasted && (raw.IsContiguous || raw.IsFContiguous))
-                return raw.IsContiguous ? Shape.Adopt(dims) : Shape.Adopt(dims, 'F');
-            return Shape.Adopt(dims);
+                return raw.IsContiguous ? new Shape(dims, copy: false) : new Shape(dims, 'F', copy: false);
+            return new Shape(dims, copy: false);
         }
     }
 }

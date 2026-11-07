@@ -133,6 +133,6 @@ namespace NumSharp
         /// </remarks>
         [OverloadResolutionPriority(-1)]
         public NDArray logseries(double p, long size)
-            => logseries(p, Shape.Adopt(new long[] { size }));
+            => logseries(p, new Shape(new long[] { size }, copy: false));
     }
 }

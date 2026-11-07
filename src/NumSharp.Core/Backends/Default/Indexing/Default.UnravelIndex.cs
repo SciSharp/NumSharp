@@ -78,7 +78,7 @@ namespace NumSharp.Backends
             }
             bufDims[idxNdim] = ndims;
             bufStrides[idxNdim] = 1;
-            var coords = NDArray.ForOverwrite(NPTypeCode.Int64, Shape.Adopt(bufDims, bufStrides), this);
+            var coords = NDArray.ForOverwrite(NPTypeCode.Int64, new Shape(bufDims, bufStrides, copy: false), this);
 
             if (count > 0)
                 UnravelInto(indices, layout, (long*)coords.Storage.Address, shape, unravelSize, cOrder);

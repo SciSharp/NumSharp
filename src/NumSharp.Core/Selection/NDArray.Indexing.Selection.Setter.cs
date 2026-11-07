@@ -185,7 +185,7 @@ namespace NumSharp
                 long len = axisIndex[a].size;
                 var sh = new long[gridDims];
                 for (int k = 0; k < gridDims; k++) sh[k] = (k == pos) ? len : 1L;
-                axisIndex[a] = axisIndex[a].reshape(Shape.Adopt(sh));
+                axisIndex[a] = axisIndex[a].reshape(new Shape(sh, copy: false));
                 pos++;
             }
 
@@ -353,7 +353,7 @@ namespace NumSharp
                     selShape[boolAxis] = 0;                      // False -> empty axis
                     string Tup(long[] s) => s.Length == 1 ? string.Create(CultureInfo.InvariantCulture, $"({s[0]},)") : "(" + string.Join(",", System.Array.ConvertAll(s, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
                     // np.broadcast_to's computation (the value may be a subclass object): only its refusal is read here.
-                    try { broadcast_to(values, Shape.Adopt(selShape)); }
+                    try { broadcast_to(values, new Shape(selShape, copy: false)); }
                     catch (IncorrectShapeException ex)
                     {
                         throw new ValueError($"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +

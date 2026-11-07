@@ -259,7 +259,7 @@ namespace NumSharp.Statistics
             var shape = new long[nd];
             for (int d = 0; d < nd; d++)
                 shape[d] = Array.IndexOf(axis, d) >= 0 ? a.Shape.dimensions[d] : 1L;
-            return wgt.reshape(Shape.Adopt(shape));
+            return wgt.reshape(new Shape(shape, copy: false));
         }
 
         /// <summary>
@@ -418,8 +418,8 @@ namespace NumSharp.Statistics
             for (int i = 0; i < kept; i++)
                 rows *= arr.Shape.dimensions[i];
             NDArray result;
-            using (var arrRows = arr.reshape(Shape.Adopt(new[] { rows, n })))
-            using (var cdfRows = cdf.reshape(Shape.Adopt(new[] { rows, n })))
+            using (var arrRows = arr.reshape(new Shape(new[] { rows, n }, copy: false)))
+            using (var cdfRows = cdf.reshape(new Shape(new[] { rows, n }, copy: false)))
             {
                 result = q.size * n <= CountingMaxWork && !ForceRowByRowTestHook
                     ? SearchByCounting(arr, arrRows, cdfRows, q, rows, rShape, clip, @out)
@@ -567,7 +567,7 @@ namespace NumSharp.Statistics
             // range check; float64), and the dtype NumPy's searchsorted compares the float64 cdf with them in.
             NDArray values = np.asarray(q, np.float64, 'C');
             NDArray indices = new NDArray(NPTypeCode.Int64,
-                q.ndim == 0 ? Shape.Scalar : Shape.Adopt((long[])q.Shape.dimensions.Clone()), false);
+                q.ndim == 0 ? Shape.Scalar : new Shape((long[])q.Shape.dimensions.Clone(), copy: false), false);
             double* sums = (double*)cumulative.Address + cumulative.Shape.offset;
             double* v = (double*)values.Address + values.Shape.offset;
             long* found = (long*)indices.Address;
@@ -656,7 +656,7 @@ namespace NumSharp.Statistics
             long[] rShape, NDArray clip, NDArray @out)
         {
             RowByRowRuns++;
-            NDArray result = @out ?? np.empty_like(arr, shape: Shape.Adopt(rShape));
+            NDArray result = @out ?? np.empty_like(arr, shape: new Shape(rShape, copy: false));
             var position = new long[kept];
             var target = new Slice[1 + kept];
             target[0] = Slice.Ellipsis;
@@ -722,7 +722,7 @@ namespace NumSharp.Statistics
                 var position = new long[kept];
                 var target = new Slice[1 + kept];
                 target[0] = Slice.Ellipsis;
-                var qShape = Shape.Adopt((long[])q.Shape.dimensions.Clone());
+                var qShape = new Shape((long[])q.Shape.dimensions.Clone(), copy: false);
                 for (long k = 0; k < rows; k++)
                 {
                     using var row = picked[Slice.Index(k)];
@@ -735,8 +735,8 @@ namespace NumSharp.Statistics
                 return @out;
             }
             // q's values first, then the positions: the transposed picks in C order are the result's elements.
-            NDArray result = @out ?? np.empty_like(arr, shape: Shape.Adopt(rShape));
-            NDArray byQ = picked.T.reshape(Shape.Adopt(rShape));
+            NDArray result = @out ?? np.empty_like(arr, shape: new Shape(rShape, copy: false));
+            NDArray byQ = picked.T.reshape(new Shape(rShape, copy: false));
             np.copyto(result, byQ, "unsafe");
             return result;
         }
@@ -811,7 +811,7 @@ namespace NumSharp.Statistics
                     shape[i] = q.Shape.dimensions[i];
                 for (int i = 0; i < kept; i++)
                     shape[q.ndim + i] = a.Shape.dimensions[i];
-                result = np.empty_like(a, shape: Shape.Adopt(shape));
+                result = np.empty_like(a, shape: new Shape(shape, copy: false));
             }
             long rows = 1;
             for (int i = 0; i < kept; i++)
@@ -940,7 +940,7 @@ namespace NumSharp.Statistics
         ///     object); otherwise a view of the full array (<c>[()]</c> of an array is a view of all of it).</returns>
         private static NDArray AllNaN(DType dtype, NDArray q)
         {
-            var shape = q.ndim == 0 ? Shape.Scalar : Shape.Adopt((long[])q.Shape.dimensions.Clone());
+            var shape = q.ndim == 0 ? Shape.Scalar : new Shape((long[])q.Shape.dimensions.Clone(), copy: false);
             var full = new NDArray(dtype, shape, true);
             using (var nanLiteral = NDArray.PythonLiteral(PositiveNaN))
             {

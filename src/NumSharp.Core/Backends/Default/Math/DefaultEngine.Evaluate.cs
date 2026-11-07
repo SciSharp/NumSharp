@@ -260,7 +260,7 @@ namespace NumSharp.Backends
         /// dims; anything else runs <see cref="BroadcastInputDims"/>.
         /// </summary>
         private static Shape ResolveInputShape(NDArray[] ops)
-            => AllSameDims(ops) ? ops[0].Shape.Clean() : Shape.Adopt(BroadcastInputDims(ops));
+            => AllSameDims(ops) ? ops[0].Shape.Clean() : new Shape(BroadcastInputDims(ops), copy: false);
 
         /// <summary>
         /// The broadcast of every input operand's dimensions, computed NumPy's way (aligned from the
@@ -432,7 +432,7 @@ namespace NumSharp.Backends
             bool allStrictFContig = AreAllInputsStrictFContig(ops, iterShape);
             bool wantFOrder = @out is null && ResolveEvalOrder(options.Order, allStrictFContig);
             Shape targetShape = wantFOrder
-                ? Shape.Adopt((long[])iterShape.dimensions.Clone(), 'F')
+                ? new Shape((long[])iterShape.dimensions.Clone(), 'F', copy: false)
                 : iterShape;
             // order='K' (the default) is NumPy's ufunc output rule, not the strict-F heuristic: the fresh result is laid
             // out in NpyIter's K order over the call's operands (KeepOrderLayout) - C for C operands, F for F operands
@@ -687,7 +687,7 @@ namespace NumSharp.Backends
                 strides[mem[i]] = acc;
                 acc *= dims[mem[i]];
             }
-            return Shape.Adopt((long[])dims.Clone(), strides);
+            return new Shape((long[])dims.Clone(), strides, copy: false);
         }
 
         /// <summary>
@@ -765,7 +765,7 @@ namespace NumSharp.Backends
                 return Shape.NewScalar();
             var dims = new long[childNdim];
             for (int i = 0; i < childNdim; i++) dims[i] = 1;
-            return Shape.Adopt(dims);
+            return new Shape(dims, copy: false);
         }
 
         /// <summary>
@@ -793,7 +793,7 @@ namespace NumSharp.Backends
             {
                 var dims = new long[childNdim];
                 for (int i = 0; i < childNdim; i++) dims[i] = 1;
-                return RelabelOrReshape(reduced, Shape.Adopt(dims));
+                return RelabelOrReshape(reduced, new Shape(dims, copy: false));
             }
             // A flat reduce is a 0-d scalar; normalize away any spurious rank from a delegated reduction
             // (Shape.NewScalar() is the canonical 0-d shape the fold path allocates via FlatReduceShape).
@@ -835,7 +835,7 @@ namespace NumSharp.Backends
             var kd = new long[nd];
             for (int d = 0, rd = 0; d < nd; d++)
                 kd[d] = d == axis ? 1 : dims[rd++];
-            return Shape.Adopt(kd);
+            return new Shape(kd, copy: false);
         }
 
         /// <summary>
@@ -912,14 +912,14 @@ namespace NumSharp.Backends
             // ownership can differ (np.evaluate reshaped its 0-d answer).
             Shape want;
             if (axis is null || argReduction || childOps.Length == 0)
-                want = Shape.Adopt((long[])result.Shape.dimensions.Clone());
+                want = new Shape((long[])result.Shape.dimensions.Clone(), copy: false);
             else
             {
                 want = NumPyReduceLayout(childOps, axis.Value, keepdims);
                 // A 0-d child's axis 0 / -1 is the flat reduction (ZeroDimAxisIsFlat), and an all-0-d child set has no
                 // axis to place: keep the result's own dims then.
                 if (want.NDim != result.ndim)
-                    want = Shape.Adopt((long[])result.Shape.dimensions.Clone());
+                    want = new Shape((long[])result.Shape.dimensions.Clone(), copy: false);
             }
 
             var have = result.Shape;
@@ -991,7 +991,7 @@ namespace NumSharp.Backends
                 strides[keepdims || a < ax ? a : a - 1] = acc;
                 acc *= cdims[a];
             }
-            return Shape.Adopt(dims, strides);
+            return new Shape(dims, strides, copy: false);
         }
 
         /// <summary>Two operand lists as one (the weighted average's values and weights leaves).</summary>
@@ -1863,7 +1863,7 @@ namespace NumSharp.Backends
             int ax = NormalizeAxis(axis.Value, nd);
             var reducedDims = new long[nd - 1];
             for (int d = 0, rd = 0; d < nd; d++) if (d != ax) reducedDims[rd++] = a.Shape.dimensions[d];
-            Shape reducedShape = reducedDims.Length > 0 ? Shape.Adopt(reducedDims) : Shape.NewScalar();
+            Shape reducedShape = reducedDims.Length > 0 ? new Shape(reducedDims, copy: false) : Shape.NewScalar();
             return ExactAxisSum(a, ax, accT, reducedShape);
         }
 
@@ -2129,7 +2129,7 @@ namespace NumSharp.Backends
             long axisSize = inputShape[axis];
             var reducedDims = new long[ndim - 1];
             for (int d = 0, rd = 0; d < ndim; d++) if (d != axis) reducedDims[rd++] = inputShape[d];
-            Shape reducedShape = reducedDims.Length > 0 ? Shape.Adopt(reducedDims) : Shape.NewScalar();
+            Shape reducedShape = reducedDims.Length > 0 ? new Shape(reducedDims, copy: false) : Shape.NewScalar();
 
             // -------------------------------------------------------------------------------------
             // Plan P2 M2 — axis Sum/Mean/Prod at NumPy-EXACT precision (mirrors the flat M1 divert).
@@ -2329,7 +2329,7 @@ namespace NumSharp.Backends
             {
                 var kd = new long[ndim];
                 for (int d = 0, rd = 0; d < ndim; d++) kd[d] = (d == axis) ? 1 : reduced.Shape.dimensions[rd++];
-                reduced = RelabelOrReshape(reduced, Shape.Adopt(kd));
+                reduced = RelabelOrReshape(reduced, new Shape(kd, copy: false));
             }
 
             if (@out is not null) { UnmanagedStorage.Copyto(@out, reduced, NPY_CASTING.NPY_SAME_KIND_CASTING); return @out; }

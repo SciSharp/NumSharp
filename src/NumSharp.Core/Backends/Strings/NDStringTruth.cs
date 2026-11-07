@@ -225,7 +225,7 @@ namespace NumSharp.Backends.Strings
                 return Shape.NewScalar();
             if ((order == 'K' || order == 'k') && !source.IsContiguous && !source.IsFContiguous)
                 return source.KeepOrder();
-            return Shape.Adopt((long[])source.dimensions.Clone(), OrderResolver.Resolve(order, source));
+            return new Shape((long[])source.dimensions.Clone(), OrderResolver.Resolve(order, source), copy: false);
         }
 
         /// <summary>The truth kernel: the IL kernel, or the managed element loop where dynamic code is unavailable.</summary>

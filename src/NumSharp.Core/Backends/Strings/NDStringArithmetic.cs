@@ -136,7 +136,7 @@ namespace NumSharp.Backends.Strings
                 {
                     // The temporary has the inputs' broadcast shape (copyto broadcasts it into out=).
                     var dims = NDStringUfuncs.BroadcastDims(x1, x2, null, null);
-                    var temp = new NDArray(loop, dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims), true);
+                    var temp = new NDArray(loop, dims.Length == 0 ? Shape.NewScalar() : new Shape(dims, copy: false), true);
                     try
                     {
                         return Multiply(x1, x2, temp, null);

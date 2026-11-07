@@ -138,7 +138,7 @@ namespace NumSharp.Backends
                     dims[k++] = 1;
             }
 
-            var nan = NewArray(NPTypeCode.Double, dims.Length == 0 ? Shape.Scalar : Shape.Adopt(dims), false);
+            var nan = NewArray(NPTypeCode.Double, dims.Length == 0 ? Shape.Scalar : new Shape(dims, copy: false), false);
             // The allocation is uninitialized: every element is written here, the buffer is dense (a fresh C array).
             double* p = (double*)nan.Address;
             for (long i = 0; i < nan.size; i++)
@@ -175,7 +175,7 @@ namespace NumSharp.Backends
             // npyiter_new_temp_array's layout, zero-filled: PyUFunc_ReduceWrapper assigns the identity (+0.0 for an inexact
             // loop, 0 for decimal) to the result before the first call, so every output, an empty reduction's included,
             // starts at it.
-            var result = NewArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : Shape.Adopt(it.ResultDims, it.ResultStrides), true);
+            var result = NewArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : new Shape(it.ResultDims, it.ResultStrides, copy: false), true);
             try
             {
                 byte* o = (byte*)result.Address + result.Shape.offset * result.dtypesize;

@@ -988,7 +988,7 @@ namespace NumSharp
                 long[] jaggedDims = DiscoverJaggedShape(array);
                 if (jaggedDims.Length < array.ResolveRank())
                 {
-                    var empty = np.zeros(Shape.Adopt(jaggedDims), dtype ?? (DType)arrType);
+                    var empty = np.zeros(new Shape(jaggedDims, copy: false), dtype ?? (DType)arrType);
                     if (ndmin <= empty.ndim)
                         return empty;
                     var raisedEmpty = AtLeastNdView(empty, ndmin);
@@ -1455,7 +1455,7 @@ namespace NumSharp
             Shape resultLayout = Backends.DefaultEngine.TryKOrderPlan(dims, new[] { condition.Shape, x.Shape, y.Shape },
                 out var kLayout, out _)
                 ? kLayout
-                : Shape.Adopt((long[])dims.Clone());
+                : new Shape((long[])dims.Clone(), copy: false);
 
             // Coerce the condition to boolean using NumPy's truthiness rules
             // (0/0.0 → False, everything else including NaN/±Inf → True). The

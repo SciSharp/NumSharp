@@ -917,7 +917,7 @@ namespace NumSharp.Backends
                     dims[o++] = 1;
             }
 
-            var r = dims.Length == 0 ? NewArray(loopType, Shape.NewScalar(), false) : NewArray(loopType, Shape.Adopt(dims), false); // dims is built above
+            var r = dims.Length == 0 ? NewArray(loopType, Shape.NewScalar(), false) : NewArray(loopType, new Shape(dims, copy: false), false); // dims is built above
             int size = loopType.SizeOf();
             Buffer.MemoryCopy(slot, (byte*)r.Address, size, size);
             return dims.Length == 0 ? r.MarkReductionScalar() : r;
@@ -1025,7 +1025,7 @@ namespace NumSharp.Backends
                 return NewArray(type, Shape.Scalar, false);
             var ones = new long[ndim];
             Array.Fill(ones, 1L);
-            return NewArray(type, Shape.Adopt(ones), false);
+            return NewArray(type, new Shape(ones, copy: false), false);
         }
 
         /// <summary>The loop-dtype value in <paramref name="slot"/>, boxed as the loop dtype's own CLR type (for an

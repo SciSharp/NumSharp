@@ -2290,7 +2290,7 @@ namespace NumSharp
                 if (t1 == NPTypeCode.Complex && xa.typecode == NPTypeCode.Complex && xa.size > 0
                     && (xa.Shape.IsContiguous || xa.ndim == 1))
                 {
-                    var r = new NDArray(NPTypeCode.Complex, Shape.Adopt((long[])xa.Shape.dimensions.Clone()), false);
+                    var r = new NDArray(NPTypeCode.Complex, new Shape((long[])xa.Shape.dimensions.Clone(), copy: false), false);
                     DirectILKernelGenerator.PolyComplex128Affine(
                         (Complex*)((byte*)xa.Storage.Address + xa.Shape.offset * sizeof(Complex)), xa.size,
                         xa.Shape.IsContiguous ? 1 : xa.Shape.strides[0],
@@ -2421,7 +2421,7 @@ namespace NumSharp
             int tsize = DirectILKernelGenerator.GetTypeSize(t);
             byte* scl = (byte*)sclP.Storage.Address + sclP.Shape.offset * tsize;
             byte* off = (byte*)offP.Storage.Address + offP.Shape.offset * tsize;
-            var r = new NDArray(t, Shape.Adopt((long[])x.Shape.dimensions.Clone()), false);
+            var r = new NDArray(t, new Shape((long[])x.Shape.dimensions.Clone(), copy: false), false);
             byte* dst = (byte*)r.Storage.Address;
             long n = x.size;
             // The points as one run: a 1-D view keeps its own (signed) stride; a C-contiguous N-D array is read flat
@@ -2523,7 +2523,7 @@ namespace NumSharp
                 var cast = DirectILKernelGenerator.GetPolyContiguousCast(xt, t1);
                 if (cast == null)
                     return null;
-                var staged = new NDArray(t1, Shape.Adopt((long[])x.Shape.dimensions.Clone()), false);
+                var staged = new NDArray(t1, new Shape((long[])x.Shape.dimensions.Clone(), copy: false), false);
                 cast((byte*)x.Storage.Address + x.Shape.offset * DirectILKernelGenerator.GetTypeSize(xt), (byte*)staged.Storage.Address, x.size);
                 return staged;
             }
@@ -2615,7 +2615,7 @@ namespace NumSharp
                                                   NDArray sclP, NDArray offP, bool mulC64, bool addC64)
         {
             long n = x.size;
-            var r = new NDArray(NPTypeCode.Complex, Shape.Adopt((long[])x.Shape.dimensions.Clone()), false);
+            var r = new NDArray(NPTypeCode.Complex, new Shape((long[])x.Shape.dimensions.Clone(), copy: false), false);
             var rp = (Complex*)r.Storage.Address;
             NDArray temp = null, product = null;
             try
@@ -3137,7 +3137,7 @@ namespace NumSharp
             var dims = new long[first.Length + 1];
             dims[0] = arrays.Length;
             System.Array.Copy(first, 0, dims, 1, first.Length);
-            var stacked = new NDArray(descr, Shape.Adopt(dims), false);
+            var stacked = new NDArray(descr, new Shape(dims, copy: false), false);
             for (int i = 0; i < arrays.Length; i++)
             {
                 // A row view of the result receives the entry through the house cast (a number becomes its str()).

@@ -87,7 +87,7 @@ namespace NumSharp
                 return KeepLaneSharingClass(expanded.copy('K'));
             var emptyDims = (long[])expanded.Shape.dimensions.Clone();
             emptyDims[0] = 0;
-            return KeepLaneSharingClass(np.empty(Shape.Adopt(emptyDims), dtype));
+            return KeepLaneSharingClass(np.empty(new Shape(emptyDims, copy: false), dtype));
         }
 
         /// <summary>

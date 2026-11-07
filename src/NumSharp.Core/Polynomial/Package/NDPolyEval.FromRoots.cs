@@ -501,7 +501,7 @@ namespace NumSharp
             {
                 // Every voter is C-ordered (a 1-D r votes on the roots axis alone), so the temporary is C: the roots axis is
                 // outermost, the innermost non-unit axis only when it is the only one (one output element).
-                yLayout = nOut == 0 ? Shape.NewScalar() : Shape.Adopt(outDims);
+                yLayout = nOut == 0 ? Shape.NewScalar() : new Shape(outDims, copy: false);
                 rootsInnermost = nr > 1 && outSize == 1;
             }
             else
@@ -717,7 +717,7 @@ namespace NumSharp
             System.Array.Copy(s.strides, strides, nd);
             for (int d = nd; d < nd + n; d++)
                 dims[d] = 1;
-            return Shape.Adopt(dims, strides);
+            return new Shape(dims, strides, copy: false);
         }
     }
 }

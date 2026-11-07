@@ -292,13 +292,13 @@ namespace NumSharp.Backends
 
                 var resultShape = Shape.GetAxis(nd.Shape, axis);
                 // np.zeros(shape, int64)'s own allocation (a zero-filled owner), without the call up into np.*.
-                var empty = NewArray(NPTypeCode.Int64, Shape.Adopt(resultShape), true);
+                var empty = NewArray(NPTypeCode.Int64, new Shape(resultShape, copy: false), true);
                 if (keepdims)
                 {
                     var ks = new long[nd.ndim];
                     for (int d = 0, sd = 0; d < nd.ndim; d++)
                         ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                    empty.Storage.Reshape(Shape.Adopt(ks));
+                    empty.Storage.Reshape(new Shape(ks, copy: false));
                 }
                 // NumPy's count is a.astype(bool).sum(axis), so a 1-D input's 0-d count is the sum's scalar, as the
                 // non-empty route below returns it (np.linalg.matrix_rank of an empty matrix with a tolerance came back

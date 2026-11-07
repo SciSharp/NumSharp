@@ -221,7 +221,7 @@ namespace NumSharp.Backends
                 // the same split — it mallocs newnbytes and only then writes the dimensions.
                 // The DESCRIPTOR allocates: a fixed-width string's width lives on it, not on its storage lane (an S5
                 // buffer grows by 5 bytes an element, and the zeroed tail reads b'' / '', NumPy's grown elements).
-                var fresh = new NDArray(self.dtype, Shape.Adopt(new[] { newSize }), fillZeros: false);
+                var fresh = new NDArray(self.dtype, new Shape(new[] { newSize }, copy: false), fillZeros: false);
 
                 byte* src = self.Storage.Address + shape.offset * itemsize;
                 byte* dst = fresh.Storage.Address;
@@ -268,7 +268,7 @@ namespace NumSharp.Backends
                 // for any other sharer under refcheck:false), then discard the fresh wrapper so the
                 // net effect is `self` solely owning the new buffer.
                 var newStorage = fresh.Storage;
-                var freshShape = Shape.Adopt(newDims, freshStrides);
+                var freshShape = new Shape(newDims, freshStrides, copy: false);
                 newStorage.SetShapeUnsafe(ref freshShape);
                 newStorage.InternalArray.TryAddRef();
                 self.Storage.InternalArray?.Release();

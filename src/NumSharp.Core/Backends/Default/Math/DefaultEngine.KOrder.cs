@@ -188,7 +188,7 @@ namespace NumSharp.Backends
                     rd[k] = present ? od[j] : 1;
                     rs[k] = present ? os[j] : 0;
                 }
-                reduced[i] = Shape.Adopt(rd, rs);
+                reduced[i] = new Shape(rd, rs, copy: false);
             }
 
             Shape reducedLayout = Shape.NpyIterOutputShape(reducedDims, reduced);
@@ -209,7 +209,7 @@ namespace NumSharp.Backends
                 else
                     strides[d] = next;
             }
-            layout = Shape.Adopt((long[])dims.Clone(), strides);
+            layout = new Shape((long[])dims.Clone(), strides, copy: false);
 
             // The extent-1 axes first, then the long axes outermost-first by stride (a dense layout gives every long axis a
             // distinct stride, so the order is exact).
@@ -240,7 +240,7 @@ namespace NumSharp.Backends
         {
             Shape layout = TryKOrderPlan(x.Shape.dimensions, new[] { x.Shape }, out var kLayout, out _)
                 ? kLayout
-                : Shape.Adopt((long[])x.Shape.dimensions.Clone());
+                : new Shape((long[])x.Shape.dimensions.Clone(), copy: false);
             var r = new NDArray(to, layout, false);
             try
             {

@@ -341,7 +341,7 @@ namespace NumSharp.Backends
         /// <returns>An offset-0 shape of <paramref name="iterShape"/>'s dims, C or F ordered.</returns>
         private static Shape PowerPlainResultShape(NDArray lhs, NDArray rhs, Shape iterShape)
             => ShouldProduceFContigOutput(lhs, rhs, iterShape)
-                ? Shape.Adopt((long[])iterShape.dimensions.Clone(), 'F')
+                ? new Shape((long[])iterShape.dimensions.Clone(), 'F', copy: false)
                 : iterShape;
 
         /// <summary>

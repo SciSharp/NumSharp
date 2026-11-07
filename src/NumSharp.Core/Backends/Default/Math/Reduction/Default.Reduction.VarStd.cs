@@ -313,9 +313,9 @@ namespace NumSharp.Backends
         {
             var dims = (long[])arrShape.dimensions.Clone();
             if (arrShape.IsContiguous)
-                return Shape.Adopt(dims);
+                return new Shape(dims, copy: false);
             if (arrShape.IsFContiguous)
-                return Shape.Adopt(dims, 'F');
+                return new Shape(dims, 'F', copy: false);
             if (axis is null)
                 return Shape.NpyIterOutputShape(dims, new ReadOnlySpan<Shape>(in arrShape));
             return Shape.NpyIterOutputShape(dims, new[] { arrShape, KeepdimsReductionLayout(arrShape, axis.Value) });
@@ -365,7 +365,7 @@ namespace NumSharp.Backends
                 strides[ax] = stride;
                 stride *= dims[ax];
             }
-            return Shape.Adopt(dims, strides);
+            return new Shape(dims, strides, copy: false);
         }
 
         /// <summary>
@@ -553,7 +553,7 @@ namespace NumSharp.Backends
                     var memDims = new long[nd];
                     for (int p = 0; p < nd; p++)
                         memDims[p] = order[p] == axis ? r : dims[order[p]];
-                    block = NewArray(sqT, Shape.Adopt(memDims), false);
+                    block = NewArray(sqT, new Shape(memDims, copy: false), false);
                     blockRows = r;
                 }
 
@@ -596,7 +596,7 @@ namespace NumSharp.Backends
             }
             // np.transpose's body (the array's own engine member), over the accumulator viewed in the kept axes' memory
             // order; the reshape keeps acc's engine, so acc.TensorEngine is the view's.
-            var accLogical = acc.TensorEngine.Transpose(acc.reshape(Shape.Adopt(keptMem)), keptAxes);
+            var accLogical = acc.TensorEngine.Transpose(acc.reshape(new Shape(keptMem, copy: false)), keptAxes);
 
             var reduced = new long[nd - 1];
             for (int d = 0, k = 0; d < nd; d++)
@@ -721,7 +721,7 @@ namespace NumSharp.Backends
                 var ones = new long[arr.ndim];
                 for (int d = 0; d < ones.Length; d++)
                     ones[d] = 1;
-                ret = ret.reshape(Shape.Adopt(ones));
+                ret = ret.reshape(new Shape(ones, copy: false));
             }
             VarStdChunkedRuns++;
             return ret;

@@ -515,9 +515,9 @@ namespace NumSharp
             var dims = (long[])Ids.Shape.dimensions.Clone();
             return order switch
             {
-                'C' => Shape.Adopt(dims),
-                'F' => Shape.Adopt(dims, 'F'),
-                'A' => Ids.Shape.IsFContiguous && !Ids.Shape.IsContiguous ? Shape.Adopt(dims, 'F') : Shape.Adopt(dims),
+                'C' => new Shape(dims, copy: false),
+                'F' => new Shape(dims, 'F', copy: false),
+                'A' => Ids.Shape.IsFContiguous && !Ids.Shape.IsContiguous ? new Shape(dims, 'F', copy: false) : new Shape(dims, copy: false),
                 _ => Ids.Shape.KeepOrder(),
             };
         }
@@ -562,7 +562,7 @@ namespace NumSharp
                 texts[i] = buffer.ToString();
             }
             using var c = np.array(texts, dtype);
-            using var shaped = c.reshape(Shape.Adopt((long[])Ids.Shape.dimensions.Clone()));
+            using var shaped = c.reshape(new Shape((long[])Ids.Shape.dimensions.Clone(), copy: false));
             var result = new NDArray(dtype, layout, true);
             try
             {

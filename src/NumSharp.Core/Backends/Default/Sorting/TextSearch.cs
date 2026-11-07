@@ -115,7 +115,7 @@ namespace NumSharp.Backends.Sorting
             NDArray k = keys.Shape.IsContiguous ? keys : NDArray.ascontiguousarray(keys, null);
             long m = k.size;
             var result = new NDArray(NPTypeCode.Int64,
-                keys.ndim == 0 ? Shape.NewScalar() : Shape.Adopt((long[])keys.Shape.dimensions.Clone()), false);
+                keys.ndim == 0 ? Shape.NewScalar() : new Shape((long[])keys.Shape.dimensions.Clone(), copy: false), false);
 
             byte* hay = (byte*)haystack.Address + haystack.Shape.offset * (long)haystack.dtype.itemsize;
             long hayStride = haystack.Shape.strides[0] * (long)haystack.dtype.itemsize;

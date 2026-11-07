@@ -236,7 +236,7 @@ namespace NumSharp.Statistics
                 if (index < -n || index >= n)
                     throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {index} is out of bounds for axis 0 with size {n}"));
 
-            NDArray picks = qShape.Length == 0 ? NDArray.Scalar(indexes[0]) : np.array(indexes).reshape(Shape.Adopt((long[])qShape.Clone()));
+            NDArray picks = qShape.Length == 0 ? NDArray.Scalar(indexes[0]) : np.array(indexes).reshape(new Shape((long[])qShape.Clone(), copy: false));
             NDArray result = np.take(sorted, picks, 0);
 
             if (target is not null)

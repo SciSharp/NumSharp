@@ -297,7 +297,7 @@ namespace NumSharp
             // NumPy's discovery first: a ragged input raises before anything is allocated; an empty level ends the dims.
             long[] dims = NDArray.DiscoverJaggedShape(data);
             if (dims.Length < 2)
-                return new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt(dims));
+                return new NDArray(InfoOf<T>.NPTypeCode, new Shape(dims, copy: false));
             unsafe
             {
                 int len1 = data.Length;
@@ -344,7 +344,7 @@ namespace NumSharp
             // NumPy's discovery first: a ragged input raises before anything is allocated; an empty level ends the dims.
             long[] dims = NDArray.DiscoverJaggedShape(data);
             if (dims.Length < 3)
-                return new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt(dims));
+                return new NDArray(InfoOf<T>.NPTypeCode, new Shape(dims, copy: false));
             unsafe
             {
                 int len1 = data.Length;
@@ -398,7 +398,7 @@ namespace NumSharp
             // NumPy's discovery first: a ragged input raises before anything is allocated; an empty level ends the dims.
             long[] dims = NDArray.DiscoverJaggedShape(data);
             if (dims.Length < 4)
-                return new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt(dims));
+                return new NDArray(InfoOf<T>.NPTypeCode, new Shape(dims, copy: false));
             unsafe
             {
                 int len1 = data.Length;
@@ -459,7 +459,7 @@ namespace NumSharp
             // NumPy's discovery first: a ragged input raises before anything is allocated; an empty level ends the dims.
             long[] dims = NDArray.DiscoverJaggedShape(data);
             if (dims.Length < 5)
-                return new NDArray(InfoOf<T>.NPTypeCode, Shape.Adopt(dims));
+                return new NDArray(InfoOf<T>.NPTypeCode, new Shape(dims, copy: false));
             unsafe
             {
                 int len1 = data.Length;

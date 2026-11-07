@@ -101,7 +101,7 @@ namespace NumSharp.Backends
             // NumPy, whose boolean-mask selection is an owned copy (probed 2.4.2:
             // np.arange(12).reshape(3,4)[[True,False,True]].flags.owndata is True). This mirrors
             // the full-mask branch above and the leading-integer fancy path, which already own.
-            result.Storage.Reshape(Shape.Adopt(BooleanMaskResultShape(trueCount, arr, leadNdim).dimensions));
+            result.Storage.Reshape(new Shape(BooleanMaskResultShape(trueCount, arr, leadNdim).dimensions, copy: false));
             return result;
         }
 
@@ -219,7 +219,7 @@ namespace NumSharp.Backends
             dims[0] = count;
             for (int i = 0; i < trailing; i++)
                 dims[i + 1] = arr.Shape.dimensions[leadNdim + i];
-            return Shape.Adopt(dims);
+            return new Shape(dims, copy: false);
         }
 
         /// <summary>
@@ -238,7 +238,7 @@ namespace NumSharp.Backends
                 reshaped[mask.ndim + i] = 1;
             // np.broadcast_to's body for an array source (the read-only stride-0 view; no numpy.matrix region is needed
             // around it: the view is built from the storage and calls no np.* function).
-            return NDArray.broadcast_to(mask.reshape(Shape.Adopt(reshaped)), arr.Shape);
+            return NDArray.broadcast_to(mask.reshape(new Shape(reshaped, copy: false)), arr.Shape);
         }
 
         /// <summary>

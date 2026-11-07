@@ -87,7 +87,7 @@ namespace NumSharp.Backends
             if (complexFill)
                 throw new TypeError("must be real number, not complex");
 
-            var result = NewArray(NPTypeCode.Double, Shape.Adopt(x.Shape.dimensions), fillZeros: false);
+            var result = NewArray(NPTypeCode.Double, new Shape(x.Shape.dimensions, copy: false), fillZeros: false);
             long lenx = xc.size;
 
             double* dx = (double*)axp.Address;
@@ -187,7 +187,7 @@ namespace NumSharp.Backends
             if (afp.size != lenxp)
                 throw new ValueError("fp and xp are not of the same length.");
 
-            var result = NewArray(NPTypeCode.Complex, Shape.Adopt(x.Shape.dimensions), fillZeros: false);
+            var result = NewArray(NPTypeCode.Complex, new Shape(x.Shape.dimensions, copy: false), fillZeros: false);
             long lenx = xc.size;
 
             double* dx = (double*)axp.Address;

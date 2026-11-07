@@ -710,11 +710,11 @@ namespace NumSharp.Backends.Strings
                 {
                     // out_dtype = f"{a.dtype.char}{width.max()}"; shape = np.broadcast_shapes(a.shape, width.shape, fillchar.shape)
                     outDescr = PadDescriptor(a, width, dims, ref w64);
-                    shape = Shape.BroadcastShape(a.Shape, Shape.Adopt(dims), fill.Shape);
+                    shape = Shape.BroadcastShape(a.Shape, new Shape(dims, copy: false), fill.Shape);
                 }
                 else
                 {
-                    shape = Shape.BroadcastShape(a.Shape, Shape.Adopt(dims), fill.Shape);
+                    shape = Shape.BroadcastShape(a.Shape, new Shape(dims, copy: false), fill.Shape);
                     outDescr = PadDescriptor(a, width, dims, ref w64);
                 }
                 var @out = NDArray.ForOverwrite(outDescr, Shape.NewLikeLayout(a.Shape, 'K', (long[])shape));
@@ -1065,8 +1065,8 @@ namespace NumSharp.Backends.Strings
                 long b = d - (nd - second.Length) >= 0 ? second[d - (nd - second.Length)] : 1;
                 if (a != b && a != 1 && b != 1)
                     throw new IncorrectShapeException(
-                        $"operands could not be broadcast together with shapes {Shape.Adopt((long[])first.Clone()).ToPythonTuple()} " +
-                        $"{Shape.Adopt((long[])second.Clone()).ToPythonTuple()} ");
+                        $"operands could not be broadcast together with shapes {new Shape((long[])first.Clone(), copy: false).ToPythonTuple()} " +
+                        $"{new Shape((long[])second.Clone(), copy: false).ToPythonTuple()} ");
                 dims[d] = a == 1 ? b : a;
             }
             return dims;

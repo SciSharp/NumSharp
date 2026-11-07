@@ -339,7 +339,7 @@ namespace NumSharp.Backends
 
             // np.zeros(x.shape, float64)'s own allocation (a zero-filled, C-ordered owner), without the call up into np.*.
             // bound to x's engine, the engine whose np.linalg call this is (the shared sub-engine has none of its own)
-            var magnitudes = x.TensorEngine.NewArray(NPTypeCode.Double, Shape.Adopt(x.Shape.dimensions), true);
+            var magnitudes = x.TensorEngine.NewArray(NPTypeCode.Double, new Shape(x.Shape.dimensions, copy: false), true);
 
             // ONE iterator over the operand and the result, pinned to 'C': a multi-operand iterator pairs the elements of
             // the same index, so each z lands in its own slot whatever x's layout (strided, transposed, reversed,

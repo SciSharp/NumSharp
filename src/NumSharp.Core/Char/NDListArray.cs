@@ -149,7 +149,7 @@ namespace NumSharp
         public long size => Ids.size;
 
         /// <summary>The outer shape as a NumSharp <see cref="NumSharp.Shape"/> (dimensions only: the lists have no strides).</summary>
-        public Shape Shape => NumSharp.Shape.Adopt(Ids.shape);
+        public Shape Shape => new NumSharp.Shape(Ids.shape, copy: false);
 
         // =============================================================================================================
         // Element access
@@ -420,7 +420,7 @@ namespace NumSharp
             // The layout engine walks an int64 array of the outer shape whose values are the C-order positions; the
             // formatter maps a position to its element's list repr.
             using var flatPositions = np.arange(size);
-            using var positions = ndim == 0 ? flatPositions.reshape(NumSharp.Shape.NewScalar()) : flatPositions.reshape(NumSharp.Shape.Adopt(Ids.shape));
+            using var positions = ndim == 0 ? flatPositions.reshape(NumSharp.Shape.NewScalar()) : flatPositions.reshape(new NumSharp.Shape(Ids.shape, copy: false));
             var opts = PrintOptions.Current;
             return repr ? ArrayFormatter.ObjectArrayRepr(positions, formatter, opts) : ArrayFormatter.ObjectArrayStr(positions, formatter, opts);
         }
@@ -668,7 +668,7 @@ namespace NumSharp
             }
             var descr = Kind == 'S' ? DTypeRegistry.Bytes.Descr(width) : DTypeRegistry.Str.Descr(width);
             // A fresh zeroed array: each piece is copied into the start of its element, the rest stays NUL padding.
-            var result = new NDArray(descr, NumSharp.Shape.Adopt(new[] { count }), true);
+            var result = new NDArray(descr, new NumSharp.Shape(new[] { count }, copy: false), true);
             int unit = Heap.UnitSize;
             byte* dst = (byte*)result.Address;
             long itemsize = width * unit;

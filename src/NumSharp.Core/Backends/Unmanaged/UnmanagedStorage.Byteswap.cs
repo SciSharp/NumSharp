@@ -82,7 +82,7 @@ namespace NumSharp.Backends
             if (a.Shape.IsContiguous && a.size > 0 && !descr.Meta.HasReferences)
             {
                 // The descriptor allocates: a string's width lives on it, not on the storage lane.
-                var result = new NDArray(descr, Shape.Adopt(a.Shape.dimensions), fillZeros: false);
+                var result = new NDArray(descr, new Shape(a.Shape.dimensions, copy: false), fillZeros: false);
                 unsafe
                 {
                     int itemsize = descr.itemsize;

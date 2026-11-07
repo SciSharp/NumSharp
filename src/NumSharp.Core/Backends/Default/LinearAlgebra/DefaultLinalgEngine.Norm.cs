@@ -111,7 +111,7 @@ namespace NumSharp.Backends
                     mergedShape[r++] = x.Shape.dimensions[d];
                 }
 
-                var merged = x.TensorEngine.Transpose(x, permutation).reshape(Shape.Adopt(mergedShape));
+                var merged = x.TensorEngine.Transpose(x, permutation).reshape(new Shape(mergedShape, copy: false));
                 var res = Norm(merged, order, new[] {0}, false);
                 if (!keepdims)
                     return res;
@@ -191,7 +191,7 @@ namespace NumSharp.Backends
                     return r;
                 r = r.copy();
             }
-            return r.reshape(Shape.Adopt(shape));
+            return r.reshape(new Shape(shape, copy: false));
         }
 
         /// <summary>
@@ -668,7 +668,7 @@ namespace NumSharp.Backends
             // runs keeps qLo where it was (qHi was after it); its slabs along qLo are the per-run sums to add in turn.
             var slabs = runs.TensorEngine.MoveAxis(runs, new[] {qLo}, new[] {0});
             // np.zeros(shape, float16)'s own allocation: the zero-filled accumulator.
-            var acc = y.TensorEngine.NewArray(NPTypeCode.Half, Shape.Adopt((long[])slabs.Shape.dimensions[1..]), true);
+            var acc = y.TensorEngine.NewArray(NPTypeCode.Half, new Shape((long[])slabs.Shape.dimensions[1..], copy: false), true);
             for (long i = 0; i < slabs.Shape.dimensions[0]; i++)
                 acc.TensorEngine.Add(acc, slabs[i], null, acc, null);
             return acc;

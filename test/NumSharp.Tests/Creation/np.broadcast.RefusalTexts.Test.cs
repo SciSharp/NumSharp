@@ -53,7 +53,7 @@ namespace NumSharp.Tests.Creation
             foreach (var (source, target, message) in rows)
             {
                 using var src = Z(source);
-                new Action(() => np.broadcast_to(src, Shape.Adopt(target)).Dispose())
+                new Action(() => np.broadcast_to(src, new Shape(target, copy: false)).Dispose())
                     .Should().Throw<IncorrectShapeException>().WithMessage(message, $"broadcast_to({string.Join(",", source)} -> {string.Join(",", target)})");
             }
 

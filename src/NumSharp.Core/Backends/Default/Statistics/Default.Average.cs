@@ -365,7 +365,7 @@ namespace NumSharp.Backends
             long[] newShape = new long[ndim];
             for (int i = 0; i < ndim; i++)
                 newShape[i] = Array.IndexOf(axis, i) >= 0 ? a.Shape.dimensions[i] : 1L;
-            wgt = wgt.reshape(Shape.Adopt(newShape));
+            wgt = wgt.reshape(new Shape(newShape, copy: false));
             return wgt;
         }
 

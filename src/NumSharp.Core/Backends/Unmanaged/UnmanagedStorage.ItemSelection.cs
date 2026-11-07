@@ -155,7 +155,7 @@ namespace NumSharp.Backends
 
             // The descriptor allocates (a string's width). The gather writes every element before the result is returned (an
             // out-of-bounds index raises and the scope reclaims the partial result), so a U result skips its zero fill.
-            var result = NDArray.ForOverwrite(a.dtype, Shape.Adopt(outDims));
+            var result = NDArray.ForOverwrite(a.dtype, new Shape(outDims, copy: false));
             long indicesCount = indices.size;
 
             // "Index error, since that is the usual error for raise mode" — only when something would be written.
@@ -1150,7 +1150,7 @@ namespace NumSharp.Backends
             {
                 // Text into numbers (a 0-d text array, or a list of strings — an ndarray of text failed the 'safe' rule
                 // above) is parsed, numbers into text formatted, every value now, before the mask is read.
-                var result = NDArray.ForOverwrite(target.dtype, Shape.Adopt((long[])values.Shape.dimensions.Clone()));
+                var result = NDArray.ForOverwrite(target.dtype, new Shape((long[])values.Shape.dimensions.Clone(), copy: false));
                 try
                 {
                     if (result.size > 0)
@@ -1376,7 +1376,7 @@ namespace NumSharp.Backends
 
             long[] outDims = (long[])inDims.Clone();
             outDims[normalizedAxis] = total;
-            var ret = new NDArray(a.dtype, Shape.Adopt(outDims));
+            var ret = new NDArray(a.dtype, new Shape(outDims, copy: false));
 
             if (src.size == 0 || total == 0)
                 return ret;
@@ -1428,7 +1428,7 @@ namespace NumSharp.Backends
 
             long[] outDims = (long[])inDims.Clone();
             outDims[normalizedAxis] = total;
-            var ret = new NDArray(a.dtype, Shape.Adopt(outDims));
+            var ret = new NDArray(a.dtype, new Shape(outDims, copy: false));
 
             if (src.size == 0 || total == 0)
                 return ret;
@@ -1762,7 +1762,7 @@ namespace NumSharp.Backends
             }
 
             // ── 6) allocate the fresh C-contiguous result (common dtype) ──────────────────
-            var result = new NDArray(resultDescr, Shape.Adopt((long[])resultDims.Clone()), false);
+            var result = new NDArray(resultDescr, new Shape((long[])resultDims.Clone(), copy: false), false);
             long totalSize = result.size;
 
             if (totalSize == 0)
@@ -2133,7 +2133,7 @@ namespace NumSharp.Backends
                 outDims[ax] = count;
             }
 
-            result = new NDArray(a.dtype, Shape.Adopt(outDims), false); // descriptor: a string's width
+            result = new NDArray(a.dtype, new Shape(outDims, copy: false), false); // descriptor: a string's width
 
             if (count == 0 || outerSize == 0 || innerCount == 0)
                 return true;
@@ -2199,7 +2199,7 @@ namespace NumSharp.Backends
 
             // The result is always C-contiguous (NumPy reshapes the concatenated 1-D read-out),
             // so normalize to C-order dims — independent of any strides carried by new_shape.
-            var outShape = Shape.Adopt(newDims);
+            var outShape = new Shape(newDims, copy: false);
 
             // A reference-holding source (PyDataType_REFCHK; StringDType): the same tiling runs on its cell view and the
             // cells are duplicated (NDVStringMove), as NumPy's concatenate copies them through the dtype; an empty source or

@@ -137,7 +137,7 @@ unsafe
         // One staged call: the composite once (contiguous) or under NDIter. Returns the fresh bool result.
         NDArray RunStaged() => RunWithContext((l, aux) =>
         {
-            var result = new NDArray(NPTypeCode.Boolean, Shape.Adopt((long[])names.Shape.dimensions.Clone()), false);
+            var result = new NDArray(NPTypeCode.Boolean, new Shape((long[])names.Shape.dimensions.Clone(), copy: false), false);
             if (layout == "contig")
             {
                 void** p = stackalloc void*[4];
@@ -162,7 +162,7 @@ unsafe
         // the remainder's program over [temp, age]. Returns the remainder's fresh result.
         NDArray RunLite() => RunWithContext((l, aux) =>
         {
-            using var temp = new NDArray(NPTypeCode.Boolean, Shape.Adopt((long[])names.Shape.dimensions.Clone()), false);
+            using var temp = new NDArray(NPTypeCode.Boolean, new Shape((long[])names.Shape.dimensions.Clone(), copy: false), false);
             if (layout == "contig")
             {
                 void** p = stackalloc void*[3];

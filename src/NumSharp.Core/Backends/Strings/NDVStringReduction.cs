@@ -323,7 +323,7 @@ namespace NumSharp.Backends.Strings
                 : new NDArray(DTypeRegistry.VString.Descr(loopDescr.VString.HasNAObject, loopDescr.VString.na_object, loopDescr.VString.coerce),
                               // NumPy's reduction iterator lays the result out over the input AND the where= mask
                               // (both vote on the axis order; a disagreement keeps C order).
-                              dims.Length == 0 ? Shape.Scalar : (scalarInput ? Shape.Adopt(dims) : Shape.ReductionOutputShape(dims, a.Shape, ax, where?.Shape)),
+                              dims.Length == 0 ? Shape.Scalar : (scalarInput ? new Shape(dims, copy: false) : Shape.ReductionOutputShape(dims, a.Shape, ax, where?.Shape)),
                               true);
             // COPY_IF_OVERLAP: a caller's StringDType out that may share cells with the input reduces a copy of the input
             // (NumPy's iterator copies the operand; its first-element copy then reads the original, which is the same text).
@@ -1151,7 +1151,7 @@ namespace NumSharp.Backends.Strings
                     ax = given < 0 ? given + a.ndim : given;
                     dims = ResultDims(a, ax, keepdims);
                 }
-                var result = new NDArray(NPTypeCode.Int64, dims.Length == 0 ? Shape.Scalar : Shape.Adopt(dims), true);
+                var result = new NDArray(NPTypeCode.Int64, dims.Length == 0 ? Shape.Scalar : new Shape(dims, copy: false), true);
                 if (result.size == 0 || input.size == 0)
                     return result.MarkReductionScalar();
                 // The lanes write into the result viewed with the input's rank (the reduced axis at length 1).

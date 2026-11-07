@@ -20,7 +20,7 @@ namespace NumSharp.Tests.Statistics
         /// <param name="dtype">The out's dtype.</param>
         /// <param name="shape">The out's shape (empty for a 0-d out).</param>
         /// <returns>The out.</returns>
-        private static NDArray Full(DType dtype, params long[] shape) => np.full(Shape.Adopt(shape), -1, dtype);
+        private static NDArray Full(DType dtype, params long[] shape) => np.full(new Shape(shape, copy: false), -1, dtype);
 
         /// <summary>The out's elements in C order, as doubles.</summary>
         /// <param name="o">The out.</param>

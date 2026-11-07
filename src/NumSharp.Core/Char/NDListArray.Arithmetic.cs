@@ -365,7 +365,7 @@ namespace NumSharp
             var dims = BroadcastAll(new List<Shape> { Ids.Shape, @out.Ids.Shape });
             if (!@out.Ids.Shape.dimensions.AsSpan().SequenceEqual(dims))
                 throw new ValueError($"non-broadcastable output operand with shape {@out.Ids.Shape.ToPythonTuple()} doesn't match " +
-                                     $"the broadcast shape {Shape.Adopt(dims).ToPythonTuple()}");
+                                     $"the broadcast shape {new Shape(dims, copy: false).ToPythonTuple()}");
             if (@out.size > 0)
                 throw new TypeError("loop of ufunc does not support argument 0 of type list which has no callable conjugate method");
             return @out;
@@ -867,7 +867,7 @@ namespace NumSharp
             if (outputs > 0)
                 throw new NotSupportedException(
                     "an empty contraction leaves NumPy's int 0 in every output of an object dot, which an NDListArray cannot hold");
-            return new NDListArray(new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])outDims.Clone()), false), NDListHeap.Empty(Kind));
+            return new NDListArray(new NDArray(NPTypeCode.Int64, new Shape((long[])outDims.Clone(), copy: false), false), NDListHeap.Empty(Kind));
         }
 
         /// <summary>
@@ -886,11 +886,11 @@ namespace NumSharp
                 throw new TypeError($"can't multiply sequence by non-int of type '{type}'");
             int bm = counts.ndim == 1 ? 0 : counts.ndim - 2;
             // This array as (rows, length) and the counts as (columns, length), both C-ordered copies of their elements.
-            using var a2 = Ids.reshape(Shape.Adopt(new[] { size / length, length }));
+            using var a2 = Ids.reshape(new Shape(new[] { size / length, length }, copy: false));
             using var aRows = a2.copy('C');
             using var moved = np.moveaxis(counts, bm, -1);
             using var bWide = moved.astype(NPTypeCode.Int64);
-            using var bRows = bWide.reshape(Shape.Adopt(new[] { counts.size / length, length }));
+            using var bRows = bWide.reshape(new Shape(new[] { counts.size / length, length }, copy: false));
             using var bCopy = bRows.copy('C');
             NDArray overflow = null;
             try
@@ -899,7 +899,7 @@ namespace NumSharp
                 {
                     using var limit = NDArray.Scalar((ulong)long.MaxValue);
                     using var over = np.greater(moved, limit);
-                    using var overRows = over.reshape(Shape.Adopt(new[] { counts.size / length, length }));
+                    using var overRows = over.reshape(new Shape(new[] { counts.size / length, length }, copy: false));
                     overflow = overRows.copy('C');
                 }
                 long rows = aRows.Shape.dimensions[0], cols = bCopy.Shape.dimensions[0];
@@ -907,7 +907,7 @@ namespace NumSharp
                 long* pb = (long*)bCopy.Address;
                 bool* pv = overflow is null ? null : (bool*)overflow.Address;
                 NDListHeap heap = null;
-                var ids = new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])outDims.Clone()), false);
+                var ids = new NDArray(NPTypeCode.Int64, new Shape((long[])outDims.Clone(), copy: false), false);
                 try
                 {
                     long* po = (long*)ids.Address;

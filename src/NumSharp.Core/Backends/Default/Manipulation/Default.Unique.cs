@@ -219,7 +219,7 @@ namespace NumSharp.Backends
         private static void ReshapeFlatInverseToInput(NDArray a, NDArray[] outputs, int at)
         {
             var inverse = outputs[at];
-            outputs[at] = inverse.reshape(Shape.Adopt((long[])a.Shape.dimensions.Clone()));
+            outputs[at] = inverse.reshape(new Shape((long[])a.Shape.dimensions.Clone(), copy: false));
             // The view holds its own reference to the inverse's buffer; the flat wrapper is released.
             inverse.Dispose();
         }
@@ -328,6 +328,6 @@ namespace NumSharp.Backends
         /// <param name="x">The operand whose shape the inverse takes.</param>
         /// <returns>A view of <paramref name="inverse"/> with <paramref name="x"/>'s shape.</returns>
         private static NDArray ReshapeInverseToInput(NDArray inverse, NDArray x)
-            => inverse.reshape(Shape.Adopt(x.Shape.dimensions));
+            => inverse.reshape(new Shape(x.Shape.dimensions, copy: false));
     }
 }

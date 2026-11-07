@@ -126,7 +126,7 @@ namespace NumSharp.Backends.Sorting
                 {
                     var ones = new long[nd];
                     Array.Fill(ones, 1L);
-                    flat.Storage.Reshape(Shape.Adopt(ones));
+                    flat.Storage.Reshape(new Shape(ones, copy: false));
                 }
                 return flat.MarkReductionScalar();
             }
@@ -137,7 +137,7 @@ namespace NumSharp.Backends.Sorting
             // with its slot; the axis is dropped afterwards by relabelling the same C-contiguous buffer.
             var keepDims = (long[])a.Shape.dimensions.Clone();
             keepDims[ax] = 1;
-            var result = new NDArray(NPTypeCode.Int64, Shape.Adopt(keepDims), false);
+            var result = new NDArray(NPTypeCode.Int64, new Shape(keepDims, copy: false), false);
             if (result.size > 0)
             {
                 long stride = a.Shape.strides[ax] * (long)width;
@@ -151,7 +151,7 @@ namespace NumSharp.Backends.Sorting
                 for (int d = 0, w = 0; d < nd; d++)
                     if (d != ax)
                         outDims[w++] = a.Shape.dimensions[d];
-                result.Storage.Reshape(outDims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(outDims));
+                result.Storage.Reshape(outDims.Length == 0 ? Shape.NewScalar() : new Shape(outDims, copy: false));
             }
             return result.MarkReductionScalar();
         }

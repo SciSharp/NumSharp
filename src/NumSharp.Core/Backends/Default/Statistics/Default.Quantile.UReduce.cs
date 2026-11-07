@@ -207,7 +207,7 @@ namespace NumSharp.Backends
             for (int d = 0; d < keep.Length; d++)
                 merged[d] = moved.Shape.dimensions[d];
             merged[keep.Length] = -1;
-            return moved.reshape(Shape.Adopt(merged));
+            return moved.reshape(new Shape(merged, copy: false));
         }
     }
 }

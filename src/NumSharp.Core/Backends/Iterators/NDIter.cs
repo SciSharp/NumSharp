@@ -606,7 +606,7 @@ namespace NumSharp.Backends.Iteration
                     }
 
                     // Allocate the NDArray with the resolved dtype and shape
-                    var shape = outputShape.Length == 0 ? new Shape() : NumSharp.Shape.Adopt(outputShape);
+                    var shape = outputShape.Length == 0 ? new Shape() : new NumSharp.Shape(outputShape, copy: false);
                     op[opIdx] = stringAllocDescr is not null ? new NDArray(stringAllocDescr, shape, true) : new NDArray(allocDtype, shape, true);
                     if (allocatedOps is not null)
                         allocatedOps[opIdx] = true;
@@ -851,7 +851,7 @@ namespace NumSharp.Backends.Iteration
                     }
                     else
                     {
-                        var broadcastArr = NumSharp.Shape.BroadcastTo(arrShape, NumSharp.Shape.Adopt(broadcastShape));
+                        var broadcastArr = NumSharp.Shape.BroadcastTo(arrShape, new NumSharp.Shape(broadcastShape, copy: false));
                         basePtr = (byte*)arr.Address + (broadcastArr.offset * elemBytes);
 
                         for (int d = 0; d < _state->NDim; d++)
@@ -1477,7 +1477,7 @@ namespace NumSharp.Backends.Iteration
                         for (int d = 0; d < opAxesNDim; d++)
                             virtualDims[d] = d < offset ? 1 : opShape[d - offset];
                     }
-                    virtualShapes.Add(NumSharp.Shape.Adopt(virtualDims));
+                    virtualShapes.Add(new NumSharp.Shape(virtualDims, copy: false));
                 }
 
                 if (virtualShapes.Count == 0)
@@ -5062,8 +5062,8 @@ namespace NumSharp.Backends.Iteration
             // AsClean returns the source's shape, sharing its dimension and stride arrays (shapes never write into them),
             // where a rebuild cloned the dimensions and recomputed the strides on every copy. Its flags are the source's;
             // the allocator re-sets what a fresh buffer reports (writeable, owner, aligned). Any other source gets
-            // Clean()'s new C layout — the same as Shape.Adopt(dims, 'C').
-            return physical == 'C' ? srcShape.AsClean() : Shape.Adopt((long[])srcShape.dimensions.Clone(), physical);
+            // Clean()'s new C layout — the same as new Shape(dims, 'C', copy: false).
+            return physical == 'C' ? srcShape.AsClean() : new Shape((long[])srcShape.dimensions.Clone(), physical, copy: false);
         }
 
         /// <inheritdoc cref="Copy(NDArray, NDArray)"/>
