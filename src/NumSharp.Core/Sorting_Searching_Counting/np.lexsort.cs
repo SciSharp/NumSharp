@@ -62,7 +62,7 @@ namespace NumSharp
             if (nd == 0)
                 return NDArray.Scalar(0L);
             if (first.size <= 1)
-                return np.zeros(Shape.Adopt(first.Shape.dimensions), NPTypeCode.Int64); // [0] for one element, [] for none
+                return np.zeros(new Shape(first.Shape.dimensions, copy: false), NPTypeCode.Int64); // [0] for one element, [] for none
 
             // First pass over an identity permutation IS the first key's stable argsort;
             // every later key re-sorts the permutation it receives (stably), so the LAST

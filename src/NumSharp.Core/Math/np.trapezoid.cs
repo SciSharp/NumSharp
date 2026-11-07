@@ -185,7 +185,7 @@ namespace NumSharp
                     long[] shp = new long[nd];
                     for (int i = 0; i < nd; i++) shp[i] = 1;
                     shp[ax] = dd.Shape.dimensions[0];
-                    d = dd.reshape(Shape.Adopt(shp));     // view sharing dd's storage
+                    d = dd.reshape(new Shape(shp, copy: false));     // view sharing dd's storage
                     // At most one axis of extent > 1, so it never takes part in a vote: any
                     // shape with these dims lays the product out the same way.
                     dLayout = d.Shape;
@@ -643,7 +643,7 @@ namespace NumSharp
                     rperm[j++] = a < axis ? a : a - 1;
             }
 
-            return Shape.Adopt(dims, Shape.StridesForPerm(dims, rperm));
+            return new Shape(dims, Shape.StridesForPerm(dims, rperm), copy: false);
         }
 
         /// <summary>

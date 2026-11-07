@@ -62,7 +62,7 @@ namespace NumSharp
             // Shape.TransformOffset, would collapse the result to the unbroadcast
             // cell — the kernel writes correct sequential values to raw memory
             // but the user would see duplicates.
-            var resultShape = Shape.Adopt((long[])indices.Shape.dimensions.Clone());
+            var resultShape = new Shape((long[])indices.Shape.dimensions.Clone(), copy: false);
             var result = new NDArray<long>[ndim];
             for (int d = 0; d < ndim; d++)
                 result[d] = new NDArray<long>(resultShape);

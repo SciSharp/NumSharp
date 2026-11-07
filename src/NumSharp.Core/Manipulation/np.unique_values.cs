@@ -300,6 +300,6 @@ namespace NumSharp
         ///     inverse array.
         /// </summary>
         private static NDArray ReshapeInverseToInput(NDArray inverse, NDArray x)
-            => inverse.reshape(Shape.Adopt(x.Shape.dimensions));
+            => inverse.reshape(new Shape(x.Shape.dimensions, copy: false));
     }
 }

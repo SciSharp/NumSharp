@@ -396,7 +396,7 @@ namespace NumSharp.Backends
                 void* loPtr = minv is null ? null : ScalarBoundPointer(minv, outType, loSlot);
                 void* hiPtr = maxv is null ? null : ScalarBoundPointer(maxv, outType, hiSlot);
 
-                NDArray dstS = outv ?? new NDArray(outType, Shape.Adopt(runDims), false);
+                NDArray dstS = outv ?? new NDArray(outType, new Shape(runDims, copy: false), false);
 
                 // ---- NumPy's const path with a NaN scalar bound fills the whole call with that bound's own NaN
                 //      (clip.cpp: npy_isnan(min_val) ? min_val : max_val), payload and sign included. The flat
@@ -424,7 +424,7 @@ namespace NumSharp.Backends
             NDArray loCast = PrepareFlatBound(minv, kind, outType, runDims);
             NDArray hiCast = PrepareFlatBound(maxv, kind, outType, runDims);
 
-            NDArray dst = outv ?? new NDArray(outType, Shape.Adopt(runDims), false);
+            NDArray dst = outv ?? new NDArray(outType, new Shape(runDims, copy: false), false);
             RunClipKernel(srcArr, dst, loCast, hiCast, outType, mode, kind);
 
             if (@out is not null)
@@ -496,8 +496,8 @@ namespace NumSharp.Backends
                 // RunClipKernel reads the value through .Address, which is only correct at offset 0.
                 return ScalarBoundReady(bound, outType) ? bound : bound.astype(outType);
             if (bound.ndim == 0)
-                return np.full(Shape.Adopt(runDims), bound.astype(outType).GetAtIndex(0), outType);
-            return PrepareBound(bound, Shape.Adopt(runDims), outType);
+                return np.full(new Shape(runDims, copy: false), bound.astype(outType).GetAtIndex(0), outType);
+            return PrepareBound(bound, new Shape(runDims, copy: false), outType);
         }
 
         /// <summary>

@@ -182,7 +182,7 @@ namespace NumSharp
         /// </remarks>
         [OverloadResolutionPriority(-1)]
         public NDArray hypergeometric(long ngood, long nbad, long nsample, long size)
-            => hypergeometric(ngood, nbad, nsample, Shape.Adopt(new long[] { size }));
+            => hypergeometric(ngood, nbad, nsample, new Shape(new long[] { size }, copy: false));
 
         /// <summary>
         ///     Draw a single sample from a Hypergeometric distribution.

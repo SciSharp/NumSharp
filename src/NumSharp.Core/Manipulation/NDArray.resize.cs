@@ -150,7 +150,7 @@ namespace NumSharp
                 // creation-time one AllocationGuard enforces: resize stops at the first zero dim,
                 // so `(0, -1)` is a legal resize target while `np.zeros((0, -1))` is not. NumPy has
                 // the same split — it mallocs newnbytes and only then writes the dimensions.
-                var fresh = new NDArray(this.typecode, Shape.Adopt(new[] { newSize }), fillZeros: false);
+                var fresh = new NDArray(this.typecode, new Shape(new[] { newSize }, copy: false), fillZeros: false);
 
                 byte* src = this.Storage.Address + shape.offset * itemsize;
                 byte* dst = fresh.Storage.Address;
@@ -165,7 +165,7 @@ namespace NumSharp
                 // for any other sharer under refcheck:false), then discard the fresh wrapper so the
                 // net effect is `this` solely owning the new buffer.
                 var newStorage = fresh.Storage;
-                var freshShape = Shape.Adopt(newDims, freshStrides);
+                var freshShape = new Shape(newDims, freshStrides, copy: false);
                 newStorage.SetShapeUnsafe(ref freshShape);
                 newStorage.InternalArray.TryAddRef();
                 this.Storage.InternalArray?.Release();

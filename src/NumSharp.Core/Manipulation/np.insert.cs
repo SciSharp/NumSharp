@@ -588,7 +588,7 @@ namespace NumSharp
                 int prefix = targetNDim - v.ndim;
                 for (int i = 0; i < prefix; i++) newDims[i] = 1;
                 for (int i = 0; i < v.ndim; i++) newDims[prefix + i] = v.Shape.dimensions[i];
-                var reshaped = v.reshape(Shape.Adopt(newDims));
+                var reshaped = v.reshape(new Shape(newDims, copy: false));
                 v = reshaped;
             }
 
@@ -645,7 +645,7 @@ namespace NumSharp
             for (int i = 0; i < arr.ndim; i++) targetDims[i] = arr.Shape.dimensions[i];
             targetDims[axis] = numNew;
 
-            var bcast = np.broadcast_to(values, Shape.Adopt(targetDims));
+            var bcast = np.broadcast_to(values, new Shape(targetDims, copy: false));
             // Materialise to a contig owning copy — broadcast_to returns a
             // stride-0 read-only view that confuses np.take and SliceAlongAxis.
             var contig = np.ascontiguousarray(bcast);
@@ -686,7 +686,7 @@ namespace NumSharp
             var targetDims = new long[arr.ndim];
             for (int i = 0; i < arr.ndim; i++) targetDims[i] = arr.Shape.dimensions[i];
             targetDims[axis] = numNew;
-            var targetShape = Shape.Adopt(targetDims);
+            var targetShape = new Shape(targetDims, copy: false);
 
             // Shape already matches? Just hand it back (the caller's values or the cast copy).
             if (v.ndim == arr.ndim)
@@ -715,7 +715,7 @@ namespace NumSharp
                 int prefix = targetNDim - v.ndim;
                 for (int i = 0; i < prefix; i++) newDims[i] = 1;
                 for (int i = 0; i < v.ndim; i++) newDims[prefix + i] = v.Shape.dimensions[i];
-                var reshaped = v.reshape(Shape.Adopt(newDims));
+                var reshaped = v.reshape(new Shape(newDims, copy: false));
                 v = reshaped;
             }
 

@@ -42,7 +42,7 @@ namespace NumSharp
             // fill_value is CAST into that dtype; its CLR type never selects the result dtype.
             var typeCode = dtype != null ? dtype.GetTypeCode() : a.typecode;
             char physical = OrderResolver.Resolve(order, a.Shape);
-            var shape = Shape.Adopt((long[])a.Shape.dimensions.Clone(), physical);
+            var shape = new Shape((long[])a.Shape.dimensions.Clone(), physical, copy: false);
 
             // Allocates from shape.size directly (not via UnmanagedStorage.Allocate), so the
             // dimension guard has to be explicit here — see np.full.

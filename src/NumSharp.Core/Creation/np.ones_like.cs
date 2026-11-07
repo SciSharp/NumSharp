@@ -33,7 +33,7 @@ namespace NumSharp
                 return NDMatrixBoundary.Wrapped((a, dtype, order, device), static s => ones_like(s.a, s.dtype, s.order, s.device));
             ValidateDevice(device);
             char physical = OrderResolver.Resolve(order, a.Shape);
-            var resolvedShape = Shape.Adopt((long[])a.Shape.dimensions.Clone(), physical);
+            var resolvedShape = new Shape((long[])a.Shape.dimensions.Clone(), physical, copy: false);
             return np.ones(resolvedShape, dtype ?? a.dtype);
         }
     }

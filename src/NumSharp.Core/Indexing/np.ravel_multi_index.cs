@@ -111,7 +111,7 @@ namespace NumSharp
             // NDArray<T>.GetAtIndex (which translates through Shape.TransformOffset)
             // would collapse to the unbroadcast cell, returning duplicated values
             // even though the kernel wrote the correct sequence to raw memory.
-            var resultShape = Shape.Adopt((long[])refShape.dimensions.Clone());
+            var resultShape = new Shape((long[])refShape.dimensions.Clone(), copy: false);
             var result = new NDArray<long>(resultShape);
 
             if (count == 0)

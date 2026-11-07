@@ -109,7 +109,7 @@ namespace NumSharp
 
             // Same elements in the average's shape: a reshape when the counts agree (a row or a column of sums),
             // else NumPy's broadcast (the element count repeated for every output cell).
-            Shape target = Shape.Adopt((long[])avg.Shape.dimensions.Clone());
+            Shape target = new Shape((long[])avg.Shape.dimensions.Clone(), copy: false);
             NDArray view = scl.size == avg.size ? scl.reshape(target) : np.broadcast_to(scl, target);
             NDArray shaped = view.copy();
             if (!ReferenceEquals(view, scl))
@@ -269,7 +269,7 @@ namespace NumSharp
                 if (isReduced) kd[i] = 1L;
                 else kd[i] = reduced.Shape.dimensions[outIdx++];
             }
-            return reduced.reshape(Shape.Adopt(kd));
+            return reduced.reshape(new Shape(kd, copy: false));
         }
 
         // Scalar (reduce-all, both inputs C-contig) fast path.
@@ -416,8 +416,8 @@ namespace NumSharp
                     if (Array.IndexOf(axes, i) < 0) outShape[oi++] = a.Shape.dimensions[i];
             }
 
-            num = np.zeros(outShape.Length == 0 ? Shape.Scalar : Shape.Adopt(outShape), resultDtype);
-            scl = np.zeros(outShape.Length == 0 ? Shape.Scalar : Shape.Adopt(outShape), resultDtype);
+            num = np.zeros(outShape.Length == 0 ? Shape.Scalar : new Shape(outShape, copy: false), resultDtype);
+            scl = np.zeros(outShape.Length == 0 ? Shape.Scalar : new Shape(outShape, copy: false), resultDtype);
 
             // Pre-broadcast w to a's shape so both inputs share the iter shape.
             NDArray wBcast = w.Shape.dimensions.SequenceEqual(a.Shape.dimensions) ? w : np.broadcast_to(w, a.Shape);
@@ -503,7 +503,7 @@ namespace NumSharp
                     if (Array.IndexOf(axes, i) < 0)
                         kept.Add(a.Shape.dimensions[i]);
                 }
-                cur = cur.reshape(Shape.Adopt(kept.ToArray()));
+                cur = cur.reshape(new Shape(kept.ToArray(), copy: false));
             }
 
             return cur;
@@ -540,7 +540,7 @@ namespace NumSharp
                     if (Array.IndexOf(axes, i) < 0)
                         kept.Add(a.Shape.dimensions[i]);
                 }
-                cur = cur.reshape(Shape.Adopt(kept.ToArray()));
+                cur = cur.reshape(new Shape(kept.ToArray(), copy: false));
             }
 
             return cur;
@@ -580,7 +580,7 @@ namespace NumSharp
             long[] newShape = new long[ndim];
             for (int i = 0; i < ndim; i++)
                 newShape[i] = Array.IndexOf(axis, i) >= 0 ? a.Shape.dimensions[i] : 1L;
-            wgt = wgt.reshape(Shape.Adopt(newShape));
+            wgt = wgt.reshape(new Shape(newShape, copy: false));
             return wgt;
         }
 

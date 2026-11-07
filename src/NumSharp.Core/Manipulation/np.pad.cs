@@ -750,7 +750,7 @@ namespace NumSharp
             int ndim = edge.ndim;
             var coefShape = new long[ndim];
             for (int i = 0; i < ndim; i++) coefShape[i] = i == axis ? width : 1L;
-            var coefReshaped = coef.reshape(Shape.Adopt(coefShape));
+            var coefReshaped = coef.reshape(new Shape(coefShape, copy: false));
 
             // Arithmetic dtype selection — must preserve the source dtype's
             // structure (especially Complex's imaginary component).  For integer
@@ -835,7 +835,7 @@ namespace NumSharp
 
             // NumPy: order = 'F' if array.flags.fnc else 'C'  (F-contig and NOT also C).
             char order = (array.Shape.IsFContiguous && !array.Shape.IsContiguous) ? 'F' : 'C';
-            var padded = np.empty(Shape.Adopt(newDims, order), array.dtype);
+            var padded = np.empty(new Shape(newDims, order, copy: false), array.dtype);
 
             if (fillValue != null)
             {

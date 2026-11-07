@@ -114,7 +114,7 @@ np                Static API class (like `import numpy as np`)
   `ALIGNED`, `WRITEABLE`, `BROADCASTED`); O(1) `IsContiguous`, `IsFContiguous`, `IsBroadcasted`, `IsWriteable`,
   `IsSliced`, `IsSimpleSlice`. Shapes and arrays share dimension and stride arrays, so nothing writes into them: inside
   Core read `x.Shape.dimensions` / `x.Shape.strides` (not `x.shape`, which allocates a copy) and build a shape over a
-  Core-created array with `Shape.Adopt(arr)`, never `new Shape(arr)` (`memory-views.md`).
+  Core-created array with `new Shape(arr, copy: false)`, never `new Shape(arr)`, which copies (`memory-views.md`).
 - Views: `original["2:5"]` shares memory (`view[0] = 999` writes `original[2]`); `.copy()` copies. A view, and a
   byte-reinterpreting alias (`.real`/`.imag`, `view(dtype)`, `getfield`), keeps its owner's buffer alive; an internal
   alias must be disposed or created inside an `[NDScoped]` member. Allocating from a view's Shape is safe:

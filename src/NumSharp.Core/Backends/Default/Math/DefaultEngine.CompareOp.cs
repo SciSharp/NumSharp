@@ -479,7 +479,7 @@ namespace NumSharp.Backends
             // looser-F copy step rectify.
             bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
             Shape resultShape = allStrictFContig
-                ? Shape.Adopt((long[])cleanShape.dimensions.Clone(), 'F')
+                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F', copy: false)
                 : cleanShape;
 
             var result = new NDArray<bool>(resultShape, true);

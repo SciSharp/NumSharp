@@ -73,7 +73,7 @@ namespace NumSharp
 
                 var kept = new long[nd];
                 System.Array.Copy(dims, extra, kept, 0, nd);
-                values = values.reshape(Shape.Adopt(kept));
+                values = values.reshape(new Shape(kept, copy: false));
                 dims = kept;
             }
 

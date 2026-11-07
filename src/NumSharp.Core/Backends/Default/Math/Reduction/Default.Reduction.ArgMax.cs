@@ -44,7 +44,7 @@ namespace NumSharp.Backends
 
                 // Reducing along non-zero axis - return empty Int64 array with reduced shape
                 var resultShape = Shape.GetAxis(shape, emptyAxis);
-                var result = np.empty(Shape.Adopt(resultShape), NPTypeCode.Int64);
+                var result = np.empty(new Shape(resultShape, copy: false), NPTypeCode.Int64);
 
                 if (keepdims)
                 {
@@ -56,7 +56,7 @@ namespace NumSharp.Backends
                         else
                             keepdimsShape[d] = resultShape[sd++];
                     }
-                    result.Storage.Reshape(Shape.Adopt(keepdimsShape));
+                    result.Storage.Reshape(new Shape(keepdimsShape, copy: false));
                 }
 
                 return result;
@@ -70,7 +70,7 @@ namespace NumSharp.Backends
                     var keepdimsShape = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShape[i] = 1;
-                    r.Storage.Reshape(Shape.Adopt(keepdimsShape));
+                    r.Storage.Reshape(new Shape(keepdimsShape, copy: false));
                 }
                 return r.MarkReductionScalar();
             }
@@ -85,7 +85,7 @@ namespace NumSharp.Backends
                     var keepdimsShape = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShape[i] = 1;
-                    r.Storage.Reshape(Shape.Adopt(keepdimsShape));
+                    r.Storage.Reshape(new Shape(keepdimsShape, copy: false));
                 }
                 return r.MarkReductionScalar();
             }
@@ -103,18 +103,18 @@ namespace NumSharp.Backends
                 if (keepdims)
                 {
                     // Keep the axis but reduce to size 1 (it's already 1)
-                    return np.zeros(Shape.Adopt(shape.dimensions), NPTypeCode.Int64);
+                    return np.zeros(new Shape(shape.dimensions, copy: false), NPTypeCode.Int64);
                 }
                 // 1-D input whose only axis has size 1 squeezes to a fresh 0-d — a numpy
                 // SCALAR (read-only) at the boundary.
-                var zerosBase = np.zeros(Shape.Adopt(shape.dimensions), NPTypeCode.Int64);
+                var zerosBase = np.zeros(new Shape(shape.dimensions, copy: false), NPTypeCode.Int64);
                 var squeezed = np.squeeze_fast(zerosBase, axis);
                 zerosBase.Dispose(); // the squeeze view holds its own counted ref on the buffer
                 return squeezed.MarkReductionScalar();
             }
 
             //handle keepdims - prepare output shape
-            Shape axisedShape = Shape.Adopt(Shape.GetAxis(shape, axis));
+            Shape axisedShape = new Shape(Shape.GetAxis(shape, axis), copy: false);
             Shape outputShape = axisedShape;
             if (keepdims)
             {
@@ -128,7 +128,7 @@ namespace NumSharp.Backends
                     else
                         keepdimsShapeDims[i] = axisedShape.dimensions[srcIdx++];
                 }
-                outputShape = Shape.Adopt(keepdimsShapeDims);
+                outputShape = new Shape(keepdimsShapeDims, copy: false);
             }
 
             // Use IL kernel for axis reduction

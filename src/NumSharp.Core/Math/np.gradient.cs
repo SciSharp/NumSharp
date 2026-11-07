@@ -353,7 +353,7 @@ namespace NumSharp
                 // inherit a strided view's strides/offset and mis-place the assigned slices).
                 long[] outDims = new long[N];
                 for (int d = 0; d < N; d++) outDims[d] = work.Shape.dimensions[d];
-                NDArray outp = np.empty(Shape.Adopt(outDims), otype);
+                NDArray outp = np.empty(new Shape(outDims, copy: false), otype);
                 bool uniform = ax_dx is double;
 
                 // ---- interior: 2nd-order central differences over [1 : M-1] ----
@@ -573,7 +573,7 @@ namespace NumSharp
             long[] shp = new long[N];
             for (int i = 0; i < N; i++) shp[i] = 1;
             shp[axis] = a.Shape.dimensions[0];
-            var r = a.reshape(Shape.Adopt(shp));
+            var r = a.reshape(new Shape(shp, copy: false));
             a.Dispose();
             return r;
         }

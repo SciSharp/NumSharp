@@ -79,7 +79,7 @@ namespace NumSharp
                     var emptyDims = (long[]) a.Shape.dimensions.Clone();
                     emptyDims[nd - 2] = n;
                     emptyDims[nd - 1] = m;
-                    return np.zeros(Shape.Adopt(emptyDims), a.typecode);
+                    return np.zeros(new Shape(emptyDims, copy: false), a.typecode);
                 }
 
                 var common = CommonType(a);

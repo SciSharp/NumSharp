@@ -28,7 +28,7 @@ namespace NumSharp
             if (!self.Shape.IsContiguous || self.Shape.offset != 0)
                 return np.logical_not(self).MakeGeneric<bool>();
 
-            var result = new NDArray(typeof(bool), Shape.Adopt(self.Shape.dimensions));
+            var result = new NDArray(typeof(bool), new Shape(self.Shape.dimensions, copy: false));
             NpFunc.Invoke(self.GetTypeCode, NotExecute<int>, (nint)self.Address, (nint)result.Address, result.size);
             return result.MakeGeneric<bool>();
         }

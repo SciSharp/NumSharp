@@ -119,7 +119,7 @@ namespace NumSharp.Backends
                 for (int d = 0, rd = 0; d < nd; d++)
                     if (d != axis)
                         reducedDims[rd++] = dims[d];
-                resultShape = reducedDims.Length > 0 ? Shape.Adopt(reducedDims) : Shape.NewScalar();
+                resultShape = reducedDims.Length > 0 ? new Shape(reducedDims, copy: false) : Shape.NewScalar();
             }
             else
             {
@@ -182,7 +182,7 @@ namespace NumSharp.Backends
                 // np.argmax(child, axis, keepdims=True): the reduced axis kept as size 1.
                 var kd = (long[])dims.Clone();
                 kd[axis] = 1;
-                result.Storage.Reshape(Shape.Adopt(kd));
+                result.Storage.Reshape(new Shape(kd, copy: false));
             }
 
             // The engine marks a 0-d axis result (a 1-D child reduced over its only axis) as a reduction scalar.

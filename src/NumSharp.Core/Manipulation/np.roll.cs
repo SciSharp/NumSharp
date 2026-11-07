@@ -26,7 +26,7 @@ namespace NumSharp
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, shift, axis), static s => roll(s.a, s.shift, s.axis));
             if (axis == null)
-                return roll(a.ravel(), shift, 0).reshape(Shape.Adopt(a.Shape.dimensions));
+                return roll(a.ravel(), shift, 0).reshape(new Shape(a.Shape.dimensions, copy: false));
 
             int ax = axis.Value;
             if (ax < 0) ax += a.ndim;

@@ -554,7 +554,7 @@ namespace NumSharp
                 var emptyDims = new long[arr.ndim];
                 for (int d = 0; d < arr.ndim; d++) emptyDims[d] = arr.Shape.dimensions[d];
                 emptyDims[axis] = 0;
-                return new NDArray(arr.GetTypeCode, Shape.Adopt(emptyDims), false);
+                return new NDArray(arr.GetTypeCode, new Shape(emptyDims, copy: false), false);
             }
 
             return np.concatenate(chunks.ToArray(), axis);

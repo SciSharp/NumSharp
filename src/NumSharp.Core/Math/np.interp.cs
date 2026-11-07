@@ -67,7 +67,7 @@ namespace NumSharp
             if (afp.size != lenxp)
                 throw new ArgumentException("fp and xp are not of the same length.");
 
-            var result = new NDArray(NPTypeCode.Double, Shape.Adopt(x.Shape.dimensions), fillZeros: false);
+            var result = new NDArray(NPTypeCode.Double, new Shape(x.Shape.dimensions, copy: false), fillZeros: false);
             long lenx = xc.size;
 
             double* dx = (double*)axp.Address;
@@ -152,7 +152,7 @@ namespace NumSharp
             if (afp.size != lenxp)
                 throw new ArgumentException("fp and xp are not of the same length.");
 
-            var result = new NDArray(NPTypeCode.Complex, Shape.Adopt(x.Shape.dimensions), fillZeros: false);
+            var result = new NDArray(NPTypeCode.Complex, new Shape(x.Shape.dimensions, copy: false), fillZeros: false);
             long lenx = xc.size;
 
             double* dx = (double*)axp.Address;

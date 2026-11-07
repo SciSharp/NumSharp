@@ -105,7 +105,7 @@ namespace NumSharp
         public static Shape squeeze(Shape shape)
         {
             //TODO! what will happen if its a slice?
-            return Shape.Adopt(shape.dimensions.Where(d => d != 1).ToArray());
+            return new Shape(shape.dimensions.Where(d => d != 1).ToArray(), copy: false);
         }
 
         /// <summary>
@@ -141,7 +141,7 @@ namespace NumSharp
             if (r.Length == 0)
                 return Shape.Scalar;
 
-            return Shape.Adopt(r);
+            return new Shape(r, copy: false);
         }
     }
 }

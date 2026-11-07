@@ -29,19 +29,19 @@ namespace NumSharp
             {
                 case 1:
                 {
-                    result = new NDArray(np2.dtype, Shape.Adopt(np2.Shape.dimensions));
+                    result = new NDArray(np2.dtype, new Shape(np2.Shape.dimensions, copy: false));
                     break;
                 }
 
                 case 2:
                 {
-                    result = new NDArray(this.dtype, Shape.Adopt(this.Shape.dimensions));
+                    result = new NDArray(this.dtype, new Shape(this.Shape.dimensions, copy: false));
                     break;
                 }
 
                 default:
                 {
-                    result = new NDArray(this.dtype, Shape.Adopt(this.Shape.dimensions));
+                    result = new NDArray(this.dtype, new Shape(this.Shape.dimensions, copy: false));
                     break;
                 }
             }

@@ -99,21 +99,21 @@ namespace NumSharp
             {
                 var bcast = new long[2 * nd];
                 for (int i = 0; i < nd; i++) { bcast[2 * i] = as_[i]; bcast[2 * i + 1] = bs[i]; }
-                var bcShape = Shape.Adopt(bcast);
+                var bcShape = new Shape(bcast, copy: false);
 
                 // repeat-a and tile-b, both materialised C-contiguous at the interleaved shape, then one
                 // SimdFull multiply. The final reshape to (rt*st) is a view over the contiguous product.
                 // Both operands (and the reshape/broadcast views they came from) are released by this
                 // method's scope as soon as it returns — the same moment a `using` would release them.
-                var aRep = broadcast_to(a.reshape(Shape.Adopt(aInter)), bcShape).copy();
-                var bTiled = broadcast_to(b.reshape(Shape.Adopt(bInter)), bcShape).copy();
-                return multiply(aRep, bTiled).reshape(Shape.Adopt(outShape));
+                var aRep = broadcast_to(a.reshape(new Shape(aInter, copy: false)), bcShape).copy();
+                var bTiled = broadcast_to(b.reshape(new Shape(bInter, copy: false)), bcShape).copy();
+                return multiply(aRep, bTiled).reshape(new Shape(outShape, copy: false));
             }
 
             // Direct broadcast-multiply. For contiguous inputs the two reshapes are pure views, so this is
             // a single kernel pass; a non-contiguous operand is materialised C-order by reshape (as NumPy
             // does), keeping values correct for every layout.
-            return multiply(a.reshape(Shape.Adopt(aInter)), b.reshape(Shape.Adopt(bInter))).reshape(Shape.Adopt(outShape));
+            return multiply(a.reshape(new Shape(aInter, copy: false)), b.reshape(new Shape(bInter, copy: false))).reshape(new Shape(outShape, copy: false));
         }
 
         /// <summary>

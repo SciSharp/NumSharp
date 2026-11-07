@@ -193,7 +193,7 @@ namespace NumSharp
                 outDims[ax] = count;
             }
 
-            result = new NDArray(a.typecode, Shape.Adopt(outDims), false);
+            result = new NDArray(a.typecode, new Shape(outDims, copy: false), false);
 
             if (count == 0 || outerSize == 0 || innerCount == 0)
                 return true;

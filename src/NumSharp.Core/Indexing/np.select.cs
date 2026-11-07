@@ -171,7 +171,7 @@ namespace NumSharp
             if (TrySelectFused(condlist, mats, n, dtype, resultDims, out var fused))
                 return fused;
 
-            var result = new NDArray(dtype, Shape.Adopt((long[])resultDims.Clone()), false);
+            var result = new NDArray(dtype, new Shape((long[])resultDims.Clone(), copy: false), false);
 
             // Composition fallback (NumPy's own structure): burn the default across the whole result
             // (unsafe cast, matching np.full's copyto), then overlay each choice where its condition is
@@ -250,7 +250,7 @@ namespace NumSharp
             if (kernel == null)
                 return false;
 
-            var res = new NDArray(dtype, Shape.Adopt((long[])resultDims.Clone()), false);
+            var res = new NDArray(dtype, new Shape((long[])resultDims.Clone(), copy: false), false);
             SelectFusedInvoke(kernel, condlist, mats, defArr, defScalar, res, n, dtype);
             result = res;
             return true;

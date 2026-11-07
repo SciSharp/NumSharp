@@ -172,7 +172,7 @@ namespace NumSharp.Backends
                 var resultDims = new long[rank];
                 for (int d = 0; d < rank; d++)
                     resultDims[d] = dims[d];
-                resultShape = Shape.Adopt(resultDims);
+                resultShape = new Shape(resultDims, copy: false);
             }
 
             // Every one of the size slots is written by RunRows, so the buffer is taken as it comes.

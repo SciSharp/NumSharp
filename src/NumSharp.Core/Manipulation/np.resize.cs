@@ -51,7 +51,7 @@ namespace NumSharp
 
             // The result is always C-contiguous (NumPy reshapes the concatenated 1-D read-out),
             // so normalize to C-order dims — independent of any strides carried by new_shape.
-            var outShape = Shape.Adopt(newDims);
+            var outShape = new Shape(newDims, copy: false);
 
             // Flatten to a 1-D C-order read-out. ravel returns a view when a is already
             // contiguous, else a fresh contiguous copy — either way a dense run of `a.size`

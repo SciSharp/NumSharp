@@ -75,7 +75,7 @@ namespace NumSharp
             // Build the output shape = input shape with axis -> nout.
             var outDims = (long[])src.Shape.dimensions.Clone();
             outDims[ax] = nout;
-            var outShape = Shape.Adopt(outDims);
+            var outShape = new Shape(outDims, copy: false);
 
             NDArray result;
             NDArray castTarget = null;   // set when out's dtype is a same_kind cast OF the loop dtype

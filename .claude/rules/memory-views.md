@@ -45,11 +45,15 @@ fast offset path). `GetOffset(coords)` and `GetCoordinates(offset)` translate be
 Shapes and arrays share dimension and stride arrays (an allocation keeps its caller's shape, an elementwise result keeps
 its input's), which is safe only because nothing public writes into them: `Shape` has no setter (its indexer included);
 `a.shape`, `Shape.Dimensions` and `Shape.Strides` return copies (NumPy's tuples); every public constructor, conversion
-and method that takes a caller's `long[]` copies it (NumPy's `PyArray_IntpConverter`). Inside Core:
+and method that takes a caller's `long[]` copies it (NumPy's `PyArray_IntpConverter`). The one opt-out is named: the
+`Shape(dims, order = 'C', copy = true)` and `Shape(dims, strides, copy = true)` constructors keep the array itself under
+`copy: false`, for an array nothing will write into again (a later write changes the dimensions of every array built on
+the shape but not its size or buffer). Inside Core:
 - read the internal fields `x.Shape.dimensions` / `x.Shape.strides`, never `x.shape`, `x.Shape.Dimensions` or
   `x.Shape.Strides`, each of which allocates on every read;
-- build a shape over an array Core created with `Shape.Adopt(arr)` (also `Adopt(arr, order)`, `Adopt(dims, strides)`, and
-  `x.reshape(Shape.Adopt(arr))`), never `new Shape(arr)` or `(Shape)arr`, which copy;
+- build a shape over an array Core created with `new Shape(arr, copy: false)` (also `new Shape(arr, order, copy: false)`,
+  `new Shape(dims, strides, copy: false)`, and `x.reshape(new Shape(arr, copy: false))`), never `new Shape(arr)` or
+  `(Shape)arr`, which copy; `copy` goes by name (a positional `false` lands on `order` and does not compile);
 - inline values (`new Shape(3, 4)`, `a.reshape(2, 3)`, `a.resize(2, 3)`) bind `params ReadOnlySpan<long>` overloads and
   allocate once.
 

@@ -284,7 +284,7 @@ namespace NumSharp
 
             NDArray w1d = weights is null ? null : np.ravel(weights);
             NDArray flat = bincount(xy, w1d, minlength: (int)minlen);
-            NDArray hist = flat.reshape(Shape.Adopt(ToLongShape(nbin)));
+            NDArray hist = flat.reshape(new Shape(ToLongShape(nbin), copy: false));
             hist = hist.astype(NPTypeCode.Double); // NumPy: hist.astype(float, casting='safe') — H is always float64
 
             // Strip the leading/trailing outlier bin on every dimension: hist[1:-1, 1:-1, ...].
@@ -299,7 +299,7 @@ namespace NumSharp
                     long[] shape = new long[D];
                     for (int d = 0; d < D; d++) shape[d] = 1;
                     shape[i] = nbin[i] - 2;
-                    hist = hist / dedges[i].reshape(Shape.Adopt(shape));
+                    hist = hist / dedges[i].reshape(new Shape(shape, copy: false));
                 }
                 hist = hist / s;
             }
