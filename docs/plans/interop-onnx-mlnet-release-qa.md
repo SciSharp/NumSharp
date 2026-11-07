@@ -56,7 +56,8 @@ log (section 7). Every new idea becomes a work-list row before it is worked on.
   over a pinned managed array (ML.NET, Tensors, and ORT's `DenseTensor<T>` view, which reported nothing) books it the
   same way - forgotten views of fresh 602 KB arrays held +2.3-2.7 GB unbooked and +96-299 MB booked, and disposed
   views pay no collection where per-lease pressure ran 12-41 gen-2 collections per 5,000 (section 5, P8).
-- **ONNX Runtime under threads (2026-11-07, the owner's decisions; branch `qa/ort-concurrency`, not merged)**: every
+- **ONNX Runtime under threads (2026-11-07, the owner's decisions; merged into `strings` `34e48e16` and `release-0.80.0`
+  `bfb8244f`)**: every
   value the ONNX Runtime bridge touches carries an ARC (a verb's call lease, a view's view lease, ONE native
   release after the last), and `NDInferenceSession` releases a session once, after the bridge's runs on it: a
   double `Dispose`, a `Dispose` during a verb or a run, and a view read after its value's `Dispose` were heap
@@ -790,7 +791,8 @@ which it references. Still to add, for whoever keeps the notes: Core's breaking 
 and frees the copy), and every import lease books the memory it keeps alive instead of one `GC.AddMemoryPressure` per
 lease, in all four bridges (Tensors and pythonnet are released packages: their lines are fixes); the ONNX Runtime
 bridge's P2 + P12, P7, P11, P21 and F71; the ML.NET bridge's P1, P17 and P18 (a repeated column name refused); and,
-once `qa/ort-concurrency` is merged, section 10: every value the ONNX Runtime bridge touches is released once after
+since the merges of `qa/ort-concurrency` (`strings` `34e48e16`, `release-0.80.0` `bfb8244f`), section 10: every value the
+ONNX Runtime bridge touches is released once after
 its last lease (a double `Dispose`, a `Dispose` during a verb and a view read after `Dispose` were crashes or another
 value's data), and the new `NDInferenceSession`.
 
@@ -927,7 +929,8 @@ full fence.
 | OrtValue: a Dispose racing a verb, a view or a second Dispose | "ARC over every value it touches (Recommended)", note: "This should allow us viewing of Ort and viewing through NumSharp" |
 | InferenceSession: two Disposes, a Dispose during the bridge's Run | Other: "I wanna go with NDINferenceSession but my question is why are we not doing this in the InferenceSession in first place or its not ours and so we will want to use NDInferenceSession / Also corruption will still work if we multithread dispose many?" |
 
-**Done** (branch `qa/ort-concurrency`, from `strings` `c2c6ee88`):
+**Done** (branch `qa/ort-concurrency`, from `strings` `c2c6ee88`; merged into `strings` as `34e48e16` and into
+`release-0.80.0` as `bfb8244f` on 2026-11-07, the owner: "Merge to strings and release-0.80.0"):
 - `OrtValueBooking`: the P8 token is every touched value's ARC. From birth for `ToOrtValue` (text and empty results
   included, unbooked), the value of every `AsOrtValue` handle (ORT's view of NumSharp memory: the handle's `Dispose` and
   a caller's direct `Dispose` of `Value`, at once, release once) and `GetMapKeys`; adopted by the first public verb for a
@@ -1011,7 +1014,7 @@ interpreter cannot exist: pythonnet 3.0.5 cannot initialize again after `Shutdow
 reference count 0; the kept reference holds it at 1 or more; CPython's finalization leaks a still-referenced object;
 the heap hands out only freed blocks.
 
-**Done** (`qa/ort-concurrency`): the three rules documented where each library is used - OpenBLAS (the OpenBLAS page,
+**Done** (`qa/ort-concurrency`, merged with section 10): the three rules documented where each library is used - OpenBLAS (the OpenBLAS page,
 `OpenBlasEngine.Enable`'s remarks, `.claude/rules/openblas.md`), the span rule (the Tensors page's lifetime section,
 `TensorSpanHandle`'s class and accessor remarks, `.claude/rules/interop-packages.md`), the GIL rule for `Dispose` (the
 pythonnet page's GIL section, the `ToNumpy` / `ToNumpyCopy` returns, the bridge README). Deferred: the shutdown fix
@@ -1119,3 +1122,4 @@ pythonnet page's GIL section, the `ToNumpy` / `ToNumpyCopy` returns, the bridge 
 | 2026-11-06 21:15 | P8 verified on the owner's "are we good? Prove it" (`qa/p8-verify`): ORT never dereferences `_memHandle` (1.16.0 / 1.29.0 / 1.31.1); new concurrency tests in Core, ORT, ML.NET, Tensors and pythonnet green on both TFMs (a non-atomic-counter mutant fails them); every bridge suite green under guard pages; the soak shows disposing code at 0 paced / 1 gen-2 in 40 s, forgotten views plateauing at +145 MB, and the mixed phase's gen-2 load matching a no-view control; holding 976 MB of live views costs 60 paced gen-0 and 3-4 gen-2. Section 5, P8. |
 | 2026-11-07 06:10 | Section 10: ONNX Runtime under threads, on the owner's "We should be tackling this from C#, what if we concurrently work with ORT?". Measured: concurrent use safe, concurrent disposal a crash in every form (values and sessions), a view read after its value's Dispose another value's data 400 / 400. Decided on two pages: ARC over every value the bridge touches, and `NDInferenceSession`. Done on `qa/ort-concurrency`: 12 races x 800 with 0 crashes and 0 wrong values, ORT 384 / 384 (1.31.1) and 360 + 24 (1.16.0, both TFMs), guard pages 384 / 384, ten mutants killed. Not merged. |
 | 2026-11-07 09:45 | Section 11: the other bridges under section 10's races, on the owner's "Is any other bridges suffer from similar? what about python". ML.NET and pythonnet (under the GIL) safe; OpenBLAS crashes when `Enable` swaps libraries under a running call; a `TensorSpan` reads freed memory after its handle and source are disposed; pythonnet's views read freed memory after `PythonEngine.Shutdown`. Decided: OpenBLAS, the span rule and the GIL rule documented; the shutdown fix deferred after the proof the owner asked for (0 of 303,000 allocations reused kept memory). |
+| 2026-11-07 11:52 | `qa/ort-concurrency` (`a7cff384` + `c0c513b1`) merged on the owner's "Merge to strings and release-0.80.0": into `strings` `efdf19f8` as `34e48e16` and into `release-0.80.0` `bf6f4047` as `bfb8244f`, each in a detached worktree and fast-forwarded (no conflict; `.claude/rules/interop-packages.md` and the ORT README merged by hunks). Both trees: ORT 1.31.1 384 / 384, 1.16.0 360 + 24 (net8.0, net10.0), ML.NET 241 / 241, Tensors 114 / 114, pythonnet and OpenBLAS build. `release-0.80.0` is not pushed (3 commits ahead of PR #633's head); the 0.80.0 notes do not mention `NDInferenceSession` yet. |

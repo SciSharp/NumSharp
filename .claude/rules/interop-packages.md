@@ -49,7 +49,7 @@ notes from merged PR titles, so PR titles stay free of it too), the website, the
 and README of every released package: a released package's IntelliSense must not point at a bridge nobody can install.
 To release it: delete its `IsPackable` property, write its page and add its `toc.yml` entry and its `interop/index.md`
 row and "See also" link (the two packages released for 0.80.0 got theirs back from git history). CI needs no
-edit, but the package is a NEW id on nuget.org: check before the tag that the key behind `NUGETAPIKEY` may push new
+edit, but the package is a NEW id on nuget.org: check before the tag that the Trusted Publishing policy may push new
 packages (`ci-release.md`).
 
 ## The conversion packages
