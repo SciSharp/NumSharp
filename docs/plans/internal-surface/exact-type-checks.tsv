@@ -1,0 +1,59 @@
+file	line	compared_type	subclass_relevant	code
+src/NumSharp.Core/Backends/Iterators/NDExpr.cs	3168	?	yes	&& x.GetType() == y.GetType());
+src/NumSharp.Core/Backends/NDArray.Numeric.cs	690	string	no	if (type == typeof(string) || type == typeof(Complex) || type == typeof(decimal) || type == typeof(Half)
+src/NumSharp.Core/Backends/NDArray.Numeric.cs	690	Complex	no	if (type == typeof(string) || type == typeof(Complex) || type == typeof(decimal) || type == typeof(Half)
+src/NumSharp.Core/Backends/NDArray.Numeric.cs	690	decimal	no	if (type == typeof(string) || type == typeof(Complex) || type == typeof(decimal) || type == typeof(Half)
+src/NumSharp.Core/Backends/NDArray.Numeric.cs	690	Half	no	if (type == typeof(string) || type == typeof(Complex) || type == typeof(decimal) || type == typeof(Half)
+src/NumSharp.Core/Backends/NDArray.Numeric.cs	691	BigInteger	no	|| type == typeof(BigInteger) || type == typeof(Char8) || type == typeof(DateTime64))
+src/NumSharp.Core/Backends/NDArray.Numeric.cs	691	Char8	no	|| type == typeof(BigInteger) || type == typeof(Char8) || type == typeof(DateTime64))
+src/NumSharp.Core/Backends/NDArray.Numeric.cs	691	DateTime64	no	|| type == typeof(BigInteger) || type == typeof(Char8) || type == typeof(DateTime64))
+src/NumSharp.Core/Backends/Subclass/NDSubclass.cs	87	NDMatrix	yes	if (t == typeof(NDMatrix))
+src/NumSharp.Core/Backends/Subclass/NDSubclass.cs	89	NDCharArray	yes	if (t == typeof(NDCharArray))
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.Coercion.Text.cs	58	byte[]	no	while (elementType is { IsArray: true } && elementType != typeof(byte[]))
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.Coercion.Text.cs	60	string	no	if (elementType == typeof(string))
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.Coercion.Text.cs	67	byte[]	no	return elementType == typeof(byte[])
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.Coercion.Text.cs	68	object	no	|| (elementType == typeof(object) && (ContainsText(array) || !ContainsArrayItem(array)));
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.Coercion.Text.cs	72	object	no	return elementType == typeof(object) && (ContainsText(array) || (dtype is not null && ContainsNull(array)));
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.Coercion.Text.cs	152	byte[]	no	while (childType is { IsArray: true } && childType != typeof(byte[]))
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.Coercion.Text.cs	154	string	no	if (childType == typeof(string) || ContainsText(child))
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.Coercion.cs	414	decimal	no	if (t == typeof(decimal))
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	990	double	no	bool pythonFloats = elementType == typeof(double) || elementType == typeof(float);
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	990	float	no	bool pythonFloats = elementType == typeof(double) || elementType == typeof(float);
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	997	sbyte	no	bool pythonInts = elementType == typeof(sbyte) || elementType == typeof(byte) || elementType == typeof(short) ||
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	997	byte	no	bool pythonInts = elementType == typeof(sbyte) || elementType == typeof(byte) || elementType == typeof(short) ||
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	997	short	no	bool pythonInts = elementType == typeof(sbyte) || elementType == typeof(byte) || elementType == typeof(short) ||
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	998	ushort	no	elementType == typeof(ushort) || elementType == typeof(int) || elementType == typeof(uint) ||
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	998	int	no	elementType == typeof(ushort) || elementType == typeof(int) || elementType == typeof(uint) ||
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	998	uint	no	elementType == typeof(ushort) || elementType == typeof(int) || elementType == typeof(uint) ||
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	999	long	no	elementType == typeof(long) || elementType == typeof(ulong);
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.ItemSelection.cs	999	ulong	no	elementType == typeof(long) || elementType == typeof(ulong);
+src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.cs	1354	TOut	no	if (typeof(TOut) == sourceArray.GetType().GetElementType()) return (ArraySlice<TOut>)sourceArray;
+src/NumSharp.Core/Casting/NDArrayFromMultiDimArr.cs	39	T	no	if (elem != typeof(T))
+src/NumSharp.Core/Creation/NDArray.Multiarray.cs	1052	object	no	return elementType == typeof(object) || typeof(NDArray).IsAssignableFrom(elementType);
+src/NumSharp.Core/Creation/NDArray.Multiarray.cs	1232	decimal	no	if (type.IsPrimitive || type == typeof(decimal) || type == typeof(Half) || type == typeof(System.Numerics.Complex))
+src/NumSharp.Core/Creation/NDArray.Multiarray.cs	1232	Half	no	if (type.IsPrimitive || type == typeof(decimal) || type == typeof(Half) || type == typeof(System.Numerics.Complex))
+src/NumSharp.Core/Creation/NDArray.Multiarray.cs	1232	System.Numerics.Complex	no	if (type.IsPrimitive || type == typeof(decimal) || type == typeof(Half) || type == typeof(System.Numerics.Complex))
+src/NumSharp.Core/DTypes/NDScalarType.cs	850	bool	no	if (type == typeof(bool))
+src/NumSharp.Core/DTypes/NDScalarType.cs	852	int	no	if (type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(sbyte) || type == typeof(byte)
+src/NumSharp.Core/DTypes/NDScalarType.cs	852	long	no	if (type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(sbyte) || type == typeof(byte)
+src/NumSharp.Core/DTypes/NDScalarType.cs	852	short	no	if (type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(sbyte) || type == typeof(byte)
+src/NumSharp.Core/DTypes/NDScalarType.cs	852	sbyte	no	if (type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(sbyte) || type == typeof(byte)
+src/NumSharp.Core/DTypes/NDScalarType.cs	852	byte	no	if (type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(sbyte) || type == typeof(byte)
+src/NumSharp.Core/DTypes/NDScalarType.cs	853	ushort	no	|| type == typeof(ushort) || type == typeof(uint) || type == typeof(ulong) || type == typeof(BigInteger))
+src/NumSharp.Core/DTypes/NDScalarType.cs	853	uint	no	|| type == typeof(ushort) || type == typeof(uint) || type == typeof(ulong) || type == typeof(BigInteger))
+src/NumSharp.Core/DTypes/NDScalarType.cs	853	ulong	no	|| type == typeof(ushort) || type == typeof(uint) || type == typeof(ulong) || type == typeof(BigInteger))
+src/NumSharp.Core/DTypes/NDScalarType.cs	853	BigInteger	no	|| type == typeof(ushort) || type == typeof(uint) || type == typeof(ulong) || type == typeof(BigInteger))
+src/NumSharp.Core/DTypes/NDScalarType.cs	855	double	no	if (type == typeof(double) || type == typeof(float))
+src/NumSharp.Core/DTypes/NDScalarType.cs	855	float	no	if (type == typeof(double) || type == typeof(float))
+src/NumSharp.Core/DTypes/NDScalarType.cs	857	Complex	no	if (type == typeof(Complex))
+src/NumSharp.Core/DTypes/NDScalarType.cs	859	string	no	if (type == typeof(string))
+src/NumSharp.Core/DTypes/NDScalarType.cs	861	byte[]	no	if (type == typeof(byte[]))
+src/NumSharp.Core/DTypes/NDScalarType.cs	863	np.MemoryView	no	if (type == typeof(np.MemoryView))
+src/NumSharp.Core/Generics/NDArray`1.cs	137	TDType	no	if (underlying != typeof(TDType))
+src/NumSharp.Core/Manipulation/np.asscalar.cs	42	T	no	if (value.GetType() != typeof(T))
+src/NumSharp.Core/RandomSampling/SeedSequence.cs	272	uint[]	no	case uint[] words when words.GetType() == typeof(uint[]):
+src/NumSharp.Core/RandomSampling/SeedSequence.cs	935	uint[]	no	case uint[] u when u.GetType() == typeof(uint[]):
+src/NumSharp.Core/Utilities/SpanSource/UnmanagedSpan.cs	47	T[]	no	if (!typeof(T).IsValueType && array.GetType() != typeof(T[]))
+src/NumSharp.Core/Utilities/SpanSource/UnmanagedSpan.cs	76	T[]	no	if (!typeof(T).IsValueType && array.GetType() != typeof(T[]))
+src/NumSharp.Core/View/Shape.cs	1748	?	yes	if (obj.GetType() != this.GetType())
+src/NumSharp.Core/View/Slice.cs	369	Slice	yes	if (obj.GetType() != typeof(Slice))

@@ -2,7 +2,7 @@ using System;
 
 namespace NumSharp
 {
-    public sealed partial class Generator
+    public partial class Generator
     {
         // The continuous distributions of NumPy's Generator (_generator.pyx + distributions.c). Each validates its
         // parameters with NumPy's constraints and messages, in NumPy's order, BEFORE drawing; `size = default` is NumPy's

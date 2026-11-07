@@ -30,7 +30,14 @@ namespace NumSharp
         /// <param name="rank">lstsq's rank (a 0-d int32, NumPy's np.intc), or null without <c>full</c>.</param>
         /// <param name="singularValues">lstsq's singular values, or null without <c>full</c>.</param>
         /// <param name="rcond">The rcond used, or null without <c>full</c>.</param>
-        internal NDPolyFitResult(UnmanagedStorage storage, NDArray residuals, NDArray rank, NDArray singularValues, NDArray rcond)
+        /// <exception cref="System.NullReferenceException"><paramref name="storage"/> is <c>null</c>.</exception>
+        /// <remarks>
+        ///     The fit functions build this; a caller building one itself gets the same object. The four statistics are kept
+        ///     by reference (not copied) and become the result's to own: disposing one of them while the result is still read
+        ///     leaves <see cref="residuals"/> and its siblings pointing at a released buffer. Deconstruction reads
+        ///     <paramref name="residuals"/> as the <c>full=True</c> mark: null refuses it, so pass all four or none.
+        /// </remarks>
+        public NDPolyFitResult(UnmanagedStorage storage, NDArray residuals, NDArray rank, NDArray singularValues, NDArray rcond)
             : base(storage)
         {
             this.residuals = residuals;

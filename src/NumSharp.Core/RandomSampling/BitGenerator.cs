@@ -10,9 +10,11 @@ namespace NumSharp
     ///     Mirrors NumPy 2.4.2's <c>numpy.random.BitGenerator</c> (<c>bit_generator.pyx</c>): a source of uniform
     ///     64-/32-bit words plus the <c>[0,1)</c> float conversions the distribution kernels are built on, with
     ///     NumPy's public surface — <see cref="random_raw"/>, <see cref="state"/>, <see cref="seed_seq"/> and
-    ///     <see cref="@lock"/>. The per-draw primitives (<c>NextUInt64</c> …) are the internal engine contract
-    ///     (NumPy's <c>bitgen_t</c> function pointers), so they are <c>internal</c> and the public surface stays
-    ///     NumPy-cased. Concrete generators: <see cref="PCG64"/> (the <c>default_rng</c> default),
+    ///     <see cref="@lock"/>. The per-draw primitives (<c>NextUInt64</c> …) are NumPy's <c>bitgen_t</c> function
+    ///     pointers, public so a generator can be written outside NumSharp.dll (NumPy takes user bit generators through
+    ///     the same contract): a subclass implements <see cref="NextUInt64"/>, <see cref="NextUInt32"/>, <see cref="Name"/>,
+    ///     <see cref="CreateFromSeed"/>, <see cref="GetStateCore"/> and <see cref="SetStateCore"/>, and may override the
+    ///     conversions and bulk fills for speed. Concrete generators: <see cref="PCG64"/> (the <c>default_rng</c> default),
     ///     <see cref="PCG64DXSM"/> (NumPy's recommendation for massively parallel work), <see cref="Philox"/> (a
     ///     counter-based generator addressable by key/counter), <see cref="SFC64"/> (Chris Doty-Humphrey's small fast
     ///     chaotic generator) and <see cref="MT19937"/> (the legacy RandomState's engine). Each is seeded through an
@@ -29,7 +31,13 @@ namespace NumSharp
 
         /// <summary>Initializes the shared state of a bit generator.</summary>
         /// <param name="seedSeq">The seed sequence the subclass seeds itself from (null for a generator seeded without one).</param>
-        private protected BitGenerator(ISeedSequence seedSeq)
+        /// <remarks>
+        ///     A subclass passes the sequence it seeds from and then draws its initial state from it
+        ///     (<see cref="SeedWords32"/> / <see cref="SeedWords64"/>). Passing <c>null</c> makes <see cref="spawn"/> refuse
+        ///     (NumPy's <c>_seed_seq = None</c>), so a generator that wants a fresh entropy default passes
+        ///     <c>new SeedSequence()</c> itself, as the built-in parameterless constructors do.
+        /// </remarks>
+        protected BitGenerator(ISeedSequence seedSeq)
         {
             _seedSeq = seedSeq;
         }
@@ -46,7 +54,8 @@ namespace NumSharp
         ///     object, so their draws serialize together, as NumPy's <c>Generator.lock = bit_generator.lock</c> makes
         ///     them. The monitor is re-entrant (like NumPy's <c>RLock</c>), so a draw that goes through another
         ///     public method (e.g. <c>choice</c> calling <c>integers</c>) re-acquires it without deadlock. Code that
-        ///     calls the internal primitives directly must hold it too.
+        ///     calls the primitives (<see cref="NextUInt64"/>, the fills, <see cref="GetStateCore"/> …) directly must
+        ///     hold it too - they are not synchronized.
         /// </remarks>
         public object @lock { get; } = new object();
 
@@ -86,7 +95,9 @@ namespace NumSharp
         /// <summary>Constructs a new instance of this bit generator's concrete type seeded from <paramref name="seed"/> (NumPy's <c>type(self)(seed=seed)</c>).</summary>
         /// <param name="seed">The seed sequence.</param>
         /// <returns>The new, independently seeded generator.</returns>
-        private protected abstract BitGenerator CreateFromSeed(ISeedSequence seed);
+        /// <remarks><see cref="spawn"/> builds every child through it, so a subclass returns its OWN type here - a subclass
+        ///     of a built-in generator that does not override it spawns instances of the built-in class.</remarks>
+        public abstract BitGenerator CreateFromSeed(ISeedSequence seed);
 
         /// <summary>
         ///     NumPy's <c>type(bit_generator)(seed)</c> for code outside the hierarchy: a new, independent generator of this
@@ -108,7 +119,9 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="seed"/> is null.</exception>
         /// <exception cref="TypeError">A custom sequence returned something other than a uint32 array of at least
         ///     <paramref name="n_words"/> words.</exception>
-        private protected static uint[] SeedWords32(ISeedSequence seed, int n_words)
+        /// <remarks>NumPy's <c>seed_seq.generate_state(n_words, np.uint32)</c>: the way a generator turns its seed sequence
+        ///     into its initial state words, so a custom generator seeds exactly as NumPy's would.</remarks>
+        public static uint[] SeedWords32(ISeedSequence seed, int n_words)
         {
             if (seed is null)
                 throw new ArgumentNullException(nameof(seed));
@@ -135,7 +148,8 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="seed"/> is null.</exception>
         /// <exception cref="TypeError">A custom sequence returned something other than a uint64 array of at least
         ///     <paramref name="n_words"/> words.</exception>
-        private protected static ulong[] SeedWords64(ISeedSequence seed, int n_words)
+        /// <remarks>NumPy's <c>seed_seq.generate_state(n_words, np.uint64)</c>, for generators with 64-bit state words.</remarks>
+        public static ulong[] SeedWords64(ISeedSequence seed, int n_words)
         {
             if (seed is null)
                 throw new ArgumentNullException(nameof(seed));
@@ -180,12 +194,18 @@ namespace NumSharp
 
         /// <summary>Snapshots the engine state.</summary>
         /// <returns>A fresh state object of the concrete generator's state type.</returns>
-        private protected abstract BitGeneratorState GetStateCore();
+        /// <remarks>The unlocked half of <see cref="state"/>'s getter, which a subclass implements. Callers read
+        ///     <see cref="state"/> instead: called directly this skips <see cref="@lock"/>, so a concurrent draw can tear the
+        ///     snapshot.</remarks>
+        public abstract BitGeneratorState GetStateCore();
 
         /// <summary>Restores the engine state from a snapshot (validated against this generator's type).</summary>
         /// <param name="value">The non-null snapshot.</param>
         /// <exception cref="ValueError">The snapshot belongs to another bit generator type.</exception>
-        private protected abstract void SetStateCore(BitGeneratorState value);
+        /// <remarks>The unlocked half of <see cref="state"/>'s setter, which a subclass implements (and which must refuse a
+        ///     snapshot of another type). Callers assign <see cref="state"/> instead: called directly this skips the null check
+        ///     and <see cref="@lock"/>.</remarks>
+        public abstract void SetStateCore(BitGeneratorState value);
 
         /// <summary>
         ///     Return randoms as generated by the underlying bit generator (NumPy's <c>BitGenerator.random_raw</c>).
@@ -239,15 +259,22 @@ namespace NumSharp
 
         /// <summary>The next uniform 64-bit word (NumPy's <c>next_uint64</c>).</summary>
         /// <returns>A uniformly distributed 64-bit value; advances the engine state.</returns>
-        internal abstract ulong NextUInt64();
+        /// <remarks>Not synchronized: a caller outside <see cref="Generator"/> holds <see cref="@lock"/> around its
+        ///     draws, or two threads tear the state and emit values of no seed's stream.</remarks>
+        public abstract ulong NextUInt64();
 
         /// <summary>The next uniform 32-bit word (NumPy's <c>next_uint32</c>).</summary>
         /// <returns>A uniformly distributed 32-bit value; advances (or consumes a buffered half of) the engine state.</returns>
-        internal abstract uint NextUInt32();
+        /// <remarks>Not synchronized, as <see cref="NextUInt64"/>. A 64-bit engine returns the low half of a word and
+        ///     buffers the high half for the next call (NumPy's <c>has_uint32</c> / <c>uinteger</c>), which its state must
+        ///     carry.</remarks>
+        public abstract uint NextUInt32();
 
         /// <summary>A random double in <c>[0, 1)</c> with 53-bit precision (NumPy's <c>next_double</c>).</summary>
         /// <returns>The top 53 bits of one 64-bit word scaled by <c>2**-53</c> (engines with their own formula override).</returns>
-        internal virtual double NextDouble() => (NextUInt64() >> 11) * (1.0 / 9007199254740992.0);
+        /// <remarks>An override must stay consistent with <see cref="UnitToDouble"/>: the read-ahead buffer converts
+        ///     <see cref="NextUInt64"/> words through it and expects this method's stream.</remarks>
+        public virtual double NextDouble() => (NextUInt64() >> 11) * (1.0 / 9007199254740992.0);
 
         /// <summary>
         ///     Converts one <c>next_uint64</c> draw to the <c>next_double</c> the same stream position would have produced —
@@ -256,15 +283,19 @@ namespace NumSharp
         /// <param name="unit">A word from <see cref="NextUInt64"/> / <see cref="FillUInt64"/>.</param>
         /// <returns><c>(unit &gt;&gt; 11) * 2**-53</c> — <c>uint64_to_double</c>, the <c>next_double</c> of every 64-bit engine
         /// (MT19937 overrides it: its double is built from the two 32-bit words its 64-bit draw concatenates).</returns>
-        internal virtual double UnitToDouble(ulong unit) => (unit >> 11) * (1.0 / 9007199254740992.0);
+        /// <remarks>Pure (no state change); an engine whose <see cref="NextDouble"/> is not
+        ///     <c>uint64_to_double(next_uint64)</c> overrides both together.</remarks>
+        public virtual double UnitToDouble(ulong unit) => (unit >> 11) * (1.0 / 9007199254740992.0);
 
         /// <summary>A random float in <c>[0, 1)</c> with 24-bit precision (NumPy's <c>next_float</c>).</summary>
         /// <returns>The top 24 bits of one 32-bit word scaled by <c>2**-24</c>.</returns>
-        internal virtual float NextFloat() => (NextUInt32() >> 8) * (1.0f / 16777216.0f);
+        /// <remarks>Not synchronized, as <see cref="NextUInt64"/>.</remarks>
+        public virtual float NextFloat() => (NextUInt32() >> 8) * (1.0f / 16777216.0f);
 
         /// <summary>The engine's raw output word (NumPy's <c>next_raw</c>), widened to 64 bits.</summary>
         /// <returns>A full 64-bit word for 64-bit engines; the 32-bit word for MT19937.</returns>
-        internal virtual ulong NextRaw() => NextUInt64();
+        /// <remarks>What <see cref="random_raw"/> returns; an engine whose raw word is narrower than 64 bits overrides it.</remarks>
+        public virtual ulong NextRaw() => NextUInt64();
 
         // ---- bulk fills: the same streams as the per-draw primitives, without a virtual call per draw ----
         //
@@ -279,7 +310,7 @@ namespace NumSharp
         /// <param name="dst">The destination (at least <paramref name="n"/> words; may be unaligned).</param>
         /// <param name="n">The number of words (non-positive: nothing).</param>
         /// <remarks>The caller holds <see cref="@lock"/>.</remarks>
-        internal virtual unsafe void FillUInt64(ulong* dst, long n)
+        public virtual unsafe void FillUInt64(ulong* dst, long n)
         {
             for (long i = 0; i < n; i++)
                 dst[i] = NextUInt64();
@@ -289,7 +320,7 @@ namespace NumSharp
         /// <param name="dst">The destination (at least <paramref name="n"/> words).</param>
         /// <param name="n">The number of words (non-positive: nothing).</param>
         /// <remarks>The caller holds <see cref="@lock"/>.</remarks>
-        internal virtual unsafe void FillUInt32(uint* dst, long n)
+        public virtual unsafe void FillUInt32(uint* dst, long n)
         {
             for (long i = 0; i < n; i++)
                 dst[i] = NextUInt32();
@@ -299,7 +330,7 @@ namespace NumSharp
         /// <param name="dst">The destination (at least <paramref name="n"/> doubles).</param>
         /// <param name="n">The number of draws (non-positive: nothing).</param>
         /// <remarks>The caller holds <see cref="@lock"/>.</remarks>
-        internal virtual unsafe void FillDouble(double* dst, long n)
+        public virtual unsafe void FillDouble(double* dst, long n)
         {
             for (long i = 0; i < n; i++)
                 dst[i] = NextDouble();
@@ -309,7 +340,7 @@ namespace NumSharp
         /// <param name="dst">The destination (at least <paramref name="n"/> floats).</param>
         /// <param name="n">The number of draws (non-positive: nothing).</param>
         /// <remarks>The caller holds <see cref="@lock"/>.</remarks>
-        internal virtual unsafe void FillFloat(float* dst, long n)
+        public virtual unsafe void FillFloat(float* dst, long n)
         {
             for (long i = 0; i < n; i++)
                 dst[i] = NextFloat();
@@ -319,7 +350,7 @@ namespace NumSharp
         /// <param name="dst">The destination (at least <paramref name="n"/> words).</param>
         /// <param name="n">The number of words (non-positive: nothing).</param>
         /// <remarks>The caller holds <see cref="@lock"/>.</remarks>
-        internal virtual unsafe void FillRaw(ulong* dst, long n)
+        public virtual unsafe void FillRaw(ulong* dst, long n)
         {
             for (long i = 0; i < n; i++)
                 dst[i] = NextRaw();
@@ -340,9 +371,10 @@ namespace NumSharp
         /// <param name="n">The number of draws.</param>
         /// <remarks>
         ///     Reinterpreting the double slots as words is safe (same size, each word read before its slot is
-        ///     rewritten), and <c>w &gt;&gt; 11 &lt; 2**53</c> converts exactly through the signed conversion.
+        ///     rewritten), and <c>w &gt;&gt; 11 &lt; 2**53</c> converts exactly through the signed conversion. A custom
+        ///     64-bit engine returns it from its <see cref="FillDouble"/> override; the caller holds <see cref="@lock"/>.
         /// </remarks>
-        private protected unsafe void FillDoubleFrom64(double* dst, long n)
+        public unsafe void FillDoubleFrom64(double* dst, long n)
         {
             var words = (ulong*)dst;
             while (n > 0)
@@ -367,7 +399,10 @@ namespace NumSharp
         /// <param name="n">The number of draws.</param>
         /// <param name="hasUint32">The engine's pending-half flag (read and updated).</param>
         /// <param name="uinteger">The engine's pending half (read and updated).</param>
-        private protected unsafe void FillUInt32From64(uint* dst, long n, ref int hasUint32, ref uint uinteger)
+        /// <remarks>A custom split-word engine passes its OWN pending-half fields by reference from its
+        ///     <see cref="FillUInt32"/> override (the caller holds <see cref="@lock"/>); passing copies loses the half a later
+        ///     <see cref="NextUInt32"/> must serve, and the stream diverges from the per-draw one.</remarks>
+        public unsafe void FillUInt32From64(uint* dst, long n, ref int hasUint32, ref uint uinteger)
         {
             if (n <= 0)
                 return;
@@ -412,7 +447,9 @@ namespace NumSharp
         /// <param name="n">The number of draws.</param>
         /// <param name="hasUint32">The engine's pending-half flag (read and updated).</param>
         /// <param name="uinteger">The engine's pending half (read and updated).</param>
-        private protected unsafe void FillFloatFrom64(float* dst, long n, ref int hasUint32, ref uint uinteger)
+        /// <remarks>Pass the engine's own pending-half fields by reference, as for <see cref="FillUInt32From64"/>; the caller
+        ///     holds <see cref="@lock"/>.</remarks>
+        public unsafe void FillFloatFrom64(float* dst, long n, ref int hasUint32, ref uint uinteger)
         {
             var words = (uint*)dst;
             while (n > 0)
@@ -428,7 +465,10 @@ namespace NumSharp
         }
 
         /// <summary>The bit generator's class name, e.g. <c>"PCG64"</c>. Drives <c>Generator</c>'s repr and the state checks.</summary>
-        internal abstract string Name { get; }
+        /// <remarks>A subclass returns its own NumPy-style class name: <see cref="Generator"/> prints it as
+        ///     <c>Generator(NAME)</c>. Its own state refusal (in <see cref="SetStateCore"/>) should name the same class, as the
+        ///     built-in generators' NumPy texts do.</remarks>
+        public abstract string Name { get; }
     }
 
     /// <summary>

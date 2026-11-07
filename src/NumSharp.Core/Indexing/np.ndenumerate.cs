@@ -62,7 +62,16 @@ namespace NumSharp
             private readonly NDArray _arr;
             private readonly NDIndexWalker _walker;
 
-            internal NDEnumerate(NDArray arr)
+            /// <summary>
+            ///     NumPy's <c>np.ndenumerate(arr)</c> constructor: a cursor positioned before the first element of
+            ///     <paramref name="arr"/>, the same object <see cref="ndenumerate(NDArray)"/> returns.
+            /// </summary>
+            /// <param name="arr">The array to enumerate; borrowed, not copied.</param>
+            /// <exception cref="ArgumentNullException"><paramref name="arr"/> is <c>null</c>.</exception>
+            /// <remarks>Footgun: the cursor reads <paramref name="arr"/> as it is at each step - writes to the array during the
+            ///     walk show up in later pairs, and disposing the array while the cursor is in use reads a released
+            ///     buffer.</remarks>
+            public NDEnumerate(NDArray arr)
             {
                 _arr = arr ?? throw new ArgumentNullException(nameof(arr));
                 _walker = new NDIndexWalker(arr.Shape);
@@ -111,7 +120,17 @@ namespace NumSharp
             private readonly NDArray _arr;
             private readonly NDIndexWalker _walker;
 
-            internal NDEnumerate(NDArray arr)
+            /// <summary>
+            ///     The typed cursor <see cref="ndenumerate{T}(NDArray)"/> returns: positioned before the first element of
+            ///     <paramref name="arr"/>, reading each element as <typeparamref name="T"/>.
+            /// </summary>
+            /// <param name="arr">The array to enumerate; borrowed, not copied. Its dtype must be <typeparamref name="T"/>.</param>
+            /// <exception cref="ArgumentNullException"><paramref name="arr"/> is <c>null</c>.</exception>
+            /// <exception cref="ArgumentException"><paramref name="arr"/>'s dtype is not <typeparamref name="T"/> (cast it
+            ///     first; the cursor reads raw elements and never converts).</exception>
+            /// <remarks>Footgun, as for the untyped cursor: writes during the walk show up in later pairs, and a disposed array
+            ///     is read as a released buffer.</remarks>
+            public NDEnumerate(NDArray arr)
             {
                 _arr = arr ?? throw new ArgumentNullException(nameof(arr));
 

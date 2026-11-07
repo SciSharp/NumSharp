@@ -549,7 +549,13 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="arcOwner">The owner's slice — the source storage's <c>InternalArray</c>.</param>
         /// <returns>A non-owning slice whose ARC operations forward to <paramref name="arcOwner"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="arcOwner"/> is null.</exception>
-        internal static unsafe ArraySlice<T> WrapShared<T>(void* address, long count, IArraySlice arcOwner) where T : unmanaged
+        /// <remarks>
+        ///     The route a bridge package takes to lay a typed view over memory a NumSharp array already owns without
+        ///     risking a free under it. Footgun: nothing checks that <paramref name="address"/> and <paramref name="count"/>
+        ///     stay inside <paramref name="arcOwner"/>'s buffer - an alias past its end reads and writes memory the owner
+        ///     never had.
+        /// </remarks>
+        public static unsafe ArraySlice<T> WrapShared<T>(void* address, long count, IArraySlice arcOwner) where T : unmanaged
             => new ArraySlice<T>(new UnmanagedMemoryBlock<T>((T*)address, count, arcOwner));
 
         /// <summary>
@@ -603,7 +609,9 @@ namespace NumSharp.Backends.Unmanaged
         /// <returns>A non-owning slice whose ARC operations forward to <paramref name="arcOwner"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="arcOwner"/> is null.</exception>
         /// <exception cref="NotSupportedException"><paramref name="typeCode"/> is not a storage type.</exception>
-        internal static unsafe IArraySlice WrapShared(NPTypeCode typeCode, void* address, long count, IArraySlice arcOwner)
+        /// <remarks>Footgun, as for the generic form: nothing checks that the alias stays inside
+        ///     <paramref name="arcOwner"/>'s buffer.</remarks>
+        public static unsafe IArraySlice WrapShared(NPTypeCode typeCode, void* address, long count, IArraySlice arcOwner)
         {
             switch (typeCode)
             {

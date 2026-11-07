@@ -112,7 +112,7 @@ namespace NumSharp
     {
         /// <summary>NumPy's class name (<c>matrix.__name__</c>), for its error texts; NumSharp.Build's weave reads it to
         ///     find the array subclasses and name them in the generated method dispatch.</summary>
-        internal const string __name__ = "matrix";
+        protected internal const string __name__ = "matrix";
 
         /// <summary>
         ///     NumPy's <c>matrix.__array_priority__</c>, 10.0: above an ndarray's and a chararray's 0.0, so the class wrap of a
@@ -130,7 +130,7 @@ namespace NumSharp
         /// <param name="array">The result to wrap.</param>
         /// <returns><paramref name="array"/> when it is a matrix, else a new matrix view of it (never an owner).</returns>
         /// <exception cref="ValueError">More than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        internal override NDArray __array_wrap__(NDArray array) => array is NDMatrix ? array : FromWrapped(array);
+        protected internal override NDArray __array_wrap__(NDArray array) => array is NDMatrix ? array : FromWrapped(array);
 
         /// <summary>
         ///     NumPy's creation of a result as a matrix (<c>Py_TYPE(self)</c>, then <c>matrix.__array_finalize__</c>): a matrix
@@ -143,7 +143,7 @@ namespace NumSharp
         /// <param name="zeroDim">Unused: a matrix's 0-d result is the finalize rule's 1 x 1 matrix.</param>
         /// <returns><paramref name="created"/> when it is a matrix, else a new matrix view of it.</returns>
         /// <exception cref="ValueError">More than two axes longer than 1, unless <paramref name="keepRank"/>.</exception>
-        internal override NDArray __array_finalize__(NDArray created, bool keepRank, NewSubtypeZeroDim zeroDim)
+        protected internal override NDArray __array_finalize__(NDArray created, bool keepRank, NewSubtypeZeroDim zeroDim)
             => created is NDMatrix ? created : keepRank ? new NDMatrix(created.Storage.Alias()) : FromWrapped(created);
 
         /// <summary>
@@ -155,7 +155,7 @@ namespace NumSharp
         /// <param name="axis">The caller's axis: it decides row or column for a 1-d plain result.</param>
         /// <returns>The 0-d result, a matrix view of it, or <paramref name="result"/>.</returns>
         /// <exception cref="ValueError">More than two axes longer than 1.</exception>
-        internal override NDArray _collapse(NDArray result, int? axis)
+        protected internal override NDArray _collapse(NDArray result, int? axis)
         {
             if (result is null || result is NDMatrix)
                 return result;
@@ -177,14 +177,19 @@ namespace NumSharp
         /// <param name="storage">The storage to wrap. Its shape becomes the matrix's shape as it is (two axes,
         ///     or zero axes for the scalar stand-in; see the file header).</param>
         /// <exception cref="NullReferenceException"><paramref name="storage"/> is <c>null</c>.</exception>
-        internal NDMatrix(UnmanagedStorage storage) : base(storage)
+        /// <remarks>
+        ///     The constructor a subclass of the matrix chains to (<c>: base(storage)</c>). To build a matrix from data, use
+        ///     <see cref="np.asmatrix(NDArray, DType)"/> or <c>np.matrix</c>: they apply NumPy's finalize rule, which this
+        ///     constructor skips, so a storage of three axes here gives a three-axis matrix NumPy could never hold.
+        /// </remarks>
+        public NDMatrix(UnmanagedStorage storage) : base(storage)
         {
         }
 
         /// <inheritdoc/>
         /// <remarks>NumPy prints a matrix as <c>matrix([[1, 2], [3, 4]])</c>: the subclass name, with the
         ///     continuation lines indented one column further than an array's.</remarks>
-        internal override string ReprClassName => "matrix";
+        protected internal override string ReprClassName => "matrix";
 
         #region Result construction (view / allocated / wrapped)
 

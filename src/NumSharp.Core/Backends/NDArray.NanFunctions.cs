@@ -88,10 +88,12 @@ namespace NumSharp
         ///     Footgun: an array subclass that does not override it is computed as a base ndarray, where NumPy would take its
         ///     subclass branch. The engine meets plain arrays only: a subclass <paramref name="out"/> or
         ///     <paramref name="where"/> beside this plain operand goes in as its plain view, and the reduction's hand-back of
-        ///     that view returns the caller's object, as <c>np.fmax.reduce(a, out=m)</c> returns <c>m</c>.
+        ///     that view returns the caller's object, as <c>np.fmax.reduce(a, out=m)</c> returns <c>m</c>. Because np.nanmax
+        ///     reaches it by plain virtual dispatch, a subclass declared outside NumSharp.dll is answered by its own override
+        ///     too (written there as <c>protected override</c>).
         /// </remarks>
         [SubclassAware]
-        internal virtual NDArray NanMax(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal virtual NDArray NanMax(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => FmaxFminReduce(axis, @out, keepdims, initial, @where, isMax: true);
 
         /// <summary>
@@ -114,9 +116,10 @@ namespace NumSharp
         /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a complex <paramref name="initial"/> for a real loop.</exception>
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
-        /// <remarks><c>[SubclassAware]</c> for the reason of <see cref="NanMax"/>.</remarks>
+        /// <remarks><c>[SubclassAware]</c> for the reason of <see cref="NanMax"/>; like it, np.nanmin reaches the override of
+        ///     any subclass, one declared outside NumSharp.dll included (written there as <c>protected override</c>).</remarks>
         [SubclassAware]
-        internal virtual NDArray NanMin(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal virtual NDArray NanMin(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => FmaxFminReduce(axis, @out, keepdims, initial, @where, isMax: false);
 
         /// <summary>

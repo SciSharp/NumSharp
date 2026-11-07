@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace NumSharp
 {
-    public sealed partial class Generator
+    public partial class Generator
     {
         /// <summary>
         ///     Generates a random sample from a given array (or <c>arange(a)</c> when <paramref name="a"/>

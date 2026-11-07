@@ -121,7 +121,13 @@ namespace NumSharp
         /// the new data and mask, so a scoped builder must yield it with the result), or a source's stored array this one
         /// SHARES (NumPy's <c>_update_from</c>) — or null for NumPy's None (the getter materializes the default).</param>
         /// <exception cref="ArgumentNullException"><paramref name="data"/> is null.</exception>
-        internal NDMaskedArray(NDArray data, NDArray mask, NDArray fill_value = null)
+        /// <remarks>
+        ///     The constructor a subclass of the masked array chains to. Footgun: unlike NumPy's <c>MaskedArray(data, mask)</c>
+        ///     it validates nothing but <paramref name="data"/> - a mask of another shape or dtype, or a fill value of another
+        ///     dtype, is stored as given and fails later in whatever reads it. To build a masked array from user data, use
+        ///     <c>np.ma.array</c> / <c>np.ma.masked_array</c>, which check, broadcast and convert as NumPy does.
+        /// </remarks>
+        public NDMaskedArray(NDArray data, NDArray mask, NDArray fill_value = null)
         {
             // Data is the one invariant that must always hold — every property and the printer dereference it.
             if (data is null)
@@ -1835,21 +1841,28 @@ namespace NumSharp
     ///     NumPy where <c>np.ma.add(masked, x)</c> and a masked 0-D result are <c>masked</c>.
     /// </summary>
     /// <remarks>
-    ///     Exactly ONE instance exists (the constructor is internal), reachable under four names that are all the
-    ///     same object: <see cref="MaskedArrayModule.NDMasked"/> / <see cref="MaskedArrayModule.NDMaskedSingleton"/>
-    ///     (NumSharp's <c>ND*</c> spelling) and <see cref="MaskedArrayModule.masked"/> /
-    ///     <see cref="MaskedArrayModule.masked_singleton"/> (NumPy's names). Because it is a singleton, reference
-    ///     identity (<c>ReferenceEquals(r, np.ma.masked)</c>) is a valid "is this the masked scalar?" test — the
-    ///     C# counterpart of NumPy's <c>r is np.ma.masked</c>.
+    ///     The library builds ONE instance, reachable under four names that are all the same object:
+    ///     <see cref="MaskedArrayModule.NDMasked"/> / <see cref="MaskedArrayModule.NDMaskedSingleton"/> (NumSharp's
+    ///     <c>ND*</c> spelling) and <see cref="MaskedArrayModule.masked"/> / <see cref="MaskedArrayModule.masked_singleton"/>
+    ///     (NumPy's names), and every masked function returns that one, so reference identity
+    ///     (<c>ReferenceEquals(r, np.ma.masked)</c>) is the C# counterpart of NumPy's <c>r is np.ma.masked</c>. The
+    ///     constructor is public, so code can build further instances; see its footgun.
     /// </remarks>
     public sealed class NDMaskedConstant : NDMaskedArray
     {
         /// <summary>Builds the constant as a 0-D <c>0.0</c> datum under a 0-D <c>True</c> mask, i.e. one masked
         /// scalar — the same internal shape NumPy's <c>masked_singleton</c> carries.</summary>
-        /// <remarks>Both scalars are detached from every scope (<see cref="MaskedArrayModule.Own"/>): the single
-        /// instance is built during <c>np</c>'s static initialization, which may run inside a caller's open
-        /// <see cref="NDScope"/>; left tracked, that scope would dispose the singleton's buffers on close.</remarks>
-        internal NDMaskedConstant() : base(MaskedArrayModule.Own(NDArray.Scalar(0.0d)), MaskedArrayModule.Own(NDArray.Scalar(true))) { }
+        /// <remarks>
+        ///     <para>Both scalars are detached from every scope (<see cref="MaskedArrayModule.Own"/>): the single
+        ///     instance is built during <c>np</c>'s static initialization, which may run inside a caller's open
+        ///     <see cref="NDScope"/>; left tracked, that scope would dispose the singleton's buffers on close.</para>
+        ///     <para>Footgun: NumPy's <c>MaskedConstant()</c> returns the existing singleton, but a C# constructor always
+        ///     builds a NEW object. Library code recognises the masked scalar both ways - five type tests
+        ///     (<c>is NDMaskedConstant</c>) accept another instance, while nine identity tests
+        ///     (<c>ReferenceEquals(x, np.ma.masked)</c>: the var / std / average and set-operation paths) treat it as an
+        ///     ordinary fully masked scalar. Use <see cref="MaskedArrayModule.masked"/> rather than building one.</para>
+        /// </remarks>
+        public NDMaskedConstant() : base(MaskedArrayModule.Own(NDArray.Scalar(0.0d)), MaskedArrayModule.Own(NDArray.Scalar(true))) { }
 
         /// <summary>Renders as the bare token <c>masked</c>, as NumPy prints its singleton.</summary>
         /// <returns>The string <c>"masked"</c>.</returns>

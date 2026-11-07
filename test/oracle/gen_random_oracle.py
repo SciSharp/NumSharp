@@ -2896,6 +2896,57 @@ def fam_bitgen_base(out, surface, name, seeds):
                 emit_m(out, PORTABLE, f"MT19937.{name}", m, recv, vals, "legacy_mt", fn)
 
 
+# ---- the engine contract: exempt (NumPy keeps it in C) -----------------------------------------------------------------
+
+# BitGenerator's engine contract, public since 2026-11-07 so a user's own bit generator can plug in: NumPy's bitgen_t draws
+# (next_uint64 / next_uint32 / next_double / next_raw), which Python reaches only as the function pointers of
+# BitGenerator.ctypes / .cffi, plus the C-side helpers around them. No Python call can record NumPy running them, so each is
+# exempt; every Generator / RandomState stream case replays NumPy's draws THROUGH them on every engine, and the leak
+# catalogue (LeakCatalogue.AddBitGeneratorContract) runs each one directly. Keyed by member name: an engine's override IS
+# the contract member, so the exemption covers every member of that name BitGenerator or an engine declares. Mirrored by
+# the C# RandomApiCoverageTests.EngineContractMembers.
+ENGINE_CONTRACT = {
+    "NextUInt64": "bitgen_t's next_uint64, C only (Python sees a ctypes/cffi function pointer); the stream cases draw through it",
+    "NextUInt32": "bitgen_t's next_uint32, C only, buffered half included; the 32-bit stream cases draw through it",
+    "NextDouble": "bitgen_t's next_double, C only; the double stream cases draw through it",
+    "NextRaw": "bitgen_t's next_raw, C only; the random_raw cases draw through it",
+    "NextFloat": "distributions.c's next_float, C only (no function pointer); the float32 stream cases draw through it",
+    "UnitToDouble": "next_double's word conversion (uint64_to_double), C only; the read-ahead buffer converts through it",
+    "FillUInt64": "a bulk next_uint64 (NumPy loops the C call per element); the samplers fill through it",
+    "FillUInt32": "a bulk next_uint32 (NumPy loops the C call per element); the samplers fill through it",
+    "FillDouble": "a bulk next_double (NumPy loops the C call per element); the samplers fill through it",
+    "FillFloat": "a bulk next_float (NumPy loops the C call per element); the float32 samplers fill through it",
+    "FillRaw": "a bulk next_raw (NumPy loops the C call per element); random_raw fills through it",
+    "FillDoubleFrom64": "the 64-bit engines' chunked bulk next_double over FillUInt64; their double streams fill through it",
+    "FillUInt32From64": "the 64-bit engines' split-word bulk next_uint32; their 32-bit streams fill through it",
+    "FillFloatFrom64": "the 64-bit engines' split-word bulk next_float; their float32 streams fill through it",
+    "SeedWords32": "seed_seq.generate_state(n, np.uint32) as MT19937's C constructor reads it; its constructor cases seed through it",
+    "SeedWords64": "seed_seq.generate_state(n, np.uint64) as the 64-bit engines' C constructors read it; their constructor cases seed through it",
+    "CreateFromSeed": "type(self)(seed=child) inside BitGenerator.spawn; the spawn cases build every child through it",
+    "GetStateCore": "the unlocked half of the state getter; the state-getter cases read through it",
+    "SetStateCore": "the unlocked half of the state setter; the state-setter cases write through it",
+    "Name": "the class name Generator's repr and the state refusals print; the repr and foreign-state cases show it",
+}
+
+
+def make_engine_contract_family(type_name):
+    """The family exempting the engine-contract members `type_name` declares (BitGenerator's own, or an engine's
+    overrides of them; a name the type does not declare has no overloads and claims nothing)."""
+    def fam(out, surface, name, seeds):
+        found = overloads(surface, type_name, name)
+        if type_name == "BitGenerator" and not found:
+            # The contract is BitGenerator's: a name it no longer declares is a stale entry, not an engine's gap.
+            raise SystemExit(f"ENGINE_CONTRACT names BitGenerator.{name}, which the inventory does not have (stale entry)")
+        for m in found:
+            exempt(m["sig"], ENGINE_CONTRACT[name] + " (plan §7)")
+    return fam
+
+
+for _T in ["BitGenerator"] + ENGINES:
+    for _n in ENGINE_CONTRACT:
+        FAMILIES[(_T, _n)] = make_engine_contract_family(_T)
+
+
 # ---- the engines' state classes ----------------------------------------------------------------------------------------
 
 # Where each State member lives in NumPy's state dict: the path of keys, and the element dtype of an array field.

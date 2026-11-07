@@ -490,9 +490,15 @@ namespace NumSharp
         /// <param name="dtype">The dtype descriptor.</param>
         /// <param name="shape">The dimensions (a view's layout is laid out again in C order, as for every allocation).</param>
         /// <param name="fillZeros">Zero the buffer; false leaves pool noise the caller must overwrite completely.</param>
-        /// <param name="engine">The engine the array binds (the engine computing the result it will hold); not null.</param>
+        /// <param name="engine">The engine the array binds (the engine computing the result it will hold), or <c>null</c>
+        ///     for <see cref="NumSharp.TensorEngine.Default"/> as it is now.</param>
         /// <exception cref="ValueError">A dimension is negative, or the byte count overflows.</exception>
-        internal NDArray(DType dtype, Shape shape, bool fillZeros, TensorEngine engine) : this(dtype, engine)
+        /// <remarks>
+        ///     The constructor a custom engine or an array subclass allocates through when the result must compute on a given
+        ///     engine. Footgun: <paramref name="fillZeros"/> <c>false</c> hands out whatever bytes the buffer pool held - the
+        ///     caller must overwrite every element before anything reads the array.
+        /// </remarks>
+        public NDArray(DType dtype, Shape shape, bool fillZeros, TensorEngine engine) : this(dtype, engine ?? TensorEngine.Default)
         {
             Storage.Allocate(shape, dtype, fillZeros);
             InitializeArc();

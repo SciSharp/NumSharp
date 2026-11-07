@@ -63,9 +63,32 @@ namespace NumSharp
         internal const char layout = 'C';
 
         internal readonly int _hashCode;
-        internal readonly long size;
-        internal readonly long[] dimensions;
-        internal readonly long[] strides;
+
+        /// <summary>
+        ///     The element count (the product of <see cref="dimensions"/>; 1 for a 0-d shape), read without a property call -
+        ///     the same value as <see cref="Size"/>.
+        /// </summary>
+        public readonly long size;
+
+        /// <summary>
+        ///     The extent of every axis: the shape's OWN array, shared with every shape and array built on it - no copy, unlike
+        ///     <see cref="Dimensions"/>.
+        /// </summary>
+        /// <remarks>
+        ///     For hot reads (an interop bridge, a kernel's setup) that cannot afford <see cref="Dimensions"/>' allocation per
+        ///     read. Footgun: writing into it changes this shape, and every array sharing the array, without updating the cached
+        ///     size, flags or hash - a later read goes past the buffer with no check. Treat it as read-only; build a new shape
+        ///     to change one.
+        /// </remarks>
+        public readonly long[] dimensions;
+
+        /// <summary>
+        ///     The stride of every axis in ELEMENTS (0 on a broadcast axis, negative on a reversed one): the shape's OWN array,
+        ///     shared like <see cref="dimensions"/> - no copy, unlike <see cref="Strides"/>.
+        /// </summary>
+        /// <remarks>Footgun, as for <see cref="dimensions"/>: writing into it retargets every array sharing it with stale
+        ///     flags and no bounds check. Read-only by contract.</remarks>
+        public readonly long[] strides;
 
         /// <summary>
         ///     Size of the underlying buffer (NumPy-aligned architecture).
@@ -73,14 +96,16 @@ namespace NumSharp
         ///     this is the actual buffer size (not the view size), used for
         ///     bounds checking and InternalArray slicing.
         /// </summary>
-        internal readonly long bufferSize;
+        /// <remarks>The same value as <see cref="BufferSize"/>, read without a property call.</remarks>
+        public readonly long bufferSize;
 
         /// <summary>
         ///     Base offset into storage (NumPy-aligned architecture).
         ///     Computed at slice/broadcast time, enabling simple element access:
         ///     element[indices] = data[offset + sum(indices * strides)]
         /// </summary>
-        internal readonly long offset;
+        /// <remarks>The same value as <see cref="Offset"/>, counted in elements, read without a property call.</remarks>
+        public readonly long offset;
 
         /// <summary>
         ///     True if this shape represents a view (sliced) into underlying data.
@@ -619,7 +644,14 @@ namespace NumSharp
         /// <param name="strides">Stride values (not cloned - caller must provide fresh array)</param>
         /// <param name="offset">Offset into underlying buffer</param>
         /// <param name="bufferSize">Size of underlying buffer</param>
-        internal Shape(long[] dims, long[] strides, long offset, long bufferSize)
+        /// <remarks>
+        ///     The constructor a bridge package lays a strided, offset view over a foreign buffer with. Footguns: it ADOPTS both
+        ///     arrays (the caller must never write into them afterwards, see <see cref="dimensions"/>), and it checks nothing -
+        ///     an element reached through <paramref name="offset"/> and <paramref name="strides"/> outside
+        ///     <paramref name="bufferSize"/> is read or written outside the buffer. <see cref="Shape(long[], long[])"/> copies
+        ///     and validates; use it when the input is not already known to be valid.
+        /// </remarks>
+        public Shape(long[] dims, long[] strides, long offset, long bufferSize)
         {
             this.dimensions = dims ?? Array.Empty<long>();
             this.strides = strides ?? Array.Empty<long>();

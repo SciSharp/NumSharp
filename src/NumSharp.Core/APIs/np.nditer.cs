@@ -250,7 +250,9 @@ namespace NumSharp
             ///     a number outside that dtype.</exception>
             /// <exception cref="OutOfMemoryException">A <c>StringDType</c> copy or buffer transfer cannot allocate a string
             ///     (NumPy's <c>MemoryError</c> texts).</exception>
-            internal NDIterator(
+            /// <remarks>NumPy's <c>np.nditer(...)</c> constructor, the one <c>np.nditer</c> calls; a subclass of the iterator
+            ///     chains to it. The iterator holds native buffers: dispose it (or use it in a <c>using</c>) when done.</remarks>
+            public NDIterator(
                 NDArray[] op,
                 string[] flags,
                 string[][] op_flags,

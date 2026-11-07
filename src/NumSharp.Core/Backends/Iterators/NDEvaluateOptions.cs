@@ -5,7 +5,9 @@ namespace NumSharp.Backends.Iteration
     ///     <c>order=</c>) that <see cref="Backends.DefaultEngine"/>'s <c>Evaluate</c> builds from the raw keywords
     ///     (<see cref="TensorEngine.Evaluate(NDExpr, NDArray[], NDArray, NDArray, DType, string, char)"/>, the np-layer
     ///     dtype plan's D11) and threads down its internal paths, so they gain ONE parameter instead of four and every
-    ///     future keyword rides the same struct. Internal since D11: no public member takes it.
+    ///     future keyword rides the same struct. Public as the parameter type of
+    ///     <see cref="TensorEngine.Evaluate(NDExprProgram, NDArray[], NDArray, in NDEvaluateOptions)"/> only: its members stay
+    ///     internal, so outside NumSharp.dll it is an opaque bundle to pass on (<c>default</c> = no keyword override).
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -22,14 +24,14 @@ namespace NumSharp.Backends.Iteration
     ///         string or order char raises first), so the internal paths only ever see a legal, resolved bundle.
     ///     </para>
     /// </remarks>
-    internal readonly struct NDEvaluateOptions
+    public readonly struct NDEvaluateOptions
     {
         /// <summary>
         ///     The requested result dtype (an implicit root cast of the whole expression), or <c>null</c>
         ///     for the tree's natural NEP50 result type. Mutually exclusive with a caller <c>out=</c>
         ///     (which already fixes the result dtype) — the API rejects both together.
         /// </summary>
-        public readonly NPTypeCode? Dtype;
+        internal readonly NPTypeCode? Dtype;
 
         /// <summary>
         ///     The requested result dtype as a whole descriptor, or <c>null</c> for none. It names what the type code in
@@ -38,7 +40,7 @@ namespace NumSharp.Backends.Iteration
         ///     (<see cref="HasTextDtype"/>). For a numeric request it is that dtype's descriptor and adds nothing to
         ///     <see cref="Dtype"/>.
         /// </summary>
-        public readonly DType DtypeDescr;
+        internal readonly DType DtypeDescr;
 
         /// <summary>
         ///     The optional <c>where=</c> boolean mask (plan P4.5): the fused kernel writes the result only
@@ -53,7 +55,7 @@ namespace NumSharp.Backends.Iteration
         ///     struct; <c>default(NDEvaluateOptions).Where</c> is <c>null</c>, so an internal sub-tree
         ///     materialisation (which passes <c>default</c>) is never masked.
         /// </summary>
-        public readonly NDArray Where;
+        internal readonly NDArray Where;
 
         /// <summary>The out= cast rule, or <c>null</c> to mean <see cref="NPY_CASTING.NPY_SAME_KIND_CASTING"/> (NumPy's ufunc default). Read through <see cref="Casting"/>.</summary>
         private readonly NPY_CASTING? _casting;
@@ -72,7 +74,7 @@ namespace NumSharp.Backends.Iteration
         /// <param name="where">The boolean write mask, or <c>null</c> for an unmasked (write-every-element) pass.</param>
         /// <param name="dtypeDescr">The requested result dtype's whole descriptor (see <see cref="DtypeDescr"/>), or
         ///     <c>null</c>; given with <paramref name="dtype"/> = its type code.</param>
-        public NDEvaluateOptions(NPTypeCode? dtype, NPY_CASTING? casting, char order, NDArray where = null, DType dtypeDescr = null)
+        internal NDEvaluateOptions(NPTypeCode? dtype, NPY_CASTING? casting, char order, NDArray where = null, DType dtypeDescr = null)
         {
             Dtype = dtype;
             _casting = casting;
@@ -82,14 +84,14 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>True when a result dtype was requested (the implicit root cast is active).</summary>
-        public bool HasDtype => Dtype.HasValue;
+        internal bool HasDtype => Dtype.HasValue;
 
         /// <summary>
         ///     True when the requested result dtype is TEXT (<c>S</c>, <c>U</c> or StringDType): the result is computed at its
         ///     natural dtype and then cast by NumPy's <c>astype</c> to the descriptor (<see cref="DtypeDescr"/>), which the
         ///     fused kernels cannot write.
         /// </summary>
-        public bool HasTextDtype => Dtype == NPTypeCode.String;
+        internal bool HasTextDtype => Dtype == NPTypeCode.String;
 
         /// <summary>
         ///     The keywords of the NATURAL result a text-shaped call computes first: only the layout request survives (a
@@ -98,16 +100,16 @@ namespace NumSharp.Backends.Iteration
         ///     (DefaultEngine.Evaluate.Text.cs).
         /// </summary>
         /// <returns>The options of the natural evaluation.</returns>
-        public NDEvaluateOptions ForNaturalResult() => new NDEvaluateOptions(null, null, _order);
+        internal NDEvaluateOptions ForNaturalResult() => new NDEvaluateOptions(null, null, _order);
 
         /// <summary>True when a <c>where=</c> write mask was supplied (the fused pass runs masked).</summary>
-        public bool HasWhere => Where is not null;
+        internal bool HasWhere => Where is not null;
 
         /// <summary>The effective out= cast rule — the request, or <see cref="NPY_CASTING.NPY_SAME_KIND_CASTING"/> when unset.</summary>
-        public NPY_CASTING Casting => _casting ?? NPY_CASTING.NPY_SAME_KIND_CASTING;
+        internal NPY_CASTING Casting => _casting ?? NPY_CASTING.NPY_SAME_KIND_CASTING;
 
         /// <summary>The effective fresh-result order char — the request, or <c>'K'</c> when unset.</summary>
-        public char Order => _order == '\0' ? 'K' : _order;
+        internal char Order => _order == '\0' ? 'K' : _order;
 
         /// <summary>
         ///     True when the user asked for a NON-default layout (anything but <c>'K'</c>). Used to reject
@@ -115,7 +117,7 @@ namespace NumSharp.Backends.Iteration
         ///     reductions carry no <c>order=</c> parameter). A bare or explicit <c>'K'</c> is not "explicit"
         ///     — it is the no-op default, so it never trips the reduction guard.
         /// </summary>
-        public bool HasExplicitOrder => _order != '\0' && _order != 'K' && _order != 'k';
+        internal bool HasExplicitOrder => _order != '\0' && _order != 'K' && _order != 'k';
 
         /// <summary>
         /// True when the CALLER asked for <c>order='K'</c> (the public <c>np.evaluate</c> passes its default <c>'K'</c>), as
