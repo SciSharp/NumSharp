@@ -474,6 +474,13 @@ class CommittedCorpusTests(unittest.TestCase):
             self.assertIsNone(evidence.via, f"{row_id} has direct contracts")
             self.assertIn(f"minmax_kwargs:{fn}", evidence.keys)
         self.assertEqual(["numpy.power"], self.labels["power"], "np.power shadows np.random.power")
+        # The layout oracle's ufunc family (a fresh ufunc result's layout, 18314cac) names each case by the function it
+        # calls: its contracts land on that function's row, one variant per case name. Without the per-name rule the
+        # whole family had no map entry and the generator refused to publish (journey5 at 882a66a0).
+        self.assertEqual("ufunc:around0", oe._layout_variant({"fam": "ufunc", "key": "around0_bcx"}))
+        self.assertIn("layout:ufunc:neg", self.evidence("numpy.negative").keys)
+        self.assertIn("layout:ufunc:mediank1", self.evidence("numpy.median").keys)
+        self.assertTrue({"layout:ufunc:add0d", "layout:ufunc:adds111"} <= self.evidence("numpy.add").keys)
         # The string oracle verifies every numpy.strings function by name: the 44 str_fn names (search, strip, pad,
         # replace, partition, slice, the comparison names, predicates, case maps, translate, mod, codecs over S / U /
         # StringDType) and np.strings.add / multiply.

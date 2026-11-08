@@ -546,7 +546,10 @@ def _layout_variant(case: Mapping[str, Any]) -> str:
 
     ``reduce`` keys are named by their leading reduction (``sum_flat`` -> ``reduce:sum``,
     ``percentile50`` -> ``reduce:percentile``); ``copyk`` keys by their trailing verb
-    (``t3d_astype`` -> ``copyk:astype``); every other family is its own key.
+    (``t3d_astype`` -> ``copyk:astype``); ``ufunc`` keys by their leading case name, the source recipe after the last
+    underscore (``add0d_c3`` -> ``ufunc:add0d``, ``around0_bcx`` -> ``ufunc:around0``): the family exercises some 30
+    functions (gen_layout_parity_oracle.py's ``UF`` / ``UF1`` tables), each mapped to its own rows; every other family
+    is its own key.
 
     :param case: one parsed layout-oracle row.
     :returns: the variant string.
@@ -556,6 +559,8 @@ def _layout_variant(case: Mapping[str, Any]) -> str:
         return "reduce:" + re.match(r"[a-z]+", case["key"]).group(0)
     if family == "copyk":
         return "copyk:" + case["key"].rsplit("_", 1)[1]
+    if family == "ufunc":
+        return "ufunc:" + case["key"].rsplit("_", 1)[0]
     return family
 
 
