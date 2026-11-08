@@ -123,6 +123,10 @@ block is that list's §7A elaboration.
     **parent** line; sub-bullets carry none.
   - Sub-bullets that are **independent functions, each from its own commit** (an umbrella grouping)
     → hash at the **end of each sub-bullet**.
+- **The published notes carry none** (the owner, 2026-11-08, for 0.80.0). Cite as above while drafting and
+  sweeping, because the 5-bucket triage reads the cited set from the file. Strip every citation before
+  the notes become the release body and the PR post. The last cited revision of the file stays in git
+  history as the ledger, and the Overview gives the release's commit count instead of a cited count.
 
 ---
 
@@ -345,3 +349,4 @@ dashboards (§7B), a sub-list feature (§7), and the performance explainer (§8)
 | 2026-11-06 | **Layout (the owner):** `### 📦 New NuGet Packages` sits **outside** the `<details>` block, right after the Overview; every other section of §3 stays inside `## Detailed Breakdown` (§2, §3 note). |
 | 2026-11-06 | **One document per published version (the owner, for 0.80.0):** a version that was never released (0.71.0) is not named in the notes; its work is merged into the release that ships it, section by section, and fixes / breaking changes are judged against the last published version (§2). |
 | 2026-11-08 | **Layout (the owner, for 0.80.0: "Move the nuget releases to the detailed area and where they are now leave a one-liner per nuget"):** the §7A elaboration moves back inside the `<details>` block as section 1 (as 0.70.0 had it); where it stood, after the Overview, a visible `### 📦 New NuGet Packages` list keeps one line per package (§2, §3 note). Supersedes the 2026-11-06 layout row above. |
+| 2026-11-08 | **No hashes in the published notes (the owner, for 0.80.0: "Remove all commit hashes from our new release notes"):** §6's citations are the drafting and sweep ledger; the published file strips them (its last cited revision stays in git history), and the Overview's tally line gives the release's commit count instead of "traced to one of N cited commits". |
