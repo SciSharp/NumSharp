@@ -193,5 +193,41 @@ namespace NumSharp.Tests
             acos.GetAtIndex<Complex>(0).Real.Should().Be(1.5941756932192908);
             acosh.GetAtIndex<Complex>(0).Imaginary.Should().Be(1.5941756932192908);
         }
+
+        // ------------------------------------------------------------------
+        // QB-07 — a binary / comparison result over a reversed or stepped C-ordered view and an F array is F-ordered
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2 allocates the result of <c>np.add(a[::-1], f)</c> (a C-ordered but non-contiguous view, and an
+        ///     F-contiguous array of the same shape) through NpyIter's K order, whose axis sort compares |strides| and lets
+        ///     C order win a conflict between operands (<c>npyiter_find_best_axis_ordering</c>): the result is C-contiguous,
+        ///     strides <c>(32, 8)</c>. NumSharp's float64 binary routes and the comparison routes end with the legacy
+        ///     "looser-F preservation" step (<c>ShouldProduceFContigOutput</c> in <c>DefaultEngine.BinaryOp.cs</c> and
+        ///     <c>DefaultEngine.CompareOp.cs</c>): some operand strictly F and none strictly C → <c>result.copy('F')</c>. A
+        ///     reversed or stepped view is neither, so it does not count, and the C result is copied to F (strides
+        ///     <c>(8, 24)</c>). The K-order plan of the same routes (<c>IsKOrderCVoter</c>, which counts such a view as a C
+        ///     voter) already gets it right; the int64 route matches NumPy. Visible through strides and flags, through
+        ///     <c>ravel('K')</c> / <c>flatten('K')</c> (another element order) and as an extra copy.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB07")]
+        public void ParityQb_QB07_BinaryOfAReversedViewAndAnFArray_IsCOrdered()
+        {
+            using var basis = np.arange(12.0).reshape(3, 4);
+            using var reversed = basis["::-1"];
+            using var f = np.asfortranarray(np.arange(12.0).reshape(3, 4));
+            using var stepped = np.arange(24.0).reshape(3, 8)[":, ::2"];
+
+            using var sum = np.add(reversed, f);
+            using var less = np.less(reversed, f);
+            using var product = np.multiply(stepped, f);
+            using var k = sum.ravel('K');
+
+            // NumPy 2.4.2: (32, 8) C-contiguous; np.less: (4, 1); stepped * F: (32, 8); ravel('K')[:4] = [8, 10, 12, 14]
+            sum.strides.Should().Equal(32L, 8L);
+            less.strides.Should().Equal(4L, 1L);
+            product.strides.Should().Equal(32L, 8L);
+            k.GetDouble(1).Should().Be(10.0);
+        }
     }
 }
