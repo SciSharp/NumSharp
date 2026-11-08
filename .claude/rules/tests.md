@@ -153,6 +153,11 @@ mapped memory ends. Two tools make it fail:
 - The LIFETIME OpenBugs (lost GC anchors) live in the Oracle project, because the bug exists only in optimized code and
   needs the lifetime child process (`oracle.md`): none is open; a new open gap gets a `Lifetime_LT<nn>_*` test beside the
   aggregate `Lifetime_KnownGaps` (and `LifetimeOracleTests.Scaled.cs`'s `LifetimeScaled_KnownGaps`).
+- The GitHub-answer pins live in `Issues/<issue>.cs`, beside the passing tests that back the same posted answer (the
+  2026-11-08 triage after 0.80.0: each `Issue<n>` class turns one answer into assertions). An answer's "still missing"
+  list is an `[OpenBugs(IssueUrl = …)]` pin: #547 and #560 (11 NumPy 2.x names, `np.round_` / `np.asscalar` still present,
+  complex64), #550 (`item(1)` of a 0-d array raises `IndexOutOfRangeException`, not `IndexError`), #592 (`np.genfromtxt`,
+  `np.memmap`, `np.rec`).
 - Auditing the category: run `TestCategory=OpenBugs&TestCategory!=HighMemory` (`[LargeMemoryTest]` adds the OpenBugs
   category to memory-heavy NON-bug tests) in Release AND Debug on both TFMs; a test that passes in all four has its tag
   removed, its comments rewritten as a regression pin, and a `<summary>` of what it guards. Kept on purpose:

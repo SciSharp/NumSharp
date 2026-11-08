@@ -5,6 +5,16 @@ using NumSharp.Examples.Gist.Karpathy;
 
 namespace NumSharp.Tests.Examples;
 
+/// <summary>
+///     Managed tests of the microGPT port (<c>examples/gist/karpathy/karpathy.MicroGpt.cs</c>): tokenizer, causal
+///     attention, finite-difference gradients, training and sampling.
+/// </summary>
+/// <remarks>
+///     They back the managed claims of the answer that closed GitHub #540, "[Goal] Support Andrej Karpathy's microgpt.py"
+///     (https://github.com/SciSharp/NumSharp/issues/540): the original E=16 / H=4 / L=1 / context=16 setup trains for the
+///     full 1,000 updates (<see cref="OriginalDefaultThousandStepSchedule_TrainsEveryStepAndImprovesLocalCorpus"/>). The
+///     answer's NumPy byte-parity claims are backed by NumSharp.Tests.Interop's <c>KarpathyMicroGptLiveTests</c>.
+/// </remarks>
 [TestClass]
 public class KarpathyMicroGptTests
 {

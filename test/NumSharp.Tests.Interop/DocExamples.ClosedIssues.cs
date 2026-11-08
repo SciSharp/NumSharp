@@ -1,3 +1,4 @@
+using System.Linq;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
@@ -9,10 +10,11 @@ namespace NumSharp.Tests.Interop
 {
     /// <summary>
     ///     Backing live-oracle tests for the closing comments posted on the pythonnet interop issues
-    ///     resolved by the NumSharp.Interop.pythonnet package in 0.70.0 (#628). Each mirrors the
-    ///     example shown in the issue's closing comment and proves the crossing against the real numpy
-    ///     embedded in the test process (over NumSharp's own memory). The tests are not referenced by
-    ///     the comments.
+    ///     resolved by the NumSharp.Interop.pythonnet package in 0.70.0 (#628), and for the pythonnet
+    ///     halves of the answers posted in the 2026-11-08 triage after 0.80.0 (#349, #498; their other
+    ///     halves are in NumSharp.Tests' <c>Issues</c> folder). Each mirrors the example shown in the
+    ///     issue's closing comment and proves the crossing against the real numpy embedded in the test
+    ///     process (over NumSharp's own memory). The tests are not referenced by the comments.
     /// </summary>
     [TestClass]
     public class ClosedInteropIssuesTests : InteropTestBase
@@ -97,6 +99,57 @@ namespace NumSharp.Tests.Interop
                 for (int i = 0; i < 4; i++)
                     ReadAt<double>(nd, i).Should().BeApproximately(i, 1e-12);
             }
+        }
+
+        /// <summary>
+        ///     Issue #498 (IronPython, closed in the 0.80.0 triage): the answer points at NumSharp.Interop.pythonnet - real
+        ///     CPython with numpy from C#, with an <c>NDArray</c> and numpy sharing memory. numpy computes over the exported
+        ///     array without a copy, and a write on either side is seen by the other.
+        /// </summary>
+        [TestMethod]
+        public void Issue498_RealNumpyFromCSharp_SharesMemoryBothWays()
+        {
+            var nd = np.arange(6).astype(NPTypeCode.Double).reshape(2, 3);
+
+            ExportTo("a", nd);   // zero-copy: numpy sees NumSharp's own buffer
+
+            PyFloat("float(np.sum(a))").Should().Be(15.0);
+            PyExec("a[1, 2] = -7.0");
+            ReadAt<double>(nd, 1, 2).Should().Be(-7.0, "numpy's write lands in the NDArray");
+            WriteAt(nd, 42.0, 0, 0);
+            PyFloat("float(a[0, 0])").Should().Be(42.0, "the NDArray's write is seen by numpy");
+        }
+
+        /// <summary>
+        ///     Issue #349 (scipy.signal, closed in the 0.80.0 triage): the answer says SciPy itself can be called through
+        ///     NumSharp.Interop.pythonnet. <c>scipy.signal.spectrogram</c> over an exported <c>NDArray</c> (Hann window, 8-sample
+        ///     segments, overlap 4, no detrending, power-spectrum scaling) agrees within 1e-12 with the spectrogram built from
+        ///     NumSharp's own <c>np.hanning</c> and <c>np.fft.rfft</c>, scaled as SciPy scales a one-sided spectrum
+        ///     (1/sum(w)^2, inner bins doubled).
+        /// </summary>
+        [TestMethod]
+        [PythonEcosystem]
+        public void Issue349_ScipySpectrogram_OverAnExportedNDArray_MatchesNumSharpsOwn()
+        {
+            SkipUnless("scipy");   // before any export: a skipped test must not leave an export pinned
+
+            var t = np.arange(32) / 32.0;
+            var sig = np.sin(2 * System.Math.PI * 5 * t) + 0.5 * np.cos(2 * System.Math.PI * 12 * t);
+            var w = np.hanning(8);
+
+            ExportTo("sig", sig);
+            ExportTo("w", w);
+            PyExec("import scipy.signal\n" +
+                   "_, _, sxx = scipy.signal.spectrogram(sig, fs=1.0, window=w, nperseg=8, noverlap=4, detrend=False, scaling='spectrum', mode='psd')");
+            var scipyResult = ImportOf("sxx");
+
+            var frames = np.stack(Enumerable.Range(0, 7).Select(k => sig[$"{k * 4}:{k * 4 + 8}"]).ToArray());
+            var power = np.power(np.abs(np.fft.rfft(frames * w, axis: 1)), 2) / System.Math.Pow(np.sum(w).GetDouble(), 2);
+            power[":, 1:-1"] *= 2;
+            var ours = power.T;
+
+            scipyResult.shape.Should().Equal(5L, 7L);
+            np.allclose(scipyResult, ours, rtol: 1e-12, atol: 0).Should().BeTrue("SciPy over the NDArray matches NumSharp's own spectrogram");
         }
     }
 }
