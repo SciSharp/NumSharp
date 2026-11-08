@@ -3,21 +3,21 @@
   "summary": {
     "schema_version": 1,
     "api_inventory": "coverage/generated/coverage.json",
-    "total_available_or_partial": 491,
-    "measured_or_aliased": 455,
+    "total_available_or_partial": 537,
+    "measured_or_aliased": 452,
     "excluded": 19,
-    "missing": 17,
+    "missing": 66,
     "blocked": 0,
-    "coverage_percent": 96.4,
+    "coverage_percent": 87.3,
     "by_status": {
-      "covered_alias": 14,
+      "covered_alias": 11,
       "excluded": 19,
-      "missing": 17,
+      "missing": 66,
       "op_matrix": 419,
       "subsystem": 22
     },
     "by_backend_route": {
-      "managed": 452,
+      "managed": 498,
       "openblas_hybrid": 3,
       "openblas_optional": 10,
       "openblas_optional_composed": 4,
@@ -51,23 +51,31 @@
         "coverage_percent": 100.0
       },
       "np": {
-        "total": 324,
-        "measured_or_aliased": 309,
+        "total": 360,
+        "measured_or_aliased": 298,
         "excluded": 1,
-        "missing": 14,
+        "missing": 61,
         "blocked": 0,
-        "coverage_percent": 95.7
+        "coverage_percent": 83.0
+      },
+      "polynomial": {
+        "total": 10,
+        "measured_or_aliased": 10,
+        "excluded": 0,
+        "missing": 0,
+        "blocked": 0,
+        "coverage_percent": 100.0
       },
       "random": {
         "total": 51,
-        "measured_or_aliased": 45,
+        "measured_or_aliased": 43,
         "excluded": 3,
-        "missing": 3,
+        "missing": 5,
         "blocked": 0,
-        "coverage_percent": 93.8
+        "coverage_percent": 89.6
       }
     },
-    "unmatched_benchmark_descriptions": 52
+    "unmatched_benchmark_descriptions": 50
   },
   "rows": [
     {
@@ -113,7 +121,7 @@
       "surface": "np",
       "name": "acos",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "covered_alias",
       "backend_route": "managed",
@@ -130,7 +138,7 @@
       "surface": "np",
       "name": "acosh",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Hyperbolic functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -254,7 +262,7 @@
       "surface": "np",
       "name": "angle",
       "kind": "function",
-      "category": "Math",
+      "category": "Complex numbers",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -307,6 +315,32 @@
       "notes": ""
     },
     {
+      "id": "numpy.apply_along_axis",
+      "surface": "np",
+      "name": "apply_along_axis",
+      "kind": "function",
+      "category": "Shape manipulation",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.apply_over_axes",
+      "surface": "np",
+      "name": "apply_over_axes",
+      "kind": "function",
+      "category": "Shape manipulation",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.arange",
       "surface": "np",
       "name": "arange",
@@ -330,7 +364,7 @@
       "surface": "np",
       "name": "arccos",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -349,7 +383,7 @@
       "surface": "np",
       "name": "arccosh",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Hyperbolic functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -368,7 +402,7 @@
       "surface": "np",
       "name": "arcsin",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -387,7 +421,7 @@
       "surface": "np",
       "name": "arcsinh",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Hyperbolic functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -406,7 +440,7 @@
       "surface": "np",
       "name": "arctan",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -425,7 +459,7 @@
       "surface": "np",
       "name": "arctan2",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -444,7 +478,7 @@
       "surface": "np",
       "name": "arctanh",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Hyperbolic functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -558,7 +592,7 @@
       "surface": "np",
       "name": "around",
       "kind": "function",
-      "category": "Math",
+      "category": "Rounding",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -627,6 +661,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Logic/LogicBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.array_equiv",
+      "surface": "np",
+      "name": "array_equiv",
+      "kind": "function",
+      "category": "Logic & comparison",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -786,7 +833,7 @@
       "surface": "np",
       "name": "asin",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "covered_alias",
       "backend_route": "managed",
@@ -803,7 +850,7 @@
       "surface": "np",
       "name": "asinh",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Hyperbolic functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -858,7 +905,7 @@
       "surface": "np",
       "name": "atan",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "covered_alias",
       "backend_route": "managed",
@@ -875,7 +922,7 @@
       "surface": "np",
       "name": "atan2",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "covered_alias",
       "backend_route": "managed",
@@ -892,7 +939,7 @@
       "surface": "np",
       "name": "atanh",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Hyperbolic functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -983,6 +1030,45 @@
       "notes": ""
     },
     {
+      "id": "numpy.bartlett",
+      "surface": "np",
+      "name": "bartlett",
+      "kind": "function",
+      "category": "Window functions",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.base_repr",
+      "surface": "np",
+      "name": "base_repr",
+      "kind": "function",
+      "category": "Text & formatting",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.binary_repr",
+      "surface": "np",
+      "name": "binary_repr",
+      "kind": "function",
+      "category": "Text & formatting",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.bincount",
       "surface": "np",
       "name": "bincount",
@@ -1006,7 +1092,7 @@
       "surface": "np",
       "name": "bitwise_and",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Bitwise operations",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -1021,11 +1107,24 @@
       "notes": ""
     },
     {
+      "id": "numpy.bitwise_count",
+      "surface": "np",
+      "name": "bitwise_count",
+      "kind": "ufunc",
+      "category": "Bitwise operations",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.bitwise_invert",
       "surface": "np",
       "name": "bitwise_invert",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Bitwise operations",
       "api_status": "available",
       "coverage_status": "covered_alias",
       "backend_route": "managed",
@@ -1042,7 +1141,7 @@
       "surface": "np",
       "name": "bitwise_left_shift",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Bitwise operations",
       "api_status": "available",
       "coverage_status": "covered_alias",
       "backend_route": "managed",
@@ -1059,7 +1158,7 @@
       "surface": "np",
       "name": "bitwise_not",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Bitwise operations",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -1078,7 +1177,7 @@
       "surface": "np",
       "name": "bitwise_or",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Bitwise operations",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -1097,7 +1196,7 @@
       "surface": "np",
       "name": "bitwise_right_shift",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Bitwise operations",
       "api_status": "available",
       "coverage_status": "covered_alias",
       "backend_route": "managed",
@@ -1114,7 +1213,7 @@
       "surface": "np",
       "name": "bitwise_xor",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Bitwise operations",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -1126,6 +1225,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Bitwise/BitwiseBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.blackman",
+      "surface": "np",
+      "name": "blackman",
+      "kind": "function",
+      "category": "Window functions",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -1177,6 +1289,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Manipulation/ExtendedShapeBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.broadcast_shapes",
+      "surface": "np",
+      "name": "broadcast_shapes",
+      "kind": "function",
+      "category": "Shape manipulation",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -1246,7 +1371,7 @@
       "surface": "np",
       "name": "ceil",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Rounding",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -1413,7 +1538,7 @@
       "surface": "np",
       "name": "conj",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Complex numbers",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -1432,7 +1557,7 @@
       "surface": "np",
       "name": "conjugate",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Complex numbers",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -1451,7 +1576,7 @@
       "surface": "np",
       "name": "convolve",
       "kind": "function",
-      "category": "Math",
+      "category": "Differences & integration",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "openblas_optional_sliding_dot",
@@ -1494,7 +1619,7 @@
       "surface": "np",
       "name": "copysign",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Floating-point handling",
       "api_status": "available",
       "coverage_status": "missing",
       "backend_route": "managed",
@@ -1564,7 +1689,7 @@
       "surface": "np",
       "name": "cos",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -1583,7 +1708,7 @@
       "surface": "np",
       "name": "cosh",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Hyperbolic functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -1640,7 +1765,7 @@
       "surface": "np",
       "name": "cross",
       "kind": "function",
-      "category": "Math",
+      "category": "Linear algebra",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -1698,7 +1823,7 @@
       "name": "cumulative_prod",
       "kind": "function",
       "category": "Reductions",
-      "api_status": "available",
+      "api_status": "partial",
       "coverage_status": "covered_alias",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
@@ -1715,7 +1840,7 @@
       "name": "cumulative_sum",
       "kind": "function",
       "category": "Reductions",
-      "api_status": "available",
+      "api_status": "partial",
       "coverage_status": "covered_alias",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
@@ -1744,7 +1869,7 @@
       "surface": "np",
       "name": "deg2rad",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -1763,7 +1888,7 @@
       "surface": "np",
       "name": "degrees",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -1901,7 +2026,7 @@
       "surface": "np",
       "name": "diff",
       "kind": "function",
-      "category": "Math",
+      "category": "Differences & integration",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -1954,11 +2079,24 @@
       "notes": ""
     },
     {
+      "id": "numpy.divmod",
+      "surface": "np",
+      "name": "divmod",
+      "kind": "ufunc",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.dot",
       "surface": "np",
       "name": "dot",
       "kind": "function",
-      "category": "Math",
+      "category": "Linear algebra",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "openblas_optional",
@@ -2015,7 +2153,7 @@
       "surface": "np",
       "name": "ediff1d",
       "kind": "function",
-      "category": "Math",
+      "category": "Differences & integration",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -2129,7 +2267,7 @@
       "surface": "np",
       "name": "exp",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Exponentials & logarithms",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -2148,7 +2286,7 @@
       "surface": "np",
       "name": "exp2",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Exponentials & logarithms",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -2196,7 +2334,7 @@
       "surface": "np",
       "name": "expm1",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Exponentials & logarithms",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -2246,6 +2384,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Creation/ConversionCreationBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.fabs",
+      "surface": "np",
+      "name": "fabs",
+      "kind": "ufunc",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -2610,6 +2761,19 @@
       "notes": ""
     },
     {
+      "id": "numpy.fix",
+      "surface": "np",
+      "name": "fix",
+      "kind": "function",
+      "category": "Rounding",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.flatnonzero",
       "surface": "np",
       "name": "flatnonzero",
@@ -2686,11 +2850,24 @@
       "notes": ""
     },
     {
+      "id": "numpy.float_power",
+      "surface": "np",
+      "name": "float_power",
+      "kind": "ufunc",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.floor",
       "surface": "np",
       "name": "floor",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Rounding",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -2762,6 +2939,19 @@
       "notes": ""
     },
     {
+      "id": "numpy.fmod",
+      "surface": "np",
+      "name": "fmod",
+      "kind": "ufunc",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.format_float_positional",
       "surface": "np",
       "name": "format_float_positional",
@@ -2800,6 +2990,19 @@
       "notes": ""
     },
     {
+      "id": "numpy.frexp",
+      "surface": "np",
+      "name": "frexp",
+      "kind": "ufunc",
+      "category": "Floating-point handling",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.frombuffer",
       "surface": "np",
       "name": "frombuffer",
@@ -2823,7 +3026,7 @@
       "surface": "np",
       "name": "fromfile",
       "kind": "function",
-      "category": "Array creation",
+      "category": "Input & output",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -2838,11 +3041,24 @@
       "notes": ""
     },
     {
+      "id": "numpy.frompyfunc",
+      "surface": "np",
+      "name": "frompyfunc",
+      "kind": "function",
+      "category": "Function utilities",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.fromstring",
       "surface": "np",
       "name": "fromstring",
       "kind": "function",
-      "category": "Array creation",
+      "category": "Input & output",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -2895,6 +3111,32 @@
       "notes": ""
     },
     {
+      "id": "numpy.gcd",
+      "surface": "np",
+      "name": "gcd",
+      "kind": "ufunc",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.geomspace",
+      "surface": "np",
+      "name": "geomspace",
+      "kind": "function",
+      "category": "Array creation",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.get_printoptions",
       "surface": "np",
       "name": "get_printoptions",
@@ -2919,6 +3161,19 @@
       "name": "getbufsize",
       "kind": "function",
       "category": "Floating-point handling",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.gradient",
+      "surface": "np",
+      "name": "gradient",
+      "kind": "function",
+      "category": "Differences & integration",
       "api_status": "available",
       "coverage_status": "missing",
       "backend_route": "managed",
@@ -2965,6 +3220,97 @@
       "notes": ""
     },
     {
+      "id": "numpy.hamming",
+      "surface": "np",
+      "name": "hamming",
+      "kind": "function",
+      "category": "Window functions",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.hanning",
+      "surface": "np",
+      "name": "hanning",
+      "kind": "function",
+      "category": "Window functions",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.heaviside",
+      "surface": "np",
+      "name": "heaviside",
+      "kind": "ufunc",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.histogram",
+      "surface": "np",
+      "name": "histogram",
+      "kind": "function",
+      "category": "Statistics & histograms",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.histogram2d",
+      "surface": "np",
+      "name": "histogram2d",
+      "kind": "function",
+      "category": "Statistics & histograms",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.histogram_bin_edges",
+      "surface": "np",
+      "name": "histogram_bin_edges",
+      "kind": "function",
+      "category": "Statistics & histograms",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.histogramdd",
+      "surface": "np",
+      "name": "histogramdd",
+      "kind": "function",
+      "category": "Statistics & histograms",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.hsplit",
       "surface": "np",
       "name": "hsplit",
@@ -3003,6 +3349,32 @@
       "notes": ""
     },
     {
+      "id": "numpy.hypot",
+      "surface": "np",
+      "name": "hypot",
+      "kind": "ufunc",
+      "category": "Trigonometric functions",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.i0",
+      "surface": "np",
+      "name": "i0",
+      "kind": "function",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.identity",
       "surface": "np",
       "name": "identity",
@@ -3026,7 +3398,7 @@
       "surface": "np",
       "name": "imag",
       "kind": "function",
-      "category": "Math",
+      "category": "Complex numbers",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -3064,7 +3436,7 @@
       "surface": "np",
       "name": "inner",
       "kind": "function",
-      "category": "Math",
+      "category": "Linear algebra",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "openblas_optional",
@@ -3102,7 +3474,7 @@
       "surface": "np",
       "name": "interp",
       "kind": "function",
-      "category": "Math",
+      "category": "Differences & integration",
       "api_status": "available",
       "coverage_status": "missing",
       "backend_route": "managed",
@@ -3134,7 +3506,7 @@
       "surface": "np",
       "name": "invert",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Bitwise operations",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -3460,11 +3832,24 @@
       "notes": ""
     },
     {
+      "id": "numpy.kaiser",
+      "surface": "np",
+      "name": "kaiser",
+      "kind": "function",
+      "category": "Window functions",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.kron",
       "surface": "np",
       "name": "kron",
       "kind": "function",
-      "category": "Math",
+      "category": "Linear algebra",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -3479,11 +3864,37 @@
       "notes": ""
     },
     {
+      "id": "numpy.lcm",
+      "surface": "np",
+      "name": "lcm",
+      "kind": "ufunc",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.ldexp",
+      "surface": "np",
+      "name": "ldexp",
+      "kind": "ufunc",
+      "category": "Floating-point handling",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.left_shift",
       "surface": "np",
       "name": "left_shift",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Bitwise operations",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -4150,7 +4561,7 @@
       "surface": "np",
       "name": "loadtxt",
       "kind": "function",
-      "category": "Array creation",
+      "category": "Input & output",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -4169,7 +4580,7 @@
       "surface": "np",
       "name": "log",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Exponentials & logarithms",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -4188,7 +4599,7 @@
       "surface": "np",
       "name": "log10",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Exponentials & logarithms",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -4207,7 +4618,7 @@
       "surface": "np",
       "name": "log1p",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Exponentials & logarithms",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -4226,7 +4637,7 @@
       "surface": "np",
       "name": "log2",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Exponentials & logarithms",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -4245,7 +4656,7 @@
       "surface": "np",
       "name": "logaddexp",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Exponentials & logarithms",
       "api_status": "available",
       "coverage_status": "missing",
       "backend_route": "managed",
@@ -4258,7 +4669,7 @@
       "surface": "np",
       "name": "logaddexp2",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Exponentials & logarithms",
       "api_status": "available",
       "coverage_status": "missing",
       "backend_route": "managed",
@@ -4343,6 +4754,19 @@
       "notes": ""
     },
     {
+      "id": "numpy.logspace",
+      "surface": "np",
+      "name": "logspace",
+      "kind": "function",
+      "category": "Array creation",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.mask_indices",
       "surface": "np",
       "name": "mask_indices",
@@ -4366,7 +4790,7 @@
       "surface": "np",
       "name": "matmul",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Linear algebra",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "openblas_optional",
@@ -4454,6 +4878,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Logic/LogicBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.may_share_memory",
+      "surface": "np",
+      "name": "may_share_memory",
+      "kind": "function",
+      "category": "Array metadata & memory",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -5507,6 +5944,11 @@
           "description": "a.max() [ndarray]",
           "suite_directory": "NDArrayApi",
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/NDArrayApi/NDArrayMethodBenchmarks.cs"
+        },
+        {
+          "description": "a.max() [method]",
+          "suite_directory": "Reduction",
+          "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Reduction/MinMaxBenchmarks.cs"
         }
       ],
       "notes": ""
@@ -5545,6 +5987,11 @@
           "description": "a.min() [ndarray]",
           "suite_directory": "NDArrayApi",
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/NDArrayApi/NDArrayMethodBenchmarks.cs"
+        },
+        {
+          "description": "a.min() [method]",
+          "suite_directory": "Reduction",
+          "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Reduction/MinMaxBenchmarks.cs"
         }
       ],
       "notes": ""
@@ -6164,7 +6611,7 @@
       "surface": "np",
       "name": "nextafter",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Floating-point handling",
       "api_status": "available",
       "coverage_status": "missing",
       "backend_route": "managed",
@@ -6253,7 +6700,7 @@
       "surface": "np",
       "name": "outer",
       "kind": "function",
-      "category": "Math",
+      "category": "Linear algebra",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -6265,6 +6712,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/LinearAlgebra/LinAlgBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.packbits",
+      "surface": "np",
+      "name": "packbits",
+      "kind": "function",
+      "category": "Bitwise operations",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -6344,6 +6804,19 @@
       "notes": ""
     },
     {
+      "id": "numpy.piecewise",
+      "surface": "np",
+      "name": "piecewise",
+      "kind": "function",
+      "category": "Math",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.place",
       "surface": "np",
       "name": "place",
@@ -6364,7 +6837,7 @@
     },
     {
       "id": "numpy.poly",
-      "surface": "np",
+      "surface": "polynomial",
       "name": "poly",
       "kind": "function",
       "category": "Polynomials",
@@ -6383,7 +6856,7 @@
     },
     {
       "id": "numpy.polyadd",
-      "surface": "np",
+      "surface": "polynomial",
       "name": "polyadd",
       "kind": "function",
       "category": "Polynomials",
@@ -6402,7 +6875,7 @@
     },
     {
       "id": "numpy.polyder",
-      "surface": "np",
+      "surface": "polynomial",
       "name": "polyder",
       "kind": "function",
       "category": "Polynomials",
@@ -6421,7 +6894,7 @@
     },
     {
       "id": "numpy.polydiv",
-      "surface": "np",
+      "surface": "polynomial",
       "name": "polydiv",
       "kind": "function",
       "category": "Polynomials",
@@ -6440,7 +6913,7 @@
     },
     {
       "id": "numpy.polyfit",
-      "surface": "np",
+      "surface": "polynomial",
       "name": "polyfit",
       "kind": "function",
       "category": "Polynomials",
@@ -6457,7 +6930,7 @@
     },
     {
       "id": "numpy.polyint",
-      "surface": "np",
+      "surface": "polynomial",
       "name": "polyint",
       "kind": "function",
       "category": "Polynomials",
@@ -6476,7 +6949,7 @@
     },
     {
       "id": "numpy.polymul",
-      "surface": "np",
+      "surface": "polynomial",
       "name": "polymul",
       "kind": "function",
       "category": "Polynomials",
@@ -6495,7 +6968,7 @@
     },
     {
       "id": "numpy.polysub",
-      "surface": "np",
+      "surface": "polynomial",
       "name": "polysub",
       "kind": "function",
       "category": "Polynomials",
@@ -6514,7 +6987,7 @@
     },
     {
       "id": "numpy.polyval",
-      "surface": "np",
+      "surface": "polynomial",
       "name": "polyval",
       "kind": "function",
       "category": "Polynomials",
@@ -6702,6 +7175,32 @@
       "notes": ""
     },
     {
+      "id": "numpy.put_along_axis",
+      "surface": "np",
+      "name": "put_along_axis",
+      "kind": "function",
+      "category": "Indexing & selection",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.putmask",
+      "surface": "np",
+      "name": "putmask",
+      "kind": "function",
+      "category": "Indexing & selection",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.quantile",
       "surface": "np",
       "name": "quantile",
@@ -6725,7 +7224,7 @@
       "surface": "np",
       "name": "rad2deg",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -6744,7 +7243,7 @@
       "surface": "np",
       "name": "radians",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -7387,15 +7886,11 @@
       "kind": "function",
       "category": "Random",
       "api_status": "available",
-      "coverage_status": "covered_alias",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.random.random_sample"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.random.rayleigh",
@@ -7423,15 +7918,11 @@
       "kind": "function",
       "category": "Random",
       "api_status": "available",
-      "coverage_status": "covered_alias",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.random.random_sample"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.random.seed",
@@ -7730,7 +8221,7 @@
       "surface": "np",
       "name": "real",
       "kind": "function",
-      "category": "Math",
+      "category": "Complex numbers",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -7742,6 +8233,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Unary/UnaryFamilyBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.real_if_close",
+      "surface": "np",
+      "name": "real_if_close",
+      "kind": "function",
+      "category": "Complex numbers",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -7770,15 +8274,11 @@
       "kind": "ufunc",
       "category": "Math",
       "api_status": "available",
-      "coverage_status": "covered_alias",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.mod"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.repeat",
@@ -7880,7 +8380,7 @@
       "surface": "np",
       "name": "right_shift",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Bitwise operations",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -7899,7 +8399,7 @@
       "surface": "np",
       "name": "rint",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Rounding",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -7953,7 +8453,7 @@
     },
     {
       "id": "numpy.roots",
-      "surface": "np",
+      "surface": "polynomial",
       "name": "roots",
       "kind": "function",
       "category": "Polynomials",
@@ -7992,7 +8492,7 @@
       "surface": "np",
       "name": "round",
       "kind": "function",
-      "category": "Math",
+      "category": "Rounding",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -8221,6 +8721,19 @@
       "notes": "Partial cross-surface property mapping; there is no comparable NumSharp np.shape call."
     },
     {
+      "id": "numpy.shares_memory",
+      "surface": "np",
+      "name": "shares_memory",
+      "kind": "function",
+      "category": "Array metadata & memory",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.sign",
       "surface": "np",
       "name": "sign",
@@ -8240,11 +8753,24 @@
       "notes": ""
     },
     {
+      "id": "numpy.signbit",
+      "surface": "np",
+      "name": "signbit",
+      "kind": "ufunc",
+      "category": "Floating-point handling",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.sin",
       "surface": "np",
       "name": "sin",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -8259,11 +8785,24 @@
       "notes": ""
     },
     {
+      "id": "numpy.sinc",
+      "surface": "np",
+      "name": "sinc",
+      "kind": "function",
+      "category": "Trigonometric functions",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.sinh",
       "surface": "np",
       "name": "sinh",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Hyperbolic functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -8332,6 +8871,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Sorting/ExtendedSortingBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.spacing",
+      "surface": "np",
+      "name": "spacing",
+      "kind": "ufunc",
+      "category": "Floating-point handling",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -8598,7 +9150,7 @@
       "surface": "np",
       "name": "tan",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Trigonometric functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -8617,7 +9169,7 @@
       "surface": "np",
       "name": "tanh",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Hyperbolic functions",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -8674,7 +9226,7 @@
       "surface": "np",
       "name": "trace",
       "kind": "function",
-      "category": "Math",
+      "category": "Linear algebra",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -8710,6 +9262,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Manipulation/ReshapeBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.trapezoid",
+      "surface": "np",
+      "name": "trapezoid",
+      "kind": "function",
+      "category": "Differences & integration",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -8888,7 +9453,7 @@
       "surface": "np",
       "name": "trunc",
       "kind": "ufunc",
-      "category": "Math",
+      "category": "Rounding",
       "api_status": "available",
       "coverage_status": "op_matrix",
       "backend_route": "managed",
@@ -8900,6 +9465,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Unary/UnaryExtraBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.typename",
+      "surface": "np",
+      "name": "typename",
+      "kind": "function",
+      "category": "Text & formatting",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -9017,6 +9595,19 @@
       "notes": ""
     },
     {
+      "id": "numpy.unpackbits",
+      "surface": "np",
+      "name": "unpackbits",
+      "kind": "function",
+      "category": "Bitwise operations",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.unravel_index",
       "surface": "np",
       "name": "unravel_index",
@@ -9052,6 +9643,19 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Manipulation/ExtendedShapeBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.unwrap",
+      "surface": "np",
+      "name": "unwrap",
+      "kind": "function",
+      "category": "Trigonometric functions",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -9461,18 +10065,6 @@
       "description": "reshape 2D -> 1D",
       "suite_directory": "Manipulation",
       "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Manipulation/ReshapeBenchmarks.cs"
-    },
-    {
-      "description": "a.amax() [method]",
-      "suite_directory": "Reduction",
-      "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Reduction/MinMaxBenchmarks.cs",
-      "unmatched_api_id": "numpy.ndarray.amax"
-    },
-    {
-      "description": "a.amin() [method]",
-      "suite_directory": "Reduction",
-      "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Reduction/MinMaxBenchmarks.cs",
-      "unmatched_api_id": "numpy.ndarray.amin"
     },
     {
       "description": "a[100:1000] (contiguous slice)",

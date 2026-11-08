@@ -3,21 +3,22 @@
 Generated from the compiled NumPy 2.4.2 API inventory and the official benchmark sources.
 A covered alias shares the exact compiled NumSharp target with a directly measured API.
 
-Headline benchmark coverage: **96.4%** (455 covered of 472 benchmarkable APIs; 19 reviewed exclusions).
+Headline benchmark coverage: **87.3%** (452 covered of 518 benchmarkable APIs; 19 reviewed exclusions).
 
 | Surface | Covered | Blocked | Excluded | Missing | Benchmarkable | Coverage |
 |---|---:|---:|---:|---:|---:|---:|
 | fft | 18 | 0 | 0 | 0 | 18 | 100.0% |
 | linalg | 31 | 0 | 0 | 0 | 31 | 100.0% |
 | ndarray | 52 | 0 | 15 | 0 | 52 | 100.0% |
-| np | 309 | 0 | 1 | 14 | 323 | 95.7% |
-| random | 45 | 0 | 3 | 3 | 48 | 93.8% |
+| np | 298 | 0 | 1 | 61 | 359 | 83.0% |
+| polynomial | 10 | 0 | 0 | 0 | 10 | 100.0% |
+| random | 43 | 0 | 3 | 5 | 48 | 89.6% |
 
 ## Execution routes
 
 | Route | APIs | Meaning |
 |---|---:|---|
-| managed | 452 | NumSharp.Core managed code only. |
+| managed | 498 | NumSharp.Core managed code only. |
 | openblas_optional | 10 | Direct product hook with managed fallback. |
 | openblas_optional_composed | 4 | Composition can reach an accelerated product. |
 | openblas_optional_sliding_dot | 2 | Long eligible correlate/convolve regions only. |
@@ -43,23 +44,72 @@ retain a managed fallback; required routes throw when no suitable LAPACK backend
 
 | API | Surface | Kind | Category | Backend route |
 |---|---|---|---|---|
+| `numpy.apply_along_axis` | np | function | Shape manipulation | managed |
+| `numpy.apply_over_axes` | np | function | Shape manipulation | managed |
+| `numpy.array_equiv` | np | function | Logic & comparison | managed |
+| `numpy.bartlett` | np | function | Window functions | managed |
+| `numpy.base_repr` | np | function | Text & formatting | managed |
+| `numpy.binary_repr` | np | function | Text & formatting | managed |
+| `numpy.bitwise_count` | np | ufunc | Bitwise operations | managed |
+| `numpy.blackman` | np | function | Window functions | managed |
 | `numpy.bmat` | np | function | Linear algebra | managed |
-| `numpy.copysign` | np | ufunc | Math | managed |
+| `numpy.broadcast_shapes` | np | function | Shape manipulation | managed |
+| `numpy.copysign` | np | ufunc | Floating-point handling | managed |
 | `numpy.datetime_data` | np | function | Date & time | managed |
+| `numpy.divmod` | np | ufunc | Math | managed |
+| `numpy.fabs` | np | ufunc | Math | managed |
+| `numpy.fix` | np | function | Rounding | managed |
+| `numpy.float_power` | np | ufunc | Math | managed |
+| `numpy.fmod` | np | ufunc | Math | managed |
+| `numpy.frexp` | np | ufunc | Floating-point handling | managed |
+| `numpy.frompyfunc` | np | function | Function utilities | managed |
+| `numpy.gcd` | np | ufunc | Math | managed |
+| `numpy.geomspace` | np | function | Array creation | managed |
 | `numpy.getbufsize` | np | function | Floating-point handling | managed |
-| `numpy.interp` | np | function | Math | managed |
+| `numpy.gradient` | np | function | Differences & integration | managed |
+| `numpy.hamming` | np | function | Window functions | managed |
+| `numpy.hanning` | np | function | Window functions | managed |
+| `numpy.heaviside` | np | ufunc | Math | managed |
+| `numpy.histogram` | np | function | Statistics & histograms | managed |
+| `numpy.histogram2d` | np | function | Statistics & histograms | managed |
+| `numpy.histogram_bin_edges` | np | function | Statistics & histograms | managed |
+| `numpy.histogramdd` | np | function | Statistics & histograms | managed |
+| `numpy.hypot` | np | ufunc | Trigonometric functions | managed |
+| `numpy.i0` | np | function | Math | managed |
+| `numpy.interp` | np | function | Differences & integration | managed |
 | `numpy.isneginf` | np | function | Logic & comparison | managed |
 | `numpy.isposinf` | np | function | Logic & comparison | managed |
-| `numpy.logaddexp` | np | ufunc | Math | managed |
-| `numpy.logaddexp2` | np | ufunc | Math | managed |
+| `numpy.kaiser` | np | function | Window functions | managed |
+| `numpy.lcm` | np | ufunc | Math | managed |
+| `numpy.ldexp` | np | ufunc | Floating-point handling | managed |
+| `numpy.logaddexp` | np | ufunc | Exponentials & logarithms | managed |
+| `numpy.logaddexp2` | np | ufunc | Exponentials & logarithms | managed |
+| `numpy.logspace` | np | function | Array creation | managed |
+| `numpy.may_share_memory` | np | function | Array metadata & memory | managed |
 | `numpy.nan_to_num` | np | function | Floating-point handling | managed |
 | `numpy.nancumprod` | np | function | Reductions | managed |
 | `numpy.nancumsum` | np | function | Reductions | managed |
-| `numpy.nextafter` | np | ufunc | Math | managed |
+| `numpy.nextafter` | np | ufunc | Floating-point handling | managed |
+| `numpy.packbits` | np | function | Bitwise operations | managed |
+| `numpy.piecewise` | np | function | Math | managed |
+| `numpy.put_along_axis` | np | function | Indexing & selection | managed |
+| `numpy.putmask` | np | function | Indexing & selection | managed |
 | `numpy.random.bytes` | random | function | Random | managed |
 | `numpy.random.default_rng` | random | function | Random | managed |
 | `numpy.random.random_integers` | random | function | Random | managed |
+| `numpy.random.ranf` | random | function | Random | managed |
+| `numpy.random.sample` | random | function | Random | managed |
+| `numpy.real_if_close` | np | function | Complex numbers | managed |
+| `numpy.remainder` | np | ufunc | Math | managed |
 | `numpy.setbufsize` | np | function | Floating-point handling | managed |
+| `numpy.shares_memory` | np | function | Array metadata & memory | managed |
+| `numpy.signbit` | np | ufunc | Floating-point handling | managed |
+| `numpy.sinc` | np | function | Trigonometric functions | managed |
+| `numpy.spacing` | np | ufunc | Floating-point handling | managed |
+| `numpy.trapezoid` | np | function | Differences & integration | managed |
+| `numpy.typename` | np | function | Text & formatting | managed |
+| `numpy.unpackbits` | np | function | Bitwise operations | managed |
+| `numpy.unwrap` | np | function | Trigonometric functions | managed |
 
 ## Benchmark-blocking open bugs
 
@@ -140,8 +190,6 @@ scenario-only benchmarks are expected here; API-looking stale labels should be c
 | `reshape 1D -> 2D` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Manipulation/ReshapeBenchmarks.cs` |
 | `reshape 1D -> 3D` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Manipulation/ReshapeBenchmarks.cs` |
 | `reshape 2D -> 1D` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Manipulation/ReshapeBenchmarks.cs` |
-| `a.amax() [method]` (`numpy.ndarray.amax`) | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Reduction/MinMaxBenchmarks.cs` |
-| `a.amin() [method]` (`numpy.ndarray.amin`) | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Reduction/MinMaxBenchmarks.cs` |
 | `a[100:1000] (contiguous slice)` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs` |
 | `a[10:100, :] (row slice 2D)` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs` |
 | `a[:, 10:100] (col slice 2D)` | `benchmark/NumSharp.Benchmark.CSharp/Benchmarks/Slicing/SliceBenchmarks.cs` |
