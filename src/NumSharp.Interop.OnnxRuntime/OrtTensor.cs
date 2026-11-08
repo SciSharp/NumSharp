@@ -78,9 +78,26 @@ namespace NumSharp.Interop.OnnxRuntime
         private readonly bool _isView;
         private readonly TensorElementType _elementType;
         private readonly long[] _shape;
+        private readonly bool _transient;
         private int _disposed;
 
         /// <summary>Takes ownership of <paramref name="value"/> and of the reference <paramref name="slice"/> carries.</summary>
+        /// <remarks>
+        ///     <para><b>Transient handles.</b> The <c>Run</c> tier's synchronous verbs (<c>Run</c>, <c>RunInto</c>) create one
+        ///     handle per fed input and pre-allocated output, hand ONNX Runtime its value for ONE call, and dispose it on the
+        ///     same thread once that call returned. Neither the handle nor its <see cref="OrtValue"/> ever reaches the caller,
+        ///     so nothing can dispose the value from another thread, hold it past the handle, or pass it to an import verb:
+        ///     the machinery that makes a REACHABLE value safe has nothing to guard. A transient handle therefore skips it -
+        ///     the value carries no ARC token (<see cref="OrtValueBooking.Track"/>: a finalizable token, a table entry and a
+        ///     store into ORT's <c>_memHandle</c> slot, then a takeover by a shadow value on dispose), it is not registered as
+        ///     a NumSharp-memory value (<see cref="ValueOwners"/>) and, disposed, it is not remembered as disposed
+        ///     (<see cref="DisposedValues"/>). Those were most of the cost of feeding an input: 27 inputs of a GPT-2 decoder
+        ///     step spent 42 us and 17 KB in them (measured 2026-11-08). Everything a run reads from a handle stays: the
+        ///     counted reference on the buffer, <see cref="Source"/>, the data range, the export counters.</para>
+        ///     <para>Never pass <c>transient: true</c> for a handle whose value can outlive the call or cross a thread: the
+        ///     asynchronous verbs, whose disposal runs on a continuation, and every public export verb keep the full
+        ///     machinery.</para>
+        /// </remarks>
         /// <param name="value">The OrtValue (created by the caller; owned by the handle from here on).</param>
         /// <param name="source">The array ORT reads (the caller's, or a temporary the handle owns); for a text tensor, the array the strings were copied from.</param>
         /// <param name="slice">
@@ -93,8 +110,12 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="isView"><c>true</c> when <paramref name="source"/> is the array the export verb was given (shared memory); <c>false</c> when it is a copy the verb made.</param>
         /// <param name="elementType">The ONNX element type the value was created with.</param>
         /// <param name="shape">The value's row-major shape.</param>
+        /// <param name="transient"><c>true</c> for a handle the synchronous <c>Run</c> tier creates and disposes within one call
+        /// on one thread, whose value never reaches a caller: no ARC token, no owner or disposed-value registration (see the
+        /// remarks). <c>false</c> (every public verb) for the full machinery.</param>
         /// <exception cref="OutOfMemoryException">The value could not be registered (the handle is then left unconstructed: its finalizer is suppressed, and the caller still owns the value and the reference).</exception>
-        internal OrtTensor(OrtValue value, NDArray source, IArraySlice slice, IntPtr data, long byteLength, bool ownsSource, bool isView, TensorElementType elementType, long[] shape)
+        internal OrtTensor(OrtValue value, NDArray source, IArraySlice slice, IntPtr data, long byteLength, bool ownsSource, bool isView, TensorElementType elementType, long[] shape,
+            bool transient = false)
         {
             _value = value;
             _source = source;
@@ -108,13 +129,19 @@ namespace NumSharp.Interop.OnnxRuntime
             _isView = isView;
             _elementType = elementType;
             _shape = shape;
+            _transient = transient;
             try
             {
-                // The value carries its ARC from birth (OrtValueBooking; no booking: the memory is NumSharp's, or a text
-                // tensor's strings): a Dispose of the value itself - by this handle, by a caller holding Value, on any number
-                // of threads at once - releases the native value exactly once.
-                OrtValueBooking.Track(value, bytes: 0);
-                ValueOwners.AddOrUpdate(value, this);
+                // A transient value is reachable only through this handle, inside one synchronous call: nothing can dispose it
+                // on another thread or hand it to an import verb, so neither the ARC token nor the owner table has a job.
+                if (!transient)
+                {
+                    // The value carries its ARC from birth (OrtValueBooking; no booking: the memory is NumSharp's, or a text
+                    // tensor's strings): a Dispose of the value itself - by this handle, by a caller holding Value, on any
+                    // number of threads at once - releases the native value exactly once.
+                    OrtValueBooking.Track(value, bytes: 0);
+                    ValueOwners.AddOrUpdate(value, this);
+                }
             }
             catch
             {
@@ -236,9 +263,13 @@ namespace NumSharp.Interop.OnnxRuntime
             finally
             {
                 // The disposed value no longer needs to keep the handle alive. It is remembered as disposed instead, so
-                // an import verb refuses it rather than call ONNX Runtime with a released value (a process crash).
-                ValueOwners.Remove(_value);
-                DisposedValues.AddOrUpdate(_value, DisposedMarker);
+                // an import verb refuses it rather than call ONNX Runtime with a released value (a process crash). A
+                // transient value was never registered and nobody else holds it, so there is nothing to forget or remember.
+                if (!_transient)
+                {
+                    ValueOwners.Remove(_value);
+                    DisposedValues.AddOrUpdate(_value, DisposedMarker);
+                }
                 _slice?.Release();   // a text tensor holds no NumSharp buffer
                 NDArrayOnnxInterop.ExportClosed();
                 if (_ownsSource)
@@ -445,6 +476,20 @@ namespace NumSharp.Interop.OnnxRuntime
     internal sealed class ImportLease
     {
         private Action _release;
+
+        /// <summary>
+        ///     The ORT value an import view of ORT's memory releases (the <see cref="ImportLease(OrtValue, OrtValueBooking.Token, bool, long)"/>
+        ///     form), or <c>null</c> for a lease built with a release <see cref="Action"/>. Holding the value here rather than in
+        ///     a closure is what roots it for the life of the view, as the closure did - one object fewer per view.
+        /// </summary>
+        private OrtValue _value;
+
+        /// <summary>The value's token (its ARC), or <c>null</c> for a value that carries none; with <see cref="_value"/> only.</summary>
+        private readonly OrtValueBooking.Token _token;
+
+        /// <summary>Whether the view owns <see cref="_value"/> (disposes it on release); with <see cref="_value"/> only.</summary>
+        private readonly bool _ownsValue;
+
         private readonly long _bytes;
         private int _released;
 
@@ -479,6 +524,35 @@ namespace NumSharp.Interop.OnnxRuntime
             NDArrayOnnxInterop.ImportOpened();
         }
 
+        /// <summary>
+        ///     Opens the lease of a view over an ORT value's memory: the same lease as the <see cref="Action"/> form, but the
+        ///     release is decided from the value, its token and the ownership instead of a delegate (and, for most of the
+        ///     cases, a closure) allocated per view - the import verbs build one view per output, 25 per decoder step of a GPT-2.
+        /// </summary>
+        /// <remarks>
+        ///     The release, when the last NumSharp view over the memory is gone: an owned value without a token is disposed;
+        ///     an owned value with one is disposed and then its view lease given back
+        ///     (<see cref="NDArrayOnnxInterop.DisposeThenReleaseView"/>), which makes the one native release; a value the caller
+        ///     owns gives back its view lease when it has a token, and is otherwise only kept reachable until then.
+        /// </remarks>
+        /// <param name="value">The value whose memory the view reads (rooted by the lease until the release).</param>
+        /// <param name="token">The value's token, or <c>null</c> when it carries none.</param>
+        /// <param name="ownsValue">Whether the view owns the value.</param>
+        /// <param name="ownedBytes">The bytes to book, as in the <see cref="Action"/> form (only an owning view books).</param>
+        internal ImportLease(OrtValue value, OrtValueBooking.Token token, bool ownsValue, long ownedBytes)
+        {
+            _value = value;
+            _token = token;
+            _ownsValue = ownsValue;
+            _bytes = ownedBytes;
+            if (_bytes > 0)
+            {
+                SizeBucketedBufferPool.BookForeign(_bytes);
+                NDArrayOnnxInterop.ImportPressureChanged(_bytes);
+            }
+            NDArrayOnnxInterop.ImportOpened();
+        }
+
         /// <summary><c>true</c> once the lease was released or disarmed.</summary>
         internal bool IsReleased => Volatile.Read(ref _released) != 0;
 
@@ -493,12 +567,43 @@ namespace NumSharp.Interop.OnnxRuntime
             try
             {
                 Action release = Interlocked.Exchange(ref _release, null);
-                release?.Invoke();
+                if (release is not null)
+                    release.Invoke();
+                else
+                    ReleaseValue(Interlocked.Exchange(ref _value, null));
             }
             finally
             {
                 RemovePressure();
                 NDArrayOnnxInterop.ImportClosed();
+            }
+        }
+
+        /// <summary>
+        ///     The release of the <see cref="ImportLease(OrtValue, OrtValueBooking.Token, bool, long)"/> form, run once by
+        ///     <see cref="Release"/>: exactly what the per-view delegates of that form used to do (see the constructor).
+        /// </summary>
+        /// <param name="value">The value, taken out of <see cref="_value"/> by the one caller that won the released flag; <c>null</c> for a lease of the <see cref="Action"/> form (nothing to do).</param>
+        private void ReleaseValue(OrtValue value)
+        {
+            if (value is null)
+                return;
+            if (_ownsValue)
+            {
+                if (_token is null)
+                    value.Dispose();
+                else
+                    NDArrayOnnxInterop.DisposeThenReleaseView(value, _token);
+            }
+            else if (_token is not null)
+            {
+                _token.ReleaseView();
+            }
+            else
+            {
+                // A caller-owned value without a token: the lease only kept it reachable (its finalizer must not free the
+                // memory while a view reads it); the caller disposes it.
+                GC.KeepAlive(value);
             }
         }
 
@@ -513,6 +618,7 @@ namespace NumSharp.Interop.OnnxRuntime
             if (Interlocked.Exchange(ref _released, 1) != 0)
                 return;
             Interlocked.Exchange(ref _release, null);
+            Interlocked.Exchange(ref _value, null);   // the value stays the caller's: never disposed or released here
             RemovePressure();
             NDArrayOnnxInterop.ImportClosed();
         }

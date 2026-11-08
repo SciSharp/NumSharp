@@ -135,7 +135,11 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   400). Every value the bridge touches carries an ARC token: from birth for `ToOrtValue` / `AsOrtValue` / `GetMapKeys`
   results, adopted by the first public verb for a value ORT allocated (never: a slot already holding a
   `MemoryHandle`, `_owned == false`, `_compositeMembers` set; nor the `Run` tier's outputs and the readers' elements,
-  which pass `adopt: false`). A verb holds a CALL lease (`OrtValueBooking.Enter`, which also makes the disposal checks)
+  which pass `adopt: false`). The synchronous `Run` / `RunInto`'s own input and pre-allocated-output handles are
+  TRANSIENT (`OrtTensor(..., transient: true)`): no token, no `ValueOwners` / `DisposedValues` entry, ORT's own `Dispose`
+  in the call's `finally` - they never leave the call or its thread (27 inputs of a GPT-2 decoder step: 42 us / 17 KB
+  in that machinery, `RunTierTransientHandleTests` pins it through `TakenOverReleases`). The asynchronous verbs and every
+  public export keep it; never pass `transient: true` for a value that can outlive the call or cross a thread. A verb holds a CALL lease (`OrtValueBooking.Enter`, which also makes the disposal checks)
   while it calls ORT; a view holds a VIEW lease for its life. The token's `Unpin` runs inside ORT's `Dispose(true)`
   before ORT's own release: it waits for the calls, moves the native value into a shadow `OrtValue` (ORT's internal
   constructor), zeroes `_handle` (ORT's own release becomes a no-op) and sets `_disposed`; the shadow is disposed at
