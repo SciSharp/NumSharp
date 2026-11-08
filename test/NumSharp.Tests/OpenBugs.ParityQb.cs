@@ -559,5 +559,92 @@ namespace NumSharp.Tests
             prod.GetInt64().Should().Be(unchecked((long)0xfff8000000000789UL));
             cumsum.GetInt64(0).Should().Be(unchecked((long)0xfff0000000000789UL));
         }
+
+        // ------------------------------------------------------------------
+        // QB-19 — a fancy assignment whose VALUE shares memory with the destination reads it while writing
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>array_assign_subscript</c> (mapping.c) copies the value first when it may share memory with
+        ///     the array (<c>solve_may_share_memory(self, tmp_arr, 1) != 0</c> → <c>PyArray_NewCopy</c>), so a fancy
+        ///     assignment behaves as if the right-hand side were evaluated before any store:
+        ///     <c>a = np.arange(10); a[[1, 2, 3, 4]] = a[:4]</c> gives <c>[0, 0, 1, 2, 3, 5, ...]</c>. NumSharp's fancy setter
+        ///     (<c>NDArray.Indexing.Selection.Setter.cs</c>) has no overlap check: a forward (contiguous) view of the
+        ///     destination is read while it is being written, so each store feeds the next and the result is
+        ///     <c>[0, 0, 0, 0, 0, 5, ...]</c>. Every dtype, 1-D index arrays of any integer type or a raw <c>long[]</c>,
+        ///     permutations, duplicates, negative indices, row indexing of a 2-D array and coordinate pairs; a reversed or
+        ///     strided value happens to be materialized first and comes out right.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB19")]
+        public void ParityQb_QB19_FancyAssignment_CopiesAnOverlappingValue()
+        {
+            using var a = np.arange(10);
+            using var index = np.array(new long[] { 1, 2, 3, 4 });
+            using var value = a[":4"];
+
+            a[index] = value;
+
+            // NumPy 2.4.2: [0, 0, 1, 2, 3, 5, 6, 7, 8, 9]
+            a.GetInt64(2).Should().Be(1);
+            a.GetInt64(3).Should().Be(2);
+            a.GetInt64(4).Should().Be(3);
+        }
+
+        // ------------------------------------------------------------------
+        // QB-20 — a fancy assignment whose INDEX array is a view of the destination reads the index while writing
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2 also copies every index ARRAY that may share memory with the destination before storing
+        ///     (<c>array_assign_subscript</c>: <c>solve_may_share_memory(self, indices[i].object, 1)</c> →
+        ///     <c>PyArray_Copy</c>), so <c>a = np.array([2, 0, 1, 3]); a[a[:3]] = 7</c> is <c>[7, 7, 7, 3]</c> and
+        ///     <c>a[a] = [5, 6, 7, 8]</c> over <c>[1, 2, 3, 0]</c> is <c>[8, 5, 6, 7]</c>. NumSharp reads the index array
+        ///     lazily during the stores, so an index already overwritten points elsewhere: the first two raise
+        ///     <c>IndexError: index 7 is out of bounds for axis 0 with size 4</c> (an error where NumPy computes), and
+        ///     <c>a[a] = a</c> silently gives <c>[1, 1, 3, 3]</c> (NumPy <c>[0, 1, 2, 3]</c>). <c>np.put_along_axis</c>
+        ///     (NumPy's <c>arr[_make_along_axis_idx(...)] = values</c>) inherits it: <c>np.put_along_axis(a, a, a * 10, 0)</c>
+        ///     over <c>[1, 2, 3, 0]</c> is <c>[1, 10, 3, 30]</c> (NumPy <c>[0, 10, 20, 30]</c>). <c>np.put</c> and
+        ///     <c>np.take(out=)</c> with aliasing indices already match.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB20")]
+        public void ParityQb_QB20_FancyAssignment_CopiesAnIndexThatAliasesTheDestination()
+        {
+            using var a = np.array(new long[] { 2, 0, 1, 3 });
+            using var index = a[":3"];
+            using var b = np.array(new long[] { 1, 2, 3, 0 });
+            using var b10 = b * 10;
+
+            a[index] = 7;
+            np.put_along_axis(b, b, b10, 0);
+
+            // NumPy 2.4.2: [7, 7, 7, 3] and [0, 10, 20, 30]
+            a.ToArray<long>().Should().Equal(7L, 7L, 7L, 3L);
+            b.ToArray<long>().Should().Equal(0L, 10L, 20L, 30L);
+        }
+
+        // ------------------------------------------------------------------
+        // QB-21 — a boolean-mask assignment copies a reversed overlapping value where NumPy reads through it
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's single-boolean-index assignment (<c>array_assign_subscript</c>'s <c>HAS_BOOL</c> branch →
+        ///     <c>array_assign_boolean_subscript</c>) does NOT copy an overlapping value: it streams the value in C order while
+        ///     storing, so <c>a = np.arange(6); a[a >= 0] = a[::-1]</c> reads elements it has already overwritten and gives
+        ///     <c>[5, 4, 3, 3, 4, 5]</c>. NumSharp materializes the reversed view first and gives <c>[5, 4, 3, 2, 1, 0]</c>
+        ///     (a forward view, <c>a[m] = a[:4]</c>, is read in place and already matches). So NumSharp decides copy-or-alias
+        ///     by the VALUE's layout, NumPy by the INDEX kind (fancy: copy, QB-19; a single boolean array: read through).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB21")]
+        public void ParityQb_QB21_MaskAssignment_ReadsAReversedOverlappingValueThrough()
+        {
+            using var a = np.arange(6);
+            using var mask = a >= 0;
+            using var reversed = a["::-1"];
+
+            a[mask] = reversed;
+
+            // NumPy 2.4.2: [5, 4, 3, 3, 4, 5]
+            a.ToArray<long>().Should().Equal(5L, 4L, 3L, 3L, 4L, 5L);
+        }
     }
 }
