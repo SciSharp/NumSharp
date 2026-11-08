@@ -229,5 +229,63 @@ namespace NumSharp.Tests
             product.strides.Should().Equal(32L, 8L);
             k.GetDouble(1).Should().Be(10.0);
         }
+
+        // ------------------------------------------------------------------
+        // QB-08 — zero-size results the allocation-strides fix (18314cac) does not reach
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2 gives every zero-size array it ALLOCATES all-zero strides (<c>PyArray_NewFromDescr_int</c>), and
+        ///     the ufunc result-layout re-port (<c>18314cac</c>, 2026-11-08) made NumSharp's allocation funnel
+        ///     (<c>Shape.ForFreshAllocation</c>) do the same, closing the allocation half of the EmptyStrides pins. Some
+        ///     producers still bypass it: <c>np.full_like(np.zeros((2, 0, 4)), 7.0)</c> has strides <c>(0, 32, 8)</c>
+        ///     (NumPy <c>(0, 0, 0)</c>) and <c>np.unique</c> of an empty array <c>(8,)</c> (NumPy <c>(0,)</c>). The reverse
+        ///     also happens where NumPy's result is a reshaped VIEW: <c>np.tile(np.arange(3), 0)</c> and
+        ///     <c>np.fromstring("", sep=" ")</c> are <c>(8,)</c> in NumPy and <c>(0,)</c> in NumSharp. Only <c>strides</c>
+        ///     observes it.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB08")]
+        public void ParityQb_QB08_ZeroSizeResults_TakeNumPysStrides()
+        {
+            using var empty3 = np.zeros(new Shape(2, 0, 4));
+            using var full = np.full_like(empty3, 7.0);
+            using var unique = (NDArray)np.unique(empty3);
+            using var tiled = np.tile(np.arange(3), 0);
+
+            // NumPy 2.4.2: (0, 0, 0), (0,), (8,)
+            full.strides.Should().Equal(0L, 0L, 0L);
+            unique.strides.Should().Equal(0L);
+            tiled.strides.Should().Equal(8L);
+        }
+
+        // ------------------------------------------------------------------
+        // QB-09 — np.matmul (and 2-D row · column np.dot) keep another NaN than NumPy's ddot route
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     Parity PA3b (<c>95191628</c>) made "which NaN survives where several meet" NumPy's for np.dot / np.vdot /
+        ///     np.vecdot: NumPy's dot functions (<c>DOUBLE_dot</c> over cblas <c>ddot</c>) keep the first operand's NaN here,
+        ///     so <c>np.dot([-nan, 1], [1, nan])</c> is <c>-nan</c> in both libraries. NumPy runs the same ddot for
+        ///     <c>np.matmul</c> of two vectors and for a row × column product (<c>cblas_matrixproduct</c>'s vector-vector
+        ///     case, and matmul's 1 × 1 output), so <c>np.matmul([-nan, 1], [1, nan])</c>,
+        ///     <c>np.matmul(a.reshape(1, 2), b.reshape(2, 1))</c> and <c>np.dot</c> of those 2-D shapes are <c>-nan</c> too;
+        ///     NumSharp's matmul and 2-D dot routes return the second operand's <c>+nan</c>, which <c>np.signbit</c> sees.
+        ///     Payload-level as well: over (1, n) × (n, 1) / (1, n) × (n, 2) / (2, n) × (n, 2) shapes the surviving NaN's
+        ///     payload differs from NumPy's (it matches for (2, n) × (n, 1), NumPy's gemv).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB09")]
+        public void ParityQb_QB09_MatmulOfVectors_KeepsNumPysNaN()
+        {
+            using var a = np.array(new long[] { unchecked((long)0xfff8000000000000UL), 0x3ff0000000000000L }).view(np.float64);
+            using var b = np.array(new long[] { 0x3ff0000000000000L, 0x7ff8000000000000L }).view(np.float64);
+            using var dot = np.dot(a, b);
+            using var mm = np.matmul(a, b);
+            using var rowColumn = np.matmul(a.reshape(1, 2), b.reshape(2, 1));
+
+            // NumPy 2.4.2: np.dot / np.matmul / row @ column of [-nan, 1] and [1, nan] are all -nan
+            np.signbit(dot).GetBoolean().Should().BeTrue("np.dot already keeps NumPy's NaN (PA3b)");
+            np.signbit(mm).GetBoolean().Should().BeTrue();
+            np.signbit(rowColumn).GetBoolean(0, 0).Should().BeTrue();
+        }
     }
 }
