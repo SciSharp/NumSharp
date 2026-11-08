@@ -6,7 +6,7 @@
 - NumPy 2.x API coverage around 95.2%, everything except datetime, complex64 and other exotic dtypes is fully supported, with byte-to-byte equality and compatibility to NumPy.
   - Text - NumPy's fixed-width `bytes_` (`S`) and `str_` (`U`) dtypes and NEP 55's variable-width `StringDType`, with every computation NumPy runs on text, all **46** `numpy.strings` functions and `numpy.char` with `chararray`.
   - `np.polynomial.*` - the whole `numpy.polynomial` package, **all 193 functions and the six series classes** for all six bases, bit-exact.
-  - `np.*` - **+48 functions**.
+  - `np.*` - **+48 functions**, the ten most used on GitHub: `np.hypot`, `np.histogram`, `np.logspace`, `np.gradient`, `np.vectorize`, `np.hanning`, `np.geomspace`, `np.apply_along_axis`, `np.trapezoid` and `np.histogram2d`.
   - `np.random.*` - every NumPy bit generator, the whole `Generator` distribution surface, and a legacy `RandomState` that is NumPy's own sampler code line for line, all byte-identical streams.
   - `np.ma.*` - the masked-array module; `np.emath.*` - the automatic-domain math module; `np.matrix` - `numpy.matrix` as the new `NDMatrix` type.
 - **`DType` is NumPy's two-level dtype model** - `NDArray.dtype` returns a `numpy.dtype`-shaped descriptor, with `np.dtypes`, byte order and `datetime64` / `timedelta64` descriptors, and NumPy's scalar classes (`np.integer`, `np.floating`, `np.number`, ...) with `np.typing`.
