@@ -750,5 +750,33 @@ namespace NumSharp.Tests
             // NumPy 2.4.2: every element 0
             a.ToArray<long>().Should().OnlyContain(v => v == 0L);
         }
+
+        // ------------------------------------------------------------------
+        // QB-26 — np.isreal of a non-C real array and np.polyval of a broadcast x return C-ordered results
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>isreal(x)</c> is <c>imag(x) == 0</c>, a comparison ufunc whose fresh result takes NpyIter's K
+        ///     order, so an F-ordered or transposed real input gives an F-ordered result (a (3, 4) bool: strides (1, 3)).
+        ///     NumSharp's <c>DefaultEngine.Isreal</c> answers a real dtype with <c>NDArray.ones(dimensions, bool)</c>, C order
+        ///     (strides (4, 1)); the complex branch already compares in K order. Likewise <c>np.polyval(p, x)</c> is
+        ///     <c>y = zeros_like(x); y = y * x + pv</c>, so a row-broadcast x (strides (0, 8)) gives NumPy's K-order layout
+        ///     of the broadcast, F (strides (8, 32) for (4, 3)); NumSharp's result is C (strides (24, 8)). The values match.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB26")]
+        public void ParityQb_QB26_IsrealAndPolyval_KeepTheInputsLayout()
+        {
+            using var f = np.asfortranarray(np.arange(12).astype(np.float64).reshape(3, 4));
+            using var row = np.array(new double[] { 3, 1, 2 });
+            using var broadcast = np.broadcast_to(row, new Shape(4, 3));
+            using var p = np.array(new double[] { 1, 2 });
+
+            using var real = np.isreal(f);
+            using var poly = np.polyval(p, broadcast);
+
+            // NumPy 2.4.2: (1, 3) and (8, 32)
+            real.strides.Should().Equal(1L, 3L);
+            poly.strides.Should().Equal(8L, 32L);
+        }
     }
 }
