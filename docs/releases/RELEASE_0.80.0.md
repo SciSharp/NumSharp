@@ -3,7 +3,7 @@
 <!-- The owner's intro paragraph goes here (0.70.0 opened with one in the owner's own voice). -->
 
 ### 🧭 Overview
-- NumPy 2.x API coverage **87.1% -> 95.2%** (488 -> 533 of the 560 headline APIs, 4 more partial), **537 of the 560 oracle-verified** against committed NumPy 2.4.2 contracts, and **2,015 of the 4,844 APIs** of NumPy's whole public surface - every figure from the [Supported Features Dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html).
+- NumPy 2.x API coverage around 95.2%, everything except datetime, complex64 and other exotic dtypes is fully supported, with byte-to-byte equality and compatibility to NumPy.
   - Text - NumPy's fixed-width `bytes_` (`S`) and `str_` (`U`) dtypes and NEP 55's variable-width `StringDType`, with every computation NumPy runs on text, all **46** `numpy.strings` functions and `numpy.char` with `chararray`.
   - `np.polynomial.*` - the whole `numpy.polynomial` package, **all 193 functions and the six series classes** for all six bases, bit-exact.
   - `np.*` - **+48 functions**.
