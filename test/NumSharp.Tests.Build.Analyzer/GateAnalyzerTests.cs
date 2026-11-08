@@ -15,6 +15,19 @@ namespace NumSharp.Tests.Build.Analyzer
         [TestMethod]
         public Task GateScenarios_MatchTagsExactly() => AnalyzerTestHarness.AssertExactAsync("GateScenarios.cs");
 
+        /// <summary>
+        ///     OPEN BUG: an <c>[NDScoped]</c> method returning a managed array that cannot hold an NDArray
+        ///     (<c>double[]</c>, <c>int[]</c>, <c>string[]</c>, <c>double[][]</c>) draws NDW003 as an "unsupported
+        ///     carrier"; it carries no NDArray and must stay clean, like a scalar return. Found by Bigtree.Algorithm's
+        ///     upgrade to NumSharp 0.80.0 (its count tables leave a scoped computation as <c>double[]</c>), which now
+        ///     scopes those methods by hand. Remove <c>OpenBugs</c> when the gate (and the weaver's twin) treat an
+        ///     array whose element type holds no NDArray as a non-carrier.
+        /// </summary>
+        /// <returns>The assertion task.</returns>
+        [TestMethod]
+        [TestCategory("OpenBugs")]
+        public Task ManagedArrayReturns_AreNotGated() => AnalyzerTestHarness.AssertExactAsync("GateManagedArrayScenarios.cs");
+
         [DataTestMethod]
         [DataRow("NDW002")] // ref NDArray hidden egress
         [DataRow("NDW003")] // unsupported carrier return (List<NDArray>)
