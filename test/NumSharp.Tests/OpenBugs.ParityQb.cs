@@ -646,5 +646,103 @@ namespace NumSharp.Tests
             // NumPy 2.4.2: [5, 4, 3, 3, 4, 5]
             a.ToArray<long>().Should().Equal(5L, 4L, 3L, 3L, 4L, 5L);
         }
+
+        // ------------------------------------------------------------------
+        // QB-22 — flatiter assignment does not cycle, truncate or flatten its value as NumPy's iter_ass_subscript does
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>a.flat[index] = value</c> (<c>iter_ass_subscript</c>, iterators.c) reads the value as a FLAT
+        ///     sequence and restarts it when it runs out (<c>if (val_it->index == val_it->size) PyArray_ITER_RESET(val_it)</c>),
+        ///     np.put's rule: <c>a = np.zeros(6); a.flat[::2] = [1, 2]</c> is <c>[1, 0, 2, 0, 1, 0]</c>, a longer value is
+        ///     cut (<c>a.flat[1:3] = [1, 2, 3]</c> stores 1, 2), an N-D value is read in C order and an empty value stores
+        ///     nothing. NumSharp's <c>np.FlatIterator</c> (<c>a.flatiter</c>, the NumPy-faithful iterator) requires the exact
+        ///     count and raises <c>ValueError: cannot assign 2 input values to the 3 output values where the mask is true</c>
+        ///     (a boolean-mask text) for slices, index arrays and boolean masks alike.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB22")]
+        public void ParityQb_QB22_FlatiterAssignment_CyclesTheValue()
+        {
+            using var a = np.zeros(new Shape(6));
+            using var value = np.array(new double[] { 1, 2 });
+
+            a.flatiter["::2"] = value;
+
+            // NumPy 2.4.2: [1, 0, 2, 0, 1, 0]
+            a.ToArray<double>().Should().Equal(1.0, 0.0, 2.0, 0.0, 1.0, 0.0);
+        }
+
+        // ------------------------------------------------------------------
+        // QB-23 — flatiter indexing reads a boolean index array as integer indices 0 / 1
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's flatiter takes a boolean array as a MASK over the flat positions (<c>iter_subscript_Bool</c> /
+        ///     <c>iter_ass_sub_Bool</c>): <c>np.arange(6).reshape(2, 3).flat[[True, False, True, False, True, False]]</c> is
+        ///     <c>[0, 2, 4]</c>, and a mask of another length raises <c>IndexError: boolean index did not match indexed flat
+        ///     iterator along axis 0; size of axis is 6 but size of corresponding boolean axis is 2</c>. NumSharp's
+        ///     <c>np.FlatIterator</c> converts the mask to the integers 1 / 0 and fancy-indexes with them: the getter returns
+        ///     <c>[1, 0, 1, 0, 1, 0]</c> (six elements read at positions 1 and 0), a short mask is accepted, and the setter
+        ///     writes every value into positions 0 and 1 (<c>a.flat[a &gt;= 0] = ...</c> rewrites a[1] six times) — silent
+        ///     wrong reads and writes.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB23")]
+        public void ParityQb_QB23_FlatiterBooleanIndex_IsAMask()
+        {
+            using var a = np.arange(6).reshape(2, 3);
+            using var mask = np.array(new[] { true, false, true, false, true, false });
+
+            using var picked = a.flatiter[mask];
+
+            // NumPy 2.4.2: [0, 2, 4]
+            picked.ToArray<long>().Should().Equal(0L, 2L, 4L);
+        }
+
+        // ------------------------------------------------------------------
+        // QB-24 — flatiter indexing with an N-D index array returns a 1-D result
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>a.flat[ind]</c> with an integer index ARRAY returns an array of the INDEX's shape
+        ///     (<c>iter_subscript_int</c> allocates with the index array's dimensions):
+        ///     <c>np.arange(6).reshape(2, 3).flat[[[0, 5], [1, 2]]]</c> is the (2, 2) array <c>[[0, 5], [1, 2]]</c>.
+        ///     NumSharp's <c>np.FlatIterator</c> returns the same values flattened to shape (4,).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB24")]
+        public void ParityQb_QB24_FlatiterIndexArray_KeepsTheIndexShape()
+        {
+            using var a = np.arange(6).reshape(2, 3);
+            using var index = np.array(new long[,] { { 0, 5 }, { 1, 2 } });
+
+            using var picked = a.flatiter[index];
+
+            // NumPy 2.4.2: shape (2, 2)
+            picked.shape.Should().Equal(2L, 2L);
+        }
+
+        // ------------------------------------------------------------------
+        // QB-25 — flatiter assignment copies an overlapping value (and index) where NumPy reads through them
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>iter_ass_subscript</c> never copies: the value and an index array are read through while
+        ///     storing. <c>a = np.arange(10); a.flat[1:] = a[:-1]</c> is all zeros, <c>a.flat[::-1] = a</c> is
+        ///     <c>[0, 1, 2, 3, 4, 4, 3, 2, 1, 0]</c>, <c>a.flat[[1, 2, 3, 4]] = a[:4]</c> is <c>[0, 0, 0, 0, 0, 5, ...]</c>
+        ///     (the opposite of ndarray fancy assignment, QB-19), and <c>a.flat[a[:3]] = 7</c> over <c>[2, 0, 1, 3]</c> raises
+        ///     <c>IndexError: index 7 is out of bounds for size 4</c>. NumSharp's <c>np.FlatIterator</c> copies the value and
+        ///     the index first, so it returns the as-if-copied results (and <c>[7, 7, 7, 3]</c> for the last). NumPy's answers
+        ///     are order-dependent aliasing, so the owner may prefer documenting these.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB25")]
+        public void ParityQb_QB25_FlatiterAssignment_ReadsAnOverlappingValueThrough()
+        {
+            using var a = np.arange(10);
+            using var shifted = a[":-1"];
+
+            a.flatiter["1:"] = shifted;
+
+            // NumPy 2.4.2: every element 0
+            a.ToArray<long>().Should().OnlyContain(v => v == 0L);
+        }
     }
 }
