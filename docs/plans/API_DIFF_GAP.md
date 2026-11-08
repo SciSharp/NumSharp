@@ -23,6 +23,14 @@ regenerated on 2026-10-17 on branch `strings` after `ffa74606` (the latest chang
 `np.char` padding and partition functions). When the tree changes, the generated files are the truth; regenerate them
 (§10) before acting on a list here.
 
+**Refresh 2026-11-09 (branch `journey5` at `882a66a0`).** The data was regenerated and every finding was checked
+against its ground truth (`validate_findings.py`, §10): the compiler for M and the absent names, NumPy's runtime for M,
+X, Q and L. The validated change list, one patch-style entry per API plus the absent names and the refuted findings, is
+[`API_PARITY_DIFF.md`](API_PARITY_DIFF.md); its counts supersede the per-package counts below, whose name lists date
+from 2026-10-17. Since then only the one-overload collapse of `sum` / `prod` / `mean` / `var` / `std` (`38bcad09`)
+removed marks; the validation refuted 19 findings that the reading of NumPy or of a class's own members got wrong (13 M,
+1 X, 5 Q, §11) and found 2 B marks that were artifacts of the probe file (a missing `using NumSharp.Backends;`, fixed).
+
 ---
 
 ## Contents
@@ -788,10 +796,24 @@ python -I binding_probe.py <s>/modules_dump.json <s>/types_dump.json \
 python -I signature_diff.py <s>/modules_dump.json ../../docs/plans/numpy-signature-diff.md \
     ../../docs/plans/numpy-signature-diff.csv ../../docs/plans/numpy-signature-marks.md \
     --types <s>/types_dump.json --probe <s>/probe_results.json
+python -I validate_findings.py <s>/modules_dump.json <s>/types_dump.json \
+    ../../src/NumSharp.Core/bin/Debug/net10.0/NumSharp.dll ../../docs/plans/numpy-signature-diff.csv \
+    <s>/probe_results.json <s>/validation <s>/validation.json
+python -I parity_diff.py <s>/modules_dump.json <s>/types_dump.json ../../docs/plans/numpy-signature-diff.csv \
+    <s>/validation.json ../../docs/plans/API_PARITY_DIFF.md --coverage <coverage dir>/coverage.json --commit <sha>
 ```
 
 - `dump_modules.cs` compiles the working tree (Debug), and the probe references that DLL: run them in this order after
   every change to a public signature. `--no-cache` matters: a file-based app otherwise reuses its cached build.
+- `validate_findings.py` asks each finding's ground truth (about 2 minutes): the compiler compiles every M parameter
+  by name on the name's base call (CS1739 confirms it) and `nameof` of every absent name (CS0117 / CS1061 confirm it),
+  and lists compile-probe failures that are artifacts of the probe file (CS0246 and the like); NumPy is called with
+  `None` placeholders and one keyword (an M keyword must be accepted, an X keyword refused; a control keyword first
+  proves the call reaches NumPy's keyword check) and with real operands for Q (a tuple) and L (None). Its `refuted`
+  lists are what `parity_diff.py` leaves out of the change list; the CSV and the coverage inventory keep the raw marks.
+- `parity_diff.py` writes the change list: one `diff` block per API (`-` what must go, `+` what must come, NumPy's
+  signature and the kept overload as context), the absent names, the modules without a facade, the coverage artifact's
+  census of what else is missing (`--coverage`) and the refuted findings.
 - The last command prints the totals (the `numpy`, `M`, `X`, `O`, `T`, `B`, `L`, `Q`, `no_mark` counts). A fix must
   lower the counts it targets and raise none.
 - A fixed name: its row in `numpy-signature-marks.md` has no mark and an empty *compile probe* cell.
@@ -829,6 +851,20 @@ python -I signature_diff.py <s>/modules_dump.json ../../docs/plans/numpy-signatu
 - **NumPy's side** is the documented signature for ndarray methods (their C forwarding accepts some keywords
   positionally that the documentation makes keyword-only), the stubs where the runtime signature forwards
   `(*args, **kwargs)`, and the wrapped callable for numpy.ma's ufunc wrappers.
+- **That reading can be wrong, so `validate_findings.py` checks it against NumPy itself** (refresh of 2026-11-09):
+  NumPy 2.4.2's stubs promise `ndarray.std(correction=...)` / `ndarray.var(correction=...)`, which the methods refuse
+  (`_std() got an unexpected keyword argument 'correction'`; only `np.std` / `np.var` take it); the docstring writes
+  `ndarray.setfield(val, dtype, offset=0)` where the runtime keyword is `value` (so NumSharp's `value` is right, and
+  neither the M nor the X of that name holds); and the stubs promise a tuple `axis` for `np.ma.compress`,
+  `MaskedArray.compress`, `matrix.argmax`, `matrix.argmin` and `matrix.ptp`, which the runtime refuses ("'tuple' object
+  cannot be interpreted as an integer", "unsupported axis").
+- **An own-members group reads only the class's own members.** For `NDMatrix` and `NDArray<T>` the M mark is about
+  the class's own overloads; C# also binds what the class inherits from `NDArray`, so `mx.cumsum(out: o)` compiles and
+  reaches `NDArray.cumsum`, not `NDMatrix.cumsum` (9 NDMatrix names and `NDArray<T>.reshape(order:)`, listed as refuted:
+  the fix is still the class's own member taking the parameter).
+- **The probe file is code too.** Until 2026-11-09 it had no `using NumSharp.Backends;`, so a probe value of type
+  `UnmanagedStorage` (the storage parameter of the `NDMatrix` and `NDCharArray` constructors) failed with CS0246 and
+  read as a B mark; `validate_findings.py` lists any such artifact.
 - **`numpy.testing` and deprecated NumPy 1.x APIs** are out of scope by the coverage policy (§7).
 
 ## Appendix A: counts per group

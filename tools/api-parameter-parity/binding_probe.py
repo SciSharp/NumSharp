@@ -618,9 +618,13 @@ def main():
     os.makedirs(args.work, exist_ok=True)
     dll = os.path.join(args.work, "NumSharp.dll")
     shutil.copyfile(args.dll, dll)
+    # Every namespace that holds a public type a probe value can name: value_for writes `default(T)` from the C#
+    # parameter type's simple name, so a namespace missing here turns a binding verdict into CS0246 ("type not
+    # found"), a probe artifact rather than a finding (UnmanagedStorage, the storage parameter of the NDMatrix and
+    # NDCharArray constructors, lives in NumSharp.Backends).
     lines = ["#nullable disable", "using System;", "using System.Collections.Generic;", "using System.IO;",
              "using System.Numerics;", "using NumSharp;", "using NumSharp.Generic;", "using NumSharp.IO;",
-             "namespace Probe {", "public static class P {"]
+             "using NumSharp.Backends;", "namespace Probe {", "public static class P {"]
     for cs_type, local in sorted(set(INSTANCES.values())):
         lines.append(f"static {cs_type} {local};")
     probes, skipped = [], []

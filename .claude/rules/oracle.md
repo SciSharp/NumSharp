@@ -91,7 +91,9 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   A row turns `identical` by itself once its API is fixed. Strict: a credited call the index cannot resolve, a gap
   spelling that joins no row or an uncredited row, and a stale `GAP_JOIN_EXEMPT` entry fail the generator. Gates
   `coverage/test_signature_parity.py` (with the committed `docs/plans/numpy-signature-diff.csv`),
-  `test_object_surfaces.py`, `test_dashboard.cjs`.
+  `test_object_surfaces.py`, `test_dashboard.cjs`. The marks are raw: `tools/api-parameter-parity/validate_findings.py`
+  checks each against the compiler and NumPy's runtime (stubs and docstrings can misstate NumPy's keywords), and
+  `parity_diff.py` writes the validated change list `docs/plans/API_PARITY_DIFF.md` (commands: `API_DIFF_GAP.md` §10).
 
 ## Tiers
 
