@@ -132,6 +132,12 @@ namespace NumSharp.Tests
             typed.Should().Throw<ValueError>();
             none.Should().Throw<ValueError>();
             ma.Should().Throw<ValueError>();
+
+            // NumPy 2.4.2: np.arange(6).reshape(2, 3).item(1, 1, 1) -> ValueError "incorrect number of indices for array"
+            // (NumSharp: ArgumentException "Incorrect number of indices for array with 2 dimensions.")
+            using var matrix = np.arange(6).reshape(2, 3);
+            Action wrongCount = () => matrix.item(1, 1, 1);
+            wrongCount.Should().Throw<ValueError>().WithMessage("incorrect number of indices for array");
         }
 
         // ------------------------------------------------------------------
