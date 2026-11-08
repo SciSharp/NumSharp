@@ -160,38 +160,48 @@ namespace NumSharp.Tests.Manipulation
             nd.GetTypeCode.Should().Be(NPTypeCode.Int32);
         }
 
-        [TestMethod, Ignore("String dtype is not supported")]
+        /// <summary>
+        ///     Text parses into numbers as NumPy's cast does: <c>np.ones((3, 3), dtype='U1')</c> holds the text <c>'1'</c> in
+        ///     every element, and <c>astype(np.uint8)</c> parses each one with Python's <c>int()</c> — a uint8 array of ones
+        ///     (NumPy 2.4.2). The dtype changes, so <c>copy=False</c> cannot hand the input back: both calls return a new
+        ///     array and leave the text array as it was.
+        /// </summary>
+        [TestMethod]
         public void CastingStringToByte()
         {
-            throw new NotSupportedException();
-            //var nd = np.ones(np.chars, 3, 3);
-            //nd[2, 2].Data<string>()[0].Should().Be("1");
-            //var output_copied = nd.astype(np.uint8, true);
-            //var output = nd.astype(np.uint8, false);
+            var nd = np.ones(new Shape(3, 3), np.dtype("U1"));
+            nd.item(2, 2).Should().Be("1");
+            var output_copied = nd.astype(np.uint8, true);
+            var output = nd.astype(np.uint8, false);
 
-            ////test copying
-            //output_copied.Array.Should().Equal(nd.Array);
-            //output.Array.Should().Equal(nd.Array);
-            //output_copied.Array.GetType().GetElementType().Should().Be<byte>();
-            //output.Array.GetType().GetElementType().Should().Be<byte>();
+            output_copied.Should().BeOfType<byte>().And.BeShaped(3, 3).And.AllValuesBe((byte)1);
+            output.Should().BeOfType<byte>().And.BeShaped(3, 3).And.AllValuesBe((byte)1);
+            output.Should().NotBeSameAs(nd.Storage);
+            nd.dtype.str.Should().Be("<U1");
+            nd.item(2, 2).Should().Be("1");
         }
 
-        [TestMethod, Ignore("String dtype is not supported")]
+        /// <summary>
+        ///     Numbers become text as NumPy's cast writes them, each value's <c>str()</c>: <c>np.ones((3, 3),
+        ///     np.uint8).astype('U')</c> is a <c>&lt;U3</c> array of <c>'1'</c> (NumPy 2.4.2; an unsized <c>'U'</c> takes
+        ///     the widest text a uint8 can need, three characters). Both <c>copy</c> forms return a new array; the input keeps
+        ///     its uint8 values.
+        /// </summary>
+        [TestMethod]
         public void CastingByteToString()
         {
-            throw new NotSupportedException();
-            //var nd = np.ones(new Shape(3, 3), np.uint8);
-            //nd[2, 2].Data<byte>()[0].Should().Be(1);
-            //var output_copied = nd.astype(np.chars, true);
-            //var output = nd.astype(np.chars, false);
+            var nd = np.ones(new Shape(3, 3), np.uint8);
+            nd.item(2, 2).Should().Be((byte)1);
+            var output_copied = nd.astype(np.dtype("U"), true);
+            var output = nd.astype(np.dtype("U"), false);
 
-            //output_copied[2, 2].Data<string>()[0].Should().Be("1");
-
-            ////test copying
-            //output_copied.Array.Should().Equal(nd.Array);
-            //output.Array.Should().Equal(nd.Array);
-            //output_copied.Array.GetType().GetElementType().Should().Be<string>();
-            //output.Array.GetType().GetElementType().Should().Be<string>();
+            output_copied.dtype.str.Should().Be("<U3");
+            output.dtype.str.Should().Be("<U3");
+            output_copied.Should().BeShaped(3, 3);
+            NDArray.AsStringArray(output_copied).Should().HaveCount(9).And.OnlyContain(s => s == "1");
+            NDArray.AsStringArray(output).Should().HaveCount(9).And.OnlyContain(s => s == "1");
+            output.Should().NotBeSameAs(nd.Storage);
+            nd.Should().BeOfType<byte>().And.AllValuesBe((byte)1);
         }
 
 

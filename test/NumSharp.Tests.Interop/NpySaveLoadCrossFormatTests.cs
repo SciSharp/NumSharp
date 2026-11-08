@@ -345,44 +345,55 @@ namespace NumSharp.Tests.Interop
                 });
         }
 
-        // ==============================  numpy text dtypes: <U1 narrows, wider ones refuse  =====
+        // ==============================  numpy text dtypes: fixed-width strings, byte for byte  ===
 
+        /// <summary>
+        ///     NumPy's one-code-point-per-element <c>'&lt;U1'</c> file loads as NumSharp's own <c>&lt;U1</c> string array
+        ///     (the fixed-width string dtypes, Stage D phase 1). It used to narrow to the 2-byte <c>Char</c> dtype, before
+        ///     NumSharp had string dtypes; <c>Char</c> is still WRITTEN as <c>'&lt;U1'</c>, so a <c>Char</c> round trip now
+        ///     comes back as a string array.
+        /// </summary>
         [TestMethod]
-        public void Npy_NumpyUcs4_U1_NumSharpReads_AsChar()
+        public void Npy_NumpyUcs4_U1_NumSharpReads_AsU1StringArray()
         {
-            // The reverse of the Char->'<U1' write: numpy's one-code-point-per-element '<U1' narrows to
-            // NumSharp's 2-byte Char on load (BMP code points).
             using (Py.GIL())
                 WithNpy(path =>
                 {
-                    NumpySave(path, "np.array(['A', 'z', '9', '\\u05d0'], dtype='<U1')");
+                    NumpySave(path, "np.array(['A', 'z', '9', '\u05d0'], dtype='<U1')");
                     using NDArray nd = np.load_npy(path);
-                    nd.typecode.Should().Be(NPTypeCode.Char, "numpy <U1 narrows to NumSharp Char");
+                    nd.typecode.Should().Be(NPTypeCode.String, "numpy <U1 is NumSharp's <U1 string dtype");
+                    nd.dtype.str.Should().Be("<U1");
                     nd.shape.Should().Equal(4);
-                    nd.GetAtIndex<char>(0).Should().Be('A');
-                    nd.GetAtIndex<char>(3).Should().Be('א');
+                    nd.item(0).Should().Be("A");
+                    nd.item(3).Should().Be("א");
                 });
         }
 
+        /// <summary>
+        ///     Wider NumPy text loads byte for byte as NumSharp's fixed-width string arrays: <c>'&lt;U3'</c> as a
+        ///     <c>&lt;U3</c> array of C# strings, <c>'|S2'</c> as an <c>|S2</c> array of <c>byte[]</c> values (both used to
+        ///     be refused, when NumSharp had no string dtypes).
+        /// </summary>
         [TestMethod]
-        public void Npy_NumpyWideText_IsRefused()
+        public void Npy_NumpyWideText_LoadsAsFixedWidthStrings()
         {
             using (Py.GIL())
             {
-                // '<U3' is a whole 3-char string per element — not one Char, no NumSharp dtype.
                 WithNpy(path =>
                 {
                     NumpySave(path, "np.array(['abc', 'de'], dtype='<U3')");
-                    ((Action)(() => { using var _ = np.load_npy(path); }))
-                        .Should().Throw<NotSupportedException>("multi-char <U3 text has no NumSharp dtype");
+                    using NDArray nd = np.load_npy(path);
+                    nd.dtype.str.Should().Be("<U3");
+                    NDArray.AsStringArray(nd).Should().Equal("abc", "de");
                 });
 
-                // '|S2' is a bytes-string dtype — likewise unrepresentable.
                 WithNpy(path =>
                 {
                     NumpySave(path, "np.array([b'ab', b'cd'], dtype='|S2')");
-                    ((Action)(() => { using var _ = np.load_npy(path); }))
-                        .Should().Throw<NotSupportedException>("bytes-string |S has no NumSharp dtype");
+                    using NDArray nd = np.load_npy(path);
+                    nd.dtype.str.Should().Be("|S2");
+                    ((byte[])nd.item(0)).Should().Equal((byte)'a', (byte)'b');
+                    ((byte[])nd.item(1)).Should().Equal((byte)'c', (byte)'d');
                 });
             }
         }

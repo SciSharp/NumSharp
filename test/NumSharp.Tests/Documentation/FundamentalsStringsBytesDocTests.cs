@@ -1,0 +1,1109 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Text;
+using NumSharp;
+using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
+using NumSharp.Utilities;
+using NumSharp.Tests.Utilities;
+
+namespace NumSharp.Tests.Documentation
+{
+    /// <summary>
+    ///     Executable coverage for every code example in
+    ///     <c>docs/website-src/docs/fundamentals/strings-and-bytes.md</c> (the "Working with arrays of
+    ///     strings and bytes" fundamentals article). Each test mirrors one documented snippet and
+    ///     asserts the behaviour the page claims: NumPy's fixed-width <c>U</c> / <c>S</c> dtypes store, convert (to and from
+    ///     numbers included), move and print like NumPy 2.4.2, and computing on text gives NumPy's results (comparisons,
+    ///     truth values, concatenation, repetition, sorting), NumPy's refusal (NumPy's text), or the next-phase exception.
+    /// </summary>
+    [TestClass]
+    public class FundamentalsStringsBytesDocTests
+    {
+        private static NDArray Names() => np.array(new[] { "cat", "dog", "bird" });
+
+        // ── The two string dtypes ─────────────────────────────────────────────────────────────────
+
+        [TestMethod]
+        public void TwoStringDtypes_WidthAndItemSize()
+        {
+            var names = Names();
+            names.dtype.ToString(true).Should().Be("dtype('<U4')", "the longest value sets the width");
+            names.dtype.itemsize.Should().Be(16, "4 characters x 4 bytes");
+            np.dtype("S5").str.Should().Be("|S5");
+            np.dtype("U5").name.Should().Be("str160", "NumPy's name counts bits");
+            np.dtype("U5").itemsize.Should().Be(20);
+            np.dtype("S5").itemsize.Should().Be(5);
+            np.array(new[] { "\U0001F600" }).dtype.str.Should().Be("<U1", "an emoji is one UCS-4 code point");
+        }
+
+        [TestMethod]
+        public void TwoStringDtypes_RawBytes()
+        {
+            np.array(new[] { "ab" }).tobytes().Should().Equal(0x61, 0, 0, 0, 0x62, 0, 0, 0);
+            np.array(new[] { "ab" }).astype("S3").tobytes().Should().Equal(0x61, 0x62, 0);
+        }
+
+        // ── Creating string arrays ────────────────────────────────────────────────────────────────
+
+        [TestMethod]
+        public void Creating_FromCSharpValues()
+        {
+            np.array(new[] { "cat", "dog" }).ToString(true).Should().Be("array(['cat', 'dog'], dtype='<U3')");
+            np.array(new[] { "cat", "dog" }, np.dtype("S5")).ToString(true).Should().Be("array([b'cat', b'dog'], dtype='|S5')");
+            np.zeros(new Shape(2), np.dtype("U3")).ToString(true).Should().Be("array(['', ''], dtype='<U3')");
+            np.full(new Shape(2), "ab").ToString(true).Should().Be("array(['ab', 'ab'], dtype='<U2')");
+            NDArray.Scalar("abc").ToString(true).Should().Be("array('abc', dtype='<U3')");
+            np.frombuffer(Encoding.ASCII.GetBytes("abcdef"), "S3").ToString(true)
+              .Should().Be("array([b'abc', b'def'], dtype='|S3')");
+        }
+
+        [TestMethod]
+        public void Creating_BytesNeedObjectArray()
+        {
+            np.array(new object[] { Encoding.ASCII.GetBytes("ab"), Encoding.ASCII.GetBytes("cde") }).ToString(true)
+              .Should().Be("array([b'ab', b'cde'], dtype='|S3')");
+            np.array(new object[] { Encoding.ASCII.GetBytes("hi") }, np.dtype("S2")).ToString(true)
+              .Should().Be("array([b'hi'], dtype='|S2')");
+
+            // The footgun: a jagged byte[][] is numeric data in C#.
+            var jagged = np.array(new[] { Encoding.ASCII.GetBytes("ab"), Encoding.ASCII.GetBytes("cd") });
+            jagged.typecode.Should().Be(NPTypeCode.Byte);
+            jagged.Should().BeShaped(2, 2);
+        }
+
+        // ── Reading and writing elements ──────────────────────────────────────────────────────────
+
+        [TestMethod]
+        public void Elements_ReadAndWrite()
+        {
+            var names = Names();
+            names.item(1).Should().Be("dog");
+            ((byte[])names.astype("S4").item(1)).Should().Equal((byte)'d', (byte)'o', (byte)'g');
+            NDArray.AsStringArray(names).Should().Equal("cat", "dog", "bird");
+            names[1].ToString(true).Should().Be("array('dog', dtype='<U4')");
+            ((System.Collections.IEnumerable)names.tolist()).Cast<object>().Should().Equal("cat", "dog", "bird");
+
+            names[1] = "zebras";
+            names.ToString(true).Should().Be("array(['cat', 'zebr', 'bird'], dtype='<U4')", "a longer value is cut to the width");
+            names[2] = null;
+            names.ToString(true).Should().Be("array(['cat', 'zebr', 'None'], dtype='<U4')", "None is stored as its str()");
+        }
+
+        [TestMethod]
+        public void CharVectorApi_RefusesStringArrays()
+        {
+            var names = np.array(new[,] { { "ab", "c" } });
+            Action get = () => names.GetString(0);
+            get.Should().Throw<InvalidOperationException>().WithMessage("GetString works on a vector of chars*");
+            Action set = () => names.SetString("x", 0);
+            set.Should().Throw<InvalidOperationException>().WithMessage("SetString works on a vector of chars*");
+
+            // The Char dtype keeps its char-vector API.
+            var chars = NDArray.FromString("abc");
+            chars.GetString().Should().Be("abc");
+        }
+
+        // ── Dtype integration ─────────────────────────────────────────────────────────────────────
+
+        [TestMethod]
+        public void Dtypes_PromotionAndCasting()
+        {
+            np.promote_types(np.dtype("S3"), np.dtype("U2")).ToString(true).Should().Be("dtype('<U3')");
+            np.result_type(new[] { "U3", "S7" }).ToString(true).Should().Be("dtype('<U7')");
+            np.can_cast(np.dtype("S3"), np.dtype("U3"), "safe").Should().BeTrue();
+            np.can_cast(np.dtype("U3"), np.dtype("S3"), "same_kind").Should().BeFalse();
+            np.can_cast(np.dtype("U5"), np.dtype("U3"), "safe").Should().BeFalse();
+        }
+
+        // ── Moving data ───────────────────────────────────────────────────────────────────────────
+
+        [TestMethod]
+        public void Moving_ViewsCopiesAndCasts()
+        {
+            np.concatenate(new[] { np.array(new[] { "a" }), np.array(new[] { "long" }) }).ToString(true)
+              .Should().Be("array(['a', 'long'], dtype='<U4')");
+            Names().astype("U2").ToString(true).Should().Be("array(['ca', 'do', 'bi'], dtype='<U2')");
+            np.array(new[,] { { "a", "b" }, { "c", "d" } }).T.ToString(true)
+              .Should().Be("array([['a', 'c'],\n       ['b', 'd']], dtype='<U1')");
+        }
+
+        [TestMethod]
+        public void Moving_NonAsciiToBytes_Throws()
+        {
+            Action act = () => np.array(new[] { "é" }).astype("S1");
+            act.Should().Throw<UnicodeEncodeError>()
+               .WithMessage("'ascii' codec can't encode character '\\xe9' in position 0: ordinal not in range(128)");
+        }
+
+        // ── Converting between text and numbers ──────────────────────────────────────────────────
+
+        /// <summary>The "Numbers to text" snippets: a number is its scalar's <c>str()</c>, at NumPy's width for its
+        /// type when the request is unsized, and cut to a sized request's width; the same text goes in through every
+        /// store.</summary>
+        [TestMethod]
+        public void Converting_NumbersToText()
+        {
+            np.arange(3).astype("U").ToString(true).Should().Be("array(['0', '1', '2'], dtype='<U21')");
+            np.array(new[] { 1.5, 1e16, 1e-5 }).astype("U").ToString(true).Should().Be("array(['1.5', '1e+16', '1e-05'], dtype='<U32')");
+            np.array(new[] { true, false }).astype("U").ToString(true).Should().Be("array(['True', 'False'], dtype='<U5')");
+            np.array(new[] { 0.1f }).astype("U").ToString(true).Should().Be("array(['0.1'], dtype='<U32')");
+            np.array(new[] { 3.14159 }).astype("U3").ToString(true).Should().Be("array(['3.1'], dtype='<U3')");
+
+            var u = np.array(new[] { "ab", "cd" });
+            u[0] = 5;
+            NDArray.AsStringArray(u).Should().Equal("5", "cd");
+            u[1] = 2.5;
+            NDArray.AsStringArray(u).Should().Equal("5", "2.");
+            np.full(new Shape(2), 7, "U").ToString(true).Should().Be("array(['7', '7'], dtype='<U1')");
+            np.ones(new Shape(2), "U").ToString(true).Should().Be("array(['1', '1'], dtype='<U1')");
+            np.pad(np.array(new[] { "ab", "c" }), 1).ToString().Should().Be("['0' 'ab' 'c' '0']");
+        }
+
+        /// <summary>The "Text to numbers" snippets: each element parsed by <c>int()</c> / <c>float()</c> /
+        /// <c>complex()</c>, NumPy's ValueError for a text that does not parse, NumPy's OverflowError for an integer that
+        /// does not fit.</summary>
+        [TestMethod]
+        public void Converting_TextToNumbers()
+        {
+            np.array(new[] { "1", " 22 ", "-3", "1_000" }).astype(np.int64).ToArray<long>().Should().Equal(1L, 22L, -3L, 1000L);
+            var f = np.array(new[] { "1.5", "inf", "-nan", "1e3" }).astype(np.float64).ToArray<double>();
+            f[0].Should().Be(1.5);
+            double.IsPositiveInfinity(f[1]).Should().BeTrue();
+            double.IsNaN(f[2]).Should().BeTrue();
+            f[3].Should().Be(1000.0);
+            np.array(new[] { "1+2j", "3", "(4-5j)" }).astype(np.complex128).ToString().Should().Be("[1.+2.j 3.+0.j 4.-5.j]");
+
+            Action badInt = () => np.array(new[] { "1", "x" }).astype(np.int64);
+            badInt.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: np.str_('x')");
+            Action badFloat = () => np.array(new[] { "1", "a" }).astype(np.float64);
+            badFloat.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('a')");
+            Action overflow = () => np.array(new[] { "300" }).astype(np.int8);
+            overflow.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+
+            var a = np.zeros(new Shape(3), np.int32);
+            a[0] = "12";
+            a.ToArray<int>().Should().Equal(12, 0, 0);
+            Action hello = () => a[0] = "hello";
+            hello.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: 'hello'");
+        }
+
+        /// <summary>The "Conversions inside other calls" snippets: a string <c>dtype=</c> request of <c>np.add</c>, a text
+        /// <c>out=</c> (of a comparison of text, and of a numeric ufunc), a reduction with a numeric <c>dtype=</c>, and the
+        /// out's text parsed first under <c>where=</c>.</summary>
+        [TestMethod]
+        public void Converting_StoresAndUfuncs()
+        {
+            np.add(np.array(new[] { 1.5, 2.0 }), np.array(new long[] { 1, 2 }), dtype: "U").ToString(true)
+              .Should().Be("array(['1.51', '2.02'], dtype='<U53')");
+            np.equal(Names(), np.array(new[] { "cat", "cow", "bird" }), np.empty(new Shape(3), "U5")).ToString()
+              .Should().Be("['True' 'False' 'True']");
+            np.add(np.array(new[] { 1.0, 2.5 }), np.array(new[] { 1.0, 3.0 }), np.zeros(new Shape(2), "U5")).ToString()
+              .Should().Be("['2.0' '5.5']");
+            np.prod(np.array(new[] { "1.5", "2", "4" }), (int?)null, np.float64).GetDouble().Should().Be(12.0);
+
+            var outText = np.array(new[] { "1", "x" }).astype("U32");
+            Action masked = () => np.sqrt(np.array(new[] { 1.0, 2.5 }), outText, np.array(new[] { true, false }));
+            masked.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('x')");
+        }
+
+        /// <summary>The breaking change: a C# string is NumPy's <c>np.array(str)</c>, a 0-d <c>U</c> array, never the
+        /// numbers the text spells.</summary>
+        [TestMethod]
+        public void Converting_CSharpStringIsText()
+        {
+            NDArray x = "[1, 2, 3]";
+            x.ToString(true).Should().Be("array('[1, 2, 3]', dtype='<U9')");
+            NDArray y = "1.5";
+            y.astype(np.float64).GetDouble().Should().Be(1.5);
+        }
+
+        // ── Printing ──────────────────────────────────────────────────────────────────────────────
+
+        [TestMethod]
+        public void Printing_StrAndRepr()
+        {
+            var names = Names();
+            names.ToString().Should().Be("['cat' 'dog' 'bird']");
+            names.ToString(true).Should().Be("array(['cat', 'dog', 'bird'], dtype='<U4')");
+            np.array2string(np.array(new[] { "a'b", "c\"d" })).Should().Be("[\"a'b\" 'c\"d']");
+        }
+
+        // ── Computing on text ─────────────────────────────────────────────────────────────────────
+
+        [TestMethod]
+        public void Computing_NumPyRefusals()
+        {
+            var names = Names();
+            Action sum = () => np.sum(names);
+            sum.Should().Throw<TypeError>().WithMessage(
+                "the resolved dtypes are not compatible with add.reduce. Resolved (dtype('<U4'), dtype('<U4'), dtype('<U8'))");
+            Action sqrt = () => np.sqrt(names);
+            sqrt.Should().Throw<TypeError>().WithMessage("ufunc 'sqrt' not supported for the input types, *");
+        }
+
+        /// <summary>
+        ///     The comparisons compute on text (strings phase 2, P2.1): <c>names == names</c> is <c>[True, True, True]</c>,
+        ///     <c>names &lt; ['dog']</c> is <c>[True, False, True]</c> (probed against NumPy 2.4.2).
+        /// </summary>
+        [TestMethod]
+        public void Computing_Comparisons()
+        {
+            var names = Names();
+            (names == names).ToArray<bool>().Should().Equal(true, true, true);
+            (names < np.array(new[] { "dog" })).ToArray<bool>().Should().Equal(true, false, true);
+            (names > "cat").ToArray<bool>().Should().Equal(false, true, false);
+        }
+
+        /// <summary>
+        ///     A string is True when it is not empty (any code unit not NUL): <c>['', 'a', ' '].astype(bool)</c> is
+        ///     <c>[False, True, True]</c>, <c>count_nonzero(names)</c> is 3 (probed against NumPy 2.4.2).
+        /// </summary>
+        [TestMethod]
+        public void Computing_TruthValues()
+        {
+            np.array(new[] { "", "a", " " }).astype(np.@bool).ToArray<bool>().Should().Equal(false, true, true);
+            np.count_nonzero(Names()).Should().Be(3L);
+        }
+
+        /// <summary>
+        ///     The "Concatenation and repetition" snippets (strings phase 2, P2.3; every value probed against NumPy 2.4.2):
+        ///     <c>names + 's'</c> is <c>&lt;U5</c>, a string on the left stays the first operand, <c>np.strings.multiply</c>
+        ///     sizes its result to the longest repetition, and the <c>np.multiply</c> ufunc cuts at <c>out=</c>'s width and
+        ///     refuses without one.
+        /// </summary>
+        [TestMethod]
+        public void Computing_ConcatenationAndRepetition()
+        {
+            var names = Names();
+            (names + "s").ToString(true).Should().Be("array(['cats', 'dogs', 'birds'], dtype='<U5')");
+            ("a " + names).ToString(true).Should().Be("array(['a cat', 'a dog', 'a bird'], dtype='<U6')");
+            np.add(names, np.array(new[] { "!", "?", "" })).ToString(true).Should().Be("array(['cat!', 'dog?', 'bird'], dtype='<U5')");
+
+            np.strings.multiply(names, 2).ToString(true).Should().Be("array(['catcat', 'dogdog', 'birdbird'], dtype='<U8')");
+            np.strings.multiply(names, np.array(new long[] { 1, 0, -1 })).ToString(true)
+              .Should().Be("array(['cat', '', ''], dtype='<U3')");
+
+            np.multiply(names, 2, np.zeros(new Shape(3L), "U5")).ToString(true).Should().Be("array(['catca', 'dogdo', 'birdb'], dtype='<U5')");
+            Action noOut = () => { var _ = names * 2; };
+            noOut.Should().Throw<TypeError>().WithMessage("The 'out' kwarg is necessary when using the string multiply ufunc directly.*");
+        }
+
+        /// <summary>
+        ///     The "Length and substring search", "Stripping, padding, replacing and slicing" and "Partitioning each string"
+        ///     snippets (strings phase 2, P2.5; every value probed against NumPy 2.4.2): the int64 / bool results, the output
+        ///     widths each function sizes (<c>strip</c> keeps <c>&lt;U5</c>, <c>replace</c> sizes <c>&lt;U4</c>,
+        ///     <c>center</c> <c>&lt;U7</c>, <c>slice</c> keeps <c>&lt;U3</c>), the three partition parts, and lengths in code
+        ///     points for both Unicode dtypes.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_SearchStripPadReplaceSlicePartition()
+        {
+            var words = np.array(new[] { "cat", "dog" });
+            np.strings.str_len(words).ToString(true).Should().Be("array([3, 3])");
+            np.strings.find(words, "a").ToString(true).Should().Be("array([ 1, -1])");
+            np.strings.startswith(words, "c").ToString(true).Should().Be("array([ True, False])");
+            np.strings.count(np.array(new[] { "banana", "pear" }), "a").ToString(true).Should().Be("array([3, 1])");
+
+            np.strings.strip(np.array(new[] { " cat ", "dog\t" })).ToString(true).Should().Be("array(['cat', 'dog'], dtype='<U5')");
+            np.strings.replace(words, "a", "oo").ToString(true).Should().Be("array(['coot', 'dog'], dtype='<U4')");
+            np.strings.center(words, 7, fillchar: "-").ToString(true).Should().Be("array(['--cat--', '--dog--'], dtype='<U7')");
+            np.strings.zfill(np.array(new[] { "-7", "12" }), 4).ToString(true).Should().Be("array(['-007', '0012'], dtype='<U4')");
+            np.strings.slice(words, 0, 2).ToString(true).Should().Be("array(['ca', 'do'], dtype='<U3')");
+
+            var fields = np.array(new[] { "a-b", "c" });
+            var (before, separator, after) = np.strings.partition(fields, "-");
+            before.ToString(true).Should().Be("array(['a', 'c'], dtype='<U1')");
+            separator.ToString(true).Should().Be("array(['-', ''], dtype='<U1')");
+            after.ToString(true).Should().Be("array(['b', ''], dtype='<U1')");
+            // The np.@char form stacks the three parts on a new last axis (numpy.char's np.stack wrapper).
+            np.@char.partition(fields, "-").ToString(true).Should().Be("array([['a', '-', 'b'],\n       ['c', '', '']], dtype='<U1')");
+
+            // Code points, not UTF-16 or UTF-8 units, for either Unicode dtype.
+            np.strings.str_len(np.array(new[] { "é中😀" })).ToString(true).Should().Be("array([3])");
+            np.strings.str_len(np.array(new[] { "é中😀" }, np.dtypes.StringDType())).ToString(true).Should().Be("array([3])");
+        }
+
+        /// <summary>
+        ///     The "Unicode properties and case conversion" snippets (every value probed against NumPy 2.4.2): the three
+        ///     numeric predicates split <c>'12'</c>, <c>'²'</c> and <c>'½'</c> as CPython's Unicode database does, and a case
+        ///     mapping that expands (<c>'ß'</c> to <c>'SS'</c>) is cut to a fixed-width input's width but kept whole by
+        ///     <c>StringDType</c>.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_UnicodePropertiesAndCaseConversion()
+        {
+            var numbers = np.array(new[] { "12", "²", "½" });
+            np.strings.isdecimal(numbers).ToArray<bool>().Should().Equal(true, false, false);
+            np.strings.isdigit(numbers).ToArray<bool>().Should().Equal(true, true, false);
+            np.strings.isnumeric(numbers).ToArray<bool>().Should().Equal(true, true, true);
+
+            // The expansion is cut: the result keeps the input's <U2, so 'SSA' loses its last character.
+            np.strings.upper(np.array(new[] { "ßa" })).ToString(true).Should().Be("array(['SS'], dtype='<U2')");
+            np.strings.upper(np.array(new[] { "ßa" }, np.dtype("T"))).ToString(true)
+              .Should().Be("array(['SSA'], dtype=StringDType())");
+        }
+
+        /// <summary>
+        ///     The "Formatting, encoding and decoding" snippet (every value probed against NumPy 2.4.2): <c>mod</c> broadcasts
+        ///     the values against the format and sizes its result to the longest text, <c>encode</c> writes UTF-8 into an
+        ///     <c>S</c> array as wide as the longest encoding, and <c>decode</c> restores the text.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_FormattingEncodingDecoding()
+        {
+            np.strings.mod("item-%02d", np.array(new long[] { 1, 12 })).ToString(true)
+              .Should().Be("array(['item-01', 'item-12'], dtype='<U7')");
+            var encoded = np.strings.encode(np.array(new[] { "café" }), "utf-8");
+            encoded.dtype.str.Should().Be("|S5", "'é' takes two UTF-8 bytes");
+            encoded.tobytes().Should().Equal(0x63, 0x61, 0x66, 0xC3, 0xA9);
+            np.strings.decode(encoded, "utf-8").ToString(true).Should().Be("array(['café'], dtype='<U4')");
+        }
+
+        /// <summary>
+        ///     The "Sorting" snippets (strings phase 2, P2.2; every value probed against NumPy 2.4.2): code-point order, the
+        ///     in-place sort, NumPy's introsort order of equal strings for the default kind and the input order for the
+        ///     stable kind (20 single letters, past the 16 elements NumPy insertion-sorts), the partitions as full sorts,
+        ///     and NumPy's two keyword errors with its texts.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_Sorting()
+        {
+            var words = np.array(new[] { "pear", "fig", "apple", "fig" });
+            NDArray.AsStringArray(np.sort(words)).Should().Equal("apple", "fig", "fig", "pear");
+            np.argsort(words).ToArray<long>().Should().Equal(2L, 1L, 3L, 0L);
+            NDArray.AsStringArray(np.sort(np.array(new[] { "b", "A", "a", "é", "Z" }))).Should().Equal("A", "Z", "a", "b", "é");
+            NDArray.AsStringArray(np.partition(words, 1)).Should().Equal("apple", "fig", "fig", "pear");
+            np.argpartition(words, 1).ToArray<long>().Should().Equal(2L, 1L, 3L, 0L);
+            words.sort();
+            NDArray.AsStringArray(words).Should().Equal("apple", "fig", "fig", "pear");
+
+            var grades = np.array("babacabcabacbacbabac".Select(c => c.ToString()).ToArray());
+            np.argsort(grades).ToArray<long>().Should().Equal(1L, 3L, 16L, 5L, 13L, 8L, 18L, 10L, 0L, 17L, 15L, 12L, 9L, 6L, 2L, 7L, 14L, 4L, 11L, 19L);
+            np.argsort(grades, kind: "stable").ToArray<long>()
+              .Should().Equal(1L, 3L, 5L, 8L, 10L, 13L, 16L, 18L, 0L, 2L, 6L, 9L, 12L, 15L, 17L, 4L, 7L, 11L, 14L, 19L);
+            np.argsort(grades, stable: true).ToArray<long>().Should().Equal(np.argsort(grades, kind: "stable").ToArray<long>());
+
+            Action badKind = () => np.sort(words, kind: "timsort");
+            badKind.Should().Throw<ValueError>().WithMessage("sort kind must be one of 'quick', 'heap', or 'stable' (got 'timsort')");
+            Action both = () => np.sort(words, kind: "stable", stable: true);
+            both.Should().Throw<ValueError>()
+                .WithMessage("`kind` and keyword parameters can't be provided at the same time. Use only one of them.");
+        }
+
+        /// <summary>
+        ///     The doc page's Searching section: the arg-reductions return the first extreme (flat and along an axis, into an
+        ///     int32 <c>out=</c>), <c>np.searchsorted</c> over sorted text on both sides and with a number key (written as
+        ///     text), and <c>np.digitize</c> of text, whose bins follow text order.
+        /// </summary>
+        [TestMethod]
+        public void Computing_Searching()
+        {
+            var words = np.array(new[] { "pear", "fig", "apple", "fig" });
+            np.argmax(words).Should().Be(0L);
+            np.argmin(words).Should().Be(2L);
+            var m = np.array(new[,] { { "b", "a" }, { "a", "c" } });
+            np.argmax(m, 1).ToArray<long>().Should().Equal(0L, 1L);
+            var o = np.zeros(new Shape(2L), np.int32);
+            np.argmax(m, (int?)1, o);
+            o.ToArray<int>().Should().Equal(0, 1);
+            np.nanargmax(words).Should().Be(0L);
+
+            var sorted = np.sort(words);
+            NDArray.AsStringArray(sorted).Should().Equal("apple", "fig", "fig", "pear");
+            np.searchsorted(sorted, np.array(new[] { "fig", "kiwi" })).ToArray<long>().Should().Equal(1L, 3L);
+            np.searchsorted(sorted, np.array(new[] { "fig", "kiwi" }), "right").ToArray<long>().Should().Equal(3L, 3L);
+            np.searchsorted(np.array(new[] { "1", "10", "2", "5" }), 3).Should().Be(3L);
+
+            np.digitize(np.array(new[] { "10", "3", "25" }), np.array(new[] { 5, 20 })).ToArray<long>().Should().Equal(0L, 2L, 2L);
+            Action uint64Out = () => np.argmax(m, (int?)1, np.zeros(new Shape(2L), np.uint64));
+            uint64Out.Should().Throw<TypeError>();
+        }
+
+        /// <summary>
+        ///     The doc page's "Unique values, set routines and statistics" section (every value probed against NumPy 2.4.2):
+        ///     np.unique with counts, np.isin, intersect1d / setdiff1d, the take path of np.quantile and the interpolation's
+        ///     TypeError; np.isin's two paths for numbers beside text; np.sort_complex's text order; a negative histogram count;
+        ///     np.quantile with an integer q.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_UniqueSetRoutinesAndStatistics()
+        {
+            var fruit = np.array(new[] { "pear", "fig", "apple", "fig", "pear" });
+            var (values, counts) = np.unique(fruit, return_counts: true);
+            NDArray.AsStringArray(values).Should().Equal("apple", "fig", "pear");
+            counts.ToArray<long>().Should().Equal(1L, 2L, 2L);
+            np.isin(fruit, np.array(new[] { "fig", "kiwi" })).ToArray<bool>().Should().Equal(false, true, false, true, false);
+            NDArray.AsStringArray(np.intersect1d(fruit, np.array(new[] { "pear", "plum" }))).Should().Equal("pear");
+            NDArray.AsStringArray(np.setdiff1d(fruit, np.array(new[] { "pear" }))).Should().Equal("apple", "fig");
+            ((string)np.quantile(fruit, 0.5, method: "lower").item()).Should().Be("fig");
+            Action lerp = () => np.quantile(fruit, 0.5);
+            lerp.Should().Throw<TypeError>().WithMessage("unsupported operand type(s) for -: 'numpy.str_' and 'numpy.str_'");
+
+            np.isin(np.array(new[] { "1", "2" }), np.arange(20)).ToArray<bool>().Should().Equal(true, true);
+            np.isin(np.array(new[] { "1", "2" }), np.array(new long[] { 1 })).ToArray<bool>().Should().Equal(false, false);
+            np.sort_complex(np.array(new[] { "10", "9", "2+1j" })).ToArray<System.Numerics.Complex>().Should().Equal(
+                new System.Numerics.Complex(10, 0), new System.Numerics.Complex(2, 1), new System.Numerics.Complex(9, 0));
+            np.histogram(np.array(new[] { "1", "5", "10", "30", "2" }), np.array(new long[] { 0, 5, 10 })).hist
+                .ToArray<long>().Should().Equal(4L, -2L);
+            ((string)np.quantile(fruit, 1).item()).Should().Be("pear");
+        }
+
+        /// <summary>
+        ///     The "The <c>numpy.char</c> module" snippets (the <c>numpy.char</c> plan's phase 1; every value probed against
+        ///     NumPy 2.4.2): a comparison that strips trailing whitespace against the plain ufunc, <c>compare_chararrays</c>,
+        ///     <c>np.char.add</c>, <c>np.char.multiply</c> and its ValueError rule, the <c>S</c> / <c>U</c> pair's
+        ///     <c>NotImplemented</c> (null), and <c>np.@char</c> still converting to the <c>Char</c> dtype.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_CharModule()
+        {
+            var padded = np.array(new[] { "cat  ", "dog\t", "bird" });
+            np.@char.equal(padded, "cat").ToArray<bool>().Should().Equal(true, false, false);
+            np.equal(padded, "cat").ToArray<bool>().Should().Equal(false, false, false);
+            np.@char.compare_chararrays(padded, "dog", "<", true).ToArray<bool>().Should().Equal(true, false, true);
+            np.@char.add(padded, "!").ToString(true).Should().Be("array(['cat  !', 'dog\\t!', 'bird!'], dtype='<U6')");
+            np.@char.multiply(np.array(new[] { "ab", "c" }), 3).ToString(true).Should().Be("array(['ababab', 'ccc'], dtype='<U6')");
+            Action notInteger = () => np.@char.multiply(padded, 2.5);
+            notInteger.Should().Throw<ValueError>().WithMessage("Can only multiply by integers");
+
+            ((bool)np.@char.equal("a ", "a")).Should().BeTrue();
+            np.@char.less(padded, new[] { "dog"u8.ToArray() }).Should().BeNull();   // NumPy's NotImplemented
+            Action vstring = () => np.@char.equal(np.array(new[] { "a" }, np.dtypes.StringDType()), "a");
+            vstring.Should().Throw<TypeError>().WithMessage("comparison of non-string arrays");
+
+            np.ones(new Shape(2L), np.@char).dtype.Should().Be(np.dtype("char"));
+            ((DType)np.@char).itemsize.Should().Be(2);
+        }
+
+        /// <summary>
+        ///     The "The <c>chararray</c> class" snippets (the <c>numpy.char</c> plan's phase 2; every value probed against
+        ///     NumPy 2.4.2): the stripped element, the unstripped <c>item()</c>, iteration, the repr, a view that stays a
+        ///     chararray, the finalize ValueError, the float32 text of the <c>tolist()</c> route and <c>view(typeof(...))</c>.
+        /// </summary>
+        [TestMethod]
+        public void Computing_CharArrayClass()
+        {
+            var c = np.@char.array(new[] { "cat  ", "dog\t", "bird" });
+            c[0].item().Should().Be("cat");
+            c.item(0).Should().Be("cat  ");
+            var items = new System.Collections.Generic.List<object>();
+            foreach (var s in c)
+                items.Add(s);
+            items.Should().Equal("cat", "dog", "bird");
+            c.ToString(true).Should().Be("chararray(['cat', 'dog', 'bird'], dtype='<U5')");
+            (c.T is NDCharArray).Should().BeTrue();
+            Action numbers = () => c.astype(np.float64);
+            numbers.Should().Throw<ValueError>().Where(e => e.Message == "Can only create a chararray from string data.");
+            ((byte[])np.@char.array(np.array(new[] { 0.1f })).item(0)).Should().Equal("0.10000000149011612"u8.ToArray());
+            (np.array(new[] { "a", "b" }).view(typeof(NDCharArray)) is NDCharArray).Should().BeTrue();
+        }
+
+        /// <summary>
+        ///     The "Operators and functions with a chararray" operator snippet (every value probed against NumPy 2.4.2): the
+        ///     comparisons strip trailing whitespace on both sides, also with the plain array on the left; <c>+</c> returns a
+        ///     chararray VIEW of the ufunc result and <c>*</c> a chararray copy, both storing the unstripped text; a
+        ///     non-integer count is NumPy's <c>ValueError</c>.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_CharArrayOperators()
+        {
+            var c = np.@char.array(new[] { "ab  ", "b", "ab", "a " });
+            var u = np.array(new[] { "ab", "b", "ab  ", "a" });
+            (c == "ab").ToArray<bool>().Should().Equal(true, false, true, false);
+            (u == c).ToArray<bool>().Should().Equal(true, true, true, true);
+
+            var plus = c + "x";
+            plus.GetType().Should().Be(typeof(NDCharArray));
+            plus.@base.Should().NotBeNull("the + result is a chararray view of the ufunc's array");
+            plus.dtype.str.Should().Be("<U5");
+            // view(typeof(NDArray)) reads the stored text: a chararray's own elements strip on access.
+            NDArray.AsStringArray(plus.view(typeof(NDArray))).Should().Equal("ab  x", "bx", "abx", "a x");
+
+            var twice = c * 2;
+            twice.GetType().Should().Be(typeof(NDCharArray));
+            twice.@base.Should().BeNull("the * result is a copy");
+            twice.dtype.str.Should().Be("<U8");
+            NDArray.AsStringArray(twice.view(typeof(NDArray))).Should().Equal("ab  ab  ", "bb", "abab", "a a ");
+
+            Action fraction = () => _ = c * 2.5;
+            fraction.Should().Throw<ValueError>().WithMessage("Can only multiply by integers");
+        }
+
+        /// <summary>
+        ///     The "Operators and functions with a chararray" function snippet (every value probed against NumPy 2.4.2):
+        ///     <c>np.sort</c> keeps the class, <c>np.concatenate</c> drops it, <c>np.argmax</c> raises the finalize
+        ///     <c>ValueError</c>, and <c>np.unique</c> merges values that differ only in trailing whitespace only when a
+        ///     <c>return_*</c> flag sends it through the chararray comparison.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_CharArrayWithNpFunctions()
+        {
+            var c = np.@char.array(new[] { "ab  ", "b", "ab", "a " });
+            var sorted = np.sort(c);
+            sorted.GetType().Should().Be(typeof(NDCharArray));
+            sorted.ToString(true).Should().Be("chararray(['a', 'ab', 'ab', 'b'], dtype='<U4')");
+            np.concatenate(new NDArray[] { c, c }).GetType().Should().Be(typeof(NDArray));
+            Action argmax = () => np.argmax(c);
+            argmax.Should().Throw<ValueError>().Where(e => e.Message == "Can only create a chararray from string data.");
+
+            var (values, counts) = np.unique(c, return_counts: true);
+            values.GetType().Should().Be(typeof(NDCharArray));
+            NDArray.AsStringArray(values.view(typeof(NDArray))).Should().Equal("a ", "ab", "b");
+            counts.ToArray<long>().Should().Equal(1L, 2L, 1L);
+            NDArray plain = np.unique(c);
+            NDArray.AsStringArray(plain.view(typeof(NDArray))).Should().Equal("a ", "ab", "ab  ", "b");
+        }
+
+        /// <summary>
+        ///     The "Splitting and joining" snippets (every value probed against NumPy 2.4.2): the list array of pieces and
+        ///     its repr, a separator that leaves empty pieces, <c>rsplit</c>'s <c>maxsplit</c> from the end,
+        ///     <c>splitlines</c> keeping the ends, element access as the list's 0-d stand-in, and <c>join</c> over the
+        ///     characters of each string — with NumPy 2.4.2's <c>TypeError</c> for joining split's lists.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_SplitJoinAndListArrays()
+        {
+            var words = np.array(new[] { "a b  c", "  lead trail  ", "" });
+            using NDListArray w = np.@char.split(words);
+            w.ToString(true).Should().Be("array([list(['a', 'b', 'c']), list(['lead', 'trail']), list([])],\n      dtype=object)");
+            using (NDListArray spaced = np.@char.split(words, " "))
+            {
+                spaced.item(0).Should().Equal("a", "b", "", "c");
+                spaced.item(1).Should().Equal("", "", "lead", "trail", "", "");
+                spaced.item(2).Should().Equal("");
+            }
+            using (NDListArray last = np.@char.rsplit(words, maxsplit: 1))
+            {
+                last.item(0).Should().Equal("a b", "c");
+                last.item(1).Should().Equal("  lead", "trail");
+                last.item(2).Should().BeEmpty();
+            }
+            using (NDListArray lines = np.@char.splitlines(np.array(new[] { "a\nb\r\nc" }), true))
+                lines.item(0).Should().Equal("a\n", "b\r\n", "c");
+
+            w.item(0).Should().Equal("a", "b", "c");
+            var nested = (System.Collections.Generic.List<object>)w.tolist();
+            nested.Should().HaveCount(3);
+            ((System.Collections.Generic.List<object>)nested[1]).Should().Equal("lead", "trail");
+            // Element access is NumPy's: the list itself, here the 0-d list array that stands for it.
+            using (NDListArray first = w[0])
+            {
+                first.ndim.Should().Be(0);
+                first.ToString().Should().Be("['a', 'b', 'c']");
+                first.item().Should().Equal("a", "b", "c");
+            }
+            using (NDListArray tail = w["1:"])
+                tail.ToString(true).Should().Be("array([list(['lead', 'trail']), list([])], dtype=object)");
+
+            np.@char.join("-", "osd").ToString(true).Should().Be("array('o-s-d', dtype='<U5')");
+            np.@char.join(new[] { "-", "." }, new[] { "ghc", "osd" }).ToString(true).Should().Be("array(['g-h-c', 'o.s.d'], dtype='<U5')");
+            Action joinLists = () => np.@char.join("-", w);
+            joinLists.Should().Throw<TypeError>()
+                     .WithMessage("currently only the no-argument instantiation is supported; use `np.dtype` instead.");
+        }
+
+        /// <summary>
+        ///     The split error snippet (every text probed against NumPy 2.4.2): an empty separator, a float
+        ///     <c>maxsplit</c>, a bytes separator of <c>U</c> text and a non-string array, each with NumPy's type and text.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_SplitErrors()
+        {
+            var words = np.array(new[] { "a b  c", "  lead trail  ", "" });
+            Action empty = () => np.@char.split(words, "");
+            empty.Should().Throw<ValueError>().WithMessage("empty separator");
+            Action fraction = () => np.@char.split(words, " ", 1.5);
+            fraction.Should().Throw<TypeError>().WithMessage("'numpy.float64' object cannot be interpreted as an integer");
+            Action bytes = () => np.@char.split(words, new byte[] { 32 });
+            bytes.Should().Throw<TypeError>().WithMessage("must be str or None, not numpy.bytes_");
+            Action numbers = () => np.@char.split(np.array(new long[] { 1 }));
+            numbers.Should().Throw<TypeError>().WithMessage("string operation on non-string array");
+        }
+
+        /// <summary>
+        ///     The list-array member snippet (every value probed against NumPy 2.4.2): <c>sum</c> concatenates the lists,
+        ///     <c>cumsum</c> writes the running lists into a list-array <c>out=</c>, <c>reshape(copy: false)</c> returns a
+        ///     view, the masked <c>mean</c> under a bool dtype is the truths over the count, and a <c>dtype=</c> whose NumPy
+        ///     result is not a list raises <see cref="NotSupportedException"/>.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_ListArrayMembers()
+        {
+            using NDListArray w = np.@char.split(np.array(new[] { "a b  c", "  lead trail  ", "" }));
+            using (NDListArray total = w.sum())
+                total.item().Should().Equal("a", "b", "c", "lead", "trail");
+            using (NDListArray running = np.@char.split(np.array(new[] { "x", "y", "z" })))
+            {
+                w.cumsum(@out: running);
+                running.item(1).Should().Equal("a", "b", "c", "lead", "trail");
+                running.item(2).Should().Equal("a", "b", "c", "lead", "trail");
+            }
+            using (NDListArray row = w.reshape(new Shape(1, 3), 'C', copy: false))
+            {
+                row.ndim.Should().Be(2);
+                row.item(0, 1).Should().Equal("lead", "trail");
+            }
+            w.mean(dtype: np.@bool, where: np.array(new[] { true, false, true })).ToString(true).Should().Be("array(True)");
+            Action boolSum = () => w.sum(dtype: np.@bool);
+            boolSum.Should().Throw<NotSupportedException>();
+        }
+
+        /// <summary>
+        ///     The "Operations that do not accept text" examples: the comparison and the unique values of <c>StringDType</c>
+        ///     text compute, as the same calls over <c>U</c> text do; a string <c>dtype=</c> request of <c>np.add</c> over
+        ///     numbers computes (the numbers written as text, then concatenated); <c>np.evaluate</c>, NumSharp's expression
+        ///     engine, computes text as NumPy does — the comparisons and the numpy.strings functions feeding numbers into the
+        ///     rest of the expression, a concatenation, a <c>Where</c> with text branches and a reduction of text answering
+        ///     with NumPy's values (every text kind, a positional operand included) — raises NumPy's own error where NumPy has
+        ///     no loop, and refuses only a delegate's text argument with <see cref="StringComputationNotSupportedException"/>
+        ///     (a <see cref="NotSupportedException"/>).
+        /// </summary>
+        [TestMethod]
+        public void Computing_StringDTypeAndEvaluate()
+        {
+            var names = Names();
+            var t = names.astype(np.dtypes.StringDType());
+            using (var eq = t == t)
+                eq.ToArray<bool>().Should().Equal(true, true, true);
+            NDArray.AsStringArray((NDArray)np.unique(t)).Should().Equal("bird", "cat", "dog");
+            NDArray.AsStringArray(np.sort(t)).Should().Equal("bird", "cat", "dog");
+            NDArray.AsStringArray((NDArray)np.unique(names)).Should().Equal("bird", "cat", "dog");
+            np.isin(names, np.array(new[] { "cow" })).ToArray<bool>().Should().Equal(false, false, false);
+            NDArray.AsStringArray(np.add(np.array(new[] { 1.5 }), np.array(new[] { 1.5 }), dtype: "U")).Should().Equal("1.51.5");
+            // The comparison computes on the text and its bool result feeds the numbers, one call.
+            np.evaluate(NDExpr.Equal(names, "cat") & ((NDExpr)np.array(new[] { 4, 2, 7 }) > 3)).ToArray<bool>()
+                .Should().Equal(true, false, false);
+            // The numpy.strings functions read the text too, their numbers fused with the rest (NumPy: 1, [0.5 0.5 1. ]).
+            ((long)np.evaluate(NDExpr.CountNonzero(NDExpr.StrLen(names) > 3))).Should().Be(1);
+            np.evaluate(NDExpr.Where(NDExpr.StartsWith(names, "b"), 1.0, 0.5)).ToArray<double>().Should().Equal(0.5, 0.5, 1.0);
+            // A text result is NumPy's too: the concatenation, a Where with text branches, a reduction of text (NumPy:
+            // ['catcat' 'dogdog' 'birdbird'], ['-' '-' 'bird'], 1).
+            NDArray.AsStringArray(np.evaluate((NDExpr)names + names)).Should().Equal("catcat", "dogdog", "birdbird");
+            NDArray.AsStringArray(np.evaluate(NDExpr.Where(NDExpr.StrLen(names) > 3, names, "-"))).Should().Equal("-", "-", "bird");
+            ((long)np.evaluate(NDExpr.ArgMax(names))).Should().Be(1);
+            // Where NumPy has no loop, np.evaluate raises NumPy's own error; only a delegate refuses text in its own words.
+            Action root = () => np.evaluate(NDExpr.Sqrt(names));
+            root.Should().Throw<TypeError>().Where(e => e.Message.StartsWith("ufunc 'sqrt' not supported for the input types"));
+            Action call = () => np.evaluate(NDExpr.Call((Func<double, double>)System.Math.Abs, names));
+            call.Should().Throw<StringComputationNotSupportedException>();
+            // StringComputationNotSupportedException is a NotSupportedException.
+            call.Should().Throw<NotSupportedException>();
+            // Every text kind computes the same way, a StringDType leaf and a positional operand included.
+            NDArray.AsStringArray(np.evaluate((NDExpr)t + t).astype(np.dtype("U8"))).Should().Equal("catcat", "dogdog", "birdbird");
+            NDArray.AsStringArray(np.evaluate(NDExpr.Input(0) + NDExpr.Input(0), new[] { names }))
+                .Should().Equal("catcat", "dogdog", "birdbird");
+
+            // The text step runs through np.strings.
+            NDArray.AsStringArray(np.strings.upper(names)).Should().Equal("CAT", "DOG", "BIRD");
+        }
+
+        [TestMethod]
+        public void Computing_NeverEqualToNumbers()
+        {
+            var eq = Names() == np.array(new[] { 1, 2, 3 });
+            eq.ToString().Should().Be("[False False False]");
+        }
+
+        /// <summary>The "Masked text arrays" snippets: the fill value stored at its own width, cut by
+        /// <c>filled()</c>; a masked reduction refuses; a number fill is written as its text.</summary>
+        [TestMethod]
+        public void Computing_MaskedTextArrays()
+        {
+            var m = np.ma.array(np.array(new[] { "ab", "c", "de" }), mask: new[] { true, false, false });
+            ((string)m.fill_value).Should().Be("N/A");
+            NDArray.AsStringArray(m.filled()).Should().Equal("N/", "c", "de");
+            NDArray.AsStringArray(m.filled("zz")).Should().Equal("zz", "c", "de");
+            np.ma.count(m).GetInt64().Should().Be(2L);
+            Action sum = () => np.ma.sum(m);
+            sum.Should().Throw<TypeError>().WithMessage(
+                "the resolved dtypes are not compatible with add.reduce. Resolved (dtype('<U2'), dtype('<U2'), dtype('<U4'))");
+            NDArray.AsStringArray(m.filled(5)).Should().Equal("5", "c", "de");
+        }
+
+        [TestMethod]
+        public void Computing_ChecksInNumPysOrder()
+        {
+            Action axis = () => np.sum(Names(), 9);
+            axis.Should().Throw<AxisError>().WithMessage("axis 9 is out of bounds for array of dimension 1*");
+            Action noLoop = () => np.sqrt(np.array(new[] { 1.5 }), dtype: "U");
+            noLoop.Should().Throw<IncorrectTypeException>()
+                  .WithMessage("No loop matching the specified signature and casting was found for ufunc sqrt");
+        }
+
+        /// <summary>
+        ///     The "When the shape decides the answer" snippet (every value probed against NumPy 2.4.2): an empty text array's
+        ///     truth test, an arg-reduction over lines of one element, and the never-equal pairs of text and numbers answer
+        ///     without reading a character.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_ShapeDecidesTheAnswer()
+        {
+            var names = Names();
+            np.any(np.zeros(new Shape(0L, 3L), "U2")).Should().BeFalse();
+            np.argmax(np.array(new[,] { { "b" }, { "a" } }), 1).ToArray<long>().Should().Equal(0L, 0L);
+            np.isin(names, np.array(new[] { 1.5, 2.0 })).ToArray<bool>().Should().Equal(false, false, false);
+            np.array_equal(names, np.zeros(new Shape(3L))).Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     The <c>np.place</c> value-form snippet (probed against NumPy 2.4.2): a C# array is a Python list, converted
+        ///     straight into the target's dtype (and repeated over the mask); an NDArray must cast under <c>'safe'</c>, so
+        ///     float64 values into an int32 target raise NumPy's TypeError text, as <see cref="InvalidCastException"/>.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_PlaceValueForms()
+        {
+            var a = np.arange(5).astype(np.int32);
+            var mask = np.ones(new Shape(5L), np.@bool);
+            np.place(a, mask, new[] { 1.9, 2.9 });
+            a.ToArray<int>().Should().Equal(1, 2, 1, 2, 1);
+            Action array = () => np.place(a, mask, np.array(new[] { 1.9, 2.9 }));
+            array.Should().Throw<InvalidCastException>()
+                 .WithMessage("Cannot cast array data from dtype('float64') to dtype('int32') according to the rule 'safe'");
+        }
+
+        // ── .npy files ────────────────────────────────────────────────────────────────────────────
+
+        [TestMethod]
+        public void Npy_RoundTrip()
+        {
+            var stream = new MemoryStream();
+            np.save(stream, Names());
+            stream.Position = 0;
+            np.load_npy(stream).ToString(true).Should().Be("array(['cat', 'dog', 'bird'], dtype='<U4')");
+        }
+
+        [TestMethod]
+        public void Npy_CharWritesAsU1()
+        {
+            var stream = new MemoryStream();
+            np.save(stream, np.array(new[] { 'a', 'b' }));
+            stream.Position = 0;
+            // The <U1 file reads back as NumPy's own <U1 string array (breaking: it used to read as Char).
+            np.load_npy(stream).ToString(true).Should().Be("array(['a', 'b'], dtype='<U1')");
+        }
+
+        /// <summary>
+        ///     The ".npy files" <c>StringDType</c> snippet: <c>np.save</c> writes the bytes <c>numpy.save</c> writes
+        ///     (NumPy's protocol-4 pickle behind a <c>'|O'</c> header, captured from NumPy 2.4.2), <c>allow_pickle: true</c>
+        ///     reads them back with the NA object, and the three refusals the paragraph names carry NumPy's texts.
+        /// </summary>
+        [TestMethod]
+        public void Npy_StringDTypeIsNumPysPickle()
+        {
+            // numpy.save(f, np.array(['cat', None], dtype=np.dtypes.StringDType(na_object=None))) under NumPy 2.4.2.
+            const string NumPysBytes =
+                "k05VTVBZAQB2AHsnZGVzY3InOiAnfE8nLCAnZm9ydHJhbl9vcmRlcic6IEZhbHNlLCAnc2hhcGUnOiAoMiwpLCB9ICAgICAgICAgICAg" +
+                "ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAqABJWjAAAAAAAAAIwWbnVtcHkuX2NvcmUubXVs" +
+                "dGlhcnJheZSMDF9yZWNvbnN0cnVjdJSTlIwFbnVtcHmUjAduZGFycmF5lJOUSwCFlEMBYpSHlFKUKEsBSwKFlIwVbnVtcHkuX2NvcmUu" +
+                "X2ludGVybmFslIweX2NvbnZlcnRfdG9fc3RyaW5nZHR5cGVfa3dhcmdzlJOUSwFOhpRSlIldlCiMA2NhdJROZXSUYi4=";
+            var words = np.array(new object[] { "cat", null }, np.dtypes.StringDType(na_object: null));
+            var stream = new MemoryStream();
+            np.save(stream, words);
+            Convert.ToBase64String(stream.ToArray()).Should().Be(NumPysBytes);
+
+            stream.Position = 0;
+            np.load_npy(stream, allow_pickle: true).ToString(true)
+              .Should().Be("array(['cat', None], dtype=StringDType(na_object=None))");
+            stream.Position = 0;
+            ((Action)(() => np.load_npy(stream))).Should().Throw<FormatException>()
+                .WithMessage("Object arrays cannot be loaded when allow_pickle=False");
+            ((Action)(() => np.save(new MemoryStream(), words, allow_pickle: false))).Should().Throw<ValueError>()
+                .WithMessage("Object arrays cannot be saved when allow_pickle=False");
+
+            // mmap_mode needs a file on disk; NumPy refuses before it reads the pickle, whatever allow_pickle says.
+            var path = Path.Combine(Path.GetTempPath(), $"numsharp-doc-{Guid.NewGuid():N}.npy");
+            try
+            {
+                np.save(path, words);
+                ((Action)(() => np.load(path, mmap_mode: "r", allow_pickle: true))).Should().Throw<ValueError>()
+                    .WithMessage("Array can't be memory-mapped: Python objects in dtype.");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        // ── The Char dtype ────────────────────────────────────────────────────────────────────────
+
+        [TestMethod]
+        public void Char_IsTwoByteUtf16CodeUnit()
+        {
+            np.array(new[] { 'a', 'b', 'c' }).typecode.Should().Be(NPTypeCode.Char);
+            InfoOf<char>.Size.Should().Be(2, "actual memory footprint is 2 bytes (UTF-16 code unit)");
+        }
+
+        [TestMethod]
+        public void UnsupportedDtypes_StillThrow()
+        {
+            ((Action)(() => np.dtype("V7"))).Should().Throw<NotSupportedException>();
+            ((Action)(() => np.dtype("O"))).Should().Throw<NotSupportedException>();
+        }
+
+        // ── Variable-width text: StringDType ──────────────────────────────────────────────────────
+
+        /// <summary>The "Creating StringDType arrays" snippet: the descriptor, the 16-byte cell, zeros and ones.</summary>
+        [TestMethod]
+        public void StringDType_Creating()
+        {
+            var t = np.array(new[] { "a", "a much longer text" }, np.dtype("T"));
+            t.dtype.ToString(true).Should().Be("StringDType()");
+            t.dtype.itemsize.Should().Be(16, "the cell, whatever the length of the text");
+            np.zeros(new Shape(2), np.dtypes.StringDType()).ToString(true).Should().Be("array(['', ''], dtype=StringDType())");
+            np.ones(new Shape(2), np.dtypes.StringDType()).ToString(true).Should().Be("array(['1', '1'], dtype=StringDType())");
+        }
+
+        /// <summary>The "Missing data: the NA object" snippet: None as the NA object, and None as text without one.</summary>
+        [TestMethod]
+        public void StringDType_NAObjects()
+        {
+            var withNA = np.dtypes.StringDType(na_object: null);
+            var a = np.array(new object[] { "x", null }, withNA);
+            a.item(1).Should().BeNull();
+            a.ToString(true).Should().Be("array(['x', None], dtype=StringDType(na_object=None))");
+            np.array(new object[] { "x", null }, np.dtype("T")).item(1).Should().Be("None");
+        }
+
+        /// <summary>The "Writing elements" snippet: a value is its str(); coerce=False accepts only text.</summary>
+        [TestMethod]
+        public void StringDType_WritingElements()
+        {
+            var t = np.array(new[] { "a", "b" }, np.dtypes.StringDType());
+            t[0] = 3.25;
+            t.item(0).Should().Be("3.25");
+            var strict = np.array(new[] { "a" }, np.dtypes.StringDType(coerce: false));
+            ((Action)(() => strict[0] = 5)).Should().Throw<ValueError>()
+                .WithMessage("StringDType only allows string data when string coercion is disabled.");
+        }
+
+        /// <summary>The "Moving and casting" snippet: parse to numbers, cut to a sized U, numbers to StringDType.</summary>
+        [TestMethod]
+        public void StringDType_MovingAndCasting()
+        {
+            var t = np.array(new[] { "12", "-3" }, np.dtypes.StringDType());
+            t.astype(np.int64).ToArray<long>().Should().Equal(12L, -3L);
+            NDArray.AsStringArray(t.astype("U1")).Should().Equal("1", "-");
+            np.array(new[] { 1.5, 2.0 }).astype(np.dtypes.StringDType()).ToString(true)
+                .Should().Be("array(['1.5', '2.0'], dtype=StringDType())");
+        }
+
+        /// <summary>
+        ///     The "Iterating with np.nditer" snippet: a buffered cast to <c>U5</c> cuts the long text, and a buffered
+        ///     <c>readwrite</c> pass writes every string back.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_Nditer()
+        {
+            var t = np.array(new[] { "a", "a long string over fifteen" }, np.dtypes.StringDType());
+            var seen = new System.Collections.Generic.List<object>();
+            using (var it = np.nditer(t, new[] { "refs_ok", "buffered" }, op_dtypes: new DType[] { "U5" }, casting: "unsafe"))
+                foreach (var x in it)
+                    seen.Add(x[0].item());
+            seen.Should().Equal("a", "a lon");
+            using (var it = np.nditer(t, new[] { "refs_ok", "buffered" }, new[] { "readwrite" }))
+                foreach (var x in it)
+                    x[0][Slice.Ellipsis] = (string)x[0].item() + "!";
+            t.ToString(true).Should().Be("array(['a!', 'a long string over fifteen!'], dtype=StringDType())");
+        }
+
+        /// <summary>
+        ///     The "Computing on StringDType text" examples, with a NaN-like NA: the comparisons (every one False with the
+        ///     NA, <c>!=</c> included), <c>add</c> / <c>multiply</c> propagating the NA, <c>maximum</c> / <c>minimum</c> and
+        ///     the reductions ordering it last, <c>isnan</c>, the default <c>StringDType()</c> result cast into a <c>U</c> out
+        ///     (the NA becomes <c>''</c>) and <c>maximum</c>'s missing <c>U</c> loop. Every value probed from NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_Computing()
+        {
+            var nan = np.dtypes.StringDType(na_object: double.NaN);
+            var t = np.array(new object[] { "pear", "fig", double.NaN }, nan);
+            var u = np.array(new object[] { "kiwi", "apple", "plum" }, nan);
+            (t < "grape").ToArray<bool>().Should().Equal(false, true, false);
+            (t != u).ToArray<bool>().Should().Equal(true, true, false);
+            (t + "!").ToString(true).Should().Be("array(['pear!', 'fig!', nan], dtype=StringDType(na_object=nan))");
+            (t * 2).ToString(true).Should().Be("array(['pearpear', 'figfig', nan], dtype=StringDType(na_object=nan))");
+            np.maximum(t, u).ToString(true).Should().Be("array(['pear', 'fig', nan], dtype=StringDType(na_object=nan))");
+            np.minimum(t, u).ToString(true).Should().Be("array(['kiwi', 'apple', 'plum'], dtype=StringDType(na_object=nan))");
+            np.sum(t["0:2"]).item().Should().Be("pearfig");
+            np.cumsum(t).ToString(true).Should().Be("array(['pear', 'pearfig', nan], dtype=StringDType(na_object=nan))");
+            np.argmax(t).Should().Be(2);
+            np.isnan(t).ToArray<bool>().Should().Equal(false, false, true);
+            Action noLoop = () => np.maximum(t, "x");
+            noLoop.Should().Throw<TypeError>().WithMessage(
+                "ufunc 'maximum' did not contain a loop with signature matching types (<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.StrDType'>) -> None");
+
+            // NumPy's NpyString_cmp: strncmp stops at the NUL both texts share, so the two texts are equal; array_equal is
+            // (a1 == a2).all() with these rules, and the NaN-like NA is equal only under equal_nan.
+            var t2 = np.dtypes.StringDType();
+            (np.array(new object[] { "a\0c" }, t2) == np.array(new object[] { "a\0b" }, t2)).ToArray<bool>().Should().Equal(true);
+            np.array_equal(np.array(new object[] { "a\0c", "x" }, t2), np.array(new object[] { "a\0b", "x" }, t2)).Should().BeTrue();
+            np.array_equal(t, t).Should().BeFalse("the NA is not equal to itself");
+            np.array_equal(t, t, equal_nan: true).Should().BeTrue();
+
+            var o = np.empty(new Shape(3), np.dtype("U8"));
+            np.add(t, "!", o).ToString(true).Should().Be("array(['pear!', 'fig!', ''], dtype='<U8')");
+        }
+
+        /// <summary>
+        ///     The "Ordering StringDType text" examples (strings phase 2, P2.2 over <c>StringDType</c>): a NaN-like NA sorting
+        ///     after every text in the sort, the stable argsort, the unique values, the search and <c>np.isin</c>; a None-like
+        ///     NA refused at the first comparison; the heapsort kind <c>StringDType</c> does not register; the order
+        ///     statistics picking an element or refusing. Every value and message probed from NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_Ordering()
+        {
+            var nan = np.dtypes.StringDType(na_object: double.NaN);
+            var t = np.array(new object[] { "pear", double.NaN, "fig", "apple", "fig" }, nan);
+            // NumPy's repr wraps here (the line would pass 75 characters): the dtype goes on its own line.
+            np.sort(t).ToString(true).Should().Be(
+                "array(['apple', 'fig', 'fig', 'pear', nan],\n      dtype=StringDType(na_object=nan))");
+            np.argsort(t, kind: "stable").ToArray<long>().Should().Equal(3L, 2L, 4L, 0L, 1L);
+            ((NDArray)np.unique(t)).ToString(true).Should().Be(
+                "array(['apple', 'fig', 'pear', nan], dtype=StringDType(na_object=nan))");
+            np.searchsorted(np.sort(t), np.array(new object[] { "grape" }, nan)).ToArray<long>().Should().Equal(3L);
+            np.isin(t, np.array(new object[] { "fig" }, nan)).ToArray<bool>().Should().Equal(false, false, true, false, true);
+            var none = np.dtypes.StringDType(na_object: null);
+            ((Action)(() => np.sort(np.array(new object[] { "b", null }, none)))).Should().Throw<ValueError>()
+                .WithMessage("Cannot compare null that is not a nan-like value");
+            ((Action)(() => np.sort(t, kind: "heapsort"))).Should().Throw<RuntimeError>().WithMessage("unsupported sort kind");
+
+            var s = np.array(new[] { "b", "a", "c" }, np.dtypes.StringDType());
+            np.quantile(s, 0.5, method: "lower").item().Should().Be("b");
+            ((Action)(() => np.quantile(s, 0.5))).Should().Throw<TypeError>()
+                .WithMessage("unsupported operand type(s) for -: 'str' and 'str'");
+            ((Action)(() => np.median(s))).Should().Throw<TypeError>()
+                .WithMessage("ufunc 'divide' not supported for the input types, *");
+        }
+
+        /// <summary>
+        ///     The "Text files" examples: loadtxt with a converter whose null is the NA object and a whole-line field;
+        ///     savetxt formatting the NA object itself (its <c>str()</c>, its own type's <c>%d</c>) and the Mismatch error;
+        ///     tofile's text mode and fromfile's refusal.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_TextFiles()
+        {
+            var na = np.dtypes.StringDType(na_object: null);
+            var t = np.loadtxt(new[] { "a b", "- c" }, na, converters: (Func<string, object>)(s => s == "-" ? null : s));
+            t.item(1, 0).Should().BeNull();
+            np.loadtxt(new[] { "a  b" }, np.dtypes.StringDType(), delimiter: ",").item().Should().Be("a  b");
+
+            var w = new System.IO.StringWriter();
+            np.savetxt(w, np.array(new object[] { "x", null }, na), "%s");
+            w.ToString().Should().Be("x\nNone\n");
+            var nanNA = np.dtypes.StringDType(na_object: double.NaN);
+            ((Action)(() => np.savetxt(new System.IO.StringWriter(), np.array(new object[] { double.NaN }, nanNA), "%d")))
+                .Should().Throw<ValueError>().WithMessage("cannot convert float NaN to integer");
+            ((Action)(() => np.savetxt(new System.IO.StringWriter(), np.array(new[] { "x" }, na), "%d")))
+                .Should().Throw<TypeError>()
+                .WithMessage("Mismatch between array dtype ('StringDType(na_object=None)') and format specifier ('%d')");
+
+            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ns_doc_tofile_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                t.tofile(path, sep: ",");
+                System.IO.File.ReadAllText(path).Should().Be("a,b,None,c");
+                ((Action)(() => np.fromfile(path, np.dtypes.StringDType(), sep: ",")))
+                    .Should().Throw<ValueError>().WithMessage("Cannot read into object array");
+            }
+            finally
+            {
+                System.IO.File.Delete(path);
+            }
+        }
+
+        /// <summary>The "What StringDType refuses" table: the raw-buffer routes and computation.</summary>
+        [TestMethod]
+        public void StringDType_Refusals()
+        {
+            var t = np.array(new[] { "a" }, np.dtypes.StringDType());
+            ((Action)(() => t.view(np.dtype("U1")))).Should().Throw<TypeError>()
+                .WithMessage("Cannot change data-type for array of references.");
+            ((Action)(() => { var _ = t.data; })).Should().Throw<ValueError>()
+                .WithMessage("cannot include dtype 'numpy.dtypes.StringDType' in a buffer");
+            ((Action)(() => np.frombuffer(new byte[16], "T"))).Should().Throw<ValueError>()
+                .WithMessage("cannot create an OBJECT array from memory buffer");
+            // np.ndarray lays StringDType only over StringDType cells (a view, as NumPy's buffer export of them); raw bytes,
+            // another dtype over the cells, or an offset that splits a cell are refused.
+            ((Action)(() => np.ndarray(new Shape(1), np.dtype("T"), new byte[16]))).Should().Throw<NotSupportedException>();
+            ((Action)(() => np.ndarray(new Shape(1), np.float64, t))).Should().Throw<NotSupportedException>();
+            using (var view = np.ndarray(new Shape(1), np.dtypes.StringDType(), t))
+                view.ToString().Should().Be("['a']");
+            // The structured path of np.unique along an axis cannot hold StringDType fields (NumPy's TypeError).
+            ((Action)(() => np.unique(np.array(new object[,] { { "a", "b" }, { "a", "b" } }, np.dtypes.StringDType()), axis: 0)))
+                .Should().Throw<TypeError>().WithMessage("The axis argument to unique is not supported for dtype StringDType()");
+
+            // The NumPy-bug list: a 1-D accumulation into a 0-d out (NumPy crashes) is the wrong-size error, and maximum
+            // with a None-like NA into an S out of non-ASCII texts (NumPy's SystemError) is the loop's own ValueError.
+            using var one = np.array("", np.dtypes.StringDType());
+            ((Action)(() => np.cumsum(np.array(new[] { "a", "b" }, np.dtypes.StringDType()), null, null, one)))
+                .Should().Throw<IncorrectShapeException>().WithMessage("provided out is the wrong size for the accumulation.");
+            var none = np.dtypes.StringDType(na_object: null);
+            var withNA = np.array(new object[] { null, "été" }, none);
+            ((Action)(() => np.maximum(withNA, np.array(new object[] { "x", "y" }, none), np.empty(new Shape(2), np.dtype("S4")))))
+                .Should().Throw<ValueError>().WithMessage("Cannot compare null that is not a nan-like value");
+
+            // A nan-quantile row whose result is a None NA: NumPy builds an object array, NumSharp has no object dtype.
+            ((Action)(() => np.nanquantile(np.array(new object[,] { { null }, { null } }, none), 0.5, 1, method: "lower")))
+                .Should().Throw<NotSupportedException>();
+
+            // The new entries of the NumPy-bug list: a non-contiguous lexsort key (NumPy crashes), an arena haystack
+            // (NumPy's MemoryError) and the complex cast (NumPy copies the real part into the imaginary part).
+            var keys = np.array(new object[,] { { "b", "a" }, { "a", "b" }, { "a", "a" } }, np.dtypes.StringDType());
+            np.lexsort(keys.T, -1).ToArray<long>().Should().Equal(2L, 0L, 1L);
+            var hay = np.array(new object[] { new string('a', 20), new string('b', 20), new string('c', 20) }, np.dtypes.StringDType());
+            np.searchsorted(hay, np.array(new object[] { "b" }, np.dtypes.StringDType())).ToArray<long>().Should().Equal(1L);
+            np.sort_complex(np.array(new[] { "2", "1" }, np.dtypes.StringDType())).ToString(true)
+                .Should().Be("array([1.+0.j, 2.+0.j])");
+        }
+
+        /// <summary>
+        ///     The NumPy-bug list's <c>byteswap</c> line: NumPy 2.4.2 crashes; a cell has no byte order (the descriptor's
+        ///     <c>byteorder</c> is <c>'|'</c>), so NumSharp returns a copy with its own buffer and the same texts, and with
+        ///     <c>inplace: true</c> the array itself.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_ByteswapIsACopy()
+        {
+            var t = np.array(new[] { "a", "a long string over fifteen" }, np.dtypes.StringDType());
+            t.dtype.byteorder.Should().Be('|');
+            var copy = t.byteswap();
+            copy.ToString(true).Should().Be(t.ToString(true));
+            np.shares_memory(copy, t).Should().BeFalse("a copy owns its cells and its arena");
+            ReferenceEquals(t.byteswap(inplace: true), t).Should().BeTrue();
+        }
+
+        // ── Byte streams via np.frombuffer ────────────────────────────────────────────────────────
+
+        [TestMethod]
+        public void Bytes_ViaFrombuffer()
+        {
+            byte[] raw = { 1, 2, 3 };
+            var asBytes = np.frombuffer(raw, np.uint8);
+            asBytes.typecode.Should().Be(NPTypeCode.Byte);
+            asBytes.ToArray<byte>().Should().Equal((byte)1, (byte)2, (byte)3);
+
+            // reinterpret 16 bytes as 4 float32
+            byte[] fbytes = new byte[16];
+            Buffer.BlockCopy(new[] { 1f, 2f, 3f, 4f }, 0, fbytes, 0, 16);
+            np.frombuffer(fbytes, np.float32).ToArray<float>().Should().Equal(1f, 2f, 3f, 4f);
+        }
+    }
+}

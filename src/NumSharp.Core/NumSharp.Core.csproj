@@ -25,7 +25,10 @@
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <Platforms>AnyCPU</Platforms>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- No PackageReadmeFile, deliberately: the package embeds no README, so each version's README
+         tab stays owner-editable on nuget.org, where the release notes are pasted after publishing.
+         README.md in this folder is repo documentation only and is not packed. See "No embedded
+         package README" in ../../Directory.Build.props, whose guard fails `dotnet pack` if this returns. -->
     <Configurations>Debug;Release;Publish</Configurations>
     <AssemblyName>NumSharp</AssemblyName>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -59,7 +62,6 @@
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
-    <None Include="README.md" Pack="true" PackagePath="\" />
     <!-- Ships into the NumSharp package so a downstream consumer imports the NDW013 guard: a build
          warning when [NDScoped]/[NDScopedAsync] is used but the NumSharp.Build package is not
          installed (the attributes are then inert and the temporaries leak). See build/NumSharp.targets. -->
@@ -223,7 +225,33 @@
        ================================================================================== -->
   <PropertyGroup>
     <NumSharpBuildProject>$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\NumSharp.Build.csproj</NumSharpBuildProject>
+    <!-- The server GC for the self-weave (the packaged target's NumSharpBuildToolEnvironment knob): Cecil's writer
+         allocates in bulk while it rewrites NumSharp's multi-megabyte assembly, and the server GC's larger budgets and
+         parallel collections cut the weave from about 1.45 s to 1.05 s per framework (measured as a cold tool process
+         on the performance cores, best of four). Four heaps bound its startup and memory on a many-core machine. A
+         consumer's assembly is small, where the server GC's own startup would cost more than it saves, so the knob
+         stays empty there. -->
+    <NumSharpBuildToolEnvironment>DOTNET_gcServer=1;DOTNET_GCHeapCount=4</NumSharpBuildToolEnvironment>
   </PropertyGroup>
+
+  <!-- A WEAVER EDIT RE-WEAVES A FRESH COMPILE. The weave rewrites the intermediate assembly in place, and the subclass weave
+       leaves a module it already wove alone (SubclassWeaver.IsAlreadyWoven: a second pass would add a second prologue), so
+       an edited weaver would otherwise keep the old weave until some Core source changed. The weaver's sources are
+       additional compile inputs: editing one reruns CoreCompile, whose fresh assembly is newer than the weave marker, so
+       _NumSharpCoreBuildWeaver builds the edited tool and NDScopeWeave runs it. -->
+  <ItemGroup Condition="'$(SkipNDScopeWeave)' != 'true'">
+    <CustomAdditionalCompileInputs Include="$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\**\*.cs"
+                                   Exclude="$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\obj\**;$(MSBuildThisFileDirectory)..\..\tools\NumSharp.Build\bin\**" />
+  </ItemGroup>
+
+  <!-- -p:SkipNDScopeWeave=true also skips NumPy's array-subclass weave (SubclassWeaver runs inside the same tool): every
+       np.* function then answers a numpy.matrix or numpy.char.chararray operand with the plain result. Said once per
+       build, as a warning (NDW030: the self-weave's own code, beside the subclass weaver's NDW022..NDW029 and NDW031),
+       so a test run against such a build is not mistaken for the shipped behaviour. -->
+  <Target Name="_NumSharpCoreSubclassWeaveSkipped" BeforeTargets="CoreCompile"
+          Condition="'$(SkipNDScopeWeave)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <Warning Code="NDW030" Text="NumSharp.Core is built with SkipNDScopeWeave=true: the array-subclass weave is skipped too, so the np.* functions answer numpy.matrix and numpy.char.chararray operands with plain results." />
+  </Target>
 
   <!-- The marker path is spelled inline (not via a body-level property): IntermediateOutputPath
        is assigned by the SDK's .targets, which import AFTER the project body — a body-level

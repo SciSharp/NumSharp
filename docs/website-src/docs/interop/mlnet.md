@@ -9,11 +9,11 @@ whole "shape my data into an `IDataView` / read the scores out of one" boilerpla
 hand-writes with a POCO class and a `PredictionEngine` becomes two verbs.
 
 **On this page:** [From zero to a prediction](#from-zero-to-a-prediction) · [The verbs](#the-verbs) ·
-[The two shapes: vector column vs scalar columns](#the-two-shapes) · [Lifetime](#lifetime-who-frees-what) ·
+[The shapes: a vector column, scalar columns, a column per array](#the-shapes) · [Lifetime](#lifetime-who-frees-what) ·
 [Post-processing](#post-processing) · [Dtypes](#dtypes) · [Why only `Microsoft.ML.DataView`](#dependency) ·
 [Limits](#limits)
 
-> Verified on ML.NET 2.0.1 (the floor - `Microsoft.ML.DataView` 2.0.0) and 4.0.2 · net8.0/net10.0 ·
+> Verified on ML.NET 2.0.1 (the floor - `Microsoft.ML.DataView` 2.0.0), 4.0.2 and 5.0.1 · net8.0/net10.0 ·
 > Windows, Linux, macOS. Every claim below is reproduced by a test in `NumSharp.Tests.Interop.MLNet`
 > (real `Microsoft.ML` transforms and trainers; no Python at test time).
 
@@ -34,6 +34,7 @@ whichever version you bring (NuGet unifies the DataView dependency upward).
 ```csharp
 using NumSharp;
 using NumSharp.Interop.MLNet;
+using NumSharp.Interop.OnnxRuntime;   // Postprocess (this package references the ONNX Runtime bridge for it)
 using Microsoft.ML;
 
 // A (rows, features) matrix in NumSharp.
@@ -62,7 +63,8 @@ runner and no POCO class.
 |------|-----------|--------------|
 | `nd.AsDataView("Features")` | NumSharp → ML.NET | An `IDataView` with **one vector column** - the feature-matrix shape a model consumes. Reads the array lazily through its strides (any layout), ARC-pinned. |
 | `nd.AsDataView(["a","b",…])` | NumSharp → ML.NET | An `IDataView` with **one scalar column per feature** - the tabular / training-data shape. |
-| `nd.ToDataView(…)` | NumSharp → ML.NET | Same, over an independent snapshot (mutate/dispose the source freely afterward). |
+| `columns.AsDataView()` | NumSharp → ML.NET | An `IDataView` with **one column per array** of an `IReadOnlyDictionary<string, NDArray>` - a 2-D array is a vector column, a 1-D array a scalar column, each in its own dtype and layout (a `Features` matrix and a `Label` vector in one view). |
+| `nd.ToDataView(…)`, `columns.ToDataView()` | NumSharp → ML.NET | Same, over an independent snapshot (mutate/dispose the source freely afterward). |
 | `nd.ToVBuffer<T>()` | NumSharp → ML.NET | A dense `VBuffer<T>` (a copy - export can't be zero-copy, see [Limits](#limits)). |
 | `view.ToNDArray("col")` | ML.NET → NumSharp | Materialize a column across all rows: a scalar column → 1-D `(R,)`; a fixed-size vector column → 2-D `(R, C)`. |
 | `vbuffer.AsNDArray<T>()` | ML.NET → NumSharp | A **zero-copy** 1-D view over a dense `VBuffer<T>`'s backing array (write-through, pinned); sparse/empty fall back to a copy. |
@@ -74,11 +76,20 @@ computes each element's physical offset itself. (`AsOrtValue` in the ONNX bridge
 `AsDataView` does not, because ML.NET pulls values one row at a time rather than handing a dense pointer
 to a native runtime.)
 
+`view.ToNDArray` reads any `IDataView`, not only this bridge's: a model's output, a `TextLoader` file, a
+`Microsoft.Data.Analysis.DataFrame` (which is one). A DataFrame column's nulls arrive as its `IDataView`
+writes them - NaN in a float column, 0 or `false` in an integer or bool column - with no mask. Where they
+matter, mask them from the DataFrame's own null map:
+`np.ma.masked_array(df.ToNDArray("col"), np.array(df["col"].ElementwiseIsNull().Select(isNull => isNull == true).ToArray()))`.
+The other way, `nd.AsDataView(names).ToDataFrame(-1)` builds a DataFrame from an array; without the `-1`,
+`ToDataFrame` keeps the first 100 rows.
+
 ---
 
-## The two shapes
+## The shapes
 
-ML.NET has two idioms for "a table of numbers", and the two `AsDataView` overloads produce each:
+ML.NET has two idioms for "a table of numbers", and the two `AsDataView` overloads of an array produce each; a
+dictionary of arrays makes a table whose columns are different arrays:
 
 **One vector column** (`AsDataView("Features")`) - the shape a trained pipeline consumes. A 2-D `(R, C)`
 array becomes `R` rows, each a length-`C` `VBuffer`; a 1-D `(C,)` array becomes a single row (one sample).
@@ -90,7 +101,10 @@ using var v = features.AsDataView("Features");   // (150, 4) -> 150 rows of a 4-
 **One scalar column per feature** (`AsDataView(string[] names)`) - the shape for building training data or
 feeding pipelines that reference named scalar columns (then `Concatenate` them into `"Features"`). A 2-D
 `(R, C)` array becomes `R` rows and `C` named scalar columns; a 1-D `(R,)` array with one name becomes `R`
-rows and one scalar column.
+rows and one scalar column. Every name must be distinct: ML.NET would let a later column hide an earlier one
+of the same name, so a repeat - say a copy-paste slip in a long feature list - throws `ArgumentException`
+naming both positions instead of making a feature unreachable. Names compare as ML.NET compares them, case
+included (`"a"` and `"A"` are two columns).
 
 ```csharp
 using var t = data.AsDataView(["SepalLength", "SepalWidth", "Label"]);   // (150, 3) table
@@ -99,10 +113,51 @@ var pipeline = ml.Transforms.Concatenate("Features", "SepalLength", "SepalWidth"
 var model = pipeline.Fit(t);
 ```
 
-Reading a column back mirrors the two shapes: a scalar `"Score"` column of `R` rows comes back as a 1-D
+**One column per array** (`columns.AsDataView()` over an `IReadOnlyDictionary<string, NDArray>`) - the shape
+for training data whose columns are separate arrays of different dtypes: a `Features` matrix and a `Label`
+vector. A 2-D `(R, C)` array becomes a length-`C` vector column and a 1-D `(R,)` array a scalar column; each
+array keeps its own dtype and is read through its own strides, and every array must have the same `R` rows.
+The columns follow the dictionary's enumeration order (ML.NET finds them by name). `columns.ToDataView()` is
+the snapshot form.
+
+```csharp
+using var train = new Dictionary<string, NDArray> { ["Features"] = x, ["Label"] = y }.AsDataView();   // (R, 4) float32 + (R,) bool
+```
+
+Reading a column back mirrors the shapes: a scalar `"Score"` column of `R` rows comes back as a 1-D
 `(R,)` array; a fixed-size vector column of width `C` comes back as `(R, C)`. A variable-length vector
-column (rows disagree on length) is refused - NumSharp arrays are rectangular; pad the column to a fixed
-size in the pipeline first.
+column whose rows disagree on length is refused - NumSharp arrays are rectangular, and NumPy refuses ragged
+rows too; read it with ML.NET's own `view.GetColumn<float[]>("col")` and pad or trim the rows to one length
+before `np.array`. (Rows that all share one length read as usual, declared size or not.)
+
+**Labels.** The label is one more array of a dictionary view, in the type its trainer reads (`bool` for a
+binary classifier, `float32` for a regression and for the `MapValueToKey` of the multiclass recipe). A
+trainer reads the label when it fits only, so the trained model scores new rows without a label column:
+
+```csharp
+using var train = new Dictionary<string, NDArray> { ["Features"] = x, ["Label"] = y }.AsDataView();   // y: (R,) bool
+ITransformer model = ml.BinaryClassification.Trainers.LbfgsLogisticRegression().Fit(train);
+using var newRows = xNew.AsDataView("Features");                                         // no label needed
+using NDArray predicted = model.Transform(newRows).ToNDArray("PredictedLabel");
+```
+
+A single-array view carries a label as one more column of the feature dtype (`np.hstack(x, y)` with
+`AsDataView(string[])`); a trainer that wants another label type then gets it from a conversion step
+(`ml.Transforms.Conversion.ConvertType("Label", outputKind: DataKind.Boolean)`) fitted on its own, outside the
+model, so that the model reads the feature columns only.
+
+A model whose chain maps the label itself - ML.NET's multiclass recipe,
+`MapValueToKey("Label").Append(...)` - asks for a `Label` column when it scores too
+(`Could not find input column 'Label'`). Score a dictionary view that carries the label, or score label-less
+rows with the chain after its label step:
+`new TransformerChain<ITransformer>(((IEnumerable<ITransformer>)model).Skip(1).ToArray()).Transform(view)`.
+
+**Large tables and multi-pass trainers.** `Concatenate` builds each row's feature vector from its scalar
+columns again on every pass over the data, and a trainer such as SDCA or L-BFGS makes many passes. Put
+ML.NET's cache between them, `ml.Transforms.Concatenate(...).AppendCacheCheckpoint(ml).Append(trainer)`:
+on 2,000,000 x 32 float32 rows SDCA (3 iterations) trained in 5.7-5.9 s instead of 9.2-10.8 s - the speed
+of a POCO list (5.1-5.3 s) - with the cache holding one more copy of the columns (peak 1.44 GB instead of
+1.11 GB; the POCO list: 1.47 GB).
 
 ---
 
@@ -110,7 +165,7 @@ size in the pipeline first.
 
 `AsDataView` returns an `NDArrayDataView`. Unlike a bare `IDataView`, it **is** `IDisposable`: dispose it
 (a `using`, or wire it into your `MLContext`'s lifetime) to release the pin it holds on the NumSharp
-buffer. The pin takes its own atomic reference, so:
+buffer (a dictionary view holds one per array, taken all or none). The pin takes its own atomic reference, so:
 
 - The array stays valid for the view even if you dispose or drop the source array while the pipeline still
   reads it - the opposite of a raw ML.NET data source over a managed array, which would read freed data.
@@ -118,9 +173,11 @@ buffer. The pin takes its own atomic reference, so:
   underneath it.
 - Not disposing the view leaks the pin until the finalizer reclaims it (a safety net, not a lifetime
   model). Cursors have the same net: ML.NET abandons cursors itself - `ShuffleRows`, which training
-  pipelines use, never disposes the cursor it opens on its input - and before the net one shuffle kept the
+  pipelines use, never disposes the cursor it opens on its input, and the time-series package's
+  `DetectEntireAnomalyBySrCnn` leaves two per call - and before the net one shuffle kept the
   NumSharp buffer referenced for the life of the process (the pool never got it back, and
-  `resize(refcheck)` refused).
+  `resize(refcheck)` refused). Until a collection finalizes such a cursor, its pin still holds the buffer:
+  disposing the array and the view gives the memory back only then.
 - **Reachable means valid.** Whatever can reach the view - you, a transform's output, a cursor, a getter
   delegate (its closure holds the cursor, the cursor the view) - keeps the pins and the buffer alive, and a
   getter keeps its cursor reachable until its read is done, so a collection that lands while it copies a row
@@ -128,6 +185,17 @@ buffer. The pin takes its own atomic reference, so:
   during that getter's own call). The finalizers of the view and of its cursors only give their reference back
   (never free eagerly), so an alias of the buffer you still hold stays valid after they run, in any order.
   The full analysis: `docs/plans/interop-lifetime-gc-analysis.md`.
+- **ML.NET reads lazily, so dispose the view after the last read.** `model.Transform(view)` reads nothing:
+  it returns a view that reads yours when it is read itself. A `using` scope that ends between the two
+  (`using (var v = x.AsDataView("Features")) output = model.Transform(v);`, then `output.ToNDArray("Score")`)
+  throws `ObjectDisposedException` at the read - for a `ToDataView` snapshot too, since it is the view that
+  was disposed. Read the output inside the scope, or let the scope cover the whole pipeline.
+- **A `VBuffer<T>` view books the array it pins.** `vbuffer.AsNDArray()` pins the buffer's array until the
+  last NumSharp view over it (derived slices included) is disposed or collected, and books the array's bytes
+  with NumSharp's memory accounting meanwhile. The GC counts the array, but a forgotten view's pin keeps it
+  alive past the collection that found the view dead: 5,000 forgotten views of fresh 602 KB buffers held
+  2.3-2.7 GB with nothing booked and 96-299 MB booked. Views you dispose cost nothing: the booking ends
+  with the pin.
 
 **Cursors follow ML.NET's own contract**, checked against the cursors of ML.NET's `Cache`,
 `FilterRowsByColumn`, `TakeRows` and `LoadFromEnumerable`:
@@ -156,7 +224,9 @@ every case, so each test doubles as a no-leak gate.
 ## Post-processing
 
 `Postprocess` turns a score column into a prediction with `np.*` compositions instead of hand-written
-loops - the softmax / argmax / top-k every classifier re-implements over a `float[]`:
+loops - the softmax / argmax / top-k every classifier re-implements over a `float[]`. It is the ONNX Runtime
+bridge's class, which this package references, so `using NumSharp.Interop.OnnxRuntime;` brings it (one
+`Postprocess` however many bridges an app uses; calling it never loads ONNX Runtime):
 
 ```csharp
 using NDArray scores = output.ToNDArray("Score");              // (batch, classes)
@@ -184,7 +254,27 @@ Eleven dtypes map directly to an ML.NET column type:
 ML.NET has no half, decimal or complex column type, so the view-producing verbs **convert**:
 `Half` → `Single` (lossless - every `Half` is an exact `Single`) and `Decimal` → `Double` (lossy beyond
 ~16 significant digits), in a temporary the view owns. `Complex` is refused - split it into real and
-imaginary planes with `np.real` / `np.imag` and feed those.
+imaginary planes with `np.real` / `np.imag` and feed those. Text arrays (`U`, `S`, `StringDType`) are
+refused too: the bridge maps no ML.NET text column. In the other direction `ToNDArray` refuses a text
+column as well; ML.NET's own column reader (in `Microsoft.ML`) reads one in a line -
+`np.array(view.GetColumn<string>("Text").ToArray())` is a fixed-width `U` array, and a vector-of-text
+column (`TokenizeIntoWords`) is `np.array(view.GetColumn<string[]>("Tokens").ToArray())`, `(rows, width)`
+when every row has the same length.
+
+**Key columns read back as their keys.** `PredictedLabel` of a multiclass model or of k-means is a key
+column: `ToNDArray` returns its `uint32` keys, 1-based indices into the model's key space (0 is a missing
+value), not the label values - `MapValueToKey` numbers the labels in the order it first sees them, by
+default. Append `MapKeyToValue("PredictedLabel")` to the pipeline to read the label values back, or
+subtract 1 for a 0-based index into the model's classes (the columns of its `Score`). The values come back
+in the labels' own type: numeric labels through `ToNDArray`; string labels (the species of ML.NET's Iris
+tutorial) make `PredictedLabel` a text column, which `ToNDArray` refuses - read it with
+`np.array(scored.GetColumn<string>("PredictedLabel").ToArray())`, a `U` array.
+
+**ML.NET's trainers read `Single` features.** A `Double` column crosses as `Double`, but the trainers
+and most transforms take `Vector<Single>` only, and NumSharp's default float dtype is float64, as NumPy's
+(`np.random.rand`, `np.array(new[] { 1.5, 2.5 })`, `np.loadtxt`). Convert before the view -
+`x.astype(np.float32).AsDataView("Features")` - or the pipeline stops with ML.NET's
+`Schema mismatch for feature column 'Features': expected Vector<Single>, got Vector<Double>`.
 
 ---
 
@@ -199,6 +289,10 @@ lightweight contract, and the heavy `Microsoft.ML` you already reference for tra
 the exact mirror of how `NumSharp.Interop.OnnxRuntime` depends on `Microsoft.ML.OnnxRuntime.Managed` and
 leaves the native runtime to the consumer.
 
+Any `Microsoft.ML.DataView` from 2.0.0 on is accepted, with no upper bound - the form `Microsoft.ML` itself
+declares it in - so moving your `Microsoft.ML` to a newer major never fails the restore. The suite runs on
+ML.NET 2.0.1, on the current release and on the newest preview.
+
 ---
 
 ## Limits
@@ -206,7 +300,7 @@ leaves the native runtime to the consumer.
 - **`VBuffer<T>` zero-copy is one-directional.** Reading a dense `VBuffer<T>` INTO NumSharp is zero-copy -
   `vbuffer.AsNDArray<T>()` reaches the buffer's private `T[]` through a compiled-expression accessor, pins
   it, and wraps it write-through. But the reverse (`NDArray → VBuffer`) cannot be: `VBuffer<T>` is backed by
-  a managed `T[]` at every ML.NET version (verified 2.0.0 / 3.0.0 / 4.0.2 - there is no `ReadOnlyMemory<T>`
+  a managed `T[]` at every ML.NET version (verified 2.0.0 / 3.0.0 / 4.0.2 / 5.0.1 and the 6.0 previews - there is no `ReadOnlyMemory<T>`
   and no non-public constructor), and a managed array cannot alias NumSharp's unmanaged buffer, so
   `ToVBuffer<T>` copies. The bulk NumSharp→ML.NET path (`AsDataView`) is already zero-copy on its source;
   the `VBuffer` is a per-vector convenience. **Aliasing caveat for `AsNDArray`:** the view shares the
@@ -214,11 +308,27 @@ leaves the native runtime to the consumer.
   instead; zero-copy is safe for a standalone VBuffer you own.
 - **Rank 1 or 2 only.** An `IDataView` is a table of rows; `AsDataView` accepts 1-D and 2-D arrays.
   Reshape higher-rank data first.
+- **A feature axis of length 0 is a variable-length column to ML.NET.** ML.NET has no fixed-size vector of
+  width 0 (a vector size of 0 means "variable length"), so the vector column of an `(R, 0)` array round-trips
+  through `ToNDArray` as `(R, 0)` but is refused by ML.NET's transforms and trainers with their own text
+  (`Wrong column type for input column ... Got: Vector<Single>`). An empty array with features, `(0, C)`, is
+  an ordinary column of no rows.
 - **ML.NET's buffers stop at 2,146,435,071 elements** (its internal `ArrayUtils.ArrayMaxSize`, a little
   below `Array.MaxLength`): `VBufferEditor.Create` - behind every cursor getter and `VBuffer.CopyTo` -
   refuses a longer length. So a vector column wider than that (`AsDataView` / `ToDataView`) and a
   `ToVBuffer` longer than that are refused at export, before anything is allocated; use more rows, or
   expose a long 1-D array as one scalar column.
+- **The view shuffles itself.** `NDArrayDataView.CanShuffle` is `true`: an array reads any row at the same
+  cost, so a cursor ML.NET opens with a `Random` walks every row once in a random permutation drawn from it
+  (row ids stay the source rows; a seeded context gives the same order every run). A trainer that shuffles -
+  SDCA - uses it. That matters for rows stored in class order (`np.vstack` of class blocks): ML.NET's
+  fallback for a source that cannot shuffle (a `LoadFromEnumerable` list, for one) is a pool shuffle that
+  cannot mix them, and SDCA on 20,000 class-sorted rows scored 0.50 accuracy through it. The permutation
+  costs 4 bytes a row per shuffled cursor; a view of more rows than a managed array holds does not shuffle.
+- **Text files lose infinities.** `np.savetxt` writes NumPy's `inf` / `-inf`, and ML.NET's `TextLoader` reads
+  those as NaN - silently, as Double and as Single (it reads `Infinity`, `-Infinity`, `∞` and overflowing
+  numbers such as `1e309` as infinities). The rest of NumPy's default `%.18e` text reads back bit for bit,
+  `-0.0` and subnormals included. Hand the array to ML.NET with `AsDataView` instead of a file.
 - **No `Complex` column.** ML.NET has no complex type (see [Dtypes](#dtypes)).
 - **`ToNDArray` rectangularizes.** A variable-length vector column cannot become a rectangular NDArray and
   is refused with a message naming the cause.
@@ -227,3 +337,15 @@ leaves the native runtime to the consumer.
   ML.NET row filter) - so a column of more than `Array.MaxLength` elements in total imports; it used to stage
   through a managed `T[]` and fail there. A sparse `VBuffer` densifies at any size (the clear used to count
   bytes in an `int` and threw at 2 GB).
+
+## See also
+
+- [An example project](https://github.com/SciSharp/NumSharp/tree/master/examples/NumSharpMLNetExample) - a
+  console app to copy: a binary classifier trained from a NumSharp array exposed as named scalar columns
+  (the label converted outside the model, so the model scores features alone), its predictions read back
+  and scored with NumSharp next to ML.NET's own evaluation, and k-means on one vector column
+- [Train in ML.NET, serve with ONNX Runtime](https://github.com/SciSharp/NumSharp/tree/master/examples/NumSharpMLNetToOnnxRuntimeExample) -
+  a console app to copy: a regression trained on a NumSharp table, exported with ML.NET's `ConvertToOnnx`,
+  served from NumSharp arrays through the ONNX Runtime bridge, and checked against ML.NET's own scores
+- [Interoperability overview](index.md) - the contract every bridge builds on
+- [ONNX Runtime](onnxruntime.md) - the sibling bridge for ONNX models

@@ -69,8 +69,9 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// IL-emitted take kernel, generated once per (copy-width, prefetch) pair. <paramref name="copyKind"/>
-        /// is the <see cref="CopyKindFor"/> of the per-index slab size (1/2/4/8/16 for a typed MOV copy,
-        /// 0 for a runtime-sized <c>cpblk</c>); <paramref name="prefetch"/> emits the software-prefetch
+        /// is the <see cref="CopyKindFor"/> or <see cref="FixedCopyKindFor"/> of the per-index slab size (1/2/4/8/16 for a
+        /// typed MOV copy, any other positive width for a constant-size <c>cpblk</c>, 0 for a runtime-sized one; the slab
+        /// is ADDRESSED with the runtime <c>innerSize</c> either way); <paramref name="prefetch"/> emits the software-prefetch
         /// inner body (a large-source win, a small-source pessimization — the caller gates it on the
         /// gathered region exceeding cache). One kernel handles any ndim, both axis=None and axis=k.
         /// Returns <c>null</c> only when <see cref="Enabled"/> is false.
@@ -125,12 +126,38 @@ namespace NumSharp.Backends.Kernels
             _ => 0,
         };
 
+        /// <summary>The widest slab <see cref="FixedCopyKindFor"/> bakes into a kernel as a constant byte count.</summary>
+        internal const int MaxFixedCopyBytes = 256;
+
         /// <summary>
-        ///     Emit the per-element copy for a gather/scatter inner body. For a fixed
-        ///     <paramref name="copyKind"/> width this is a typed load+store (one MOV, two for 16 bytes);
-        ///     for copyKind 0 it is <c>cpblk</c> with a runtime byte count pushed by
+        ///     The copy width a gather / scatter kernel bakes in for a slab of <paramref name="bytes"/> bytes: the byte count
+        ///     itself for 1 to <see cref="MaxFixedCopyBytes"/> bytes (the five primitive widths keep their typed MOVs, any
+        ///     other width becomes a <c>cpblk</c> of a CONSTANT size, which the JIT unrolls into vector moves), else 0 for a
+        ///     runtime-sized <c>cpblk</c>. A fixed-width string element (<c>&lt;U8</c> is 32 bytes) or a whole row of the
+        ///     string unit view is such a slab: copied with a runtime size, each one was a call to the memory-move helper
+        ///     (~3 ns an element, most of a 1K string <c>take</c>).
+        /// </summary>
+        /// <param name="bytes">The slab size in bytes.</param>
+        /// <returns>The copy kind for <see cref="EmitElementCopy"/>: the width, or 0.</returns>
+        /// <remarks>Only the kernels that address their slabs with the width as a constant
+        ///     (<see cref="GetTakeFlatKernel"/>, <see cref="GetPutFlatKernel"/>) and the general <see cref="GetTakeKernel(int, bool, bool)"/>,
+        ///     which copies with the kind and addresses with its runtime slab argument, accept these kinds. The other families
+        ///     keep <see cref="CopyKindFor"/>.</remarks>
+        internal static int FixedCopyKindFor(long bytes) => bytes >= 1 && bytes <= MaxFixedCopyBytes ? (int)bytes : 0;
+
+        /// <summary>
+        ///     Emit the per-element copy for a gather/scatter inner body. For a primitive
+        ///     <paramref name="copyKind"/> width (1/2/4/8/16) this is a typed load+store (one MOV, two for 16 bytes); for any
+        ///     other positive kind (<see cref="FixedCopyKindFor"/>) it is <c>cpblk</c> of that CONSTANT byte count, which the JIT
+        ///     unrolls into vector moves; for copyKind 0 it is <c>cpblk</c> with a runtime byte count pushed by
         ///     <paramref name="pushByteCount"/>. Consumes nothing else; leaves the stack empty.
         /// </summary>
+        /// <param name="il">The generator.</param>
+        /// <param name="copyKind">The width (see above), or 0 for a runtime count.</param>
+        /// <param name="dst">The local holding the destination address.</param>
+        /// <param name="src">The local holding the source address.</param>
+        /// <param name="pushByteCount">Pushes the runtime byte count; called only for copyKind 0 (null is allowed for a
+        ///     kernel that never emits kind 0).</param>
         internal static void EmitElementCopy(ILGenerator il, int copyKind, LocalBuilder dst, LocalBuilder src, Action pushByteCount)
         {
             switch (copyKind)
@@ -149,6 +176,9 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldloc, dst); il.Emit(OpCodes.Ldc_I4_8); il.Emit(OpCodes.Add);
                     il.Emit(OpCodes.Ldloc, src); il.Emit(OpCodes.Ldc_I4_8); il.Emit(OpCodes.Add);
                     il.Emit(OpCodes.Ldind_I8); il.Emit(OpCodes.Stind_I8); break;
+                case > 0:
+                    // A constant-size block copy: the JIT sees the count and unrolls it (no memory-move helper call).
+                    il.Emit(OpCodes.Ldloc, dst); il.Emit(OpCodes.Ldloc, src); il.Emit(OpCodes.Ldc_I4, copyKind); il.Emit(OpCodes.Cpblk); break;
                 default:
                     il.Emit(OpCodes.Ldloc, dst); il.Emit(OpCodes.Ldloc, src); pushByteCount(); il.Emit(OpCodes.Conv_U4); il.Emit(OpCodes.Cpblk); break;
             }
@@ -319,8 +349,9 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stloc, locDstSlab);
 
             // Element copy: a typed MOV (or two, for 16-byte Complex/Decimal) when the slab is one
-            // primitive width — the common gather case — else cpblk with the runtime innerSize (arg 5).
-            // For the typed widths innerSize == copyKind, so the slab addressing above stays correct.
+            // primitive width — the common gather case —, a constant-size cpblk for any other width the
+            // caller baked in (FixedCopyKindFor: a string element), else cpblk with the runtime innerSize
+            // (arg 5). For every positive kind innerSize == copyKind, so the slab addressing above stays correct.
             // (Cpblk byte count is uint32; per-slab sizes > 2^32 can't arise — they'd need > 4 GB per
             // element, beyond NDArray capacity.)
             EmitElementCopy(il, copyKind, locDstSlab, locSrcSlab, () => il.Emit(OpCodes.Ldarg, 5));

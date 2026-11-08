@@ -23,10 +23,32 @@ namespace NumSharp.Backends
         /// SimdFull/SimdScalarRight/SimdScalarLeft/SimdChunk/General paths.
         /// The integer kernel calls <see cref="Utilities.NDIntegerPower"/> for
         /// exact dtype wrapping (replaces the previous double round-trip).
+        ///
+        /// float32 / float64 loops are NumPy's DOUBLE_power / FLOAT_power: when the exponent's step in NumPy's
+        /// inner-loop call is 0, an exponent of -1, 0, 0.5, 1 or 2 gives 1/x, 1, sqrt(x), x or x*x, otherwise
+        /// pow — on every route (plain, out=, where=, dtype=), decided by NumPy's own trivial-loop and iterator
+        /// rules (<see cref="PowerFloatLoop"/>). float16 is NumPy's HALF_power (powf, no fast path).
         /// </summary>
+        /// <param name="lhs">The bases.</param>
+        /// <param name="rhs">The exponents.</param>
+        /// <param name="dtype">The loop dtype (NumPy's <c>dtype=</c>), or null to promote the inputs.</param>
+        /// <param name="out">The out= array, or null for a fresh result.</param>
+        /// <param name="where">The bool where= mask, or null.</param>
+        /// <returns>The powers, or <paramref name="out"/> when one is given.</returns>
+        /// <exception cref="ArgumentException">An integer loop meets a negative integer exponent ("Integers to
+        /// negative integer powers are not allowed."), a cast is not allowed, a mask is not bool, or the out is
+        /// read-only.</exception>
+        /// <exception cref="INumSharpException">A read-only <paramref name="out"/>: NumPy's ValueError "output array is
+        /// read-only" (<see cref="NumSharpException.ThrowIfNotWriteable"/>).</exception>
+        /// <exception cref="ValueError">A text <paramref name="out"/> under <paramref name="where"/> whose current text does
+        /// not parse into the loop dtype (read before the loop, as NumPy's buffered iteration does).</exception>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast together, or the out cannot hold
+        /// the broadcast result.</exception>
         public override NDArray Power(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "power", lhs, rhs, @out, where);
+            // power has no string loop; refused before the exponent checks read the operands' values.
+            Strings.NDStringUfuncs.ThrowIfBinary("power", lhs, rhs, @out, typeCode, where);
             // NumPy rule: signed integer exponents cannot be negative when the LOOP is an
             // integer loop. The check is on the exponent, regardless of base value (NumPy throws
             // even for base=1 or base=-1 where the answer would be exact). An explicit dtype=
@@ -40,11 +62,39 @@ namespace NumSharp.Backends
             // that promotion (the same one the compute path uses), so keying the guard off it —
             // rather than off lhs.IsInteger(), which is false for a bool base — closes the bool-base
             // gap without over-raising the uint64 case.
-            bool loopIsInteger = typeCode.HasValue
-                ? typeCode.Value.IsInteger()
-                : ResolvePowerResultType(lhs, rhs).IsInteger();
-            if (loopIsInteger && IsSignedInteger(rhs.GetTypeCode) && ContainsNegative(rhs))
+            NPTypeCode promotedLoop = typeCode ?? ResolvePowerResultType(lhs, rhs);
+            bool loopIsInteger = promotedLoop.IsInteger();
+
+            // NEP 50: NumPy packs a 0-d Python-int operand into the loop BEFORE it applies the integer-power rule, and
+            // the pack range-checks it: uint8 ** -1 is the pack's OverflowError ("Python integer -1 out of bounds for
+            // uint8"), int8 ** -129 too, and only a negative exponent that fits meets the ValueError below (plan
+            // api-parameter-parity X21). NumPy parses out= (a read-only out) and where= (the mask's dtype) before it
+            // resolves the loop, so those come first; the routes below repeat them (idempotent).
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+            if (where is not null)
+                ValidateWhereMask(where);
+            CheckWeakPyIntOperand(lhs, rhs, promotedLoop, loopFromPromotion: !typeCode.HasValue);
+
+            // A text out= under where= is READWRITE: NumPy's buffered iteration parses the out's current text into the loop
+            // dtype (after the output cast check and the broadcast) BEFORE the loop runs, so its parse error wins over the
+            // loop's negative-exponent error (probed: power(i8, i8, out=['7', 'x', …], where=…) reports the 'x').
+            if (@out is not null && @out.typecode == NPTypeCode.String && where is not null)
+            {
+                ThrowIfTextOutCastFails("power", "output", promotedLoop, @out);
+                ResolveUfuncIterationShape(BroadcastUfuncInputs(lhs, rhs, @out, where).LeftShape.Clean(), new[] { lhs, rhs },
+                    @out, where);
+                ReadMaskedTextOut(@out, promotedLoop, where);
+            }
+
+            if (loopIsInteger && IsSignedInteger(rhs.GetTypeCode) && ContainsNegative(rhs, where))
                 throw new ArgumentException("Integers to negative integer powers are not allowed.");
+
+            // The float32 / float64 loops branch on the exponent's STEP inside NumPy's inner-loop call, on every
+            // route: NumPy's own decision is replayed there (Default.Power.StrideZero.cs).
+            NPTypeCode loop = ResolvePowerLoop(lhs, rhs, typeCode);
+            if (loop == NPTypeCode.Single || loop == NPTypeCode.Double)
+                return PowerFloatLoop(lhs, rhs, loop, typeCode, @out, where);
 
             // ufunc out=/where=: skip the scalar-exponent fast paths (they return
             // fresh arrays) and route through the iterator with the provided out.
@@ -65,17 +115,21 @@ namespace NumSharp.Backends
             if (typeCode.HasValue)
                 return ExecuteBinaryOp(lhs, rhs, BinaryOp.Power, null, null, typeCode);
 
-            // Scalar-exponent fast paths (mirror NumPy's loops.c.src constant-time bodies):
+            // Scalar-exponent shortcuts for the loops whose values they cannot change: the integer loops (exact
+            // arithmetic, so x*x IS NumPy's repeated squaring, wraparound included) and decimal (no NumPy dtype):
             //   - exp = 0 → ones_like(lhs) in result dtype
             //   - exp = 1 → lhs (cast to result dtype if needed)
             //   - exp = 2 → lhs * lhs (uses SIMD Multiply kernel)
             //   - exp = 0.5 (float)  → sqrt(lhs)
             //   - exp = -1.0 (float) → reciprocal(lhs)
             // Only triggered when:
-            //   - rhs has size == 1 (scalar or 1-element array), AND
+            //   - rhs has size == 1 (scalar or 1-element array) and adds no dimension to lhs, so the result has
+            //     lhs's shape (a (1,1) exponent would make a (3,) base a (1,3) result), AND
             //   - the trivially-substituted op produces the same result dtype the
             //     general Power path would.
-            if (rhs.size == 1)
+            // float16 and complex128 never take them: NumPy's HALF_power is powf on every element (a signalling NaN
+            // ** 1 is quieted, ** 0 is NaN), and every complex power goes through npy_cpow.
+            if (rhs.size == 1 && rhs.ndim <= lhs.ndim && loop != NPTypeCode.Half && loop != NPTypeCode.Complex)
             {
                 var fast = TryScalarExponentFastPath(lhs, rhs);
                 if (fast is not null)
@@ -83,6 +137,21 @@ namespace NumSharp.Backends
             }
 
             return ExecuteBinaryOp(lhs, rhs, BinaryOp.Power);
+        }
+
+        /// <summary>
+        /// The loop dtype NumPy runs power in, exactly as <see cref="ExecuteBinaryOp"/> resolves it: the promoted
+        /// dtype of the operands (NEP 50, a 0-d operand weak), or the <c>dtype=</c> request, and the int8 loop where
+        /// that is bool (power has no bool loop).
+        /// </summary>
+        /// <param name="lhs">The bases.</param>
+        /// <param name="rhs">The exponents.</param>
+        /// <param name="typeCode">The <c>dtype=</c> request, or null.</param>
+        /// <returns>The loop dtype.</returns>
+        private static NPTypeCode ResolvePowerLoop(NDArray lhs, NDArray rhs, NPTypeCode? typeCode)
+        {
+            var loop = typeCode ?? np._FindCommonType(lhs, rhs);
+            return loop == NPTypeCode.Boolean ? NPTypeCode.SByte : loop;
         }
 
         /// <summary>
@@ -95,6 +164,15 @@ namespace NumSharp.Backends
             var rhsTc = rhs.GetTypeCode;
             var lhsTc = lhs.GetTypeCode;
 
+            // Complex power always goes through the faithful npy_cpow port (ComplexPowNumPy in the
+            // Power kernel), never these generic substitutions: NumPy routes EVERY complex power
+            // through npy_cpow, whose integer-exponent branch is EXACT repeated multiplication. The
+            // fast paths do NOT reproduce it for complex — z**2 must be cmul(a,a) (== np.square), not
+            // the complex Multiply kernel (measured ~4700 ULP off), and z**-1 must be cdiv(1,z), not
+            // CDOUBLE_reciprocal (1 ULP off). Bail so complex stays bit-exact vs NumPy.
+            if (lhsTc == NPTypeCode.Complex)
+                return null;
+
             // exp = 0 — works for integer or float exponent
             if (IsScalarValueZero(rhs))
             {
@@ -103,7 +181,7 @@ namespace NumSharp.Backends
                 // dtype the fast path would be wrong — bail out and use the slow path.
                 var resultType = ResolvePowerResultType(lhs, rhs);
                 if (resultType == lhsTc)
-                    return np.ones_like(lhs);
+                    return NDArray.ones(Shape.NewLikeLayout(lhs.Shape, 'K', (long[])lhs.Shape.dimensions.Clone()), lhs.dtype);
                 return null;
             }
 
@@ -134,15 +212,15 @@ namespace NumSharp.Backends
                 double v = ReadScalarAsDouble(rhs);
                 if (v == 0.5)
                 {
-                    // np.sqrt promotes int -> float64 the same way as power would,
+                    // Sqrt promotes int -> float64 the same way as power would,
                     // and preserves float dtypes (f32 -> f32, f64 -> f64).
-                    return np.sqrt(lhs);
+                    return Sqrt(lhs);
                 }
                 if (v == -1.0 && lhsTc.IsFloatingPoint())
                 {
-                    // np.reciprocal preserves float dtype. For integer base we'd need to
+                    // Reciprocal preserves float dtype. For integer base we'd need to
                     // promote, which the general path handles — let it through.
-                    return np.reciprocal(lhs);
+                    return Reciprocal(lhs);
                 }
             }
 
@@ -225,6 +303,37 @@ namespace NumSharp.Backends
         /// Mirrors numpy's per-element check in <c>@TYPE@_power</c> but hoisted to a single
         /// pre-pass so the inner kernel stays branch-free.
         /// </summary>
+        /// <summary>
+        ///     Whether an integer power loop meets a negative exponent where it RUNS: NumPy raises inside the loop, so under a
+        ///     <c>where=</c> mask only a selected element counts (<c>power([2, -1], [2, -1], out=…, where=[True, False])</c>
+        ///     computes <c>[4, …]</c>, probed against NumPy 2.4.2).
+        /// </summary>
+        /// <param name="nd">The exponents.</param>
+        /// <param name="where">The bool mask, or null (every element runs).</param>
+        /// <returns>True when a running element's exponent is negative.</returns>
+        /// <remarks>When the exponents and the mask do not broadcast, this answers false: the ufunc route then raises
+        ///     NumPy's broadcast error, which lists every operand (NumPy builds its iterator before any loop runs).</remarks>
+        private bool ContainsNegative(NDArray nd, NDArray where)
+        {
+            if (where is null)
+                return ContainsNegative(nd);
+            if (!ContainsNegative(nd))
+                return false;
+            try
+            {
+                using var negative = nd.TensorEngine.Less(nd, NewScalar(0L));
+                using var selected = negative.TensorEngine.LogicalAnd(negative, where);
+                return selected.TensorEngine.Any(selected);
+            }
+            catch (Exception e) when (e is IncorrectShapeException or ArgumentException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Whether any exponent of a signed integer array is negative (every element, every layout).</summary>
+        /// <param name="nd">The exponents.</param>
+        /// <returns>True when an element is below zero; false for an unsigned / non-integer dtype.</returns>
         private static bool ContainsNegative(NDArray nd)
         {
             switch (nd.GetTypeCode)

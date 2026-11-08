@@ -11,21 +11,26 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="axis">Axis along which the cumulative product is computed. The default (None) is to compute the cumprod over the flattened array.</param>
-        /// <param name="dtype">Type of the returned array and of the accumulator in which the elements are multiplied (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/> — all convert implicitly). If not specified, it defaults to the dtype of <paramref name="a"/>, unless <paramref name="a"/> has an integer dtype with a precision less than that of the default platform integer, in which case the default platform integer is used.</param>
+        /// <param name="dtype">Type of the returned array and of the accumulator in which the elements are multiplied (a <see cref="System.Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/> — all convert implicitly). If not specified, it defaults to the dtype of <paramref name="a"/>, unless <paramref name="a"/> has an integer dtype with a precision less than that of the default platform integer, in which case the default platform integer is used.</param>
         /// <param name="out">Alternate output array in which to place the result. It must have the same shape and buffer length as the expected output, but its dtype may differ (the result is cast into it with NumPy's unsafe casting) and a reference to <paramref name="out"/> is returned.</param>
         /// <returns>A new array holding the result unless <paramref name="out"/> is specified, in which case a reference to <paramref name="out"/> is returned.</returns>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.nancumprod.html
         /// Port of numpy/lib/_nanfunctions_impl.py::nancumprod: <c>_replace_nan(a, 1)</c> then <c>np.cumprod</c>.
         /// Only float-family dtypes can contain NaN, so integer/bool/decimal inputs are equivalent to <see cref="cumprod"/>.
+        /// The whole function is the engine's <c>TensorEngine.NanCumProd</c> (the np-layer dtype plan, P1b and PE);
+        /// this applies the matrix rule and calls it.
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a read-only <paramref name="out"/>; text a numeric dtype cannot parse.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">A text operand or request NumPy's loop resolution refuses.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape.</exception>
         [NDScoped]
         public static NDArray nancumprod(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null)
         {
-            // Boundary scope: the full-size NaN-replaced copy is reclaimed at exit; the scan
-            // result (or the caller's @out — untracked, a Returns no-op) is yielded.
-            // NumPy: a, mask = _replace_nan(a, 1); return np.cumprod(a, axis, dtype, out).
-            return cumprod(_replace_nan_for_scan(a, 1), axis, dtype, @out);
+            // NumPy's nancumprod is _replace_nan(a, 1) then np.cumprod(a, axis, dtype, out); the whole function, its text
+            // routes included, is the engine's: TensorEngine.NanCumProd.
+            return a.TensorEngine.NanCumProd(a, axis, dtype, @out);
         }
     }
 }

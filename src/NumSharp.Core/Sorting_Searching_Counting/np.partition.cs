@@ -1,4 +1,4 @@
-using NumSharp.Backends.Sorting;
+using System;
 
 namespace NumSharp
 {
@@ -25,8 +25,17 @@ namespace NumSharp
         ///     lexicographic real-then-imag ordering. The result is a fresh C-contiguous copy (house
         ///     np.sort convention — NumPy's copy(order='K') keeps F-order for F-inputs; values identical).
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition
+        ///     (<c>chararray.partition() got an unexpected keyword argument 'axis'</c>),
+        ///     after the argument checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         public static NDArray partition(NDArray a, int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.Partition(a, new[] { kth }, axis, kind, order);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Partition(a, kth, axis, kind, order);
+        }
 
         /// <summary>
         ///     Return a partitioned copy of an array, partitioning around EVERY index in
@@ -41,9 +50,18 @@ namespace NumSharp
         /// <param name="kind">Selection algorithm — only 'introselect' exists.</param>
         /// <param name="order">Must stay null (no structured dtypes).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.partition.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition
+        ///     (<c>chararray.partition() got an unexpected keyword argument 'axis'</c>),
+        ///     after the argument checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         [NDScoped]
         public static NDArray partition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.Partition(a, kth, axis, kind, order);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Partition(a, kth, axis, kind, order);
+        }
 
         /// <summary>
         ///     Return a partitioned copy with the kth indices given as an ARRAY — NumPy's array-kth
@@ -54,8 +72,17 @@ namespace NumSharp
         ///     (uint64 past 2^63 goes negative; 2^64-1 is a legal -1). 0-d and any layout accepted.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.partition.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition
+        ///     (<c>chararray.partition() got an unexpected keyword argument 'axis'</c>),
+        ///     after the argument checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         public static NDArray partition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.Partition(a, kth, axis, kind, order);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Partition(a, kth, axis, kind, order);
+        }
     }
 
     public partial class NDArray
@@ -66,14 +93,14 @@ namespace NumSharp
         ///     null axis flattens in place — the same NumSharp extension <c>ndarray.sort</c> carries).
         /// </summary>
         public void partition(int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.PartitionInPlace(this, new[] { kth }, axis, kind, order);
+            => TensorEngine.PartitionInPlace(this, kth, axis, kind, order);
 
         /// <summary>
         ///     Partition this array in place around every index in <paramref name="kth"/> at once
         ///     (NumPy <c>ndarray.partition</c> with a kth sequence).
         /// </summary>
         public void partition(int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.PartitionInPlace(this, kth, axis, kind, order);
+            => TensorEngine.PartitionInPlace(this, kth, axis, kind, order);
 
         /// <summary>
         ///     Partition this array in place with the kth indices given as an ARRAY (NumPy's array-kth
@@ -81,6 +108,6 @@ namespace NumSharp
         ///     dtype/too-deep rejections and wrap semantics).
         /// </summary>
         public void partition(NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.PartitionInPlace(this, kth, axis, kind, order);
+            => TensorEngine.PartitionInPlace(this, kth, axis, kind, order);
     }
 }

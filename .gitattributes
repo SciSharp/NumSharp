@@ -51,3 +51,4 @@ coverage/generated/**                      linguist-generated=true -diff
 test/inventory/generated/**                linguist-generated=true -diff
 docs/website-src/docs/data/**              linguist-generated=true -diff
 test/NumSharp.Tests.Oracle/Fuzz/corpus/**  linguist-generated=true -diff
+test/NumSharp.Tests.Oracle/Fuzz/Lifetime/corpus/**  linguist-generated=true -diff

@@ -9,8 +9,11 @@
         /// <param name="a">The array whose axes should be reordered.</param>
         /// <param name="source">Original positions of the axes to move. These must be unique (distinct).</param>
         /// <param name="destination">Destination positions for each of the original axes. These must also be unique (distinct).</param>
-        /// <returns>Array with moved axes.</returns>
+        /// <returns>Array with moved axes.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.moveaxis.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray moveaxis(NDArray a, int source, int destination)
             => a.TensorEngine.MoveAxis(a, new[] {source}, new[] {destination});
 
@@ -21,8 +24,11 @@
         /// <param name="a">The array whose axes should be reordered.</param>
         /// <param name="source">Original positions of the axes to move. These must be unique (distinct).</param>
         /// <param name="destination">Destination positions for each of the original axes. These must also be unique (distinct).</param>
-        /// <returns>Array with moved axes.</returns>
+        /// <returns>Array with moved axes.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.moveaxis.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray moveaxis(NDArray a, int[] source, int destination)
             => a.TensorEngine.MoveAxis(a, source, new[] {destination});
 
@@ -33,8 +39,11 @@
         /// <param name="a">The array whose axes should be reordered.</param>
         /// <param name="source">Original positions of the axes to move. These must be unique (distinct).</param>
         /// <param name="destination">Destination positions for each of the original axes. These must also be unique (distinct).</param>
-        /// <returns>Array with moved axes.</returns>
+        /// <returns>Array with moved axes.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.moveaxis.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray moveaxis(NDArray a, int source, int[] destination)
             => a.TensorEngine.MoveAxis(a, new[] {source}, destination);
 
@@ -45,8 +54,11 @@
         /// <param name="a">The array whose axes should be reordered.</param>
         /// <param name="source">Original positions of the axes to move. These must be unique (distinct).</param>
         /// <param name="destination">Destination positions for each of the original axes. These must also be unique (distinct).</param>
-        /// <returns>Array with moved axes.</returns>
+        /// <returns>Array with moved axes.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.moveaxis.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray moveaxis(NDArray a, int[] source, int[] destination)
             => a.TensorEngine.MoveAxis(a, source, destination);
     }

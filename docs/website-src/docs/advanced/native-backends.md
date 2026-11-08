@@ -10,7 +10,7 @@ This page explains that seam - `IBlasBackend` on `TensorEngine.Blas` - the flags
 
 ## The default: 100% managed, no native anything
 
-There is no Fortran to bridge and no C library to link. NumSharp's matrix products, factorisations, transcendentals, and every other kernel are managed C# with runtime-generated SIMD ([IL Generation](../il-generation.md)). For most workloads this is the whole story - and for integer/boolean products it is even *exactly* NumPy's answer, because modular integer arithmetic is associative regardless of order.
+There is no Fortran to bridge and no C library to link. NumSharp's matrix products, the LU factorisations (`det`, `slogdet`, `solve`, `inv`), transcendentals, and every other kernel are managed C# with runtime-generated SIMD ([IL Generation](../il-generation.md)); the other factorisations (eigen, SVD, QR, Cholesky, `lstsq`) need the backend below. For most workloads this is the whole story - and for integer/boolean products it is even *exactly* NumPy's answer, because modular integer arithmetic is associative regardless of order.
 
 The one place a portable managed algorithm cannot match NumPy **bit-for-bit** is float matrix products: NumPy always routes float32/float64/complex128 `@` through cblas, whose arch-specific multi-accumulator scheme no portable loop reproduces. That - and raw speed on large matrices - is why a native backend seam exists.
 
@@ -115,7 +115,7 @@ The dividing line is what a portable managed algorithm *costs*: a GEMM and an un
 ## Troubleshooting
 
 ### "`np.linalg.svd` threw NotSupportedException"
-Core ships no managed SVD/eig/QR. Reference `NumSharp.Interop.OpenBLAS` - the message names the LAPACK routine and the `IBlasBackend.Try*` member the backend supplies.
+Core ships no managed SVD/eig/QR. Reference `NumSharp.Interop.OpenBLAS` - the message (an `OpenBlasMissingBackendException`, a `NotSupportedException`) names that package and the `IBlasBackend.Try*` member the backend supplies.
 
 ### "My product results changed after referencing OpenBLAS"
 That's expected - they became byte-identical to NumPy (and the exact bits depend on thread count + dispatched kernel). Pin `threads`/`coreType` via `OpenBlasEngine.Enable(...)` to match a specific NumPy.

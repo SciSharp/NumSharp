@@ -208,7 +208,7 @@ public class AuditV2_MathSelectionSorting
     /// T1.32 — Public-API typo: np.modf returns (NDArray Fractional, NDArray Intergral).
     /// The second tuple element must be renamed to `Integral` (compile-time API break).
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.32")]
+    [TestMethod]
     public void T1_32_Modf_IntegralFieldName_Typo()
     {
         // Locate the public np.modf method(s) and inspect tuple element names.
@@ -240,15 +240,21 @@ public class AuditV2_MathSelectionSorting
     // ---------------------------------------------------------------------------
 
     /// <summary>
-    /// argsort perf regression — measured ~150-184x slower than NumPy on 1000x1000.
+    /// argsort perf regression guard — at audit time argsort measured ~150-184x slower than
+    /// NumPy on 1000x1000, and this test keeps it within 50× of NumPy.
     ///
-    /// NumSharp uses LINQ (`OrderBy` + per-element NDArray view allocations) in
-    /// `Sorting_Searching_Counting/ndarray.argsort.cs:17-212`. The fix is to use
-    /// a pointer-based typed introsort over each axis stride.
+    /// At audit time NumSharp used LINQ (`OrderBy` + per-element NDArray view allocations) in
+    /// `Sorting_Searching_Counting/ndarray.argsort.cs`. f9b8c6bc replaced it with a radix line
+    /// kernel driven by NDIter (`Backends/Default/Sorting/AxisSort.cs`, `RadixSort.cs`).
     ///
     /// Test threshold: 50× NumPy baseline of ~12.5 ms = 625 ms ceiling.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-argsort-perf")]
+    /// <remarks>
+    /// [OpenBugs] until the 2026-10-05 run of the whole OpenBugs category found it passing:
+    /// 10-18 ms per call in Release and 30-33 ms in a Debug build on an i9-13900K, a 19× margin
+    /// even in Debug, so the wall-clock limit is safe for CI.
+    /// </remarks>
+    [TestMethod] // RESOLVED: argsort is a radix line kernel (was [OpenBugs] audit-v2-argsort-perf).
     public void T2_Argsort_Perf_LINQ_AtLeast50xSlower()
     {
         var rand = new System.Random(42);
@@ -269,8 +275,8 @@ public class AuditV2_MathSelectionSorting
         const double numpyBaselineMs = 12.5;
         const double targetMaxMs = numpyBaselineMs * 50.0; // 50x ceiling
 
-        // Currently exceeds the 50x ceiling. The test should pass after argsort
-        // is rewritten with a typed pointer sort.
+        // Exceeded the 50x ceiling at audit time; passes since argsort became a typed radix
+        // line kernel (f9b8c6bc).
         perIter.Should().BeLessThan(targetMaxMs,
             $"argsort 1000x1000 axis=-1 should be within 50x of NumPy (~{targetMaxMs} ms), measured {perIter:F1} ms");
     }

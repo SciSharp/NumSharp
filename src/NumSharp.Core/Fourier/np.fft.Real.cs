@@ -1,10 +1,12 @@
+using System;
+
 namespace NumSharp
 {
     public partial class FourierModule
     {
         // Real transforms (rfft: real -> complex half-spectrum; irfft: complex half -> real).
-        // Ports of numpy/fft/_pocketfft.py. rfft/irfft resolve fully then reach the 1-D seam;
-        // rfftn/irfftn (and the 2-D wrappers) are pure compositions.
+        // Ports of numpy/fft/_pocketfft.py: each is one call into the TensorEngine.Fft sub-engine
+        // (Backends/FftEngine.cs; the default's statements are Backends/Default/Fourier/DefaultFftEngine.Real.cs).
 
         /// <summary>
         ///     Compute the one-dimensional discrete Fourier Transform for real input. The output length
@@ -15,12 +17,23 @@ namespace NumSharp
         /// <param name="axis">Axis over which to compute the FFT (default the last axis).</param>
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated complex output of shape <c>(..., n//2+1, ...)</c>.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft.html</remarks>
-        [NDScoped]
+        /// <returns>The half spectrum, complex128 (<paramref name="out"/> itself when given).</returns>
+        /// <exception cref="ValueError"><paramref name="n"/> below 1, an unknown <paramref name="norm"/>, or an
+        ///     <paramref name="out"/> of the wrong shape or read-only.</exception>
+        /// <exception cref="IndexError"><paramref name="axis"/> out of range with <paramref name="n"/> omitted.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> out of range with <paramref name="n"/> given.</exception>
+        /// <exception cref="TypeError">A complex input (<c>ufunc 'rfft_n_even'</c> / <c>'rfft_n_odd' not supported for
+        ///     the input types, ...</c>).</exception>
+        /// <exception cref="DTypePromotionError">A text input.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> dtype complex128 cannot be cast to under
+        ///     same_kind.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft.html
+        ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Rfft"/>).</para></remarks>
         public NDArray rfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
-            int nn = n ?? ShapeAt(a, axis);
-            return RawFft(a, nn, axis, isReal: true, isForward: true, norm, @out, "rfft", IsSinglePrecision(a));
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Rfft(a, n, axis, norm, @out);
         }
 
         /// <summary>
@@ -33,12 +46,22 @@ namespace NumSharp
         /// <param name="axis">Axis over which to compute the inverse FFT (default the last axis).</param>
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated real (float64) output of length <c>n</c> on the axis.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.irfft.html</remarks>
-        [NDScoped]
+        /// <returns>The real signal, float64 (<paramref name="out"/> itself when given).</returns>
+        /// <exception cref="ValueError"><paramref name="n"/> below 1 (an input of length 1 with <paramref name="n"/>
+        ///     omitted gives 0), an unknown <paramref name="norm"/>, or an <paramref name="out"/> of the wrong shape or
+        ///     read-only.</exception>
+        /// <exception cref="IndexError"><paramref name="axis"/> out of range with <paramref name="n"/> omitted.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> out of range with <paramref name="n"/> given.</exception>
+        /// <exception cref="DTypePromotionError">A text input.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> dtype float64 cannot be cast to under
+        ///     same_kind.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.irfft.html
+        ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Irfft"/>).</para></remarks>
         public NDArray irfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
-            int nn = n ?? (ShapeAt(a, axis) - 1) * 2;
-            return RawFft(a, nn, axis, isReal: true, isForward: false, norm, @out, "irfft", IsSinglePrecision(a));
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Irfft(a, n, axis, norm, @out);
         }
 
         /// <summary>
@@ -50,9 +73,21 @@ namespace NumSharp
         /// <param name="axes">Axes over which to compute the FFT. Default <c>(-2, -1)</c>.</param>
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated complex output.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft2.html</remarks>
+        /// <returns>The transform, complex128, the last transformed axis halved.</returns>
+        /// <exception cref="ValueError"><paramref name="s"/> and <paramref name="axes"/> of different lengths, a length
+        ///     below 1, an unknown norm, or an unfit out.</exception>
+        /// <exception cref="IndexError">An axis out of range, or no axis to transform.</exception>
+        /// <exception cref="AxisError">An axis out of range for a one-dimensional transform.</exception>
+        /// <exception cref="TypeError">A complex input.</exception>
+        /// <exception cref="DTypePromotionError">A text input.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft2.html
+        ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Rfft2"/>).</para></remarks>
         public NDArray rfft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
-            => rfftn(a, s, axes ?? new[] { -2, -1 }, norm, @out);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Rfft2(a, s, axes, norm, @out);
+        }
 
         /// <summary>
         ///     Compute the N-dimensional discrete Fourier Transform for real input: <see cref="rfft"/>
@@ -64,21 +99,21 @@ namespace NumSharp
         /// <param name="axes">Axes over which to compute the FFT (default: all axes).</param>
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated complex output.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfftn.html</remarks>
-        [NDScoped]
+        /// <returns>The transform, complex128, the last transformed axis halved.</returns>
+        /// <exception cref="ValueError"><paramref name="s"/> and <paramref name="axes"/> of different lengths, a length
+        ///     below 1, an unknown norm, or an unfit out.</exception>
+        /// <exception cref="IndexError">An axis out of range, or no axis to transform (<c>list index out of
+        ///     range</c>).</exception>
+        /// <exception cref="AxisError">An axis out of range for a one-dimensional transform.</exception>
+        /// <exception cref="TypeError">A complex input.</exception>
+        /// <exception cref="DTypePromotionError">A text input.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfftn.html
+        ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Rfftn"/>).</para></remarks>
         public NDArray rfftn(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
         {
-            bool floatPrec = IsSinglePrecision(a); // float-precision source: thread it so every leaf reproduces its own numpy loop
-            var (ss, aa) = CookNdArgs(a, s, axes, invreal: false);
-            // NumPy indexes s[-1]/axes[-1] with no axes to transform (0-d input, or an explicit
-            // empty `axes`), leaking a bare IndexError("list index out of range"). Reproduce it here
-            // rather than let C# surface an IndexOutOfRangeException.
-            if (aa.Length == 0)
-                throw new IndexError("list index out of range");
-            a = RawFft(a, ss[aa.Length - 1], aa[aa.Length - 1], isReal: true, isForward: true, norm, @out, "rfft", floatPrec);
-            for (int ii = aa.Length - 2; ii >= 0; ii--)
-                a = RawFft(a, ss[ii], aa[ii], isReal: false, isForward: true, norm, @out, "fft", floatPrec);
-            return a;
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Rfftn(a, s, axes, norm, @out);
         }
 
         /// <summary>
@@ -91,35 +126,45 @@ namespace NumSharp
         /// <param name="axes">Axes over which to compute the inverse FFT. Default <c>(-2, -1)</c>.</param>
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Accepted for signature parity; NumPy passes <c>out=None</c> internally.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.irfft2.html</remarks>
+        /// <returns>The real result, float64.</returns>
+        /// <exception cref="ValueError"><paramref name="s"/> and <paramref name="axes"/> of different lengths, a length
+        ///     below 1, or an unknown norm.</exception>
+        /// <exception cref="IndexError">An axis out of range, or no axis to transform.</exception>
+        /// <exception cref="AxisError">An axis out of range for a one-dimensional transform.</exception>
+        /// <exception cref="DTypePromotionError">A text input.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.irfft2.html
+        ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Irfft2"/>).</para></remarks>
         public NDArray irfft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
-            => irfftn(a, s, axes ?? new[] { -2, -1 }, norm, @out: null);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Irfft2(a, s, axes, norm, @out);
+        }
 
         /// <summary>
         ///     Compute the inverse of <see cref="rfftn"/>: <see cref="ifft"/> over all axes but the last,
         ///     then <see cref="irfft"/> over the last axis (real output). The last-axis default length is
-        ///     <c>2*(m-1)</c> (see <see cref="CookNdArgs"/> with <c>invreal</c>).
+        ///     <c>2*(m-1)</c>.
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="s">Per-axis output lengths; <c>-1</c> uses the full input length.</param>
         /// <param name="axes">Axes over which to compute the inverse FFT (default: all axes).</param>
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated real (float64) output for the final transform.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.irfftn.html</remarks>
-        [NDScoped]
+        /// <returns>The real result, float64.</returns>
+        /// <exception cref="ValueError"><paramref name="s"/> and <paramref name="axes"/> of different lengths, a length
+        ///     below 1, an unknown norm, or an unfit out.</exception>
+        /// <exception cref="IndexError">An axis out of range, or no axis to transform (<c>tuple</c> / <c>list index out
+        ///     of range</c>).</exception>
+        /// <exception cref="AxisError">An axis out of range for a one-dimensional transform.</exception>
+        /// <exception cref="DTypePromotionError">A text input.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.irfftn.html
+        ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Irfftn"/>).</para></remarks>
         public NDArray irfftn(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
         {
-            bool floatPrec = IsSinglePrecision(a); // float-precision source: thread it so every leaf reproduces its own numpy loop
-            var (ss, aa) = CookNdArgs(a, s, axes, invreal: true);
-            // As in rfftn: no axes to transform leaks NumPy's IndexError("list index out of range")
-            // at the s[-1]/axes[-1] access. (For a shapeless `s`, the invreal defaulting inside
-            // CookNdArgs reaches that access first — see the report's shared-core escalation.)
-            if (aa.Length == 0)
-                throw new IndexError("list index out of range");
-            for (int ii = 0; ii < aa.Length - 1; ii++)
-                a = RawFft(a, ss[ii], aa[ii], isReal: false, isForward: false, norm, @out: null, "ifft", floatPrec);
-            a = RawFft(a, ss[aa.Length - 1], aa[aa.Length - 1], isReal: true, isForward: false, norm, @out, "irfft", floatPrec);
-            return a;
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Irfftn(a, s, axes, norm, @out);
         }
     }
 }

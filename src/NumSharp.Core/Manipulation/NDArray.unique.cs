@@ -91,16 +91,17 @@ namespace NumSharp
         /// <param name="equal_nan">If <c>true</c> (default), all NaNs collapse to one output value.</param>
         /// <param name="sorted">Accepted for API parity; NumSharp always returns sorted output.</param>
         /// <returns>The sorted unique values.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> array of two or more dimensions with an axis (NumPy's structured
+        ///     path refuses it).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> array whose NA object is neither NaN-like nor a string, with an NA
+        ///     among two or more distinct values (NumPy's sort refuses to compare it).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html (the computation is this array's
+        ///     <see cref="TensorEngine.Unique"/> without return flags, of which this member returns the values; the
+        ///     internals are reclaimed at its return).</remarks>
         public NDArray unique(int? axis = null, bool equal_nan = true, bool sorted = true)
-        {
-            // Delegate to the tuple path with all return flags false, then take the values. The
-            // kwargs path uses the optimized sort+mask algorithm (NaN-partition for floats, plain
-            // Array.Sort for integers, IL-vectorizable mask scan) and carries the axis handling —
-            // substantially faster than the legacy Hashset+LongIntroSort path above ~1K elements.
-            return unique(return_index: false, return_inverse: false, return_counts: false,
-                          axis: axis, equal_nan: equal_nan, sorted: sorted)[0];
-        }
+            // With every return flag false the engine returns [values]; the facade of NumPy's bare return takes it.
+            => TensorEngine.Unique(this, axis: axis, equal_nan: equal_nan, sorted: sorted)[0];
 
         /// <summary>
         ///     Find the unique elements of an array with full NumPy keyword argument support.
@@ -118,10 +119,19 @@ namespace NumSharp
         ///   so only one appears in the output. If <c>false</c>, each NaN is treated as unique.</param>
         /// <param name="sorted">If <c>true</c> (default), the unique elements are sorted (NumPy 2.3).
         ///   NumSharp always returns sorted output — NumPy's <c>sorted=False</c> hash order for
-        ///   integer/complex values is platform-specific and not reproducible in C# — so this
+        ///   integer/complex values and for text is platform-specific and not reproducible in C# — so this
         ///   parameter is accepted for API parity but does not change the result (spec-compliant).</param>
-        /// <returns>An array of NDArrays in order: [values, index?, inverse?, counts?].</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
+        /// <returns>An array of NDArrays in order: [values, index?, inverse?, counts?]. With <paramref name="axis"/>
+        ///     null the inverse has the input's shape (NumPy's <c>inv_idx.reshape(ar.shape)</c>: <c>()</c> for a 0-d input,
+        ///     <c>(0, 3)</c> for an empty <c>(0, 3)</c> one).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> array of two or more dimensions with an axis (NumPy's structured
+        ///     path refuses it).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> array whose NA object is neither NaN-like nor a string, where
+        ///     NumPy's sort compares an NA. Text computes NumPy's answer: fixed-width text through NumPy's statements,
+        ///     <c>StringDType</c> through NumPy's flat path (see <see cref="TensorEngine.Unique"/>).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html (the computation is this array's
+        ///     <see cref="TensorEngine.Unique"/>; the internals are reclaimed at its return, the outputs are kept).</remarks>
         public NDArray[] unique(
             bool return_index,
             bool return_inverse = false,
@@ -129,35 +139,31 @@ namespace NumSharp
             int? axis = null,
             bool equal_nan = true,
             bool sorted = true)
-        {
-            // sorted is a no-op: NumSharp cannot reproduce NumPy's non-portable sorted=False hash
-            // order (integer/complex, values-only), so it always returns the deterministic sorted
-            // result — identical AS A SET, and consistent with the unique_values family.
-            _ = sorted;
-
-            if (axis == null)
-            {
-                return uniqueFlatKwargs(return_index, return_inverse, return_counts, equal_nan);
-            }
-
-            int resolved = axis.Value;
-            if (resolved < 0) resolved += ndim;
-            if (resolved < 0 || resolved >= ndim)
-                throw new AxisError(axis.Value, ndim);
-
-            return uniqueAxisKwargs(resolved, return_index, return_inverse, return_counts, equal_nan);
-        }
+            => TensorEngine.Unique(this, return_index, return_inverse, return_counts, axis, equal_nan, sorted);
 
         /// <summary>
-        ///     Find the unique elements of an array.<br></br>
-        ///
-        ///     Returns the sorted unique elements of an array.There are three optional outputs in addition to the unique elements:<br></br>
-        ///     * the indices of the input array that give the unique values<br></br>
-        ///     * the indices of the unique array that reconstruct the input array<br></br>
-        ///     * the number of times each unique value comes up in the input array<br></br>
+        ///     The sorted distinct values of this array, found with a hash set: a legacy helper that no NumSharp code calls,
+        ///     kept for subclasses (it is <c>protected</c> on a public, unsealed class). <c>np.unique</c> does not run it and
+        ///     its answer is not NumPy's in the cases listed under remarks; call <see cref="unique(int?, bool, bool)"/> for
+        ///     NumPy's answer.
         /// </summary>
-        /// <returns></returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html
+        /// <typeparam name="T">The CLR type of the array's dtype. The elements are read as <typeparamref name="T"/> without
+        ///     a check, so any other type reinterprets the bytes.</typeparam>
+        /// <returns>A new 1-D array of the distinct values in ascending order. Values that
+        ///     <see cref="EqualityComparer{T}.Default"/> calls equal are one value: every NaN is one value, and so are -0.0
+        ///     and +0.0; the one kept is the first met in C order, with its bits.</returns>
+        /// <remarks>
+        ///     Where the answer differs from NumPy's <c>np.unique</c>:
+        ///     <list type="bullet">
+        ///       <item><description>a float16 NaN sorts first, because <see cref="Half.CompareTo(Half)"/> orders a NaN below
+        ///         every value (float32 and float64 put it last, as NumPy does);</description></item>
+        ///       <item><description>the NaN kept has the bits of the first NaN met, where NumPy's sort writes the positive
+        ///         quiet NaN for float32 and float64.</description></item>
+        ///     </list>
+        ///     A non-contiguous array is read through <see cref="flat"/>, a raveled copy that is not disposed: its buffer
+        ///     returns to the pool only when the finalizer runs.
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.unique.html
+        /// </remarks>
         protected NDArray unique<T>() where T : unmanaged, IComparable<T>
         {
             unsafe
@@ -165,7 +171,10 @@ namespace NumSharp
                 var hashset = new Hashset<T>();
                 if (Shape.IsContiguous)
                 {
-                    var src = (T*)this.Address;
+                    // The logical start is the base address PLUS the shape's offset: a contiguous view may keep the base
+                    // address with a non-zero offset (np.ndarray over a buffer, a reconstructed view), and reading from
+                    // the base alone took the elements before the view and dropped its last ones.
+                    var src = (T*)this.Address + Shape.offset;
                     long len = this.size;
                     for (long i = 0; i < len; i++)
                         hashset.Add(src[i]);
@@ -186,7 +195,8 @@ namespace NumSharp
                 var arraySlice = new ArraySlice<T>(memoryBlock);
                 Hashset<T>.CopyTo(hashset, arraySlice);
 
-                // NumPy returns sorted unique values with NaN at end
+                // Ascending order. float32 / float64 put a NaN last (NumPy's place for it); every other type sorts by its
+                // CompareTo, which puts a float16 NaN first.
                 SortUnique<T>(memoryBlock.Address, count);
 
                 // Create NDArray directly from ArraySlice (no additional allocation)
@@ -196,9 +206,14 @@ namespace NumSharp
 
         /// <summary>
         /// Sorts the unique values using LongIntroSort. For float/double, uses NaN-aware comparison
-        /// that places NaN at the end (matching NumPy behavior).
+        /// that places NaN at the end (matching NumPy behavior). Every other type sorts by its own
+        /// <see cref="IComparable{T}.CompareTo"/>, which puts a float16 NaN first. The sort is not stable,
+        /// which is harmless here only because the values are distinct.
         /// Supports long indexing for arrays exceeding int.MaxValue elements.
         /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="ptr">The first of <paramref name="count"/> values, sorted in place.</param>
+        /// <param name="count">The number of values.</param>
         private static unsafe void SortUnique<T>(T* ptr, long count) where T : unmanaged, IComparable<T>
         {
             if (typeof(T) == typeof(double))

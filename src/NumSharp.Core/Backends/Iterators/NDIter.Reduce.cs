@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Kernels;
 
 // =============================================================================
@@ -14,8 +15,10 @@ using NumSharp.Backends.Kernels;
 //
 //     do { inner(dataptrs, strides, count, aux); } while (iternext(iter));
 //
-// np.average already builds this shape by hand for its fused 4-operand
-// weighted-sum (Statistics/np.average.cs : TryFusedWeightedSum). This file
+// np.average's fused 4-operand weighted sum built this shape by hand until
+// 2026-10-27, when np.average became NumPy's composition (its partial sums were
+// not np.sum's order); the kernel, DirectILKernelGenerator.WeightedSum.cs, stays
+// as public API. This file
 // hoists that construction into a single reusable factory so every np.*
 // reduction (sum / prod / min / max / mean, single- or multi-axis) shares one
 // audited op_axes builder instead of re-deriving it per call site.
@@ -34,7 +37,7 @@ using NumSharp.Backends.Kernels;
 //          output = oc++ for kept axes, -1 for reduced axes (stride 0 ⇒ REDUCE)
 //
 // This is non-buffered REDUCE+EXTERNAL_LOOP, which is N-D capable via Advance
-// (it sidesteps the 2-D-only buffered reduce double-loop). The inner loop the
+// (no cast, so no buffer and no buffered reduce double loop). The inner loop the
 // kernel sees is one contiguous stripe of the iteration's innermost axis; the
 // output stride is 0 (pinned) when the reduced axis is innermost, else nonzero
 // (slab) when a kept axis is innermost.
@@ -65,7 +68,7 @@ namespace NumSharp.Backends.Iteration
             int ndim = input.ndim;
             if (axis < 0 || axis >= ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis} is out of bounds for array of dimension {ndim}");
+                    string.Create(CultureInfo.InvariantCulture, $"axis {axis} is out of bounds for array of dimension {ndim}"));
 
             var reduced = new bool[ndim];
             reduced[axis] = true;

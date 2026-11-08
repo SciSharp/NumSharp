@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -444,6 +445,37 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <summary>
+        ///     Boxes the strided run <c>start + i * stride</c> into <paramref name="destination"/> (see
+        ///     <see cref="IArraySlice.GetItems"/>): one boxed <typeparamref name="T"/> per element, the values
+        ///     <see cref="UnmanagedStorage.GetAtIndex(long)"/> returns, read straight from this slice's memory.
+        /// </summary>
+        /// <param name="start">The first element.</param>
+        /// <param name="stride">The step in elements (0 repeats an element, negative walks back).</param>
+        /// <param name="destination">Receives the boxed values.</param>
+        /// <remarks>
+        ///     A <see cref="Half"/> is boxed from the value built of its 16-bit pattern, never straight from the pointer:
+        ///     .NET 8's tier-0 code reads past the two bytes when it boxes a <see cref="Half"/> from memory, which ends the
+        ///     process for an element that ends where mapped memory ends (the reason
+        ///     <see cref="UnmanagedStorage.GetAtIndex(long)"/> does the same). The test is a JIT-time constant of each
+        ///     instantiation, so every other element type compiles to the plain loop.
+        /// </remarks>
+        [MethodImpl(Optimize)]
+        void IArraySlice.GetItems(long start, long stride, Span<object> destination)
+        {
+            Debug.Assert(destination.Length == 0 || ((ulong)start < (ulong)Count && (ulong)(start + (destination.Length - 1) * stride) < (ulong)Count),
+                "the run lies inside the slice");
+            T* p = Address + start;
+            if (typeof(T) == typeof(Half))
+            {
+                for (int i = 0; i < destination.Length; i++, p += stride)
+                    destination[i] = BitConverter.UInt16BitsToHalf(*(ushort*)p);
+                return;
+            }
+            for (int i = 0; i < destination.Length; i++, p += stride)
+                destination[i] = *p;
+        }
+
+        /// <summary>
         ///     The start address of this memory block.
         /// </summary>
         T* IMemoryBlock<T>.Address => Address;
@@ -507,7 +539,7 @@ namespace NumSharp.Backends.Unmanaged
             var sourceBytes = Count * ItemLength;
             var targetSize = InfoOf<T1>.Size;
             if (sourceBytes % targetSize != 0)
-                throw new InvalidOperationException($"Cannot reinterpret {sourceBytes} bytes as {typeof(T1).Name} elements.");
+                throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Cannot reinterpret {sourceBytes} bytes as {typeof(T1).Name} elements."));
 
             return new ArraySlice<T1>(UnmanagedMemoryBlock<T1>.Copy(VoidAddress, sourceBytes / targetSize));
         }

@@ -20,7 +20,7 @@ namespace NumSharp.Benchmark
         [GlobalSetup]
         public void Setup()
         {
-            var rnd = new MT19937(42);
+            var rnd = new System.Random(42);
             // first array
             np1 = new double[10_000_000];
 

@@ -27,6 +27,13 @@ Console.WriteLine(OpenBlasEngine.Info);
 OpenBlasEngine.Disable();   // clears engine.Blas — back to NumSharp's managed SIMD GEMM
 ```
 
+> **Two projects to copy:** [`examples/NumSharpOpenBlasDefaultExample`](../../examples/NumSharpOpenBlasDefaultExample/README.md)
+> is a console app with this one package reference and no configuration: the statement that starts the
+> backend, matrix products, linear algebra, and a timing against NumSharp's own kernels.
+> [`examples/NumSharpOpenBlasAdvancedExample`](../../examples/NumSharpOpenBlasAdvancedExample/README.md)
+> pins the OpenBLAS build in the project file (`OpenBlasVersion`) and the thread count and the kernels in
+> code, and prints the hash of one product for each setting.
+
 ## The bundled binary
 
 **The package ships the OpenBLAS binaries NumPy itself ships** — not "an" OpenBLAS. NumPy 2.x does

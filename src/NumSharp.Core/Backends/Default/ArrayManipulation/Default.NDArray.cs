@@ -118,7 +118,7 @@ namespace NumSharp.Backends
 		            throw new NotSupportedException();
             }
 
-            return new NDArray(slice, shape: shape, order: order);
+            return new NDArray(slice, shape: shape, order: order) { TensorEngine = this };
         }
 
         public override NDArray CreateNDArray(Shape shape, DType dtype = null, IArraySlice buffer = null, char order = 'C')
@@ -233,7 +233,7 @@ namespace NumSharp.Backends
 		                throw new NotSupportedException();
                 }
 
-            return new NDArray(buffer, shape: shape, order: order);
+            return new NDArray(buffer, shape: shape, order: order) { TensorEngine = this };
         }
     }
 }

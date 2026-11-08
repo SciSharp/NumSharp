@@ -1,6 +1,3 @@
-using System;
-using NumSharp.Backends;
-
 namespace NumSharp
 {
     public static partial class np
@@ -11,7 +8,7 @@ namespace NumSharp
         /// <param name="args">
         ///     N 1-D sequences of integer or boolean type. A boolean sequence is interpreted as a mask for
         ///     the corresponding dimension (equivalent to passing <see cref="nonzero"/> of it). Accepts
-        ///     anything <see cref="asanyarray"/> understands — <see cref="NDArray"/>, C# arrays, collections,
+        ///     anything <see cref="asanyarray(in object, DType, string)"/> understands — <see cref="NDArray"/>, C# arrays, collections,
         ///     tuples.
         /// </param>
         /// <returns>
@@ -23,77 +20,22 @@ namespace NumSharp
         ///     Port of NumPy 2.x <c>numpy.ix_</c> (<c>numpy/lib/_index_tricks_impl.py</c>). The reshape is a
         ///     VIEW when the source permits one, so the outputs share memory with an <see cref="NDArray"/>
         ///     input (NumPy does the same — <c>shares_memory</c> is True there too) and remain writeable.
+        ///     Every output is a NEW view, a single sequence's too (NumPy's reshape to the same shape): never the
+        ///     input array itself, and never an array that owns its data.
         ///     <para>
         ///     The dtype is PRESERVED, not forced to <c>intp</c>: <c>ix_</c> performs no integer validation,
         ///     so a float or byte sequence comes back as float/byte and only fails later, at the indexing
         ///     call. The single exception is NumPy's: a non-ndarray input that turns out EMPTY is cast to
-        ///     <c>intp</c> (int64) to avoid the float64 default of an untyped empty list.
+        ///     <c>intp</c> (int64) to avoid the float64 default of an untyped empty list. A typed C# array
+        ///     (<c>new int[0]</c>) or <c>Memory&lt;T&gt;</c> is an ndarray in NumSharp's boundary map and keeps
+        ///     its dtype; an empty <c>object[]</c> or collection is a Python list and becomes int64.
         ///     </para>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.ix_.html
         /// </remarks>
         /// <exception cref="ValueError">A sequence is not 1-D ("Cross index must be 1 dimensional").</exception>
         [NDScoped]
         public static NDArray[] ix_(params object[] args)
-        {
-            if (args is null || args.Length == 0)
-                return Array.Empty<NDArray>();
-
-            int nd = args.Length;
-            var @out = new NDArray[nd];
-
-            for (int k = 0; k < nd; k++)
-            {
-                var item = args[k];
-                NDArray New;
-
-                if (item is null)
-                {
-                    // NumPy reaches the same error by a different route: asarray(None) is a 0-d
-                    // object array, whose ndim is 0. NumSharp has no object dtype, so the outcome
-                    // is reproduced directly rather than letting asanyarray raise a bare
-                    // ArgumentNullException from three frames down.
-                    throw new ValueError("Cross index must be 1 dimensional");
-                }
-
-                if (item is NDArray already)
-                {
-                    New = already;
-                }
-                else
-                {
-                    New = asanyarray(item);
-                    // Explicitly type empty arrays to avoid the float default.
-                    if (New.size == 0 && New.typecode != NPTypeCode.Int64)
-                        New = New.astype(NPTypeCode.Int64);
-                }
-
-                if (New.ndim != 1)
-                    throw new ValueError("Cross index must be 1 dimensional");
-
-                if (New.typecode == NPTypeCode.Boolean)
-                    New = nonzero(New)[0];
-
-                // NumPy's reshape((1,)*k + (size,) + (1,)*(nd-k-1)), spelled as the equivalent
-                // insertion of length-1 axes. expand_dims aliases the storage, so a stride-0
-                // (broadcast) or otherwise read-only operand keeps its strides AND its
-                // non-writeable flag — reshape materializes those and would hand back a
-                // writeable copy, which NumPy does not do.
-                if (nd > 1)
-                {
-                    var axes = new int[nd - 1];
-                    for (int i = 0, w = 0; i < nd; i++)
-                    {
-                        if (i != k)
-                            axes[w++] = i;
-                    }
-
-                    New = expand_dims(New, axes);
-                }
-
-                @out[k] = New;
-            }
-
-            return @out;
-        }
+            // NumPy's numpy.ix_: the statements are the array object's (NDArray.IndexTricks.cs)
+            => NDArray.ix_(args);
     }
 }

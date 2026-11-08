@@ -1,0 +1,1250 @@
+{
+  "schema_version": 1,
+  "verified_at_utc": "2026-09-09T15:33:35.2836279Z",
+  "path_base": "Repository root for local_path, path and port.file; manifest_entry fields are preserved verbatim, including original acquisition cache paths.",
+  "selection": {
+    "ranking_json": {
+      "path": "docs/articles/gist/rankings/stars-x-usage-2026-09-09/ranking.json",
+      "sha256": "bdfaddfd2fc517a5af5b45cf0d9e1b64e7f356663730e684d0eab5d65ce07e5a",
+      "bytes": 500700
+    },
+    "ranking_provenance": {
+      "path": "docs/articles/gist/rankings/stars-x-usage-2026-09-09/provenance.json",
+      "sha256": "b3672421b6aca07191ed76e35356b5fbad9693bfb66638380283c543929a94ef"
+    },
+    "source_kind": "gist",
+    "cohort": "complete-parse",
+    "ranks": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "formula": "observed stars * accepted NumPy call sites, including ndarray methods",
+    "unit": "whole gist at pinned revision, not an individual file",
+    "caveats": [
+      "Stars are the saved observations, not refreshed current stars.",
+      "Call sites are statically attributed occurrences across the measured gist, not runtime executions or calls in the C# port.",
+      "Ranking describes the measured corpus, not every public gist."
+    ]
+  },
+  "scope": {
+    "approved": "Functional numerical routines only; full framework applications and their dependencies are out of scope.",
+    "implementation_files": 10,
+    "inventoried_python_source_files": 14,
+    "main_source_files": 10,
+    "companion_source_files": 4,
+    "execution_policy": "Reviewed numerical definitions and independently written NumPy/SciPy references may be evaluated for parity. Original scripts are not executed as complete framework/audio/plotting applications.",
+    "copyright_note": "No bulk original source or prose is reproduced here. Attribution is not a license grant; observed declarations and gaps are recorded per gist."
+  },
+  "verification": {
+    "method": "Read saved ranking and origin files.jsonl; require matching entity revision; SHA256-hash every cached Python source and compare byte count/hash with its manifest; independently UTF-8 encode pinned API file content and require the same hash/size; hash each pinned API JSON and the ranking/provenance inputs.",
+    "source_files_verified": 14,
+    "source_files_matching_manifest": 14,
+    "source_files_matching_pinned_api_content": 14,
+    "pinned_api_acquisition_receipts_verified": 10,
+    "network_requests": 0,
+    "source_files_refetched": false,
+    "stars_refreshed": false,
+    "claim_boundary": "Upstream evidence integrity and attribution only. Numerical parity coverage and measured results are documented in README.md and test artifacts."
+  },
+  "gists": [
+    {
+      "facts": {
+        "saved_ranking_row": {
+          "rank": 1,
+          "entity_id": "5dc237f59f019b26145648e2124ca1c9",
+          "source_kind": "gist",
+          "name": "bshishov/5dc237f59f019b26145648e2124ca1c9",
+          "url": "https://gist.github.com/bshishov/5dc237f59f019b26145648e2124ca1c9",
+          "description": "Python Numpy functions for most common forecasting metrics",
+          "revision": "824c2f332d919185289ded2709752c67bd41244d",
+          "origin_run": "2026-09-09-expanded",
+          "stars": 230,
+          "stars_observed_at": "2026-09-09T15:28:12.478729+03:00",
+          "numpy_call_sites": 60,
+          "ndarray_method_call_sites": 0,
+          "other_numpy_call_sites": 60,
+          "distinct_callable_apis": 12,
+          "stars_x_numpy_call_sites": 13800,
+          "stars_x_distinct_callable_apis": 2760,
+          "source_stratum_call_sites": 60,
+          "stars_x_source_stratum_call_sites": 13800,
+          "totals_by_kind": {
+            "call": 60,
+            "attribute": 3,
+            "import_statement": 1,
+            "import_binding": 1
+          },
+          "metadata_evidence": null,
+          "metadata_sha256": null,
+          "stars_receipt": "../2026-09-09-expanded/receipts/stars-batch-007.json"
+        },
+        "files_manifest": {
+          "path": "docs/articles/gist/runs/2026-09-09-expanded/files.jsonl",
+          "sha256": "62e1558f2c2081339312d4e50a4dfdd5d3f7f00c2fba1b76dbc0f386ec116af6"
+        },
+        "source_files": [
+          {
+            "manifest_entry": {
+              "entity_id": "5dc237f59f019b26145648e2124ca1c9",
+              "revision": "824c2f332d919185289ded2709752c67bd41244d",
+              "path": "forecasting_metrics.py",
+              "source_url": "https://gist.github.com/bshishov/5dc237f59f019b26145648e2124ca1c9/824c2f332d919185289ded2709752c67bd41244d#file-forecasting_metrics-py",
+              "raw_url": "https://gist.githubusercontent.com/bshishov/5dc237f59f019b26145648e2124ca1c9/raw/c796231f77940b78f081104627e4c90448591f21/forecasting_metrics.py",
+              "declared_size": 9800,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T15:27:35.480599+03:00",
+              "fetch_status": "ok",
+              "bytes": 9800,
+              "sha256": "df7a6d0709b228cd8ae9b44a416da200e7f988ef2ef3e0479b89f89bc80a17be",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-expanded\\cache\\source-5dc237f59f019b26145648e2124ca1c9-824c2f332d919185289ded2709752c67bd41244d-db6a85a4134e6560.raw",
+              "cache_relative_path": "cache/source-5dc237f59f019b26145648e2124ca1c9-824c2f332d919185289ded2709752c67bd41244d-db6a85a4134e6560.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "df7a6d0709b228cd8ae9b44a416da200e7f988ef2ef3e0479b89f89bc80a17be",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-expanded/cache/source-5dc237f59f019b26145648e2124ca1c9-824c2f332d919185289ded2709752c67bd41244d-db6a85a4134e6560.raw",
+              "bytes": 9800,
+              "pinned_api_content_sha256": "df7a6d0709b228cd8ae9b44a416da200e7f988ef2ef3e0479b89f89bc80a17be",
+              "pinned_api_content_matches_cache": true
+            }
+          }
+        ],
+        "pinned_api_evidence": {
+          "receipt_verification": {
+            "body_hash_matches": true,
+            "sha256": "58be50ba312e8deae6af6fcd5ec7d0e203a026d079fbf28e62646eb78278e463",
+            "path": "docs/articles/gist/runs/2026-09-09-expanded/receipts/pinned-5dc237f59f019b26145648e2124ca1c9-824c2f332d919185289ded2709752c67bd41244d.json",
+            "body_bytes_match": true,
+            "successful_exit_code": 0
+          },
+          "path": "docs/articles/gist/runs/2026-09-09-expanded/cache/pinned-5dc237f59f019b26145648e2124ca1c9-824c2f332d919185289ded2709752c67bd41244d.json",
+          "sha256": "450596318e190aa80bf8130914355c6c415679b68f5fa6c653d6d6a930d225ca",
+          "bytes": 109354,
+          "auxiliary_files": []
+        },
+        "license_declaration_observation": {
+          "status": "no_explicit_declaration_observed",
+          "scope": "Reviewed files in this pinned gist snapshot; not a statement about all historical revisions or linked projects.",
+          "notes": [
+            "No license grant or public-domain status is inferred from public accessibility or attribution."
+          ],
+          "evidence": []
+        }
+      },
+      "port": {
+        "file": "examples/gist/bshishov.ForecastingMetrics.cs",
+        "main_source": "forecasting_metrics.py",
+        "companion_sources": [],
+        "notes": [
+          "Forecasting metrics, shared normalizations and aggregate evaluation."
+        ]
+      }
+    },
+    {
+      "facts": {
+        "saved_ranking_row": {
+          "rank": 2,
+          "entity_id": "3726239",
+          "source_kind": "gist",
+          "name": "bwhite/3726239",
+          "url": "https://gist.github.com/bwhite/3726239",
+          "description": "Ranking Metrics",
+          "revision": "2c92e90259b01b4a657d20c0ad8390caadd59c8b",
+          "origin_run": "2026-09-09-expanded",
+          "stars": 529,
+          "stars_observed_at": "2026-09-09T15:28:06.443533+03:00",
+          "numpy_call_sites": 17,
+          "ndarray_method_call_sites": 1,
+          "other_numpy_call_sites": 16,
+          "distinct_callable_apis": 7,
+          "stars_x_numpy_call_sites": 8993,
+          "stars_x_distinct_callable_apis": 3703,
+          "source_stratum_call_sites": 17,
+          "stars_x_source_stratum_call_sites": 8993,
+          "totals_by_kind": {
+            "call": 17,
+            "attribute": 1,
+            "import_statement": 1,
+            "import_binding": 1
+          },
+          "metadata_evidence": null,
+          "metadata_sha256": null,
+          "stars_receipt": "../2026-09-09-expanded/receipts/stars-batch-002.json"
+        },
+        "files_manifest": {
+          "path": "docs/articles/gist/runs/2026-09-09-expanded/files.jsonl",
+          "sha256": "62e1558f2c2081339312d4e50a4dfdd5d3f7f00c2fba1b76dbc0f386ec116af6"
+        },
+        "source_files": [
+          {
+            "manifest_entry": {
+              "entity_id": "3726239",
+              "revision": "2c92e90259b01b4a657d20c0ad8390caadd59c8b",
+              "path": "rank_metrics.py",
+              "source_url": "https://gist.github.com/bwhite/3726239/2c92e90259b01b4a657d20c0ad8390caadd59c8b#file-rank_metrics-py",
+              "raw_url": "https://gist.githubusercontent.com/bwhite/3726239/raw/a2de20ded2b059a86cb5a975f5f39e526aaae3d7/rank_metrics.py",
+              "declared_size": 6204,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T15:24:39.253077+03:00",
+              "fetch_status": "ok",
+              "bytes": 6204,
+              "sha256": "b9abd30faa5fe1d4ff968769888bd774ad2220ce1d64365c66aa9b0a42055a1c",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-expanded\\cache\\source-3726239-2c92e90259b01b4a657d20c0ad8390caadd59c8b-ef3bc9751473f529.raw",
+              "cache_relative_path": "cache/source-3726239-2c92e90259b01b4a657d20c0ad8390caadd59c8b-ef3bc9751473f529.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "b9abd30faa5fe1d4ff968769888bd774ad2220ce1d64365c66aa9b0a42055a1c",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-expanded/cache/source-3726239-2c92e90259b01b4a657d20c0ad8390caadd59c8b-ef3bc9751473f529.raw",
+              "bytes": 6204,
+              "pinned_api_content_sha256": "b9abd30faa5fe1d4ff968769888bd774ad2220ce1d64365c66aa9b0a42055a1c",
+              "pinned_api_content_matches_cache": true
+            }
+          }
+        ],
+        "pinned_api_evidence": {
+          "receipt_verification": {
+            "body_hash_matches": true,
+            "sha256": "3fdb1744cb77b0c373f258d36a9a14b8aba5072a2ee560539055551f9a2a699f",
+            "path": "docs/articles/gist/runs/2026-09-09-expanded/receipts/pinned-3726239-2c92e90259b01b4a657d20c0ad8390caadd59c8b.json",
+            "body_bytes_match": true,
+            "successful_exit_code": 0
+          },
+          "path": "docs/articles/gist/runs/2026-09-09-expanded/cache/pinned-3726239-2c92e90259b01b4a657d20c0ad8390caadd59c8b.json",
+          "sha256": "e6181307eec181a6c732faea6dcaf793982f8df5dd8d7e5a2c7ab321b54e1839",
+          "bytes": 250131,
+          "auxiliary_files": []
+        },
+        "license_declaration_observation": {
+          "status": "no_explicit_declaration_observed",
+          "scope": "Reviewed files in this pinned gist snapshot; not a statement about all historical revisions or linked projects.",
+          "notes": [
+            "No license grant or public-domain status is inferred from public accessibility or attribution."
+          ],
+          "evidence": []
+        }
+      },
+      "port": {
+        "file": "examples/gist/bwhite.RankingMetrics.cs",
+        "main_source": "rank_metrics.py",
+        "companion_sources": [],
+        "notes": [
+          "Ranking/retrieval metrics and validation; no external ranking service."
+        ]
+      }
+    },
+    {
+      "facts": {
+        "saved_ranking_row": {
+          "rank": 3,
+          "entity_id": "255291",
+          "source_kind": "gist",
+          "name": "endolith/255291",
+          "url": "https://gist.github.com/endolith/255291",
+          "description": "Frequency estimation methods in Python",
+          "revision": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+          "origin_run": "2026-09-09-expanded",
+          "stars": 244,
+          "stars_observed_at": "2026-09-09T15:28:05.008252+03:00",
+          "numpy_call_sites": 16,
+          "ndarray_method_call_sites": 0,
+          "other_numpy_call_sites": 16,
+          "distinct_callable_apis": 8,
+          "stars_x_numpy_call_sites": 3904,
+          "stars_x_distinct_callable_apis": 1952,
+          "source_stratum_call_sites": 16,
+          "stars_x_source_stratum_call_sites": 3904,
+          "totals_by_kind": {
+            "call": 16,
+            "attribute": 0,
+            "import_statement": 4,
+            "import_binding": 9
+          },
+          "metadata_evidence": null,
+          "metadata_sha256": null,
+          "stars_receipt": "../2026-09-09-expanded/receipts/stars-batch-001.json"
+        },
+        "files_manifest": {
+          "path": "docs/articles/gist/runs/2026-09-09-expanded/files.jsonl",
+          "sha256": "62e1558f2c2081339312d4e50a4dfdd5d3f7f00c2fba1b76dbc0f386ec116af6"
+        },
+        "source_files": [
+          {
+            "manifest_entry": {
+              "entity_id": "255291",
+              "revision": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+              "path": "frequency_estimator.py",
+              "source_url": "https://gist.github.com/endolith/255291/f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f#file-frequency_estimator-py",
+              "raw_url": "https://gist.githubusercontent.com/endolith/255291/raw/d406174f01bcc7d6d087d14cecca1e6d98ae7c16/frequency_estimator.py",
+              "declared_size": 3749,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T15:24:13.503823+03:00",
+              "fetch_status": "ok",
+              "bytes": 3749,
+              "sha256": "7be86bc481c64a7df601430b9ebc44e41224011eea65d6b02c7557972a8ac86d",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-expanded\\cache\\source-255291-f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f-c4754187b206a2ee.raw",
+              "cache_relative_path": "cache/source-255291-f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f-c4754187b206a2ee.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "7be86bc481c64a7df601430b9ebc44e41224011eea65d6b02c7557972a8ac86d",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-expanded/cache/source-255291-f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f-c4754187b206a2ee.raw",
+              "bytes": 3749,
+              "pinned_api_content_sha256": "7be86bc481c64a7df601430b9ebc44e41224011eea65d6b02c7557972a8ac86d",
+              "pinned_api_content_matches_cache": true
+            }
+          },
+          {
+            "manifest_entry": {
+              "entity_id": "255291",
+              "revision": "f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f",
+              "path": "parabolic.py",
+              "source_url": "https://gist.github.com/endolith/255291/f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f#file-parabolic-py",
+              "raw_url": "https://gist.githubusercontent.com/endolith/255291/raw/b89a0dd35e929878021a240b256226cccf6dcabf/parabolic.py",
+              "declared_size": 1576,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T15:24:14.470055+03:00",
+              "fetch_status": "ok",
+              "bytes": 1576,
+              "sha256": "38243bbbab3481a5839228bf71ddfedca79534fb49eaf921b6c644eb7367e5d0",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-expanded\\cache\\source-255291-f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f-be7b4a35a2acee83.raw",
+              "cache_relative_path": "cache/source-255291-f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f-be7b4a35a2acee83.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "38243bbbab3481a5839228bf71ddfedca79534fb49eaf921b6c644eb7367e5d0",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-expanded/cache/source-255291-f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f-be7b4a35a2acee83.raw",
+              "bytes": 1576,
+              "pinned_api_content_sha256": "38243bbbab3481a5839228bf71ddfedca79534fb49eaf921b6c644eb7367e5d0",
+              "pinned_api_content_matches_cache": true
+            }
+          }
+        ],
+        "pinned_api_evidence": {
+          "receipt_verification": {
+            "body_hash_matches": true,
+            "sha256": "b023417c05b457140291ed431bd10c093ff49ab26d97ed930ec3d7c43f968f41",
+            "path": "docs/articles/gist/runs/2026-09-09-expanded/receipts/pinned-255291-f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f.json",
+            "body_bytes_match": true,
+            "successful_exit_code": 0
+          },
+          "path": "docs/articles/gist/runs/2026-09-09-expanded/cache/pinned-255291-f94aa1d3d63a8ec3c0e80f30c6f9f4e375ceea0f.json",
+          "sha256": "36c0a3f072610c1cacf02d85f136aa146ed2f8da490a9b1fba5155a84320507e",
+          "bytes": 122117,
+          "auxiliary_files": [
+            {
+              "filename": "parabolic.md",
+              "raw_url": "https://gist.githubusercontent.com/endolith/255291/raw/f4c48f2fc3f468b4a98599a268a4f040584f0c5b/parabolic.md",
+              "declared_size": 2153,
+              "api_content_truncated": false,
+              "content_utf8_sha256": "3e37b221daa0f8dea4018d32cf8c5d5af1809b2a52a904da3e5d91a30bf179fb",
+              "content_utf8_bytes": 2153,
+              "size_matches": true
+            },
+            {
+              "filename": "readme.md",
+              "raw_url": "https://gist.githubusercontent.com/endolith/255291/raw/6679e42fc357747241669f733b6dbd0b3a857909/readme.md",
+              "declared_size": 3047,
+              "api_content_truncated": false,
+              "content_utf8_sha256": "10e01da6e1943b3e88d9918c1669303df5c911334b492cf0c3386cf87a2dd478",
+              "content_utf8_bytes": 3047,
+              "size_matches": true
+            }
+          ]
+        },
+        "license_declaration_observation": {
+          "status": "no_explicit_declaration_observed",
+          "scope": "Reviewed files in this pinned gist snapshot; not a statement about all historical revisions or linked projects.",
+          "notes": [
+            "No license grant or public-domain status is inferred from public accessibility or attribution."
+          ],
+          "evidence": []
+        }
+      },
+      "port": {
+        "file": "examples/gist/endolith.FrequencyEstimation.cs",
+        "main_source": "frequency_estimator.py",
+        "companion_sources": [
+          "parabolic.py"
+        ],
+        "notes": [
+          "Four frequency estimators, symmetric Blackman-Harris windows and both interpolation routines from parabolic.py.",
+          "The original HPS plotting routine's six diagnostics are preserved separately; the return-valued HPS estimator explicitly repairs recursive spectrum decimation.",
+          "Audio loading and plotting are excluded. Undefined interpolations are documented NaNs."
+        ]
+      }
+    },
+    {
+      "facts": {
+        "saved_ranking_row": {
+          "rank": 4,
+          "entity_id": "00103b0037c5aaea32fe1da1af553355",
+          "source_kind": "gist",
+          "name": "karpathy/00103b0037c5aaea32fe1da1af553355",
+          "url": "https://gist.github.com/karpathy/00103b0037c5aaea32fe1da1af553355",
+          "description": "hacky stablediffusion code for generating videos",
+          "revision": "cfec3bb84900cc3abfe5539d6d69e3fb1f2921b8",
+          "origin_run": "2026-09-09-sorted",
+          "stars": 383,
+          "stars_observed_at": "2026-09-09T17:17:55.602909+03:00",
+          "numpy_call_sites": 8,
+          "ndarray_method_call_sites": 0,
+          "other_numpy_call_sites": 8,
+          "distinct_callable_apis": 5,
+          "stars_x_numpy_call_sites": 3064,
+          "stars_x_distinct_callable_apis": 1915,
+          "source_stratum_call_sites": 8,
+          "stars_x_source_stratum_call_sites": 3064,
+          "totals_by_kind": {
+            "call": 8,
+            "attribute": 2,
+            "import_statement": 1,
+            "import_binding": 1
+          },
+          "metadata_evidence": null,
+          "metadata_sha256": null,
+          "stars_receipt": "../2026-09-09-sorted/receipts/stars-batch-000.json"
+        },
+        "files_manifest": {
+          "path": "docs/articles/gist/runs/2026-09-09-sorted/files.jsonl",
+          "sha256": "71b6bd03412c829e97f67d18f17a43adfa2a97e219e1f05a79195f17c8a21fa8"
+        },
+        "source_files": [
+          {
+            "manifest_entry": {
+              "entity_id": "00103b0037c5aaea32fe1da1af553355",
+              "revision": "cfec3bb84900cc3abfe5539d6d69e3fb1f2921b8",
+              "path": "stablediffusionwalk.py",
+              "source_url": "https://gist.github.com/karpathy/00103b0037c5aaea32fe1da1af553355/cfec3bb84900cc3abfe5539d6d69e3fb1f2921b8#file-stablediffusionwalk-py",
+              "raw_url": "https://gist.githubusercontent.com/karpathy/00103b0037c5aaea32fe1da1af553355/raw/6dd00a70dce6205a8ca3543bd7b4c1c4fbb9518f/stablediffusionwalk.py",
+              "declared_size": 7696,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T17:16:26.47536+03:00",
+              "fetch_status": "ok",
+              "bytes": 7696,
+              "sha256": "cd5c47d7fbfa6d09fafbd6d6938c8a3217bf734c30ce9fb222b238aeb88c8451",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-sorted\\cache\\source-00103b0037c5aaea32fe1da1af553355-cfec3bb84900cc3abfe5539d6d69e3fb1f2921b8-55dbbdcfe4bef303.raw",
+              "cache_relative_path": "cache/source-00103b0037c5aaea32fe1da1af553355-cfec3bb84900cc3abfe5539d6d69e3fb1f2921b8-55dbbdcfe4bef303.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "cd5c47d7fbfa6d09fafbd6d6938c8a3217bf734c30ce9fb222b238aeb88c8451",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-sorted/cache/source-00103b0037c5aaea32fe1da1af553355-cfec3bb84900cc3abfe5539d6d69e3fb1f2921b8-55dbbdcfe4bef303.raw",
+              "bytes": 7696,
+              "pinned_api_content_sha256": "cd5c47d7fbfa6d09fafbd6d6938c8a3217bf734c30ce9fb222b238aeb88c8451",
+              "pinned_api_content_matches_cache": true
+            }
+          }
+        ],
+        "pinned_api_evidence": {
+          "receipt_verification": {
+            "body_hash_matches": true,
+            "sha256": "e7c37a3d14e69b2f0f7c8913a090081ab97659734d27ea4897c807c6675c01d6",
+            "path": "docs/articles/gist/runs/2026-09-09-sorted/receipts/pinned-00103b0037c5aaea32fe1da1af553355-cfec3bb84900cc3abfe5539d6d69e3fb1f2921b8.json",
+            "body_bytes_match": true,
+            "successful_exit_code": 0
+          },
+          "path": "docs/articles/gist/runs/2026-09-09-sorted/cache/pinned-00103b0037c5aaea32fe1da1af553355-cfec3bb84900cc3abfe5539d6d69e3fb1f2921b8.json",
+          "sha256": "116c7c68a0ad996f099b8d0a26b1f69291ead861c45174faf89a966f228d6b14",
+          "bytes": 129084,
+          "auxiliary_files": []
+        },
+        "license_declaration_observation": {
+          "status": "no_explicit_declaration_observed",
+          "scope": "Reviewed files in this pinned gist snapshot; not a statement about all historical revisions or linked projects.",
+          "notes": [
+            "No license grant or public-domain status is inferred from public accessibility or attribution."
+          ],
+          "evidence": []
+        }
+      },
+      "port": {
+        "file": "examples/gist/karpathy.StableDiffusionWalk.cs",
+        "main_source": "stablediffusionwalk.py",
+        "companion_sources": [],
+        "notes": [
+          "Latent spherical interpolation, classifier-free guidance and decoded-image byte conversion.",
+          "No diffusion model, PyTorch, checkpoint download, scheduler, VAE or image generation is supplied."
+        ]
+      }
+    },
+    {
+      "facts": {
+        "saved_ranking_row": {
+          "rank": 5,
+          "entity_id": "c7222daa328f0e885093",
+          "source_kind": "gist",
+          "name": "EderSantana/c7222daa328f0e885093",
+          "url": "https://gist.github.com/EderSantana/c7222daa328f0e885093",
+          "description": "Keras plays catch - a single file Reinforcement Learning example",
+          "revision": "90a8dafa550b581abbe2d578eb10acec0fe3dcd3",
+          "origin_run": "2026-09-09-sorted",
+          "stars": 157,
+          "stars_observed_at": "2026-09-09T17:17:58.281718+03:00",
+          "numpy_call_sites": 13,
+          "ndarray_method_call_sites": 0,
+          "other_numpy_call_sites": 13,
+          "distinct_callable_apis": 6,
+          "stars_x_numpy_call_sites": 2041,
+          "stars_x_distinct_callable_apis": 942,
+          "source_stratum_call_sites": 13,
+          "stars_x_source_stratum_call_sites": 2041,
+          "totals_by_kind": {
+            "call": 13,
+            "attribute": 6,
+            "import_statement": 2,
+            "import_binding": 2
+          },
+          "metadata_evidence": null,
+          "metadata_sha256": null,
+          "stars_receipt": "../2026-09-09-sorted/receipts/stars-batch-002.json"
+        },
+        "files_manifest": {
+          "path": "docs/articles/gist/runs/2026-09-09-sorted/files.jsonl",
+          "sha256": "71b6bd03412c829e97f67d18f17a43adfa2a97e219e1f05a79195f17c8a21fa8"
+        },
+        "source_files": [
+          {
+            "manifest_entry": {
+              "entity_id": "c7222daa328f0e885093",
+              "revision": "90a8dafa550b581abbe2d578eb10acec0fe3dcd3",
+              "path": "qlearn.py",
+              "source_url": "https://gist.github.com/EderSantana/c7222daa328f0e885093/90a8dafa550b581abbe2d578eb10acec0fe3dcd3#file-qlearn-py",
+              "raw_url": "https://gist.githubusercontent.com/EderSantana/c7222daa328f0e885093/raw/14f87d5a2e8969457f9fc78392f7a602e94a9cb0/qlearn.py",
+              "declared_size": 5535,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T17:17:28.516418+03:00",
+              "fetch_status": "ok",
+              "bytes": 5535,
+              "sha256": "cdb007b06d61b69c0207450920e3754787bcd3d422a0be2e145f2364ed05bfc7",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-sorted\\cache\\source-c7222daa328f0e885093-90a8dafa550b581abbe2d578eb10acec0fe3dcd3-1ac5193be7b9d2ee.raw",
+              "cache_relative_path": "cache/source-c7222daa328f0e885093-90a8dafa550b581abbe2d578eb10acec0fe3dcd3-1ac5193be7b9d2ee.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "cdb007b06d61b69c0207450920e3754787bcd3d422a0be2e145f2364ed05bfc7",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-sorted/cache/source-c7222daa328f0e885093-90a8dafa550b581abbe2d578eb10acec0fe3dcd3-1ac5193be7b9d2ee.raw",
+              "bytes": 5535,
+              "pinned_api_content_sha256": "cdb007b06d61b69c0207450920e3754787bcd3d422a0be2e145f2364ed05bfc7",
+              "pinned_api_content_matches_cache": true
+            }
+          },
+          {
+            "manifest_entry": {
+              "entity_id": "c7222daa328f0e885093",
+              "revision": "90a8dafa550b581abbe2d578eb10acec0fe3dcd3",
+              "path": "test.py",
+              "source_url": "https://gist.github.com/EderSantana/c7222daa328f0e885093/90a8dafa550b581abbe2d578eb10acec0fe3dcd3#file-test-py",
+              "raw_url": "https://gist.githubusercontent.com/EderSantana/c7222daa328f0e885093/raw/de9101b13c3955a42e261ef61f3b42df3539f0a7/test.py",
+              "declared_size": 1235,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T17:17:32.823575+03:00",
+              "fetch_status": "ok",
+              "bytes": 1235,
+              "sha256": "c577fb519cee9c000f99d1e015bb251ab309ef4326de5e1c9af4735f41063a80",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-sorted\\cache\\source-c7222daa328f0e885093-90a8dafa550b581abbe2d578eb10acec0fe3dcd3-3665d65394f4f58a.raw",
+              "cache_relative_path": "cache/source-c7222daa328f0e885093-90a8dafa550b581abbe2d578eb10acec0fe3dcd3-3665d65394f4f58a.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "c577fb519cee9c000f99d1e015bb251ab309ef4326de5e1c9af4735f41063a80",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-sorted/cache/source-c7222daa328f0e885093-90a8dafa550b581abbe2d578eb10acec0fe3dcd3-3665d65394f4f58a.raw",
+              "bytes": 1235,
+              "pinned_api_content_sha256": "c577fb519cee9c000f99d1e015bb251ab309ef4326de5e1c9af4735f41063a80",
+              "pinned_api_content_matches_cache": true
+            }
+          }
+        ],
+        "pinned_api_evidence": {
+          "receipt_verification": {
+            "body_hash_matches": true,
+            "sha256": "1a76059114c9fb8e41c8385f910bf06d380a2682376cd058a82940107ee2ac7d",
+            "path": "docs/articles/gist/runs/2026-09-09-sorted/receipts/pinned-c7222daa328f0e885093-90a8dafa550b581abbe2d578eb10acec0fe3dcd3.json",
+            "body_bytes_match": true,
+            "successful_exit_code": 0
+          },
+          "path": "docs/articles/gist/runs/2026-09-09-sorted/cache/pinned-c7222daa328f0e885093-90a8dafa550b581abbe2d578eb10acec0fe3dcd3.json",
+          "sha256": "b78c1fd1eac62ce7f5e0afed5509af540a044494f5940adaf9667f4fff7f7205",
+          "bytes": 119813,
+          "auxiliary_files": [
+            {
+              "filename": "CATCH_Keras_RL.md",
+              "raw_url": "https://gist.githubusercontent.com/EderSantana/c7222daa328f0e885093/raw/abfee796899069fe3519d0e1eaa4ffe5e2e73734/CATCH_Keras_RL.md",
+              "declared_size": 783,
+              "api_content_truncated": false,
+              "content_utf8_sha256": "e147fa0621a0d054ab3d6560ee81f14b7145ae07f039794758965d49676e8084",
+              "content_utf8_bytes": 783,
+              "size_matches": true
+            }
+          ]
+        },
+        "license_declaration_observation": {
+          "status": "MIT_declared_in_pinned_readme",
+          "scope": "Reviewed files in this pinned gist snapshot; not a statement about all historical revisions or linked projects.",
+          "notes": [
+            "CATCH_Keras_RL.md declares the code released under the MIT license and links to a description of MIT; the pinned gist does not embed the complete license text."
+          ],
+          "evidence": [
+            {
+              "file": "CATCH_Keras_RL.md",
+              "section": "License",
+              "raw_url": "https://gist.githubusercontent.com/EderSantana/c7222daa328f0e885093/raw/abfee796899069fe3519d0e1eaa4ffe5e2e73734/CATCH_Keras_RL.md",
+              "api_content_utf8_sha256": "e147fa0621a0d054ab3d6560ee81f14b7145ae07f039794758965d49676e8084",
+              "declaration": "MIT license"
+            }
+          ]
+        }
+      },
+      "port": {
+        "file": "examples/gist/EderSantana.CatchReinforcementLearning.cs",
+        "main_source": "qlearn.py",
+        "companion_sources": [
+          "test.py"
+        ],
+        "notes": [
+          "Catch environment, replay snapshots and Bellman target construction; a prediction delegate replaces the Keras model.",
+          "test.py is inventoried as the original application-playback companion, not ported as a model loader/plotting application."
+        ]
+      }
+    },
+    {
+      "facts": {
+        "saved_ranking_row": {
+          "rank": 6,
+          "entity_id": "77fbb6a8dac5395f1b73e7a89300318d",
+          "source_kind": "gist",
+          "name": "karpathy/77fbb6a8dac5395f1b73e7a89300318d",
+          "url": "https://gist.github.com/karpathy/77fbb6a8dac5395f1b73e7a89300318d",
+          "description": "Natural Evolution Strategies (NES) toy example that optimizes a quadratic function",
+          "revision": "2d87bda1fe2a1711eac65c65a2d215f6cfb799e3",
+          "origin_run": "2026-09-09-sorted",
+          "stars": 195,
+          "stars_observed_at": "2026-09-09T17:17:56.837863+03:00",
+          "numpy_call_sites": 10,
+          "ndarray_method_call_sites": 0,
+          "other_numpy_call_sites": 10,
+          "distinct_callable_apis": 9,
+          "stars_x_numpy_call_sites": 1950,
+          "stars_x_distinct_callable_apis": 1755,
+          "source_stratum_call_sites": 10,
+          "stars_x_source_stratum_call_sites": 1950,
+          "totals_by_kind": {
+            "call": 10,
+            "attribute": 0,
+            "import_statement": 1,
+            "import_binding": 1
+          },
+          "metadata_evidence": null,
+          "metadata_sha256": null,
+          "stars_receipt": "../2026-09-09-sorted/receipts/stars-batch-001.json"
+        },
+        "files_manifest": {
+          "path": "docs/articles/gist/runs/2026-09-09-sorted/files.jsonl",
+          "sha256": "71b6bd03412c829e97f67d18f17a43adfa2a97e219e1f05a79195f17c8a21fa8"
+        },
+        "source_files": [
+          {
+            "manifest_entry": {
+              "entity_id": "77fbb6a8dac5395f1b73e7a89300318d",
+              "revision": "2d87bda1fe2a1711eac65c65a2d215f6cfb799e3",
+              "path": "nes.py",
+              "source_url": "https://gist.github.com/karpathy/77fbb6a8dac5395f1b73e7a89300318d/2d87bda1fe2a1711eac65c65a2d215f6cfb799e3#file-nes-py",
+              "raw_url": "https://gist.githubusercontent.com/karpathy/77fbb6a8dac5395f1b73e7a89300318d/raw/573bddd8588ea4c5030bfb7beb66d95c86e0bfcd/nes.py",
+              "declared_size": 3306,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T17:17:05.576761+03:00",
+              "fetch_status": "ok",
+              "bytes": 3306,
+              "sha256": "4144833dab064335631040b233d19aea2392f1e460a2cae1491a5def5d912f3b",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-sorted\\cache\\source-77fbb6a8dac5395f1b73e7a89300318d-2d87bda1fe2a1711eac65c65a2d215f6cfb799e3-08487b543521b307.raw",
+              "cache_relative_path": "cache/source-77fbb6a8dac5395f1b73e7a89300318d-2d87bda1fe2a1711eac65c65a2d215f6cfb799e3-08487b543521b307.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "4144833dab064335631040b233d19aea2392f1e460a2cae1491a5def5d912f3b",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-sorted/cache/source-77fbb6a8dac5395f1b73e7a89300318d-2d87bda1fe2a1711eac65c65a2d215f6cfb799e3-08487b543521b307.raw",
+              "bytes": 3306,
+              "pinned_api_content_sha256": "4144833dab064335631040b233d19aea2392f1e460a2cae1491a5def5d912f3b",
+              "pinned_api_content_matches_cache": true
+            }
+          }
+        ],
+        "pinned_api_evidence": {
+          "receipt_verification": {
+            "body_hash_matches": true,
+            "sha256": "55eb0051a38b8a6d186f1c00f8cc289316ac23622f5f4006bb67f8005f2518a9",
+            "path": "docs/articles/gist/runs/2026-09-09-sorted/receipts/pinned-77fbb6a8dac5395f1b73e7a89300318d-2d87bda1fe2a1711eac65c65a2d215f6cfb799e3.json",
+            "body_bytes_match": true,
+            "successful_exit_code": 0
+          },
+          "path": "docs/articles/gist/runs/2026-09-09-sorted/cache/pinned-77fbb6a8dac5395f1b73e7a89300318d-2d87bda1fe2a1711eac65c65a2d215f6cfb799e3.json",
+          "sha256": "dbaa116da108d3436c353d8ebb0602312139fc5c46cd70e21a5a8d04c5b255cf",
+          "bytes": 91870,
+          "auxiliary_files": []
+        },
+        "license_declaration_observation": {
+          "status": "no_explicit_declaration_observed",
+          "scope": "Reviewed files in this pinned gist snapshot; not a statement about all historical revisions or linked projects.",
+          "notes": [
+            "No license grant or public-domain status is inferred from public accessibility or attribution."
+          ],
+          "evidence": []
+        }
+      },
+      "port": {
+        "file": "examples/gist/karpathy.NaturalEvolutionStrategies.cs",
+        "main_source": "nes.py",
+        "companion_sources": [],
+        "notes": [
+          "Quadratic reward, perturbation evaluation, normalized-reward update and complete optimization loop."
+        ]
+      }
+    },
+    {
+      "facts": {
+        "saved_ranking_row": {
+          "rank": 7,
+          "entity_id": "250860",
+          "source_kind": "gist",
+          "name": "endolith/250860",
+          "url": "https://gist.github.com/endolith/250860",
+          "description": "Peak detection in Python [Eli Billauer]",
+          "revision": "bd0936f3983d43b37472f7b59991fdd4bcbb35c5",
+          "origin_run": "2026-09-09-sorted",
+          "stars": 178,
+          "stars_observed_at": "2026-09-09T17:17:56.837863+03:00",
+          "numpy_call_sites": 10,
+          "ndarray_method_call_sites": 0,
+          "other_numpy_call_sites": 10,
+          "distinct_callable_apis": 4,
+          "stars_x_numpy_call_sites": 1780,
+          "stars_x_distinct_callable_apis": 712,
+          "source_stratum_call_sites": 10,
+          "stars_x_source_stratum_call_sites": 1780,
+          "totals_by_kind": {
+            "call": 10,
+            "attribute": 5,
+            "import_statement": 1,
+            "import_binding": 6
+          },
+          "metadata_evidence": null,
+          "metadata_sha256": null,
+          "stars_receipt": "../2026-09-09-sorted/receipts/stars-batch-001.json"
+        },
+        "files_manifest": {
+          "path": "docs/articles/gist/runs/2026-09-09-sorted/files.jsonl",
+          "sha256": "71b6bd03412c829e97f67d18f17a43adfa2a97e219e1f05a79195f17c8a21fa8"
+        },
+        "source_files": [
+          {
+            "manifest_entry": {
+              "entity_id": "250860",
+              "revision": "bd0936f3983d43b37472f7b59991fdd4bcbb35c5",
+              "path": "peakdetect.py",
+              "source_url": "https://gist.github.com/endolith/250860/bd0936f3983d43b37472f7b59991fdd4bcbb35c5#file-peakdetect-py",
+              "raw_url": "https://gist.githubusercontent.com/endolith/250860/raw/44903edf42db855d8f0b2cb441a562313b1ef1e4/peakdetect.py",
+              "declared_size": 2452,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T17:17:07.739985+03:00",
+              "fetch_status": "ok",
+              "bytes": 2452,
+              "sha256": "7e7f6a87e7e7479a8d2d080c9806ef0e9249faa957b23c9269d781d62c228e48",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-sorted\\cache\\source-250860-bd0936f3983d43b37472f7b59991fdd4bcbb35c5-7752ac8d30aa8444.raw",
+              "cache_relative_path": "cache/source-250860-bd0936f3983d43b37472f7b59991fdd4bcbb35c5-7752ac8d30aa8444.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "7e7f6a87e7e7479a8d2d080c9806ef0e9249faa957b23c9269d781d62c228e48",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-sorted/cache/source-250860-bd0936f3983d43b37472f7b59991fdd4bcbb35c5-7752ac8d30aa8444.raw",
+              "bytes": 2452,
+              "pinned_api_content_sha256": "7e7f6a87e7e7479a8d2d080c9806ef0e9249faa957b23c9269d781d62c228e48",
+              "pinned_api_content_matches_cache": true
+            }
+          }
+        ],
+        "pinned_api_evidence": {
+          "receipt_verification": {
+            "body_hash_matches": true,
+            "sha256": "f1fa9471c0600d8265c9d5507082617dd9580d573693ccb805154362dafde6b1",
+            "path": "docs/articles/gist/runs/2026-09-09-sorted/receipts/pinned-250860-bd0936f3983d43b37472f7b59991fdd4bcbb35c5.json",
+            "body_bytes_match": true,
+            "successful_exit_code": 0
+          },
+          "path": "docs/articles/gist/runs/2026-09-09-sorted/cache/pinned-250860-bd0936f3983d43b37472f7b59991fdd4bcbb35c5.json",
+          "sha256": "cba0aad6d33b60eff7a568ae907506e517fa7c95d71c46b475526fcf9c144882",
+          "bytes": 125703,
+          "auxiliary_files": [
+            {
+              "filename": "peakdet.m",
+              "raw_url": "https://gist.githubusercontent.com/endolith/250860/raw/44868ef91280735e881101a5850c0b131d4242df/peakdet.m",
+              "declared_size": 1604,
+              "api_content_truncated": false,
+              "content_utf8_sha256": "a332fdf004496ffbf7c310fa4bfdf3e23964856fa8f8f621d9b23474e461db43",
+              "content_utf8_bytes": 1604,
+              "size_matches": true
+            },
+            {
+              "filename": "readme.md",
+              "raw_url": "https://gist.githubusercontent.com/endolith/250860/raw/63205fa50e0cb7411ac82a93dc0db85f74fd2732/readme.md",
+              "declared_size": 492,
+              "api_content_truncated": false,
+              "content_utf8_sha256": "b29014decaa82ef644b76832c853ecb6cdd0e952746044ede2ac36d92de5f684",
+              "content_utf8_bytes": 492,
+              "size_matches": true
+            }
+          ]
+        },
+        "license_declaration_observation": {
+          "status": "public_domain_declared_including_Python_translation",
+          "scope": "Reviewed files in this pinned gist snapshot; not a statement about all historical revisions or linked projects.",
+          "notes": [
+            "peakdetect.py and peakdet.m attribute the original algorithm to Eli Billauer (3 April 2005) and state public-domain release.",
+            "The pinned readme explicitly extends that declaration to endolith's Python translation."
+          ],
+          "evidence": [
+            {
+              "file": "peakdetect.py",
+              "section": "peakdet docstring",
+              "source_url": "https://gist.github.com/endolith/250860/bd0936f3983d43b37472f7b59991fdd4bcbb35c5#file-peakdetect-py",
+              "sha256": "7e7f6a87e7e7479a8d2d080c9806ef0e9249faa957b23c9269d781d62c228e48",
+              "declaration": "Public domain"
+            },
+            {
+              "file": "readme.md",
+              "section": "First paragraph",
+              "raw_url": "https://gist.githubusercontent.com/endolith/250860/raw/63205fa50e0cb7411ac82a93dc0db85f74fd2732/readme.md",
+              "api_content_utf8_sha256": "b29014decaa82ef644b76832c853ecb6cdd0e952746044ede2ac36d92de5f684",
+              "declaration": "The original is public domain, so my translation is, too."
+            }
+          ]
+        }
+      },
+      "port": {
+        "file": "examples/gist/endolith.PeakDetection.cs",
+        "main_source": "peakdetect.py",
+        "companion_sources": [],
+        "notes": [
+          "Hysteresis maxima/minima detection with custom coordinates, original empty-output shape and tie behavior.",
+          "Real inputs are converted to float64; invalid thresholds throw instead of exiting the process."
+        ]
+      }
+    },
+    {
+      "facts": {
+        "saved_ranking_row": {
+          "rank": 8,
+          "entity_id": "1f8dfb1b5c82627ae3efcfbbadb9f514",
+          "source_kind": "gist",
+          "name": "gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514",
+          "url": "https://gist.github.com/gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514",
+          "description": "Logging to tensorboard without tensorflow operations. Uses manually generated summaries instead of summary ops",
+          "revision": "abe6172ae826c4c75fc344ba1def8b756ae9e8a7",
+          "origin_run": "2026-09-09-expanded",
+          "stars": 226,
+          "stars_observed_at": "2026-09-09T15:28:13.41459+03:00",
+          "numpy_call_sites": 7,
+          "ndarray_method_call_sites": 0,
+          "other_numpy_call_sites": 7,
+          "distinct_callable_apis": 6,
+          "stars_x_numpy_call_sites": 1582,
+          "stars_x_distinct_callable_apis": 1356,
+          "source_stratum_call_sites": 7,
+          "stars_x_source_stratum_call_sites": 1582,
+          "totals_by_kind": {
+            "call": 7,
+            "attribute": 2,
+            "import_statement": 1,
+            "import_binding": 1
+          },
+          "metadata_evidence": null,
+          "metadata_sha256": null,
+          "stars_receipt": "../2026-09-09-expanded/receipts/stars-batch-008.json"
+        },
+        "files_manifest": {
+          "path": "docs/articles/gist/runs/2026-09-09-expanded/files.jsonl",
+          "sha256": "62e1558f2c2081339312d4e50a4dfdd5d3f7f00c2fba1b76dbc0f386ec116af6"
+        },
+        "source_files": [
+          {
+            "manifest_entry": {
+              "entity_id": "1f8dfb1b5c82627ae3efcfbbadb9f514",
+              "revision": "abe6172ae826c4c75fc344ba1def8b756ae9e8a7",
+              "path": "tensorboard_logging.py",
+              "source_url": "https://gist.github.com/gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514/abe6172ae826c4c75fc344ba1def8b756ae9e8a7#file-tensorboard_logging-py",
+              "raw_url": "https://gist.githubusercontent.com/gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514/raw/217601ecc326a0cdbfcad03fd33b6592c1d3da18/tensorboard_logging.py",
+              "declared_size": 2973,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T15:27:53.334006+03:00",
+              "fetch_status": "ok",
+              "bytes": 2973,
+              "sha256": "6eb1095ec6d6af6316df0c1dfc86203d774fcdf5704ed72a6662496e07429aec",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-expanded\\cache\\source-1f8dfb1b5c82627ae3efcfbbadb9f514-abe6172ae826c4c75fc344ba1def8b756ae9e8a7-b7e2fb88802bb5a1.raw",
+              "cache_relative_path": "cache/source-1f8dfb1b5c82627ae3efcfbbadb9f514-abe6172ae826c4c75fc344ba1def8b756ae9e8a7-b7e2fb88802bb5a1.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "6eb1095ec6d6af6316df0c1dfc86203d774fcdf5704ed72a6662496e07429aec",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-expanded/cache/source-1f8dfb1b5c82627ae3efcfbbadb9f514-abe6172ae826c4c75fc344ba1def8b756ae9e8a7-b7e2fb88802bb5a1.raw",
+              "bytes": 2973,
+              "pinned_api_content_sha256": "6eb1095ec6d6af6316df0c1dfc86203d774fcdf5704ed72a6662496e07429aec",
+              "pinned_api_content_matches_cache": true
+            }
+          }
+        ],
+        "pinned_api_evidence": {
+          "receipt_verification": {
+            "body_hash_matches": true,
+            "sha256": "b616e945c1a534bd04b907cf9fe109da80c4d5056ba1dbabf4a1613b6b66aa01",
+            "path": "docs/articles/gist/runs/2026-09-09-expanded/receipts/pinned-1f8dfb1b5c82627ae3efcfbbadb9f514-abe6172ae826c4c75fc344ba1def8b756ae9e8a7.json",
+            "body_bytes_match": true,
+            "successful_exit_code": 0
+          },
+          "path": "docs/articles/gist/runs/2026-09-09-expanded/cache/pinned-1f8dfb1b5c82627ae3efcfbbadb9f514-abe6172ae826c4c75fc344ba1def8b756ae9e8a7.json",
+          "sha256": "51044d5790c328dda6f49526763710e11c1fdd889c408aca591dc2bde07c3db8",
+          "bytes": 72631,
+          "auxiliary_files": []
+        },
+        "license_declaration_observation": {
+          "status": "ambiguous_BSD_declaration_without_complete_text",
+          "scope": "Reviewed files in this pinned gist snapshot; not a statement about all historical revisions or linked projects.",
+          "notes": [
+            "The exact header says \"BSD License 2.0\"; no complete license text accompanies it. This is not normalized to BSD-2-Clause, BSD-3-Clause, or any other SPDX identifier."
+          ],
+          "evidence": [
+            {
+              "file": "tensorboard_logging.py",
+              "section": "Module docstring line 3",
+              "source_url": "https://gist.github.com/gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514/abe6172ae826c4c75fc344ba1def8b756ae9e8a7#file-tensorboard_logging-py",
+              "sha256": "6eb1095ec6d6af6316df0c1dfc86203d774fcdf5704ed72a6662496e07429aec",
+              "declaration": "BSD License 2.0"
+            }
+          ]
+        }
+      },
+      "port": {
+        "file": "examples/gist/gyglim.TensorboardHistogram.cs",
+        "main_source": "tensorboard_logging.py",
+        "companion_sources": [],
+        "notes": [
+          "Histogram bucket limits/counts and summary statistics; NumSharp searchsorted/bincount compose the missing histogram operation.",
+          "No TensorFlow SummaryWriter, event-file serialization or TensorBoard viewer is supplied."
+        ]
+      }
+    },
+    {
+      "facts": {
+        "saved_ranking_row": {
+          "rank": 9,
+          "entity_id": "1d878d0401b28b281eb75016ed29f2ee",
+          "source_kind": "gist",
+          "name": "jkleint/1d878d0401b28b281eb75016ed29f2ee",
+          "url": "https://gist.github.com/jkleint/1d878d0401b28b281eb75016ed29f2ee",
+          "description": "Example of using Keras to implement a 1D convolutional neural network (CNN) for timeseries prediction.",
+          "revision": "b12c675bed3be4126fd9f502f0cd9b33ec4b2186",
+          "origin_run": "2026-09-09-sorted",
+          "stars": 138,
+          "stars_observed_at": "2026-09-09T17:17:56.837863+03:00",
+          "numpy_call_sites": 10,
+          "ndarray_method_call_sites": 0,
+          "other_numpy_call_sites": 10,
+          "distinct_callable_apis": 6,
+          "stars_x_numpy_call_sites": 1380,
+          "stars_x_distinct_callable_apis": 828,
+          "source_stratum_call_sites": 10,
+          "stars_x_source_stratum_call_sites": 1380,
+          "totals_by_kind": {
+            "call": 10,
+            "attribute": 7,
+            "import_statement": 1,
+            "import_binding": 1
+          },
+          "metadata_evidence": null,
+          "metadata_sha256": null,
+          "stars_receipt": "../2026-09-09-sorted/receipts/stars-batch-001.json"
+        },
+        "files_manifest": {
+          "path": "docs/articles/gist/runs/2026-09-09-sorted/files.jsonl",
+          "sha256": "71b6bd03412c829e97f67d18f17a43adfa2a97e219e1f05a79195f17c8a21fa8"
+        },
+        "source_files": [
+          {
+            "manifest_entry": {
+              "entity_id": "1d878d0401b28b281eb75016ed29f2ee",
+              "revision": "b12c675bed3be4126fd9f502f0cd9b33ec4b2186",
+              "path": "timeseries_cnn.py",
+              "source_url": "https://gist.github.com/jkleint/1d878d0401b28b281eb75016ed29f2ee/b12c675bed3be4126fd9f502f0cd9b33ec4b2186#file-timeseries_cnn-py",
+              "raw_url": "https://gist.githubusercontent.com/jkleint/1d878d0401b28b281eb75016ed29f2ee/raw/5c62ed1a01e3c17acdc06143c1fa3ad68f592572/timeseries_cnn.py",
+              "declared_size": 7062,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T17:16:50.297735+03:00",
+              "fetch_status": "ok",
+              "bytes": 7062,
+              "sha256": "d94a17b2a3d76ae273fe4f43812bd31fb40a0a4ac37dfcf7c1646df14f629965",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-sorted\\cache\\source-1d878d0401b28b281eb75016ed29f2ee-b12c675bed3be4126fd9f502f0cd9b33ec4b2186-dabd7d069cde52ca.raw",
+              "cache_relative_path": "cache/source-1d878d0401b28b281eb75016ed29f2ee-b12c675bed3be4126fd9f502f0cd9b33ec4b2186-dabd7d069cde52ca.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "d94a17b2a3d76ae273fe4f43812bd31fb40a0a4ac37dfcf7c1646df14f629965",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-sorted/cache/source-1d878d0401b28b281eb75016ed29f2ee-b12c675bed3be4126fd9f502f0cd9b33ec4b2186-dabd7d069cde52ca.raw",
+              "bytes": 7062,
+              "pinned_api_content_sha256": "d94a17b2a3d76ae273fe4f43812bd31fb40a0a4ac37dfcf7c1646df14f629965",
+              "pinned_api_content_matches_cache": true
+            }
+          }
+        ],
+        "pinned_api_evidence": {
+          "receipt_verification": {
+            "body_hash_matches": true,
+            "sha256": "acdcc06b53a02df05f804c4ee876de6a2473f6a1ceee6ab395201864bdca0e42",
+            "path": "docs/articles/gist/runs/2026-09-09-sorted/receipts/pinned-1d878d0401b28b281eb75016ed29f2ee-b12c675bed3be4126fd9f502f0cd9b33ec4b2186.json",
+            "body_bytes_match": true,
+            "successful_exit_code": 0
+          },
+          "path": "docs/articles/gist/runs/2026-09-09-sorted/cache/pinned-1d878d0401b28b281eb75016ed29f2ee-b12c675bed3be4126fd9f502f0cd9b33ec4b2186.json",
+          "sha256": "5bc7711f51eb8afd7be1f6c4716a51bc54bb01c62ba81d44698966e4ac7799ee",
+          "bytes": 113572,
+          "auxiliary_files": []
+        },
+        "license_declaration_observation": {
+          "status": "no_explicit_declaration_observed",
+          "scope": "Reviewed files in this pinned gist snapshot; not a statement about all historical revisions or linked projects.",
+          "notes": [
+            "No license grant or public-domain status is inferred from public accessibility or attribution."
+          ],
+          "evidence": []
+        }
+      },
+      "port": {
+        "file": "examples/gist/jkleint.TimeseriesCnn.cs",
+        "main_source": "timeseries_cnn.py",
+        "companion_sources": [],
+        "notes": [
+          "Time-major normalization, lookback samples/query and chronological train/test splitting.",
+          "No convolutional network creation, Keras fitting or model prediction is supplied."
+        ]
+      }
+    },
+    {
+      "facts": {
+        "saved_ranking_row": {
+          "rank": 10,
+          "entity_id": "a2ede9ab3928f999575423b9887abd14",
+          "source_kind": "gist",
+          "name": "joelouismarino/a2ede9ab3928f999575423b9887abd14",
+          "url": "https://gist.github.com/joelouismarino/a2ede9ab3928f999575423b9887abd14",
+          "description": "GoogLeNet in Keras",
+          "revision": "6c17b8dd160d1212f11a7918d00c7c0c0c85e812",
+          "origin_run": "2026-09-09-sorted",
+          "stars": 215,
+          "stars_observed_at": "2026-09-09T17:17:55.602909+03:00",
+          "numpy_call_sites": 6,
+          "ndarray_method_call_sites": 2,
+          "other_numpy_call_sites": 4,
+          "distinct_callable_apis": 6,
+          "stars_x_numpy_call_sites": 1290,
+          "stars_x_distinct_callable_apis": 1290,
+          "source_stratum_call_sites": 6,
+          "stars_x_source_stratum_call_sites": 1290,
+          "totals_by_kind": {
+            "call": 6,
+            "attribute": 5,
+            "import_statement": 1,
+            "import_binding": 1
+          },
+          "metadata_evidence": null,
+          "metadata_sha256": null,
+          "stars_receipt": "../2026-09-09-sorted/receipts/stars-batch-000.json"
+        },
+        "files_manifest": {
+          "path": "docs/articles/gist/runs/2026-09-09-sorted/files.jsonl",
+          "sha256": "71b6bd03412c829e97f67d18f17a43adfa2a97e219e1f05a79195f17c8a21fa8"
+        },
+        "source_files": [
+          {
+            "manifest_entry": {
+              "entity_id": "a2ede9ab3928f999575423b9887abd14",
+              "revision": "6c17b8dd160d1212f11a7918d00c7c0c0c85e812",
+              "path": "googlenet.py",
+              "source_url": "https://gist.github.com/joelouismarino/a2ede9ab3928f999575423b9887abd14/6c17b8dd160d1212f11a7918d00c7c0c0c85e812#file-googlenet-py",
+              "raw_url": "https://gist.githubusercontent.com/joelouismarino/a2ede9ab3928f999575423b9887abd14/raw/c57c50b3f8c268c7fbeadd83df44818922343f76/googlenet.py",
+              "declared_size": 18049,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T17:16:42.842944+03:00",
+              "fetch_status": "ok",
+              "bytes": 18049,
+              "sha256": "59833005f51947232b73beacd1047121aeeee275ac9fbaa8fcc3b65065f8a51d",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-sorted\\cache\\source-a2ede9ab3928f999575423b9887abd14-6c17b8dd160d1212f11a7918d00c7c0c0c85e812-1b2e26eb2a281495.raw",
+              "cache_relative_path": "cache/source-a2ede9ab3928f999575423b9887abd14-6c17b8dd160d1212f11a7918d00c7c0c0c85e812-1b2e26eb2a281495.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "59833005f51947232b73beacd1047121aeeee275ac9fbaa8fcc3b65065f8a51d",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-sorted/cache/source-a2ede9ab3928f999575423b9887abd14-6c17b8dd160d1212f11a7918d00c7c0c0c85e812-1b2e26eb2a281495.raw",
+              "bytes": 18049,
+              "pinned_api_content_sha256": "59833005f51947232b73beacd1047121aeeee275ac9fbaa8fcc3b65065f8a51d",
+              "pinned_api_content_matches_cache": true
+            }
+          },
+          {
+            "manifest_entry": {
+              "entity_id": "a2ede9ab3928f999575423b9887abd14",
+              "revision": "6c17b8dd160d1212f11a7918d00c7c0c0c85e812",
+              "path": "lrn.py",
+              "source_url": "https://gist.github.com/joelouismarino/a2ede9ab3928f999575423b9887abd14/6c17b8dd160d1212f11a7918d00c7c0c0c85e812#file-lrn-py",
+              "raw_url": "https://gist.githubusercontent.com/joelouismarino/a2ede9ab3928f999575423b9887abd14/raw/da4420de942e10fb4a911347b724c1e74804688e/lrn.py",
+              "declared_size": 1580,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T17:16:44.022895+03:00",
+              "fetch_status": "ok",
+              "bytes": 1580,
+              "sha256": "74ef3eb3e1828da44eb35fd4ff83ba83f79598cac0188145c67d72b15961f815",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-sorted\\cache\\source-a2ede9ab3928f999575423b9887abd14-6c17b8dd160d1212f11a7918d00c7c0c0c85e812-5b61df59852d4bc2.raw",
+              "cache_relative_path": "cache/source-a2ede9ab3928f999575423b9887abd14-6c17b8dd160d1212f11a7918d00c7c0c0c85e812-5b61df59852d4bc2.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "74ef3eb3e1828da44eb35fd4ff83ba83f79598cac0188145c67d72b15961f815",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-sorted/cache/source-a2ede9ab3928f999575423b9887abd14-6c17b8dd160d1212f11a7918d00c7c0c0c85e812-5b61df59852d4bc2.raw",
+              "bytes": 1580,
+              "pinned_api_content_sha256": "74ef3eb3e1828da44eb35fd4ff83ba83f79598cac0188145c67d72b15961f815",
+              "pinned_api_content_matches_cache": true
+            }
+          },
+          {
+            "manifest_entry": {
+              "entity_id": "a2ede9ab3928f999575423b9887abd14",
+              "revision": "6c17b8dd160d1212f11a7918d00c7c0c0c85e812",
+              "path": "pool_helper.py",
+              "source_url": "https://gist.github.com/joelouismarino/a2ede9ab3928f999575423b9887abd14/6c17b8dd160d1212f11a7918d00c7c0c0c85e812#file-pool_helper-py",
+              "raw_url": "https://gist.githubusercontent.com/joelouismarino/a2ede9ab3928f999575423b9887abd14/raw/def2ab2942a4539b846e372d8e2bd2c8f5a08c78/pool_helper.py",
+              "declared_size": 388,
+              "stratum": "source",
+              "parse_status": "not_analyzed",
+              "api_content_truncated": false,
+              "source_observed_at": "2026-09-09T17:16:46.38907+03:00",
+              "fetch_status": "ok",
+              "bytes": 388,
+              "sha256": "5fc18f52fb9c9c4bf3fdcf7015c163d09a82cc1e75c7fae9a4d8abe2689946c5",
+              "cache_path": "K:\\source\\NumSharp\\docs\\articles\\gist\\runs\\2026-09-09-sorted\\cache\\source-a2ede9ab3928f999575423b9887abd14-6c17b8dd160d1212f11a7918d00c7c0c0c85e812-8961b1514a448ed5.raw",
+              "cache_relative_path": "cache/source-a2ede9ab3928f999575423b9887abd14-6c17b8dd160d1212f11a7918d00c7c0c0c85e812-8961b1514a448ed5.raw",
+              "size_verified": true,
+              "pinned_api_content_exact_match": true
+            },
+            "verification": {
+              "sha256": "5fc18f52fb9c9c4bf3fdcf7015c163d09a82cc1e75c7fae9a4d8abe2689946c5",
+              "matches_manifest": true,
+              "local_path": "docs/articles/gist/runs/2026-09-09-sorted/cache/source-a2ede9ab3928f999575423b9887abd14-6c17b8dd160d1212f11a7918d00c7c0c0c85e812-8961b1514a448ed5.raw",
+              "bytes": 388,
+              "pinned_api_content_sha256": "5fc18f52fb9c9c4bf3fdcf7015c163d09a82cc1e75c7fae9a4d8abe2689946c5",
+              "pinned_api_content_matches_cache": true
+            }
+          }
+        ],
+        "pinned_api_evidence": {
+          "receipt_verification": {
+            "body_hash_matches": true,
+            "sha256": "80bccb59be5d66672797a90680e7256db62a29cf811aa33967cadab879972e18",
+            "path": "docs/articles/gist/runs/2026-09-09-sorted/receipts/pinned-a2ede9ab3928f999575423b9887abd14-6c17b8dd160d1212f11a7918d00c7c0c0c85e812.json",
+            "body_bytes_match": true,
+            "successful_exit_code": 0
+          },
+          "path": "docs/articles/gist/runs/2026-09-09-sorted/cache/pinned-a2ede9ab3928f999575423b9887abd14-6c17b8dd160d1212f11a7918d00c7c0c0c85e812.json",
+          "sha256": "515b37bb13ec34a52d8c6ca24d45fe66a59c2973e35706e2e4b7723a8abfb130",
+          "bytes": 184383,
+          "auxiliary_files": [
+            {
+              "filename": "readme.md",
+              "raw_url": "https://gist.githubusercontent.com/joelouismarino/a2ede9ab3928f999575423b9887abd14/raw/8afe8a875eb24a0e9feb7e038edd601051ea4e79/readme.md",
+              "declared_size": 1819,
+              "api_content_truncated": false,
+              "content_utf8_sha256": "95674820ff74a1e34bea6aeba60803bd4f65d5f54a16e4d3eb2c587c31b1bfad",
+              "content_utf8_bytes": 1819,
+              "size_matches": true
+            }
+          ]
+        },
+        "license_declaration_observation": {
+          "status": "no_explicit_declaration_observed",
+          "scope": "Reviewed files in this pinned gist snapshot; not a statement about all historical revisions or linked projects.",
+          "notes": [
+            "No license grant or public-domain status is inferred from public accessibility or attribution."
+          ],
+          "evidence": []
+        }
+      },
+      "port": {
+        "file": "examples/gist/joelouismarino.GoogLeNet.cs",
+        "main_source": "googlenet.py",
+        "companion_sources": [
+          "lrn.py",
+          "pool_helper.py"
+        ],
+        "notes": [
+          "RGB preprocessing, channel-local response normalization from lrn.py, pooling crop from pool_helper.py and class-index selection.",
+          "No convolutional model, pretrained weights, image decoding/resizing or inference engine is supplied."
+        ]
+      }
+    }
+  ]
+}

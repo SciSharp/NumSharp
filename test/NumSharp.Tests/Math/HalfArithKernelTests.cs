@@ -130,4 +130,171 @@ public class HalfArithKernelTests
         for (int i = 0; i < 20; i++) g[i].Should().Be((ushort)0x0002);
         g[20].Should().Be((ushort)0x0400, "max subnormal + min subnormal crosses to normal");
     }
+
+    /// <summary>The four arithmetic ufuncs the widen-compute-narrow kernels serve, by name.</summary>
+    private static readonly (string, Func<NDArray, NDArray, NDArray>)[] Ops =
+    {
+        ("add", (x, y) => np.add(x, y)), ("subtract", (x, y) => np.subtract(x, y)),
+        ("multiply", (x, y) => np.multiply(x, y)), ("divide", (x, y) => np.divide(x, y)),
+    };
+
+    /// <summary>Random float16 bit patterns (every class: NaN payloads both signs, sNaN, inf, subnormal, ±0).</summary>
+    private static NDArray RandomBits(System.Random rng, params long[] dims)
+    {
+        long n = 1;
+        foreach (var d in dims) n *= d;
+        var bits = new ushort[n];
+        for (long i = 0; i < n; i++)
+            bits[i] = (ushort)rng.Next(0, 0x10000);
+        return FromBits(bits).reshape(dims);
+    }
+
+    /// <summary>The logical C-order bit patterns of any layout.</summary>
+    private static ushort[] CBits(NDArray nd)
+    {
+        using var c = nd.copy('C');
+        return Bits(c);
+    }
+
+    /// <summary>
+    /// The strided / broadcast route (plan api-parameter-parity X4 / X15: an odometer over the outer axes, the SIMD
+    /// widen-compute-narrow kernels per inner run, strided runs gathered into 256-element blocks) gives, bit for bit,
+    /// what the contiguous kernel gives over the materialized operands — NumPy's HALF loop is elementwise, so its NaN
+    /// priority and rounding do not depend on the layout. Runs of 300 cross the gather block and leave a tail; the
+    /// random bit patterns hit every value class, NaN payloads included.
+    /// </summary>
+    [TestMethod]
+    public void Arith_BroadcastAndStridedLayouts_MatchTheContiguousKernel_BitForBit()
+    {
+        var rng = new System.Random(20261006);
+        using var a = RandomBits(rng, 37, 300);
+        using var wide = RandomBits(rng, 37, 600);
+        using var col = RandomBits(rng, 37, 1);
+        using var colB = RandomBits(rng, 37, 1);
+        using var row = RandomBits(rng, 1, 300);
+        var strided = wide[":, ::2"];
+        var reversed = a[":, ::-1"];
+        var shape = new Shape(37, 300);
+        // A read-only broadcast VIEW with a stride-0 inner axis: against another column, both operands stay put along
+        // the run (one value per row, two different operands).
+        var colView = np.broadcast_to(col, shape);
+
+        foreach (var (opName, op) in Ops)
+        {
+            foreach (var (name, x, y) in new (string, NDArray, NDArray)[]
+                     {
+                         ("a op col", a, col), ("col op a", col, a), ("a op row", a, row), ("row op a", row, a),
+                         ("strided op col", strided, col), ("row op strided", row, strided),
+                         ("reversed op row", reversed, row), ("strided op reversed", strided, reversed),
+                         ("col op row (outer)", col, row), ("colView op colB", colView, colB),
+                         ("row op colView", row, colView),
+                     })
+            {
+                using var got = op(x, y);
+                using var xm = np.broadcast_to(x, shape).copy();
+                using var ym = np.broadcast_to(y, shape).copy();
+                using var want = op(xm, ym);
+                CBits(got).Should().Equal(Bits(want), $"{opName}: {name}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// With <c>out=</c>, a broadcast or strided float16 input runs the same strided widen-compute-narrow kernel straight
+    /// into a C- or F-contiguous out (X15: numpy.ma's anom subtracts a column mean into an out buffer), bit for bit what
+    /// the iterator route gives; an input that IS the out runs in place, and an input that only overlaps the out (a
+    /// column view of it) is left to the iterator's copy.
+    /// </summary>
+    [TestMethod]
+    public void Arith_OutWithBroadcastInputs_MatchesTheIteratorRoute_BitForBit()
+    {
+        var rng = new System.Random(11);
+        using var a = RandomBits(rng, 37, 300);
+        using var wide = RandomBits(rng, 37, 600);
+        using var col = RandomBits(rng, 37, 1);
+        using var row = RandomBits(rng, 1, 300);
+        using var row1d = RandomBits(rng, 300);
+        var strided = wide[":, ::2"];
+        var shape = new Shape(37, 300);
+
+        foreach (var (opName, _) in Ops)
+        {
+            foreach (var (name, x, y) in new (string, NDArray, NDArray)[]
+                     {
+                         ("a op col", a, col), ("col op a", col, a), ("a op row", a, row), ("row1d op a", row1d, a),
+                         ("strided op col", strided, col), ("row op strided", row, strided), ("col op row", col, row),
+                     })
+            {
+                foreach (bool fOut in new[] { false, true })
+                {
+                    using var fast = fOut ? np.asfortranarray(np.zeros(shape, NPTypeCode.Half)) : np.zeros(shape, NPTypeCode.Half);
+                    using var slow = fOut ? np.asfortranarray(np.zeros(shape, NPTypeCode.Half)) : np.zeros(shape, NPTypeCode.Half);
+                    int runs = NumSharp.Backends.DefaultEngine.TrivialBinaryOutRuns;
+                    OutCall(opName, x, y, fast);
+                    NumSharp.Backends.DefaultEngine.TrivialBinaryOutRuns.Should().Be(runs + 1, $"{opName} {name}: the kernel route ran");
+                    NumSharp.Backends.DefaultEngine.DisableTrivialBinaryOut = true;
+                    try { OutCall(opName, x, y, slow); }
+                    finally { NumSharp.Backends.DefaultEngine.DisableTrivialBinaryOut = false; }
+                    CBits(fast).Should().Equal(CBits(slow), $"{opName}: {name}, out {(fOut ? "F" : "C")}");
+                }
+            }
+        }
+
+        // In place (the input IS the out) runs the kernel; a column VIEW of the out overlaps it and takes the iterator,
+        // which copies the column first (NumPy's COPY_IF_OVERLAP).
+        using var inPlace = a.copy();
+        using var inPlaceWant = np.subtract(a, col);
+        np.subtract(inPlace, col, @out: inPlace);
+        CBits(inPlace).Should().Equal(CBits(inPlaceWant), "in place");
+
+        using var selfCol = a.copy();
+        using var firstColumn = a[":, :1"].copy();
+        using var selfColWant = np.subtract(a, firstColumn);
+        np.subtract(selfCol, selfCol[":, :1"], @out: selfCol);
+        CBits(selfCol).Should().Equal(CBits(selfColWant), "a column view of the out");
+
+        // The transpose of a square out starts at the out's first element but walks it in another order: a forward pass
+        // would read elements it already wrote, so it must take the iterator's copy (NumPy's COPY_IF_OVERLAP).
+        using var square = RandomBits(rng, 40, 40);
+        using var squareCopy = square.copy();
+        using var squareWant = np.add(squareCopy, squareCopy.T);
+        int before = NumSharp.Backends.DefaultEngine.TrivialBinaryOutRuns;
+        np.add(square, square.T, @out: square);
+        NumSharp.Backends.DefaultEngine.TrivialBinaryOutRuns.Should().Be(before, "a transposed view of the out is not run in place");
+        CBits(square).Should().Equal(CBits(squareWant), "the transpose of the out");
+    }
+
+    /// <summary>Calls the named float16 arithmetic ufunc with <c>out=</c>.</summary>
+    private static void OutCall(string opName, NDArray x, NDArray y, NDArray o)
+    {
+        switch (opName)
+        {
+            case "add": np.add(x, y, @out: o); break;
+            case "subtract": np.subtract(x, y, @out: o); break;
+            case "multiply": np.multiply(x, y, @out: o); break;
+            default: np.divide(x, y, @out: o); break;
+        }
+    }
+
+    /// <summary>
+    /// A broadcast set of strictly F-ordered operands is walked with its axes reversed into an F result (X4): NumPy's
+    /// layout without a C result copied to F, and the contiguous kernel's bits.
+    /// </summary>
+    [TestMethod]
+    public void Arith_FOrderedBroadcastSet_IsFAndExact()
+    {
+        var rng = new System.Random(7);
+        using var f = np.asfortranarray(RandomBits(rng, 5, 6, 70));
+        using var fb = np.asfortranarray(RandomBits(rng, 5, 1, 70));
+        foreach (var (opName, op) in Ops)
+        {
+            using var got = op(f, fb);
+            got.Shape.IsFContiguous.Should().BeTrue(opName);
+            got.Shape.IsContiguous.Should().BeFalse(opName);
+            using var fm = f.copy('C');
+            using var fbm = np.broadcast_to(fb, new Shape(5, 6, 70)).copy();
+            using var want = op(fm, fbm);
+            CBits(got).Should().Equal(Bits(want), opName);
+        }
+    }
 }

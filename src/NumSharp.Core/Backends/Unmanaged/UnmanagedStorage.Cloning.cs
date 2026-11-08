@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
@@ -174,6 +175,30 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     This storage with its leading axes beyond <paramref name="ndim"/> dropped: a view (no copy) over the same
+        ///     elements, for an assignment whose source <see cref="Shape.AssignmentBroadcastStrides"/> validated with the
+        ///     leading extent-1 axes stripped (the dropped axes then have extent 1, so no element is lost).
+        /// </summary>
+        /// <param name="ndim">The destination's rank (at most this storage's rank).</param>
+        /// <returns>An alias of this storage's buffer over its trailing <paramref name="ndim"/> axes, with this storage's
+        ///     offset and buffer size. No counted reference is taken: the caller's array keeps the buffer alive for the
+        ///     copy that reads the alias.</returns>
+        /// <remarks>The copy iterator (<see cref="NDIter.Copy(UnmanagedStorage, UnmanagedStorage)"/>) broadcasts a source of
+        ///     at most the destination's rank, so a view assignment and <c>np.copyto</c> hand it this alias where NumPy's
+        ///     <c>PyArray_AssignArray</c> skips the stripped axes.</remarks>
+        internal UnmanagedStorage AliasWithoutLeadingAxes(int ndim)
+        {
+            long[] dims = _shape.dimensions, strides = _shape.strides;
+            int skip = dims.Length - ndim;
+            var nd = new long[ndim];
+            var ns = new long[ndim];
+            Array.Copy(dims, skip, nd, 0, ndim);
+            Array.Copy(strides, skip, ns, 0, ndim);
+            var shape = new Shape(nd, ns, _shape.offset, _shape.bufferSize);
+            return Alias(ref shape);
+        }
+
+        /// <summary>
         /// Creates an alias (view) of this storage with a different dtype, reinterpreting bytes —
         /// the storage half of NumPy's <c>ndarray.view(dtype)</c>.
         /// </summary>
@@ -201,15 +226,15 @@ namespace NumSharp.Backends
         /// Read-only (broadcast) sources stay read-only.
         /// </para>
         /// </remarks>
-        /// <exception cref="InvalidOperationException">
-        /// If the last axis is not contiguous and type sizes differ (NumPy raises ValueError). NumSharp
-        /// stores strides/offset in ELEMENTS rather than bytes, so the rare misaligned strided+offset
-        /// view whose byte offset/stride is not a whole multiple of the new itemsize is also refused here
-        /// (NumPy, which carries a byte pointer, would allow it).
+        /// <exception cref="ValueError">
+        /// NumPy's errors with NumPy's texts (<see cref="ReinterpretShape"/>): a 0-d array whose itemsize changes, a
+        /// non-contiguous last axis, a smaller dtype that does not divide the old itemsize, a larger one that does not divide
+        /// the last axis' byte length.
         /// </exception>
-        /// <exception cref="ArgumentException">
-        /// If the array is 0-d, or the last axis's byte size is not divisible by the new itemsize
-        /// (NumPy raises ValueError with the same wording).
+        /// <exception cref="InvalidOperationException">
+        /// NumSharp stores strides/offset in ELEMENTS rather than bytes, so the rare strided+offset view whose byte
+        /// offset/stride is not a whole multiple of the new itemsize is refused (NumPy, which carries a byte pointer,
+        /// would allow it).
         /// </exception>
         public unsafe UnmanagedStorage AliasAs<T>() where T : unmanaged
         {
@@ -226,32 +251,70 @@ namespace NumSharp.Backends
             if (oldSize == newSize)
                 return WrapReinterpreted<T>(_shape, InternalArray.Count);
 
-            // Different itemsize — NumPy 2.x view(dtype) rules (numpy/_core/src/multiarray/getset.c
-            // array_descr_set): only the LAST axis has to be contiguous; every outer axis keeps its byte
-            // stride and the last axis is rescaled by the size ratio.
+            // Different itemsize — NumPy 2.x view(dtype) rules (ReinterpretShape); the alias spans the whole backing
+            // buffer in new-dtype units (floor: a trailing partial element is never addressed).
+            var newShape = ReinterpretShape(oldSize, newSize, out long newBufferCount);
+            return WrapReinterpreted<T>(newShape, newBufferCount);
+        }
+
+        /// <summary>
+        ///     The shape of this storage's memory read as elements of <paramref name="newSize"/> bytes instead of
+        ///     <paramref name="oldSize"/> — NumPy's <c>array_descr_set</c> (<c>numpy/_core/src/multiarray/getset.c</c>, the
+        ///     <c>ndarray.dtype</c> setter behind <c>ndarray.view(dtype)</c>) for a CHANGED itemsize, with its checks in its
+        ///     order: a 0-d array cannot change size; the LAST axis must be contiguous (an extent-1 or empty last axis always
+        ///     is); a smaller element must divide the old one (an unsized <c>U0</c>/<c>S0</c> target, size 0, never does) and
+        ///     multiplies the last axis by the ratio; a larger one must divide the last axis' byte length and divides it.
+        ///     Every outer axis keeps its byte stride; the last axis gets stride one element.
+        /// </summary>
+        /// <param name="oldSize">The current element size in bytes.</param>
+        /// <param name="newSize">The new element size in bytes (0 for an unsized string descriptor); not equal to
+        ///     <paramref name="oldSize"/>.</param>
+        /// <param name="newBufferCount">Receives the backing buffer's length in new elements (rounded down).</param>
+        /// <returns>The reinterpreted shape, its strides and offset in NEW elements.</returns>
+        /// <exception cref="ValueError">NumPy's texts: <c>Changing the dtype of a 0d array is only supported if the itemsize
+        ///     is unchanged</c>; <c>To change to a dtype of a different size, the last axis must be contiguous</c>;
+        ///     <c>When changing to a smaller dtype, its size must be a divisor of the size of original dtype</c>;
+        ///     <c>When changing to a larger dtype, its size must be a divisor of the total size in bytes of the last axis of the
+        ///     array.</c></exception>
+        /// <exception cref="InvalidOperationException">The view's byte offset or an outer byte stride is not a whole number
+        ///     of new elements. NumSharp stores strides and offsets in ELEMENTS, so such a view (an outer-strided view of
+        ///     odd-sized string elements, say) cannot be represented; NumPy, which keeps bytes, allows it.</exception>
+        internal Shape ReinterpretShape(int oldSize, int newSize, out long newBufferCount)
+        {
             var dims = _shape.dimensions;
             if (dims.Length == 0)
-                throw new ArgumentException("Changing the dtype of a 0d array is only supported if the itemsize is unchanged");
+                throw new ValueError("Changing the dtype of a 0d array is only supported if the itemsize is unchanged");
 
             var oldStrides = _shape.strides; // element strides in the OLD dtype
             int last = dims.Length - 1;
-            // The last axis is contiguous iff its byte-stride == old itemsize, i.e. its element stride is
-            // 1. A length-≤1 last axis is trivially contiguous (its stride is never stepped).
-            bool lastContiguous = dims[last] <= 1 || oldStrides[last] == 1;
-            if (!lastContiguous)
-                throw new InvalidOperationException("To change to a dtype of a different size, the last axis must be contiguous");
+            // "resize on last axis only": its byte stride must be the old itemsize (element stride 1), unless the
+            // stride is never stepped (an extent-1 last axis) or nothing is addressed at all (an empty array).
+            if (dims[last] != 1 && _shape.size != 0 && oldStrides[last] != 1)
+                throw new ValueError("To change to a dtype of a different size, the last axis must be contiguous");
 
-            long lastAxisBytes = dims[last] * oldSize;
-            if (lastAxisBytes % newSize != 0)
-                throw new ArgumentException("When changing to a larger dtype, its size must be a divisor of the total size in bytes of the last axis of the array.");
+            long newLast;
+            if (newSize < oldSize)
+            {
+                if (newSize == 0 || oldSize % newSize != 0)
+                    throw new ValueError("When changing to a smaller dtype, its size must be a divisor of the size of original dtype");
+                newLast = dims[last] * (oldSize / newSize);
+            }
+            else
+            {
+                long lastAxisBytes = dims[last] * oldSize;
+                if (lastAxisBytes % newSize != 0)
+                    throw new ValueError("When changing to a larger dtype, its size must be a divisor of the total size in bytes of the last axis of the array.");
+                newLast = lastAxisBytes / newSize;
+            }
 
             // Reinterpret the outer axes' byte strides and the base offset as new-dtype elements. NumSharp
             // stores these in ELEMENTS (NumPy in bytes), so a value that is not a whole multiple of the new
-            // itemsize cannot be represented — refuse it (extremely rare; offset 0 and the common strided
-            // cases always divide). This is strictly MORE permissive than before, never less.
+            // itemsize cannot be represented — refuse it (offset 0 and the common strided cases always divide).
             long byteOffset = _shape.offset * oldSize;
             if (byteOffset % newSize != 0)
-                throw new InvalidOperationException("To change to a dtype of a different size, the last axis must be contiguous");
+                throw new InvalidOperationException(
+                    string.Create(CultureInfo.InvariantCulture, $"This view starts {byteOffset} bytes into its buffer, which is not a whole number of {newSize}-byte elements: ") +
+                    "NumSharp keeps offsets in elements, so it cannot reinterpret this view as the new dtype (copy it first).");
 
             var newDims = new long[dims.Length];
             var newStrides = new long[dims.Length];
@@ -260,25 +323,27 @@ namespace NumSharp.Backends
                 newDims[i] = dims[i];
                 long outerByteStride = oldStrides[i] * oldSize;
                 if (outerByteStride % newSize != 0)
-                    throw new InvalidOperationException("To change to a dtype of a different size, the last axis must be contiguous");
+                    throw new InvalidOperationException(
+                        string.Create(CultureInfo.InvariantCulture, $"Axis {i} of this view steps {outerByteStride} bytes, which is not a whole number of {newSize}-byte elements: ") +
+                        "NumSharp keeps strides in elements, so it cannot reinterpret this view as the new dtype (copy it first).");
                 newStrides[i] = outerByteStride / newSize;
             }
-            newDims[last] = lastAxisBytes / newSize;
+            newDims[last] = newLast;
             newStrides[last] = 1;
             long newOffset = byteOffset / newSize;
 
-            // Span the whole backing buffer in new-dtype units (floor: a trailing partial element is never
-            // addressed, since each last-axis run is a whole number of new elements).
-            long newBufferCount = InternalArray.BytesLength / newSize;
-            var newShape = new Shape(newDims, newStrides, newOffset, newBufferCount);
-            return WrapReinterpreted<T>(newShape, newBufferCount);
+            newBufferCount = InternalArray.BytesLength / newSize;
+            return new Shape(newDims, newStrides, newOffset, newBufferCount);
         }
 
         /// <summary>
         /// Builds a byte-reinterpreting alias: a new storage of dtype <typeparamref name="T"/> over the
-        /// SAME memory, carrying <paramref name="shape"/> (dims/strides/offset) and a non-owning wrap of
-        /// <paramref name="wrapCount"/> new-dtype elements. A read-only source stays read-only, and the
-        /// ultimate owner is rooted through <c>_baseStorage</c> so the shared buffer outlives the view.
+        /// SAME memory, carrying <paramref name="shape"/> (dims/strides/offset) and a non-owning slice of
+        /// <paramref name="wrapCount"/> new-dtype elements whose reference counting forwards to this storage's
+        /// block (<see cref="ArraySlice.WrapShared{T}"/>): an NDArray over the alias holds a counted reference on
+        /// the owner's buffer, so disposing the owner while the alias lives does not free it (a plain wrap did —
+        /// the alias then read the next same-size allocation). A read-only source stays read-only, and the
+        /// ultimate owner is rooted through <c>_baseStorage</c> for the GC.
         /// </summary>
         private unsafe UnmanagedStorage WrapReinterpreted<T>(Shape shape, long wrapCount) where T : unmanaged
         {
@@ -292,7 +357,9 @@ namespace NumSharp.Backends
             if ((shape._flags & (int)ArrayFlags.ALIGNED) == 0)
                 shape = shape.WithFlags(flagsToSet: ArrayFlags.ALIGNED);
 
-            var newSlice = ArraySlice.Wrap<T>((T*)InternalArray.Address, wrapCount);
+            // The alias counts its references on THIS storage's block (WrapShared), so disposing the owner while the
+            // reinterpreted view lives does not free the buffer under it.
+            var newSlice = ArraySlice.WrapShared<T>(InternalArray.Address, wrapCount, InternalArray);
             var r = new UnmanagedStorage();
             r._shape = shape;
             r._typecode = InfoOf<T>.NPTypeCode;
@@ -360,7 +427,9 @@ namespace NumSharp.Backends
         /// <param name="imaginary"><c>false</c> selects the real lane, <c>true</c> the imaginary lane.</param>
         /// <returns>
         ///     A float64 <see cref="UnmanagedStorage"/> aliasing this storage's chosen lane. Writes through
-        ///     to the Complex base; the base is kept alive via <c>_baseStorage</c>.
+        ///     to the Complex base; the base's buffer is kept alive by the lane's counted reference on the base's
+        ///     block (<see cref="ArraySlice.WrapShared{T}"/>) — disposing the base while the lane lives does not free
+        ///     it — and the base object by <c>_baseStorage</c>.
         /// </returns>
         /// <remarks>
         ///     <para>
@@ -393,15 +462,16 @@ namespace NumSharp.Backends
                 dstr[i] = cstr[i] * 2;
 
             long laneOffset = _shape.offset * 2 + (imaginary ? 1 : 0);
-            var laneShape = new Shape((long[])_shape.dimensions.Clone(), dstr, laneOffset, doubleCount);
+            var laneShape = new Shape(_shape.dimensions, dstr, laneOffset, doubleCount);
 
             // Inherit read-only-ness: a lane of a non-writeable Complex must not become writeable
             // (the internal Shape ctor defaults WRITEABLE on). Same guard as Alias(Shape).
             if (!_shape.IsWriteable && laneShape.IsWriteable)
                 laneShape = laneShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
 
-            // Non-owning float64 slice over the SAME memory; lifetime handed to the Complex owner.
-            var slice = ArraySlice.Wrap<double>((double*)InternalArray.Address, doubleCount);
+            // Non-owning float64 slice over the SAME memory.
+            // Counted on the Complex owner's block (WrapShared): disposing the owner while the lane lives keeps the buffer.
+            var slice = ArraySlice.WrapShared<double>(InternalArray.Address, doubleCount, InternalArray);
 
             var r = new UnmanagedStorage();
             r._shape = laneShape;
@@ -528,7 +598,7 @@ namespace NumSharp.Backends
         {
             Shape outShape = _shape.NDim == 0
                 ? Shape.NewScalar()
-                : new Shape((long[])_shape.dimensions.Clone(), 'C');
+                : new Shape(_shape.dimensions, 'C', copy: false);
 
             var dst = new UnmanagedStorage(ArraySlice.Allocate(typeCode, outShape.size, false), outShape) { Engine = Engine };
             NDIter.Copy(dst, this);
@@ -561,7 +631,7 @@ namespace NumSharp.Backends
         ///     A freshly-allocated <see cref="IArraySlice"/> whose
         ///     <c>Count == _shape.size</c>. For contiguous shapes the
         ///     elements come from <c>InternalArray[_shape.offset.._shape.offset + _shape.size)</c>
-        ///     via <see cref="IArraySlice.Slice(int, int)"/> + Clone; for strided /
+        ///     via <see cref="IArraySlice.Slice(long, long)"/> + Clone; for strided /
         ///     broadcast / transposed shapes they are materialised via <see cref="NDIter.Copy"/>.
         /// </returns>
         /// <remarks>
@@ -584,7 +654,7 @@ namespace NumSharp.Backends
             // (e.g. arr["1:,1:,1:1"].flatten()). NumPy's flatten / ravel / copy of an empty array
             // all yield an empty array.
             if (_shape.size == 0)
-                return ArraySlice.Allocate(_typecode, 0L, false);
+                return AllocateLike(0L, false); // a string lane keeps its descriptor (width) on the empty buffer
 
             // Contiguous shapes can copy directly from memory.
             // Must account for offset AND the size-vs-buffer mismatch — slice
@@ -597,7 +667,7 @@ namespace NumSharp.Backends
                 return InternalArray.Slice(_shape.offset, _shape.size).Clone();
             }
 
-            if (_shape.IsScalar)
+            if (_shape.IsScalar && _typecode != NPTypeCode.String)
                 return ArraySlice.Scalar(GetValue(0), _typecode);
 
             // Scalar-broadcast (all strides 0): every element is the SAME single source value, so
@@ -605,11 +675,12 @@ namespace NumSharp.Backends
             // UnmanagedMemoryBlock<T>.Fill) instead of the general per-element NDIter.Copy walk.
             // Proven 6-8x for the same-type broadcast clone (bcast u8->u8 4M: 0.83->5.69x).
             // Bit-identical (same value in every slot).
-            if (_shape.IsScalarBroadcast)
+            // (A string element is not re-encoded from its decoded value: the general path below copies its raw bytes.)
+            if (_shape.IsScalarBroadcast && _typecode != NPTypeCode.String)
                 return ArraySlice.Allocate(InternalArray.TypeCode, _shape.size, GetValue(0));
 
             //Linear copy of all the sliced items (non-contiguous: broadcast, stepped, transposed).
-            var ret = ArraySlice.Allocate(InternalArray.TypeCode, _shape.size, false);
+            var ret = AllocateLike(_shape.size, false);
             var dst = new UnmanagedStorage(ret, _shape.Clean());
             NDIter.Copy(dst, this);
 
@@ -640,10 +711,13 @@ namespace NumSharp.Backends
             if (InternalArray == null)
                 return new UnmanagedStorage(_typecode) { Engine = Engine };
 
-            if (CanCloneRawLayout())
-                return new UnmanagedStorage(InternalArray.Clone(), new Shape(_shape)) { Engine = Engine };
-
-            return new UnmanagedStorage(CloneData(), _shape.Clone(true, true, true)) { Engine = Engine };
+            // The clone is a new storage built from the data's lane, so it would report the lane's own class: a
+            // lane-sharing descriptor (longdouble, Windows' intc) is carried over explicitly, as NumPy's copy keeps the dtype.
+            var clone = CanCloneRawLayout()
+                ? new UnmanagedStorage(InternalArray.Clone(), new Shape(_shape)) { Engine = Engine }
+                : new UnmanagedStorage(CloneData(), _shape.Clone(true, true, true)) { Engine = Engine };
+            clone.AdoptLaneSharingDescr(_descr);
+            return clone;
         }
 
         private bool CanCloneRawLayout()

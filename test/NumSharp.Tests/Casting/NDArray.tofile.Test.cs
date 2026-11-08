@@ -266,5 +266,42 @@ namespace NumSharp.Tests.Casting
             var a = np.arange(24).astype(NPTypeCode.Double).reshape(2, 3, 4);
             CollectionAssert.AreEqual(a.tobytes('C'), Bin(a));
         }
+
+        /// <summary>
+        ///     <c>sep</c> and <c>format</c> are NumPy's <c>"s"</c> arguments (tofile's arguments 2 and 3): a null one is
+        ///     Python's <c>None</c>, refused with CPython's TypeError before the file is opened, so no file is created and a
+        ///     stream gets no byte; <c>sep</c> is checked first. NumSharp wrote binary for a null <c>sep</c> and <c>str()</c>
+        ///     for a null <c>format</c>. NumPy 2.4.2: <c>a.tofile(p, sep=None)</c> raises <c>TypeError: tofile() argument 2
+        ///     must be str, not None</c> and <c>os.path.exists(p)</c> is False; <c>a.tofile(p, sep=',', format=None)</c>
+        ///     names argument 3.
+        /// </summary>
+        [TestMethod]
+        public void NullSepOrFormat_IsNone_RefusedBeforeAnythingIsWritten()
+        {
+            var a = np.array(new long[] { 1, 2 });
+            string path = TempPath("none_arguments.bin");
+            if (File.Exists(path))
+                File.Delete(path);
+            foreach (var (sep, format, position) in new (string, string, int)[]
+                     {
+                         (null, "%s", 2), ("", null, 3), (null, null, 2), (",", null, 3),
+                     })
+            {
+                var e = Assert.ThrowsException<TypeError>(() => a.tofile(path, sep, format));
+                Assert.AreEqual($"tofile() argument {position} must be str, not None", e.Message);
+                Assert.IsFalse(File.Exists(path), $"no file for sep={sep ?? "null"}, format={format ?? "null"}");
+
+                using var ms = new MemoryStream();
+                e = Assert.ThrowsException<TypeError>(() => a.tofile(ms, sep, format));
+                Assert.AreEqual($"tofile() argument {position} must be str, not None", e.Message);
+                Assert.AreEqual(0, ms.Length, "nothing is written to the stream");
+            }
+
+            // NumPy's argument parsing converts sep before tofile looks at its file object: a null stream with a null sep
+            // reports the sep.
+            var first = Assert.ThrowsException<TypeError>(() => a.tofile((Stream)null, null, "%s"));
+            Assert.AreEqual("tofile() argument 2 must be str, not None", first.Message);
+            Assert.ThrowsException<ArgumentNullException>(() => a.tofile((Stream)null, ",", "%s"));
+        }
     }
 }

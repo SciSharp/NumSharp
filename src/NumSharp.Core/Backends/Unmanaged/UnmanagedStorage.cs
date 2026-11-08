@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -160,10 +162,22 @@ namespace NumSharp.Backends
         ///     write would reach PROT_READ pages — an access violation, not an exception.
         /// </summary>
         /// <remarks>
+        ///     <para>
         ///     Ordinary owned allocations and ordinary views never set this; a cleared WRITEABLE flag alone
         ///     (e.g. <c>a.flags.writeable = false</c> on your own array) is reversible and does NOT imply it.
+        ///     </para>
+        ///     <para>
+        ///     It answers only that question: whether a cleared WRITEABLE flag may be set again. It does not block a
+        ///     write while the flag is set. So np.nditer's views carry it too, writeable ones included
+        ///     (<c>NDIterRef.CurrentView</c>): their NumPy base is the iterator, an object that exports no buffer at all,
+        ///     so a write flag cleared on one cannot be set again.
+        ///     </para>
+        ///     <para>
+        ///     Readable by everyone, set only inside NumSharp (where the storage over the foreign memory is created):
+        ///     clearing it on a read-only mapping would let the next write reach PROT_READ pages.
+        ///     </para>
         /// </remarks>
-        internal bool WriteProtected;
+        public bool WriteProtected { get; internal set; }
 
         /// <summary>
         ///     Set when this storage's memory belongs to a FOREIGN owner even though no
@@ -173,15 +187,54 @@ namespace NumSharp.Backends
         ///     memmap does, in every mode) and <c>np.require(…, "O")</c> copies them.
         /// </summary>
         /// <remarks>Orthogonal to <see cref="WriteProtected"/>: an <c>'r+'</c> memmap is externally based
-        /// yet writable; an <c>'r'</c> memmap is both.</remarks>
-        internal bool ExternalBase;
+        /// yet writable; an <c>'r'</c> memmap is both. Readable by everyone, set only inside NumSharp when the storage is
+        /// created: the shape's cached OWNDATA bit is computed from it then, so a later change would leave
+        /// <c>flags.owndata</c> stale.</remarks>
+        public bool ExternalBase { get; internal set; }
 
         /// <summary>
         ///     Does this storage own the memory it addresses — NumPy's <c>OWNDATA</c>: no base storage
         ///     (<see cref="_baseStorage"/>) and no foreign owner (<see cref="ExternalBase"/>). Read by
         ///     <c>ndarray.flags.owndata</c> and <c>np.require("O")</c>.
         /// </summary>
-        internal bool OwnsData => _baseStorage is null && !ExternalBase;
+        /// <remarks>Answers for the storage object itself: a view's storage reports <c>false</c> even when the array it views
+        ///     owns its buffer.</remarks>
+        public bool OwnsData => _baseStorage is null && !ExternalBase;
+
+        /// <summary>
+        ///     Is every element of this storage's array aligned for its dtype — the memory half of NumPy's
+        ///     <c>ALIGNED</c> flag (<c>raw_array_is_aligned</c>, <c>numpy/_core/src/common/array_assign.c</c>), which
+        ///     NumPy recomputes for every new array object. <see cref="NDArray.flags"/> reports <c>aligned</c> only when
+        ///     this holds AND the shape's <see cref="ArrayFlags.ALIGNED"/> bit (cleared by <c>setflags(align=False)</c>)
+        ///     is set; <c>setflags(align=True)</c> refuses when it does not hold.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy ORs the data pointer with the byte stride of every axis longer than 1 and tests the low bits.
+        ///     NumSharp's offsets and strides are whole elements, and every dtype's itemsize is a multiple of its
+        ///     alignment, so those terms never add a misaligned bit: the storage's base address alone decides. An empty
+        ///     array is always aligned, as in NumPy.
+        ///     </para>
+        ///     <para>
+        ///     NumSharp's own allocations are always aligned. Misaligned data comes from a caller's buffer at an odd
+        ///     byte offset (<c>np.ndarray(shape, buffer=b, offset=3)</c>, <c>np.frombuffer(b, offset=3)</c>) or a field
+        ///     view at an odd byte offset (<c>getfield</c>), and every view of such an array shares its address, so the
+        ///     flag follows to every view without each view path computing it.
+        ///     </para>
+        ///     <para>Recomputed on every read (one address test), so it follows the storage as it is now.</para>
+        /// </remarks>
+        public unsafe bool IsDataAligned
+        {
+            get
+            {
+                if (_shape.size == 0)
+                    return true;
+
+                // A storage without a known descriptor has no alignment requirement to check.
+                int alignment = Descr?.alignment ?? 1;
+                return ((nuint)Address & (nuint)(alignment - 1)) == 0;
+            }
+        }
 
         /// <summary>
         ///     Post-transition hook — run after this storage's <see cref="_shape"/> is (re)assigned or its
@@ -241,7 +294,7 @@ namespace NumSharp.Backends
         public Type DType => _dtype;
 
         /// <summary>
-        ///     The <see cref="NPTypeCode"/> of <see cref="IStorage.DType"/>.
+        ///     The <see cref="NPTypeCode"/> of <see cref="UnmanagedStorage.DType"/>.
         /// </summary>
         public NPTypeCode TypeCode => _typecode;
 
@@ -260,14 +313,57 @@ namespace NumSharp.Backends
                 var descr = _descr;
                 if (descr is null)
                 {
+                    // A string lane's descriptor is sized; the class singleton (unsized U0) would describe no element. A
+                    // StringDType slice carries its descriptor instance (na_object, coerce) the same way.
+                    if (InternalArray is StringArraySlice strings)
+                        return _descr = strings.Descr;
+                    if (InternalArray is VStringArraySlice vstrings)
+                        return _descr = vstrings.Descr;
                     var meta = DTypeRegistry.FromTypeCode(_typecode);
                     if (meta is null)
                         return null;
-                    _descr = descr = meta.Singleton;
+                    _descr = descr = meta.singleton;
                 }
 
                 return descr;
             }
+        }
+
+        /// <summary>
+        ///     Labels this storage's elements with a lane-sharing C-type class (<c>longdouble</c>, <c>clongdouble</c>, Windows'
+        ///     <c>intc</c> / <c>uintc</c>, Linux's <c>longlong</c> / <c>ulonglong</c>) when <paramref name="requested"/> is one
+        ///     and its lane is this storage's: the bytes are the same, only <see cref="Descr"/> changes. For any other
+        ///     descriptor this does nothing (the lane's own class is already what <see cref="Descr"/> reports).
+        /// </summary>
+        /// <param name="requested">The descriptor a creation or cast asked for; null does nothing.</param>
+        /// <remarks>
+        ///     <para>
+        ///     The allocation paths that take a descriptor install it themselves (<see cref="Allocate(Shape, DType, bool)"/>);
+        ///     the ones that allocate by storage code (<c>np.ones</c>, <c>np.full</c>, <c>astype</c>'s cast, a dtype view)
+        ///     call this afterwards, so a created <c>np.ones(3, np.longdouble)</c> reports <c>'g'</c>, as NumPy's does.
+        ///     </para>
+        ///     <para>
+        ///     Footgun: only a storage the caller just created may be relabelled. A storage shared with other arrays (a base
+        ///     whose views read <see cref="Descr"/>) would change their dtype too.
+        ///     </para>
+        /// </remarks>
+        internal void AdoptLaneSharingDescr(DType requested)
+        {
+            if (requested?.Meta is LegacyBuiltinDTypeMeta { OwnsTypeCode: false } && requested.typecode == _typecode)
+                _descr = requested.isnative ? requested : requested.Meta.ensure_canonical(requested);
+        }
+
+        /// <summary>
+        ///     Labels this storage with ANY builtin class of its own storage lane — the lane's owner or a lane-sharing C-type
+        ///     class — for a dtype VIEW: <c>a.view(np.longdouble)</c> of a float64 array is <c>'g'</c>, and the <c>'g'</c>
+        ///     array's <c>view(np.float64)</c> is float64 again (the same bytes either way).
+        /// </summary>
+        /// <param name="descr">A builtin descriptor; a descriptor of another lane, or of a non-builtin class, does nothing.</param>
+        /// <remarks>Footgun: as for <see cref="AdoptLaneSharingDescr"/>, only an alias the caller just made may be relabelled.</remarks>
+        internal void SetLaneDescr(DType descr)
+        {
+            if (descr?.Meta is LegacyBuiltinDTypeMeta && descr.typecode == _typecode)
+                _descr = descr.isnative ? descr : descr.Meta.ensure_canonical(descr);
         }
 
         /// <summary>
@@ -281,18 +377,42 @@ namespace NumSharp.Backends
         /// over <c>Address</c> uses this value, so the in-memory layout is
         /// the only correct reference.
         /// </remarks>
+        /// <exception cref="NotSupportedException">This storage holds NEP 55 <c>StringDType</c> text. Every caller of this
+        ///     property moves or reinterprets elements as raw bytes of this width, which is never valid for a
+        ///     <c>StringDType</c> cell (an arena offset or a heap pointer that only its own buffer's allocator can read), so
+        ///     the property refuses: a route without its <c>StringDType</c> form fails loudly instead of copying cells. Code
+        ///     that only needs the descriptor's item size (strides in bytes, <c>nbytes</c>, overlap bounds) reads
+        ///     <see cref="ItemBytes"/>.</exception>
         public int DTypeSize
         {
             get
             {
+                // A string element's width is a property of the DESCRIPTOR (S5 is 5 bytes, U5 is 20), not of the lane.
                 if (_typecode == NPTypeCode.String)
                 {
-                    return IntPtr.Size;
+                    if (InternalArray is StringArraySlice strings)
+                        return strings.ItemSize;
+                    // The loud refusal of every raw route (docs/plans/strings-phase1-completion.md §3, rule 2): a StringDType
+                    // element is a cell tied to its allocator, so "its bytes" cannot be copied anywhere.
+                    if (InternalArray is VStringArraySlice vstrings)
+                        throw VStringNotSupported(vstrings.Descr, "A route that copies elements as raw bytes");
+                    return (int)Descr.itemsize;
                 }
 
                 return _typecode.SizeOf();
             }
         }
+
+        /// <summary>
+        ///     The descriptor's item size in bytes (NumPy's <c>dtype.itemsize</c>) for every storage: <see cref="DTypeSize"/>
+        ///     for the numeric and fixed-width string lanes, and 16 (one packed cell) for a NEP 55 <c>StringDType</c> storage.
+        /// </summary>
+        /// <remarks>
+        ///     Use it for byte ARITHMETIC that never moves an element (byte strides, <c>nbytes</c>, the extent of a view for an
+        ///     overlap test). A route that copies or reinterprets elements must read <see cref="DTypeSize"/>, which refuses a
+        ///     <c>StringDType</c> storage.
+        /// </remarks>
+        public int ItemBytes => InternalArray is VStringArraySlice ? VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING : DTypeSize;
 
         /// <summary>
         ///     The shape representing the data in this storage.
@@ -342,7 +462,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     The engine that was used to create this <see cref="IStorage"/>.
+        ///     The engine that was used to create this <see cref="UnmanagedStorage"/>.
         /// </summary>
         public TensorEngine Engine { get; protected internal set; }
 
@@ -414,6 +534,8 @@ namespace NumSharp.Backends
             ret._baseStorage = storage._baseStorage ?? storage;
             ret.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             ret.Engine = storage.Engine;
+            // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the broadcast view carries it.
+            ret.AdoptLaneSharingDescr(storage._descr);
             return ret;
         }
 
@@ -487,8 +609,12 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(descr));
 
             _typecode = descr.GetTypeCode(); // throws the descriptive "no storage yet" for a descriptor-only class
-            _dtype = descr.type;
-            _descr = descr.isnative ? descr : descr.Meta.EnsureCanonical(descr);
+            // The lane's CLR type (System.String for both string classes, whose descriptor type is string / byte[]) —
+            // `_dtype.GetTypeCode()` must give back the lane, and byte[] would read as uint8.
+            _dtype = _typecode.AsType();
+            _descr = descr.Meta is StringDTypeMeta
+                ? NDStringStorage.AllocationDescr(descr)
+                : descr.isnative ? descr : descr.Meta.ensure_canonical(descr);
         }
 
         private UnmanagedStorage(object value)
@@ -506,7 +632,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(shape));
 
             if (shape.size != arraySlice.Count)
-                throw new IncorrectShapeException($"Given shape size ({shape.size}) does not match the size of the given storage size ({arraySlice.Count})");
+                throw new IncorrectShapeException(string.Create(CultureInfo.InvariantCulture, $"Given shape size ({shape.size}) does not match the size of the given storage size ({arraySlice.Count})"));
 
             _Allocate(shape, arraySlice);
         }
@@ -1169,6 +1295,32 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.String:
+                {
+                    if (array is VStringArraySlice vstrings)
+                    {
+                        // The StringDType layout of the lane: the cells carry the allocator and the descriptor instance, so a
+                        // storage rebuilt from them by any generic path (contiguous slicing, Clone, GetData) is the same kind of
+                        // text array, sharing (a view) or owning (a clone) its allocator through the slice.
+                        InternalArray = vstrings;
+                        _slices.Byte = vstrings.Cells; // the byte lane keeps the block reachable through the union too
+                        Address = vstrings.Address;
+                        Count = vstrings.Count;
+                        _descr = vstrings.Descr;
+                        break;
+                    }
+                    // The fixed-width string lane: the element slice carries its bytes AND its descriptor, so the
+                    // descriptor is (re)installed from it — a storage rebuilt from a string slice by any generic path
+                    // (contiguous slicing, Clone, GetData) is a string storage of the same width without knowing it.
+                    var strings = (StringArraySlice)array;
+                    InternalArray = strings;
+                    _slices.Byte = strings.Bytes; // the byte lane keeps the block reachable through the union too
+                    Address = strings.Address;
+                    Count = strings.Count;
+                    _descr = strings.Descr;
+                    break;
+                }
+
                 default:
                     throw new NotSupportedException();
             }
@@ -1182,7 +1334,7 @@ namespace NumSharp.Backends
         /// <param name="sourceArray">The array to change his type</param>
         /// <param name="to_dtype">The type to change to.</param>
         /// <remarks>If the return type is equal to source type, this method does not return a copy.</remarks>
-        /// <returns>Returns <see cref="sourceArray"/> or new array with changed type to <see cref="to_dtype"/></returns>
+        /// <returns>Returns <paramref name="sourceArray"/> or new array with changed type to <paramref name="to_dtype"/></returns>
         [SuppressMessage("ReSharper", "AssignNullToNotNullAttribute")]
         protected static Array _ChangeTypeOfArray(Array sourceArray, Type to_dtype)
         {
@@ -1195,7 +1347,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="sourceArray">The array to change his type</param>
         /// <remarks>If the return type is equal to source type, this method does not return a copy.</remarks>
-        /// <returns>Returns <see cref="sourceArray"/> or new array with changed type to <see cref="to_dtype"/></returns>
+        /// <returns>Returns <paramref name="sourceArray"/> or new array with changed type to <paramref name="to_dtype"/></returns>
         [SuppressMessage("ReSharper", "AssignNullToNotNullAttribute")]
         protected static ArraySlice<TOut> _ChangeTypeOfArray<TOut>(IArraySlice sourceArray) where TOut : unmanaged
         {
@@ -1244,50 +1396,72 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Allocates a new <see cref="Array"/> into memory.
+        ///     Allocates a new, zero-filled buffer for <paramref name="shape"/>'s dimensions and makes it this storage's
+        ///     data — NumPy's <c>PyArray_NewFromDescr</c> with no data pointer.
         /// </summary>
+        /// <param name="shape">The dimensions to allocate. Only a fresh layout (C, F or a dense permutation at offset 0)
+        ///     is kept; a view's layout (stepped, offset, reversed, broadcast) is re-laid out in C order
+        ///     (<see cref="Shape.ForFreshAllocation"/>), so <c>Allocate(x.Shape)</c> of a view never addresses past the
+        ///     new buffer.</param>
         /// <param name="dtype">The type of the Array, if null <see cref="DType"/> is used.</param>
-        /// <param name="shape">The shape of the array.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized (<c>default(Shape)</c>).</exception>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
         public void Allocate(Shape shape, Type dtype = null)
         {
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
             var resolved = dtype ?? DType;
+            // The string lane has no width of its own: allocate this storage's own string descriptor, or NumPy's class
+            // default (U1) for a bare `typeof(string)` request.
+            if (resolved.GetTypeCode() == NPTypeCode.String)
+            {
+                Allocate(shape, StringRequest(dtype), true);
+                return;
+            }
             AllocationGuard.CheckDimensions(shape.dimensions, resolved.GetTypeCode());
 
-            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(resolved, shape.size, true));
+            _Allocate(shape.ForFreshAllocation(), ArraySlice.Allocate(resolved, shape.size, true));
         }
 
-        // This overload allocates BRAND-NEW owned memory, so its result is always writeable — even when
-        // the shape was borrowed from a read-only source (e.g. an elementwise result whose shape is the
-        // read-only operand's shape, `mmap_r + 1`). Without this the fresh array would inherit the stale
-        // read-only flag and diverge from NumPy. (Views never allocate — they Alias, which correctly
-        // inherits read-only.)
-        private static Shape FreshWriteable(Shape shape)
-            => shape.IsWriteable ? shape : shape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
-
         /// <summary>
-        ///     Allocates a new <see cref="Array"/> into memory.
+        ///     Allocates a new buffer for <paramref name="shape"/>'s dimensions and makes it this storage's data — NumPy's
+        ///     <c>PyArray_NewFromDescr</c> with no data pointer.
         /// </summary>
+        /// <param name="shape">The dimensions to allocate. Only a fresh layout (C, F or a dense permutation at offset 0)
+        ///     is kept; a view's layout is re-laid out in C order (<see cref="Shape.ForFreshAllocation"/>).</param>
         /// <param name="dtype">The type of the Array, if null <see cref="DType"/> is used.</param>
-        /// <param name="shape">The shape of the array.</param>
+        /// <param name="fillZeros">Zero the fresh buffer, else leave the allocation noise (the caller writes every element).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized (<c>default(Shape)</c>).</exception>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
         public void Allocate(Shape shape, Type dtype, bool fillZeros)
         {
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
             var resolved = dtype ?? DType;
+            if (resolved.GetTypeCode() == NPTypeCode.String)
+            {
+                Allocate(shape, StringRequest(dtype), fillZeros);
+                return;
+            }
             AllocationGuard.CheckDimensions(shape.dimensions, resolved.GetTypeCode());
 
-            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(resolved, shape.size, fillZeros));
+            _Allocate(shape.ForFreshAllocation(), ArraySlice.Allocate(resolved, shape.size, fillZeros));
         }
 
         /// <summary>
-        ///     Allocates a new <see cref="Array"/> into memory.
+        ///     Allocates a new buffer for <paramref name="shape"/>'s dimensions and makes it this storage's data — NumPy's
+        ///     <c>PyArray_NewFromDescr</c> with no data pointer.
         /// </summary>
-        /// <param name="dtype">The type of the Array, if null <see cref="DType"/> is used.</param>
-        /// <param name="shape">The shape of the array.</param>
+        /// <param name="shape">The dimensions to allocate. Only a fresh layout (C, F or a dense permutation at offset 0)
+        ///     is kept; a view's layout is re-laid out in C order (<see cref="Shape.ForFreshAllocation"/>).</param>
+        /// <param name="dtype">The storage lane to allocate.</param>
+        /// <param name="fillZeros">Zero the fresh buffer, else leave the allocation noise (the caller writes every element).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized, or <paramref name="dtype"/> is <see cref="NPTypeCode.Empty"/>.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> is <see cref="NPTypeCode.String"/> and this storage
+        ///     has no string descriptor to keep (the lane alone names no width; see <see cref="DType.From(NPTypeCode)"/>).</exception>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
         public void Allocate(Shape shape, NPTypeCode dtype, bool fillZeros)
         {
             if (shape.IsEmpty)
@@ -1296,20 +1470,52 @@ namespace NumSharp.Backends
             if (dtype == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(dtype));
 
+            if (dtype == NPTypeCode.String)
+            {
+                // The lane alone has no width: only a re-allocation of a string storage (which keeps its own descriptor)
+                // is meaningful. Anything else would be a silent <U1 written with wider elements — refuse it.
+                if (!(_descr?.Meta is StringDTypeMeta))
+                    throw new NotSupportedException(NumSharp.DType.StringLaneHasNoDType);
+                Allocate(shape, StringRequest(null), fillZeros);
+                return;
+            }
+
             AllocationGuard.CheckDimensions(shape.dimensions, dtype);
 
-            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(dtype, shape.size, fillZeros));
+            _Allocate(shape.ForFreshAllocation(), ArraySlice.Allocate(dtype, shape.size, fillZeros));
         }
 
         /// <summary>
         ///     Allocates a new <see cref="Array"/> into memory described by a dtype DESCRIPTOR (NumPy's
         ///     <c>PyArray_NewFromDescr</c>): the descriptor becomes <see cref="Descr"/>, its class supplies the lane.
         /// </summary>
-        /// <param name="shape">The shape of the array.</param>
+        /// <param name="shape">The dimensions to allocate. Only a fresh layout (C, F or a dense permutation at offset 0)
+        ///     is kept; a view's layout is re-laid out in C order (<see cref="Shape.ForFreshAllocation"/>), which is what
+        ///     makes <c>new NDArray(dtype, x.Shape)</c>, <c>np.empty(x.Shape)</c> and <c>np.zeros(x.Shape)</c> safe for a
+        ///     view <c>x</c>.</param>
         /// <param name="dtype">The dtype descriptor of the array; a non-native byte order is canonicalised (NumSharp buffers are always native).</param>
         /// <param name="fillZeros">Zero the fresh buffer, else leave the allocation noise.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized, or <paramref name="dtype"/> is null.</exception>
         /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet (a datetime64/timedelta64 descriptor before Stage C).</exception>
-        public void Allocate(Shape shape, DType dtype, bool fillZeros)
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
+        public void Allocate(Shape shape, DType dtype, bool fillZeros) => Allocate(shape, dtype, fillZeros, overwriteAll: false);
+
+        /// <summary>
+        ///     <see cref="Allocate(Shape, DType, bool)"/> for a caller that WRITES EVERY BYTE of the new buffer before anyone
+        ///     reads it (a copy, a cast, a concatenation): <paramref name="overwriteAll"/> skips NumPy's <c>NPY_NEEDS_INIT</c>
+        ///     zero fill of a <c>U</c> allocation, which would only be overwritten — a whole extra pass over the buffer
+        ///     (3.2 MB for 100K <c>&lt;U8</c> elements, as long as the copy itself at L2/L3 sizes).
+        /// </summary>
+        /// <param name="shape">The dimensions (see <see cref="Allocate(Shape, DType, bool)"/>).</param>
+        /// <param name="dtype">The dtype descriptor.</param>
+        /// <param name="fillZeros">Zero the fresh buffer (wins over <paramref name="overwriteAll"/>).</param>
+        /// <param name="overwriteAll">True when the caller overwrites every byte: a <c>U</c> buffer is then left with the
+        ///     pool's noise, which no reader can observe. A caller that may leave an element unwritten (an early exception
+        ///     after which the array is still returned, a partial fill) must pass false.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized, or <paramref name="dtype"/> is null.</exception>
+        /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet.</exception>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
+        internal void Allocate(Shape shape, DType dtype, bool fillZeros, bool overwriteAll)
         {
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
@@ -1318,10 +1524,36 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(dtype));
 
             var typeCode = dtype.GetTypeCode(); // throws the descriptive "no storage yet" for a descriptor-only class
+            if (dtype.Meta is VStringDTypeMeta)
+            {
+                // NEP 55 StringDType: 16-byte cells, always zero-filled (an all-zero cell is the empty string, and a cell of
+                // pool noise would read as an arena offset or a heap pointer: NumPy's NPY_NEEDS_INIT, which fillZeros and
+                // overwriteAll cannot waive), and a new allocator owned by the cells' block. The overflow guard counts the
+                // cells' BYTES.
+                AllocationGuard.CheckDimensions(shape.dimensions, VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING);
+                var fresh = shape.ForFreshAllocation();
+                _Allocate(fresh, VStringArraySlice.Allocate(dtype, fresh.size));
+                return;
+            }
+            if (dtype.Meta is StringDTypeMeta)
+            {
+                // The element width comes from the descriptor (an unsized request becomes one character), and the
+                // overflow guard counts BYTES of that width; the slice installs the descriptor on this storage.
+                var stringDescr = NDStringStorage.AllocationDescr(dtype);
+                AllocationGuard.CheckDimensions(shape.dimensions, stringDescr.itemsize);
+                var fresh = shape.ForFreshAllocation();
+                // NumPy zero-fills EVERY allocation of a dtype flagged NPY_NEEDS_INIT (PyArray_NewFromDescr_int), so
+                // np.empty(3, 'U3') is three empty strings: a U element's NUL padding is part of its value, and a reused
+                // buffer could hold units no code point maps to. S carries no such flag; its leftover bytes are still text.
+                // A caller that overwrites every byte (overwriteAll) skips the fill: nothing can read the noise.
+                bool zero = fillZeros || (!overwriteAll && (stringDescr.Meta.ItemFlags & DTypeMeta.NPY_NEEDS_INIT) != 0);
+                _Allocate(fresh, StringArraySlice.Allocate(stringDescr, fresh.size, zero));
+                return;
+            }
             AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
 
-            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(typeCode, shape.size, fillZeros));
-            _descr = dtype.isnative ? dtype : dtype.Meta.EnsureCanonical(dtype);
+            _Allocate(shape.ForFreshAllocation(), ArraySlice.Allocate(typeCode, shape.size, fillZeros));
+            _descr = dtype.isnative ? dtype : dtype.Meta.ensure_canonical(dtype);
         }
 
         /// <summary>
@@ -1342,7 +1574,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Assign this <see cref="ArraySlice{T}"/> as the internal array storage and assign <see cref="shape"/> to it.
+        ///     Assign this <see cref="ArraySlice{T}"/> as the internal array storage and assign <paramref name="shape"/> to it.
         /// </summary>
         /// <param name="values">The array to set as internal data storage</param>
         /// <param name="shape">The shape of the array.</param>
@@ -1360,12 +1592,28 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Allocate <paramref name="values"/> into memory.
+        ///     Makes <paramref name="values"/> this storage's data and installs <paramref name="shape"/>'s layout over it AS
+        ///     GIVEN — strides, offset and flags included. This is the analog of NumPy's C API
+        ///     (<c>PyArray_NewFromDescr</c> with a data pointer and strides, where the caller is responsible for correctness),
+        ///     not of the Python-level <c>np.ndarray(shape, buffer=...)</c>.
         /// </summary>
-        /// <param name="values">The array to set as internal data storage</param>
-        /// <param name="shape">The shape of the array.</param>
-        /// <param name="copy">Should perform a copy of <paramref name="values"/></param>
-        /// <remarks>Does not copy <paramref name="values"/></remarks>
+        /// <param name="values">The buffer to adopt as this storage's data.</param>
+        /// <param name="shape">The exact layout to install. Every element it addresses must lie inside
+        ///     <paramref name="values"/>; nothing here checks that.</param>
+        /// <param name="copy">True to adopt a clone of <paramref name="values"/> instead of the slice itself.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized (<c>default(Shape)</c>).</exception>
+        /// <exception cref="ArgumentException">The element count of <paramref name="values"/> is not the size of
+        ///     <paramref name="shape"/>.</exception>
+        /// <remarks>
+        ///     <para>Does not copy <paramref name="values"/> unless <paramref name="copy"/> is true.</para>
+        ///     <para>
+        ///     A view's layout installed here reads past the buffer: for <c>x = arange(20)["::4"]</c>,
+        ///     <c>Allocate(fiveElements, x.Shape)</c> reads element i at i * 4. The public wrap constructors
+        ///     (<c>new NDArray(IArraySlice, Shape, char)</c>, <c>new NDArray(Array, Shape, char)</c>) therefore lay out the
+        ///     dimensions afresh first (<see cref="Shape.ForWrappedBuffer"/>), as NumPy's <c>ndarray</c> does, and only pass
+        ///     a layout they built.
+        ///     </para>
+        /// </remarks>
         public void Allocate(IArraySlice values, Shape shape, bool copy = false)
         {
             if (shape.IsEmpty)
@@ -1453,9 +1701,21 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Copies the entire contents of this storage to given address.
         /// </summary>
-        /// <param name="address">The address to copy to.</param>
+        /// <param name="address">The address to copy to; it must hold <c>Count * DTypeSize</c> bytes.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="address"/> is null.</exception>
+        /// <remarks>
+        ///     A fixed-width string storage copies its raw element bytes (<see cref="DTypeSize"/> each: NUL-padded ASCII
+        ///     for <c>S</c>, UCS-4 code units for <c>U</c>) in C order — the bytes <c>tobytes()</c> returns.
+        /// </remarks>
         public unsafe void CopyTo(void* address)
         {
+            // Strings have no unmanaged CLR element type for CopyTo<T>: copy whole elements as bytes.
+            if (_typecode == NPTypeCode.String)
+            {
+                CopyStringBytesTo(address);
+                return;
+            }
+
             // #region Compute
 
 		    // switch (TypeCode)
@@ -1779,7 +2039,7 @@ namespace NumSharp.Backends
 
             // .NET arrays are limited to int32 indexing
             if (Shape.Size > int.MaxValue)
-                throw new InvalidOperationException($"Array size {Shape.Size} exceeds int.MaxValue. Use ToArraySlice() for large arrays.");
+                throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Array size {Shape.Size} exceeds int.MaxValue. Use ToArraySlice() for large arrays."));
 
             var ret = new T[(int)Shape.Size];
 

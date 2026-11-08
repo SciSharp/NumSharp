@@ -209,8 +209,12 @@ namespace NumSharp.Backends.Iteration
         ///
         /// Runs AFTER the order/flip resolution, exactly where NumPy runs its coalesce, so a
         /// K-order stride sort or a C/F forced order is honored: merging only ever joins axes the
-        /// chosen order already walks back-to-back. Must NOT run when a multi-index or flat index
-        /// is tracked (index reconstruction needs the original axes; NumPy skips it there too).
+        /// chosen order already walks back-to-back. Must NOT run while a multi-index is tracked
+        /// (its coordinates name the original axes; NumPy skips it there too, until
+        /// <c>remove_multi_index</c>). A tracked flat index is merged like one more operand — NumPy's
+        /// <c>npyiter_coalesce_axes</c> walks <c>nop + 1</c> strides when HASINDEX is set — so two axes
+        /// merge only when the index also steps across them as one run (a <c>c_index</c> over a
+        /// C-ordered walk, an <c>f_index</c> over an F-ordered one).
         /// Reduce operands keep their structure by construction: a reduced axis has output stride
         /// 0, which never satisfies the contiguity test against a walked inner axis.
         /// </summary>
@@ -225,6 +229,9 @@ namespace NumSharp.Backends.Iteration
             int stridesNDim = state.StridesNDim;
             int nop = state.NOp;
             int ndim = state.NDim;
+            // The index strides are set by NDIterState.ComputeIndexStrides before any coalescing of an index-tracking
+            // iterator; without an index they are not read.
+            long* index = (state.ItFlags & (uint)NDIterFlags.HASINDEX) != 0 ? state.IndexStrides : null;
 
             // 'write' is the axis being grown; 'read' walks the next inner axis.
             int write = 0;
@@ -248,6 +255,14 @@ namespace NumSharp.Backends.Iteration
                     }
                 }
 
+                // The index as the (nop + 1)-th operand, under the same rule.
+                if (canMerge && index != null)
+                {
+                    long so = index[write];
+                    long si = index[read];
+                    canMerge = (shapeO == 1 && so == 0) || (shapeI == 1 && si == 0) || (so == si * shapeI);
+                }
+
                 if (canMerge)
                 {
                     // The merged axis walks shapeO*shapeI elements at the INNER stride — unless
@@ -261,6 +276,9 @@ namespace NumSharp.Backends.Iteration
                             int baseIdx = op * stridesNDim;
                             strides[baseIdx + write] = strides[baseIdx + read];
                         }
+
+                        if (index != null)
+                            index[write] = index[read];
                     }
                     shape[write] = shapeO * shapeI;
                 }
@@ -275,6 +293,9 @@ namespace NumSharp.Backends.Iteration
                             int baseIdx = op * stridesNDim;
                             strides[baseIdx + write] = strides[baseIdx + read];
                         }
+
+                        if (index != null)
+                            index[write] = index[read];
                     }
                 }
             }
@@ -286,7 +307,8 @@ namespace NumSharp.Backends.Iteration
             state.NDim = newNDim;
 
             // Axis merging invalidates the original-axis mapping; reset to identity exactly like
-            // CoalesceAxes / RemoveUnitAxes (no index tracking is active on this path).
+            // CoalesceAxes / RemoveUnitAxes (NumPy resets its perm when the rank shrinks). A tracked
+            // flat index no longer reads the permutation: it rides the merged index strides.
             for (int d = 0; d < newNDim; d++)
                 perm[d] = (sbyte)d;
             state.ItFlags |= (uint)NDIterFlags.IDENTPERM;
@@ -368,10 +390,20 @@ namespace NumSharp.Backends.Iteration
         /// <param name="forCoalescing">If true, sort for coalescing (ascending).
         /// If false, sort for memory-order iteration with MULTI_INDEX (descending).
         /// Only affects K-order; C and F orders are deterministic.</param>
-        public static void ReorderAxesForCoalescing(ref NDIterState state, NPY_ORDER order, bool forCoalescing = true)
+        /// <param name="numpyOrdering">K-order only: sort with NumPy's own <c>npyiter_find_best_axis_ordering</c>
+        /// (<see cref="FindBestAxisOrderingNumPy"/>) instead of the minimum-stride key. np.nditer's descriptor path passes
+        /// true; the internal callers keep the key sort they were tuned with.</param>
+        public static void ReorderAxesForCoalescing(ref NDIterState state, NPY_ORDER order, bool forCoalescing = true,
+                                                    bool numpyOrdering = false)
         {
             if (state.NDim <= 1)
                 return;
+
+            if (numpyOrdering && order == NPY_ORDER.NPY_KEEPORDER)
+            {
+                FindBestAxisOrderingNumPy(ref state, ascending: forCoalescing);
+                return;
+            }
 
             var shape = state.Shape;
             var strides = state.Strides;
@@ -484,6 +516,179 @@ namespace NumSharp.Backends.Iteration
             for (int d = 0; d < ndim; d++)
             {
                 if (perm[d] != d)
+                {
+                    isIdentity = false;
+                    break;
+                }
+            }
+
+            if (isIdentity)
+                state.ItFlags |= (uint)NDIterFlags.IDENTPERM;
+            else
+                state.ItFlags &= ~(uint)NDIterFlags.IDENTPERM;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>npyiter_find_best_axis_ordering</c>: a stable insertion sort of the iterator axes from the
+        ///     smallest stride to the largest, comparing two axes operand by operand.
+        /// </summary>
+        /// <param name="state">The iterator state, axes still in their construction (C) order.</param>
+        /// <param name="ascending">True for the innermost-first layout the coalescing pass reads, false for the
+        ///     iteration-order layout (innermost axis last) everything else reads.</param>
+        /// <remarks>
+        ///     <para>
+        ///     For two axes, every operand whose strides are nonzero on BOTH votes: a smaller stride on the later axis asks
+        ///     for a swap, an equal or larger one forbids it — and the first operand that compares decides unless a later
+        ///     one forbids the swap, because "in the case of conflicts between different operands, C-order wins". An axis
+        ///     no operand compares on (stride 0 everywhere: a broadcast, a reduction output, an operand the iterator will
+        ///     allocate) is ambiguous and keeps its place, which is why no broadcast fallback is needed.
+        ///     </para>
+        ///     <para>
+        ///     NumPy sorts its axisdata, which runs innermost first (the reversed C order); NumSharp's axes run outermost
+        ///     first, so NumPy's position <c>k</c> is NumSharp's position <c>ndim - 1 - k</c> before the sort.
+        ///     <c>IDENTPERM</c> follows the permutation's new contents.
+        ///     </para>
+        /// </remarks>
+        public static void FindBestAxisOrderingNumPy(ref NDIterState state, bool ascending)
+        {
+            int ndim = state.NDim;
+            if (ndim <= 1)
+                return;
+
+            int nop = state.NOp;
+            int stridesNDim = state.StridesNDim;
+            var strides = state.Strides;
+
+            // order[k] = NumPy axisdata index at sorted position k (innermost first); axisdata j is NumSharp position
+            // ndim - 1 - j before the sort. Heap scratch past a small rank (NumSharp has no NPY_MAXDIMS cap).
+            int[] heapOrder = ndim > 64 ? new int[ndim] : null;
+            Span<int> order = heapOrder ?? stackalloc int[ndim];
+            for (int k = 0; k < ndim; k++)
+                order[k] = k;
+
+            bool permuted = false;
+            for (int i0 = 1; i0 < ndim; i0++)
+            {
+                int ipos = i0;
+                int j0 = order[i0];
+                int pos0 = ndim - 1 - j0;
+                for (int i1 = i0 - 1; i1 >= 0; i1--)
+                {
+                    bool ambig = true, shouldSwap = false;
+                    int pos1 = ndim - 1 - order[i1];
+                    for (int op = 0; op < nop; op++)
+                    {
+                        long s0 = strides[op * stridesNDim + pos0];
+                        long s1 = strides[op * stridesNDim + pos1];
+                        if (s0 != 0 && s1 != 0)
+                        {
+                            if (Math.Abs(s1) <= Math.Abs(s0))
+                                shouldSwap = false;   // C order wins a conflict between operands
+                            else if (ambig)
+                                shouldSwap = true;
+                            ambig = false;
+                        }
+                    }
+
+                    if (!ambig)
+                    {
+                        if (shouldSwap)
+                            ipos = i1;
+                        else
+                            break;
+                    }
+                }
+
+                if (ipos != i0)
+                {
+                    for (int i1 = i0; i1 > ipos; i1--)
+                        order[i1] = order[i1 - 1];
+                    order[ipos] = j0;
+                    permuted = true;
+                }
+            }
+
+            if (permuted)
+            {
+                // Apply the order: the axis at NumSharp position ndim - 1 - order[k] moves to position k (ascending) or
+                // ndim - 1 - k (iteration order). Shape, permutation and every operand's strides move together.
+                long[] heapShape = ndim > 64 ? new long[ndim] : null;
+                Span<long> oldShape = heapShape ?? stackalloc long[ndim];
+                sbyte[] heapPerm = ndim > 64 ? new sbyte[ndim] : null;
+                Span<sbyte> oldPerm = heapPerm ?? stackalloc sbyte[ndim];
+                for (int d = 0; d < ndim; d++)
+                {
+                    oldShape[d] = state.Shape[d];
+                    oldPerm[d] = state.Perm[d];
+                }
+
+                for (int k = 0; k < ndim; k++)
+                {
+                    int from = ndim - 1 - order[k];
+                    int to = ascending ? k : ndim - 1 - k;
+                    state.Shape[to] = oldShape[from];
+                    state.Perm[to] = oldPerm[from];
+                }
+
+                long[] heapStrides = ndim > 64 ? new long[ndim] : null;
+                Span<long> oldStrides = heapStrides ?? stackalloc long[ndim];
+                for (int op = 0; op < nop; op++)
+                {
+                    int baseIdx = op * stridesNDim;
+                    for (int d = 0; d < ndim; d++)
+                        oldStrides[d] = strides[baseIdx + d];
+                    for (int k = 0; k < ndim; k++)
+                    {
+                        int from = ndim - 1 - order[k];
+                        int to = ascending ? k : ndim - 1 - k;
+                        strides[baseIdx + to] = oldStrides[from];
+                    }
+                }
+            }
+            else if (ascending)
+            {
+                // Nothing moved in NumPy's (innermost-first) order: the ascending layout is the reversed C order.
+                ReverseAxes(ref state);
+            }
+
+            bool isIdentity = true;
+            for (int d = 0; d < ndim; d++)
+            {
+                if (state.Perm[d] != d)
+                {
+                    isIdentity = false;
+                    break;
+                }
+            }
+
+            if (isIdentity)
+                state.ItFlags |= (uint)NDIterFlags.IDENTPERM;
+            else
+                state.ItFlags &= ~(uint)NDIterFlags.IDENTPERM;
+        }
+
+        /// <summary>
+        ///     Turns the ascending, innermost-first layout <see cref="ReorderAxesForCoalescing"/> produces for coalescing
+        ///     into the iteration-order layout every other part of the iterator reads (innermost axis LAST), keeping the
+        ///     same walk: the axis that was innermost stays innermost.
+        /// </summary>
+        /// <param name="state">The iterator state; its shape, strides and permutation are reversed in place.</param>
+        /// <remarks>
+        ///     For an iterator that <see cref="CoalesceAxes"/> cannot collapse to one axis (it only handles the full
+        ///     collapse): after this, <see cref="CoalesceAxesIterationOrder"/> merges whatever the operands allow.
+        ///     <c>IDENTPERM</c> follows the permutation's new contents.
+        /// </remarks>
+        public static void ReverseAxisOrder(ref NDIterState state)
+        {
+            if (state.NDim <= 1)
+                return;
+
+            ReverseAxes(ref state);
+
+            bool isIdentity = true;
+            for (int d = 0; d < state.NDim; d++)
+            {
+                if (state.Perm[d] != d)
                 {
                     isIdentity = false;
                     break;

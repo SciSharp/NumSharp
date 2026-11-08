@@ -125,16 +125,21 @@ namespace NumSharp.Tests.Indexing
                 .BeOfValues(1, 2, 3, 1, 2, 3, 0, 2, 3);
         }
 
+        /// <summary>
+        ///     NumPy leaks tri()'s own missing-argument TypeError, because <c>tri(*m.shape[-2:])</c> receives no
+        ///     arguments: the type and the text are NumPy 2.4.2's (parity QA-03: the type was ArgumentException).
+        /// </summary>
         [TestMethod]
-        public void Tril_ZeroD_Throws_NumPysLeakedText()
+        public void Tril_ZeroD_Throws_NumPysLeakedTypeError()
         {
-            // NumPy leaks tri()'s own missing-argument TypeError, because `tri(*m.shape[-2:])`
-            // receives no arguments. The text is reproduced verbatim.
             new Action(() => np.tril(NDArray.Scalar(5)))
-                .Should().Throw<ArgumentException>()
+                .Should().ThrowExactly<TypeError>()
                 .WithMessage("tri() missing 1 required positional argument: 'N'");
             new Action(() => np.triu(NDArray.Scalar(5)))
-                .Should().Throw<ArgumentException>()
+                .Should().ThrowExactly<TypeError>()
+                .WithMessage("tri() missing 1 required positional argument: 'N'");
+            new Action(() => np.tril(np.array(5.0), 1))
+                .Should().ThrowExactly<TypeError>()
                 .WithMessage("tri() missing 1 required positional argument: 'N'");
         }
 
@@ -243,7 +248,7 @@ namespace NumSharp.Tests.Indexing
         [TestMethod]
         public void Tril_AboveTheWriteOnceThreshold_StillZeroesTheDroppedTriangle()
         {
-            // tri/tril/triu pick their allocation strategy by size (np.tri.cs WriteOnceMaxBytes,
+            // tri/tril/triu pick their allocation strategy by size (SizeBucketedBufferPool.WriteOnceMaxBytes,
             // 64 MiB): below it they allocate UNINITIALISED and zero the dropped run themselves,
             // above it they lean on np.zeros. Every other test here sits on the small side, so
             // this one crosses the boundary — a missing zero-fill on the large path would leave

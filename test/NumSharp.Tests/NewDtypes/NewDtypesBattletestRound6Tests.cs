@@ -203,11 +203,13 @@ namespace NumSharp.Tests.NewDtypes
         [TestMethod]
         public void B11_Complex_Cbrt_NotSupported()
         {
-            // NumPy does NOT support np.cbrt(complex) — it raises TypeError.
-            // NumSharp should match by throwing NotSupportedException.
+            // NumPy does NOT support np.cbrt(complex) — it raises TypeError with the ufunc
+            // "not supported for the input types" message. NumSharp now matches that TYPE and text
+            // exactly (was a NotSupportedException with NumSharp wording; resolves oracle K4/K5).
             var a = np.array(new Complex[] { new Complex(1, 2) });
             Action act = () => np.cbrt(a);
-            act.Should().Throw<NotSupportedException>();
+            act.Should().Throw<TypeError>()
+                .WithMessage("ufunc 'cbrt' not supported for the input types*");
         }
 
         #endregion

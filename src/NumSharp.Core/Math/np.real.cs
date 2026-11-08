@@ -1,5 +1,3 @@
-using NumSharp.Backends;
-
 namespace NumSharp
 {
     public static partial class np
@@ -19,16 +17,11 @@ namespace NumSharp
         ///     real number is the number), so the input is returned unchanged with its dtype preserved.
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.real.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray real(NDArray val)
         {
-            // Complex: a strided float64 view onto the real lane (writes through, shares memory) — the
-            // same strided complex->real lane read the FFT driver relies on, exposed as a view.
-            if (val.typecode == NPTypeCode.Complex)
-                return new NDArray(val.Storage.AliasComplexLane(imaginary: false));
-
-            // Real / int / bool: NumPy's `val.real` IS `val` for a real array (same object, shared memory,
-            // dtype preserved). Return it unchanged.
-            return val;
+            // NumPy's `val.real`: the statements are the array object's (NDArray.TypeCheck.cs)
+            return NDArray.real_(val);
         }
     }
 }

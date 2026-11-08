@@ -11,6 +11,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of.</param>
         /// <returns>The corresponding angle in radians. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.deg2rad.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray deg2rad(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => x.TensorEngine.Deg2Rad(x, dtype, @out, where);
 
@@ -21,7 +22,12 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of.</param>
         /// <returns>The corresponding angle in radians. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.radians.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         public static NDArray radians(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => deg2rad(x, @out, where, dtype);
+        {
+            if (x is null) throw new ArgumentNullException(nameof(x));
+            return x.TensorEngine.Radians(x, dtype, @out, where);
+        }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -47,9 +48,9 @@ namespace NumSharp
                         "works for any layout.");
                 if (_this.size > int.MaxValue)
                     throw new InvalidOperationException(
-                        $"nd.Unsafe.Span/Memory<{typeof(T).Name}> cannot represent {_this.size} elements — a Span<T>/" +
+                        string.Create(CultureInfo.InvariantCulture, $"nd.Unsafe.Span/Memory<{typeof(T).Name}> cannot represent {_this.size} elements — a Span<T>/" +
                         $"Memory<T> length is a 32-bit int. Use Unsafe.AsSpan<{typeof(T).Name}>() (a long-indexable " +
-                        $"UnmanagedSpan) or Pointer<{typeof(T).Name}>() for arrays larger than int.MaxValue.");
+                        $"UnmanagedSpan) or Pointer<{typeof(T).Name}>() for arrays larger than int.MaxValue."));
             }
 
             // Pointer to the array's logical element 0 for ANY layout:

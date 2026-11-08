@@ -11,6 +11,9 @@ namespace NumSharp.Build;
 ///     ...original body...
 ///     return scope.Returns(result);     // and out-NDArray params escape before each return
 ///     </code>
+///     It also gives OPERAND ROOTS (shadow locals passed to <c>NDScope.Anchor</c> before every return) to every method
+///     that opens a scope — woven or hand-written — and to every <c>[NDAnchored]</c> method, so an operand the caller
+///     passed as a temporary cannot be collected while a kernel inside the call still reads it.
 ///     Invoked by the <c>NDScopeWeave</c> target after CoreCompile, for each TargetFramework,
 ///     on the intermediate assembly — from NumSharp.Core.csproj for the library's self-weave,
 ///     and from the packaged <c>build/NumSharp.Build.targets</c> for any project that installs
@@ -23,8 +26,18 @@ namespace NumSharp.Build;
 /// </summary>
 internal static class Program
 {
+    /// <summary>The tool's entry point: parses the command line, weaves the assembly in place, and reports the outcome.</summary>
+    /// <param name="args">The assembly path, then the <c>--snk</c>, <c>--refs</c> and <c>--verbose</c> options (see <see cref="Usage"/>).</param>
+    /// <returns>
+    ///     0 on success (woven, or nothing to weave); 1 when the weave reported build errors (NDW0xx on stderr); 2 on a
+    ///     usage problem, a missing input file, or an unhandled failure (NDW099).
+    /// </returns>
     private static int Main(string[] args)
     {
+        // First, before any work: a windowless build step is otherwise scheduled as background work on a hybrid CPU's
+        // efficiency cores, which doubled the weave (see ToolQualityOfService).
+        ToolQualityOfService.OptOutOfEfficiencyMode();
+
         string assemblyPath = null;
         string snkPath = null;
         string refsPath = null;

@@ -58,8 +58,9 @@ long best = np.argmax(probs);                        // 1 - NumSharp reductions 
 
 ## The verbs
 
-Everything is packaging over five operations on the static `NDArrayTensorsInterop` class (also extension
-methods). The naming is the house convention: **`As…` shares memory, `To…` copies.**
+Everything is packaging over seven operations on the static `NDArrayTensorsInterop` class (also extension
+methods): five for the 15 numeric and boolean dtypes and two for text. The naming is the house convention:
+**`As…` shares memory, `To…` copies.**
 
 | Direction | Verb | Semantics |
 |---|---|---|
@@ -68,6 +69,8 @@ methods). The naming is the house convention: **`As…` shares memory, `To…` c
 | Tensors → NumSharp | `tensor.ToNDArray()` | fresh **owning** C-contiguous **copy** - the safe default |
 | Tensors → NumSharp | `tensor.AsNDArray()` | **zero-copy view** over the tensor's pinned backing store; dense → a C-contiguous view, strided → a strided view (no densifying copy) |
 | Tensors → NumSharp | `span.ToNDArray()` | **copy** of a `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` (a `ref struct` span cannot be leased) |
+| NumSharp → Tensors | `nd.ToStringTensor()` → `Tensor<string>` | **copy** of a text array: `U`, `S` (decoded as UTF-8) or `StringDType` (an NA as `null`); any layout, logical order |
+| Tensors → NumSharp | `tensor.ToNDArray()` / `span.ToNDArray()` of `string` | **copy** into `StringDType(na_object=None)`, a `null` element as the NA |
 
 Plus the dtype maps (`ToTensorElementClrType`, `TypeCodeOf<T>`) and the counters
 `NDArrayTensorsInterop.LiveExports` / `LiveImports`, which count live export handles and import leases so a
@@ -81,6 +84,15 @@ ReadOnlyTensorSpan<float> ro = h.ReadOnlySpan;   // read-only, always available
 Tensor<float> t = nd.ToTensor<float>();          // dense copy, independent
 using NDArray copy = t.ToNDArray();              // owning copy back
 using NDArray view = t.AsNDArray();              // zero-copy view over t's buffer
+```
+
+Text is never shared - a `Tensor<string>` holds managed strings, NumSharp's text lives in its own buffers - so it
+crosses as a copy both ways:
+
+```csharp
+using NDArray names = np.array(new[] { "ada", "grace", "linus" });
+Tensor<string> texts = names.ToStringTensor();   // copy: ["ada", "grace", "linus"]
+using NDArray back = texts.ToNDArray();          // copy: StringDType(na_object=None)
 ```
 
 ### Why a handle, not the span itself
@@ -143,15 +155,23 @@ element, so they import as the empty vector `(0,)`, never as a one-element 0-d a
   count: the lease fires (unpinning the array) when the *last* NumSharp view over the memory - slices
   derived from it included - is disposed or collected. The view roots the `Tensor<T>` so its backing cannot
   move underneath it, and does not own its data (`owndata == false`), so a size-changing `resize` refuses
-  instead of detaching. `LiveImports` counts open leases.
+  instead of detaching. `LiveImports` counts open leases. While a lease is open, its pinned bytes are booked
+  with NumSharp's memory accounting: the GC counts the backing array, but a forgotten view's pin keeps it
+  alive past the collection that found the view dead, and 5,000 forgotten views of fresh 602 KB tensors held
+  2.6 GB with nothing booked and 96 MB booked. Views you dispose cost nothing: the booking ends with the pin.
+- **A span holds no reference of its own.** A `TensorSpan<T>` is a `ref struct`, so it cannot take a reference on
+  the buffer the way the handle does: it reads the handle's memory the way an `NDArray` can wrap
+  [unsafe memory](../buffering.md), and that memory must outlive it. Keep the `TensorSpanHandle<T>` - or the source
+  array - undisposed for the whole life of every span you take from it, on every thread, and dispose them only after
+  the last span is done. A span read after both were disposed reads whatever the pool handed the buffer to next
+  (800 of 800 reads in a race probe returned another array's data).
 - **No GIL, no interpreter, no native handles.** The verbs are plain managed calls; the one rule is the
   handle rule - **keep the `TensorSpanHandle<T>` alive while you use its span, and dispose it.**
 
 ## Dtypes
 
-`System.Numerics.Tensors` containers are **unconstrained generics** over an unmanaged `T` - there is no
-dtype enum and no fixed element-type table. So **all 15 NumSharp dtypes cross zero-copy as their own CLR
-type**; nothing is refused and nothing is converted:
+The bridge maps NumSharp dtypes to `Tensor<T>` element types as follows. Shared views preserve the
+CLR element type without conversion; the bridge's generic methods require an unmanaged `T`.
 
 | NumSharp | Crosses as | Note |
 |---|---|---|
@@ -160,6 +180,7 @@ type**; nothing is refused and nothing is converted:
 | Char | `char` | zero-copy, UTF-16 code units; **directional** - a `ushort` element type reads back as `UInt16`, never `Char` |
 | Decimal | `System.Decimal` | zero-copy (a 16-byte unmanaged struct) - no conversion |
 | Complex | `System.Numerics.Complex` | zero-copy (a 16-byte unmanaged struct) - no refusal |
+| `S`, `U`, `StringDType` | `string`, as a **copy** only | `ToStringTensor()` / `ToNDArray()`: no string can be shared, since NumSharp packs text (UCS-4 code units, bytes, a UTF-8 arena) where a `Tensor<string>` holds managed strings. The unmanaged verbs refuse a text array naming its class and `ToStringTensor()` |
 
 `T` must be the array's own element type: a mismatch (`AsTensorSpan<int>()` on a `float` array) is refused
 up front rather than silently reinterpreting the bytes.
@@ -202,9 +223,11 @@ away. `System.Numerics.Tensors` does not compute NumSharp operations - which is 
 
 ## Claims ledger
 
+The dtype claims below cover the supported mappings in the table above.
+
 | # | Claim | Gate |
 |---|---|---|
-| 1 | All 15 dtypes map to their own CLR type and round-trip; the map is directional (UInt16 ≠ Char) | [`DtypeMapTests`][gate] |
+| 1 | Supported dtypes map to their own CLR type and round-trip; the map is directional (UInt16 ≠ Char) | [`DtypeMapTests`][gate] |
 | 2 | `AsTensorSpan` shares memory both ways (span↔ndarray write-through) and shares every dtype's bytes 1:1 | [`ExportTests`][gate] |
 | 3 | `ToTensor` is an independent dense copy that reads any layout (incl. negative stride) in logical order | [`ExportTests`][gate] |
 | 4 | `ToNDArray` copies (dense + strided); `AsNDArray` is a zero-copy view, write-through, dense or strided | [`ImportTests`][gate] |
@@ -216,9 +239,9 @@ away. `System.Numerics.Tensors` does not compute NumSharp operations - which is 
 | 10 | Special values (NaN sign/payload/signaling, ±inf, ±0, subnormals, every dtype extreme) survive every crossing bit-exact | [`SpecialValueFidelityTests`][gate] |
 | 11 | NDArray → Tensor → NDArray and NDArray → TensorSpan → NDArray preserve values across all dtypes and layouts | [`RoundTripTests`][gate] |
 | 12 | The examples on this page run as written | [`DocExampleTests`][gate] |
-| 13 | A tensor that starts past element 0 of its backing array (a `Slice`, a range indexer, `Tensor.Create(array, start, …)`) imports its own elements through `ToNDArray` and `AsNDArray`, for all 15 dtypes; a write through the view lands on the element it names | [`ImportTests`][gate] |
-| 14 | A 0-d array crosses as `[1]` through `AsTensorSpan` and `ToTensor` with its value kept, for all 15 dtypes | [`ExportTests`][gate] |
-| 15 | An empty array exports with its shape and all-zero strides; the BCL can flatten, fill and reduce the span, and it imports back to the same shape, for all 15 dtypes; the BCL's rank-0 values import as `(0,)` | [`ExportTests`][gate], [`ImportTests`][gate] |
+| 13 | A tensor that starts past element 0 of its backing array (a `Slice`, a range indexer, `Tensor.Create(array, start, …)`) imports its own elements through `ToNDArray` and `AsNDArray`, for every supported dtype; a write through the view lands on the element it names | [`ImportTests`][gate] |
+| 14 | A 0-d array crosses as `[1]` through `AsTensorSpan` and `ToTensor` with its value kept, for every supported dtype | [`ExportTests`][gate] |
+| 15 | An empty array exports with its shape and all-zero strides; the BCL can flatten, fill and reduce the span, and it imports back to the same shape, for every supported dtype; the BCL's rank-0 values import as `(0,)` | [`ExportTests`][gate], [`ImportTests`][gate] |
 | 16 | Both export verbs refuse a released buffer with `ObjectDisposedException`, for every layout | [`LifetimeTests`][gate] |
 | 17 | The copies refuse what they cannot hold before allocating (`ToTensor` past `Array.MaxLength`, `ToNDArray` past `int.MaxValue`); `AsNDArray` of a stride-0 tensor shares any size zero-copy | [`ImportTests`][gate], [`BoundaryTests`][gate] |
 | 18 | Every dtype × every catalogued layout (≈45: offsets, steps, transposes, broadcasts, empties at offsets, unit axes, read-only flags, ranks 40/70) × every export verb holds, element by element through the BCL's own indexer, and each write through a span changes exactly the element it names | [`LayoutMatrixTests`][gate] |
@@ -229,6 +252,8 @@ away. `System.Numerics.Tensors` does not compute NumSharp operations - which is 
 | 23 | Refused exports leave no reference behind; a handle holds exactly one, which `resize(refcheck)` sees; a lease pins while live and unpins on release (as the GC counts pinned objects), also when only the finalizer releases it | [`ArcAccountingTests`][gate] |
 | 24 | Random bit patterns (bool bytes beyond 0/1, NaN payloads, invalid decimals) survive every path byte-identical, contiguous and strided | [`BitPatternFuzzTests`][gate] |
 | 25 | The public surface is exactly the approved one, every type and verb marked `[Experimental("NUMSHARP_TENSORS")]` | [`ApiSurfaceTests`][gate] |
+| 26 | Every text class (`U`, `S`, `StringDType` with each NA object) × layout copies into a `Tensor<string>` of its shape holding numpy's `tolist()` texts (`S` decoded as UTF-8, a None / NaN NA as `null`); a `Tensor<string>` or string span copies into `StringDType(na_object=None)`, a `null` as the NA; invalid UTF-8 and a lone surrogate are refused with numpy's errors | [`TextCrossingTests`][gate] |
+| 27 | The unmanaged verbs and the dtype map refuse every text array with one message naming its class and `ToStringTensor()`, before anything is leased | [`TextRefusalTests`][gate] |
 
 ## See also
 

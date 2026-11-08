@@ -75,260 +75,63 @@ namespace NumSharp
             ///     Slice-expression strings, special-directive strings, <see cref="Slice"/> objects,
             ///     <see cref="NDArray"/>s, C# scalars, arrays and collections — in any mix.
             /// </param>
-            public NDArray this[params object[] key] => Build(key);
+            public NDArray this[params object[] key]
+                // NumPy's __getitem__ is the array object's; a numpy.matrix entry's class (np.concatenate returns a matrix) is
+                // decided there too, because the entries are nested in the key.
+                => NDArray.AxisConcatenate(key, _axis, _matrix, _ndmin, _trans1d);
 
             /// <summary>NumPy's <c>__len__</c>, which is 0 for these objects.</summary>
             public int Count => 0;
 
-            /// <summary>
-            ///     <c>array(a, ndmin=ndmin)</c>: pad with leading length-1 axes, as a view.
-            /// </summary>
-            /// <remarks>
-            ///     Deliberately UNCAPPED. NumPy validates <c>ndmin</c> against <c>NPY_MAXDIMS</c> (64) and
-            ///     raises <c>ndmin must be &lt;= ndmax (64)</c>; NumSharp has no 64-dimension ceiling
-            ///     anywhere, so importing one here would make the DSL refuse ranks the rest of the
-            ///     library accepts. <c>ndmin</c> does arrive from a user-typed directive string, so the
-            ///     padding must be cheap rather than merely bounded: <see cref="AtLeastNdView"/> prepends
-            ///     all the axes in one alias (O(ndim)), where the per-axis loop it replaced was quadratic
-            ///     — 27.6 s at ndmin=100 000, unbounded at 2**31-1. An ndmin genuinely too large to
-            ///     allocate a shape for surfaces as <see cref="OutOfMemoryException"/>, the same answer
-            ///     any other oversized NumSharp allocation gives. A ndmin of 0 or less stays a no-op,
-            ///     as it is upstream.
-            /// </remarks>
-            private static NDArray AtLeastNdmin(NDArray a, int ndmin) => AtLeastNdView(a, ndmin);
-
-            [NDScoped]
-            private NDArray Build(object[] key)
-            {
-                if (key is null)
-                    throw new ArgumentNullException(nameof(key));
-
-                // Copy the attributes — the first entry may override them.
-                int axis = _axis, ndmin = _ndmin, trans1d = _trans1d;
-                bool matrix = _matrix, col = false;
-
-                var objs = new List<Operand>(key.Length);
-
-                for (int k = 0; k < key.Length; k++)
-                {
-                    object item = key[k];
-                    switch (item)
-                    {
-                        case null:
-                            throw new ArgumentNullException($"key[{k}]",
-                                "index expression entries must not be null.");
-
-                        case string s:
-                            if (s.IndexOf(':') < 0)
-                            {
-                                // No colon ⇒ a NumPy special directive, which must lead.
-                                if (k != 0)
-                                    throw new ValueError("special directives must be the first entry.");
-                                ApplyDirective(s, ref axis, ref ndmin, ref trans1d, ref matrix, ref col);
-                                break;
-                            }
-
-                            foreach (var token in s.Split(','))
-                            {
-                                if (string.IsNullOrWhiteSpace(token))
-                                    continue;
-                                objs.Add(FromSlice(ParseSliceToken(token), ndmin, trans1d));
-                            }
-
-                            break;
-
-                        case Slice slice:
-                            objs.Add(FromSlice(SliceSpec.FromSlice(slice), ndmin, trans1d));
-                            break;
-
-                        case Slice[] slices:
-                            foreach (var one in slices)
-                                objs.Add(FromSlice(SliceSpec.FromSlice(one), ndmin, trans1d));
-                            break;
-
-                        // Weak (NEP50 "python literal") scalars.
-                        case bool:
-                            objs.Add(Operand.Scalar(item, WeakKind.Bool));
-                            break;
-                        case sbyte or byte or short or ushort or int or uint or long or ulong:
-                            objs.Add(Operand.Scalar(item, WeakKind.Int));
-                            break;
-                        case float or double:
-                            objs.Add(Operand.Scalar(item, WeakKind.Float));
-                            break;
-                        case Complex:
-                            objs.Add(Operand.Scalar(item, WeakKind.Complex));
-                            break;
-
-                        // Strong scalars — NumSharp dtypes with no Python literal form.
-                        case char or Half or decimal:
-                            objs.Add(Operand.StrongScalar(item));
-                            break;
-
-                        default:
-                            objs.Add(FromArrayLike(item, ndmin, trans1d));
-                            break;
-                    }
-                }
-
-                NDArray[] arrays;
-                if (objs.Count != 0)
-                {
-                    NPTypeCode final = ResolveDtype(objs);
-                    arrays = new NDArray[objs.Count];
-                    for (int i = 0; i < objs.Count; i++)
-                        arrays[i] = objs[i].Materialize(final, ndmin);
-                }
-                else
-                {
-                    // Directives only — drops through to concatenate's own error, as in NumPy.
-                    arrays = Array.Empty<NDArray>();
-                }
-
-                var res = concatenate(arrays, axis);
-
-                if (matrix)
-                {
-                    int oldndim = res.ndim;
-                    res = asmatrix(res);
-                    if (oldndim == 1 && col)
-                        res = res.T;
-                }
-
-                return res;
-            }
-
-            #region directives
-
-            private static void ApplyDirective(string item, ref int axis, ref int ndmin,
-                ref int trans1d, ref bool matrix, ref bool col)
-            {
-                if (item == "r" || item == "c")
-                {
-                    matrix = true;
-                    col = item == "c";
-                    return;
-                }
-
-                if (item.IndexOf(',') >= 0)
-                {
-                    // "axis,ndmin" or "axis,ndmin,trans1d". NumPy reads only vec[:2] and vec[2],
-                    // so a fourth field is silently ignored — including a non-numeric one.
-                    var vec = item.Split(',');
-                    if (!TryParseDirectiveInt(vec[0], out int a) || !TryParseDirectiveInt(vec[1], out int n))
-                        throw new ValueError($"unknown special directive '{item}'");
-
-                    int t = trans1d;
-                    if (vec.Length == 3 && !TryParseDirectiveInt(vec[2], out t))
-                        throw new ValueError($"unknown special directive '{item}'");
-
-                    axis = a;
-                    ndmin = n;
-                    trans1d = t;
-                    return;
-                }
-
-                if (TryParseDirectiveInt(item, out int only))
-                {
-                    axis = only;
-                    return;
-                }
-
-                throw new ValueError("unknown special directive");
-            }
-
-            private static bool TryParseDirectiveInt(string s, out int value)
-                => int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
-
-            #endregion
-
-            #region entry conversion
-
-            /// <summary>
-            ///     NumPy's slice branch: <c>arange</c>/<c>linspace</c>, then <c>ndmin</c> padding and the
-            ///     <c>swapaxes(-1, trans1d)</c> that differs from the array branch's permutation.
-            /// </summary>
-            private static Operand FromSlice(in SliceSpec spec, int ndmin, int trans1d)
-            {
-                NDArray newobj = spec.Materialize();
-                if (ndmin > 1)
-                {
-                    newobj = AtLeastNdmin(newobj, ndmin);
-                    if (trans1d != -1)
-                        newobj = swapaxes(newobj, -1, trans1d);
-                }
-
-                return Operand.Array(newobj);
-            }
-
-            /// <summary>
-            ///     NumPy's array branch: <c>array(item, ndmin=ndmin)</c> followed, when the entry was
-            ///     upgraded, by the <c>defaxes</c> permutation that places the original axes at
-            ///     <c>trans1d</c>.
-            /// </summary>
-            private static Operand FromArrayLike(object item, int ndmin, int trans1d)
-            {
-                NDArray arr = item as NDArray ?? asanyarray(item);
-                int itemNdim = arr.ndim;
-
-                NDArray newobj = AtLeastNdmin(arr, ndmin);
-                if (trans1d != -1 && itemNdim < ndmin)
-                {
-                    int k2 = ndmin - itemNdim;
-                    int k1 = trans1d;
-                    if (k1 < 0)
-                        k1 += k2 + 1;
-                    newobj = transpose(newobj, BuildTransposeAxes(ndmin, k1, k2));
-                }
-
-                return Operand.Array(newobj);
-            }
-
-            /// <summary>
-            ///     <c>defaxes[:k1] + defaxes[k2:] + defaxes[k1:k2]</c> over <c>defaxes = range(ndmin)</c>,
-            ///     with Python's forgiving list-slice clamping (an out-of-range <c>trans1d</c> yields a
-            ///     malformed permutation and lands on transpose's own "axes don't match array").
-            /// </summary>
-            private static int[] BuildTransposeAxes(int ndmin, int k1, int k2)
-            {
-                var axes = new List<int>(ndmin);
-                AppendRangeSlice(axes, ndmin, 0, k1);
-                AppendRangeSlice(axes, ndmin, k2, ndmin);
-                AppendRangeSlice(axes, ndmin, k1, k2);
-                return axes.ToArray();
-            }
-
-            /// <summary>Appends <c>list(range(n))[start:stop]</c> with Python's index clamping.</summary>
-            private static void AppendRangeSlice(List<int> into, int n, int start, int stop)
-            {
-                if (start < 0)
-                    start = Math.Max(0, start + n);
-                else if (start > n)
-                    start = n;
-
-                if (stop < 0)
-                    stop = Math.Max(0, stop + n);
-                else if (stop > n)
-                    stop = n;
-
-                for (int i = start; i < stop; i++)
-                    into.Add(i);
-            }
-
-            #endregion
-
             #region slice expressions
 
             /// <summary>
-            ///     A parsed <c>start:stop:step</c> expression. Unlike <see cref="Slice"/> (which indexes and
-            ///     is integer-only) this carries real bounds and NumPy's imaginary step, where
-            ///     <c>start:stop:Nj</c> means "N points, stop inclusive" — i.e. <c>linspace</c>.
+            ///     A parsed <c>start:stop:step</c> expression, each field the Python number NumPy computes with. Unlike
+            ///     <see cref="Slice"/> (which indexes and is integer-only) this carries real bounds and NumPy's imaginary
+            ///     step, where <c>start:stop:Nj</c> means "N points, stop inclusive" (<c>linspace</c> in <c>np.r_</c>,
+            ///     <c>arange(0, N) * step + start</c> in <c>np.mgrid</c> / <c>np.ogrid</c>).
             /// </summary>
+            /// <remarks>
+            ///     A field written as digits (or omitted: start 0, step 1) is a Python INT, held exactly in
+            ///     <see cref="IntStart"/> / <see cref="IntStop"/> / <see cref="IntStep"/>; any other field (a point, an exponent,
+            ///     <c>Infinity</c>, <c>NaN</c>) is a Python float. <see cref="Start"/> / <see cref="Stop"/> / <see cref="Step"/>
+            ///     hold every field as a double: an int field correctly rounded (CPython's <c>float(int)</c>, but ±inf past the
+            ///     double range where CPython raises, so a computation that can meet such a field converts the int value). The
+            ///     int values matter past 2**53, where a double no longer holds every integer: NumPy's lengths and int64 values
+            ///     come from Python's exact int arithmetic (<c>np.r_[2**53 + 1:2**53 + 3]</c> has two elements; a double
+            ///     reading of the bounds made four).
+            /// </remarks>
             internal readonly struct SliceSpec
             {
+                /// <summary>The start as a double (0 when omitted).</summary>
                 public readonly double Start;
+
+                /// <summary>The stop as a double (0 when omitted: see <see cref="HasStop"/>).</summary>
                 public readonly double Stop;
+
+                /// <summary>The step as a double (1 when omitted); for an imaginary step, its imaginary part (a point count).</summary>
                 public readonly double Step;
+
+                /// <summary>The start's exact value when <see cref="StartIsInt"/> (0 when omitted).</summary>
+                public readonly BigInteger IntStart;
+
+                /// <summary>The stop's exact value when <see cref="StopIsInt"/> and <see cref="HasStop"/>.</summary>
+                public readonly BigInteger IntStop;
+
+                /// <summary>The step's exact value when <see cref="StepIsInt"/> (1 when omitted).</summary>
+                public readonly BigInteger IntStep;
+
+                /// <summary>The start is a Python int (written as digits, or omitted).</summary>
+                public readonly bool StartIsInt;
+
+                /// <summary>
+                ///     The stop is a Python int, or omitted: Python's None never meets arithmetic as a number (arange moves the
+                ///     start into the stop slot, nd_grid raises), so it does not make the expression a float one.
+                /// </summary>
+                public readonly bool StopIsInt;
+
+                /// <summary>The step is a Python int (written as digits, or omitted); false for an imaginary step.</summary>
+                public readonly bool StepIsInt;
 
                 /// <summary>False for <c>a:</c> and <c>:</c>, where NumPy's arange re-reads start as stop.</summary>
                 public readonly bool HasStop;
@@ -336,21 +139,43 @@ namespace NumSharp
                 /// <summary>The step was written <c>Nj</c>: <see cref="Step"/> is a point COUNT.</summary>
                 public readonly bool ImaginaryStep;
 
-                /// <summary>Every field was written as an integer literal ⇒ int64, else float64.</summary>
+                /// <summary>
+                ///     Every field is a Python int and the step is real: NumPy's arange discovers int64 for it, and its
+                ///     <c>(stop - start) / step</c> is Python's int division (<c>division by zero</c> for a zero step).
+                /// </summary>
                 public readonly bool Integral;
 
-                public SliceSpec(double start, double stop, bool hasStop, double step,
-                    bool imaginaryStep, bool integral)
+                /// <summary>Builds a slice from its fields, each a double and, for a Python int, its exact value.</summary>
+                /// <param name="start">The start as a double.</param>
+                /// <param name="intStart">The start's exact value when it is a Python int, else null (a float).</param>
+                /// <param name="stop">The stop as a double (any value when <paramref name="hasStop"/> is false).</param>
+                /// <param name="intStop">The stop's exact value when it is a Python int, else null.</param>
+                /// <param name="hasStop">Whether the stop was written.</param>
+                /// <param name="step">The step as a double (an imaginary step's imaginary part).</param>
+                /// <param name="intStep">The step's exact value when it is a Python int, else null (a float or imaginary step).</param>
+                /// <param name="imaginaryStep">Whether the step was written <c>Nj</c>.</param>
+                public SliceSpec(double start, BigInteger? intStart, double stop, BigInteger? intStop, bool hasStop,
+                    double step, BigInteger? intStep, bool imaginaryStep)
                 {
                     Start = start;
                     Stop = stop;
-                    HasStop = hasStop;
                     Step = step;
+                    IntStart = intStart ?? BigInteger.Zero;
+                    IntStop = intStop ?? BigInteger.Zero;
+                    IntStep = intStep ?? BigInteger.One;
+                    StartIsInt = intStart.HasValue;
+                    StopIsInt = !hasStop || intStop.HasValue;
+                    StepIsInt = intStep.HasValue && !imaginaryStep;
+                    HasStop = hasStop;
                     ImaginaryStep = imaginaryStep;
-                    Integral = integral;
+                    Integral = StartIsInt && StopIsInt && StepIsInt;
                 }
 
-                /// <summary>Adapts a NumSharp <see cref="Slice"/> (always integral, never imaginary).</summary>
+                /// <summary>Adapts a NumSharp <see cref="Slice"/> (Python ints, never an imaginary step).</summary>
+                /// <param name="slice">The slice.</param>
+                /// <returns>The slice's fields: start 0 when absent, the stop only when present.</returns>
+                /// <exception cref="ArgumentNullException"><paramref name="slice"/> is null.</exception>
+                /// <exception cref="ArgumentException"><paramref name="slice"/> is <c>...</c> or <c>newaxis</c>.</exception>
                 public static SliceSpec FromSlice(Slice slice)
                 {
                     if (slice is null)
@@ -360,10 +185,22 @@ namespace NumSharp
                             "'...' and 'newaxis' are index-only and cannot appear in a concatenation expression.",
                             nameof(slice));
 
-                    return new SliceSpec(slice.Start ?? 0, slice.Stop ?? 0, slice.Stop.HasValue,
-                        slice.Step, false, true);
+                    long start = slice.Start ?? 0;
+                    long stop = slice.Stop ?? 0;
+                    return new SliceSpec(start, start, stop, slice.Stop.HasValue ? (BigInteger?)stop : null, slice.Stop.HasValue,
+                        slice.Step, slice.Step, false);
                 }
 
+                /// <summary>
+                ///     NumPy's slice branch of <c>np.r_</c> / <c>np.c_</c> (and <c>np.mgrid</c> / <c>np.ogrid</c>'s single real
+                ///     slice): <c>arange(start, stop, step)</c> over the Python numbers, or <c>linspace(start, stop, N)</c> for
+                ///     an imaginary step.
+                /// </summary>
+                /// <returns>A fresh 1-D array: int64 when every field is a Python int, else float64.</returns>
+                /// <exception cref="ValueError">An imaginary step without a stop; arange's NaN length or length past
+                ///     npy_intp; the allocation guard's <c>array is too big</c>.</exception>
+                /// <exception cref="DivideByZeroException">A zero step: Python's <c>division by zero</c> for ints,
+                ///     <c>float division by zero</c> once a float is involved.</exception>
                 public NDArray Materialize()
                 {
                     if (ImaginaryStep)
@@ -375,59 +212,77 @@ namespace NumSharp
                         return linspace(Start, Stop, (long)Math.Abs(Step), true, NPTypeCode.Double);
                     }
 
-                    // A zero step is left to arange, exactly as NumPy leaves it to its own
-                    // (where it surfaces as Python's ZeroDivisionError from (stop-start)/step).
-                    var code = Integral ? NPTypeCode.Int64 : NPTypeCode.Double;
+                    // Python ints within int64 take arange's int route (PyArray_ArangeObj over Python ints): the exact length,
+                    // exact int64 values past 2**53, and Python's int division, so a zero step is "division by zero".
+                    if (Integral && FitsInt64(IntStart) && FitsInt64(IntStop) && FitsInt64(IntStep))
+                    {
+                        // NumPy's arange(start, None, step) is arange(0, start, step): a missing stop promotes start into
+                        // the stop slot. np.r_[5::2] is therefore [0, 2, 4].
+                        return HasStop
+                            ? arange((long)IntStart, (long)IntStop, (long)IntStep)
+                            : arange(0L, (long)IntStart, (long)IntStep);
+                    }
 
-                    // NumPy's arange(start, None, step) is arange(0, start, step): a missing stop
-                    // promotes start into the stop slot. np.r_[5::2] is therefore [0, 2, 4].
+                    // A float field makes arange's float route (a zero step is "float division by zero"). A Python int past
+                    // int64 is read as its double here too, NumSharp's limit: NumPy discovers uint64 or object for it.
+                    var code = Integral ? NPTypeCode.Int64 : NPTypeCode.Double;
                     return HasStop
                         ? arange(Start, Stop, Step, code)
                         : arange(0d, Start, Step, code);
                 }
+
+                /// <summary>Whether a Python int fits an int64.</summary>
+                /// <param name="value">The int.</param>
+                /// <returns>True within <c>[-2**63, 2**63 - 1]</c>.</returns>
+                internal static bool FitsInt64(BigInteger value) => value >= long.MinValue && value <= long.MaxValue;
             }
 
             /// <summary>Parses one <c>start:stop[:step]</c> token.</summary>
+            /// <param name="token">The token: two or three colon-separated fields, any of which may be empty.</param>
+            /// <returns>The slice, each field the Python number it spells.</returns>
+            /// <exception cref="ArgumentException">Fewer than two or more than three fields, or a field that is no number
+            ///     (<c>Invalid slice notation: '...'</c>).</exception>
             internal static SliceSpec ParseSliceToken(string token)
             {
                 var fields = token.Split(':');
                 if (fields.Length < 2 || fields.Length > 3)
                     throw new ArgumentException($"Invalid slice notation: '{token.Trim()}'", nameof(token));
 
-                bool integral = true;
-
                 double start = 0d;
+                BigInteger? intStart = BigInteger.Zero;
                 if (!string.IsNullOrWhiteSpace(fields[0]))
-                {
-                    start = ParseNumber(fields[0], token, out bool startIntegral, out _, allowImaginary: false);
-                    integral &= startIntegral;
-                }
+                    start = ParseNumber(fields[0], token, out intStart, out _, allowImaginary: false);
 
                 bool hasStop = !string.IsNullOrWhiteSpace(fields[1]);
                 double stop = 0d;
+                BigInteger? intStop = null;
                 if (hasStop)
-                {
-                    stop = ParseNumber(fields[1], token, out bool stopIntegral, out _, allowImaginary: false);
-                    integral &= stopIntegral;
-                }
+                    stop = ParseNumber(fields[1], token, out intStop, out _, allowImaginary: false);
 
                 double step = 1d;
+                BigInteger? intStep = BigInteger.One;
                 bool imaginary = false;
                 if (fields.Length == 3 && !string.IsNullOrWhiteSpace(fields[2]))
-                {
-                    step = ParseNumber(fields[2], token, out bool stepIntegral, out imaginary, allowImaginary: true);
-                    integral &= stepIntegral;
-                }
+                    step = ParseNumber(fields[2], token, out intStep, out imaginary, allowImaginary: true);
 
-                return new SliceSpec(start, stop, hasStop, step, imaginary, integral && !imaginary);
+                return new SliceSpec(start, intStart, stop, intStop, hasStop, step, intStep, imaginary);
             }
 
             /// <summary>
-            ///     Reads one numeric field. <paramref name="integral"/> follows Python's LITERAL rule, not
-            ///     the value's: <c>0</c> is integral, <c>0.0</c> and <c>1e3</c> are not — which is what makes
+            ///     Reads one numeric field as the Python literal it spells. Python's LITERAL rule decides the type, not the
+            ///     value: digits with an optional sign are an int (<c>0</c>, <c>-5</c>, kept exactly at any size), anything
+            ///     else that parses (<c>0.0</c>, <c>1e3</c>, <c>Infinity</c>, <c>NaN</c>) is a float — which is what makes
             ///     <c>np.r_["0:5"]</c> int64 while <c>np.r_["0.0:5"]</c> is float64.
             /// </summary>
-            private static double ParseNumber(string field, string token, out bool integral,
+            /// <param name="field">The field's text.</param>
+            /// <param name="token">The whole token, for the error text.</param>
+            /// <param name="asInt">The field's exact value when it is a Python int, else null.</param>
+            /// <param name="imaginary">Whether a trailing <c>j</c> made the field imaginary (only when
+            ///     <paramref name="allowImaginary"/>).</param>
+            /// <param name="allowImaginary">Whether the field may end in <c>j</c> (the step).</param>
+            /// <returns>The field as a double (correctly rounded; ±inf past the double range).</returns>
+            /// <exception cref="ArgumentException">The field is no number (<c>Invalid slice notation: '...'</c>).</exception>
+            private static double ParseNumber(string field, string token, out BigInteger? asInt,
                 out bool imaginary, bool allowImaginary)
             {
                 string f = field.Trim();
@@ -443,158 +298,93 @@ namespace NumSharp
                         f = "-1";
                 }
 
-                integral = f.IndexOf('.') < 0 && f.IndexOf('e') < 0 && f.IndexOf('E') < 0;
+                // Digits with an optional sign are a Python int, kept exactly (a double rounds the integers past 2**53); its
+                // double is float(int), correctly rounded. Within int64 the scan is the whole parse: a C# long -> double
+                // conversion rounds to nearest, ties to even, as float() does - and "-0" is the int 0, so +0.0.
+                switch (ScanIntLiteral(f, out long small))
+                {
+                    case IntLiteral.Int64:
+                        asInt = small;
+                        return small;
+                    case IntLiteral.Big:
+                        asInt = BigInteger.Parse(f, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+                        // Correctly rounded too; ±inf past the double range (where CPython's float(int) raises: the
+                        // computations that can meet such a field convert the int value instead).
+                        return double.Parse(f, NumberStyles.Float, CultureInfo.InvariantCulture);
+                }
 
                 if (!double.TryParse(f, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
                     throw new ArgumentException($"Invalid slice notation: '{token.Trim()}'", nameof(token));
-
+                asInt = null;
                 return value;
             }
 
-            #endregion
-
-            #region dtype resolution
-
-            /// <summary>
-            ///     NEP50 kinds an entry can contribute. Ordered by dominance so the winner is the maximum.
-            /// </summary>
-            private enum WeakKind : byte
+            /// <summary>What <see cref="ScanIntLiteral"/> found in a field.</summary>
+            private enum IntLiteral
             {
-                Strong = 0,
-                Bool = 1,
-                Int = 2,
-                Float = 3,
-                Complex = 4
+                /// <summary>Not a Python int literal (a float, or no number at all).</summary>
+                None,
+
+                /// <summary>An int literal whose value fits int64.</summary>
+                Int64,
+
+                /// <summary>An int literal past int64.</summary>
+                Big,
             }
 
-            /// <summary>One entry of the index expression, kept unmaterialized until the dtype is known.</summary>
-            [NDBorrowed] // an entry references the caller's array until the concatenation reads it
-            private readonly struct Operand
+            /// <summary>
+            ///     Scans a trimmed field for a Python int literal as NumSharp spells one — an optional sign, then ASCII digits
+            ///     only — and reads its value when it fits int64, in the same pass. Every float field (<c>0.5</c>,
+            ///     <c>1e3</c>, <c>Infinity</c>) is told apart without a parse attempt.
+            /// </summary>
+            /// <param name="f">The trimmed field.</param>
+            /// <param name="value">The value when the result is <see cref="IntLiteral.Int64"/>, else 0.</param>
+            /// <returns>The kind of field.</returns>
+            private static IntLiteral ScanIntLiteral(string f, out long value)
             {
-                private readonly NDArray _array;
-                private readonly object _scalar;
-                private readonly NPTypeCode _code;
-                private readonly WeakKind _weak;
-
-                private Operand(NDArray array, object scalar, NPTypeCode code, WeakKind weak)
+                value = 0;
+                int i = 0;
+                bool negative = false;
+                if (f.Length > 0 && (f[0] == '+' || f[0] == '-'))
                 {
-                    _array = array;
-                    _scalar = scalar;
-                    _code = code;
-                    _weak = weak;
+                    negative = f[0] == '-';
+                    i = 1;
                 }
 
-                public static Operand Array(NDArray a) => new Operand(a, null, a.typecode, WeakKind.Strong);
+                if (i == f.Length)
+                    return IntLiteral.None;
 
-                public static Operand Scalar(object value, WeakKind weak)
-                    => new Operand(null, value, NPTypeCode.Empty, weak);
-
-                public static Operand StrongScalar(object value)
-                    => new Operand(null, value, value.GetType().GetTypeCode(), WeakKind.Strong);
-
-                public bool IsStrong => _weak == WeakKind.Strong;
-                public NPTypeCode Code => _code;
-                public WeakKind Weak => _weak;
-
-                /// <summary>
-                ///     A weak integer literal too large for int64 — which lifts an all-literal key's
-                ///     default from int64 to uint64, as NumPy's <c>result_type(2**64-1)</c> does.
-                /// </summary>
-                public bool ExceedsInt64 => _scalar is ulong u && u > long.MaxValue;
-
-                public NDArray Materialize(NPTypeCode final, int ndmin)
+                // The magnitude accumulates in a ulong until it would overflow; the digits after that only need checking.
+                ulong magnitude = 0;
+                bool big = false;
+                for (; i < f.Length; i++)
                 {
-                    NDArray arr;
-                    if (_array is not null)
-                    {
-                        arr = _array.typecode == final ? _array : _array.astype(final);
-                    }
+                    uint digit = (uint)(f[i] - '0');
+                    if (digit > 9)
+                        return IntLiteral.None;
+                    if (big)
+                        continue;
+                    if (magnitude > (ulong.MaxValue - digit) / 10)
+                        big = true;
                     else
-                    {
-                        if (_weak == WeakKind.Int)
-                            CheckWeakIntFits(_scalar, final);
-
-                        arr = asanyarray(_scalar);
-                        if (arr.typecode != final)
-                            arr = arr.astype(final);
-                    }
-
-                    return AtLeastNdmin(arr, ndmin);
-                }
-            }
-
-            /// <summary>
-            ///     NumPy's <c>result_type(*result_type_objs)</c>: arrays and NumSharp-only scalars contribute
-            ///     their dtype, C# literals contribute a weak kind that adopts it.
-            /// </summary>
-            private static NPTypeCode ResolveDtype(List<Operand> objs)
-            {
-                bool anyStrong = false;
-                bool anyBeyondInt64 = false;
-                NPTypeCode strong = NPTypeCode.Empty;
-                WeakKind weak = WeakKind.Strong;
-
-                foreach (var op in objs)
-                {
-                    if (op.IsStrong)
-                    {
-                        strong = anyStrong ? NDExprTypeRules.PromoteStrong(strong, op.Code) : op.Code;
-                        anyStrong = true;
-                    }
-                    else
-                    {
-                        if (op.Weak > weak)
-                            weak = op.Weak;
-                        anyBeyondInt64 |= op.ExceedsInt64;
-                    }
+                        magnitude = magnitude * 10 + digit;
                 }
 
-                if (!anyStrong)
+                if (big)
+                    return IntLiteral.Big;
+                if (negative)
                 {
-                    // All literals — NEP50 defaults. An integer literal past int64 lifts the default
-                    // to uint64 (NumPy: result_type(2**63) and result_type(2**64-1) are both uint64).
-                    return weak switch
-                    {
-                        WeakKind.Bool => NPTypeCode.Boolean,
-                        WeakKind.Int => anyBeyondInt64 ? NPTypeCode.UInt64 : NPTypeCode.Int64,
-                        WeakKind.Float => NPTypeCode.Double,
-                        _ => NPTypeCode.Complex
-                    };
+                    // -2**63 is an int64 too: its magnitude's unchecked negation is long.MinValue.
+                    if (magnitude > 9223372036854775808UL)
+                        return IntLiteral.Big;
+                    value = unchecked(-(long)magnitude);
+                    return IntLiteral.Int64;
                 }
 
-                return weak switch
-                {
-                    // No literal, or a bool literal (which adopts anything).
-                    WeakKind.Strong or WeakKind.Bool => strong,
-                    // An int literal adopts anything but bool, which it lifts to the default int.
-                    WeakKind.Int => strong == NPTypeCode.Boolean ? NPTypeCode.Int64 : strong,
-                    // A float literal keeps a float-kind dtype's width, else forces the default float.
-                    WeakKind.Float => NDExprTypeRules.IsFloatKind(strong)
-                                      || strong == NPTypeCode.Decimal
-                                      || strong == NPTypeCode.Complex
-                        ? strong
-                        : NPTypeCode.Double,
-                    // NumSharp has a single complex width, so complex64 collapses onto Complex.
-                    _ => NPTypeCode.Complex
-                };
-            }
-
-            /// <summary>
-            ///     NumPy raises <c>OverflowError</c> — never wraps — when a weak integer literal does not fit
-            ///     the dtype it adopted: <c>np.r_[uint8Array, -1]</c> is an error, not 255.
-            /// </summary>
-            private static void CheckWeakIntFits(object value, NPTypeCode final)
-            {
-                if (value is ulong big && big > long.MaxValue)
-                {
-                    if (final != NPTypeCode.UInt64 && NDExprTypeRules.IsIntegerKind(final))
-                        throw new OverflowException(
-                            $"Python integer {big} out of bounds for {final.AsNumpyDtypeName()}");
-                    return;
-                }
-
-                NDExprTypeRules.CheckIntLiteralFits(
-                    Convert.ToInt64(value, CultureInfo.InvariantCulture), final);
+                if (magnitude > long.MaxValue)
+                    return IntLiteral.Big;
+                value = (long)magnitude;
+                return IntLiteral.Int64;
             }
 
             #endregion

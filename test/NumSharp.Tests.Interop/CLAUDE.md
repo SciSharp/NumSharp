@@ -48,11 +48,23 @@ beside `Python.Runtime`, precisely so the two read for what they are). Never con
 ## 2. The moving parts
 
 ### `PythonSession` (`PythonSession.cs`) — one embedded engine per process
-- `[AssemblyInitialize]` discovers a Python with numpy (`PYTHONNET_PYDLL`, then `python`/`python3`,
-  then `~/.claude/python`, then Windows `Programs\Python3*`), starts the engine, imports numpy to
-  fail fast, and **enables OpenBLAS as the default backend at `threads: 1`**
+- `[AssemblyInitialize]` discovers a Python with numpy (`NUMSHARP_PYTHONNET_PYTHON` — a named
+  interpreter, **binding**: it never falls back to another Python — then `PYTHONNET_PYDLL`, then
+  `python`/`python3`, then `~/.claude/python`, then Windows `Programs\Python3*`), starts the engine,
+  imports numpy to fail fast, and **enables OpenBLAS as the default backend at `threads: 1`**
   (`OpenBlasEngine.TryEnable(threads: 1)`). CPython+numpy cannot re-init after `Py_Finalize`, so the
   engine lifecycle is assembly-scoped, not per-test.
+- **Virtual environments are embedded AS the venv.** A venv has no libpython of its own, so
+  pythonnet loads the base install's; alone, that starts an interpreter whose `sys.prefix` is the
+  base install — the venv's site-packages simply aren't on `sys.path`, and the base's packages
+  (a different numpy, or none) answer instead. When the probed interpreter is a venv's
+  (`sys.prefix != sys.base_prefix`), `Start` sets `PythonEngine.ProgramName` to it before
+  initializing: CPython's `getpath.py` then finds the venv's `pyvenv.cfg` beside that program and
+  `site.py` makes the venv the prefix — exactly what running the venv's `python` does. The embedded
+  `sys.prefix` is then **verified** against the probe's, so a failed adoption stops the session
+  instead of testing against the wrong packages. (Proven: embedding a venv holding torch
+  2.13.0+cpu over a base holding 2.12.1+cu126 yields the venv's torch with the program name set,
+  the base's without it.)
 - **`threads: 1` is load-bearing** — see §4.
 - `EnsureOrInconclusive()` — call at the top of any engine-backed test (InteropTestBase does it for
   you). If the engine is unavailable it either **fails** (default: `NUMSHARP_PYTHONNET_REQUIRE_ENGINE`
@@ -142,6 +154,23 @@ byte-identical too. Likewise integer/bool operands widen to float64 on both side
 Windows, 64-bit on unix), so `numpy.sum(int32)` is int32 on `windows-latest` but int64 elsewhere.
 Run integer reductions at **int64** so the byte compare is width-identical on all three CI OSes
 (NumSharp is always int64). Products/factorisations don't hit this (they run in float64).
+
+**arm64 contraction trap:** NumPy's arm64 wheels target a baseline ISA that has fused multiply-add
+and are compiled with the default floating-point contraction (clang `-ffp-contract=on` on macOS), so
+every `a*b + c` or `a*b + c*d` written as ONE C expression rounds once there — the left product
+fused, any right product rounded first. The x86-64 wheels (X86_V2 baseline, no FMA) cannot fuse, and
+RyuJIT never does, so NumSharp matches x86-64 NumPy. Two places this reaches a byte-exact test:
+NumPy's legacy Gaussian sampler (`NumPyLegacyGaussianIsLiteral` / `DefineLegacyRandn`) and pocketfft
+(every `np.fft` result: on macos-latest 73–98 % of an `rfft`'s float64 lanes are an ULP or so apart).
+Wrap exactly those cells in `AssertExactUnlessNumPyFuses(cell, PocketFftFusedArithmetic, () => …)`:
+strict on x86/x64; on arm64 a mismatch becomes Inconclusive CARRYING the measured difference, and a
+match still passes. Keep every other cell of the test strict — a result NumPy takes from the bundled
+OpenBLAS (products, `np.correlate`'s `ddot`) matches on arm64 too. `SpectrumLiveParityTests` reports
+SHA-256 prefixes of its platform-independent input and both results. That is how the diagnosis was
+proven: an x64 replica of pocketfft reproduced both macOS hashes, NumSharp's literally and NumPy's
+fused. It had to be fed macOS's own libm twiddle values, because the result hashes are NOT
+host-independent. Both stacks take twiddles from the platform libm, and Apple, glibc and ucrtbase
+disagree in the last bit on some angles.
 
 ---
 
@@ -239,6 +268,50 @@ Four traps the twins had to learn (each cost a red run):
 tuples and back (`numpy.zeros((2, 3))`, `(long, long) shape = a.shape`) through `TupleCodec`,
 registered by `RegisterCodec()`.
 
+## 7c. End-to-end text parity (`TextLiveParityHarness`)
+
+`TextOpsLiveParityTests`, `TextConversionLiveParityTests` and `TextPandasLiveParityTests` hold what a program does with
+text ONCE IT CROSSED (the crossing itself is `TextFixedWidthCrossingTests` / `TextStringDTypeCrossingTests` /
+`TextCrossingEdgeCaseTests`): numpy builds the input, the bridge hands it to NumSharp (a view of a fixed-width array,
+an exact copy of a `StringDType` one), NumSharp computes, the result crosses back and numpy's own answer over the same
+input is the expected one — dtype string, shape and C-order bytes, or the descriptor repr + values with NA identity for
+`StringDType`, or numpy's exception class and text. A family is a table of `TextOp`s (`E` / `E2` / `W` / `Lit` /
+`Lit2` build them: the numpy expression over `x` and its partner `p = x[::-1]`, and the NumSharp twin) run by
+`RunFamily` over four classes (`U12`, `S12`, `StringDType()`, `StringDType(na_object=None)` with NA cells) × twelve
+layouts × the class's routes; it fails once, listing every disagreeing cell.
+
+`TextEdgeLiveParityTests` runs the edges over two more runners. `RunFamilyFromNumSharp` is the EXPORT direction:
+NumSharp builds each of `NumSharpLayouts` (the `np.split` child at an offset, broadcast, F order, transposed, stepped to
+the end, reversed rows, 0-d, empty) and hands it to numpy (`ExportTo`, a view, for `U` / `S`; `ExportCopyTo` for
+`StringDType`), so a wrong stride, offset or flag in the export fails a cell. `RunPairFamily` takes `OperandPair`s, `x`
+and `p` built separately (two classes, widths, NA objects or broadcastable shapes), and runs both-0-d pairs through the
+`x[None]` trick. The families there: export elementwise / order and casts, cross-class operands (numpy's promotion and
+refusals), broadcasting shapes, `out=` / `where=` / `dtype=` (`_kw1` / `_kw2` assert numpy returned the `out` object; the
+C# `Out` twin throws unless NumSharp returned it by reference), the NA kinds (NaN-like, string, `None`, `coerce=False`),
+`numpy.char` and its chararray, `partition` / `mod` / `translate` (when every element's part is empty numpy's part is
+ZERO-width and NumSharp's width 1, the pinned divergence; `_w1` widens numpy's side), fused `np.evaluate` text
+expressions against numpy's composition, and numpy's
+functions called with NumSharp arrays through `RegisterCodec` (a `StringDType` 0-d result arrives as a plain `str`,
+which `As<NDArray>()` refuses). The cross-class, NA-kind, keyword and char-comparison answers are also recorded by
+`test/oracle/gen_text_edge_twins.py` for `TextBridgeEdgeTwinTests` in the unit suite, which runs them without Python.
+
+Conventions the harness encodes (change them only with the reason that put them there):
+- The copy route's numpy twin is `x.copy(order='C')`: the import copy is C-contiguous by `ToNDArray`'s contract, and the
+  order is observable — a refused cast names the first failing element of its MEMORY walk (`TextCastErrorOrderTests` in
+  the unit suite guards the walk).
+- An elementwise op on a 0-d input runs numpy over `x[None]` and takes `[0, ...]` (numpy returns a scalar there); a numpy
+  `str_` / `bytes_` scalar result is compared at NumSharp's 0-d width.
+- Error texts are compared without .NET's `(Parameter '…')` decoration; the class matches numpy's by name (a
+  `UFuncTypeError` cast refusal is NumSharp's `TypeError`, its builtin base) or is the documented house convention (a
+  shape `ValueError` is `IncorrectShapeException`).
+- NumPy's own bugs are routed around in the numpy expression and named there: `_t2c` (StringDType → complex copies the
+  real part into the imaginary part), `_eager` (numpy's `S → StringDType` cast stores non-UTF-8 bytes and raises only on
+  a read; NumSharp raises at the cast), `np.ascontiguousarray(x)` under `argsort(axis=None)` (a non-contiguous
+  `StringDType` view raises `MemoryError` or misorders in numpy). A Windows numpy's 32-bit C long changes the TEXT of the
+  int64-edge parse cells; those keep the class check only there (LP64 numpy compares them exactly).
+- Adding an op: one `TextOp` line in the right family; a new divergence is pinned in the unit suite and waived here by the
+  narrowest `messageGap` (the class still compared), never by dropping the cell.
+
 ## 8. Running
 
 ```bash
@@ -250,7 +323,10 @@ dotnet test -f net10.0
 # Just the cholesky/qr live-parity gate
 dotnet test -f net10.0 --filter "ClassName~CholeskyQrLiveParityTests"
 
-# Point at a specific interpreter's shared library
+# Point at a specific interpreter (a venv's or a base install's) — binding, venv-aware
+NUMSHARP_PYTHONNET_PYTHON=/path/to/python dotnet test -f net10.0
+
+# Point at a specific interpreter's shared library (base installs only — a venv has none)
 PYTHONNET_PYDLL=/path/to/python312.dll dotnet test -f net10.0
 
 # On a box without Python: skip instead of fail
@@ -259,9 +335,51 @@ NUMSHARP_PYTHONNET_REQUIRE_ENGINE=0 dotnet test -f net10.0
 
 Backend discovery honours the usual `NUMSHARP_OPENBLAS_*` knobs (`NUMSHARP_OPENBLAS_LIBRARY` binds one
 specific CBLAS — point it at the numpy wheel's own `libscipy_openblas*` to *guarantee* lever 1 on a
-non-2.4.2 host; `NUMSHARP_OPENBLAS_USE_BUNDLED=0` drops the bundle). CI's interop job installs
-Python+numpy and sets `NUMSHARP_PYTHONNET_REQUIRE_ENGINE`, so a discovery break there goes red rather
-than green-by-skipping.
+non-2.4.2 host; `NUMSHARP_OPENBLAS_USE_BUNDLED=0` drops the bundle). CI's interop job builds the
+Python environments below and sets `NUMSHARP_PYTHONNET_REQUIRE_ENGINE`, so a discovery break there
+goes red rather than green-by-skipping.
+
+### Python environments (`python-envs/`) — what CI runs, reproducible locally
+
+The suite needs two Pythons that must not share site-packages, so it runs twice, each run embedding
+a different virtual environment built by `python-envs/make_env.py` (stdlib `venv` + pip, from the
+tracked, exactly-pinned requirement files beside it):
+
+| Environment | Holds | Runs | Why separate |
+|---|---|---|---|
+| `parity` | numpy ONLY, at the OpenBLAS manifest's `numpy_version` (macOS: the scipy-openblas wheel, never Accelerate) | everything EXCEPT `[PythonEcosystem]` | the byte-exact oracle: numpy pinned, nothing else loaded into its process |
+| `ecosystem` | the same numpy + torch (CPU index), pandas, scipy, pyarrow, pillow, polars, opencv | ONLY `[PythonEcosystem]` | libraries that release on their own schedule and pin numpy ranges of their own |
+
+`make_env.py` installs numpy first from the manifest pin and every later file under a numpy
+**constraint**, so a library that demands another numpy fails the install instead of moving the
+oracle; then it **verifies** what numpy reports (the pinned release linked to scipy-openblas at the
+manifest's `openblas_version`). Environments land at `<repo>/.venvs/<name>-py<maj><min>/`
+(gitignored) — built from whichever interpreter runs the script, so one machine holds the same
+environment for several Pythons side by side (`py -3.11 make_env.py parity`, `py -3.12 …`; on Linux
+`python3.11 …`). The script prints only the interpreter path on stdout:
+
+```bash
+PY=$(python test/NumSharp.Tests.Interop/python-envs/make_env.py parity)
+NUMSHARP_PYTHONNET_PYTHON="$PY" dotnet test -f net10.0 --filter "TestCategory!=PythonEcosystem"
+
+PY=$(python test/NumSharp.Tests.Interop/python-envs/make_env.py ecosystem)
+NUMSHARP_PYTHONNET_PYTHON="$PY" NUMSHARP_PYTHONNET_REQUIRE_PACKAGES=1 \
+  dotnet test -f net10.0 --filter "TestCategory=PythonEcosystem"
+```
+
+- **Tag a test that needs a package beyond numpy with `[PythonEcosystem]`** (the method, or the class
+  when (nearly) all of it does). The package gates — `SkipUnless`, `PyTorchTestGate`,
+  `PandasTestGate` — FAIL an untagged caller on every machine: untagged, it would run only in the
+  numpy-only environment, skip there, and never run anywhere. A new package goes in
+  `python-envs/ecosystem.txt` (exact pin), then check it co-resolves with the numpy pin on all
+  three OSes (e.g. `uv pip compile --python-platform …`).
+- `NUMSHARP_PYTHONNET_REQUIRE_PACKAGES=1` turns an absent or wrong-version package into a failure
+  (CI sets it for the ecosystem run); by default it is Inconclusive, for a dev box with numpy alone.
+- On Debian/Ubuntu a system `python3` builds venvs only with the `python3.X-venv` apt package
+  (`ensurepip` is split out); python.org, `actions/setup-python`, conda and uv interpreters have it.
+- A genuinely different Python (not just different packages) is the same mechanism with another
+  interpreter: e.g. the Python twin of the ONNX Runtime floor, `onnxruntime==1.16.0`, has no cp312
+  wheel and was compiled against NumPy 1.x, so it needs a 3.11 + numpy<2 interpreter of its own.
 
 ---
 

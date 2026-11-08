@@ -94,6 +94,23 @@ With float steps `arange` can't predict the element count exactly (floating-poin
 
 ---
 
+## Text arrays
+
+Strings use the same `NDArray`, indexing and broadcasting model as numbers:
+
+```csharp
+var names = np.array(new[] { "cat", "dog", "bird" }); // U4: inferred fixed width
+var matches = names == "cat";                         // [True False False]
+var ordered = np.sort(names);                         // ['bird' 'cat' 'dog']
+var doubled = np.strings.multiply(names, 2);          // ['catcat' 'dogdog' 'birdbird']
+var growing = names.astype(np.dtypes.StringDType());  // variable-width UTF-8
+growing[0] = "a much longer label";                   // no fixed-width truncation
+```
+
+Use `"S8"` for fixed-width byte strings, `"U8"` for eight Unicode code points, or `np.dtypes.StringDType(na_object: null)` for variable-width text with a missing-value sentinel. A C# `'a'` is a **Char code unit**; `"a"` is a **string**. NumPy's legacy `numpy.char` module is **`np.@char`** in C#, and `np.@char.array(...)` creates an `NDCharArray` with whitespace-stripping element access and comparisons. See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md) for string operations, missing values and the chararray rules.
+
+---
+
 ## Printing arrays
 
 Printing an `NDArray` (via `ToString()` / `Console.WriteLine`) lays it out like nested lists: the last axis left-to-right, the second-to-last top-to-bottom, higher axes separated by a blank line.
@@ -168,8 +185,8 @@ The `@out:` path also reproduces NumPy's in-place **casting rule**: writing a fl
 var ai = np.ones(3, np.int32);
 var bf = np.linspace(0, 3, 3);          // float64
 np.add(ai, bf, @out: ai);
-// ArgumentException: Cannot cast ufunc 'add' output from dtype('float64')
-//                    to dtype('int32') with casting rule 'same_kind'
+// TypeError: Cannot cast ufunc 'add' output from dtype('float64')
+//            to dtype('int32') with casting rule 'same_kind'
 ```
 
 See [Copies and views → in-place modification](fundamentals/copies-and-views.md#in-place-modification).

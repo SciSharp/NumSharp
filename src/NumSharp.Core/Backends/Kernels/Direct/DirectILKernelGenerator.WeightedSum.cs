@@ -6,15 +6,22 @@ using NumSharp.Backends.Iteration;
 using Unsafe = System.Runtime.CompilerServices.Unsafe;
 
 // =============================================================================
-// DirectILKernelGenerator.WeightedSum.cs — fused weighted-sum kernel for np.average.
+// DirectILKernelGenerator.WeightedSum.cs — fused weighted-sum kernel (sum(a * w) and sum(w) in one pass).
+//
+// np.average no longer runs it: since the np-layer dtype plan's step 2 for the np.average family it is NumPy's
+// composition (np.sum of the weights, np.sum of np.multiply(a, w), the division), whose sums are np.sum's pairwise
+// add.reduce. This kernel accumulates in its own SIMD order (several partial sums), a few ULP from NumPy's pairwise
+// sums, so it cannot give np.average NumPy's bits. It stays because its entry point and GeneratedDelegates'
+// WeightedSumCount are public API (shipped in 0.70.0); a caller that wants one fused pass and accepts that order may
+// still use it. The CALL SHAPE below is the contract it was written to.
 //
 // RESPONSIBILITY
 //   - WeightedSumKernelKey            — cache key (dtype only; layout handled
 //                                       at runtime inside the kernel body)
 //   - GetWeightedSumIterKernel(key)   — single user-facing entry point;
 //                                       cached per dtype, returns the IL-emitted
-//                                       NDInnerLoopFunc that np.average
-//                                       hands to NDIter.ForEach
+//                                       NDInnerLoopFunc a caller (np.average
+//                                       until step 2) hands to NDIter.ForEach
 //   - CreateWeightedSumIterKernel     — factory; the only place that switches
 //                                       on NPTypeCode (one-time per dtype,
 //                                       result cached forever in
@@ -30,8 +37,8 @@ using Unsafe = System.Runtime.CompilerServices.Unsafe;
 //
 // CALL SHAPE
 //   Operands: [a, w, num_out, scl_out]
-//     a, w           — READONLY,  pre-cast to result dtype by np.average
-//     num_out, scl_out — READWRITE, pre-zeroed by np.average
+//     a, w           — READONLY,  pre-cast to the result dtype by the caller
+//     num_out, scl_out — READWRITE, pre-zeroed by the caller
 //   Iterator flags : REDUCE_OK | EXTERNAL_LOOP
 //   op_axes        : a/w = identity, num/scl = -1 in reduction axes (axis=None
 //                    means all -1 → both outputs are 0-D scalars pinned via
@@ -46,8 +53,8 @@ using Unsafe = System.Runtime.CompilerServices.Unsafe;
 // SUPPORTED DTYPES
 //   The body is generic over T : unmanaged. SIMD specialization activates
 //   automatically for T = float/double/int*/uint* via Vector256<T>.IsSupported.
-//   For Half/Complex/Decimal/Bool/Char the factory returns null and np.average
-//   falls back to the existing `aCast * wgtCast → sum` path.
+//   For Half/Complex/Decimal/Bool/Char the factory returns null and a caller
+//   forms the products and sums them itself.
 // =============================================================================
 
 namespace NumSharp.Backends.Kernels

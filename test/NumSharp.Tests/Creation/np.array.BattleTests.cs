@@ -329,6 +329,78 @@ public class np_array_BattleTests
         arr.shape.Should().BeEquivalentTo(new[] { 2, 3 });
     }
 
+    /// <summary>
+    ///     NumPy's <c>np.array(a)</c> is <c>PyArray_NewCopy(a, NPY_KEEPORDER)</c>: a copy NumPy allocates is always a
+    ///     writeable owner, so a read-only C, F, 0-d or text source gives a WRITEABLE copy (NumPy 2.4.2: <c>writeable
+    ///     True</c>, <c>owndata True</c>; the write lands in the copy only). It used to clone the storage with the source's
+    ///     flags and refuse the write (parity QA-35).
+    /// </summary>
+    [TestMethod]
+    public void Array_FromReadOnlySources_IsAWriteableOwner()
+    {
+        using var ro = np.arange(6.0).reshape(2, 3);
+        ro.setflags(write: false);
+        using var roF = np.asfortranarray(np.arange(6.0).reshape(2, 3));
+        roF.setflags(write: false);
+        using var ro0d = np.array(5.0);
+        ro0d.setflags(write: false);
+        using var roText = np.array(new[] { "ab", "c" });
+        roText.setflags(write: false);
+
+        using var copy = np.array(ro);
+        using var copyF = np.array(roF);
+        using var copy0d = np.array(ro0d);
+        using var copyText = np.array(roText);
+
+        foreach (var c in new[] { copy, copyF, copy0d, copyText })
+        {
+            c.flags.writeable.Should().BeTrue();
+            c.flags.owndata.Should().BeTrue();
+        }
+        copy[0, 0] = (NDArray)99.0;
+        copy.GetDouble(0, 0).Should().Be(99.0);
+        ro.GetDouble(0, 0).Should().Be(0.0, "the copy owns its data");
+        copyF.strides.Should().Equal(new long[] { 8, 16 }, "K order keeps an F source F");
+    }
+
+    /// <summary>
+    ///     The copy keeps the source's memory order, as NumPy's K-order copy does (NumPy 2.4.2's strides): a
+    ///     <c>(0, 8)</c>-strided broadcast of <c>arange(4.)</c> to <c>(3, 4)</c> copies F-contiguous <c>(8, 24)</c>; a
+    ///     permuted <c>(3, 2, 4)</c> view keeps its permutation <c>(32, 96, 8)</c>; a column broadcast to <c>(3, 4)</c>, a
+    ///     stepped and a reversed view come back C-contiguous; a matrix gives a plain array (<c>subok=False</c>) and an
+    ///     explicit 0-d array stays explicit.
+    /// </summary>
+    [TestMethod]
+    public void Array_CopyKeepsTheSourcesMemoryOrder()
+    {
+        using var rowBroadcast = np.broadcast_to(np.arange(4.0), new Shape(3, 4));
+        using var permuted = np.arange(24.0).reshape(2, 3, 4).transpose(new[] { 1, 0, 2 });
+        using var columnBroadcast = np.broadcast_to(np.arange(3.0).reshape(3, 1), new Shape(3, 4));
+        using var stepped = np.arange(10.0)["::2"];
+        using var reversed = np.arange(5.0)["::-1"];
+        using var matrix = np.matrix(np.arange(4.0).reshape(2, 2));
+        using var explicit0d = np.array(7L);
+
+        using var fromRow = np.array(rowBroadcast);
+        using var fromPermuted = np.array(permuted);
+        using var fromColumn = np.array(columnBroadcast);
+        using var fromStepped = np.array(stepped);
+        using var fromReversed = np.array(reversed);
+
+        fromRow.strides.Should().Equal(new long[] { 8, 24 });
+        fromRow.flags.f_contiguous.Should().BeTrue();
+        fromRow.flags.writeable.Should().BeTrue("a copy of a read-only broadcast is writeable");
+        fromRow.ToArray<double>().Should().Equal(0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3);
+        fromPermuted.strides.Should().Equal(new long[] { 32, 96, 8 });
+        fromPermuted.GetDouble(2, 1, 3).Should().Be(23.0);
+        fromColumn.strides.Should().Equal(new long[] { 32, 8 });
+        fromColumn.flags.c_contiguous.Should().BeTrue();
+        fromStepped.ToArray<double>().Should().Equal(0, 2, 4, 6, 8);
+        fromReversed.ToArray<double>().Should().Equal(4, 3, 2, 1, 0);
+        np.array(matrix).GetType().Should().Be(typeof(NDArray));
+        np.array(explicit0d).IsExplicitZeroDimArray.Should().BeTrue();
+    }
+
     #endregion
 
     #region Params Syntax
@@ -389,13 +461,15 @@ public class np_array_BattleTests
     }
 
     [TestMethod]
-    public void Array_String_CreatesCharArray()
+    public void Array_String_CreatesUnicodeScalar()
     {
-        // NumSharp-specific: string creates char array
+        // NumPy 2.4.2: np.array("hello") -> array('hello', dtype='<U5'), a 0-d fixed-width Unicode array.
+        // (NumSharp's character vector of the text is NDArray.FromString("hello").)
         var arr = np.array("hello");
-        arr.ndim.Should().Be(1);
-        arr.shape.Should().BeEquivalentTo(new[] { 5 });
-        arr.dtype.Should().Be(typeof(char));
+        arr.ndim.Should().Be(0);
+        arr.shape.Should().BeEmpty();
+        arr.dtype.str.Should().Be("<U5");
+        arr.GetValue().Should().Be("hello");
     }
 
     #endregion

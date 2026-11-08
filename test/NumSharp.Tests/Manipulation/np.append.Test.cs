@@ -102,5 +102,47 @@ namespace NumSharp.Tests.Manipulation
             np.append(np.array(new byte[] { 1, 2 }), (object)(byte)3)
                 .array_equal(np.array(new byte[] { 1, 2, 3 })).Should().BeTrue();
         }
+
+        // ---------------- lifetime: an NDArray reaching the object overload ----------------
+
+        /// <summary>
+        ///     An <see cref="NDArray"/> whose static type is <see cref="object"/> binds the object overload, and
+        ///     <c>np.asanyarray</c> hands it back unchanged. The hand-written overload disposed that conversion
+        ///     unconditionally, which released the CALLER'S array: after <c>np.append(a, (object)v)</c>,
+        ///     <c>v</c> was disposed and its buffer back in the pool (a second call then read recycled memory).
+        ///     The overload is now <c>[NDScoped]</c>, and <c>v</c> was built before its scope opened, so the scope
+        ///     never touches it. NumPy 2.4.2: <c>np.append([1, 2, 3], [4, 5])</c> → <c>[1, 2, 3, 4, 5]</c>.
+        /// </summary>
+        [TestMethod]
+        public void ObjectOverload_NDArrayValue_SurvivesTheCall()
+        {
+            var arr = np.array(new long[] { 1, 2, 3 });
+            var values = np.array(new long[] { 4, 5 });
+
+            var r = np.append(arr, (object)values);
+
+            LeakGuards.StillUsable(values, " — the object overload must not dispose the caller's NDArray");
+            LeakGuards.StillUsable(arr);
+            r.array_equal(np.array(new long[] { 1, 2, 3, 4, 5 })).Should().BeTrue();
+            // A second call reads the same live array, not a recycled buffer.
+            np.append(arr, (object)values).array_equal(r).Should().BeTrue();
+            values.ToArray<long>().Should().Equal(4L, 5L);
+        }
+
+        /// <summary>
+        ///     The axis path of the same overload. NumPy 2.4.2:
+        ///     <c>np.append([[1, 2], [3, 4]], [[5, 6]], axis=0)</c> → <c>[[1, 2], [3, 4], [5, 6]]</c>.
+        /// </summary>
+        [TestMethod]
+        public void ObjectOverload_NDArrayValue_Axis0_SurvivesTheCall()
+        {
+            var arr = np.array(new long[] { 1, 2, 3, 4 }).reshape(2, 2);
+            var values = np.array(new long[] { 5, 6 }).reshape(1, 2);
+
+            var r = np.append(arr, (object)values, axis: 0);
+
+            LeakGuards.StillUsable(values, " — the object overload must not dispose the caller's NDArray");
+            r.array_equal(np.array(new long[] { 1, 2, 3, 4, 5, 6 }).reshape(3, 2)).Should().BeTrue();
+        }
     }
 }

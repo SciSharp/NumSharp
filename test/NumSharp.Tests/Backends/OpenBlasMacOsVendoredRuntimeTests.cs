@@ -20,6 +20,12 @@ namespace NumSharp.Tests.Backends
     ///     parsed Mach-O header, so it is exercised here with synthetic Mach-O images on Windows and
     ///     Linux too — a macOS-only gate would have hidden this bug exactly the way the
     ///     ProjectReference build did. The real dylib, when staged, is parsed as well.
+    /// <para>
+    ///     Parallel execution: the tests that set <c>NUMSHARP_OPENBLAS_CACHE_DIR</c> (or the discovery variables) or load
+    ///     the process-wide OpenBLAS backend carry <c>[DoNotParallelize]</c> and run in the serial phase; the rest work on
+    ///     their own temp folder only and run in parallel. The cleanup's restore of the cache variable is then a write
+    ///     of the value it already has, because no test changes it during the parallel phase.
+    /// </para>
     /// </remarks>
     [TestClass]
     public class OpenBlasMacOsVendoredRuntimeTests
@@ -348,6 +354,7 @@ namespace NumSharp.Tests.Backends
 
         #region materialization — the per-user cache
 
+        [DoNotParallelize] // sets the process-wide NUMSHARP_OPENBLAS_CACHE_DIR
         [TestMethod]
         public void Cache_FlattenedLayout_RelocatesMainAndDeps_KeyedByContentHash()
         {
@@ -383,6 +390,7 @@ namespace NumSharp.Tests.Backends
             StringAssert.Contains(note2, "cache hit");
         }
 
+        [DoNotParallelize] // sets the process-wide NUMSHARP_OPENBLAS_CACHE_DIR
         [TestMethod]
         public void Cache_RebuildsAStaleOrTamperedEntry_AndNeverTrustsItsName()
         {
@@ -412,6 +420,7 @@ namespace NumSharp.Tests.Backends
             Assert.IsTrue(MacOsVendoredRuntime.FilesIdentical(image, main));
         }
 
+        [DoNotParallelize] // sets the process-wide NUMSHARP_OPENBLAS_CACHE_DIR
         [TestMethod]
         public void Cache_TwoDifferentBinaries_NeverAlias()
         {
@@ -434,6 +443,7 @@ namespace NumSharp.Tests.Backends
             Assert.AreNotEqual(Path.GetDirectoryName(Path.GetDirectoryName(imageA)), Path.GetDirectoryName(Path.GetDirectoryName(imageB)));
         }
 
+        [DoNotParallelize] // sets the process-wide NUMSHARP_OPENBLAS_CACHE_DIR
         [TestMethod]
         public void Cache_RefusesADependencyThatEscapesTheEntry()
         {
@@ -452,6 +462,7 @@ namespace NumSharp.Tests.Backends
             Assert.IsFalse(Directory.Exists(Path.Combine(cache, "escape")));
         }
 
+        [DoNotParallelize] // sets the process-wide NUMSHARP_OPENBLAS_CACHE_DIR
         [TestMethod]
         public void CacheRoot_HonorsTheEnvVariable_ThenThePlatformDefaults()
         {
@@ -514,6 +525,7 @@ namespace NumSharp.Tests.Backends
         ///     runtime flat in the app root, no runtimes/ tree. It IS the bundle there, and a source
         ///     marker still overrides that answer.
         /// </summary>
+        [DoNotParallelize] // sets process-wide environment variables and loads the process-wide OpenBLAS backend
         [TestMethod]
         public void IsBundledLibrary_FlattenedPublishLayout_IsTheBundle_UnlessAMarkerSaysOtherwise()
         {
@@ -597,6 +609,7 @@ namespace NumSharp.Tests.Backends
 
         #region the loader seam
 
+        [DoNotParallelize] // loads the process-wide OpenBLAS backend (TensorEngine.Blas)
         [TestMethod]
         public void LoadedImagePath_IsExposed_AndTracksTheLoadedLibrary()
         {

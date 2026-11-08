@@ -15,6 +15,12 @@ PythonEngine.Initialize();
 > — twelve single-file `dotnet run` tutorials covering every feature below, written for reading (a `dynamic`
 > Python namespace, one `NDScope` per script, the outcome of each line in a comment); their asserted twins
 > live in [`test/NumSharp.Tests.Interop/Examples`](../../test/NumSharp.Tests.Interop/Examples).
+>
+> **Two projects to copy:** [`examples/NumSharpPythonnetLocalExample`](../../examples/NumSharpPythonnetLocalExample/README.md)
+> is a console app that finds the Python on your machine, starts the engine inside a virtual environment and runs
+> NumPy, pandas, SciPy, scikit-learn, Matplotlib and PyTorch over NumSharp arrays.
+> [`examples/NumSharpPythonnetGhActionsCicd`](../../examples/NumSharpPythonnetGhActionsCicd/README.md) is its
+> asserted twin: an MSTest project with the GitHub Actions workflow that runs it on Windows, Linux and macOS.
 
 ## The four verbs
 
@@ -27,7 +33,7 @@ Everything is packaging over four operations on the static `NDArrayPythonInterop
 | Python → NumSharp | `ToNDArray(py)` | **copy** any PEP 3118 exporter or registered-adapter source into a fresh C-contiguous `NDArray` (honors logical strides/order; complex64 widens; adapter Copy may detach/transfer) |
 | Python → NumSharp | `ToNDArrayView(py[, allowReadonly])` | **zero-copy NDArray view** over Python memory — adapters only select a canonical shareable object; the existing locked-buffer / `__array_interface__` / strided-buffer routes make every memory and lifetime decision |
 
-The lease buffer is always acquired **through the exporter's `memoryview`**, never the raw object: the memoryview is CPython's canonical, uniformly-behaved buffer exporter, so this sidesteps pythonnet 3.0.x's per-exporter `GetBuffer` bugs — a raw `ctypes` array hard-crashes `obj.GetBuffer` on *every* flag, while the memoryview over the same memory leases cleanly. Measured coverage across 50 exporter varieties: **47 view, 2 copy** (`complex64` widens, sub-item strides linearize). Big-endian multi-byte data is a **third copy** — the view path declines it (a native-endian shared view is impossible), but `ToNDArray` byte-reverses each element on copy — so the only refusals left are element types with no NumSharp dtype at all (`datetime64`, structured, object, void).
+The lease buffer is always acquired **through the exporter's `memoryview`**, never the raw object: the memoryview is CPython's canonical, uniformly-behaved buffer exporter, so this sidesteps pythonnet 3.0.x's per-exporter `GetBuffer` bugs — a raw `ctypes` array hard-crashes `obj.GetBuffer` on *every* flag, while the memoryview over the same memory leases cleanly. Measured coverage across 55 exporter varieties: **50 view, 4 copy** (`complex64` widens, sub-item strides linearize, and a `StringDType` array or an object array of `str` copies as a NumSharp `StringDType` array; fixed-width `S` / `U` text views). Big-endian multi-byte data is a further copy — the view path declines it (a native-endian shared view is impossible), but `ToNDArray` byte-reverses each element on copy — so the only refusals left are element types with no NumSharp dtype at all (`datetime64`, structured, void) and object arrays that hold anything but `str`.
 
 Plus `ToMemoryView(nd)` (a writable Python `memoryview` of raw bytes for non-numpy consumers) and the dtype maps `ToNumpyDtypeStr` / `FromNumpyDtypeStr` / `ToBufferFormat` / `FromBufferFormat`.
 
@@ -83,8 +89,12 @@ that two independent official projections overlap before the existing bridge lea
 NumPy-backed frames, numeric Series/Indexes, and some extension arrays share; mixed numeric blocks,
 nullable arrays with missing values, categorical, and sparse arrays copy through Auto/Copy. Pandas 3
 usually exposes shared projections read-only, so direct view callers pass `allowReadonly:true` and
-receive a non-writeable `NDArray`. Object/string/datetime/timedelta outputs remain unsupported because
-NumSharp has no corresponding dtype. Axis labels are metadata and do not enter the value array.
+receive a non-writeable `NDArray`. A text column of `str` (an object projection) copies as a NumSharp
+`StringDType()` array, and fixed-width `S` / `U` projections cross like any NumPy text array; a text
+projection holding a missing value (`None`, `NaN`, `pd.NA`) is refused until it is converted to a NumPy
+`StringDType` with a representable NA object. Mixed object, datetime and timedelta outputs remain
+unsupported because NumSharp has no corresponding dtype. Axis labels are metadata and do not enter the value
+array.
 
 NumSharp → Pandas is the existing NumPy encoder; request Pandas `copy:false` when sharing is intended:
 
@@ -177,7 +187,7 @@ adapter instance; it is not a support toggle).
 
 | Mode | Meaning |
 |---|---|
-| `Auto` *(default)* | **Zero-copy view when the dtype/layout permits, an independent copy only when a view is impossible** — never a blanket copy. On decode the fallback is real (complex64 widens, UCS-4 text narrows, sub-item strides linearize, big-endian multi-byte byteswaps — all as copies; everything else stays a view). On encode a view and a copy have identical dtype coverage, so Auto always yields a view. |
+| `Auto` *(default)* | **Zero-copy view when the dtype/layout permits, an independent copy only when a view is impossible** — never a blanket copy. On decode the fallback is real (complex64 widens, sub-item strides linearize, big-endian multi-byte byteswaps, a `StringDType` array or an object array of `str` copies as `StringDType` — all as copies; everything else, fixed-width `S` / `U` text included, stays a view). On encode every array has a view except a `StringDType` array, which Auto copies (its text lives outside its buffer). |
 | `View` | Always share; **decline** the conversion (return no value) if a view is impossible — a loud failure for callers who depend on shared memory. |
 | `Copy` | Always an independent copy — no shared memory, no Py_buffer lock, total coverage. |
 
@@ -201,13 +211,15 @@ double corner = z.item((1, 2));             // a tuple multi-index
 
 **Imports** lease the Python buffer through NumSharp's memory-block reference counting: the lease is released when the last NumSharp view over the memory — *including derived slices like `nd["2:"]`* — is disposed or collected. C-contiguous leases hold a real `Py_buffer`, so resizable exporters (`bytearray`) are locked against reallocation, and numpy's `resize` refcheck refuses while the lease lives. The Python-side release is marshaled to the GIL safely (never raw on a finalizer thread); `NDArrayPythonInterop.LiveExports` / `LiveImports` expose the counters.
 
-Read-only sources (`bytes`, non-writeable numpy arrays) are **refused** for views by default — writing through them would corrupt immutable Python objects. Pass `allowReadonly: true` to opt in: the view comes back **non-writeable** (`Shape.IsWriteable == false`, exactly numpy's `writeable=False`), so guarded write paths raise `assignment destination is read-only` instead of corrupting the source. Or use `ToNDArray` to copy.
+Read-only sources (`bytes`, non-writeable numpy arrays) are **refused** for views by default — writing through them would corrupt immutable Python objects. Pass `allowReadonly: true` to opt in: the view comes back **non-writeable** (`Shape.IsWriteable == false`, exactly numpy's `writeable=False`), so guarded write paths raise `assignment destination is read-only` instead of corrupting the source. Or use `ToNDArray` to copy. An empty read-only source (`np.frombuffer(b'')`, an empty broadcast) is refused or non-writeable the same way, and an empty NumSharp broadcast exports as a read-only numpy array.
 
 Import views also **do not own their data** (like `np.frombuffer(...)`, whose `flags.owndata` is `False`): a size-changing `ndarray.resize` refuses with NumPy's `cannot resize this array: it does not own its data` instead of silently reallocating away from the shared Python memory, and `np.require(..., "O")` produces an owning copy.
 
 ## Rules & limits
 
-- **GIL**: every method acquires the GIL itself (re-entrant). Your own `PyObject` usage still follows pythonnet's rules.
+- **GIL**: every method acquires the GIL itself (re-entrant). Your own `PyObject` usage still follows pythonnet's rules:
+  dispose a `PyObject` (a `ToNumpy` result included) inside `Py.GIL()`. pythonnet's `Dispose` has no guard of its own,
+  so two threads disposing one without the GIL can both release it (1 crash in 397 races of a probe; 0 under the GIL).
 - **GIL opt-out**: every conversion verb takes a nullable `requireGIL` parameter; `null` (the default) follows the process-wide `NDArrayPythonInterop.RequireGIL` (default `true`). An effective `false` replaces `Py.GIL()` with a shared no-op guard — the calling thread must **already hold the GIL** (an enclosing `Py.GIL()` block); converting GIL-less without holding it is an immediate access violation. **Trap:** a .NET method/delegate body invoked *from* Python does **not** hold the GIL — pythonnet's binder releases it around managed bodies (probed on 3.0.5/3.1.0: `PyGILState_Check() == 0` inside the body) — so keep GIL management on inside Python→.NET callbacks. The interop's background machinery (deferred lease disposal, shutdown drain) always manages the GIL itself, regardless of the policy.
 
   ```csharp
@@ -220,7 +232,8 @@ Import views also **do not own their data** (like `np.frombuffer(...)`, whose `f
   ```
 - **Engine lifetime**: import views die with the interpreter. `PythonEngine.Shutdown()` releases all outstanding leases crash-free (a registered shutdown handler), but the NDArrays over that memory must not be touched afterwards (disposing them stays safe). Exports still held by Python are swept right after shutdown completes — no leak survives the engine.
 - **`PythonEngine.Shutdown` on .NET 8+**: pythonnet crashes in its own BinaryFormatter state-stashing. Opt out first: `RuntimeData.FormatterType = typeof(NoopFormatter);` (`NoopFormatter` ships from pythonnet 3.0.4 onward — guaranteed by the 3.0.5 floor below).
-- **dtypes**: all NumSharp dtypes map except `Decimal` — it has no numpy dtype, so the array-producing verbs (`ToNumpy` / `ToNumpyCopy`, and the codec) auto-convert it to `float64` (the `astype(Double)` guidance, automated — lossy beyond ~16 digits), while the low-level maps (`ToNumpyDtypeStr` / `ToBufferFormat` / `ToMemoryView`) stay honest and still refuse it. `Char` is exported as `uint16` (UTF-16 code units) and imported from 2-byte wchar buffers (PEP 3118 `'u'`: `array.array('u')` on Windows, `ctypes.c_wchar`) as a zero-copy view. Big-endian multi-byte buffers cannot be *viewed* (a native-endian shared view is impossible), but `ToNDArray` **byteswaps them on copy** (`>c16` reverses each 8-byte half; `>c8` reverses then widens; single-byte `>i1`/`|u1`/`|b1` view regardless). complex64 imports copy-widen to complex128, UCS-4 text (numpy `<U1`, 4-byte wchar, `'w'`) copy-narrows to `Char` (BMP only) — neither has a zero-copy view.
+- **dtypes**: all NumSharp numeric dtypes map except `Decimal` (text: next bullet) — it has no numpy dtype, so the array-producing verbs (`ToNumpy` / `ToNumpyCopy`, and the codec) auto-convert it to `float64` (the `astype(Double)` guidance, automated — lossy beyond ~16 digits), while the low-level maps (`ToNumpyDtypeStr` / `ToBufferFormat` / `ToMemoryView`) stay honest and still refuse it. `Char` is exported as `uint16` (UTF-16 code units) and imported from 2-byte wchar buffers (PEP 3118 `'u'`: `array.array('u')` on Windows, `ctypes.c_wchar`) as a zero-copy view. Big-endian multi-byte buffers cannot be *viewed* (a native-endian shared view is impossible), but `ToNDArray` **byteswaps them on copy** (`>c16` reverses each 8-byte half; `>c8` reverses then widens; single-byte `>i1`/`|u1`/`|b1` view regardless). complex64 imports copy-widen to complex128 — it has no zero-copy view.
+- **text**: fixed-width `S<n>` / `U<n>` arrays cross as views in both directions, the same bytes on both sides (numpy `<U1` is NumSharp's `U1`, the same 4-byte code points, astral characters included; a 4-byte wchar buffer, `'w'`, views as `U1`); big-endian `>U<n>` copies byte-reversed; `np.str_` / `np.bytes_` scalars are 0-d `U<n>` / `S<n>`. A NEP 55 `StringDType` array has no buffer — numpy keeps each element's text in an allocator its descriptor owns — so `ToNDArray` and `ToNumpyCopy` copy it exactly through numpy's own `NpyString` C API (every NA value, NULs, non-BMP text, any layout; the copy keeps `na_object` and `coerce`), and the view verbs refuse it. The missing-value object crosses when it has a C# form (`None`, `bool`, `int`, `float`, `complex`, `str`, `bytes`, `np.float16`, and numpy's `np.float64` / `np.complex128` / `np.str_` / `np.bytes_` as the Python type they subclass); any other (`pd.NA`, `np.int64`) is refused. An object array whose every element is a `str` (a pandas text column) copies to `StringDType()` (a `str` subclass element as `str(x)`, what numpy's own `StringDType()` cast stores); any other object array is refused. PyTorch has no string tensors, so `ToTorch` refuses text.
 - **array-like decode (on by default)**: `py.FromArrayLike()` materializes a Python `list` / `tuple` / nested sequence / scalar (`int`/`float`/`bool`/`complex`) into an owning `NDArray` via `numpy.asarray`, and the registered codec does it automatically (`NumpyCodecOptions.DecodeArrayLike`, default `true`) so a numpy call or plain Python that returns a list crosses without a manual conversion. It fires ONLY for genuine non-buffer builtins — a numpy array the view/copy paths declined is never rescued into a silent copy. Set `DecodeArrayLike = false` to restrict decode to buffer exporters (fully numpy-agnostic).
 - **pythonnet versions**: the dependency is `[3.0.5, 4.0.0)`. `PyBuffer` is broken for shape/strides/format flags, so metadata is read through Python's `memoryview` and only the crash-free `PyBUF.SIMPLE`/`PyBUF.WRITABLE` are used — the same code path works on every v3. The source compiles clean against all of 3.0.0–3.1.0; 3.0.5 is the floor because it is the oldest release that covers the Python versions people actually run (see below).
 

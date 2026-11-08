@@ -68,7 +68,19 @@ NDArray d = NDArray.Scalar(100.123m);    // 0-d decimal
 NDArray e = NDArray.Scalar<long>(1);     // 0-d with explicit dtype
 ```
 
-Implicit scalar → NDArray exists for all 15 dtypes (`bool, sbyte, byte, short, ushort, int, uint, long, ulong, char, Half, float, double, decimal, Complex`). Use `NDArray.Scalar<T>(value)` to force a specific dtype the C# literal wouldn't pick - e.g. `NDArray.Scalar<short>(1)` instead of `NDArray x = 1;` (which would be int32).
+Implicit scalar → NDArray conversions are available for `bool`, `sbyte`, `byte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, `char`, `Half`, `float`, `double`, `decimal`, `Complex` and `string`. `NDArray label = "cat"` is a 0-d `U3` array; `NDArray.Scalar<short>(1)` pins an integer value to `int16`.
+
+### Text is array data
+
+```csharp
+var names = np.array(new[] { "cat", "dog", "bird" }); // U4, inferred from the longest text
+var bytes = names.astype("S4");                     // byte strings, ASCII conversion
+var growing = names.astype(np.dtypes.StringDType()); // variable-width UTF-8
+growing[0] = "a longer label";                       // no width limit from U4
+var match = names == "cat";                          // [True False False]
+```
+
+All three text families are `NDArray`, with ordinary views, indexing and movement. Read the **full descriptor** from `dtype`: their shared `typecode` is `NPTypeCode.String` and does not say which family, width or NA policy the array has. `np.@char.array(...)` instead returns the `NDCharArray` subclass with NumPy's whitespace-stripping rules. C# `Char` is separate from all of these. See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md).
 
 See also: [Dtypes](dtypes.md) for how to pick element types, [Broadcasting](broadcasting.md) for shape rules.
 
@@ -132,7 +144,7 @@ var le = np.frombuffer(networkData, "<i4");         // little-endian int32 (view
 
 - **`offset` is in bytes, `count` is in elements.** A `float` buffer with `offset: 4, count: 10` reads 40 bytes starting at byte 4.
 - **Buffer length (minus offset) must be a multiple of the element size**, or NumSharp throws.
-- **Views couple lifetimes.** If you return an NDArray wrapping a local `byte[]`, the array can be GC'd out from under the view. Either `.copy()` before returning, or allocate through NumSharp (`np.zeros`, `np.empty`).
+- **Managed buffers are pinned and rooted by their views.** A `byte[]` wrapped by `np.frombuffer` remains alive until the last owning/view reference releases its pin; a local variable going out of scope does not invalidate it. An explicit raw native pointer has no such GC anchor.
 - **Native memory without `dispose` is borrowed** - the caller must keep the memory alive and free it after all viewing NDArrays are gone.
 
 See the [Buffering & Memory](buffering.md) page for the full story: memory architecture, ownership patterns (ArrayPool, COM, P/Invoke), endianness, and troubleshooting.
@@ -146,7 +158,7 @@ See the [Buffering & Memory](buffering.md) page for the full story: memory archi
 | `shape` | `long[]` | `ndarray.shape` | Dimensions |
 | `ndim` | `int` | `ndarray.ndim` | Number of dimensions |
 | `size` | `long` | `ndarray.size` | Total element count |
-| `dtype` | `Type` | `ndarray.dtype` | C# element type |
+| `dtype` | `DType` | `ndarray.dtype` | Full descriptor, including text width / NA policy; `.type` is the CLR type |
 | `typecode` | `NPTypeCode` | - | Compact enum form of dtype |
 | `strides` | `long[]` | `ndarray.strides` | Byte stride per dimension |
 | `T` | `NDArray` | `ndarray.T` | Transpose (view) |
@@ -159,7 +171,8 @@ var a = np.arange(12).reshape(3, 4);   // arange defaults to int64 (NumPy 2.x)
 a.shape;       // [3, 4]
 a.ndim;        // 2
 a.size;        // 12
-a.dtype;       // typeof(long)
+a.dtype;       // dtype('int64'), a DType descriptor
+a.dtype.type;  // typeof(long)
 a.typecode;    // NPTypeCode.Int64
 a.T.shape;     // [4, 3]
 a.@base;       // the 1-D arange buffer - reshape returns a view (like NumPy)
@@ -388,15 +401,15 @@ long v = (long)elem;                    // explicit cast to scalar (converts)
 long v2 = a.item<long>(6);              // flat index 6 → row 1, col 2
 object box = a.item(6);                 // untyped form returns object (boxed long)
 
-// 3. GetValue<T> - N-D coordinates, typed. T must match the dtype exactly.
+// 3. GetValue<T> - N-D coordinates, typed; another T than the dtype's own type is NumPy's cast to T.
 long v3 = a.GetValue<long>(1, 2);
 
-// 4. GetAtIndex<T> - flat index, typed, no Shape math (fastest). T must match the dtype.
+// 4. GetAtIndex<T> - flat index, typed, no Shape math (fastest with the dtype's own type).
 long v4 = a.GetAtIndex<long>(6);
 
-// Writes mirror the reads:
+// Writes mirror the reads, casting the value to the array's dtype:
 a[1, 2] = 99;                           // indexer assignment (converts to the array dtype)
-a.SetValue(99L, 1, 2);                  // N-D coordinates (value must match the dtype)
+a.SetValue(99L, 1, 2);                  // N-D coordinates
 a.SetAtIndex(99L, 6);                   // flat index
 ```
 
@@ -449,7 +462,7 @@ foreach (Span<double> chunk in np.nditer_chunks<double>(a, writeable: true))
 
 Measured on 100K `float64` (Release, best-of-9): `np.nditer<T>` **0.167 ms**, `np.nditer_chunks<T>` **0.162 ms**, chunks + `Vector<T>` **0.027 ms** - against **59 ms** for the boxed `np.nditer` `it[0]` loop and a 0.047 ms raw-pointer floor.
 
-Both work on every layout (contiguous, F-order, transposed, reversed, sliced, broadcast, 0-d, empty) and all 15 dtypes. Three things to know:
+These overloads require an unmanaged CLR element type. For string values, use `item()`, `tolist()`, ordinary iteration or `np.nditer` (`refs_ok` for `StringDType`). Three things to know:
 
 - **`T` must be the array's exact dtype** - a `ref` cannot convert, so `np.nditer<double>` on an `int32` array throws rather than reinterpreting the bytes. `astype` first.
 - **Order is `'K'` (memory order)**, matching `np.nditer`. On a reversed view that is not the logical order - pass `order: 'C'` if you need the order `np.ndenumerate` uses.
@@ -505,13 +518,16 @@ np.moveaxis(a, 0, -1);
 
 ## Generic `NDArray<T>`
 
-For type-safe element access, use `NDArray<T>`:
+For a statically typed array, use `NDArray<T>`. Its indexer is NumPy's, like every array's, and the selection comes back typed:
 
 ```csharp
 NDArray<double> a = np.zeros(10).MakeGeneric<double>();
-double first = a[0];                  // T, not NDArray
-a[0] = 3.14;
+NDArray<double> head = a["0:3"];      // a typed view
+double first = (double)a[0];          // an element is a 0-d array: cast it to read the value
+a[0] = 3.14;                          // a double converts to a 0-d NDArray<double>
 ```
+
+Through an `NDArray<T>` variable the indexer's setter takes an `NDArray<T>` or a `T`. To assign an untyped `NDArray`, go through an `NDArray` reference (`NDArray u = a; u["0:3"] = values;`) or `a.__setitem__("0:3", values)`.
 
 Three ways to get a typed wrapper:
 
@@ -521,7 +537,7 @@ Three ways to get a typed wrapper:
 | `AsGeneric<T>()` | never (same storage) | returns `null` (like C# `as`) | Defensive typing - check for `null` |
 | `AsOrMakeGeneric<T>()` | only if dtype differs (then `astype`) | converts via `astype` | Accept any dtype, convert if needed |
 
-`NDArray<T>` wraps the same storage; use the untyped `NDArray` when dtype is dynamic.
+`NDArray<T>` is for unmanaged CLR element types. **`NDArray<string>` is not the text representation**: use an untyped `NDArray` with an `S`, `U` or `StringDType` descriptor and its text accessors. The same untyped array also serves numeric code when the dtype is dynamic.
 
 ---
 
@@ -552,7 +568,7 @@ arr.tofile("data.bin");
 var raw = np.fromfile("data.bin", np.float64);
 ```
 
-Format versions 1.0 / 2.0 / 3.0, C- and Fortran-order, and big-endian files all load; the writer emits the byte-exact, 64-byte-aligned, mmap-ready layout NumPy produces. `np.load` returns `object` because - like NumPy - it yields an array for a `.npy` and an archive for a `.npz`, decided by the file's contents rather than its name; prefer the typed `np.load_npy` / `np.load_npz` when you know the kind. `allow_pickle` defaults to `false` (NumPy's security default), so object-array files are rejected with a clear message instead of executed. See [NumPy Compliance](compliance.md) for the full dtype map and the handful of unsupported types.
+Format versions 1.0 / 2.0 / 3.0, C- and Fortran-order, and big-endian files all load; the writer emits the byte-exact, 64-byte-aligned, mmap-ready layout NumPy produces. `np.load` returns `object` because - like NumPy - it yields an array for a `.npy` and an archive for a `.npz`, decided by the file's contents rather than its name; prefer the typed `np.load_npy` / `np.load_npz` when you know the kind. `allow_pickle` defaults to `false` (NumPy's security default), so pickled files are rejected with a clear message instead of executed. With `allow_pickle: true`, NumSharp reads the one pickle NumPy writes for a `StringDType` array, and no other. See [NumPy Compliance](compliance.md) for the full dtype map and the handful of unsupported types.
 
 Interop with standard .NET arrays:
 
@@ -580,15 +596,13 @@ For unsafe interop with native code, use `arr.Data<T>()` (gets the `ArraySlice<T
 
 ## Memory Layout
 
-NumSharp is **C-contiguous only** - row-major storage, like NumPy's default. The `order` parameter on `reshape`, `ravel`, `flatten`, and `copy` is accepted for API compatibility but ignored (there is no F-order path).
+NumSharp supports **C and F order**, as well as stepped, reversed, transposed and broadcast views. C order is the default; an API's `order` parameter selects its traversal/allocation rules rather than being ignored. This applies to text as well as numeric arrays.
 
-This means:
+- `arr.strides` reports **byte** strides; `arr.Shape.Strides` reports element strides.
+- `arr.itemsize` comes from the descriptor: `U8` is 32 bytes, `S8` is 8, and `T` is a 16-byte cell.
+- `StringDType` cells may reference separately allocated text. A raw copy of cells into a different array does not copy their values; use `copy`, `copyto` and the other descriptor-aware operations.
 
-- `arr.shape = [3, 4]` → element `[i, j]` is at flat offset `i * 4 + j`.
-- `arr.strides` reports byte strides, not element strides.
-- For higher dimensions, the last axis varies fastest (element `[i, j, k]` is at `i * stride[0] + j * stride[1] + k * stride[2]` bytes from `Storage.Address`).
-
-Views can be non-contiguous (sliced, transposed, broadcasted). Use `arr.Shape.IsContiguous` to detect; use `arr.copy()` to materialize contiguous memory when a kernel needs it.
+Use `arr.flags.c_contiguous` / `arr.flags.f_contiguous` to inspect the layout and `np.ascontiguousarray(arr)` when a consumer needs a C-contiguous buffer.
 
 ---
 
@@ -639,7 +653,7 @@ C# compound assignment reassigns the variable; it doesn't mutate. See [Compound 
 | `shape` | `long[]` | Dimensions |
 | `ndim` | `int` | Rank |
 | `size` | `long` | Total elements |
-| `dtype` | `Type` | Element `Type` |
+| `dtype` | `DType` | Full element descriptor; `.type` gives the CLR type |
 | `typecode` | `NPTypeCode` | Element type enum |
 | `strides` | `long[]` | Byte strides |
 | `T` | `NDArray` | Transpose (view) |
@@ -690,8 +704,8 @@ C# compound assignment reassigns the variable; it doesn't mutate. See [Compound 
 
 | Direction | Kind | Notes |
 |-----------|------|-------|
-| scalar → `NDArray` | implicit | `bool, sbyte, byte, short, ushort, int, uint, long, ulong, char, Half, float, double, decimal, Complex` |
-| `NDArray` → scalar | explicit | same 15 types + `string` - 0-d required; complex → non-complex throws `TypeError` |
+| scalar → `NDArray` | implicit | `bool`, `sbyte`, `byte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, `char`, `Half`, `float`, `double`, `decimal`, `Complex`, `string` |
+| `NDArray` → scalar | explicit | Numeric values and `string`; use `item()` for `S` byte strings or a StringDType NA object; complex → non-complex throws `TypeError` |
 
 ### Persistence & Buffers
 

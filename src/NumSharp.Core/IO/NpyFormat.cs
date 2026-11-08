@@ -36,13 +36,21 @@ namespace NumSharp.IO
     ///       <item>Big-endian files are byte-swapped to native on read. NumPy instead keeps the raw bytes
     ///             behind a byte-swapped dtype; NumSharp has no such dtype, so it converts. Values match;
     ///             the byte-order attribute is not preserved.</item>
-    ///       <item><c>Char</c> (2-byte UTF-16) maps to NumPy's <c>'&lt;U1'</c> (4-byte UCS-4), converting in
-    ///             both directions. <c>'&lt;U'</c> widths above 1 have no NumSharp analog.</item>
+    ///       <item>Fixed-width strings (<c>'|S5'</c>, <c>'&lt;U3'</c>) read and write as NumSharp's string
+    ///             arrays, byte for byte (a <c>'&gt;U3'</c> file is byte-swapped per code point, as every
+    ///             big-endian file is). A zero-width <c>'|S0'</c> / <c>'&lt;U0'</c> file is refused: NumSharp's
+    ///             string buffers hold at least one character per element.</item>
+    ///       <item><c>Char</c> (2-byte UTF-16, no NumPy analog) is WRITTEN as NumPy's <c>'&lt;U1'</c> (4-byte
+    ///             UCS-4); a <c>'&lt;U1'</c> file reads back as NumPy's own <c>'&lt;U1'</c> string array, not as
+    ///             <c>Char</c> (the mapping it had before the string dtypes existed).</item>
     ///       <item><c>'&lt;c8'</c> (complex64) widens to <see cref="System.Numerics.Complex"/> on read;
     ///             writing always emits <c>'&lt;c16'</c>.</item>
     ///       <item><c>Decimal</c> has no NumPy dtype and cannot be written.</item>
-    ///       <item>Object arrays, structured dtypes, datetime64/timedelta64, byte strings and void are
-    ///             parsed but rejected with a precise message (see the issue's "What We're Not Doing").</item>
+    ///       <item>A NEP 55 <c>StringDType</c> array is written as NumPy writes it: the header says <c>'|O'</c>
+    ///             and the data is NumPy's protocol-4 pickle of the array, byte for byte; such a file (and NumPy's)
+    ///             loads with <c>allow_pickle=True</c> (<see cref="NpyPickle"/>).</item>
+    ///       <item>Other object arrays, structured dtypes, datetime64/timedelta64 and void are parsed but rejected
+    ///             with a precise message.</item>
     ///     </list>
     /// </remarks>
     public static class NpyFormat
@@ -136,7 +144,7 @@ namespace NumSharp.IO
             public override int GetHashCode() => (Major << 8) | Minor;
 
             /// <summary>Formatted as Python's tuple repr, e.g. <c>(1, 0)</c>, so it can go verbatim into messages.</summary>
-            public override string ToString() => $"({Major}, {Minor})";
+            public override string ToString() => string.Create(CultureInfo.InvariantCulture, $"({Major}, {Minor})");
 
             public static bool operator ==(FormatVersion l, FormatVersion r) => l.Equals(r);
             public static bool operator !=(FormatVersion l, FormatVersion r) => !l.Equals(r);
@@ -156,11 +164,9 @@ namespace NumSharp.IO
         /// </summary>
         internal enum ElementConversion
         {
-            /// <summary>File bytes are NumSharp bytes (after any byte-swap).</summary>
+            /// <summary>File bytes are NumSharp bytes (after any byte-swap) — every dtype but complex64, the
+            ///     fixed-width strings included (a <c>U</c> element is UCS-4 code points in both).</summary>
             None,
-
-            /// <summary>NumPy 4-byte UCS-4 code point ↔ NumSharp 2-byte UTF-16 <see cref="char"/>.</summary>
-            Ucs4,
 
             /// <summary>NumPy <c>'c8'</c> (two float32) → <see cref="System.Numerics.Complex"/> (two float64).</summary>
             Complex64,
@@ -189,8 +195,23 @@ namespace NumSharp.IO
             /// <summary>True for <c>'|O'</c>, whose data is a Python pickle rather than raw elements.</summary>
             public readonly bool HasObject;
 
+            /// <summary>
+            ///     The sized, native descriptor a fixed-width string file materializes as (<c>|S5</c>, <c>&lt;U3</c>);
+            ///     null for every other dtype. The <see cref="TypeCode"/> lane (<see cref="NPTypeCode.String"/>) carries
+            ///     no width, so allocating a string result must use this.
+            /// </summary>
+            public readonly DType Descr;
+
+            /// <summary>Records one parsed descriptor.</summary>
+            /// <param name="typeCode">The NumSharp storage lane.</param>
+            /// <param name="fileItemSize">Bytes per element in the file.</param>
+            /// <param name="swapUnit">Bytes per byte-swappable unit (1 when nothing swaps).</param>
+            /// <param name="littleEndian">The file's byte order.</param>
+            /// <param name="conversion">How file elements become NumSharp elements.</param>
+            /// <param name="hasObject">True for an object (pickled) array.</param>
+            /// <param name="descr">The string descriptor, for a fixed-width string file.</param>
             public DtypeInfo(NPTypeCode typeCode, int fileItemSize, int swapUnit, bool littleEndian,
-                             ElementConversion conversion = ElementConversion.None, bool hasObject = false)
+                             ElementConversion conversion = ElementConversion.None, bool hasObject = false, DType descr = null)
             {
                 TypeCode = typeCode;
                 FileItemSize = fileItemSize;
@@ -198,7 +219,17 @@ namespace NumSharp.IO
                 LittleEndian = littleEndian;
                 Conversion = conversion;
                 HasObject = hasObject;
+                Descr = descr;
             }
+
+            /// <summary>
+            ///     A new array of the descriptor this file materializes as, with <paramref name="shape"/>: the string
+            ///     descriptor for a string file, the storage lane otherwise.
+            /// </summary>
+            /// <param name="shape">The dimensions.</param>
+            /// <returns>The new (zero-filled) array.</returns>
+            public NDArray Allocate(Shape shape)
+                => Descr != null ? new NDArray(Descr, shape) : new NDArray(TypeCode, shape);
 
             /// <summary>True when the file's byte order differs from this machine's.</summary>
             public bool NeedsSwap => LittleEndian != BitConverter.IsLittleEndian && SwapUnit > 1;
@@ -235,9 +266,38 @@ namespace NumSharp.IO
                     throw new NotSupportedException(
                         "Decimal has no NumPy dtype and cannot be saved to a .npy file. " +
                         "Convert first, e.g. arr.astype(np.float64) — note this loses precision.");
+                // The string lane holds S and U arrays of every width: only the descriptor names one.
+                case NPTypeCode.String:
+                    throw new ArgumentException(
+                        "NPTypeCode.String names no single dtype: a fixed-width string array's descr carries its class and width " +
+                        "('|S5', '<U3'). Pass the array's descriptor to DtypeToDescr(DType).", nameof(typeCode));
                 default:
                     throw new NotSupportedException($"{typeCode} cannot be saved to a .npy file.");
             }
+        }
+
+        /// <summary>
+        ///     The <c>descr</c> string for a NumSharp descriptor — NumPy's <c>dtype_to_descr</c>: a fixed-width string
+        ///     descriptor writes its own <c>str</c> (<c>'|S5'</c>, <c>'&lt;U3'</c>, native order as NumSharp stores it), a
+        ///     NEP 55 <c>StringDType</c> descriptor <c>'|O'</c> (NumPy "lies that the dtype is object" and pickles the array,
+        ///     because a new-style dtype has no array-interface descr), every other dtype the descr of its storage lane
+        ///     (<see cref="DtypeToDescr(NPTypeCode)"/>).
+        /// </summary>
+        /// <param name="dtype">The descriptor of the array being written.</param>
+        /// <returns>The header's descr.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="NotSupportedException">The dtype has no NumPy equivalent (Decimal).</exception>
+        /// <remarks>NumPy also warns <c>UserWarning: Custom dtypes are saved as python objects using the pickle
+        ///     protocol</c> for a <c>StringDType</c>; NumSharp has no warnings channel and writes the same file silently.</remarks>
+        public static string DtypeToDescr(DType dtype)
+        {
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
+            if (dtype.Meta is StringDTypeMeta)
+                return dtype.isnative ? dtype.str : dtype.newbyteorder("=").str;
+            if (dtype.Meta is VStringDTypeMeta)
+                return "|O";
+            return DtypeToDescr(dtype.GetTypeCode());
         }
 
         /// <summary>
@@ -293,26 +353,28 @@ namespace NumSharp.IO
                     "Convert to an integer count of units in NumPy before saving.");
             }
 
-            if (kind == 'S' || kind == 'a')
-                throw new NotSupportedException(
-                    $"Byte-string dtypes ('{s}') are not supported by NumSharp, which has no string dtype.");
+            // A fixed-width string: '|S5' holds 5 bytes per element, '<U3' 3 UCS-4 code points (12 bytes) whose byte
+            // order the prefix states. 'a' is NumPy's legacy spelling of 'S'.
+            if (kind == 'S' || kind == 'a' || kind == 'U')
+            {
+                if (!int.TryParse(rest, NumberStyles.None, CultureInfo.InvariantCulture, out int chars))
+                    throw new FormatException($"descr is not a valid dtype descriptor: {PyLiteral.Repr(descr)}");
+                // '|S0' / '<U0' are real (zero-width) NumPy dtypes, so rejecting them as malformed would be a lie —
+                // they are unrepresentable here, which is a different thing.
+                if (chars == 0)
+                    throw new NotSupportedException(
+                        $"Zero-width string dtype '{s}' is not supported: NumSharp's fixed-width string buffers hold at least " +
+                        "one character per element.");
+                bool unicode = kind == 'U';
+                DType native = (unicode ? DTypeRegistry.Str : DTypeRegistry.Bytes).Descr(chars);
+                // A U element swaps per 4-byte code point (a '>U3' file); an S element is single bytes.
+                return new DtypeInfo(NPTypeCode.String, native.itemsize, unicode ? 4 : 1, littleEndian,
+                                     ElementConversion.None, descr: native);
+            }
 
             if (kind == 'V')
                 throw new NotSupportedException(
                     $"Void dtypes ('{s}') are not supported by NumSharp.");
-
-            if (kind == 'U')
-            {
-                // '<U0' is a real (zero-width) NumPy dtype, so rejecting it as malformed would be a lie —
-                // it is unrepresentable here, which is a different thing.
-                if (!int.TryParse(rest, NumberStyles.None, CultureInfo.InvariantCulture, out int chars))
-                    throw new FormatException($"descr is not a valid dtype descriptor: {PyLiteral.Repr(descr)}");
-                if (chars != 1)
-                    throw new NotSupportedException(
-                        $"Unicode string dtype '{s}' is not supported — only '<U1' maps to NumSharp's Char " +
-                        "(a single UTF-16 code unit). NumSharp has no string dtype.");
-                return new DtypeInfo(NPTypeCode.Char, 4, 4, littleEndian, ElementConversion.Ucs4);
-            }
 
             if (!int.TryParse(rest, NumberStyles.None, CultureInfo.InvariantCulture, out int size))
                 throw new FormatException($"descr is not a valid dtype descriptor: {PyLiteral.Repr(descr)}");
@@ -418,9 +480,10 @@ namespace NumSharp.IO
 
             return new Dictionary<string, object>(StringComparer.Ordinal)
             {
-                ["descr"] = DtypeToDescr(array.typecode),
+                // The descriptor, not the lane: a string array's descr carries its class and width.
+                ["descr"] = DtypeToDescr(array.dtype),
                 ["fortran_order"] = fortranOrder,
-                ["shape"] = array.shape,
+                ["shape"] = array.Shape.dimensions,
             };
         }
 
@@ -499,7 +562,7 @@ namespace NumSharp.IO
             long totalHeaderLen = (long)hlen + padlen;
 
             if (totalHeaderLen > version.MaxHeaderLength)
-                throw new InvalidOperationException($"Header length {hlen} too big for version={version}");
+                throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Header length {hlen} too big for version={version}"));
 
             var result = new byte[prefixSize + totalHeaderLen];
             int pos = 0;
@@ -677,7 +740,7 @@ namespace NumSharp.IO
 
             if (header.Length > maxHeaderSize)
                 throw new FormatException(
-                    $"Header info length ({header.Length}) is large and may not be safe to load securely.\n" +
+                    string.Create(CultureInfo.InvariantCulture, $"Header info length ({header.Length}) is large and may not be safe to load securely.\n") +
                     "To allow loading, adjust `maxHeaderSize` or fully trust the `.npy` file using `allow_pickle=True`.\n" +
                     "For safety against large resource use or crashes, sandboxing may be necessary.");
 
@@ -726,10 +789,14 @@ namespace NumSharp.IO
         /// <param name="array">The array to write. Any layout; non-contiguous is materialized C-order.</param>
         /// <param name="version">The format version, or null (default) for the oldest that fits.</param>
         /// <param name="allowPickle">
-        ///     Present for NumPy parity. NumSharp has no object dtype, so no array can reach the pickle
-        ///     path and this parameter never changes the outcome.
+        ///     Whether a pickle may be written. Only a NEP 55 <c>StringDType</c> array needs one (NumPy pickles it behind a
+        ///     <c>'|O'</c> header); with <c>false</c> such an array raises NumPy's error AFTER its header is written, as
+        ///     NumPy's <c>write_array</c> does. Every other dtype ignores it.
         /// </param>
-        /// <exception cref="NotSupportedException">The dtype has no NumPy equivalent (Decimal).</exception>
+        /// <exception cref="NotSupportedException">The dtype has no NumPy equivalent (Decimal), or a <c>StringDType</c>
+        ///     missing-data object has no pickle form NumSharp writes (see <see cref="NpyPickle"/>).</exception>
+        /// <exception cref="ValueError"><c>Object arrays cannot be saved when allow_pickle=False</c>: a <c>StringDType</c>
+        ///     array with <paramref name="allowPickle"/> false (the header is already in <paramref name="stream"/>).</exception>
         public static void WriteArray(Stream stream, NDArray array, FormatVersion? version = null, bool allowPickle = true)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
@@ -737,6 +804,16 @@ namespace NumSharp.IO
             if (version.HasValue) CheckVersion(version.Value);
 
             WriteArrayHeader(stream, HeaderDataFromArray(array), version);
+
+            // A StringDType array is NumPy's "object" case: its cells hold allocator offsets and pointers, so NumPy writes
+            // a pickle of the array instead of raw bytes, and checks allow_pickle only once the header is out.
+            if (array.Storage.IsVString)
+            {
+                if (!allowPickle)
+                    throw new ValueError("Object arrays cannot be saved when allow_pickle=False");
+                NpyPickle.WriteStringDTypeArray(stream, array);
+                return;
+            }
 
             // NumPy writes an F-contiguous array as its transpose in C-order — the transpose of an
             // F-contiguous array is C-contiguous, so this streams the same bytes the file needs.
@@ -787,7 +864,7 @@ namespace NumSharp.IO
                 char c = p[i];
                 if (char.IsSurrogate(c))
                     throw new NotSupportedException(
-                        $"Char at flat index {i} is the surrogate U+{(int)c:X4}. A NumPy '<U1' element holds one " +
+                        string.Create(CultureInfo.InvariantCulture, $"Char at flat index {i} is the surrogate U+{(int)c:X4}. A NumPy '<U1' element holds one ") +
                         "whole code point, so a surrogate pair cannot be represented and would corrupt the file.");
 
                 BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(filled), c);
@@ -815,11 +892,20 @@ namespace NumSharp.IO
         /// </summary>
         /// <param name="stream">A stream positioned at the magic string.</param>
         /// <param name="allowPickle">
-        ///     Whether the caller trusts this file. NumSharp cannot unpickle either way, but this
-        ///     selects which error an object array produces and, per NumPy, lifts
-        ///     <paramref name="maxHeaderSize"/>.
+        ///     Whether the caller trusts this file. A <c>'|O'</c> file holds a pickle: without it NumPy's error, with it
+        ///     NumSharp reads NumPy's pickle of a <c>StringDType</c> array (and refuses any other pickle). Per NumPy it also
+        ///     lifts <paramref name="maxHeaderSize"/>.
         /// </param>
         /// <param name="maxHeaderSize">Reject headers larger than this. Ignored when <paramref name="allowPickle"/>.</param>
+        /// <returns>The array; for a pickled file the shape and layout the PICKLE states (NumPy ignores the header's for an
+        ///     object array).</returns>
+        /// <exception cref="FormatException">A malformed file, or <c>Object arrays cannot be loaded when
+        ///     allow_pickle=False</c>.</exception>
+        /// <exception cref="NotSupportedException">A dtype NumSharp cannot represent, or a pickle that is not NumPy's pickle
+        ///     of a <c>StringDType</c> array.</exception>
+        /// <exception cref="UnicodeError">A pickled text that is not UTF-8: NumPy's <c>Unpickling a python object failed:
+        ///     UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'invalid start byte')</c> text (and its line about
+        ///     <c>encoding=</c>), with the <see cref="UnicodeDecodeError"/> as the inner exception.</exception>
         public static NDArray ReadArray(Stream stream, bool allowPickle = false, long maxHeaderSize = MaxHeaderSize)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
@@ -838,9 +924,22 @@ namespace NumSharp.IO
             {
                 if (!allowPickle)
                     throw new FormatException("Object arrays cannot be loaded when allow_pickle=False");
-                throw new NotSupportedException(
-                    "Object arrays are stored as a Python pickle stream, which NumSharp cannot read. " +
-                    "Re-save the array from NumPy with a concrete numeric dtype.");
+                // NumPy unpickles whatever the file holds and returns it, ignoring the header's shape and order; NumSharp
+                // reads the one pickle it can represent, NumPy's pickle of a StringDType array (decision D3).
+                try
+                {
+                    return NpyPickle.ReadStringDTypeArray(stream);
+                }
+                catch (UnicodeError err)
+                {
+                    // read_array's "friendlier error message" around the unpickler's UnicodeError (a text that is not
+                    // UTF-8), raised from it as NumPy does.
+                    string repr = err is UnicodeDecodeError decode
+                        ? decode.PythonRepr()
+                        : $"{err.GetType().Name}({NumSharp.Backends.Printing.PyRepr.Str(err.Message)})";
+                    throw new UnicodeError(
+                        $"Unpickling a python object failed: {repr}\nYou may need to pass the encoding= option to numpy.load", err);
+                }
             }
 
             foreach (long dim in header.Shape)
@@ -848,7 +947,7 @@ namespace NumSharp.IO
                     throw new FormatException("negative dimensions are not allowed");
 
             long count = header.Count;
-            var result = new NDArray(header.Dtype.TypeCode, new Shape(header.Shape));
+            var result = header.Dtype.Allocate(new Shape(header.Shape, copy: false));
 
             if (count > 0)
                 ReadArrayData(stream, result, header.Dtype, count);
@@ -860,7 +959,7 @@ namespace NumSharp.IO
                 var reversed = new long[header.Shape.Length];
                 for (int i = 0; i < header.Shape.Length; i++)
                     reversed[i] = header.Shape[header.Shape.Length - 1 - i];
-                result = result.reshape(reversed).T;
+                result = result.reshape(new Shape(reversed, copy: false)).T;
             }
 
             return result;
@@ -888,7 +987,7 @@ namespace NumSharp.IO
                 int toRead = (int)Math.Min(remaining, buffer.Length);
                 int got = ReadInto(stream, buffer, toRead);
                 if (got != toRead)
-                    throw new FormatException($"EOF: reading array data, expected {fileBytes} bytes got {fileBytes - remaining + got}");
+                    throw new FormatException(string.Create(CultureInfo.InvariantCulture, $"EOF: reading array data, expected {fileBytes} bytes got {fileBytes - remaining + got}"));
 
                 if (dtype.NeedsSwap)
                     SwapBytes(buffer, got, dtype.SwapUnit);
@@ -909,26 +1008,6 @@ namespace NumSharp.IO
                 case ElementConversion.None:
                     Marshal.Copy(buffer, 0, (IntPtr)dst, length);
                     return length;
-
-                case ElementConversion.Ucs4:
-                {
-                    // 4-byte UCS-4 code point -> 2-byte UTF-16 code unit. Anything outside the BMP needs
-                    // a surrogate pair and cannot fit a single Char.
-                    int n = length / 4;
-                    char* c = (char*)dst;
-                    for (int i = 0; i < n; i++)
-                    {
-                        uint cp = BinaryPrimitives.ReadUInt32LittleEndian(buffer.AsSpan(i * 4));
-                        if (cp > 0xFFFF)
-                            throw new NotSupportedException(
-                                $"'<U1' element U+{cp:X} is outside the Basic Multilingual Plane and does not fit " +
-                                "NumSharp's 2-byte Char. Load this file in NumPy and convert it instead.");
-                        if (cp >= 0xD800 && cp <= 0xDFFF)
-                            throw new FormatException($"'<U1' element U+{cp:X4} is an unpaired surrogate and is not a valid code point.");
-                        c[i] = (char)cp;
-                    }
-                    return (long)n * 2;
-                }
 
                 case ElementConversion.Complex64:
                 {
@@ -977,8 +1056,9 @@ namespace NumSharp.IO
         ///     the same lifecycle a normally-owned array frees on.
         /// </returns>
         /// <exception cref="NotSupportedException">
-        ///     The dtype cannot be zero-copy mapped: NumSharp byte-swaps big-endian files and converts
-        ///     <c>&lt;U1</c>/<c>&lt;c8</c> on read, none of which a shared view allows.
+        ///     The dtype cannot be zero-copy mapped: NumSharp byte-swaps big-endian files (a <c>'&gt;U3'</c> file
+        ///     included) and widens <c>&lt;c8</c> on read, none of which a shared view allows. A native fixed-width
+        ///     string file maps like any other dtype.
         /// </exception>
         public static NDArray OpenMemmap(string path, string mode, long maxHeaderSize = MaxHeaderSize)
         {
@@ -987,7 +1067,9 @@ namespace NumSharp.IO
             string fileMode = ResolveMmapMode(mode);
             (FileAccess fileAccess, MemoryMappedFileAccess mapAccess, bool writeable) = MmapAccess(fileMode);
 
-            var fs = new FileStream(path, FileMode.Open, fileAccess, FileShare.Read);
+            // Python's open() share mode (numpy.memmap opens its file object with it): another load of the file, a second
+            // map or a plain reader / writer stays possible while this map lives, as in NumPy (parity QA-39).
+            var fs = NDFileShare.Open(path, fileAccess);
             MemoryMappedFile mmf = null;
             MemoryMappedViewAccessor view = null;
             bool transferred = false;
@@ -1010,9 +1092,9 @@ namespace NumSharp.IO
                         "which a zero-copy view rules out. Load without mmap_mode.");
                 if (header.Dtype.Conversion != ElementConversion.None)
                 {
-                    string fileDtype = header.Dtype.Conversion == ElementConversion.Ucs4 ? "'<U1' (Unicode)" : "'<c8' (complex64)";
+                    // complex64 is the one dtype whose file width differs from its NumSharp width.
                     throw new NotSupportedException(
-                        $"{fileDtype} is stored at a different width than its NumSharp type and is converted on read, " +
+                        "'<c8' (complex64) is stored at a different width than its NumSharp type and is converted on read, " +
                         "so it cannot be memory-mapped. Load without mmap_mode.");
                 }
                 foreach (long dim in header.Shape)
@@ -1025,7 +1107,7 @@ namespace NumSharp.IO
                     // No element bytes to point at — return a plain empty array and drop the handle.
                     fs.Dispose();
                     transferred = true;
-                    var empty = new NDArray(header.Dtype.TypeCode, new Shape(header.Shape));
+                    var empty = header.Dtype.Allocate(new Shape(header.Shape, copy: false));
                     // NumPy's memmap reports owndata=False in EVERY mode (its base is the mmap object).
                     empty.Storage.ExternalBase = true;
                     empty.Storage.OnReshaped(); // drop the allocating ctor's OWNDATA bit
@@ -1121,7 +1203,11 @@ namespace NumSharp.IO
                 capturedMmf.Dispose(); // disposes the FileStream too (leaveOpen: false)
             };
 
-            NDArray nd = WrapMappedBlock(header.Dtype.TypeCode, (void*)dataPtr, count, free, new Shape(header.Shape));
+            // A string file's elements are its descriptor's width: the mapped bytes become a string slice of that
+            // descriptor (the lane alone cannot size them); every other dtype wraps a typed block.
+            NDArray nd = header.Dtype.Descr != null
+                ? WrapMappedStrings(header.Dtype.Descr, (byte*)dataPtr, count, free, new Shape(header.Shape, copy: false))
+                : WrapMappedBlock(header.Dtype.TypeCode, (void*)dataPtr, count, free, new Shape(header.Shape, copy: false));
 
             // The mapped memory belongs to the file mapping, not the array — NumPy's memmap has the mmap
             // object as its (non-array) base and reports owndata=False in EVERY mode ('r'/'r+'/'c').
@@ -1148,7 +1234,7 @@ namespace NumSharp.IO
                 var reversed = new long[header.Shape.Length];
                 for (int i = 0; i < header.Shape.Length; i++)
                     reversed[i] = header.Shape[header.Shape.Length - 1 - i];
-                nd = nd.reshape(reversed).T;
+                nd = nd.reshape(new Shape(reversed, copy: false)).T;
             }
 
             // Defensive: the wrap-storage clear above already propagates through reshape/transpose.
@@ -1158,8 +1244,25 @@ namespace NumSharp.IO
             return nd;
         }
 
-        // Type-dispatch to a typed block over the mapped pointer. Char (`<U1`) and complex64 (`<c8`) never
-        // reach here — they are rejected in OpenMemmap because their file width differs from NumSharp's.
+        /// <summary>
+        ///     Wraps mapped file bytes as a fixed-width string array of <paramref name="descr"/> — the string twin of
+        ///     <see cref="WrapMappedBlock"/>: the bytes are the elements (no copy), released through
+        ///     <paramref name="free"/> with the last array over them.
+        /// </summary>
+        /// <param name="descr">The file's sized, native string descriptor.</param>
+        /// <param name="dataPtr">The first data byte.</param>
+        /// <param name="count">The element count.</param>
+        /// <param name="free">Releases the mapping (called once, by the block).</param>
+        /// <param name="shape">The array's dimensions.</param>
+        /// <returns>The mapped string array.</returns>
+        private static unsafe NDArray WrapMappedStrings(DType descr, byte* dataPtr, long count, Action free, Shape shape)
+        {
+            var block = new UnmanagedMemoryBlock<byte>(dataPtr, count * descr.itemsize, free);
+            return new NDArray(new Backends.UnmanagedStorage(new StringArraySlice(new ArraySlice<byte>(block), descr), shape));
+        }
+
+        // Type-dispatch to a typed block over the mapped pointer. complex64 (`<c8`) never reaches here — it is
+        // rejected in OpenMemmap because its file width differs from NumSharp's; strings go to WrapMappedStrings.
         private static unsafe NDArray WrapMappedBlock(NPTypeCode typeCode, void* dataPtr, long count, Action free, Shape shape)
         {
             switch (typeCode)
@@ -1205,7 +1308,16 @@ namespace NumSharp.IO
         ///     reports the CLAIMED size, exactly as NumPy's does.
         /// </remarks>
         /// <exception cref="FormatException">The stream ended early.</exception>
-        private static byte[] ReadBytes(Stream stream, long count, string what)
+        /// <summary>
+        ///     Reads exactly <paramref name="count"/> bytes, allocating no more than the stream can still deliver (a length
+        ///     field is attacker-controlled: a 28-byte file can claim a 4 GB header).
+        /// </summary>
+        /// <param name="stream">The stream.</param>
+        /// <param name="count">The byte count.</param>
+        /// <param name="what">What is being read, for the EOF text.</param>
+        /// <returns>The bytes.</returns>
+        /// <exception cref="FormatException">The stream ends first.</exception>
+        internal static byte[] ReadBytes(Stream stream, long count, string what)
         {
             if (count == 0)
                 return Array.Empty<byte>();
@@ -1237,7 +1349,7 @@ namespace NumSharp.IO
             }
 
             if (total != count)
-                throw new FormatException($"EOF: reading {what}, expected {count} bytes got {total}");
+                throw new FormatException(string.Create(CultureInfo.InvariantCulture, $"EOF: reading {what}, expected {count} bytes got {total}"));
 
             if (buffer.Length != total)
                 Array.Resize(ref buffer, (int)total);

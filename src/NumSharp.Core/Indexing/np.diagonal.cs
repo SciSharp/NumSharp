@@ -28,7 +28,8 @@ namespace NumSharp
         ///     <paramref name="a"/>. Shape: <c>a.shape</c> with
         ///     <paramref name="axis1"/> and <paramref name="axis2"/> removed
         ///     and the diagonal appended as the last axis.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.diagonal.html
         ///     <para>
@@ -39,94 +40,18 @@ namespace NumSharp
         ///     change pencilled in for NumPy 1.10 hasn't shipped in 2.x).
         ///     </para>
         /// </remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="a"/> has fewer than two dimensions ("diag requires an array of at
+        ///     least two dimensions"), or the two axes are the same axis ("axis1 and axis2 cannot be the same").</exception>
+        /// <exception cref="AxisError">An axis is out of range: "axis1: axis …" / "axis2: axis …" (axis1 checked
+        ///     first).</exception>
         public static NDArray diagonal(NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
 
-            int ndim = a.ndim;
-            if (ndim < 2)
-                throw new ArgumentException(
-                    "diag requires an array of at least two dimensions",
-                    nameof(a));
-
-            int ax1 = NormalizeAxis(axis1, ndim, nameof(axis1));
-            int ax2 = NormalizeAxis(axis2, ndim, nameof(axis2));
-            if (ax1 == ax2)
-                throw new ArgumentException(
-                    "axis1 and axis2 cannot be the same",
-                    nameof(axis2));
-
-            var srcShape = a.Shape;
-            long dim1 = srcShape.dimensions[ax1];
-            long dim2 = srcShape.dimensions[ax2];
-            long stride1 = srcShape.strides[ax1];
-            long stride2 = srcShape.strides[ax2];
-
-            // NumPy formula: positive offset shifts along axis2 (column direction),
-            // negative along axis1 (row direction). We adjust the corresponding
-            // dimension and the data offset.
-            long offsetStride;
-            long offAbs;
-            if (offset >= 0)
-            {
-                offsetStride = stride2;
-                dim2 -= offset;
-                offAbs = offset;
-            }
-            else
-            {
-                offsetStride = stride1;
-                dim1 -= -(long)offset;
-                offAbs = -(long)offset;
-            }
-
-            long diagSize = Math.Min(dim1, dim2);
-            if (diagSize < 0)
-                diagSize = 0;
-
-            // Element size for byte→element offset conversion. NumSharp strides are
-            // in elements (not bytes); the source offset added below stays in
-            // elements.
-            long newOffset = srcShape.offset;
-            if (diagSize > 0)
-                newOffset += offAbs * offsetStride;
-
-            // Build new shape and strides: remove axis1 and axis2 then append
-            // (diagSize, stride1 + stride2) as the last axis.
-            int outNdim = ndim - 1;
-            var outDims = new long[outNdim];
-            var outStrides = new long[outNdim];
-            int w = 0;
-            for (int d = 0; d < ndim; d++)
-            {
-                if (d == ax1 || d == ax2) continue;
-                outDims[w] = srcShape.dimensions[d];
-                outStrides[w] = srcShape.strides[d];
-                w++;
-            }
-            outDims[outNdim - 1] = diagSize;
-            outStrides[outNdim - 1] = stride1 + stride2;
-
-            long bufSize = srcShape.bufferSize > 0 ? srcShape.bufferSize : srcShape.size;
-            var newShape = new Shape(outDims, outStrides, newOffset, bufSize);
-            // NumPy contract: diagonal view is READ-ONLY.
-            newShape = newShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
-
-            return new NDArray(a.Storage.Alias(newShape)) { TensorEngine = a.TensorEngine };
-        }
-
-        /// <summary>
-        ///     Normalises a possibly-negative axis to the [0, ndim) range, matching
-        ///     NumPy's <c>check_and_adjust_axis_msg</c>. Throws with the parameter
-        ///     name embedded in the message.
-        /// </summary>
-        private static int NormalizeAxis(int axis, int ndim, string argName)
-        {
-            int adjusted = axis < 0 ? axis + ndim : axis;
-            if (adjusted < 0 || adjusted >= ndim)
-                throw new ArgumentOutOfRangeException(argName,
-                    $"{argName}: axis {axis} is out of bounds for array of dimension {ndim}");
-            return adjusted;
+            // NumPy's diagonal IS PyArray_Diagonal, a read-only view built from the strides: the array object's
+            // (NDArray.diagonal over Shape.Diagonal's layout; a view computes no value, so it is no engine member).
+            return NDArray.diagonal(a, offset, axis1, axis2);
         }
     }
 }

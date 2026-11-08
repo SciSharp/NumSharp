@@ -7,7 +7,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">First argument. Flattened; conjugated when complex.</param>
         /// <param name="b">Second argument. Flattened.</param>
-        /// <returns>A 0-d result, always — <c>vdot</c> never performs a matrix product.</returns>
+        /// <returns>A 0-d result, always — <c>vdot</c> never performs a matrix product.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.vdot.html
         ///     <para>

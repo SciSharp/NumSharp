@@ -396,6 +396,7 @@ namespace NumSharp.Tests.Backends.Iterators
         // =====================================================================
 
         [TestMethod]
+        [DoNotParallelize] // counts the process-wide inner-loop kernel cache, which other tests' work grows
         public void Call_SameStaticMethodReusesKernel()
         {
             GeneratedDelegates.ClearInnerLoop();
@@ -419,6 +420,7 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         [TestMethod]
+        [DoNotParallelize] // counts the process-wide inner-loop kernel cache, which other tests' work grows
         public void Call_DifferentMethodsProduceDistinctKernels()
         {
             GeneratedDelegates.ClearInnerLoop();

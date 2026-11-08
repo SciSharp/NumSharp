@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public static partial class np
@@ -12,34 +14,18 @@ namespace NumSharp
         ///     the calculation. Default is False.</param>
         /// <returns>Sorted 1-D array of unique values that are in only one of the input arrays.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.setxor1d.html</remarks>
+        /// <exception cref="UnicodeDecodeError">A <c>U</c> result over <c>S</c> text holding a non-ASCII byte.</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class the concatenation finds no common
+        ///     DType with (a number, bool, <c>S</c> bytes): NumPy's verbatim promotion text.</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="ar1"/> is null.</exception>
         [NDScoped]
         public static NDArray setxor1d(NDArray ar1, NDArray ar2, bool assume_unique = false)
         {
-            // Boundary scope: the unique/ravel/concatenate/sort temps and the flag masks are
-            // reclaimed at exit; only the surviving-values array is yielded.
-
-            if (!assume_unique)
-            {
-                ar1 = np.unique(ar1);
-                ar2 = np.unique(ar2);
-            }
-
-            // concatenate((ar1, ar2), axis=None) — flattens both.
-            NDArray aux = np.concatenate((np.ravel(ar1), np.ravel(ar2)), 0);
-            if (aux.size == 0)
-                return aux;
-
-            aux = np.sort(aux);
-
-            // flag = concatenate(([True], aux[1:] != aux[:-1], [True]))
-            NDArray trueOne = np.array(new[] { true });
-            NDArray neq = aux["1:"] != aux[":-1"];
-            NDArray flag = np.concatenate((trueOne, neq, trueOne), 0);
-
-            // return aux[flag[1:] & flag[:-1]]  — values appearing exactly once survive
-            NDArray sel = flag["1:"] & flag[":-1"];
-            // aux came from np.sort; NumPy's sort canonicalises a surviving float32/float64 NaN (see np.setops.cs).
-            return CanonicalizeSetOpNaN(aux[sel]);
+            if (ar1 is null) throw new ArgumentNullException(nameof(ar1));
+            return ar1.TensorEngine.Setxor1d(ar1, ar2, assume_unique);
         }
     }
 }

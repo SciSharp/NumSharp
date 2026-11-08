@@ -9,18 +9,20 @@ namespace NumSharp
         ///     This is equivalent to concatenation along the first axis after 1-D arrays of shape(N,) have been reshaped to(1, N). Rebuilds arrays divided by vsplit.
         /// </summary>
         /// <param name="tup">The arrays must have the same shape along all but the first axis. 1-D arrays must have the same length.</param>
-        /// <returns>The array formed by stacking the given arrays, will be at least 2-D.</returns>
+        /// <returns>The array formed by stacking the given arrays, will be at least 2-D.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.vstack.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="tup"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="tup"/> is empty ("need at least one array to concatenate").</exception>
         public static NDArray vstack(params NDArray[] tup)
         {
             if (tup == null)
                 throw new ArgumentNullException(nameof(tup));
 
-            if (tup.Length == 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(tup));
-
-            tup = np.atleast_2d(tup);
-            return np.concatenate(tup, 0);
+            // NumPy's statements (atleast_2d(*tup), then concatenate along axis 0) are the array object's.
+            return NDArray.vstack_(tup);
         }
     }
 }

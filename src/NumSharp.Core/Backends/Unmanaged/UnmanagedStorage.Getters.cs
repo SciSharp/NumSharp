@@ -28,107 +28,156 @@ namespace NumSharp.Backends
             => InternalArray.Slice(count == 0 ? 0 : offset, count);
 
         /// <summary>
-        ///     Retrieves value of unspecified type (will figure using <see cref="IStorage.DType"/>).
+        ///     The length of a broadcast sub-array's slice, ended at the buffer's end: the parent's buffer size counts from
+        ///     the parent's FIRST element and the slice from the sub-array's, so past the first row the requested length runs
+        ///     off the end of the buffer (row i of <c>np.broadcast_to(b, (3, n)).T</c> starts at element i and asked for all
+        ///     n).
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="IStorage.DType"/> is not <see cref="object"/></exception>
+        /// <param name="offset">The sub-array's first element in the buffer.</param>
+        /// <param name="length">The requested length.</param>
+        /// <returns>The length, at most the elements from <paramref name="offset"/> to the buffer's end (never negative).</returns>
+        /// <remarks>
+        ///     A broadcast view's strides are stride 0 or non-negative, so it reaches only elements its parent reaches: the
+        ///     clamped slice still covers every element the view reads. A numeric slice never checked its length (the view
+        ///     read inside the buffer anyway); a <c>StringDType</c> cell slice does, and refused the row
+        ///     (<c>np.apply_along_axis</c> along an axis of a broadcast <c>StringDType</c> array).
+        /// </remarks>
+        private long ClampToBuffer(long offset, long length)
+        {
+            long available = InternalArray.Count - offset;
+            return length > available ? Math.Max(available, 0) : length;
+        }
+
+        /// <summary>
+        ///     Reads the element at <paramref name="indices"/> boxed as the dtype's own CLR type (a text element as its
+        ///     decoded C# value), after NumPy's coordinate check — the read behind <c>item(i, j, …)</c>.
+        /// </summary>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its axis, and
+        ///     axes left out read their first element.</param>
+        /// <returns>The element, boxed.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's texts;
+        ///     nothing outside the array is read).</exception>
+        /// <exception cref="NotSupportedException">The storage has no element type.</exception>
         public unsafe object GetValue(int[] indices)
+        {
+            // One checked offset for the whole switch (parity QA-33: an out-of-range coordinate used to read another row
+            // or outside the buffer).
+            long off = _shape.GetOffsetChecked(indices);
+            return ElementAt(off);
+        }
+
+        /// <summary>
+        ///     Reads the element at <paramref name="indices"/> boxed as the dtype's own CLR type (a text element as its
+        ///     decoded C# value), after NumPy's coordinate check — the read behind <c>item(i, j, …)</c>.
+        /// </summary>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end
+        ///     of its axis, and axes left out read their first element.</param>
+        /// <returns>The element, boxed.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's texts;
+        ///     nothing outside the array is read).</exception>
+        /// <exception cref="NotSupportedException">The storage has no element type.</exception>
+        public unsafe object GetValue(params long[] indices)
+        {
+            long off = _shape.GetOffsetChecked(indices);
+            return ElementAt(off);
+        }
+
+        /// <summary>
+        ///     Reads the element at logical flat index <paramref name="index"/> (C order) boxed as the dtype's own CLR
+        ///     type, after NumPy's flat-index check (<c>a.item(i)</c>, <c>a.flat[i]</c>).
+        /// </summary>
+        /// <param name="index">The flat index; a negative one counts from the end of the array.</param>
+        /// <returns>The element, boxed.</returns>
+        /// <exception cref="IndexError"><paramref name="index"/> is outside the array (NumPy's item texts).</exception>
+        /// <exception cref="NotSupportedException">The storage has no element type.</exception>
+        public unsafe object GetAtIndex(long index)
+        {
+            long off = _shape.TransformOffsetChecked(index);
+            return ElementAt(off);
+        }
+
+        /// <summary>
+        ///     Boxes the element at a storage offset the caller resolved itself from this storage's shape
+        ///     (<c>Shape.offset + Σ index·stride</c>, in elements) — the array printer's walk, which addresses every element
+        ///     through the strides instead of building a view per axis (parity QA-50).
+        /// </summary>
+        /// <param name="offset">The element's offset in the buffer, in elements.</param>
+        /// <returns>The element, boxed exactly as <see cref="GetAtIndex(long)"/> boxes it (a text element as its decoded
+        ///     C# value).</returns>
+        /// <exception cref="NotSupportedException">The storage has no element type.</exception>
+        /// <remarks>Unchecked: an offset that does not come from this storage's own shape reads memory outside the
+        ///     array. Only a walker that derives every offset from <c>Shape.dimensions</c> / <c>strides</c> /
+        ///     <c>offset</c> may call it.</remarks>
+        internal object ElementAtResolvedOffset(long offset) => ElementAt(offset);
+
+        /// <summary>
+        ///     Boxes the element at a resolved storage offset as the dtype's own CLR type; the shared tail of the checked
+        ///     boxing getters.
+        /// </summary>
+        /// <param name="off">The element's offset in the buffer, already checked by the caller.</param>
+        /// <returns>The element, boxed (a text element as its decoded C# value).</returns>
+        /// <exception cref="NotSupportedException">The storage has no element type.</exception>
+        private unsafe object ElementAt(long off)
         {
             switch (TypeCode)
             {
-	            // %foreach supported_dtypes,supported_dtypes_lowercase%
-	            // case NPTypeCode.#1: return *((#2*)Address + _shape.GetOffset(indices));
-	            // %
-	            // default:
-		            // throw new NotSupportedException();
-                case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.SByte: return *((sbyte*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Byte: return *((byte*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Int16: return *((short*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.UInt16: return *((ushort*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Int32: return *((int*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.UInt32: return *((uint*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Int64: return *((long*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Char: return *((char*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Half: return *((Half*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Double: return *((double*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + _shape.GetOffset(indices));
+                case NPTypeCode.Boolean: return *((bool*)Address + off);
+                case NPTypeCode.SByte: return *((sbyte*)Address + off);
+                case NPTypeCode.Byte: return *((byte*)Address + off);
+                case NPTypeCode.Int16: return *((short*)Address + off);
+                case NPTypeCode.UInt16: return *((ushort*)Address + off);
+                case NPTypeCode.Int32: return *((int*)Address + off);
+                case NPTypeCode.UInt32: return *((uint*)Address + off);
+                case NPTypeCode.Int64: return *((long*)Address + off);
+                case NPTypeCode.UInt64: return *((ulong*)Address + off);
+                case NPTypeCode.Char: return *((char*)Address + off);
+                case NPTypeCode.Half: return HalfAt((ushort*)Address + off);
+                case NPTypeCode.Double: return *((double*)Address + off);
+                case NPTypeCode.Single: return *((float*)Address + off);
+                case NPTypeCode.Decimal: return *((decimal*)Address + off);
+                case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + off);
+                // A string element decodes to its C# value through its slice: string for U, byte[] for S, string or the NA
+                // object for StringDType (the slice of either layout implements IArraySlice.GetIndex(long)).
+                case NPTypeCode.String: return InternalArray.GetIndex(off);
                 default:
                     throw new NotSupportedException();
             }
         }
 
         /// <summary>
-        ///     Retrieves value of unspecified type (will figure using <see cref="IStorage.DType"/>).
+        ///     The <see cref="Half"/> at <paramref name="p"/>, built from its 16-bit pattern — the form the boxing getters
+        ///     above return.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long array version).</param>
-        /// <returns></returns>
-        public unsafe object GetValue(params long[] indices)
-        {
-            switch (TypeCode)
-            {
-                case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.SByte: return *((sbyte*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Byte: return *((byte*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Int16: return *((short*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.UInt16: return *((ushort*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Int32: return *((int*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.UInt32: return *((uint*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Int64: return *((long*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Char: return *((char*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Half: return *((Half*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Double: return *((double*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + _shape.GetOffset(indices));
-                default:
-                    throw new NotSupportedException();
-            }
-        }
+        /// <param name="p">The element's address.</param>
+        /// <returns>The value.</returns>
+        /// <remarks>
+        ///     Boxing a <see cref="Half"/> straight from a pointer (<c>return *(Half*)p;</c> into an <see cref="object"/>)
+        ///     makes the .NET 8 runtime's tier-0 code (the first calls of a method, before tiered compilation optimizes
+        ///     it) read past the two bytes: an element that ends where mapped memory ends — a <c>frombuffer</c> over a
+        ///     caller's page, a buffer under <c>NUMSHARP_DEBUG_GUARD_PAGES=1</c> — ended the process ("Internal CLR error",
+        ///     reproduced with <c>VirtualAlloc</c>: .NET 8.0.29 crashes, .NET 10 and optimized code read two bytes). A
+        ///     <see cref="Half"/> made from a <see cref="ushort"/> read is boxed from a register, never from the memory.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe Half HalfAt(ushort* p) => BitConverter.UInt16BitsToHalf(*p);
 
-        public unsafe object GetAtIndex(long index)
-        {
-            // switch (TypeCode)
-            // {
-	            // %foreach supported_dtypes,supported_dtypes_lowercase%
-	            // case NPTypeCode.#1: return *((#2*)Address + _shape.TransformOffset(index));
-	            // %
-	            // default:
-		            // throw new NotSupportedException();
-            // }
-            switch (TypeCode)
-            {
-                case NPTypeCode.Boolean: return *((bool*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.SByte: return *((sbyte*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.Byte: return *((byte*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.Int16: return *((short*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.UInt16: return *((ushort*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.Int32: return *((int*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.UInt32: return *((uint*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.Int64: return *((long*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.UInt64: return *((ulong*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.Char: return *((char*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.Half: return *((Half*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.Double: return *((double*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.Single: return *((float*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.Decimal: return *((decimal*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + _shape.TransformOffset(index));
-                default:
-                    throw new NotSupportedException();
-            }
-        }
-
+        /// <summary>
+        ///     Reads the element at logical flat index <paramref name="index"/> (C order) as <typeparamref name="T"/>: the
+        ///     stored value for the dtype's own type, NumPy's cast of it for any other <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="T">The type to read the element as.</typeparam>
+        /// <param name="index">The flat index; a negative one counts from the end of the array.</param>
+        /// <returns>The element as <typeparamref name="T"/>.</returns>
+        /// <exception cref="IndexError"><paramref name="index"/> is outside the array (NumPy's item texts).</exception>
+        /// <exception cref="NotSupportedException">The storage has no element type.</exception>
+        /// <remarks>
+        ///     Before parity QA-12 / QA-33 this loaded <c>sizeof(T)</c> bytes at an unchecked offset (a <c>Debug.Assert</c>
+        ///     was the only type test), so a wrong <typeparamref name="T"/> or index read neighbouring elements or memory
+        ///     past the buffer in Release.
+        /// </remarks>
         [MethodImpl(OptimizeAndInline)]
         public unsafe T GetAtIndex<T>(long index) where T : unmanaged
-        {
-            Debug.Assert(typeof(T) == _dtype, $"GetAtIndex<{typeof(T).Name}> called on {_dtype.Name} array.");
-            return *((T*)Address + _shape.TransformOffset(index));
-        }
+            => ReadAs<T>(_shape.TransformOffsetChecked(index));
 
         /// <summary>
         /// Gets a sub-array based on the given indices, returning a view that shares memory.
@@ -174,13 +223,32 @@ namespace NumSharp.Backends
                 var (shape, offset) = this_shape.GetSubshape(indices);
                 // For non-broadcasted contiguous subshapes, use size (the actual data extent).
                 // Only use BufferSize when the subshape itself is broadcasted.
-                long sliceSize = shape.IsBroadcasted
+                long sliceSize = ClampToBuffer(offset, shape.IsBroadcasted
                     ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
-                    : shape.size;
-                // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
-                var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                    : shape.size);
+                // The slice below starts at the element GetSubshape names, so the view's shape starts at 0 — except for an
+                // EMPTY index list, where GetSubshape returns this shape itself with offset 0 (the slice then starts at the
+                // buffer's first element) and the shape's own offset must stay: a row of a broadcast at a non-zero offset
+                // (np.broadcast_arrays(x[:, None], x)[0][1] has stride 0 and offset 1) took its stores (`row[...] = v`,
+                // SetData) at element 0 when this offset was dropped.
+                var adjustedShape = new Shape(shape.dimensions, shape.strides, indices.Length == 0 ? shape.offset : 0, sliceSize);
+                // A sub-array of a read-only array is read-only (NumPy views inherit WRITEABLE): row 2 of a broadcast row
+                // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
+                if (!this_shape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+                // The mirror half, as Alias(Shape) applies it: a broadcast sub-array of a WRITEABLE broadcast parent
+                // (np.broadcast_arrays' results, ndarray.setflags(write: true), an np.nditer view of a reduce operand's
+                // stride-0 chunk) keeps the parent's write access — its computed read-only flag came from the broadcastness
+                // it inherited, not from a protection decision. Without it a store into such a parent (`y[...] = v`, whose
+                // copy takes this sub-array) raised "assignment destination is read-only" where NumPy writes.
+                else if (adjustedShape.IsBroadcasted && !adjustedShape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -202,6 +270,10 @@ namespace NumSharp.Backends
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -229,13 +301,32 @@ namespace NumSharp.Backends
                 var (shape, offset) = this_shape.GetSubshape(indices);
                 // For non-broadcasted contiguous subshapes, use size (the actual data extent).
                 // Only use BufferSize when the subshape itself is broadcasted.
-                long sliceSize = shape.IsBroadcasted
+                long sliceSize = ClampToBuffer(offset, shape.IsBroadcasted
                     ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
-                    : shape.size;
-                // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
-                var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                    : shape.size);
+                // The slice below starts at the element GetSubshape names, so the view's shape starts at 0 — except for an
+                // EMPTY index list, where GetSubshape returns this shape itself with offset 0 (the slice then starts at the
+                // buffer's first element) and the shape's own offset must stay: a row of a broadcast at a non-zero offset
+                // (np.broadcast_arrays(x[:, None], x)[0][1] has stride 0 and offset 1) took its stores (`row[...] = v`,
+                // SetData) at element 0 when this offset was dropped.
+                var adjustedShape = new Shape(shape.dimensions, shape.strides, indices.Length == 0 ? shape.offset : 0, sliceSize);
+                // A sub-array of a read-only array is read-only (NumPy views inherit WRITEABLE): row 2 of a broadcast row
+                // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
+                if (!this_shape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+                // The mirror half, as Alias(Shape) applies it: a broadcast sub-array of a WRITEABLE broadcast parent
+                // (np.broadcast_arrays' results, ndarray.setflags(write: true), an np.nditer view of a reduce operand's
+                // stride-0 chunk) keeps the parent's write access — its computed read-only flag came from the broadcastness
+                // it inherited, not from a protection decision. Without it a store into such a parent (`y[...] = v`, whose
+                // copy takes this sub-array) raised "assignment destination is read-only" where NumPy writes.
+                else if (adjustedShape.IsBroadcasted && !adjustedShape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -257,6 +348,10 @@ namespace NumSharp.Backends
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -309,13 +404,32 @@ namespace NumSharp.Backends
                 var (shape, offset) = this_shape.GetSubshape(longDims, ndims);
                 // For non-broadcasted contiguous subshapes, use size (the actual data extent).
                 // Only use BufferSize when the subshape itself is broadcasted.
-                long sliceSize = shape.IsBroadcasted
+                long sliceSize = ClampToBuffer(offset, shape.IsBroadcasted
                     ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
-                    : shape.size;
-                // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
-                var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                    : shape.size);
+                // The slice below starts at the element GetSubshape names, so the view's shape starts at 0 — except for an
+                // EMPTY index list, where GetSubshape returns this shape itself with offset 0 (the slice then starts at the
+                // buffer's first element) and the shape's own offset must stay: a row of a broadcast at a non-zero offset
+                // (np.broadcast_arrays(x[:, None], x)[0][1] has stride 0 and offset 1) took its stores (`row[...] = v`,
+                // SetData) at element 0 when this offset was dropped.
+                var adjustedShape = new Shape(shape.dimensions, shape.strides, ndims == 0 ? shape.offset : 0, sliceSize);
+                // A sub-array of a read-only array is read-only (NumPy views inherit WRITEABLE): row 2 of a broadcast row
+                // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
+                if (!this_shape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+                // The mirror half, as Alias(Shape) applies it: a broadcast sub-array of a WRITEABLE broadcast parent
+                // (np.broadcast_arrays' results, ndarray.setflags(write: true), an np.nditer view of a reduce operand's
+                // stride-0 chunk) keeps the parent's write access — its computed read-only flag came from the broadcastness
+                // it inherited, not from a protection decision. Without it a store into such a parent (`y[...] = v`, whose
+                // copy takes this sub-array) raised "assignment destination is read-only" where NumPy writes.
+                else if (adjustedShape.IsBroadcasted && !adjustedShape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -341,6 +455,10 @@ namespace NumSharp.Backends
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -352,7 +470,7 @@ namespace NumSharp.Backends
         /// <param name="dims">Pointer to an array of long dimension indices.</param>
         /// <param name="ndims">The number of indices in the array.</param>
         /// <returns>A new <see cref="UnmanagedStorage"/> representing the sub-array.</returns>
-        /// <seealso cref="GetData(int*)"/>
+        /// <seealso cref="GetData(int*, int)"/>
         [MethodImpl(OptimizeAndInline)]
         public unsafe UnmanagedStorage GetData(long* dims, int ndims)
         {
@@ -365,13 +483,32 @@ namespace NumSharp.Backends
                 var (shape, offset) = this_shape.GetSubshape(dims, ndims);
                 // For non-broadcasted contiguous subshapes, use size (the actual data extent).
                 // Only use BufferSize when the subshape itself is broadcasted.
-                long sliceSize = shape.IsBroadcasted
+                long sliceSize = ClampToBuffer(offset, shape.IsBroadcasted
                     ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
-                    : shape.size;
-                // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
-                var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                    : shape.size);
+                // The slice below starts at the element GetSubshape names, so the view's shape starts at 0 — except for an
+                // EMPTY index list, where GetSubshape returns this shape itself with offset 0 (the slice then starts at the
+                // buffer's first element) and the shape's own offset must stay: a row of a broadcast at a non-zero offset
+                // (np.broadcast_arrays(x[:, None], x)[0][1] has stride 0 and offset 1) took its stores (`row[...] = v`,
+                // SetData) at element 0 when this offset was dropped.
+                var adjustedShape = new Shape(shape.dimensions, shape.strides, ndims == 0 ? shape.offset : 0, sliceSize);
+                // A sub-array of a read-only array is read-only (NumPy views inherit WRITEABLE): row 2 of a broadcast row
+                // keeps no stride-0 axis, so its fresh flags would otherwise call it writeable.
+                if (!this_shape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+                // The mirror half, as Alias(Shape) applies it: a broadcast sub-array of a WRITEABLE broadcast parent
+                // (np.broadcast_arrays' results, ndarray.setflags(write: true), an np.nditer view of a reduce operand's
+                // stride-0 chunk) keeps the parent's write access — its computed read-only flag came from the broadcastness
+                // it inherited, not from a protection decision. Without it a store into such a parent (`y[...] = v`, whose
+                // copy takes this sub-array) raised "assignment destination is read-only" where NumPy writes.
+                else if (adjustedShape.IsBroadcasted && !adjustedShape.IsWriteable)
+                    adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -397,6 +534,10 @@ namespace NumSharp.Backends
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
+                // a sub-array keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -433,38 +574,38 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Get single value from internal storage as type T and cast dtype to T
+        ///     Reads the element at <paramref name="indices"/> as <typeparamref name="T"/>: the stored value for the
+        ///     dtype's own type, NumPy's cast of it (the cast <c>astype</c> runs) for any other <typeparamref name="T"/>.
         /// </summary>
-        /// <param name="indices">indices</param>
-        /// <typeparam name="T">new storage data type</typeparam>
-        /// <returns>element from internal storage</returns>
-        /// <exception cref="NullReferenceException">When <typeparamref name="T"/> does not equal to <see cref="DType"/></exception>
-        /// <remarks>If you provide less indices than there are dimensions, the rest are filled with 0.</remarks> //TODO! doc this in other similar methods
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its axis, and
+        ///     axes left out read their first element.</param>
+        /// <typeparam name="T">The type to read the element as.</typeparam>
+        /// <returns>The element as <typeparamref name="T"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's texts;
+        ///     nothing outside the array is read).</exception>
+        /// <exception cref="NotSupportedException">The storage has no element type.</exception>
+        /// <remarks>
+        ///     Before parity QA-12 / QA-33 this loaded <c>sizeof(T)</c> bytes at an unchecked offset: <c>GetValue&lt;double&gt;(1)</c>
+        ///     of a float32 array read elements 1 and 2 as one double, and a wrong coordinate read another row or memory
+        ///     outside the array in Release.
+        /// </remarks>
         public T GetValue<T>(int[] indices) where T : unmanaged
-        {
-            Debug.Assert(typeof(T) == _dtype, $"GetValue<{typeof(T).Name}> called on {_dtype.Name} array.");
-            unsafe
-            {
-                return *((T*)Address + _shape.GetOffset(indices));
-            }
-        }
+            => ReadAs<T>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Get element from internal storage as T
+        ///     Reads the element at <paramref name="indices"/> as <typeparamref name="T"/>: the stored value for the
+        ///     dtype's own type, NumPy's cast of it (the cast <c>astype</c> runs) for any other <typeparamref name="T"/>.
         /// </summary>
-        /// <param name="indices">indices</param>
-        /// <typeparam name="T">new storage data type</typeparam>
-        /// <returns>element from internal storage</returns>
-        /// <exception cref="NullReferenceException">When <typeparamref name="T"/> does not equal to <see cref="DType"/></exception>
-        /// <remarks>If you provide less indices than there are dimensions, the rest are filled with 0.</remarks>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end
+        ///     of its axis, and axes left out read their first element.</param>
+        /// <typeparam name="T">The type to read the element as.</typeparam>
+        /// <returns>The element as <typeparamref name="T"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's texts;
+        ///     nothing outside the array is read).</exception>
+        /// <exception cref="NotSupportedException">The storage has no element type.</exception>
+        /// <remarks>See <see cref="GetValue{T}(int[])"/>.</remarks>
         public T GetValue<T>(params long[] indices) where T : unmanaged
-        {
-            Debug.Assert(typeof(T) == _dtype, $"GetValue<{typeof(T).Name}> called on {_dtype.Name} array.");
-            unsafe
-            {
-                return *((T*)Address + _shape.GetOffset(indices));
-            }
-        }
+            => ReadAs<T>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
         /// Get reference to internal data storage
@@ -490,278 +631,368 @@ namespace NumSharp.Backends
         #region Direct Getters
      
         /// <summary>
-        ///     Retrieves value of type <see cref="bool"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="bool"/>: the stored value itself in a
+        ///     bool array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="bool"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public bool GetBoolean(int[] indices)
-            => _slices.Boolean[_shape.GetOffset(indices)];
+            => ReadAs<bool>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="sbyte"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="sbyte"/>: the stored value itself in a
+        ///     int8 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="sbyte"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="sbyte"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public sbyte GetSByte(int[] indices)
-            => _slices.SByte[_shape.GetOffset(indices)];
+            => ReadAs<sbyte>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="byte"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="byte"/>: the stored value itself in a
+        ///     uint8 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="byte"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="byte"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public byte GetByte(int[] indices)
-            => _slices.Byte[_shape.GetOffset(indices)];
+            => ReadAs<byte>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="short"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="short"/>: the stored value itself in a
+        ///     int16 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="short"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="short"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public short GetInt16(int[] indices)
-            => _slices.Int16[_shape.GetOffset(indices)];
+            => ReadAs<short>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="ushort"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="ushort"/>: the stored value itself in a
+        ///     uint16 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ushort"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="ushort"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public ushort GetUInt16(int[] indices)
-            => _slices.UInt16[_shape.GetOffset(indices)];
+            => ReadAs<ushort>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="int"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="int"/>: the stored value itself in a
+        ///     int32 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="int"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="int"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public int GetInt32(int[] indices)
-            => _slices.Int32[_shape.GetOffset(indices)];
+            => ReadAs<int>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="uint"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="uint"/>: the stored value itself in a
+        ///     uint32 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="uint"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="uint"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public uint GetUInt32(int[] indices)
-            => _slices.UInt32[_shape.GetOffset(indices)];
+            => ReadAs<uint>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="long"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="long"/>: the stored value itself in a
+        ///     int64 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="long"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="long"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public long GetInt64(int[] indices)
-            => _slices.Int64[_shape.GetOffset(indices)];
+            => ReadAs<long>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="ulong"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="ulong"/>: the stored value itself in a
+        ///     uint64 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ulong"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="ulong"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public ulong GetUInt64(int[] indices)
-            => _slices.UInt64[_shape.GetOffset(indices)];
+            => ReadAs<ulong>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="char"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="char"/>: the stored value itself in a
+        ///     char array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="char"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="char"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public char GetChar(int[] indices)
-            => _slices.Char[_shape.GetOffset(indices)];
+            => ReadAs<char>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="Half"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="Half"/>: the stored value itself in a
+        ///     float16 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="Half"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="Half"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public Half GetHalf(int[] indices)
-            => _slices.Half[_shape.GetOffset(indices)];
+            => ReadAs<Half>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="double"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="double"/>: the stored value itself in a
+        ///     float64 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="double"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="double"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public double GetDouble(int[] indices)
-            => _slices.Double[_shape.GetOffset(indices)];
+            => ReadAs<double>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="float"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="float"/>: the stored value itself in a
+        ///     float32 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="float"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="float"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public float GetSingle(int[] indices)
-            => _slices.Single[_shape.GetOffset(indices)];
+            => ReadAs<float>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="decimal"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="decimal"/>: the stored value itself in a
+        ///     decimal array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="decimal"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public decimal GetDecimal(int[] indices)
-            => _slices.Decimal[_shape.GetOffset(indices)];
+            => ReadAs<decimal>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="System.Numerics.Complex"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="System.Numerics.Complex"/>: the stored value itself in a
+        ///     complex128 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="System.Numerics.Complex"/></exception>
+        /// <param name="indices">One coordinate per leading axis; a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="System.Numerics.Complex"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public System.Numerics.Complex GetComplex(int[] indices)
-            => _slices.Complex[_shape.GetOffset(indices)];
+            => ReadAs<System.Numerics.Complex>(_shape.GetOffsetChecked(indices));
 
         #endregion
 
         #region Direct Getters (long[] overloads)
 
         /// <summary>
-        ///     Retrieves value of type <see cref="bool"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="bool"/>: the stored value itself in a
+        ///     bool array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="bool"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public bool GetBoolean(params long[] indices)
-            => _slices.Boolean[_shape.GetOffset(indices)];
+            => ReadAs<bool>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="sbyte"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="sbyte"/>: the stored value itself in a
+        ///     int8 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="sbyte"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="sbyte"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public sbyte GetSByte(params long[] indices)
-            => _slices.SByte[_shape.GetOffset(indices)];
+            => ReadAs<sbyte>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="byte"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="byte"/>: the stored value itself in a
+        ///     uint8 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="byte"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="byte"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public byte GetByte(params long[] indices)
-            => _slices.Byte[_shape.GetOffset(indices)];
+            => ReadAs<byte>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="short"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="short"/>: the stored value itself in a
+        ///     int16 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="short"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="short"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public short GetInt16(params long[] indices)
-            => _slices.Int16[_shape.GetOffset(indices)];
+            => ReadAs<short>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="ushort"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="ushort"/>: the stored value itself in a
+        ///     uint16 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ushort"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="ushort"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public ushort GetUInt16(params long[] indices)
-            => _slices.UInt16[_shape.GetOffset(indices)];
+            => ReadAs<ushort>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="int"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="int"/>: the stored value itself in a
+        ///     int32 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="int"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="int"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public int GetInt32(params long[] indices)
-            => _slices.Int32[_shape.GetOffset(indices)];
+            => ReadAs<int>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="uint"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="uint"/>: the stored value itself in a
+        ///     uint32 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="uint"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="uint"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public uint GetUInt32(params long[] indices)
-            => _slices.UInt32[_shape.GetOffset(indices)];
+            => ReadAs<uint>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="long"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="long"/>: the stored value itself in a
+        ///     int64 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="long"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="long"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public long GetInt64(params long[] indices)
-            => _slices.Int64[_shape.GetOffset(indices)];
+            => ReadAs<long>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="ulong"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="ulong"/>: the stored value itself in a
+        ///     uint64 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ulong"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="ulong"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public ulong GetUInt64(params long[] indices)
-            => _slices.UInt64[_shape.GetOffset(indices)];
+            => ReadAs<ulong>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="char"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="char"/>: the stored value itself in a
+        ///     char array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="char"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="char"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public char GetChar(params long[] indices)
-            => _slices.Char[_shape.GetOffset(indices)];
+            => ReadAs<char>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="Half"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="Half"/>: the stored value itself in a
+        ///     float16 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="Half"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="Half"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public Half GetHalf(params long[] indices)
-            => _slices.Half[_shape.GetOffset(indices)];
+            => ReadAs<Half>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="double"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="double"/>: the stored value itself in a
+        ///     float64 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="double"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="double"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public double GetDouble(params long[] indices)
-            => _slices.Double[_shape.GetOffset(indices)];
+            => ReadAs<double>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="float"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="float"/>: the stored value itself in a
+        ///     float32 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="float"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="float"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public float GetSingle(params long[] indices)
-            => _slices.Single[_shape.GetOffset(indices)];
+            => ReadAs<float>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="decimal"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="decimal"/>: the stored value itself in a
+        ///     decimal array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="decimal"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public decimal GetDecimal(params long[] indices)
-            => _slices.Decimal[_shape.GetOffset(indices)];
+            => ReadAs<decimal>(_shape.GetOffsetChecked(indices));
 
         /// <summary>
-        ///     Retrieves value of type <see cref="System.Numerics.Complex"/> from internal storage.
+        ///     Reads the element at <paramref name="indices"/> as a <see cref="System.Numerics.Complex"/>: the stored value itself in a
+        ///     complex128 array, NumPy's cast of it (the cast <c>astype</c> runs) in an array of any other dtype.
         /// </summary>
-        /// <param name="indices">The shape's indices to get (long version).</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="System.Numerics.Complex"/></exception>
+        /// <param name="indices">One coordinate per leading axis (long version); a negative coordinate counts from the end of its
+        ///     axis, and axes left out read their first element.</param>
+        /// <returns>The element as a <see cref="System.Numerics.Complex"/>.</returns>
+        /// <exception cref="IndexError">A coordinate outside its axis, or more coordinates than dimensions (NumPy's
+        ///     texts; nothing outside the array is read).</exception>
         public System.Numerics.Complex GetComplex(params long[] indices)
-            => _slices.Complex[_shape.GetOffset(indices)];
+            => ReadAs<System.Numerics.Complex>(_shape.GetOffsetChecked(indices));
 
         #endregion
 

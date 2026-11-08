@@ -12,12 +12,18 @@ namespace NumSharp.Backends
         public NPTypeCode ResolveUnaryReturnType(NDArray nd, NPTypeCode? @override, string ufunc = "sin")
         {
             if (!@override.HasValue)
+            {
+                // A string operand has no loop at all (NumPy's refusal), and the string lane has no computing type.
+                Strings.NDStringUfuncs.ThrowIfUnary(ufunc, nd);
                 return nd.GetTypeCode.GetComputingType();
+            }
 
             var over = @override.Value;
             if (over < NPTypeCode.Single)
                 throw new IncorrectTypeException($"No loop matching the specified signature and casting was found for ufunc {ufunc}");
 
+            // The requested float loop exists; NumPy then checks the input's cast to it, which text never passes.
+            Strings.NDStringUfuncs.ThrowIfUnary(ufunc, nd, over);
             return over;
         }
 
@@ -43,6 +49,8 @@ namespace NumSharp.Backends
                 var over = @override.Value;
                 if (over < NPTypeCode.Single)
                     throw new IncorrectTypeException($"No loop matching the specified signature and casting was found for ufunc {ufunc}");
+                // A string input cannot reach the requested loop: NumPy's input-cast text, naming the descriptor.
+                Strings.NDStringUfuncs.ThrowIfUnary(ufunc, nd, over);
                 // The input must reach the requested loop dtype by a same_kind cast (int->float is
                 // allowed, complex->real is not). Without this guard a complex input + real-float
                 // dtype= (e.g. np.exp(complex128, dtype=float64)) selected a real output buffer half
@@ -51,6 +59,9 @@ namespace NumSharp.Backends
                 ValidateUnaryInputCast(nd.GetTypeCode, over, ufunc);
                 return over;
             }
+
+            // No float-producing ufunc has a string loop: NumPy's refusal for this ufunc name.
+            Strings.NDStringUfuncs.ThrowIfUnary(ufunc, nd);
 
             switch (nd.GetTypeCode)
             {

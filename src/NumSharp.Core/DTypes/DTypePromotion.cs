@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 
 namespace NumSharp
@@ -14,9 +15,12 @@ namespace NumSharp
     ///     NEP 50 entry point where C# literals are weak and arrays — 0-d included — are strong).
     /// </summary>
     /// <remarks>
-    ///     For the storage-backed builtins the answers ARE NumSharp's frozen promotion table
-    ///     (<see cref="np._nptypemap_arr_arr"/>, consulted by <see cref="DefaultBuiltinCommonDType"/>), so every
-    ///     two-operand <c>promote_types</c> / <c>result_type</c> answer the <c>dtype_text</c> fuzz tier gates is unchanged.
+    ///     Two NumPy numeric classes promote by NumPy's own table of type numbers (<see cref="NumPyPromotionTable"/>,
+    ///     consulted by <see cref="DefaultBuiltinCommonDType"/>): its answer is a CLASS, and can be a lane-sharing C-type
+    ///     class even for two canonical classes (Windows' <c>promote(int16, uint16)</c> is the C int class <c>'i'</c>).
+    ///     Its storage lane is always the one NumSharp's frozen table (<see cref="np._nptypemap_arr_arr"/>) names — the
+    ///     table every kernel and NumSharp's own Decimal and Char still promote by — so every two-operand
+    ///     <c>promote_types</c> / <c>result_type</c> answer the <c>dtype_text</c> fuzz tier gates is unchanged.
     ///     Three things the old engine could not do come with the port: order-independent reduction of THREE OR MORE
     ///     operands (the old fold dropped every other pair, so <c>result_type(i1, i1, f8, i1)</c> was <c>int8</c>),
     ///     weak C# literals (<c>result_type(int8_array, 300)</c> is <c>int8</c>, <c>result_type(int8_array, 1.5)</c> is
@@ -35,7 +39,7 @@ namespace NumSharp
             if (ReferenceEquals(dtype1, dtype2))
                 return dtype1;
 
-            var common = dtype1.CommonDType(dtype2) ?? dtype2.CommonDType(dtype1);
+            var common = dtype1.common_dtype(dtype2) ?? dtype2.common_dtype(dtype1);
             if (common == null)
                 throw new DTypePromotionError(
                     $"The DTypes {dtype1} and {dtype2} do not have a common DType. " +
@@ -50,10 +54,21 @@ namespace NumSharp
         ///       to complex; a weak float adopts a float or complex class; a weak int adopts any numeric class (and
         ///       <c>timedelta64</c>); anything else defers (null);</description></item>
         ///       <item><description>an operand with a LARGER type number is "more generic" and must answer instead (null);</description></item>
-        ///       <item><description>otherwise the frozen promotion table decides — for the datetime classes NumPy's table row
-        ///       says <c>timedelta64</c> absorbs bool and the integers narrower than uint64, and nothing else promotes.</description></item>
+        ///       <item><description>two NumPy numeric classes take NumPy's own table by type number
+        ///       (<see cref="NumPyPromotionTable"/>): its answer is a class, and can be a lane-sharing C-type class
+        ///       (<c>longdouble</c>, <c>intc</c> on Windows, <c>longlong</c> on Linux) even for two canonical classes —
+        ///       Windows' <c>promote(int16, uint16)</c> is the C int class <c>'i'</c> — which a storage code cannot
+        ///       tell from its lane's owner;</description></item>
+        ///       <item><description>a lane-sharing class beside NumSharp's own Decimal or Char takes the storage-lane table,
+        ///       its result kept in the lane-sharing class (<see cref="LaneSharingCommonDType"/>);</description></item>
+        ///       <item><description>otherwise the frozen promotion table decides (NumSharp's Decimal and Char, which NumPy has
+        ///       no row for) — and for the datetime classes NumPy's table row says <c>timedelta64</c> absorbs bool and the
+        ///       integers narrower than uint64, and nothing else promotes.</description></item>
         ///     </list>
         /// </summary>
+        /// <param name="cls">The class whose <c>common_dtype</c> slot is called.</param>
+        /// <param name="other">The other operand's class.</param>
+        /// <returns>The common class, or null (NotImplemented) when <paramref name="other"/> must answer or no common class exists.</returns>
         internal static DTypeMeta DefaultBuiltinCommonDType(DTypeMeta cls, DTypeMeta other)
         {
             if (other is PyScalarDTypeMeta py)
@@ -70,6 +85,11 @@ namespace NumSharp
                     case PyScalarKind.Complex:
                         if (cls.Kind == 'c')
                             return cls;
+                        // NumPy lifts a real float class to the complex class of its precision: long double to
+                        // clongdouble, float64 to complex128, and float16 / float32 to complex64, which NumSharp's single
+                        // complex width carries as complex128.
+                        if (ReferenceEquals(cls, DTypeRegistry.LongDouble))
+                            return DTypeRegistry.CLongDouble;
                         if (cls.Kind == 'f')
                             return DTypeRegistry.Complex128; // NumSharp's single complex width
                         break;
@@ -86,13 +106,30 @@ namespace NumSharp
                 return null;
             }
 
-            if (other.TypeNum > cls.TypeNum)
+            if (other.type_num > cls.type_num)
             {
                 /*
                  * Let the more generic (larger type number) DType handle this
                  * (note that half is after all others, which works out here.)
                  */
                 return null;
+            }
+
+            // Two NumPy numeric classes promote by NumPy's own table of type numbers, whose answer can be a C-type class
+            // even for two canonical classes (Windows' promote(int16, uint16) is the C int class 'i', int32's lane but not
+            // its 'l' class) — a storage code cannot tell those apart. A lane-sharing class beside NumSharp's own Decimal
+            // or Char has no NumPy row and takes the storage-lane table, kept in its own class.
+            if (cls is LegacyBuiltinDTypeMeta a && other is LegacyBuiltinDTypeMeta b)
+            {
+                if (a.IsNumPyNumeric && b.IsNumPyNumeric)
+                {
+                    int byTypeNumber = NumPyPromotionTable.Promote(a.type_num, b.type_num);
+                    // complex64 (14) has no NumSharp class: NumPy's table names it only beside float16 / float32 with a
+                    // complex64 operand, which NumSharp never has, so a -1 or an unregistered number is NotImplemented.
+                    return byTypeNumber < 0 ? null : LegacyClasses.ByTypeNum[byTypeNumber];
+                }
+                if (!a.OwnsTypeCode || !b.OwnsTypeCode)
+                    return LaneSharingCommonDType(a, b);
             }
 
             if (cls.HasStorage && other.HasStorage
@@ -108,12 +145,54 @@ namespace NumSharp
                  * timedelta64 — except a 64-bit unsigned one — so those pairs promote to timedelta64; datetime64
                  * promotes with nothing numeric.
                  */
-                if (dtm.IsTimedelta && other.IsLegacy && other.IsNumeric
+                if (dtm.IsTimedelta && other._legacy && other._is_numeric
                     && (other.Kind == 'b' || other.Kind == 'i' || (other.Kind == 'u' && other.ItemSize < 8)))
                     return cls;
             }
 
             return null;
+        }
+
+        /// <summary>
+        ///     The builtin classes by NumPy type number (0 … 23), read by the promotion of two NumPy numeric classes. A
+        ///     nested class so the array is built on the first promotion — after <see cref="DTypeRegistry"/> registered
+        ///     every builtin, which it does once and for good (a user class takes a number of the user range) — and never
+        ///     during the registry's own initialisation.
+        /// </summary>
+        private static class LegacyClasses
+        {
+            /// <summary><c>ByTypeNum[n]</c> is <see cref="DTypeRegistry.FromTypeNum"/>(<c>n</c>), or null for a number without a NumSharp class (complex64, object, void).</summary>
+            internal static readonly DTypeMeta[] ByTypeNum = Build();
+
+            /// <summary>Builds <see cref="ByTypeNum"/> from the registry.</summary>
+            /// <returns>The array, one entry per legacy type number.</returns>
+            private static DTypeMeta[] Build()
+            {
+                var classes = new DTypeMeta[NumPyPromotionTable.NTypesLegacy];
+                for (int typeNum = 0; typeNum < classes.Length; typeNum++)
+                    classes[typeNum] = DTypeRegistry.FromTypeNum(typeNum);
+                return classes;
+            }
+        }
+
+        /// <summary>
+        ///     The common class of a lane-sharing C-type class and one of NumSharp's own classes NumPy has no row for
+        ///     (Decimal, Char): the storage-lane table, with a result in the lane-sharing class's lane kept as that class
+        ///     (<c>promote(char, intc)</c> is <c>intc</c>, as <c>promote(uint16, intc)</c> is in NumPy). Two NumPy numeric
+        ///     classes never come here: NumPy's own table by type number answers them first.
+        /// </summary>
+        /// <param name="cls">The class whose <c>common_dtype</c> is asked (its type number is not smaller than <paramref name="other"/>'s).</param>
+        /// <param name="other">The other class.</param>
+        /// <returns>The common class, or null (NotImplemented) when the lane table has none.</returns>
+        private static DTypeMeta LaneSharingCommonDType(LegacyBuiltinDTypeMeta cls, LegacyBuiltinDTypeMeta other)
+        {
+            if (!np._nptypemap_arr_arr.TryGetValue((cls.TypeCode, other.TypeCode), out var lane))
+                return null;
+            if (!cls.OwnsTypeCode && cls.TypeCode == lane)
+                return cls;
+            if (!other.OwnsTypeCode && other.TypeCode == lane)
+                return other;
+            return DTypeRegistry.FromTypeCode(lane);
         }
 
         /// <summary>
@@ -139,7 +218,7 @@ namespace NumSharp
                 }
                 else
                 {
-                    res = dtypes[low].CommonDType(dtypes[high]);
+                    res = dtypes[low].common_dtype(dtypes[high]);
                     notImplemented = res == null;
                 }
 
@@ -214,7 +293,7 @@ namespace NumSharp
                  * a higher category). We assume that the result is not in a lower
                  * category.
                  */
-                var promotion = mainDType.CommonDType(dtypes[i]);
+                var promotion = mainDType.common_dtype(dtypes[i]);
                 if (promotion == null)
                 {
                     throw new DTypePromotionError(
@@ -239,26 +318,37 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>PyArray_PromoteTypes</c>: the smallest descriptor both inputs cast to safely. An identical
-        ///     native legacy input is returned as is (metadata preserved); otherwise the common CLASS decides — a
-        ///     non-parametric class yields its default descriptor, a parametric one casts both inputs to itself
+        ///     NumPy's <c>PyArray_PromoteTypes</c>: the smallest descriptor both inputs cast to safely. The SAME native
+        ///     legacy descriptor object passed twice is returned as is (metadata and an explicit byte order preserved);
+        ///     otherwise the common CLASS decides — a non-parametric class yields its default descriptor (the singleton:
+        ///     metadata and an explicit host byte order are dropped), a parametric one casts both inputs to itself
         ///     (<see cref="CastDescrToDType"/>) and takes their <c>common_instance</c>.
         /// </summary>
+        /// <param name="type1">The first descriptor.</param>
+        /// <param name="type2">The second descriptor.</param>
+        /// <returns>The promoted descriptor.</returns>
+        /// <exception cref="ArgumentNullException">Either descriptor is null.</exception>
+        /// <exception cref="DTypePromotionError">The two classes have no common class.</exception>
+        /// <exception cref="TypeError">A parametric common class cannot represent an input, or the units have no common divisor.</exception>
         public static DType PromoteTypes(DType type1, DType type2)
         {
             if (type1 == null) throw new ArgumentNullException(nameof(type1));
             if (type2 == null) throw new ArgumentNullException(nameof(type2));
 
             /* Fast path for identical inputs (NOTE: This path preserves metadata!) */
-            if (type1.Equals(type2) && type1.Meta.IsLegacy && type1.isnative)
+            // NumPy tests POINTER identity (`type1 == type2`), not equality: two equal descriptors that are different
+            // objects (a copy, one with metadata, one with an explicit host byte order) take the common-class path and
+            // come back as the singleton, so np.promote_types(np.dtype('f8').newbyteorder('<'), np.dtype('f8')) is
+            // dtype('float64'), isbuiltin 1.
+            if (ReferenceEquals(type1, type2) && type1.Meta._legacy && type1.isnative)
                 return type1;
 
             var commonDType = CommonDType(type1.Meta, type2.Meta);
 
-            if (!commonDType.IsParametric)
+            if (!commonDType._parametric)
             {
                 /* Note that this path loses all metadata */
-                return commonDType.DefaultDescr();
+                return commonDType.default_descr();
             }
 
             /* Cast the input types to the common DType if necessary */
@@ -269,7 +359,57 @@ namespace NumSharp
              * And find the common instance of the two inputs
              * NOTE: Common instance preserves metadata (normally and of one input)
              */
-            return commonDType.CommonInstance(d1, d2);
+            return commonDType.common_instance(d1, d2);
+        }
+
+        /// <summary>
+        ///     <see cref="PromoteTypes(DType, DType)"/> of two storage lanes: the lane of the promoted descriptor, or the lane
+        ///     itself when both are the same. The type-code form of <c>np.promote_types</c> and of <c>np.result_type</c> of
+        ///     two types, and what engine code that resolves a loop over type codes calls (a call into the np.* facade from
+        ///     the engine is what the layering ratchet R2 refuses).
+        /// </summary>
+        /// <param name="type1">The first lane.</param>
+        /// <param name="type2">The second lane.</param>
+        /// <returns>The promoted lane; <paramref name="type1"/> when the lanes are equal.</returns>
+        /// <exception cref="DTypePromotionError">The two classes have no common class.</exception>
+        /// <exception cref="NotSupportedException">The lanes differ and one is the string lane
+        ///     (<see cref="NPTypeCode.String"/>), which carries neither the string class nor the width
+        ///     (<see cref="DType.From(NPTypeCode)"/>'s refusal).</exception>
+        /// <remarks>
+        ///     Equal lanes return at once, without the descriptors: the promotion of a builtin class with itself is that
+        ///     class, so the answer is the same and the call is a comparison. Only the LANE comes back, so whatever the
+        ///     promoted descriptor carries beyond its lane is dropped (a lane-sharing C-type class: Windows NumPy promotes
+        ///     int16 with uint16 to the C int class <c>'i'</c>, whose lane is int32). Callers that need the descriptor use the
+        ///     <see cref="DType"/> form.
+        /// </remarks>
+        internal static NPTypeCode PromoteTypes(NPTypeCode type1, NPTypeCode type2)
+            => type1 == type2 ? type1 : PromoteTypes(DType.From(type1), DType.From(type2)).GetTypeCode();
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_AdaptDescriptorToArray(arr, NULL, descr)</c> (<c>array_coercion.c</c>): the descriptor an
+        ///     array is cast, iterated or viewed with when <paramref name="requested"/> is asked for. A sized descriptor is
+        ///     used as given; an unsized string descriptor (<c>'S'</c> / <c>'U'</c>, NumPy's legacy parametric instance
+        ///     standing for its class) becomes the instance a cast from the array's descriptor resolves to
+        ///     (<see cref="CastDescrToDType"/>): <c>'U'</c> over <c>&lt;U3</c> stays <c>&lt;U3</c>, over <c>|S3</c> is
+        ///     <c>&lt;U3</c>, over int64 is <c>&lt;U21</c>.
+        /// </summary>
+        /// <param name="arrayDescr">The array's descriptor.</param>
+        /// <param name="requested">The requested descriptor.</param>
+        /// <returns><paramref name="requested"/> itself, or the instance the cast from <paramref name="arrayDescr"/> to its
+        ///     class resolves.</returns>
+        /// <exception cref="TypeError">No cast exists from the array's class to the requested one (<c>cannot cast dtype %S
+        ///     to %S.</c>).</exception>
+        /// <remarks>
+        ///     One function for every caller that adapts a request to an array: <c>astype</c>, np.nditer's <c>op_dtypes</c>
+        ///     and numpy.ma's <c>astype</c>. It replaces two identical copies (np.nditer's own and the string astype's,
+        ///     which numpy.ma called).
+        /// </remarks>
+        internal static DType AdaptDescriptorToArray(DType arrayDescr, DType requested)
+        {
+            // descr_is_legacy_parametric_instance: an unsized flexible descriptor stands for its class.
+            if (requested.itemsize == 0 && requested.Meta is StringDTypeMeta)
+                return CastDescrToDType(arrayDescr, requested.Meta);
+            return requested;
         }
 
         /// <summary>
@@ -287,13 +427,13 @@ namespace NumSharp
 
             if (ReferenceEquals(descr.Meta, givenDType))
                 return descr;
-            if (!givenDType.IsParametric)
+            if (!givenDType._parametric)
             {
                 /*
                  * Don't actually do anything, the default is always the result
                  * of any cast.
                  */
-                return givenDType.DefaultDescr();
+                return givenDType.default_descr();
             }
 
             var impl = descr.Meta.GetCastingImpl(givenDType);
@@ -304,7 +444,7 @@ namespace NumSharp
             var loop = new DType[2];
             try
             {
-                impl.ResolveDescriptors(given, loop, out _);
+                impl.resolve_descriptors(given, loop, out _);
             }
             catch (TypeError e)
             {
@@ -326,15 +466,15 @@ namespace NumSharp
             var result = CastDescrToDType(descrs[0], dtype);
             if (descrs.Count == 1)
                 return result;
-            if (!dtype.IsParametric)
+            if (!dtype._parametric)
             {
                 /* Note that this "fast" path loses all metadata */
-                return dtype.DefaultDescr();
+                return dtype.default_descr();
             }
             for (int i = 1; i < descrs.Count; i++)
             {
                 var curr = CastDescrToDType(descrs[i], dtype);
-                result = dtype.CommonInstance(result, curr);
+                result = dtype.common_instance(result, curr);
             }
             return result;
         }
@@ -346,10 +486,15 @@ namespace NumSharp
         ///     <c>decimal</c> is STRONG (contributes its dtype), while a C# integer, <c>float</c>/<c>double</c> or
         ///     <see cref="Complex"/> literal is WEAK — it contributes only its NEP 50 class (<c>_PyLongDType</c>,
         ///     <c>_PyFloatDType</c>, <c>_PyComplexDType</c>) and no width, so <c>result_type(int8_array, 300)</c> is
-        ///     <c>int8</c>. A <see cref="DTypeMeta"/> operand contributes the class alone.
+        ///     <c>int8</c>. A <see cref="DTypeMeta"/> operand contributes the class alone, and a null operand is NumPy's
+        ///     <c>None</c>: the strong float64 descriptor (<c>np.result_type(None, np.int8)</c> is float64).
         /// </summary>
+        /// <param name="arraysAndDtypes">The operands, classified by <see cref="ClassifyOperand"/>.</param>
+        /// <returns>The result descriptor.</returns>
         /// <exception cref="ValueError"><c>at least one array or dtype is required</c>.</exception>
         /// <exception cref="DTypePromotionError">No common dtype exists.</exception>
+        /// <exception cref="TypeError">An operand that is no dtype, or a dtype string NumPy cannot parse (see <see cref="ClassifyOperand"/>).</exception>
+        /// <exception cref="NotSupportedException">A dtype string or <see cref="Type"/> naming a dtype NumSharp has no class for.</exception>
         public static DType ResultType(params object[] arraysAndDtypes)
         {
             if (arraysAndDtypes == null || arraysAndDtypes.Length == 0)
@@ -358,32 +503,39 @@ namespace NumSharp
             int n = arraysAndDtypes.Length;
             var allDTypes = new DTypeMeta[n];
             var allDescriptors = new DType[n];
+            // The operands are promoted in the order given: NumPy's PyArray_ResultType takes its descriptors first and its
+            // arrays after, so a caller standing in for one of NumPy's calls passes them in that call's order (the public
+            // np.result_type sorts its arguments the way array_result_type does: InArrayResultTypeOrder).
             for (int i = 0; i < n; i++)
                 ClassifyOperand(arraysAndDtypes[i], out allDTypes[i], out allDescriptors[i]);
 
             if (n == 1)
             {
                 /* If the input is a single value, skip promotion. */
-                return allDescriptors[0] != null ? allDTypes[0].EnsureCanonical(allDescriptors[0]) : allDTypes[0].DefaultDescr();
+                // NumPy's lone operand is `PyArray_DTYPE(np.asarray(obj))`: a literal is discovered by value (a C# ulong
+                // past int64 is uint64, as 2**63 is in NumPy), and a class operand stands for its default descriptor.
+                return allDescriptors[0] != null
+                    ? allDTypes[0].ensure_canonical(allDescriptors[0])
+                    : allDTypes[0].discover_descr_from_pyobject(arraysAndDtypes[0]);
             }
 
             var commonDType = PromoteDTypeSequence(allDTypes);
 
-            if (commonDType.IsAbstract)
+            if (commonDType._abstract)
             {
                 /* (ab)use default descriptor to define a default */
-                commonDType = commonDType.DefaultDescr().Meta;
+                commonDType = commonDType.default_descr().Meta;
             }
 
             DType result = null;
-            if (commonDType.IsParametric)
+            if (commonDType._parametric)
             {
                 for (int i = 0; i < n; i++)
                 {
                     if (allDescriptors[i] == null)
                         continue; /* originally a python scalar/literal */
                     var curr = CastDescrToDType(allDescriptors[i], commonDType);
-                    result = result == null ? curr : commonDType.CommonInstance(result, curr);
+                    result = result == null ? curr : commonDType.common_instance(result, curr);
                 }
             }
 
@@ -391,18 +543,73 @@ namespace NumSharp
              * If the DType is not parametric, or all were weak scalars,
              * a result may not yet be set.
              */
-            return result ?? commonDType.DefaultDescr();
+            return result ?? commonDType.default_descr();
+        }
+
+        /// <summary>
+        ///     Whether a <c>result_type</c> operand is a DESCRIPTOR in NumPy's split (<c>array_result_type</c>): a dtype, a
+        ///     scalar type, a type code or a dtype string, or a concrete DType class — as opposed to an array, a NumPy scalar
+        ///     or a Python scalar (C# literals and <c>bool</c> / <c>char</c> / <c>Half</c> / <c>decimal</c> values), and the
+        ///     abstract classes those stand for.
+        /// </summary>
+        /// <param name="operand">The operand (null counts as an array, whose classification then refuses it).</param>
+        /// <returns>True for a descriptor operand, which NumPy promotes before every array.</returns>
+        private static bool IsDescriptorOperand(object operand)
+            => operand is DType or NPTypeCode or Type or string || operand is DTypeMeta { _abstract: false };
+
+        /// <summary>
+        ///     NumPy's <c>array_result_type</c> argument split: the descriptors (dtypes, scalar types, type codes, dtype
+        ///     strings, concrete DType classes) first, then the arrays and scalars, each group in call order — the order
+        ///     <c>PyArray_ResultType</c> promotes them in.
+        /// </summary>
+        /// <param name="arraysAndDtypes">The arguments of a <c>np.result_type</c> call.</param>
+        /// <returns>A new array of the same operands in NumPy's promotion order.</returns>
+        /// <remarks>The order never changes a result (the main DType makes the promotion order-independent and
+        ///     <c>common_instance</c> is commutative), but it decides which DType a refusal names:
+        ///     <c>np.result_type(text_array, np.float64)</c> is <c>The DType &lt;class 'numpy.dtypes.Float64DType'&gt; could not
+        ///     be promoted by &lt;class 'numpy.dtypes.StringDType'&gt;. ... The full list of DTypes is: (&lt;class
+        ///     'numpy.dtypes.Float64DType'&gt;, &lt;class 'numpy.dtypes.StringDType'&gt;)</c>.</remarks>
+        internal static object[] InArrayResultTypeOrder(object[] arraysAndDtypes)
+        {
+            var ordered = new object[arraysAndDtypes.Length];
+            int k = 0;
+            foreach (var operand in arraysAndDtypes)
+                if (IsDescriptorOperand(operand))
+                    ordered[k++] = operand;
+            foreach (var operand in arraysAndDtypes)
+                if (!IsDescriptorOperand(operand))
+                    ordered[k++] = operand;
+            return ordered;
         }
 
         /// <summary>
         ///     Sorts one <c>result_type</c> operand into (class, descriptor-or-null): the NEP 50 weak/strong rule for C#.
         /// </summary>
+        /// <param name="operand">
+        ///     The operand: an <see cref="NDArray"/>, <see cref="DType"/>, <see cref="DTypeMeta"/>, <see cref="NPTypeCode"/>,
+        ///     <see cref="Type"/>, dtype string, a C# scalar, or null — NumPy's <c>None</c>, the strong float64 descriptor
+        ///     (<see cref="np.DefaultTypeDescr"/>).
+        /// </param>
+        /// <param name="meta">The operand's DType class (an abstract <c>_Py*DType</c> class for a weak literal).</param>
+        /// <param name="descr">The operand's descriptor when it is strong; null when it is a weak literal or a bare class.</param>
+        /// <exception cref="TypeError">
+        ///     An object that is no dtype (<c>Cannot interpret '…' as a data type</c>), a dtype string NumPy cannot parse
+        ///     (<c>data type 'x' not understood</c>), or a malformed datetime unit in a dtype string.
+        /// </exception>
+        /// <exception cref="NotSupportedException">A dtype string or <see cref="Type"/> naming a dtype NumSharp has no class for.</exception>
+        /// <exception cref="ValueError">A datetime divisor in a dtype string that is not a multiple of a lower unit.</exception>
+        /// <exception cref="ArgumentException"><see cref="NPTypeCode.Empty"/>, which has no class.</exception>
         internal static void ClassifyOperand(object operand, out DTypeMeta meta, out DType descr)
         {
             switch (operand)
             {
                 case null:
-                    throw new ArgumentNullException(nameof(operand), "result_type operands cannot be null");
+                    // NumPy's array_result_type converts an operand that is neither an array nor a scalar with
+                    // PyArray_DescrConverter, whose None is the default float64 descriptor: a STRONG operand
+                    // (np.result_type(None, np.int8) is float64).
+                    descr = np.DefaultTypeDescr;
+                    meta = descr.Meta;
+                    return;
                 case DType d:
                     meta = d.Meta;
                     descr = d;
@@ -412,7 +619,9 @@ namespace NumSharp
                     descr = null;
                     return;
                 case NDArray arr:
-                    descr = DType.From(arr.typecode);
+                    // The array's own descriptor: a fixed-width string's width lives there (its lane, NPTypeCode.String,
+                    // names no dtype); for the numeric lanes it is the class singleton.
+                    descr = arr.dtype;
                     meta = descr.Meta;
                     return;
                 case NPTypeCode tc:
@@ -464,7 +673,7 @@ namespace NumSharp
                     descr = null;
                     return;
                 default:
-                    throw new TypeError($"Cannot interpret '{operand}' as a data type");
+                    throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"Cannot interpret '{operand}' as a data type"));
             }
         }
     }

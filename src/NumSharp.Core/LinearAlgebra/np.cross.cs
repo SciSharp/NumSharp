@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public static partial class np
@@ -39,111 +41,24 @@ namespace NumSharp
         /// <exception cref="ValueError">
         ///     When either input has zero dimensions, or a vector's length is neither 2 nor 3.
         /// </exception>
-        /// <exception cref="AxisError">When an axis is out of bounds for its operand.</exception>
+        /// <exception cref="IncorrectShapeException">The leading axes do not broadcast: NumPy's <c>np.broadcast</c> text
+        ///     (<c>shape mismatch: objects cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (2,)
+        ///     and arg 1 with shape (3,).</c>), raised before the dtype promotion.</exception>
+        /// <exception cref="AxisError">When an axis is out of bounds for its operand (<c>axisc</c> against the result's
+        ///     rank, checked right after the broadcast).</exception>
+        /// <exception cref="TypeError">A text operand: NumPy multiplies the components in the promoted dtype, which has no
+        ///     string loop (checked after the shape checks).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        /// </remarks>
         [NDScoped]
         public static NDArray cross(NDArray a, NDArray b, int axisa = -1, int axisb = -1, int axisc = -1,
             int? axis = null)
         {
-            if (axis is not null)
-                axisa = axisb = axisc = axis.Value;
-
-            if (a.ndim < 1 || b.ndim < 1)
-                throw new ValueError("At least one array has zero dimension");
-
-            // Check axisa and axisb are within bounds, then move the working axis to the end.
-            int normA = NormalizeCrossAxis(axisa, a.ndim, "axisa");
-            int normB = NormalizeCrossAxis(axisb, b.ndim, "axisb");
-            a = moveaxis(a, normA, -1);
-            b = moveaxis(b, normB, -1);
-
-            long aLen = a.shape[a.ndim - 1];
-            long bLen = b.shape[b.ndim - 1];
-            if ((aLen != 2 && aLen != 3) || (bLen != 2 && bLen != 3))
-                throw new ValueError(
-                    "incompatible dimensions for cross product\n(dimension must be 2 or 3)");
-            // NumPy warns on 2-vectors (deprecated 2.0); NumSharp does not model warnings.
-
-            // recast both operands to the promoted dtype, exactly as NumPy does, so every
-            // intermediate product/difference runs in that dtype (integer inputs stay integer, etc.).
-            NPTypeCode dtype = promote_types(a.typecode, b.typecode);
-            a = a.astype(dtype);
-            b = b.astype(dtype);
-
-            // Component slices along the (now last) axis. A 2-vector has no [..., 2] component; its
-            // contribution to the formula is zero, reproduced by NumPy's branch structure below.
-            NDArray a0 = a["..., 0"], a1 = a["..., 1"];
-            NDArray b0 = b["..., 0"], b1 = b["..., 1"];
-
-            if (aLen == 2)
-            {
-                if (bLen == 2)
-                    // both 2-D: only the z-component, returned as a scalar (per leading position).
-                    return subtract(multiply(a0, b1), multiply(a1, b0));
-
-                // a is 2-D (a2 == 0), b is 3-D.
-                NDArray b2 = b["..., 2"];
-                return StackCross(
-                    multiply(a1, b2),                              // a1*b2 - 0
-                    negative(multiply(a0, b2)),                    // 0 - a0*b2
-                    subtract(multiply(a0, b1), multiply(a1, b0)),  // a0*b1 - a1*b0
-                    axisc);
-            }
-
-            {
-                // a is 3-D.
-                NDArray a2 = a["..., 2"];
-                if (bLen == 3)
-                {
-                    NDArray b2 = b["..., 2"];
-                    return StackCross(
-                        subtract(multiply(a1, b2), multiply(a2, b1)),
-                        subtract(multiply(a2, b0), multiply(a0, b2)),
-                        subtract(multiply(a0, b1), multiply(a1, b0)),
-                        axisc);
-                }
-
-                // a is 3-D, b is 2-D (b2 == 0).
-                return StackCross(
-                    negative(multiply(a2, b1)),                    // 0 - a2*b1
-                    multiply(a2, b0),                              // a2*b0 - 0
-                    subtract(multiply(a0, b1), multiply(a1, b0)),  // a0*b1 - a1*b0
-                    axisc);
-            }
-        }
-
-        /// <summary>
-        ///     Assembles the three 3-vector components into an array whose component axis lands at
-        ///     <paramref name="axisc"/>. Each component shares the broadcast leading shape, so the
-        ///     component axis is built at the END (via <see cref="expand_dims"/> + <see cref="concatenate"/>,
-        ///     NOT <c>np.stack</c>, whose <c>atleast_1d</c> would turn 0-d components into <c>(3,1)</c>)
-        ///     and then moved to <paramref name="axisc"/>.
-        /// </summary>
-        [NDScopedCovered] // only caller: [NDScoped] np.cross (the expand_dims wrappers + pre-moveaxis stack are scope-reclaimed)
-        private static NDArray StackCross(NDArray cp0, NDArray cp1, NDArray cp2, int axisc)
-        {
-            int outNdim = cp0.ndim + 1;                         // len(broadcast_shape + (3,))
-            int normC = NormalizeCrossAxis(axisc, outNdim, "axisc");
-
-            var stacked = concatenate(new[]
-            {
-                expand_dims(cp0, -1),
-                expand_dims(cp1, -1),
-                expand_dims(cp2, -1)
-            }, -1);
-            return moveaxis(stacked, -1, normC);
-        }
-
-        /// <summary>
-        ///     NumPy's <c>normalize_axis_index(axis, ndim, msg_prefix)</c>: normalizes a negative axis
-        ///     and, on an out-of-range value, raises <see cref="AxisError"/> reporting the ORIGINAL
-        ///     axis with the operand-naming prefix (<c>axisa</c>/<c>axisb</c>/<c>axisc</c>).
-        /// </summary>
-        private static int NormalizeCrossAxis(int axis, int ndim, string prefix)
-        {
-            int resolved = axis < 0 ? axis + ndim : axis;
-            if (resolved < 0 || resolved >= ndim)
-                throw new AxisError($"{prefix}: axis {axis} is out of bounds for array of dimension {ndim}");
-            return resolved;
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Cross(a, b, axisa, axisb, axisc, axis);
         }
     }
 }

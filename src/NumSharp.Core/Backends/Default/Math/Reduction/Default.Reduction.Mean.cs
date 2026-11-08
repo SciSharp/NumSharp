@@ -6,63 +6,178 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
+        /// <summary>
+        ///     <c>np.mean</c> / <c>ndarray.mean</c>: NumPy's <c>_methods._mean</c> — the add reduction (identity-seeded, see
+        ///     <see cref="ReduceAdd"/>) divided by the count of the reduced elements. A mean of only negative zeros is
+        ///     therefore +0.0, and a complex mean divides with NumPy's complex loop (Smith's algorithm with the divisor
+        ///     <c>n+0j</c>), so an infinite or NaN part poisons the other one even for a single element.
+        /// </summary>
+        /// <param name="arr">The array to average; any dtype, any layout.</param>
+        /// <param name="axis_">The axis to reduce, or null for every axis. Unlike np.sum, a 0-d array takes no axis
+        /// (np.mean normalizes it against rank 0 and raises).</param>
+        /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
+        /// <param name="dtype">The dtype the sum is computed in and the mean returned in; null selects float64 for bool /
+        /// integers / char and the input's own dtype for float16 / float32 / float64 / complex128 / decimal.</param>
+        /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape, or null for a fresh result:
+        /// <c>_mean</c> with an out (<see cref="MeanIntoOut"/>) — the sum stored into it, then divided in place, both with an
+        /// unsafe cast.</param>
+        /// <param name="where">NumPy's <c>where=</c> mask, or null. A mask (anything but the C# <c>true</c> literal, NumPy's
+        /// <c>where=True</c>) takes <c>_mean</c>'s masked statements (<see cref="MeanWhereNumPy"/>): per-output counts, the
+        /// masked sum, the division.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise the mean: a read-only 0-d scalar for a full reduction
+        /// without keepdims, a fresh array else.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range (every axis is, for a 0-d input without a
+        /// mask).</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape (the reduce
+        /// prologue's texts).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input, or
+        /// <paramref name="where"/> does not broadcast to its shape.</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
+        /// <exception cref="TypeError">Text NumPy's loop resolution refuses (a text out has no division loop).</exception>
+        public override NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+            NDArray @where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            // where=: _mean's masked statements. NumPy tests `where is True`, so only the C# true literal is no mask; an
+            // explicit 0-d true array is a mask (the same values, ufunc.reduce's axis rule).
+            if (IsPythonTrueMask(@where))
+                @where = null;
+            if (@where is not null)
+                return MeanWhereNumPy(arr, axis_, keepdims, dtype, @out, @where);
+
+            // out=: _mean with an out argument stores the SUM into out and divides out in place (MeanIntoOut), a route of its
+            // own; the plain call below allocates its result.
+            if (@out is not null)
+                return MeanIntoOut(arr, axis_, keepdims, dtype, @out);
+
+            // StringDType: _mean computes the sum (umr_sum, with its loop's checks and NA rules) and then meets NumPy's
+            // division of what it holds (an ndarray, or the 0-d sum's Python object): NDVStringStatistics.Mean.
+            if (Strings.NDStringUfuncs.VStringReduces("mean", arr, axis_, dtype))
+                return Strings.NDVStringStatistics.Mean("mean", arr, Strings.NDStringUfuncs.ReducedAxes(arr, axis_), keepdims, dtype);
+            // Fixed-width text, or a string dtype= request: NumPy's mean checks its arguments first (the axis, and the dtype=
+            // class where NumPy reads it), then refuses with its verbatim text.
+            Strings.NDStringUfuncs.ThrowIfReduce("mean", arr, axis_, dtype);
+            NPTypeCode? typeCode = UfuncLoopCode(dtype);
             var shape = arr.Shape;
+            // np.mean's result dtype: dtype=, else float64 for bool / integers / char, the input's own otherwise (NumPy
+            // computes a float16 mean through a float32 sum and returns float16).
+            var meanType = typeCode ?? arr.GetTypeCode.GetComputingType();
 
             if (shape.IsEmpty)
-                return NDArray.Scalar(double.NaN);
+                return NewScalar(double.NaN);
+
+            var inT = arr.GetTypeCode;
+            // Decimal (no NumPy dtype) keeps the routes below.
+            bool portable = inT != NPTypeCode.Decimal && meanType != NPTypeCode.Decimal;
+
+            // An integer or bool loop (only through dtype=) is _mean statement for statement on every shape: the sum in the
+            // loop (wrapping, or logical OR for bool), the float64 quotient, NumPy's unsafe cast back (an empty slice's
+            // 0 / 0 = NaN becomes INT_MIN, or True). The routes below assumed a float result: an empty input returned a
+            // float64 NaN or threw InvalidCastException, a flat sum did not wrap, an axis sum read every element as a
+            // double. A char loop (NumSharp's, reachable only through dtype=) is the uint16 loop of the oracle's proxy,
+            // whose sum ReduceAdd runs (ReduceInCharLoop): the flat char mean summed without wrapping before (21823 for
+            // np.mean([[3, 300, 65535], [100, 2, 65000]], dtype=uint16), NumPy's is 10900).
+            if (portable && (meanType.IsInteger() || meanType == NPTypeCode.Boolean || meanType == NPTypeCode.Char))
+                return MeanLikeNumPy(arr, MeanAxis(axis_, shape.NDim), keepdims, meanType, float16Result: false);
 
             if (shape.size == 0)
             {
+                // NumPy: the identity-seeded sum (0) divided by a count of 0 — NaN in the mean's dtype ((nan+nanj) for
+                // complex, through CDOUBLE_divide's zero-divisor branch). A dtype that cannot hold NaN (decimal, an
+                // explicit integer dtype) keeps the float64 NaN this path always returned.
+                var nan = NaNOfMeanType(meanType, out var nanType);
                 if (axis_ == null)
                 {
-                    var r = NDArray.Scalar(double.NaN);
-                    if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
+                    var r = NewScalar(nan, nanType);
+                    if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
                     return r.MarkReductionScalar();
                 }
                 var axis = NormalizeAxis(axis_.Value, arr.ndim);
                 var resultShape = Shape.GetAxis(shape, axis);
-                var outputType = typeCode ?? NPTypeCode.Double;
+                var outputType = typeCode.HasValue ? typeCode.Value : nanType;
                 NDArray result;
                 if (shape[axis] == 0)
                 {
-                    result = np.empty(new Shape(resultShape), outputType);
-                    for (long i = 0; i < result.size; i++) result.SetAtIndex(double.NaN, i);
+                    result = NewArray(outputType, new Shape(resultShape, copy: false), false);
+                    for (long i = 0; i < result.size; i++) result.SetAtIndex(nan, i);
                 }
-                else result = np.empty(new Shape(resultShape), outputType);
+                else result = NewArray(outputType, new Shape(resultShape, copy: false), false);
                 if (keepdims)
                 {
                     var ks = new long[arr.ndim];
                     for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                    result.Storage.Reshape(new Shape(ks));
+                    result.Storage.Reshape(new Shape(ks, copy: false));
                 }
-                return result;
+                // A 1-D input along its only axis gives the 0-d NaN, which NumPy returns as a scalar like any 0-d mean
+                // (this exit returned it writeable); a no-op for an array result.
+                return result.MarkReductionScalar();
             }
 
-            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
+            // ONE element per output — a one-element input reduced flat or over its only axis: NumPy's mean is
+            // (identity + x) / 1, the identity add of np.sum and then np.mean's own division (a no-op for every real
+            // dtype; NumPy's complex division by 1+0j for complex). Never a copy of x: -0.0 becomes +0.0.
+            if (shape.size == 1 && (axis_ == null || shape.NDim <= 1))
             {
-                var val = arr.GetAtIndex(0);
-                // B2/B16: NumPy mean preserves float/complex input dtype (half→half, complex→complex).
-                // Only integer inputs promote to float64. GetComputingType() enforces this rule.
-                var outputType = typeCode ?? arr.GetTypeCode.GetComputingType();
-                var r = NDArray.Scalar(Converts.ChangeType(val, outputType));
-                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
-                return r.MarkReductionScalar();
+                if (axis_ != null)
+                {
+                    // np.mean normalizes the axis itself (_count_reduce_items), so — unlike np.sum — a 0-d input
+                    // refuses even axis 0 / -1.
+                    if (shape.NDim == 0)
+                        throw new AxisError(axis_.Value, 0);
+                    NormalizeAxis(axis_.Value, shape.NDim);
+                }
+
+                return SumOfOneElement(arr, keepdims, meanType, null, divideByCount: true);
             }
 
             if (axis_ == null)
             {
+                // The flat mean of a float loop is NumPy's _mean statement for statement: its exact add.reduce in the loop
+                // _mean picks (float64 for bool / integers, float32 for float16), then the float64 division by the count.
+                var exact = TryExactFlatMean(arr, keepdims, typeCode);
+                if (exact is not null)
+                    return exact;
+
+                // What the exact engine declines (a broadcast operand, a decimal one) keeps the elementwise fold below
+                // where that fold is NumPy's value: it sums an integer / bool / char input in its native 64-bit
+                // accumulator and divides in float64, which equals NumPy's float64 sum only in the float64 loop and only
+                // while the sum is exact in float64 (size × max |x| <= 2^53). Anything else takes _mean's statements
+                // through np.sum's own route for the operand: an int64 / uint64 input, whose native sum wraps (np.mean
+                // of a broadcast [0, 2**64-1, 127, 128, 255] gave 101.8, NumPy 3.69e18), another dtype= loop (the fold
+                // divided before converting), and decimal, whose fold returned float64 where the axis route (and the
+                // decimal oracle) keep decimal.
+                if (inT == NPTypeCode.Decimal ? meanType == NPTypeCode.Decimal
+                    : portable && IntegerMaxMagnitude(inT) >= 0
+                      && !(meanType == NPTypeCode.Double && IntegerMaxMagnitude(inT) > 0
+                           && arr.size * IntegerMaxMagnitude(inT) <= 9007199254740992.0))
+                    return MeanLikeNumPy(arr, null, keepdims, meanType, float16Result: false);
+
+                // A broadcast float or complex operand: _mean's statements as well. Its sum runs np.sum's route, which
+                // reduces a broadcast operand with NumPy's reduction iterator (one add-loop call per broadcast row, a
+                // dtype= loop's casts included); the fold below adds the elements in its own order and read the operand
+                // as its own dtype under a float16 / complex128 dtype= loop (plan api-parameter-parity finding 10, X14).
+                if (portable && shape.IsBroadcasted
+                    && (inT == NPTypeCode.Half || inT == NPTypeCode.Single || inT == NPTypeCode.Double || inT == NPTypeCode.Complex))
+                    return MeanLikeNumPy(arr, null, keepdims, typeCode ?? (inT == NPTypeCode.Half ? NPTypeCode.Single : meanType),
+                                         float16Result: MeanIsFloat16Result(arr, dtype));
+
                 var result = mean_elementwise_il(arr, typeCode);
-                var r = NDArray.Scalar(result);
-                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
+                var r = NewScalar(result);
+                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
                 return r.MarkReductionScalar();
             }
 
             var axis2 = NormalizeAxis(axis_.Value, arr.ndim);
             var inputTc = arr.GetTypeCode;
+
+            // Every float or complex loop along an axis (but a length-1 axis, whose identity add above is exact) is _mean
+            // statement for statement: np.sum's exact add reduction in the loop (a cast loop casts each element first;
+            // float16 sums in float32 by default), then the division. The kernel route below summed a cast loop's
+            // elements as doubles in one sequential pass and divided a complex sum part by part; and it walked a reversed
+            // axis in memory order, which ReduceAdd's flat engine walks in NumPy's logical order.
+            if (portable && shape[axis2] != 1)
+                return MeanLikeNumPy(arr, axis2, keepdims, typeCode ?? (inputTc == NPTypeCode.Half ? NPTypeCode.Single : meanType),
+                                     float16Result: MeanIsFloat16Result(arr, dtype));
 
             // B2: Complex mean axis is handled by the NDIter REDUCE path (ExecuteAxisReduction
             // → ExecuteAxisReductionNDIter), which runs a one-pass complex Sum kernel then
@@ -80,13 +195,187 @@ namespace NumSharp.Backends
 
             NDArray result2;
             if (shape[axis2] == 1)
-                result2 = HandleTrivialAxisReduction(arr, axis2, keepdims, outputType2, null);
+                // Every output owns one element: (identity + x) / 1, never a copy of x (a -0.0 slab is +0.0); the
+                // count division only changes a complex loop (NumPy's complex division by 1+0j).
+                result2 = SumOverLengthOneAxis(arr, axis2, keepdims, outputType2, null, divideByCount: true);
             else
                 result2 = ExecuteAxisReduction(arr, axis2, keepdims, outputType2, null, ReductionOp.Mean);
 
             if (needsCast)
-                result2 = Cast(result2, inputTc, copy: true);
+            {
+                // The double-precision intermediate is consumed by the narrowing COPY cast — leaving
+                // it undisposed stranded one pooled buffer per f16 axis mean (the sum path's twin
+                // leak, caught by UndisposedIntermediateTests via the instance oracle tier,
+                // 2026-09-18).
+                var wide2 = result2;
+                try
+                {
+                    result2 = Cast(result2, inputTc, copy: true);
+                }
+                finally
+                {
+                    wide2.Dispose();
+                }
+            }
             return result2;
+        }
+
+        /// <summary>
+        ///     The value an EMPTY mean takes: NumPy divides the identity-seeded sum (0) by a count of 0, which is NaN in
+        ///     the mean's own dtype — <c>(nan+nanj)</c> for complex128 (CDOUBLE_divide's zero-divisor branch divides each
+        ///     part by 0). A dtype without a NaN (decimal, or an explicit integer dtype) falls back to the float64 NaN this
+        ///     route always returned.
+        /// </summary>
+        /// <param name="meanType">The mean's result dtype.</param>
+        /// <param name="nanType">Receives the dtype the returned value is boxed as.</param>
+        /// <returns>The boxed NaN of <paramref name="nanType"/>.</returns>
+        private static object NaNOfMeanType(NPTypeCode meanType, out NPTypeCode nanType)
+        {
+            nanType = meanType;
+            switch (meanType)
+            {
+                case NPTypeCode.Half: return Half.NaN;
+                case NPTypeCode.Single: return float.NaN;
+                case NPTypeCode.Double: return double.NaN;
+                case NPTypeCode.Complex: return new System.Numerics.Complex(double.NaN, double.NaN);
+                default:
+                    nanType = NPTypeCode.Double;
+                    return double.NaN;
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>is_float16_result</c> of <c>_mean</c>: a float16 input without <c>dtype=</c> is summed in float32
+        ///     and its mean ends with <c>arr.dtype.type(ret)</c> — a CONVERSION, which allocates the result (for numpy.matrix
+        ///     a new matrix that owns its data) and, for a scalar, rounds the float64 quotient once into float16. Every other
+        ///     mean ends with the <c>true_divide</c> ufunc's output, which a subclass wraps as a view.
+        /// </summary>
+        /// <param name="arr">The averaged array.</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <returns>True when NumPy's mean of <paramref name="arr"/> ends with the float16 conversion.</returns>
+        /// <remarks>The class statement of numpy.matrix's <c>mean</c> reads it (an owning matrix or a wrapped view), so the
+        ///     dtype rule stays here with <c>_mean</c>'s other statements.</remarks>
+        internal static bool MeanIsFloat16Result(NDArray arr, DType dtype)
+            => dtype is null && arr.GetTypeCode == NPTypeCode.Half;
+
+        /// <summary>
+        ///     np.mean's axis check: <c>_count_reduce_items</c> normalizes the axis against the operand's rank before
+        ///     anything is summed, so a 0-d operand refuses every axis (np.sum would take 0 and -1 there).
+        /// </summary>
+        /// <param name="axis">The requested axis, negative counting from the end, or null for a flat mean.</param>
+        /// <param name="ndim">The operand's rank.</param>
+        /// <returns>The non-negative axis, or null.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand (every axis is, for a 0-d one).</exception>
+        private static int? MeanAxis(int? axis, int ndim) => axis is null ? null : NormalizeAxis(axis.Value, ndim);
+
+        /// <summary>
+        ///     NumPy's <c>_methods._mean</c>, statement for statement:
+        ///     <code>
+        ///     rcount = _count_reduce_items(arr, axis, keepdims=keepdims)     # np.intp: a STRONG int64
+        ///     ret = umr_sum(arr, axis, dtype, out, keepdims)                 # np.sum in the loop
+        ///     if isinstance(ret, ndarray):
+        ///         ret = um.true_divide(ret, rcount, out=ret, casting='unsafe')
+        ///         if is_float16_result: ret = arr.dtype.type(ret)            # float32 -> float16
+        ///     else:                                                          # a scalar
+        ///         ret = (arr.dtype if is_float16_result else ret.dtype).type(ret / rcount)
+        ///     </code>
+        /// </summary>
+        /// <param name="arr">The operand; any dtype but decimal, any layout, not the uninitialized-shape sentinel.</param>
+        /// <param name="axis">The normalized axis, or null for a flat mean.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <param name="loop">The sum's loop dtype (the <c>dtype=</c> request, or <c>_mean</c>'s default: float64 for
+        /// bool / integers / char, float32 for float16, the input's own otherwise).</param>
+        /// <param name="float16Result">NumPy's <c>is_float16_result</c>: a float16 input without <c>dtype=</c>, summed in
+        /// float32 and returned as float16.</param>
+        /// <returns>The mean in <paramref name="loop"/> (float16 for <paramref name="float16Result"/>), laid out as
+        /// np.sum lays out its result; 0-d and read-only (NumPy's scalar) when every axis is reduced without
+        /// keepdims.</returns>
+        /// <remarks>
+        ///     The two branches differ only for <paramref name="float16Result"/>: the array branch rounds the float64
+        ///     quotient into the float32 sum and then into float16 (twice), the scalar branch rounds the float64 quotient
+        ///     into float16 once. For every other loop both are the float64 quotient rounded once into the loop
+        ///     (<see cref="DivideByCountLikeNumPy(NDArray, long)"/>: complex divides by <c>rcount + 0j</c>, an integer or bool loop casts
+        ///     unsafely, so 0 / 0 is INT_MIN or True).
+        /// </remarks>
+        private NDArray MeanLikeNumPy(NDArray arr, int? axis, bool keepdims, NPTypeCode loop, bool float16Result)
+        {
+            // rcount: the reduced extent. An empty slice divides by 0 (NumPy's NaN, then the loop's cast of it).
+            long count = axis is null ? arr.size : arr.Shape.dimensions[axis.Value];
+            var ret = ReduceAdd(arr, axis, keepdims, loop, @out: null);
+            return FinishMeanLikeNumPy(ret, count, loop, float16Result);
+        }
+
+        /// <summary>
+        ///     The statements of NumPy's <c>_methods._mean</c> after its sum, shared by the single-axis mean
+        ///     (<see cref="MeanLikeNumPy"/>) and the mean over an axis set (<see cref="MeanOverAxes"/>):
+        ///     <code>
+        ///     if isinstance(ret, ndarray):
+        ///         ret = um.true_divide(ret, rcount, out=ret, casting='unsafe')
+        ///         if is_float16_result: ret = arr.dtype.type(ret)            # float32 -> float16
+        ///     else:                                                          # a scalar
+        ///         ret = (arr.dtype if is_float16_result else ret.dtype).type(ret / rcount)
+        ///     </code>
+        /// </summary>
+        /// <param name="ret">The sum (consumed: divided in place and returned, or disposed when a new array replaces
+        ///     it).</param>
+        /// <param name="count">The count of the reduced elements (NumPy's <c>rcount</c>, an <c>np.intp</c>); 0 gives NumPy's
+        ///     NaN (and the loop's cast of it).</param>
+        /// <param name="loop">The sum's loop dtype.</param>
+        /// <param name="float16Result">NumPy's <c>is_float16_result</c>: a float16 input summed in float32 and returned as
+        ///     float16.</param>
+        /// <returns>The mean: <paramref name="ret"/> divided in place (narrowed to float16 for
+        ///     <paramref name="float16Result"/>: a new array), or for a 0-d sum a fresh read-only 0-d scalar (NumPy's
+        ///     scalar).</returns>
+        /// <exception cref="DivideByZeroException">A decimal loop with a count of 0 (decimal has no NaN). Not reached:
+        ///     np.mean's decimal routes and <see cref="MeanOverAxes"/> answer a decimal mean over no element first.</exception>
+        /// <remarks>
+        ///     The two branches differ only for <paramref name="float16Result"/>: the array branch rounds the float64
+        ///     quotient into the float32 sum and then into float16 (twice), the scalar branch rounds the float64 quotient
+        ///     into float16 once. For every other loop both are the float64 quotient rounded once into the loop
+        ///     (<see cref="DivideByCountLikeNumPy(NDArray, long)"/>: complex divides by <c>rcount + 0j</c>, an integer or bool
+        ///     loop casts unsafely, so 0 / 0 is INT_MIN or True).
+        /// </remarks>
+        private NDArray FinishMeanLikeNumPy(NDArray ret, long count, NPTypeCode loop, bool float16Result)
+        {
+            bool scalar = ret.ndim == 0;
+
+            if (float16Result && scalar)
+            {
+                // arr.dtype.type(ret / rcount): np.float32 / np.intp promotes to float64, rounded once into float16.
+                double q = ret.GetSingle() / (double)count;
+                ret.Dispose();
+                var h = NewArray(NPTypeCode.Half, Shape.Scalar, false);
+                unsafe { *(ushort*)h.Address = DirectILKernelGenerator.DoubleToHalfBits(q); }
+                return h.MarkReductionScalar();
+            }
+
+            // A 0-d sum is the read-only reduction scalar; 0-d has no layout to keep, so dividing a copy is exact.
+            if (!ret.Shape.IsWriteable)
+            {
+                var owned = ret.copy();
+                ret.Dispose();
+                ret = owned;
+            }
+
+            // The engine's dense-block division is NumPy's quotient where it is exact: x / (double)n for the float64 loop,
+            // the complex loop's division by n + 0j, and x / (float)n for float32 while n <= 2^24 (n is then exact in
+            // float32, and float64 division rounded once to float32 equals float32 division: 53 >= 2*24 + 2 bits). Every
+            // other loop (and a larger float32 count) takes the float64 loop with NumPy's unsafe cast back.
+            if (count > 0 && (loop == NPTypeCode.Double || loop == NPTypeCode.Complex
+                              || (loop == NPTypeCode.Single && count <= 1L << 24)))
+                ILKernelGenerator.MeanDivideByCount(ret, count);
+            else
+                DivideByCountLikeNumPy(ret, count);
+
+            if (float16Result)
+            {
+                // arr.dtype.type(ret) on the float32 array: a K-order cast (the layout np.sum gave the sum stays).
+                var narrowed = ret.astype(np.float16, copy: true);
+                ret.Dispose();
+                ret = narrowed;
+            }
+
+            return scalar ? ret.MarkReductionScalar() : ret;
         }
 
         /// <summary>

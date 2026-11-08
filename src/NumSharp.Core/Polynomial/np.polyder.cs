@@ -7,29 +7,27 @@ namespace NumSharp
         /// <summary>
         ///     Return the derivative of the specified order of a polynomial.
         /// </summary>
-        /// <param name="p">Polynomial coefficients, highest degree first.</param>
-        /// <param name="m">Order of differentiation (default 1).</param>
+        /// <param name="p">Polynomial coefficients, highest degree first. NumPy measures them with <c>len()</c>: a 2-D p is
+        ///     differentiated along its first axis, each row a coefficient (<c>np.polyder(np.ones((3, 2)))</c> is
+        ///     <c>[[2, 1], [2, 1]]</c>).</param>
+        /// <param name="m">Order of differentiation (default 1); 0 returns <paramref name="p"/> as an array.</param>
         /// <returns>A new polynomial representing the derivative.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polyder.html</remarks>
-        [NDScoped]
+        /// <exception cref="ValueError">A negative <paramref name="m"/>, checked first.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="p"/> is null (NumPy's object array of None).</exception>
+        /// <exception cref="IncorrectShapeException">An N-D <paramref name="p"/> whose rows do not broadcast with the ramp
+        ///     at some order, the discarded <c>m == 0</c> product included, as NumPy's recursion computes it.</exception>
+        /// <exception cref="TypeError">A 0-d <paramref name="p"/> at every order (<c>len() of unsized object</c>); text
+        ///     coefficients the multiply has no loop for.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="p"/> is null.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.polyder.html
+        ///     <para>The statements are <see cref="TensorEngine.Polyder"/>, on <paramref name="p"/>'s engine (the default one
+        ///     for null, so the order check still comes first), with plain views of subclass operands.</para>
+        /// </remarks>
         public static NDArray polyder(NDArray p, int m = 1)
         {
-            if (m < 0)
-                throw new ValueError("Order of derivative must be positive (see polyint)");
-
-            p = np.asarray(p);
-
-            // Each order differentiates once: y = p[:-1] * arange(n, 0, -1), where n = len(p) - 1.
-            // The int64 arange is what lifts int32 coefficients to int64 (matching NumPy).
-            for (int iteration = 0; iteration < m; iteration++)
-            {
-                long n = p.size - 1;
-                NDArray head = p[":-1"];
-                NDArray factors = np.arange(n, 0L, -1L);
-                p = head * factors;
-            }
-
-            return p;
+            if (p is null) throw new ArgumentNullException(nameof(p));
+            return p.TensorEngine.Polyder(p, m);
         }
     }
 }

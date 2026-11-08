@@ -180,6 +180,26 @@ namespace NumSharp.Tests.LinearAlgebra
                     "(has 0, gufunc core with signature (m,m),(m,n)->(m,n) requires 2)");
         }
 
+        /// <summary>
+        ///     Stacked axes that do not broadcast meet the solve gufunc's iterator, whose refusal NumPy 2.4.2 words as its
+        ///     remapped-shapes text: each operand's shape and the iterator's view of it (the core axes as <c>newaxis</c>),
+        ///     then the requested shape (the output's core sizes; the unknown loop size is not printed), with the two spaces
+        ///     NumPy's string building leaves before "and". NumSharp's engine refused with a text of its own. No backend is
+        ///     needed: the check runs before the solve.
+        /// </summary>
+        [TestMethod]
+        public void Solve_StackedAxesThatDoNotBroadcast_AreTheIteratorsText()
+        {
+            new Action(() => np.linalg.solve(np.ones(new Shape(2, 3, 3)), np.ones(new Shape(3, 3, 2))))
+                .Should().Throw<ValueError>().WithMessage(
+                    "operands could not be broadcast together with remapped shapes [original->remapped]: " +
+                    "(2,3,3)->(2,newaxis,newaxis) (3,3,2)->(3,newaxis,newaxis)  and requested shape (3,2)");
+            new Action(() => np.linalg.solve(np.ones(new Shape(2, 1, 3, 3)), np.ones(new Shape(3, 2, 3, 2))))
+                .Should().Throw<ValueError>().WithMessage(
+                    "operands could not be broadcast together with remapped shapes [original->remapped]: " +
+                    "(2,1,3,3)->(2,1,newaxis,newaxis) (3,2,3,2)->(3,2,newaxis,newaxis)  and requested shape (3,2)");
+        }
+
         #endregion
 
         #region the Array-API forms are stricter than their main-namespace twins

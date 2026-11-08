@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Threading;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
@@ -8,11 +12,27 @@ namespace NumSharp
     ///     The DType CLASS — NumPy's <c>PyArray_DTypeMeta</c> (<c>type(np.dtype('f8'))</c>, i.e.
     ///     <c>np.dtypes.Float64DType</c>). One live object per dtype class; a <see cref="DType"/> is an INSTANCE of it
     ///     (the descriptor). This is NEP 41/42's two-level model: behaviour lives on the class as virtual "slots"
-    ///     (<see cref="CommonDType"/>, <see cref="CommonInstance"/>, <see cref="DefaultDescr"/>,
-    ///     <see cref="EnsureCanonical"/>, <see cref="DiscoverDescrFromObject"/>, <see cref="IsKnownScalarType"/>, the
-    ///     casting implementations), parameters live on the instance (a datetime unit, a byte order).
+    ///     (<see cref="common_dtype"/>, <see cref="common_instance"/>, <see cref="default_descr"/>,
+    ///     <see cref="ensure_canonical"/>, <see cref="discover_descr_from_pyobject"/>, <see cref="is_known_scalar_type"/>,
+    ///     the casting implementations), parameters live on the instance (a datetime unit, a byte order).
     /// </summary>
     /// <remarks>
+    ///     <para>
+    ///     <b>Names are NumPy's, case for case.</b> Every member NumPy names keeps NumPy's spelling: the Python class
+    ///     attributes (<see cref="type"/>, <see cref="_abstract"/>, <see cref="_parametric"/>, <see cref="_legacy"/>,
+    ///     <see cref="_is_numeric"/>), the C struct fields of <c>PyArray_DTypeMeta</c> / <c>NPY_DType_Slots</c>
+    ///     (<see cref="singleton"/>, <see cref="type_num"/>, <see cref="flags"/>, <see cref="castingimpls"/>,
+    ///     <see cref="within_dtype_castingimpl"/>) and the NEP 42 slots of <c>dtype_api.h</c> (<see cref="default_descr"/>,
+    ///     <see cref="common_dtype"/>, …). C function names keep NumPy's PascalCase after the <c>PyArray_</c> prefix
+    ///     (<see cref="GetCastingImpl"/> is <c>PyArray_GetCastingImpl</c>, <see cref="AddCastingImpl"/> is
+    ///     <c>PyArray_AddCastingImplementation</c>). PascalCase members (<see cref="Name"/>, <see cref="TypeCode"/>,
+    ///     <see cref="Kind"/>, …) are NumSharp's own and have no NumPy name. NumPy's slots <c>setitem</c> and
+    ///     <c>getitem</c> and three functions of the legacy <c>PyArray_ArrFuncs</c> table (<c>copyswapn</c>,
+    ///     <c>fill</c>, <c>nonzero</c>) are internal members the array object's code calls (the np-layer dtype plan's
+    ///     P3); <c>finalize_descr</c>, <c>get_constant</c>, the rest of the ArrFuncs table and the 2.4
+    ///     <c>sort_meth</c> / <c>argsort_meth</c> are not ported: NumSharp's kernels select on
+    ///     <see cref="NPTypeCode"/> instead.
+    ///     </para>
     ///     <para>
     ///     <b>Compatibility contract.</b> <see cref="NPTypeCode"/> stays the storage / kernel discriminator: every meta
     ///     that has storage exposes it as <see cref="TypeCode"/>, and a future storage-backed dtype adds one enum
@@ -22,29 +42,75 @@ namespace NumSharp
     ///     <see cref="NotSupportedException"/> naming the missing piece.
     ///     </para>
     ///     <para>
-    ///     <b>Type numbers</b> follow NumPy's <c>NPY_TYPES</c> (LP64 convention: <c>Int32 = NPY_INT (5)</c>,
-    ///     <c>Int64 = NPY_LONG (7)</c>, <c>Half = 23</c>, <c>DateTime = 21</c>, <c>TimeDelta = 22</c>); the two NumSharp-only
-    ///     dtypes take the user-defined range (<c>Decimal = 256</c>, <c>Char = 257</c>), which is also what makes their
-    ///     descriptors report <c>isbuiltin == 2</c>. The number ORDER is load-bearing: the builtin
-    ///     <c>common_dtype</c> defers to the operand with the larger type number ("the more generic one handles it"),
-    ///     exactly as NumPy's <c>default_builtin_common_dtype</c> does.
+    ///     <b>Type numbers</b> follow NumPy's <c>NPY_TYPES</c> on the host's C <c>long</c> model (<c>Half = 23</c>,
+    ///     <c>DateTime = 21</c>, <c>TimeDelta = 22</c>; the 4- and 8-byte integers take the numbers NumPy gives them on
+    ///     this platform, see <see cref="DTypeRegistry"/>); the two NumSharp-only dtypes take the user-defined range
+    ///     (<c>Decimal = 256</c>, <c>Char = 257</c>), which is also what makes their descriptors report
+    ///     <c>isbuiltin == 2</c>. The number ORDER is load-bearing: the builtin <c>common_dtype</c> defers to the operand
+    ///     with the larger type number ("the more generic one handles it"), exactly as NumPy's
+    ///     <c>default_builtin_common_dtype</c> does.
     ///     </para>
     ///     <para>
-    ///     <b>NotImplemented</b> is spelled <see langword="null"/>: <see cref="CommonDType"/> returns null when this class
-    ///     does not know the other one, and <see cref="DTypePromotion.CommonDType"/> then asks the other class
+    ///     <b>NotImplemented</b> is spelled <see langword="null"/>: <see cref="common_dtype"/> returns null when this
+    ///     class does not know the other one, and <see cref="DTypePromotion.CommonDType"/> then asks the other class
     ///     (NEP 42's two-sided <c>__common_dtype__</c> protocol) before raising <see cref="DTypePromotionError"/>.
     ///     </para>
     ///     <para>
-    ///     <b>NEP 55 reservations.</b> <see cref="HasReferences"/>, <see cref="GetClearLoop"/> and
-    ///     <see cref="GetFillZeroLoop"/> are the slots a reference-holding dtype (<c>StringDType</c>) will override; the
-    ///     builtins report false / null.
+    ///     <b>NEP 55 reservations.</b> <see cref="HasReferences"/>, <see cref="get_clear_loop"/> and
+    ///     <see cref="get_fill_zero_loop"/> are the slots a reference-holding dtype (<c>StringDType</c>) will override;
+    ///     the builtins report false / null. The fixed-width <c>S</c>/<c>U</c> classes (<see cref="StringDTypeMeta"/>)
+    ///     hold no references — their items are raw bytes — so they report false too.
     ///     </para>
     /// </remarks>
     public abstract class DTypeMeta
     {
-        private readonly Dictionary<DTypeMeta, CastingImpl> _castingImpls = new Dictionary<DTypeMeta, CastingImpl>();
+        /// <summary>
+        ///     The casts from this class to every OTHER class, keyed by the destination class — NumPy's per-DType
+        ///     <c>castingimpls</c> dict. A <see cref="ConcurrentDictionary{TKey,TValue}"/> so <see cref="GetCastingImpl"/>
+        ///     reads it without taking a lock (every <c>np.can_cast</c> over descriptors lands there, and so does promotion
+        ///     whenever the common class is parametric), while a registration can still run at any time: the public
+        ///     <see cref="DTypeRegistry.AddCastingImpl"/> admits a user cast after the registry is built.
+        /// </summary>
+        /// <remarks>
+        ///     Keys compare by reference, because no <see cref="DTypeMeta"/> overrides <see cref="object.Equals(object)"/>;
+        ///     that is NumPy's rule too, whose dict is keyed by the class object itself. The constructor arguments are
+        ///     deliberate: <c>concurrencyLevel: 1</c> gives the dictionary ONE write lock, which is enough because writes
+        ///     are rare (the registry's static constructor, the occasional user registration) and reads never take it;
+        ///     <c>capacity: 31</c> holds every class's registrations (16 at most today) without a resize. The default
+        ///     constructor would allocate one lock object per CPU for each class, and on a many-core host (one lock per
+        ///     bucket or so) it would also grow its table and its lock array while the registry's static constructor
+        ///     registers the casts.
+        /// </remarks>
+        private readonly ConcurrentDictionary<DTypeMeta, CastingImpl> _castingImpls =
+            new ConcurrentDictionary<DTypeMeta, CastingImpl>(concurrencyLevel: 1, capacity: 31);
+
+        /// <summary>
+        ///     The read-only face of <see cref="_castingImpls"/> that <see cref="castingimpls"/> hands out — built once per
+        ///     class so a reader allocates nothing, and a wrapper rather than the dictionary itself so a caller cannot
+        ///     downcast it and register a cast past <see cref="AddCastingImpl"/>'s one-registration-per-pair rule.
+        /// </summary>
+        private readonly ReadOnlyDictionary<DTypeMeta, CastingImpl> _castingImplsView;
+
+        /// <summary>
+        ///     The cast between two instances of this class, held in its own slot as NumPy holds
+        ///     <c>NPY_DT_SLOTS(DType)-&gt;within_dtype_castingimpl</c>. Written at most once, by the compare-exchange in
+        ///     <see cref="AddCastingImpl"/>, and read through <see cref="Volatile.Read{T}"/>, so a reader on another
+        ///     thread sees either null or the implementation, never a stale value cached across a registration.
+        /// </summary>
         private CastingImpl _withinDTypeCastingImpl;
+
+        /// <summary>Backing field of <see cref="singleton"/>; set once by the registry while it builds the class.</summary>
         private DType _singleton;
+
+        /// <summary>
+        ///     The NumPy scalar CLASS of this dtype class (NumPy's <c>DType.type</c> as a class object, e.g.
+        ///     <c>numpy.float64</c>), built on first use by <see cref="NDScalarType.Of(DTypeMeta)"/> and published with one
+        ///     compare-exchange, so every reader gets the same object. Identity is load-bearing: <c>issubclass</c> and
+        ///     <c>isinstance</c> compare scalar classes by reference, as Python compares class objects
+        ///     (<c>np.dtype('f8').type is np.float64</c>). Null until first asked for; it stays null on an abstract class,
+        ///     which has no descriptors to ask for it.
+        /// </summary>
+        internal NDScalarType _scalarType;
 
         /// <summary>
         ///     Builds a DType class. Called by the registry / subclasses only — every class is a singleton reachable via
@@ -62,40 +128,51 @@ namespace NumSharp
         /// <param name="typeChar">NumPy's <c>dtype.char</c> (<c>'?' 'b' 'B' 'h' 'H' 'i' 'I' 'l' 'L' 'e' 'f' 'd' 'D' 'M' 'm'</c>).</param>
         /// <param name="itemSize">Element size in bytes (-1 for abstract classes).</param>
         /// <param name="alignment">Required alignment in bytes (NumPy's <c>dtype.alignment</c>).</param>
-        /// <param name="flags">The <see cref="DTypeFlags"/> (legacy / abstract / parametric / numeric).</param>
+        /// <param name="flags">The <see cref="DTypeFlags"/> (<c>NPY_DT_LEGACY</c> / <c>_ABSTRACT</c> / <c>_PARAMETRIC</c> / <c>_NUMERIC</c>).</param>
         /// <param name="aliases">Alias class names NumPy also exports (<c>"IntDType"</c> for <c>Int32DType</c>).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="modulePath"/> is null.</exception>
         protected DTypeMeta(string name, string modulePath, int typeNum, Type scalarType, string scalarName,
             NPTypeCode typeCode, char kind, char typeChar, int itemSize, int alignment, DTypeFlags flags,
             IReadOnlyList<string> aliases = null)
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             ModulePath = modulePath ?? throw new ArgumentNullException(nameof(modulePath));
-            TypeNum = typeNum;
-            ScalarType = scalarType;
+            type_num = typeNum;
+            type = scalarType;
             ScalarName = scalarName ?? name;
             TypeCode = typeCode;
             Kind = kind;
             TypeChar = typeChar;
             ItemSize = itemSize;
             Alignment = alignment;
-            Flags = flags;
+            this.flags = flags;
             Aliases = aliases ?? Array.Empty<string>();
+            _castingImplsView = new ReadOnlyDictionary<DTypeMeta, CastingImpl>(_castingImpls);
         }
 
-        /// <summary>NumPy's class name: <c>"Int32DType"</c>, <c>"DateTime64DType"</c>, <c>"_PyLongDType"</c>.</summary>
+        /// <summary>NumPy's class name (<c>type.__name__</c>): <c>"Int32DType"</c>, <c>"DateTime64DType"</c>, <c>"_PyLongDType"</c>.</summary>
         public string Name { get; }
 
-        /// <summary>The module path used in <see cref="ToString"/>: <c>"numpy.dtypes"</c> or <c>"numsharp.dtypes"</c>.</summary>
+        /// <summary>The module path (<c>type.__module__</c>) used in <see cref="ToString"/>: <c>"numpy.dtypes"</c> or <c>"numsharp.dtypes"</c>.</summary>
         public string ModulePath { get; }
 
         /// <summary>The fully qualified class name: <c>"numpy.dtypes.Int32DType"</c>.</summary>
         public string FullName => ModulePath + "." + Name;
 
-        /// <summary>NumPy's <c>type_num</c> (<c>NPY_TYPES</c>, LP64 convention; 256+ for the NumSharp-only dtypes; -1 for abstract).</summary>
-        public int TypeNum { get; }
+        /// <summary>
+        ///     NumPy's <c>PyArray_DTypeMeta.type_num</c>: the <c>NPY_TYPES</c> number of the class (the host's C
+        ///     <c>long</c> model for the 4- and 8-byte integers; 256+ for the NumSharp-only dtypes; -1 for an abstract
+        ///     class). An <see cref="int"/> as in NumPy's struct; a descriptor's <see cref="DType.type_num"/> reports the
+        ///     same number typed as <see cref="NPY_TYPES"/>.
+        /// </summary>
+        public int type_num { get; }
 
-        /// <summary>The C# scalar type of one element (NumPy's <c>DType.type</c>); null when the class has no C# scalar yet.</summary>
-        public Type ScalarType { get; }
+        /// <summary>
+        ///     NumPy's class attribute <c>DType.type</c> (the C field <c>scalar_type</c>): the scalar type of one element,
+        ///     which in NumSharp is the C# type (<c>typeof(double)</c> where NumPy has <c>numpy.float64</c>). Null when the
+        ///     class has no C# scalar yet — the datetime pair before Stage C, the abstract classes.
+        /// </summary>
+        public Type type { get; }
 
         /// <summary>NumPy's <c>dtype.type.__name__</c>: <c>"int32"</c>, <c>"bool"</c>, <c>"datetime64"</c>, <c>"decimal"</c>.</summary>
         public string ScalarName { get; }
@@ -115,103 +192,135 @@ namespace NumSharp
         /// <summary>Required alignment in bytes.</summary>
         public int Alignment { get; }
 
-        /// <summary>The class flags.</summary>
-        public DTypeFlags Flags { get; }
+        /// <summary>
+        ///     NumPy's <c>PyArray_DTypeMeta.flags</c>: the <c>NPY_DT_*</c> word with NumPy's bit values. Python reads its
+        ///     bits as <see cref="_legacy"/>, <see cref="_abstract"/>, <see cref="_parametric"/> and
+        ///     <see cref="_is_numeric"/>.
+        /// </summary>
+        public DTypeFlags flags { get; }
 
         /// <summary>Alias class names NumPy also exports for this class (e.g. <c>ByteDType</c> for <c>Int8DType</c>).</summary>
         public IReadOnlyList<string> Aliases { get; }
 
-        /// <summary>A legacy (pre-NEP 41 layout) dtype — every builtin and the datetime pair.</summary>
-        public bool IsLegacy => (Flags & DTypeFlags.Legacy) != 0;
+        /// <summary>
+        ///     NumPy's class attribute <c>DType._legacy</c> (<c>NPY_DT_LEGACY</c>): a dtype whose descriptor layout predates
+        ///     NEP 41/42 — every builtin and the datetime pair. True means promotion and casting fall back to the legacy
+        ///     tables for this class.
+        /// </summary>
+        public bool _legacy => (flags & DTypeFlags.NPY_DT_LEGACY) != 0;
 
-        /// <summary>An abstract dtype (no instances; promotion only).</summary>
-        public bool IsAbstract => (Flags & DTypeFlags.Abstract) != 0;
+        /// <summary>
+        ///     NumPy's class attribute <c>DType._abstract</c> (<c>NPY_DT_ABSTRACT</c>): the class has no instances and only
+        ///     takes part in promotion (the NEP 50 Python-scalar classes). Building a descriptor of it raises
+        ///     <see cref="TypeError"/>.
+        /// </summary>
+        public bool _abstract => (flags & DTypeFlags.NPY_DT_ABSTRACT) != 0;
 
-        /// <summary>A parametric dtype (instances carry parameters — a unit, a length).</summary>
-        public bool IsParametric => (Flags & DTypeFlags.Parametric) != 0;
+        /// <summary>
+        ///     NumPy's class attribute <c>DType._parametric</c> (<c>NPY_DT_PARAMETRIC</c>): the instances carry parameters
+        ///     (a unit, a length), so promotion must run <see cref="common_instance"/> and the bare class call raises.
+        /// </summary>
+        public bool _parametric => (flags & DTypeFlags.NPY_DT_PARAMETRIC) != 0;
 
-        /// <summary>A numeric dtype (bool, integer, float, complex).</summary>
-        public bool IsNumeric => (Flags & DTypeFlags.Numeric) != 0;
+        /// <summary>NumPy's class attribute <c>DType._is_numeric</c> (<c>NPY_DT_NUMERIC</c>): bool, integer, float or complex.</summary>
+        public bool _is_numeric => (flags & DTypeFlags.NPY_DT_NUMERIC) != 0;
 
         /// <summary>True when descriptors of this class can back an <see cref="NDArray"/> today (a storage <see cref="NPTypeCode"/> exists).</summary>
         public bool HasStorage => TypeCode != NPTypeCode.Empty;
 
         /// <summary>
-        ///     The canonical native descriptor of a non-parametric class — NumPy's <c>DType.singleton</c>, the object
-        ///     <c>np.dtype('i8')</c> returns every time (<c>np.dtype('i8') is np.dtype('i8')</c>). Null for abstract
-        ///     classes; for the parametric datetime pair it is the generic-unit descriptor and <see cref="DefaultDescr"/>
+        ///     NumPy's <c>PyArray_DTypeMeta.singleton</c>: the canonical native descriptor of a non-parametric class, the
+        ///     object <c>np.dtype('i8')</c> returns every time (<c>np.dtype('i8') is np.dtype('i8')</c>). Null for abstract
+        ///     classes; for the parametric datetime pair it is the generic-unit descriptor and <see cref="default_descr"/>
         ///     hands out COPIES of it (a copy reports <c>isbuiltin == 0</c>, as in NumPy).
         /// </summary>
-        public DType Singleton
+        public DType singleton
         {
             get => _singleton;
             internal set => _singleton = value;
         }
 
         // ---------------------------------------------------------------------------------------------
-        // Slots (NEP 42)
+        // Slots (NEP 42) — NumPy's dtype_api.h slot names
         // ---------------------------------------------------------------------------------------------
 
         /// <summary>
-        ///     <c>default_descr</c>: the descriptor a bare class stands for — the singleton for the builtins, a fresh
-        ///     generic-unit descriptor for datetime64 / timedelta64, the default (<c>int64</c>/<c>float64</c>/<c>complex128</c>)
-        ///     for the abstract NEP 50 scalar classes.
+        ///     NumPy's slot <c>default_descr</c> (<c>NPY_DT_default_descr</c>): the descriptor a bare class stands for — the
+        ///     singleton for the builtins, a fresh generic-unit descriptor for datetime64 / timedelta64, the default
+        ///     (<c>int64</c>/<c>float64</c>/<c>complex128</c>) for the abstract NEP 50 scalar classes.
         /// </summary>
-        public abstract DType DefaultDescr();
+        /// <returns>The default descriptor; whether it is a shared singleton or a fresh copy is the class's choice, as in NumPy.</returns>
+        public abstract DType default_descr();
 
         /// <summary>
-        ///     <c>ensure_canonical</c>: the native-byte-order form of <paramref name="descr"/> (the descriptor itself when
-        ///     already native).
+        ///     NumPy's slot <c>ensure_canonical</c> (<c>ensure_native_byteorder</c> for every legacy class): the descriptor
+        ///     itself when its byte order is native, otherwise a FRESH copy of it with byte order <c>'='</c>
+        ///     (<c>PyArray_DescrNewByteorder(descr, NPY_NATIVE)</c>) — never the class singleton, so the result of
+        ///     canonicalising a non-native descriptor reports <c>isbuiltin == 0</c> and keeps its metadata, as NumPy's does
+        ///     (<c>np.result_type(np.dtype('&gt;f8')).isbuiltin</c> is 0).
         /// </summary>
-        public virtual DType EnsureCanonical(DType descr)
+        /// <param name="descr">A descriptor of THIS class.</param>
+        /// <returns><paramref name="descr"/> when native (an explicit host-order byte order counts as native), else a native copy.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="descr"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="descr"/> is an instance of another class (NumPy only ever calls a class's slot on its own instances).</exception>
+        public virtual DType ensure_canonical(DType descr)
         {
             if (descr == null)
                 throw new ArgumentNullException(nameof(descr));
+            if (!ReferenceEquals(descr.Meta, this))
+                throw new ArgumentException($"{descr.ToString(true)} is not an instance of {this}", nameof(descr));
             if (descr.isnative)
                 return descr;
-            // A non-parametric class has exactly one canonical native instance: hand back the singleton itself
-            // (NumPy's ensure_native_byteorder returns the builtin descriptor), not a fresh copy of it.
-            if (!IsParametric && Singleton != null && ReferenceEquals(descr.Meta, this))
-                return Singleton;
-            return descr.WithByteOrder(DType.NativeByteOrder);
+            return descr.WithByteOrder(DType.NPY_NATIVE);
         }
 
         /// <summary>
-        ///     <c>__common_dtype__</c>: the class that can hold values of both this class and <paramref name="other"/>, or
-        ///     <see langword="null"/> (NumPy's <c>NotImplemented</c>) when this class does not know the other — the caller
-        ///     then asks <paramref name="other"/> the mirrored question.
+        ///     NumPy's slot <c>common_dtype</c> (<c>__common_dtype__</c>): the class that can hold values of both this class
+        ///     and <paramref name="other"/>, or <see langword="null"/> (NumPy's <c>NotImplemented</c>) when this class does
+        ///     not know the other — the caller then asks <paramref name="other"/> the mirrored question.
         /// </summary>
-        public abstract DTypeMeta CommonDType(DTypeMeta other);
+        /// <param name="other">The other operand's class.</param>
+        /// <returns>The common class, or null for NotImplemented.</returns>
+        public abstract DTypeMeta common_dtype(DTypeMeta other);
 
         /// <summary>
-        ///     <c>__common_instance__</c>: for a PARAMETRIC class, the descriptor that can hold values of two descriptors
-        ///     of this class (the unit GCD for datetimes; the longer length for strings). Non-parametric classes return
-        ///     their default descriptor.
+        ///     NumPy's slot <c>common_instance</c> (<c>__common_instance__</c>): for a PARAMETRIC class, the descriptor that
+        ///     can hold values of two descriptors of this class (the unit GCD for datetimes; the longer length for
+        ///     strings). Non-parametric classes return their default descriptor (NumPy never calls the slot for them).
         /// </summary>
-        public virtual DType CommonInstance(DType descr1, DType descr2) => DefaultDescr();
+        /// <param name="descr1">The first descriptor, an instance of this class.</param>
+        /// <param name="descr2">The second descriptor, an instance of this class.</param>
+        /// <returns>The common descriptor.</returns>
+        public virtual DType common_instance(DType descr1, DType descr2) => default_descr();
 
         /// <summary>
-        ///     <c>discover_descr_from_pyobject</c>: the descriptor a scalar of this class should get (the default for
-        ///     every non-parametric class).
+        ///     NumPy's slot <c>discover_descr_from_pyobject</c>: the descriptor a scalar of this class should get (the
+        ///     default for every non-parametric class).
         /// </summary>
-        public virtual DType DiscoverDescrFromObject(object obj) => DefaultDescr();
+        /// <param name="obj">The scalar being discovered.</param>
+        /// <returns>The descriptor an array built from <paramref name="obj"/> takes.</returns>
+        public virtual DType discover_descr_from_pyobject(object obj) => default_descr();
 
-        /// <summary><c>is_known_scalar_type</c>: whether a C# scalar of <paramref name="type"/> belongs to this class.</summary>
-        public virtual bool IsKnownScalarType(Type type) => ScalarType != null && type == ScalarType;
+        /// <summary>NumPy's slot <c>is_known_scalar_type</c>: whether a C# scalar of <paramref name="type"/> belongs to this class.</summary>
+        /// <param name="type">The C# type of the scalar.</param>
+        /// <returns>True when <paramref name="type"/> is this class's scalar type.</returns>
+        public virtual bool is_known_scalar_type(Type type) => this.type != null && type == this.type;
 
         /// <summary>
         ///     The NumPy class call <c>Int8DType()</c>: the no-argument instantiation returns the singleton for a
         ///     non-parametric legacy class, and raises NumPy's <c>TypeError</c> for a parametric one
         ///     (<c>DateTime64DType()</c> → "Preliminary-API: Flexible/Parametric legacy DType … can only be instantiated
-        ///     using `np.dtype(...)`"), verbatim.
+        ///     using `np.dtype(...)`"), verbatim. C# cannot call a class object, so the call is this method.
         /// </summary>
+        /// <returns>The class's singleton descriptor.</returns>
+        /// <exception cref="TypeError">The class is abstract, or parametric (NumPy's texts).</exception>
         public virtual DType Instantiate()
         {
-            if (IsAbstract)
+            if (_abstract)
                 throw new TypeError($"Cannot instantiate abstract DType {this}");
-            if (IsParametric)
+            if (_parametric)
                 throw new TypeError($"Preliminary-API: Flexible/Parametric legacy DType '{this}' can only be instantiated using `np.dtype(...)`");
-            return Singleton;
+            return singleton;
         }
 
         // ---------------------------------------------------------------------------------------------
@@ -221,11 +330,267 @@ namespace NumSharp
         /// <summary>Whether items of this dtype hold references that must be cleared (NumPy's <c>NPY_ITEM_REFCOUNT</c>); false for every builtin.</summary>
         public virtual bool HasReferences => false;
 
-        /// <summary><c>get_clear_loop</c>: a loop that releases the references an item holds; null when <see cref="HasReferences"/> is false.</summary>
-        public virtual NDInnerLoopFunc GetClearLoop(DType descr) => null;
+        /// <summary>NumPy's slot <c>get_clear_loop</c>: a loop that releases the references an item holds.</summary>
+        /// <param name="descr">The descriptor whose items are cleared.</param>
+        /// <returns>The loop, or null when <see cref="HasReferences"/> is false (nothing to clear).</returns>
+        public virtual NDInnerLoopFunc get_clear_loop(DType descr) => null;
 
-        /// <summary><c>get_fill_zero_loop</c>: a loop that writes this dtype's zero; null when a zeroed buffer already is the zero.</summary>
-        public virtual NDInnerLoopFunc GetFillZeroLoop(DType descr) => null;
+        /// <summary>NumPy's slot <c>get_fill_zero_loop</c>: a loop that writes this dtype's zero.</summary>
+        /// <param name="descr">The descriptor whose items are zero-filled.</param>
+        /// <returns>The loop, or null when a zeroed buffer already is this dtype's zero (every builtin).</returns>
+        public virtual NDInnerLoopFunc get_fill_zero_loop(DType descr) => null;
+
+        /// <summary>
+        ///     NumPy's per-descriptor item flags (<c>dtype.flags</c>: <c>NPY_ITEM_REFCOUNT = 0x01</c>,
+        ///     <c>NPY_NEEDS_INIT = 0x08</c>, …): 63 for a reference-holding class, 0 for every numeric builtin. A class
+        ///     overrides it when NumPy sets other bits on its descriptors — <c>StrDType</c> reports
+        ///     <c>NPY_NEEDS_INIT</c> (8), because a fixed-width Unicode item is NUL-padded and must start zeroed.
+        /// </summary>
+        /// <value>The flag bits every descriptor of this class reports. The one storage decision they drive is
+        ///     <see cref="NPY_NEEDS_INIT"/>: a fresh buffer of such a class is zero-filled even when uninitialized memory
+        ///     was asked for (NumPy's <c>PyArray_NewFromDescr_int</c>).</value>
+        public virtual int ItemFlags => HasReferences ? 63 : 0;
+
+        /// <summary>
+        ///     NumPy's <c>NPY_NEEDS_INIT</c> item flag (0x08, <c>ndarraytypes.h</c>): every allocation of a descriptor reporting
+        ///     it starts zeroed, so <c>np.empty</c> of a <c>U</c> dtype holds empty strings rather than whatever the allocator
+        ///     returned.
+        /// </summary>
+        public const int NPY_NEEDS_INIT = 0x08;
+
+        /// <summary>
+        ///     NumPy's <c>NPY_LIST_PICKLE</c> item flag (0x02, <c>ndarraytypes.h</c>): the items are Python objects, pickled as
+        ///     a list, so their bytes mean nothing outside the process - <c>PyArray_ToFile</c> refuses to write them in binary
+        ///     mode (<c>cannot write object arrays to a file in binary mode</c>). Set by <c>StringDType</c>.
+        /// </summary>
+        public const int NPY_LIST_PICKLE = 0x02;
+
+        // ---------------------------------------------------------------------------------------------
+        // Element slots: NEP 42's setitem / getitem and the legacy ArrFuncs copyswapn, fill and nonzero
+        // (np-layer dtype plan, P3's batch 1). They answer, per class, the questions the array object's code asks
+        // today by testing the dtype's name; P3's later batches route those questions here. Internal until a
+        // user-defined DType needs them public.
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's slot <c>setitem</c> (NEP 42's slot 7, <c>PyArrayDTypeMeta_SetItem</c>; the legacy
+        ///     <c>PyArray_ArrFuncs.setitem</c>): stores one Python value into one element of this class, with NumPy's
+        ///     conversions and refusals for the value. It is the last step of <c>PyArray_Pack</c>.
+        /// </summary>
+        /// <param name="descr">The element's descriptor: its width for a parametric class, its byte order (a non-native
+        ///     descriptor stores the swapped bytes, as NumPy's setitem swaps for a byte-swapped array).</param>
+        /// <param name="value">The value in the C# boundary map: a C# number is a Python scalar, a <see cref="string"/> a
+        ///     Python str, a <c>byte[]</c> Python bytes, null Python's <c>None</c>, a 0-d <see cref="NDArray"/> an array
+        ///     scalar.</param>
+        /// <param name="item">The element's first byte.</param>
+        /// <param name="buffer">The buffer the element lives in, or null. NumSharp keeps a <c>StringDType</c> array's
+        ///     string allocator on its buffer where NumPy keeps it on the descriptor, so that class needs the buffer; the
+        ///     others ignore it.</param>
+        /// <exception cref="NotSupportedException">The class has no element storage (an abstract class, the datetime
+        ///     classes until their storage lands). The overrides document the conversions' own errors.</exception>
+        /// <remarks>Called once per Python value, as NumPy's is, never inside a bulk move: a typed kernel stays the way to
+        ///     copy or convert many elements. A run of Python values into a NEW array goes through
+        ///     <see cref="SetFreshItems"/>, whose default is this call per value.</remarks>
+        internal virtual unsafe void setitem(DType descr, object value, byte* item, IArraySlice buffer)
+            => throw NoSlot(nameof(setitem));
+
+        /// <summary>
+        ///     NumSharp's run of <see cref="setitem"/> over a NEW array: stores <paramref name="values"/> into the consecutive
+        ///     elements that start at <paramref name="first"/>, in order. It is the loop of <c>PyArray_Pack</c> that NumPy's
+        ///     <c>PyArray_AssignFromCache</c> runs over the array <c>np.array</c> has just allocated, and the default is that
+        ///     loop, one <see cref="setitem"/> per value. A class overrides it only where the whole run can be stored faster
+        ///     with the same element bytes: <c>StringDType</c> locks its allocator once and reserves its arena once for every
+        ///     text of the run, where a store per value grows the arena step by step.
+        /// </summary>
+        /// <param name="descr">The array's descriptor (see <see cref="setitem"/>).</param>
+        /// <param name="values">The values in element order, in <see cref="setitem"/>'s C# boundary map (null is
+        ///     <c>None</c>).</param>
+        /// <param name="first">The first element to store; the others follow at the descriptor's item size.</param>
+        /// <param name="buffer">The buffer the elements live in (see <see cref="setitem"/>).</param>
+        /// <exception cref="NotSupportedException">The class has no element storage, or a value has no form the class can
+        ///     store.</exception>
+        /// <exception cref="ValueError">A value <see cref="setitem"/> refuses (a text that is not a number of a numeric
+        ///     class's kind, a non-text value into a <c>coerce=False</c> <c>StringDType</c>).</exception>
+        /// <exception cref="TypeError">A value the class cannot convert (None into an integer class).</exception>
+        /// <exception cref="OverflowException">A value that does not fit an integer class.</exception>
+        /// <exception cref="UnicodeEncodeError">A text the class cannot encode.</exception>
+        /// <exception cref="UnicodeDecodeError">Bytes the class cannot decode.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <b>New elements only.</b> The elements must be untouched elements of a new allocation, zeroed when the class
+        ///     holds references (NumPy's <c>NPY_NEEDS_INIT</c>). An override may rely on it: <c>StringDType</c>'s run tells a
+        ///     text still to be stored from a stored one by the cell's zero flags, so over cells that already hold strings it
+        ///     would drop texts. To store into an array that already holds values, call <see cref="setitem"/> per element.
+        ///     </para>
+        ///     <para>
+        ///     A refused value raises at the element NumPy's loop raises at, after every earlier element is stored. The
+        ///     later elements may be partly written (an override can prepare them first), which is why the caller discards
+        ///     the array on any error, as NumPy discards its half-built one.
+        ///     </para>
+        /// </remarks>
+        internal virtual unsafe void SetFreshItems(DType descr, IReadOnlyList<object> values, byte* first, IArraySlice buffer)
+        {
+            long itemsize = descr.itemsize;
+            for (int i = 0; i < values.Count; i++)
+                setitem(descr, values[i], first + i * itemsize, buffer);
+        }
+
+        /// <summary>
+        ///     NumPy's slot <c>getitem</c> (NEP 42's slot 8, <c>PyArrayDTypeMeta_GetItem</c>; the legacy
+        ///     <c>PyArray_ArrFuncs.getitem</c>): reads one element as the Python value NumPy returns for it, in the C#
+        ///     boundary map (the element's exact CLR type for a number, a <see cref="string"/> for <c>U</c> and
+        ///     <c>StringDType</c> text, a <c>byte[]</c> for <c>S</c>).
+        /// </summary>
+        /// <param name="descr">The element's descriptor (its width and byte order).</param>
+        /// <param name="item">The element's first byte.</param>
+        /// <param name="buffer">The buffer the element lives in, or null; <c>StringDType</c> needs it (see
+        ///     <see cref="setitem"/>).</param>
+        /// <returns>The element's value.</returns>
+        /// <exception cref="NotSupportedException">The class has no element storage.</exception>
+        internal virtual unsafe object getitem(DType descr, byte* item, IArraySlice buffer)
+            => throw NoSlot(nameof(getitem));
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_ArrFuncs.copyswapn</c>, the byte-order copy that <c>PyArray_FromBuffer</c>'s and
+        ///     <c>PyArray_FromFile</c>'s byte-swapped reads and the <c>.npy</c> reader still call: copies
+        ///     <paramref name="n"/> elements from <paramref name="src"/> to <paramref name="dst"/> (each at its own stride)
+        ///     and, when <paramref name="swap"/> is true, reverses each element's byte-order units in the destination.
+        /// </summary>
+        /// <param name="descr">The elements' descriptor (their width).</param>
+        /// <param name="dst">The first destination element.</param>
+        /// <param name="dstride">The destination's stride in bytes.</param>
+        /// <param name="src">The first source element, or null to swap the destination in place.</param>
+        /// <param name="sstride">The source's stride in bytes.</param>
+        /// <param name="n">The number of elements.</param>
+        /// <param name="swap">True to reverse the byte order of each unit (a number's whole item, a complex number's two
+        ///     halves, a <c>U</c> element's 4-byte code units).</param>
+        /// <exception cref="NotSupportedException">The class has no byte-order copy: no element storage, or items that hold
+        ///     references (NumPy refuses a buffer for such a dtype).</exception>
+        internal virtual unsafe void copyswapn(DType descr, byte* dst, long dstride, byte* src, long sstride, long n, bool swap)
+            => throw NoSlot(nameof(copyswapn));
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_ArrFuncs.fill</c>, which <c>PyArray_Arange</c> fills through: given the first two elements
+        ///     of a contiguous buffer, writes the arithmetic progression they start into elements 2 to
+        ///     <paramref name="length"/> - 1, in NumPy's arithmetic (<c>start + i * delta</c>, with <c>delta</c> the second
+        ///     element minus the first, both already in this class).
+        /// </summary>
+        /// <param name="descr">The buffer's descriptor.</param>
+        /// <param name="buffer">The first element of a contiguous run of <paramref name="length"/> elements; elements 0 and 1
+        ///     are set.</param>
+        /// <param name="length">The number of elements in the run.</param>
+        /// <returns>False when the class has no fill function (NumPy's <c>no fill-function for data-type.</c>, which the
+        ///     caller raises); true after the fill.</returns>
+        /// <exception cref="TypeError">The bool class with more than two elements (NumPy's <c>BOOL_fill</c>).</exception>
+        internal virtual unsafe bool fill(DType descr, byte* buffer, long length) => false;
+
+        /// <summary>
+        ///     Whether this class defines <see cref="fill"/>: NumPy's <c>PyArray_ArrFuncs.fill != NULL</c>, the test
+        ///     <c>PyArray_ArangeObj</c> makes before it computes anything (<c>arange() not supported for inputs with DType
+        ///     ...</c> when it fails). True for the numeric classes; false for the text classes and the classes without
+        ///     storage.
+        /// </summary>
+        /// <remarks>A class that overrides <see cref="fill"/> overrides this too; the two answer one question, asked before
+        ///     the array exists (this) and while filling it (<see cref="fill"/>'s false).</remarks>
+        internal virtual bool HasFill => false;
+
+        /// <summary>
+        ///     Whether this class can read its items from a text FILE: NumPy's <c>PyArray_ArrFuncs.scanfunc != NULL</c>, the
+        ///     test <c>PyArray_FromFile</c> makes before a text read (<c>Unable to read character files of that array
+        ///     type</c> when it fails). True for the numeric classes, whose scanners are NumSharp's typed ports
+        ///     (<c>NumPyTextScan</c>, one per scan family); false for the text classes and the classes without storage.
+        /// </summary>
+        /// <remarks>The question only: the scanners stay typed kernels keyed on the storage lane, as NumPy's are one C
+        ///     routine per type. NumSharp's decimal and char classes read as the float64 and the uint16 they print as.</remarks>
+        internal virtual bool HasScanFunc => false;
+
+        /// <summary>
+        ///     Whether this class can read its items from a text STRING: NumPy's <c>PyArray_ArrFuncs.fromstr != NULL</c>, the
+        ///     test <c>PyArray_FromString</c> makes before its text read (<c>don't know how to read character strings with
+        ///     that array type</c> when it fails). The same classes as <see cref="HasScanFunc"/>: NumPy defines the two
+        ///     routines for the same types.
+        /// </summary>
+        internal virtual bool HasFromStr => false;
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_ArrFuncs.nonzero</c> (a slot <c>StringDType</c> defines too): the truth of one element as
+        ///     <c>np.nonzero</c>, <c>np.argwhere</c>, <c>np.count_nonzero</c> and <c>np.trim_zeros</c> read it.
+        /// </summary>
+        /// <param name="descr">The element's descriptor (its width, byte order and, for <c>StringDType</c>, its NA
+        ///     object).</param>
+        /// <param name="item">The element's first byte.</param>
+        /// <returns>True when the element is nonzero (a NaN is; a <c>U</c> / <c>S</c> element is when any unit is).</returns>
+        /// <exception cref="NotSupportedException">The class has no element storage.</exception>
+        internal virtual unsafe bool nonzero(DType descr, byte* item) => throw NoSlot(nameof(nonzero));
+
+        /// <summary>The refusal of an element slot this class does not have.</summary>
+        /// <param name="slot">The slot's name.</param>
+        /// <returns>The exception to throw (NumSharp's: NumPy's classes all define the slots a storage class needs).</returns>
+        private NotSupportedException NoSlot(string slot)
+            => new NotSupportedException($"{this} has no '{slot}' slot: it has no element storage in NumSharp.");
+
+        /// <summary>
+        ///     Whether two runs of <paramref name="bytes"/> bytes share no byte: the condition of
+        ///     <see cref="copyswapn"/>'s fused copy-and-swap pass (<c>NDByteOrder.CopyReverseRun</c> reads each vector
+        ///     before it writes it, so only disjoint runs - or the same run - are safe; NumPy's copy is a memmove).
+        /// </summary>
+        /// <param name="a">The first run's first byte.</param>
+        /// <param name="b">The second run's first byte.</param>
+        /// <param name="bytes">The runs' length in bytes.</param>
+        /// <returns>True when the runs do not overlap.</returns>
+        internal static unsafe bool Disjoint(byte* a, byte* b, long bytes) => a + bytes <= b || b + bytes <= a;
+
+        /// <summary>
+        ///     Reverses the byte order of each <paramref name="unit"/>-byte unit of one element in place: NumPy's
+        ///     <c>_strided_byte_swap</c> over an element (a number's whole item, a complex number's two halves, a <c>U</c>
+        ///     element's code units).
+        /// </summary>
+        /// <param name="item">The element's first byte.</param>
+        /// <param name="size">The element's size in bytes, a multiple of <paramref name="unit"/>.</param>
+        /// <param name="unit">The unit size in bytes; 1 leaves the element as it is.</param>
+        internal static unsafe void ReverseUnits(byte* item, int size, int unit)
+        {
+            if (unit <= 1)
+                return;
+            for (byte* u = item, end = item + size; u < end; u += unit)
+            {
+                // Swap the unit's bytes pairwise from both ends towards the middle.
+                for (int lo = 0, hi = unit - 1; lo < hi; lo++, hi--)
+                    (u[lo], u[hi]) = (u[hi], u[lo]);
+            }
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Registry and descriptor-layout policy
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Whether every descriptor of this class reports the byte order <c>'|'</c> ("not applicable"). True for the
+        ///     one-byte numeric classes and for <c>BytesDType</c> (an <c>S</c> item is a byte sequence at any width, so
+        ///     NumPy never swaps it: <c>np.dtype('&gt;S5').byteorder</c> is <c>'|'</c>); false for everything else,
+        ///     including the variable-width <c>StrDType</c>, whose code points ARE byte-order dependent.
+        /// </summary>
+        /// <value>True when <see cref="DType"/> must normalise any requested byte order to <c>'|'</c>.</value>
+        internal virtual bool ByteOrderNotApplicable => ItemSize == 1;
+
+        /// <summary>
+        ///     Whether <see cref="DTypeRegistry.FromTypeCode"/> maps this class's <see cref="TypeCode"/> back to it. True
+        ///     for every class but <c>BytesDType</c>: the two fixed-width string classes share the ONE
+        ///     <see cref="NPTypeCode.String"/> storage lane (their bytes are moved by the same unit-view kernels), and that
+        ///     lane's canonical class is <c>StrDType</c> — so <c>(DType)NPTypeCode.String</c> is <c>dtype('&lt;U')</c>, as
+        ///     the vestigial enum member always meant.
+        /// </summary>
+        /// <value>True when the registry should index this class by its storage code.</value>
+        internal virtual bool OwnsTypeCode => true;
+
+        /// <summary>
+        ///     Whether <see cref="DTypeRegistry.FromScalarType"/> maps this class's <see cref="type"/> back to it.
+        ///     False only for <c>BytesDType</c>: its C# element is <c>byte[]</c>, and a C# array type must keep resolving
+        ///     to its ELEMENT class (<c>np.array(new byte[]{…})</c> is <c>uint8</c>), so an <c>S</c> dtype is requested
+        ///     only by name (<c>"S5"</c>, <c>np.bytes_</c>) and never inferred from a <see cref="Type"/>.
+        /// </summary>
+        /// <value>True when the registry should index this class by its C# scalar type.</value>
+        internal virtual bool OwnsScalarType => true;
 
         // ---------------------------------------------------------------------------------------------
         // Casting implementations (NEP 43)
@@ -234,45 +599,96 @@ namespace NumSharp
         /// <summary>
         ///     The <see cref="CastingImpl"/> from this class to <paramref name="to"/> (the within-dtype implementation when
         ///     <paramref name="to"/> is this class), or null when no cast exists — NumPy's <c>PyArray_GetCastingImpl</c>.
+        ///     Every cast question of <see cref="DTypeCasting"/> starts here (each <c>np.can_cast</c> over descriptors and
+        ///     each <see cref="DType"/> <c>&lt;</c> / <c>&lt;=</c> / <c>&gt;</c> / <c>&gt;=</c> comparison), and so does
+        ///     <see cref="DTypePromotion.CastDescrToDType"/> whenever the common class is parametric (datetime64,
+        ///     timedelta64).
         /// </summary>
+        /// <param name="to">The destination class, compared by reference.</param>
+        /// <returns>
+        ///     The registered implementation, or null when none is registered for the pair — an impossible cast, which
+        ///     <see cref="DTypeCasting.GetCastInfo"/> reports as null and <see cref="DTypeCasting.CheckCastSafety"/> as false.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="to"/> is null.</exception>
+        /// <remarks>
+        ///     Takes no lock: <see cref="ConcurrentDictionary{TKey,TValue}.TryGetValue"/> reads the dictionary without its
+        ///     write lock and the within-dtype slot is a volatile read, so concurrent cast and promotion queries never
+        ///     contend with each other or with a registration. A query racing the registration of the same pair returns
+        ///     either null or the registered implementation.
+        /// </remarks>
         public CastingImpl GetCastingImpl(DTypeMeta to)
         {
             if (to == null)
                 throw new ArgumentNullException(nameof(to));
             if (ReferenceEquals(to, this))
-                return _withinDTypeCastingImpl;
-            lock (_castingImpls)
-                return _castingImpls.TryGetValue(to, out var impl) ? impl : null;
+                return Volatile.Read(ref _withinDTypeCastingImpl);
+            return _castingImpls.TryGetValue(to, out var impl) ? impl : null;
         }
 
-        /// <summary>The casting implementation between two instances of this class (<c>within_dtype_castingimpl</c>).</summary>
-        public CastingImpl WithinDTypeCastingImpl => _withinDTypeCastingImpl;
+        /// <summary>
+        ///     NumPy's slot field <c>within_dtype_castingimpl</c>: the casting implementation between two instances of this
+        ///     class — the one <see cref="DTypeCasting"/> consults when both descriptors belong to this class (a byte-order
+        ///     change, a datetime unit change, a plain copy).
+        /// </summary>
+        /// <value>The registered within-dtype cast, or null when the class registered none (the abstract NEP 50 scalar
+        ///     classes and the vestigial string slot). Read without a lock, like <see cref="GetCastingImpl"/>.</value>
+        public CastingImpl within_dtype_castingimpl => Volatile.Read(ref _withinDTypeCastingImpl);
 
-        /// <summary>Registers <paramref name="impl"/> (whose <see cref="CastingImpl.From"/> must be this class) — <c>PyArray_AddCastingImplementation</c>.</summary>
+        /// <summary>
+        ///     NumPy's slot field <c>castingimpls</c>: the casts from this class to every OTHER class, keyed by the
+        ///     destination class (the within-dtype cast is <see cref="within_dtype_castingimpl"/>, not an entry here — the
+        ///     same split as NumPy's).
+        /// </summary>
+        /// <value>
+        ///     A read-only live view: a cast registered later shows up in it, enumerating it never blocks a registration,
+        ///     and it cannot be cast back to a writable dictionary. Use <see cref="GetCastingImpl"/> for a single lookup.
+        /// </value>
+        public IReadOnlyDictionary<DTypeMeta, CastingImpl> castingimpls => _castingImplsView;
+
+        /// <summary>
+        ///     Registers <paramref name="impl"/> (whose <see cref="CastingImpl.From"/> must be this class) — NumPy's
+        ///     <c>PyArray_AddCastingImplementation</c>. Each class pair is registered once: a second registration for the
+        ///     same destination raises instead of replacing the first, so a user cast can never silently displace a
+        ///     builtin one.
+        /// </summary>
+        /// <param name="impl">The cast to register; its <see cref="CastingImpl.To"/> is the key it is stored under.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="impl"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="impl"/> casts from another class.</exception>
+        /// <exception cref="InvalidOperationException">
+        ///     A cast from this class to <see cref="CastingImpl.To"/> is already registered (for a within-dtype
+        ///     <paramref name="impl"/>: a cast within this class).
+        /// </exception>
+        /// <remarks>
+        ///     Takes no lock of its own. The within-dtype slot is claimed by one
+        ///     <see cref="Interlocked.CompareExchange{T}(ref T, T, T)"/> and every other pair by
+        ///     <see cref="ConcurrentDictionary{TKey,TValue}.TryAdd"/>, which serialises writers on the dictionary's
+        ///     single write lock and never blocks a reader. Each check-and-store is one atomic step, so when several
+        ///     threads register the same pair, exactly one succeeds and every other one raises.
+        /// </remarks>
         internal void AddCastingImpl(CastingImpl impl)
         {
             if (impl == null)
                 throw new ArgumentNullException(nameof(impl));
             if (!ReferenceEquals(impl.From, this))
-                throw new ArgumentException($"casting implementation '{impl.Name}' casts from {impl.From}, not from {this}", nameof(impl));
+                throw new ArgumentException($"casting implementation '{impl.name}' casts from {impl.From}, not from {this}", nameof(impl));
 
             if (ReferenceEquals(impl.To, this))
             {
-                if (_withinDTypeCastingImpl != null)
+                // A null check followed by a plain store would let two racing registrations both pass the check, and the
+                // later one would silently replace the earlier instead of raising. The compare-exchange checks and stores
+                // in one step, and it publishes the implementation fully built to the volatile readers.
+                if (Interlocked.CompareExchange(ref _withinDTypeCastingImpl, impl, null) != null)
                     throw new InvalidOperationException($"A cast within {this} is already registered.");
-                _withinDTypeCastingImpl = impl;
                 return;
             }
 
-            lock (_castingImpls)
-            {
-                if (_castingImpls.ContainsKey(impl.To))
-                    throw new InvalidOperationException($"A cast from {this} to {impl.To} is already registered.");
-                _castingImpls.Add(impl.To, impl);
-            }
+            // TryAdd is ContainsKey + Add as one atomic step: false means another registration of this pair got there first.
+            if (!_castingImpls.TryAdd(impl.To, impl))
+                throw new InvalidOperationException($"A cast from {this} to {impl.To} is already registered.");
         }
 
-        /// <summary>NumPy's rendering of the class object: <c>&lt;class 'numpy.dtypes.Int32DType'&gt;</c>.</summary>
+        /// <summary>NumPy's rendering of the class object (<c>repr(np.dtypes.Int32DType)</c>): <c>&lt;class 'numpy.dtypes.Int32DType'&gt;</c>.</summary>
+        /// <returns>The class repr.</returns>
         public override string ToString() => $"<class '{FullName}'>";
     }
 }

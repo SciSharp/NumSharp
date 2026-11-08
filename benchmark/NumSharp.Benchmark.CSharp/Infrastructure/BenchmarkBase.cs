@@ -38,7 +38,8 @@ public abstract class BenchmarkBase
             NPTypeCode.SByte => np.random.randint(-100, 100, new Shape(n)).astype(NPTypeCode.SByte),
             NPTypeCode.Int16 => np.random.randint(-1000, 1000, new Shape(n)).astype(np.int16),
             NPTypeCode.UInt16 => np.random.randint(0, 2000, new Shape(n)).astype(np.uint16),
-            NPTypeCode.Int32 => np.random.randint(-1000, 1000, new Shape(n)),
+            // randint's default dtype is the legacy C long (int64 in NumSharp's LP64 model): cast like every other row.
+            NPTypeCode.Int32 => np.random.randint(-1000, 1000, new Shape(n)).astype(np.int32),
             NPTypeCode.UInt32 => np.random.randint(0, 2000, new Shape(n)).astype(np.uint32),
             NPTypeCode.Int64 => np.random.randint(-1000, 1000, new Shape(n)).astype(np.int64),
             NPTypeCode.UInt64 => np.random.randint(0, 2000, new Shape(n)).astype(np.uint64),
@@ -94,7 +95,7 @@ public abstract class BenchmarkBase
             NPTypeCode.SByte => np.random.randint(1, 100, new Shape(n)).astype(NPTypeCode.SByte),
             NPTypeCode.Int16 => np.random.randint(1, 1000, new Shape(n)).astype(np.int16),
             NPTypeCode.UInt16 => np.random.randint(1, 2000, new Shape(n)).astype(np.uint16),
-            NPTypeCode.Int32 => np.random.randint(1, 1000, new Shape(n)),
+            NPTypeCode.Int32 => np.random.randint(1, 1000, new Shape(n)).astype(np.int32),
             NPTypeCode.UInt32 => np.random.randint(1, 2000, new Shape(n)).astype(np.uint32),
             NPTypeCode.Int64 => np.random.randint(1, 1000, new Shape(n)).astype(np.int64),
             NPTypeCode.UInt64 => np.random.randint(1, 2000, new Shape(n)).astype(np.uint64),
@@ -132,6 +133,23 @@ public abstract class BenchmarkBase
     /// executable/auditable without pretending they perform an elementwise kernel. Such C#-only
     /// evidence has no NumPy timing peer and therefore never enters comparison rollups.
     /// </summary>
+    /// <param name="operation">
+    /// The call that must be REJECTED for the dtype under test. If it unexpectedly returns, its
+    /// result is disposed (when it is an <see cref="IDisposable"/> such as an <c>NDArray</c>) so
+    /// the failed expectation does not also leak a buffer.
+    /// </param>
+    /// <returns>
+    /// The shared <see cref="UnsupportedDtypeEvidence"/> sentinel, standing in for a benchmark
+    /// result when the rejection is one of the recognised "dtype not supported" exception types.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// The operation succeeded, i.e. the dtype is NOT rejected — the benchmark's unsupported-dtype
+    /// declaration is stale and must be revisited rather than silently timed.
+    /// </exception>
+    /// <remarks>
+    /// Any exception type other than the four recognised ones propagates unchanged, so a genuine
+    /// defect (a crash, an index error) is never mistaken for an intended dtype rejection.
+    /// </remarks>
     protected static object VerifyUnsupportedDtype(Func<object> operation)
     {
         try
@@ -139,6 +157,16 @@ public abstract class BenchmarkBase
             var unexpected = operation();
             (unexpected as IDisposable)?.Dispose();
             throw new InvalidOperationException("The dtype was expected to be rejected, but the operation succeeded.");
+        }
+        // IncorrectTypeException DERIVES from TypeError (every ufunc "no loop matching" / forbidden-
+        // dtype rejection is a NumPy TypeError). C# requires a derived type's catch clause BEFORE its
+        // base's — placed after `catch (TypeError)` it is unreachable, which is compile error CS0160
+        // (the build break this ordering fixes). The clause stays explicit rather than being folded
+        // into TypeError so the benchmark keeps recognising the rejection even if the exception is
+        // ever re-parented.
+        catch (IncorrectTypeException)
+        {
+            return UnsupportedDtypeEvidence.Instance;
         }
         catch (TypeError)
         {
@@ -149,10 +177,6 @@ public abstract class BenchmarkBase
             return UnsupportedDtypeEvidence.Instance;
         }
         catch (InvalidCastException)
-        {
-            return UnsupportedDtypeEvidence.Instance;
-        }
-        catch (IncorrectTypeException)
         {
             return UnsupportedDtypeEvidence.Instance;
         }

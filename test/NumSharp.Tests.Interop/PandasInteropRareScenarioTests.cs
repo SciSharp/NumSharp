@@ -14,6 +14,7 @@ namespace NumSharp.Tests.Interop
     ///     mutation visibility, malformed projections, and two-axis negative strides.
     /// </summary>
     [TestClass]
+    [PythonEcosystem]
     public class PandasInteropRareScenarioTests : InteropTestBase
     {
         [TestMethod]

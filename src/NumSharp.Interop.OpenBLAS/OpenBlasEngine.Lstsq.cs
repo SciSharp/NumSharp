@@ -84,9 +84,9 @@ namespace NumSharp.Interop.OpenBLAS
             long maxmn = Math.Max(m, n);
             bool isComplex = typeof(T) == typeof(Complex);
 
-            var x = new NDArray(InfoOf<T>.NPTypeCode, new Shape(new long[] { n, nrhs }));   // zero-filled
-            var resids = new NDArray(NPTypeCode.Double, new Shape(new long[] { nrhs }));
-            var sarr = new NDArray(NPTypeCode.Double, new Shape(new long[] { mn }));
+            var x = new NDArray(InfoOf<T>.NPTypeCode, new Shape(new long[] { n, nrhs }, copy: false));   // zero-filled
+            var resids = new NDArray(NPTypeCode.Double, new Shape(new long[] { nrhs }, copy: false));
+            var sarr = new NDArray(NPTypeCode.Double, new Shape(new long[] { mn }, copy: false));
 
             double* residPtr = nrhs == 0 ? null : (double*)resids.Address + resids.Shape.offset;
             double* sPtr = mn == 0 ? null : (double*)sarr.Address + sarr.Shape.offset;
@@ -124,11 +124,18 @@ namespace NumSharp.Interop.OpenBLAS
             {
                 Linearize((T*)a.Address + sa.offset, sa.strides[0], sa.strides[1], abuf, m, n);
 
-                // B into a column-major buffer of leading dimension max(M,N) — only the M rows are the RHS.
+                // B into a column-major buffer of leading dimension max(M,N) — only the M rows are the RHS. A column that
+                // is contiguous in b (a 1-D b's single column, an F-ordered b) is one block copy; the bytes are the same.
                 for (long c = 0; c < nrhs; c++)
                 {
                     T* col = bbuf + c * ldb;
                     T* src = pb + c * bSc;
+                    if (bSr == 1)
+                    {
+                        long bytes = m * sizeof(T);
+                        Buffer.MemoryCopy(src, col, bytes, bytes);
+                        continue;
+                    }
                     for (long r = 0; r < m; r++)
                         col[r] = src[r * bSr];
                 }

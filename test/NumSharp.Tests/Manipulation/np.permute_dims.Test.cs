@@ -89,15 +89,18 @@ namespace NumSharp.Tests.Manipulation
                 .Throw<ArgumentException>().WithMessage("*axes don't match*");
         }
 
+        /// <summary>
+        ///     np.permute_dims raises NumPy's AxisError for an out-of-range axis on either side, with NumPy's text.
+        /// </summary>
         [TestMethod]
         public void OutOfRangeAxis_Throws()
         {
-            // NumPy raises AxisError; NumSharp's analog is AxisOutOfRangeException.
+            // NumPy raises AxisError, and so does NumSharp (the house AxisError, NumPy's text).
             var nd = np.arange(6).reshape(2, 3);
             new Action(() => np.permute_dims(nd, new int[] {0, 2})).Should()
-                .Throw<AxisOutOfRangeException>().WithMessage("*out of bounds*");
+                .Throw<AxisError>().WithMessage("axis 2 is out of bounds for array of dimension 2*");
             new Action(() => np.permute_dims(nd, new int[] {0, -3})).Should()
-                .Throw<AxisOutOfRangeException>().WithMessage("*out of bounds*");
+                .Throw<AxisError>().WithMessage("axis -3 is out of bounds for array of dimension 2*");
         }
 
         [TestMethod]

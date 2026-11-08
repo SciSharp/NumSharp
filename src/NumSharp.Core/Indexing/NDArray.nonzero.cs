@@ -10,7 +10,10 @@ namespace NumSharp
         /// </summary>
         /// <returns>One index array per dimension, together selecting the non-zero elements in C (row-major) order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.nonzero.html</remarks>
+        [PlainReceiver]
         public NDArray<long>[] nonzero()
-            => np.nonzero(this);
+        {
+            return np.nonzero(this);
+        }
     }
 }

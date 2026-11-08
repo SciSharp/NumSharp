@@ -18,7 +18,10 @@ The essential types for working with NumSharp.
 | @NumSharp.np | Static API class (like `import numpy as np` in Python) |
 | @NumSharp.Shape | Array dimensions and strides |
 | @NumSharp.Slice | Slice specification for array indexing |
-| @NumSharp.Generic.NDArray`1 | Generic typed wrapper for type-safe access |
+| @NumSharp.Generic.NDArray`1 | Generic typed wrapper for unmanaged CLR element types; use `NDArray` for text |
+| @NumSharp.DType | Full dtype descriptor, including text width or StringDType parameters |
+| @NumSharp.NDCharArray | NumPy's fixed-width `chararray`, with stripping element access and comparisons |
+| @NumSharp.NDListArray | Disposable split-result container: one list of text pieces per element |
 
 ### Quick Example
 
@@ -72,6 +75,35 @@ Functions for combining multiple arrays.
 | `np.vstack(arrays)` | Stack arrays vertically (row-wise) |
 | `np.hstack(arrays)` | Stack arrays horizontally (column-wise) |
 | `np.dstack(arrays)` | Stack arrays depth-wise (along 3rd axis) |
+
+---
+
+## Strings, Bytes and Character Arrays
+
+`NDArray` stores NumPy's Unicode, byte-string and variable-width string dtypes. See [Strings, bytes and chararrays](../docs/fundamentals/strings-and-bytes.md) for text operations, encoding, missing values and character-array behavior.
+
+| API | Behavior |
+|-----|----------|
+| `np.array(string[])`, `np.dtype("U8")` / `np.str_` | Fixed-width UCS-4 text; width in code points |
+| `np.dtype("S8")` / `np.bytes_` | Fixed-width bytes; `item()` returns `byte[]` |
+| `np.dtypes.StringDType(...)`, `np.dtype("T")` | Variable-width UTF-8 with optional `na_object` and `coerce` |
+| `np.strings.add`, `np.strings.multiply` | Elementwise concatenation and repetition |
+| `np.strings.equal`, `not_equal`, `less`, `less_equal`, `greater`, `greater_equal` | Elementwise comparisons without stripping |
+| `np.strings.str_len`, `find`, `rfind`, `index`, `rindex`, `count`, `startswith`, `endswith` | Lengths and substring searches |
+| `np.strings.strip`, `lstrip`, `rstrip`, `replace`, `expandtabs`, `center`, `ljust`, `rjust`, `zfill`, `slice` | Text transformations |
+| `np.strings.partition`, `rpartition` | Three arrays: before, separator and after |
+| `np.strings.isalpha`, `isalnum`, `isdigit`, `isdecimal`, `isnumeric`, `isspace`, `islower`, `isupper`, `istitle` | Character-property predicates |
+| `np.strings.upper`, `lower`, `swapcase`, `capitalize`, `title`, `translate` | Case conversion and translation |
+| `np.strings.mod`, `encode`, `decode` | Python-style formatting and codec conversion |
+| `np.sort`, `np.searchsorted`, `np.unique`, `np.isin`, set routines | Compute on `S`, `U` and `T` |
+| `np.sum`, `np.cumsum`, `np.max`, `np.min` over `T` | Concatenation / lexical reductions; `S` / `U` have NumPy's refusals |
+| `np.@char.equal` … `np.@char.greater_equal`, `compare_chararrays` | Fixed-width comparisons that strip trailing ASCII whitespace |
+| `np.@char.add`, `np.@char.multiply` | Concatenation / repetition; multiply maps type errors to NumPy's ValueError |
+| `np.@char.array`, `np.@char.asarray`, `np.@char.chararray` | Construct `NDCharArray`, NumPy's `chararray` |
+| `np.@char.split`, `rsplit`, `splitlines` | Return `NDListArray`; dispose the result explicitly |
+| `np.@char.join` | Join each element's characters, not array elements |
+
+`char` is a C# keyword, hence `np.@char`. The module exposes the string functions above except `slice`; its comparisons strip trailing whitespace and its `partition` / `rpartition` stack the parts on a new last axis. `NDCharArray` exposes the corresponding string methods. The module also converts to the existing **Char dtype** in dtype parameters; that 2-byte UTF-16 code-unit type is distinct from a string dtype or a chararray.
 
 ---
 
@@ -364,7 +396,7 @@ These types are for advanced users extending NumSharp or understanding its inter
 
 ## Supported Data Types
 
-NumSharp supports 15 public array dtypes:
+NumSharp supports the following array dtypes:
 
 | NPTypeCode | C# Type | NumPy Equivalent |
 |------------|---------|------------------|
@@ -383,9 +415,13 @@ NumSharp supports 15 public array dtypes:
 | Double | `double` | `np.float64` |
 | Decimal | `decimal` | (no equivalent) |
 | Complex | `System.Numerics.Complex` | `np.complex128` |
+| String | `byte[]` values | `np.bytes_` (`S`, fixed-width bytes) |
+| String | `string` values | `np.str_` (`U`, fixed-width Unicode) |
+| String | `string` or NA values | `np.dtypes.StringDType()` (`T`, variable-width UTF-8) |
 
-`NPTypeCode.Empty`, `NPTypeCode.String`, and the `NPTypeCode.Float` alias are enum/compatibility
-values, not additional public array dtypes. `Float` resolves to `Single`.
+String descriptors carry the width, encoding and NA policy in addition to the shared `NPTypeCode.String` value. Preserve `arr.dtype` when creating a matching array; use `np.dtype("U8")`, `np.dtype("S8")` or `np.dtypes.StringDType(...)` to select a representation.
+
+`NPTypeCode.Empty` is a sentinel; `NPTypeCode.Float` is an alias of `Single`, not another dtype.
 
 ---
 

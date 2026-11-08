@@ -69,6 +69,28 @@ namespace NumSharp.Tests.Casting
                 .WithMessage("Cannot cast array data from dtype('int32') to dtype('int16') according to the rule 'safe'");
         }
 
+        /// <summary>
+        ///     A refused rule on a 0-d source says "scalar", as NumPy's <c>npy_set_invalid_cast_error</c> does when astype tells
+        ///     it the array is 0-d (probed against 2.4.2: <c>np.array(5, np.int16).astype(np.int8, casting='safe')</c> is
+        ///     <c>Cannot cast scalar from dtype('int16') to dtype('int8') according to the rule 'safe'</c>, and the same 1-D
+        ///     cast "array data"). The numeric path said "array data" for both; the string path already told them apart.
+        /// </summary>
+        [TestMethod]
+        public void Astype_RejectedCast_ZeroDimSource_SaysScalar()
+        {
+            var scalar = np.array((short)5);
+            new Action(() => scalar.astype(np.int8, true, 'K', "safe"))
+                .Should().Throw<InvalidCastException>()
+                .WithMessage("Cannot cast scalar from dtype('int16') to dtype('int8') according to the rule 'safe'");
+            new Action(() => np.array(new short[] { 5 }).astype(np.int8, true, 'K', "safe"))
+                .Should().Throw<InvalidCastException>()
+                .WithMessage("Cannot cast array data from dtype('int16') to dtype('int8') according to the rule 'safe'");
+            // np.array(5, np.int8).astype(np.float64, casting='no'): the stricter rules word it the same way.
+            new Action(() => np.array((sbyte)5).astype(np.float64, true, 'K', "no"))
+                .Should().Throw<InvalidCastException>()
+                .WithMessage("Cannot cast scalar from dtype('int8') to dtype('float64') according to the rule 'no'");
+        }
+
         [TestMethod]
         public void Astype_TypeOverload_AlsoValidatesCasting()
         {

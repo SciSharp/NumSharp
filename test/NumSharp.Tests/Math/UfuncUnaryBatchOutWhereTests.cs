@@ -122,27 +122,27 @@ namespace NumSharp.Tests.Math
             var f = F8();
             var i4out = np.empty(new Shape(4), np.int32);
 
-            var exFloor = Assert.ThrowsException<ArgumentException>(() => np.floor(f, i4out));
+            var exFloor = Assert.ThrowsException<TypeError>(() => np.floor(f, i4out));
             Assert.AreEqual(
                 "Cannot cast ufunc 'floor' output from dtype('float64') to dtype('int32') " +
                 "with casting rule 'same_kind'", exFloor.Message);
 
-            var exTrunc = Assert.ThrowsException<ArgumentException>(() => np.trunc(f, i4out));
+            var exTrunc = Assert.ThrowsException<TypeError>(() => np.trunc(f, i4out));
             StringAssert.Contains(exTrunc.Message, "ufunc 'trunc'");
 
-            var exRint = Assert.ThrowsException<ArgumentException>(() => np.round_(f, @out: i4out));
+            var exRint = Assert.ThrowsException<TypeError>(() => np.round_(f, @out: i4out));
             StringAssert.Contains(exRint.Message, "ufunc 'rint'");
 
-            var exSinh = Assert.ThrowsException<ArgumentException>(() => np.sinh(f, i4out));
+            var exSinh = Assert.ThrowsException<TypeError>(() => np.sinh(f, i4out));
             StringAssert.Contains(exSinh.Message, "ufunc 'sinh'");
 
-            var exATan = Assert.ThrowsException<ArgumentException>(() => np.arctan(f, i4out));
+            var exATan = Assert.ThrowsException<TypeError>(() => np.arctan(f, i4out));
             StringAssert.Contains(exATan.Message, "ufunc 'arctan'");
 
-            var exSign = Assert.ThrowsException<ArgumentException>(() => np.sign(f, i4out));
+            var exSign = Assert.ThrowsException<TypeError>(() => np.sign(f, i4out));
             StringAssert.Contains(exSign.Message, "ufunc 'sign'");
 
-            var exAt2 = Assert.ThrowsException<ArgumentException>(() => np.arctan2(f, f, i4out));
+            var exAt2 = Assert.ThrowsException<TypeError>(() => np.arctan2(f, f, i4out));
             Assert.AreEqual(
                 "Cannot cast ufunc 'arctan2' output from dtype('float64') to dtype('int32') " +
                 "with casting rule 'same_kind'", exAt2.Message);
@@ -184,23 +184,23 @@ namespace NumSharp.Tests.Math
         public void Dtype_InputCastErrors_Verbatim()
         {
             // NumPy: the INPUT must reach the dtype-selected loop via same_kind.
-            var exFloor = Assert.ThrowsException<ArgumentException>(() =>
+            var exFloor = Assert.ThrowsException<TypeError>(() =>
                 np.floor(F8(), dtype: NPTypeCode.Int32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'floor' input from dtype('float64') to dtype('int32') " +
                 "with casting rule 'same_kind'", exFloor.Message);
 
-            var exU = Assert.ThrowsException<ArgumentException>(() =>
+            var exU = Assert.ThrowsException<TypeError>(() =>
                 np.floor(I4(), dtype: NPTypeCode.UInt32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'floor' input from dtype('int32') to dtype('uint32') " +
                 "with casting rule 'same_kind'", exU.Message);
 
-            var exSign = Assert.ThrowsException<ArgumentException>(() =>
+            var exSign = Assert.ThrowsException<TypeError>(() =>
                 np.sign(F8(), dtype: NPTypeCode.Int32));
             StringAssert.Contains(exSign.Message, "ufunc 'sign' input");
 
-            var exInv = Assert.ThrowsException<ArgumentException>(() =>
+            var exInv = Assert.ThrowsException<TypeError>(() =>
                 np.invert(F8(), dtype: NPTypeCode.Int32));
             StringAssert.Contains(exInv.Message, "ufunc 'invert' input");
         }
@@ -387,7 +387,7 @@ namespace NumSharp.Tests.Math
 
             // decimals==0 -> the rint ufunc. (np.round's 2nd positional is
             // decimals per NumPy — out rides the 3rd slot or the name.)
-            var exRint = Assert.ThrowsException<ArgumentException>(() =>
+            var exRint = Assert.ThrowsException<TypeError>(() =>
                 np.round_(x, @out: np.empty(new Shape(4), np.int32)));
             Assert.AreEqual(
                 "Cannot cast ufunc 'rint' output from dtype('float64') to dtype('int32') " +
@@ -395,7 +395,7 @@ namespace NumSharp.Tests.Math
 
             // decimals!=0 is NumPy's multiply→rint→divide composition: the cast
             // error names ufunc 'multiply' (probed).
-            var exMul = Assert.ThrowsException<ArgumentException>(() =>
+            var exMul = Assert.ThrowsException<TypeError>(() =>
                 np.round_(x, 1, np.empty(new Shape(4), np.int32)));
             Assert.AreEqual(
                 "Cannot cast ufunc 'multiply' output from dtype('float64') to dtype('int32') " +
@@ -602,63 +602,97 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void UnaryBatch_Family_OutSmoke()
         {
+            // One value-pinned call per shipped out=-capable unary ufunc — now checking EVERY element
+            // (not just [3]), the out= reference identity, and the out dtype. Full arrays and the
+            // pi-based interior values probed against NumPy 2.4.2.
+            const double Pi = System.Math.PI;
             var o = np.empty(new Shape(4), np.float64);
 
-            np.log2(np.array(new[] { 1.0, 2, 4, 8 }), o);
-            Assert.AreEqual(3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.log2(np.array(new[] { 1.0, 2, 4, 8 }), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, 3.0);
 
-            np.log10(np.array(new[] { 1.0, 10, 100, 1000 }), o);
-            Assert.AreEqual(3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.log10(np.array(new[] { 1.0, 10, 100, 1000 }), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, 3.0);
 
-            np.log1p(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.log1p(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.exp2(np.array(new[] { 0.0, 1, 2, 3 }), o);
-            Assert.AreEqual(8.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.exp2(np.array(new[] { 0.0, 1, 2, 3 }), o), o));
+            AssertRow(o, 1.0, 2.0, 4.0, 8.0);
 
-            np.expm1(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.expm1(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.cbrt(np.array(new[] { 0.0, 1, 8, 27 }), o);
-            Assert.AreEqual(3.0, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.cbrt(np.array(new[] { 0.0, 1, 8, 27 }), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, 3.0);
 
-            np.cosh(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(1.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.cosh(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 1.0, 1.0, 1.0, 1.0);
 
-            np.tanh(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.tanh(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.arcsin(np.array(new[] { 0.0, 0, 0, 1 }), o);
-            Assert.AreEqual(System.Math.PI / 2, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.arcsin(np.array(new[] { 0.0, 0, 0, 1 }), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, Pi / 2);
 
-            np.arccos(np.array(new[] { 1.0, 1, 1, 0 }), o);
-            Assert.AreEqual(System.Math.PI / 2, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.arccos(np.array(new[] { 1.0, 1, 1, 0 }), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, Pi / 2);
 
-            np.arctan(np.array(new[] { 0.0, 0, 0, 1 }), o);
-            Assert.AreEqual(System.Math.PI / 4, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.arctan(np.array(new[] { 0.0, 0, 0, 1 }), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, Pi / 4);
 
-            np.deg2rad(np.array(new[] { 0.0, 90, 180, 360 }), o);
-            Assert.AreEqual(2 * System.Math.PI, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.deg2rad(np.array(new[] { 0.0, 90, 180, 360 }), o), o));
+            AssertRow(o, 0.0, Pi / 2, Pi, 2 * Pi);
 
-            np.rad2deg(np.array(new[] { 0.0, System.Math.PI / 2, System.Math.PI, 2 * System.Math.PI }), o);
-            Assert.AreEqual(360.0, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.rad2deg(np.array(new[] { 0.0, Pi / 2, Pi, 2 * Pi }), o), o));
+            AssertRow(o, 0.0, 90.0, 180.0, 360.0);
 
-            np.ceil(np.array(new[] { 0.5, 1.5, 2.5, 3.5 }), o);
-            Assert.AreEqual(4.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.ceil(np.array(new[] { 0.5, 1.5, 2.5, 3.5 }), o), o));
+            AssertRow(o, 1.0, 2.0, 3.0, 4.0);
 
-            np.trunc(np.array(new[] { 0.5, 1.5, 2.5, -3.5 }), o);
-            Assert.AreEqual(-3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.trunc(np.array(new[] { 0.5, 1.5, 2.5, -3.5 }), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, -3.0);
 
-            // aliases ride the same merged surface.
-            np.radians(np.array(new[] { 0.0, 90, 180, 360 }), o);
-            Assert.AreEqual(2 * System.Math.PI, o.GetDouble(3), 1e-12);
+            // aliases ride the same merged surface — identical values to deg2rad/rad2deg.
+            Assert.IsTrue(ReferenceEquals(np.radians(np.array(new[] { 0.0, 90, 180, 360 }), o), o));
+            AssertRow(o, 0.0, Pi / 2, Pi, 2 * Pi);
 
-            np.degrees(np.array(new[] { 0.0, System.Math.PI / 2, System.Math.PI, 2 * System.Math.PI }), o);
-            Assert.AreEqual(360.0, o.GetDouble(3), 1e-12);
+            Assert.IsTrue(ReferenceEquals(np.degrees(np.array(new[] { 0.0, Pi / 2, Pi, 2 * Pi }), o), o));
+            AssertRow(o, 0.0, 90.0, 180.0, 360.0);
 
+            // bitwise_not (int loop) — every element + the int32 out dtype.
             var oi = np.empty(new Shape(4), np.int32);
-            np.bitwise_not(np.array(new[] { 12, 10, 15, 1 }).astype(np.int32), oi);
-            Assert.AreEqual(-13, oi.GetInt32(0));
+            Assert.IsTrue(ReferenceEquals(np.bitwise_not(np.array(new[] { 12, 10, 15, 1 }).astype(np.int32), oi), oi));
+            AssertRowInt(oi, -13, -11, -16, -2);
+        }
+
+        /// <summary>
+        /// Assert a float64 <paramref name="o"/> has exactly <paramref name="expected"/>.Length elements,
+        /// is float64 dtype, and matches every element within a tight tolerance — turns the family smoke
+        /// test from a single-element pin into a full-row assertion.
+        /// </summary>
+        /// <param name="o">The out array to check.</param>
+        /// <param name="expected">The full expected row (probed against NumPy 2.4.2).</param>
+        private static void AssertRow(NDArray o, params double[] expected)
+        {
+            Assert.AreEqual(expected.Length, (int)o.size, "size");
+            Assert.AreEqual(NPTypeCode.Double, o.typecode, "dtype");
+            for (int i = 0; i < expected.Length; i++)
+                Assert.AreEqual(expected[i], o.GetDouble(i), 1e-12, $"element {i}");
+        }
+
+        /// <summary>
+        /// Int32 twin of <see cref="AssertRow"/> for the integer-loop smoke ops (bitwise_not): exact
+        /// per-element equality plus the int32 out dtype.
+        /// </summary>
+        /// <param name="o">The out array to check.</param>
+        /// <param name="expected">The full expected row (probed against NumPy 2.4.2).</param>
+        private static void AssertRowInt(NDArray o, params int[] expected)
+        {
+            Assert.AreEqual(expected.Length, (int)o.size, "size");
+            Assert.AreEqual(NPTypeCode.Int32, o.typecode, "dtype");
+            for (int i = 0; i < expected.Length; i++)
+                Assert.AreEqual(expected[i], o.GetInt32(i), $"element {i}");
         }
 
         // =====================================================================

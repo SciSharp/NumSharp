@@ -15,7 +15,11 @@ namespace NumSharp.Backends.Kernels
     //     - Caller must materialize v (keyPtr) to contiguous before calling; sorter must be int64
     //       and contiguous. a (arrPtr) may be strided via arrStrideBytes.
     //   PARITY WITH NUMPY:
-    //     - Mirrors numpy/_core/src/npysort/binsearch.cpp template binsearch<Tag, side>.
+    //     - Mirrors numpy/_core/src/npysort/binsearch.cpp template binsearch<Tag, side>, and
+    //       argbinsearch<Tag, side> for a sorter: every sorter entry the bisection reaches is checked
+    //       against [0, arrLen) before it addresses a (argbinsearch returns -1, which
+    //       PyArray_SearchSorted raises as "Sorter index out of range."); an entry it never reaches is
+    //       never read, so it is never checked.
     //     - side='left'  cmp = (val <  target)  -> bisect_left  (returns first i with a[i] >= target)
     //     - side='right' cmp = (val <= target)  -> bisect_right (returns first i with a[i] >  target)
     // =============================================================================
@@ -31,7 +35,11 @@ namespace NumSharp.Backends.Kernels
         /// <param name="keyLen">Number of elements in v.</param>
         /// <param name="sorterPtr">Pointer to int64 sorter array (contiguous), or null for no sorter.</param>
         /// <param name="retPtr">Output int64* (contiguous, keyLen elements).</param>
-        public unsafe delegate void SearchSortedKernel(
+        /// <returns>0 when every key was searched; -1 (NumPy's argbinsearch) when the bisection reached a sorter entry outside
+        ///     <c>[0, arrLen)</c>: the search stops there, before that entry addresses <paramref name="arrPtr"/>, and the caller
+        ///     raises NumPy's <c>ValueError: Sorter index out of range.</c> (the keys already written are discarded with the
+        ///     result, as NumPy's are). Always 0 without a sorter.</returns>
+        public unsafe delegate long SearchSortedKernel(
             void* arrPtr,
             long arrLen,
             long arrStrideBytes,
@@ -103,7 +111,7 @@ namespace NumSharp.Backends.Kernels
         {
             var dm = new DynamicMethod(
                 name: $"SearchSorted_{key}",
-                returnType: typeof(void),
+                returnType: typeof(long),   // 0, or -1 for a sorter entry outside the haystack (SearchSortedKernel)
                 parameterTypes: new[]
                 {
                     typeof(void*),  // arrPtr        (arg 0)
@@ -155,6 +163,7 @@ namespace NumSharp.Backends.Kernels
 
             // ---- labels ----
             var lblReturn      = il.DefineLabel();
+            var lblBadSorter   = il.DefineLabel();
             var lblOuter       = il.DefineLabel();
             var lblOuterBody   = il.DefineLabel();
             var lblBisect      = il.DefineLabel();
@@ -267,6 +276,13 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Add);
                 il.Emit(OpCodes.Ldind_I8);
                 il.Emit(OpCodes.Stloc, locMidIdx);
+
+                // argbinsearch's `if (sort_idx < 0 || sort_idx >= arr_len) return -1;`, before the entry addresses a: the
+                // caller's sorter checks cover its rank, dtype and size, not its values. As unsigned numbers a negative
+                // index is above every length, so one compare covers both ends.
+                il.Emit(OpCodes.Ldloc, locMidIdx);
+                il.Emit(OpCodes.Ldarg, 1);         // arrLen
+                il.Emit(OpCodes.Bge_Un, lblBadSorter);
             }
             else
             {
@@ -335,6 +351,12 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Br, lblOuter);
 
             il.MarkLabel(lblReturn);
+            il.Emit(OpCodes.Ldc_I8, 0L);           // every key searched
+            il.Emit(OpCodes.Ret);
+
+            // A sorter entry outside the haystack was reached (only a sorter kernel branches here).
+            il.MarkLabel(lblBadSorter);
+            il.Emit(OpCodes.Ldc_I8, -1L);
             il.Emit(OpCodes.Ret);
         }
 

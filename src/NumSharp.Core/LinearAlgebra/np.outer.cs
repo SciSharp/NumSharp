@@ -17,12 +17,22 @@
         ///     product dtype.
         /// </param>
         /// <returns>out[i, j] = a[i] * b[j]</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.outer.html</remarks>
-        [NDScoped]
+        /// <exception cref="System.NullReferenceException"><paramref name="a"/> or <paramref name="b"/> is null.</exception>
+        /// <exception cref="TypeError">Operands the multiply has no loop for (text with numbers, two texts).</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> the product does not reach under
+        ///     same_kind.</exception>
+        /// <exception cref="System.ArgumentException">An <paramref name="out"/> the products do not broadcast
+        ///     into.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.outer.html
+        ///     <para>NumPy's statement <c>multiply(a.ravel()[:, newaxis], b.ravel()[newaxis, :], out)</c> is
+        ///     <see cref="TensorEngine.Outer"/>, on <paramref name="a"/>'s engine, called with plain views of subclass
+        ///     operands (a numpy.matrix operand is computed as a plain array).</para>
+        /// </remarks>
         public static NDArray outer(NDArray a, NDArray b, NDArray @out = null)
         {
-            //multiply(a.ravel()[:, newaxis], b.ravel()[newaxis, :], out)
-            return multiply(np.expand_dims(a.ravel(), -1), np.expand_dims(b.ravel(), 0), @out);
+            return a.TensorEngine.Outer(a, b, @out);
         }
     }
 }

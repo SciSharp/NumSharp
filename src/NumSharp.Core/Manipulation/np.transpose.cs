@@ -7,8 +7,11 @@
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="premute">By default, reverse the dimensions, otherwise permute the axes according to the values given.</param>
-        /// <returns>a with its axes permuted. A view is returned whenever possible.</returns>
+        /// <returns>a with its axes permuted. A view is returned whenever possible.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.transpose.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray transpose(NDArray a, int[] premute = null)
             => a.TensorEngine.Transpose(a, premute);
     }

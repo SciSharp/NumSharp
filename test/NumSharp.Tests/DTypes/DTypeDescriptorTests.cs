@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using NumSharp.Backends.Iteration;
 
@@ -29,13 +30,30 @@ namespace NumSharp.Tests.DTypes
         [DataRow("f", 11, 'f', 'f', '=', 4, 4, "float32", "<f4", "dtype('float32')", "float32", "Float32DType")]
         [DataRow("d", 12, 'f', 'd', '=', 8, 8, "float64", "<f8", "dtype('float64')", "float64", "Float64DType")]
         [DataRow("D", 15, 'c', 'D', '=', 16, 8, "complex128", "<c16", "dtype('complex128')", "complex128", "Complex128DType")]
-        [DataRow("g", 12, 'f', 'd', '=', 8, 8, "float64", "<f8", "dtype('float64')", "float64", "Float64DType")]
-        [DataRow("G", 15, 'c', 'D', '=', 16, 8, "complex128", "<c16", "dtype('complex128')", "complex128", "Complex128DType")]
+        // long double: its own class (type number 13 / 16, char 'g' / 'G'), 8 / 16 bytes as on NumPy's win-amd64 build.
+        [DataRow("g", 13, 'f', 'g', '=', 8, 8, "float64", "<f8", "dtype('float64')", "float64", "LongDoubleDType")]
+        [DataRow("G", 16, 'c', 'G', '=', 16, 8, "complex128", "<c16", "dtype('complex128')", "complex128", "CLongDoubleDType")]
         public void Builtin_Surface(string spelling, int num, char kind, char ch, char byteorder, int itemsize, int alignment,
             string name, string str, string repr, string tostr, string cls)
         {
             var d = np.dtype(spelling);
+            // The 32/64-bit integer type_num AND char are platform-dependent: np.dtype('int32')/np.dtype('int64')
+            // resolve to NPY_LONG(7,'l')/NPY_LONGLONG(9,'q') on LLP64 (Windows / 32-bit) but NPY_INT(5,'i')/
+            // NPY_LONG(7,'l') on LP64 (Linux/macOS). The DataRow carries the LP64 values; remap to the local
+            // platform so the assertion tracks the host NumPy byte-for-byte (see DTypeRegistry's CLongIs32Bit).
+            bool cLongIs32 = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) || IntPtr.Size != 8;
+            if (cLongIs32)
+            {
+                switch (spelling)
+                {
+                    case "i4": num = 7; ch = 'l'; break;
+                    case "u4": num = 8; ch = 'L'; break;
+                    case "i8": num = 9; ch = 'q'; break;
+                    case "u8": num = 10; ch = 'Q'; break;
+                }
+            }
             d.num.Should().Be(num);
+            d.type_num.Should().Be((NPY_TYPES)num, "type_num is the typed view of num");
             d.kind.Should().Be(kind);
             d.@char.Should().Be(ch);
             d.byteorder.Should().Be(byteorder);
@@ -67,6 +85,10 @@ namespace NumSharp.Tests.DTypes
             var dec = np.dtype("decimal");
             dec.num.Should().Be(256);
             dec.kind.Should().Be('f');
+            // A type character of its own (NumPy's user-dtype convention, rational's 'r'): no NumPy type, kind letter or
+            // PEP 3118 format uses 'A', so np.dtype("A") stays NumPy's "not understood" (it was int64's borrowed 'q').
+            dec.@char.Should().Be('A');
+            new Action(() => np.dtype(dec.@char.ToString())).Should().Throw<TypeError>().WithMessage("data type 'A' not understood");
             dec.itemsize.Should().Be(16);
             dec.name.Should().Be("decimal");
             dec.str.Should().Be("<f16");
@@ -78,13 +100,49 @@ namespace NumSharp.Tests.DTypes
             var ch = np.dtype("char");
             ch.num.Should().Be(257);
             ch.kind.Should().Be('u', "Char promotes and prints as uint16 everywhere");
-            ch.@char.Should().Be('c');
+            ch.@char.Should().Be('u', "PEP 3118's UCS-2 code; NumPy's 'c' is S1");
+            new Action(() => np.dtype(ch.@char.ToString())).Should().Throw<TypeError>().WithMessage("data type 'u' not understood");
+            np.array(new[] { 'a', 'b' }).data.format.Should().Be(ch.@char.ToString(), "the type character is the buffer format");
             ch.itemsize.Should().Be(2);
             ch.name.Should().Be("char");
             ch.str.Should().Be("<u2");
             ch.ToString(true).Should().Be("dtype(char)");
             ch.isbuiltin.Should().Be(2);
             ch.Meta.Should().BeSameAs(np.dtypes.CharDType);
+        }
+
+        [TestMethod]
+        public void NpyTypes_ImplicitCast_And_From_WidthCanonicalized()
+        {
+            // NPY_TYPES is the fifth dtype spelling — implicitly converts to DType like Type/NPTypeCode/string.
+            ((DType)NPY_TYPES.NPY_DOUBLE).Should().Be(np.float64);
+            np.zeros(3, NPY_TYPES.NPY_DOUBLE).dtype.Should().Be(np.float64);
+            np.sqrt(np.arange(4), dtype: NPY_TYPES.NPY_FLOAT).dtype.Should().Be(np.float32);
+
+            // From (and thus the implicit cast) maps EVERY C-integer number to the NumSharp type of that width, on
+            // any platform — NumPy's PyArray_DescrFromType accepts intc/long/longlong everywhere; NumSharp folds each
+            // width to one type. So NPY_INT and NPY_LONGLONG resolve regardless of which is the platform-canonical num.
+            DType.From(NPY_TYPES.NPY_INT).Should().Be(np.int32);
+            DType.From(NPY_TYPES.NPY_UINT).Should().Be(np.uint32);
+            DType.From(NPY_TYPES.NPY_LONGLONG).Should().Be(np.int64);
+            DType.From(NPY_TYPES.NPY_ULONGLONG).Should().Be(np.uint64);
+            bool cLongIs32 = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) || IntPtr.Size != 8;
+            DType.From(NPY_TYPES.NPY_LONG).Should().Be(cLongIs32 ? np.int32 : np.int64);   // C long: 32-bit on Windows
+            DType.From(NPY_TYPES.NPY_HALF).Should().Be(np.float16);
+            DType.From(NPY_TYPES.NPY_CDOUBLE).Should().Be(np.complex128);
+
+            // type_num round-trips through From for the platform-canonical spelling.
+            DType.From(np.dtype("int64").type_num).Should().Be(np.int64);
+            DType.From(np.dtype("int32").type_num).Should().Be(np.int32);
+
+            // NumSharp's user-range extras carry the user members.
+            np.dtype("decimal").type_num.Should().Be(NPY_TYPES.NUMSHARP_DECIMAL);
+            np.dtype("char").type_num.Should().Be(NPY_TYPES.NUMSHARP_CHAR);
+
+            // Numbers with no NumSharp type at all are rejected (never silently substituted).
+            ((Action)(() => DType.From(NPY_TYPES.NPY_CFLOAT))).Should().Throw<NotSupportedException>("no complex64");
+            ((Action)(() => DType.From(NPY_TYPES.NPY_OBJECT))).Should().Throw<NotSupportedException>();
+            ((Action)(() => DType.From(NPY_TYPES.NPY_VOID))).Should().Throw<NotSupportedException>();
         }
 
         // ---- datetime64 / timedelta64: parametric descriptors -----------------------------------------------------
@@ -112,13 +170,23 @@ namespace NumSharp.Tests.DTypes
             d.str.Should().Be(str);
             d.ToString(true).Should().Be(repr);
             d.ToString().Should().Be(tostr);
-            d.isbuiltin.Should().Be(0, "NumPy's datetime default_descr hands out a COPY of the singleton, never the singleton");
+            if (spelling.Length == 1)
+            {
+                // The bare letters are PyArray_DescrFromType(NPY_DATETIME / NPY_TIMEDELTA): the static builtin descriptor
+                // itself, the same object every call (NumPy 2.4.2: np.dtype('M').isbuiltin == 1, np.dtype('M') is np.dtype('M')).
+                d.isbuiltin.Should().Be(1, "np.dtype('M') / np.dtype('m') is the builtin singleton");
+                d.Should().BeSameAs(np.dtype(spelling));
+            }
+            else
+            {
+                d.isbuiltin.Should().Be(0, "a datetime typestr builds a fresh descriptor (and default_descr hands out a COPY of the singleton)");
+            }
             d.isnative.Should().BeTrue();
             d.type.Should().BeNull("no C# scalar type until the storage lane lands (Stage C)");
             d.typecode.Should().Be(NPTypeCode.Empty);
-            d.Meta.IsParametric.Should().BeTrue();
-            d.Meta.IsLegacy.Should().BeTrue();
-            d.Meta.IsNumeric.Should().BeFalse();
+            d.Meta._parametric.Should().BeTrue();
+            d.Meta._legacy.Should().BeTrue();
+            d.Meta._is_numeric.Should().BeFalse();
             np.datetime_data(d).Should().Be((unit, count));
             d.DatetimeMetadata.Should().NotBeNull();
         }
@@ -150,7 +218,9 @@ namespace NumSharp.Tests.DTypes
         {
             np.dtype("i8").Should().BeSameAs(np.dtype("i8"));
             np.dtype("i8").Should().BeSameAs(DType.Int64);
-            np.dtype("int64").Should().BeSameAs(np.dtype("q"));
+            // int64's singleton is the C long long class on Windows ('q') and the C long class on LP64 ('l'); there the
+            // other 8-byte character is NumPy's C-type class of its own (LongLongDType), equal but not the same object.
+            np.dtype("int64").Should().BeSameAs(np.dtype(DTypeRegistry.CLongIs32Bit ? "q" : "l"));
             ((DType)typeof(int)).Should().BeSameAs(np.dtype("int32"));
             ((DType)NPTypeCode.Double).Should().BeSameAs(DType.Double);
             DType.From(typeof(int[])).Should().BeSameAs(DType.Int32, "array types map to their element class");
@@ -206,14 +276,65 @@ namespace NumSharp.Tests.DTypes
             (d != "i4").Should().BeFalse();
             ("f8" == np.dtype("double")).Should().BeTrue();
             (np.dtype(">i4") == "i4").Should().BeFalse("NumPy: np.dtype('>i4') == 'i4' is False");
-            // `d == "garbage"` goes through the implicit string->DType conversion and raises like np.dtype("garbage");
-            // the NumPy-shaped "unequal, never an error" answer is Equals(string) (asserted above). There are deliberately
-            // no ==(DType, string) operators: a null literal would bind them and break every `descr == null` check.
-            Action viaOperator = () => { bool _ = d == "garbage"; };
-            viaOperator.Should().Throw<NotSupportedException>();
+            // The operators answer like dtype.__eq__ too: a string that is not a dtype is unequal, never an error (parity
+            // QA-46; they used to bind ==(DType, DType) through the raising implicit string -> DType conversion).
+            (d == "garbage").Should().BeFalse("np.dtype('i4') == 'garbage' is False, never an error");
+            (d != "garbage").Should().BeTrue();
             DType none = null;
             (none == null).Should().BeTrue();
             (none != null).Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     Parity QA-46: <c>==</c> / <c>!=</c> between a descriptor and a string, in both operand orders, give NumPy
+        ///     2.4.2's answers (scratchpad probe p166_numpy.py: <c>arraydescr_richcompare</c> converts the string, returns
+        ///     <c>NotImplemented</c> when that fails, and Python falls back to identity), and a NULL string is the null
+        ///     descriptor — the footgun the operators are built around: C# binds <c>descr == null</c> to
+        ///     <c>==(DType, string)</c>, and it must keep meaning "no descriptor".
+        /// </summary>
+        [TestMethod]
+        public void StringOperators_AnswerLikeNumPy_AndANullStringIsTheNullDescriptor()
+        {
+            var i4 = np.dtype("i4");
+            // (descriptor, string, NumPy's ==) rows from the NumPy matrix; != is always the negation, and the reflected
+            // `str == dtype` gives the same answer.
+            var rows = new (DType D, string S, bool Equal)[]
+            {
+                (i4, "i4", true), (i4, "int32", true), (i4, "<i4", true), (i4, "=i4", true), (i4, "|i4", true),
+                (i4, "i 4", true), (i4, ">i4", false), (i4, " i4", false), (i4, "f8", false), (i4, "bogus", false),
+                (i4, "", false), (i4, "i4,i4", false), (i4, "complex64", false), (i4, "O", false),
+                (i4, "f16", false), (i4, "int0", false), (i4, "T", false),
+                (np.dtype("f8"), "double", true), (np.dtype("f8"), "float64", true), (np.dtype("f8"), "M8[ns]", false),
+                (np.dtype(">i4"), ">i4", true), (np.dtype(">i4"), "i4", false),
+                (np.dtype("?"), "bool", true), (np.dtype("?"), "b1", true), (np.dtype("?"), "?", true),
+                (np.dtype("M8[ns]"), "M8[ns]", true), (np.dtype("M8[ns]"), "M8[s]", false), (np.dtype("M8[ns]"), "M8", false),
+                (np.dtype("U5"), "U5", true), (np.dtype("U5"), "U", false),
+                (np.dtype("S"), "S", true), (np.dtype("S"), "S0", true), (np.dtype("S"), "a", true),
+                // A StringDType descriptor does not coerce: stringdtype_richcompare returns NotImplemented for a str.
+                (np.dtype("T"), "T", false), (np.dtype("T"), "bogus", false),
+            };
+            foreach (var (d, s, equal) in rows)
+            {
+                (d == s).Should().Be(equal, $"np.dtype('{d}') == '{s}'");
+                (d != s).Should().Be(!equal, $"np.dtype('{d}') != '{s}'");
+                (s == d).Should().Be(equal, $"'{s}' == np.dtype('{d}')");
+                (s != d).Should().Be(!equal, $"'{s}' != np.dtype('{d}')");
+            }
+
+            // The null literal binds the string overloads; a null string compares as the null descriptor, in both orders.
+            DType none = null;
+            (i4 == null).Should().BeFalse();
+            (i4 != null).Should().BeTrue();
+            (null == i4).Should().BeFalse();
+            (null != i4).Should().BeTrue();
+            (none == null).Should().BeTrue();
+            (none != null).Should().BeFalse();
+            (null == none).Should().BeTrue();
+            (none == (string)null).Should().BeTrue();
+            (none == "i4").Should().BeFalse("no descriptor equals any dtype string");
+            (none != "i4").Should().BeTrue();
+            ("i4" == none).Should().BeFalse();
+            (i4 == (DType)null).Should().BeFalse();
         }
 
         [TestMethod]
@@ -320,14 +441,24 @@ namespace NumSharp.Tests.DTypes
             empty.Should().Throw<ValueError>().WithMessage("byteorder not recognized (got '')");
         }
 
+        /// <summary>
+        ///     NumPy's legacy <c>ensure_canonical</c> slot (<c>ensure_native_byteorder</c>) returns a native descriptor as is
+        ///     and a non-native one as a FRESH '=' copy (<c>PyArray_DescrNewByteorder(descr, NPY_NATIVE)</c>), never the class
+        ///     singleton — observable through <c>np.result_type(np.dtype('&gt;i4'))</c>, which NumPy 2.4.2 answers with an
+        ///     int32 that <c>is not np.dtype('i4')</c> and reports <c>isbuiltin == 0</c>.
+        /// </summary>
         [TestMethod]
         public void EnsureCanonical_ReturnsNativeForm()
         {
             var big = np.dtype(">i4");
-            big.Meta.EnsureCanonical(big).Should().BeSameAs(DType.Int32);
-            DType.Int32.Meta.EnsureCanonical(DType.Int32).Should().BeSameAs(DType.Int32);
+            var native = big.Meta.ensure_canonical(big);
+            native.Should().Be(DType.Int32);
+            native.Should().NotBeSameAs(DType.Int32, "NumPy copies the descriptor rather than returning the singleton");
+            native.isbuiltin.Should().Be(0);
+            native.byteorder.Should().Be('=');
+            DType.Int32.Meta.ensure_canonical(DType.Int32).Should().BeSameAs(DType.Int32);
             var bigDt = np.dtype(">M8[ns]");
-            var canon = bigDt.Meta.EnsureCanonical(bigDt);
+            var canon = bigDt.Meta.ensure_canonical(bigDt);
             canon.isnative.Should().BeTrue();
             canon.Should().Be(np.dtype("M8[ns]"));
         }
@@ -399,10 +530,43 @@ namespace NumSharp.Tests.DTypes
             np.dtype(typeof(string)).ToString(true).Should().Be("dtype('<U')", "the vestigial string slot is NumPy's unsized U");
             np.dtype("String").str.Should().Be("<U0");
             np.dtype("String").name.Should().Be("str");
-            Action nullType = () => np.dtype((Type)null);
-            nullType.Should().Throw<ArgumentNullException>();
+            np.dtype((Type)null).Should().BeSameAs(DType.Double, "a null type is NumPy's None");
             Action foreign = () => np.dtype(typeof(DTypeDescriptorTests));
             foreign.Should().Throw<NotSupportedException>();
+        }
+
+        /// <summary>
+        ///     Null is NumPy's <c>None</c> in every <c>np.dtype</c> overload (NumPy 2.4.2: <c>np.dtype(None) is
+        ///     np.dtype('f8')</c>, <c>isbuiltin</c> 1), and the keywords then apply as for any argument:
+        ///     <c>np.dtype(None, copy=True)</c> is a fresh float64 (<c>isbuiltin</c> 0, equal to float64),
+        ///     <c>np.dtype(None, metadata={'a': 1})</c> a fresh float64 carrying it, <c>align=True</c> the singleton.
+        ///     <see cref="NPTypeCode.Empty"/> is NumSharp's "no type" code, not None, and keeps its ArgumentException.
+        /// </summary>
+        [TestMethod]
+        public void Dtype_Null_IsNumPysNone()
+        {
+            np.dtype((string)null).Should().BeSameAs(DType.Double);
+            np.dtype((Type)null).Should().BeSameAs(DType.Double);
+            np.dtype((DType)null).Should().BeSameAs(DType.Double);
+            np.dtype((NDScalarType)null).Should().BeSameAs(DType.Double);
+            np.dtype((NPTypeCode?)null).Should().BeSameAs(DType.Double, "a null NPTypeCode? converts to a null DType");
+            np.dtype((DType)null).isbuiltin.Should().Be(1);
+            np.dtype((DType)null, align: true).Should().BeSameAs(DType.Double);
+
+            var copied = np.dtype((DType)null, copy: true);
+            copied.Should().NotBeSameAs(DType.Double);
+            copied.Equals(DType.Double).Should().BeTrue();
+            copied.isbuiltin.Should().Be(0);
+
+            var tagged = np.dtype((string)null, metadata: new Dictionary<string, object> { ["a"] = 1 });
+            tagged.Should().NotBeSameAs(DType.Double);
+            tagged.Equals(DType.Double).Should().BeTrue();
+            tagged.metadata.Should().ContainKey("a").WhoseValue.Should().Be(1);
+
+            new Action(() => np.dtype(NPTypeCode.Empty)).Should().Throw<ArgumentException>();
+            // Equality stays a null test (the engine's `descr == null`), where NumPy's np.dtype('f8') == None is True.
+            DType.Double.Equals((object)null).Should().BeFalse();
+            (DType.Double == null).Should().BeFalse();
         }
 
         // ---- issubdtype / isdtype over descriptors ----------------------------------------------------------------
@@ -414,15 +578,15 @@ namespace NumSharp.Tests.DTypes
             np.issubdtype(np.dtype(">i4"), np.dtype("i4")).Should().BeTrue();
             np.issubdtype(np.dtype("i4"), np.dtype("i8")).Should().BeFalse();
             np.issubdtype(np.dtype("m8"), np.dtype("M8")).Should().BeFalse();
-            np.issubdtype(np.dtype("M8"), "generic").Should().BeTrue();
-            np.issubdtype(np.dtype("M8"), "number").Should().BeFalse("Datetime doesn't fit in any category");
-            np.issubdtype(np.dtype("m8"), "signedinteger").Should().BeTrue("Timedelta is an integer with an associated unit");
-            np.issubdtype(np.dtype("m8"), "integer").Should().BeTrue();
-            np.issubdtype(np.dtype("m8"), "number").Should().BeTrue();
-            np.issubdtype(np.dtype("m8"), "floating").Should().BeFalse();
-            np.issubdtype("i4", "integer").Should().BeTrue("a dtype string binds the dtype grammar, not the char-array conversion");
-            np.issubdtype("M8[ns]", "generic").Should().BeTrue();
-            np.issubdtype(np.dtype("?"), "integer").Should().BeFalse("NumPy 2.x: bool is not an integer");
+            np.issubdtype(np.dtype("M8"), np.generic).Should().BeTrue();
+            np.issubdtype(np.dtype("M8"), np.number).Should().BeFalse("Datetime doesn't fit in any category");
+            np.issubdtype(np.dtype("m8"), np.signedinteger).Should().BeTrue("Timedelta is an integer with an associated unit");
+            np.issubdtype(np.dtype("m8"), np.integer).Should().BeTrue();
+            np.issubdtype(np.dtype("m8"), np.number).Should().BeTrue();
+            np.issubdtype(np.dtype("m8"), np.floating).Should().BeFalse();
+            np.issubdtype("i4", np.integer).Should().BeTrue("a dtype string binds the dtype grammar, not the char-array conversion");
+            np.issubdtype("M8[ns]", np.generic).Should().BeTrue();
+            np.issubdtype(np.dtype("?"), np.integer).Should().BeFalse("NumPy 2.x: bool is not an integer");
         }
 
         [TestMethod]

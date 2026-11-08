@@ -29,6 +29,10 @@ namespace NumSharp.Tests.Backends.Kernels
                 InnerLoopKernelKey.Shift(true, NPTypeCode.Int32, NPTypeCode.Int32).ToCacheKey());
             Assert.AreEqual("npy_shift_R_Byte_Byte",
                 InnerLoopKernelKey.Shift(false, NPTypeCode.Byte, NPTypeCode.Byte).ToCacheKey());
+            // np.power's zero-exponent-step float kernel (plan api-parameter-parity X13): its own family, so it never
+            // shares a cache slot with the plain power kernel of the same dtypes.
+            Assert.AreEqual("npy_powz_Int32_Single_Double",
+                InnerLoopKernelKey.PowerStrideZero(NPTypeCode.Int32, NPTypeCode.Single, NPTypeCode.Double).ToCacheKey());
         }
 
         [TestMethod]
@@ -91,6 +95,17 @@ namespace NumSharp.Tests.Backends.Kernels
                         Assert.IsTrue(seenStrings.Add(k.ToCacheKey()), k.ToString());
                         expected++;
                     }
+            // The stride-0 power kernels exist for the two float loops; every operand dtype pair is a distinct key, and
+            // none collides with the plain power kernel (BinaryOp.Power above) of the same dtypes.
+            foreach (var loop in new[] { NPTypeCode.Single, NPTypeCode.Double })
+                foreach (var l in types)
+                    foreach (var r in types)
+                    {
+                        var k = InnerLoopKernelKey.PowerStrideZero(l, r, loop);
+                        Assert.IsTrue(seen.Add(k), k.ToString());
+                        Assert.IsTrue(seenStrings.Add(k.ToCacheKey()), k.ToString());
+                        expected++;
+                    }
 
             Assert.AreEqual(expected, seen.Count);
         }
@@ -98,13 +113,14 @@ namespace NumSharp.Tests.Backends.Kernels
         [TestMethod]
         public void Production_Route_Registers_Kernel_Under_Both_Keys()
         {
-            // An int16 add with a provided out takes the NDIter ufunc route; afterwards the
-            // kernel must be reachable through the packed key AND the legacy string key —
-            // the same delegate — so GeneratedDelegates.InnerLoopCount and the string cache
+            // An int16 add with a provided STRIDED out takes the NDIter ufunc route (a contiguous out would take the
+            // trivial out= loop since 2026-10-04 and never touch the inner-loop caches, so the test only passed when an
+            // earlier test had compiled the kernel); afterwards the kernel must be reachable through the packed key AND
+            // the legacy string key — the same delegate — so GeneratedDelegates.InnerLoopCount and the string cache
             // keep reporting one kernel per identity.
             var a = np.arange(6).astype(np.int16);
             var b = np.arange(6).astype(np.int16);
-            var o = np.empty(new Shape(6), np.int16);
+            var o = np.empty(new Shape(12), np.int16)["::2"];
             np.add(a, b, o);
             Assert.AreEqual((short)10, o.GetInt16(5));
 

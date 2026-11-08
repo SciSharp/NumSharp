@@ -212,8 +212,13 @@ namespace NumSharp.Backends.Iteration
     /// Half max. Contiguous chunks (stride == 2) run a 4-accumulator unroll that
     /// breaks the per-element dependency chain (~1.3× the scalar fold); other
     /// strides take the scalar branch. NaN propagates: the kernel aborts the
-    /// moment a NaN is seen so the caller returns Half.NaN.
+    /// moment a NaN is seen and only flags it (<see cref="HalfMinMaxAccumulator.SawNaN"/>).
     /// </summary>
+    /// <remarks>
+    /// VALUE-only: it decides neither WHICH NaN nor which ±0 a NumPy reduction returns, so the engine's float16
+    /// np.max / np.min no longer use it — they run <c>NumPyHalfMinMaxReduce</c>, NumPy's sequential HALF loop bit for bit
+    /// (Default.Reduction.MinMax.Half.cs). Kept for callers of this public kernel.
+    /// </remarks>
     public readonly struct HalfMaxKernel : INDReducingInnerLoop<HalfMinMaxAccumulator>
     {
         [MethodImpl(OptimizeAndInline)]

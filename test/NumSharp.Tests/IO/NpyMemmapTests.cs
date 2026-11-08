@@ -11,10 +11,15 @@ namespace NumSharp.Tests.IO
     ///     Behavior probed against NumPy 2.4.2. Through <c>np.load</c> only <c>r</c>/<c>readonly</c>,
     ///     <c>r+</c> and <c>c</c> actually work; the other four documented spellings validate but fail
     ///     downstream in NumPy too, and are reproduced verbatim. A memmap holds the file open until the
-    ///     array (and every view of it) is released — the tests GC before reopening / deleting, exactly
-    ///     as a NumPy user does with <c>del a; gc.collect()</c>.
+    ///     array (and every view of it) is released — the tests collect before reopening / deleting, exactly
+    ///     as a NumPy user does with <c>del a; gc.collect()</c>. That collection is a YOUNG one
+    ///     (<see cref="ReleaseUndisposedViews"/>): a forced full collection costs tens of milliseconds in-suite
+    ///     because it marks the whole test run's heap, and the 70 this class used to force (a collect / drain /
+    ///     collect per test cleanup plus eight inline) were most of its ~3 s; a full collection is kept only as
+    ///     the fallback where a test can SEE the file is still held.
     /// </remarks>
     [TestClass]
+    [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
     public class NpyMemmapTests
     {
         private string _dir;
@@ -29,16 +34,47 @@ namespace NumSharp.Tests.IO
         [TestCleanup]
         public void Cleanup()
         {
-            // A mapped file stays open until its array + views are collected; release before deleting.
-            FullGc();
-            try { Directory.Delete(_dir, recursive: true); } catch { /* best-effort */ }
+            // A mapped file stays open until its array + views are released. The views a test left undisposed
+            // are young, so the young pass frees them; a full collection is paid only when the directory is
+            // still held afterwards (a view a mid-test GC promoted to gen 2). Deletion stays best-effort: a
+            // leftover temp directory must never fail a test. (The shared helper every mmap-using class uses.)
+            MappedFileCleanup.DeleteDirectory(_dir);
         }
 
-        private static void FullGc()
+        /// <summary>
+        ///     Collects the arrays and views a test did not dispose and runs their finalizers, releasing any
+        ///     mapping they kept open — the C# spelling of NumPy's <c>del a; gc.collect()</c>.
+        /// </summary>
+        /// <remarks>
+        ///     A young (gen-1) collection with a finalizer drain (<see cref="GcQuiescence.CollectYoung"/>): every
+        ///     object a test allocated is young unless a collection mid-test promoted it, and a full collection
+        ///     would also have to mark the rest of the test run's heap. Where the release is ASSERTED, the caller
+        ///     checks the file and falls back to <see cref="GcQuiescence.CollectFull"/>, so a promoted view can
+        ///     never fail a test while a genuinely leaked mapping still does.
+        /// </remarks>
+        private static void ReleaseUndisposedViews() => GcQuiescence.CollectYoung();
+
+        /// <summary>
+        ///     Whether <paramref name="path"/> can be opened read-write with no sharing — i.e. nothing in the
+        ///     process (a mapping included) still holds it.
+        /// </summary>
+        /// <param name="path">The file to probe.</param>
+        /// <returns>True when the exclusive open succeeded (the probe handle is closed again).</returns>
+        private static bool CanOpenExclusively(string path)
         {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            try
+            {
+                using var probe = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                return true;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
         }
 
         private string Write(string name, NDArray arr)
@@ -80,7 +116,7 @@ namespace NumSharp.Tests.IO
             string p = Write("a.npy", Arange(6));
 
             { var m = (NDArray)np.load(p, mmap_mode: "r+"); Assert.IsTrue(m.Shape.IsWriteable); m[0] = 999; m.Dispose(); }
-            FullGc(); // release the mapping before reopening
+            ReleaseUndisposedViews(); // release the mapping before reopening
 
             var disk = np.load_npy(p);
             Assert.AreEqual(999, disk.GetInt32(0), "r+ write must flush to disk");
@@ -93,7 +129,7 @@ namespace NumSharp.Tests.IO
             string p = Write("a.npy", Arange(6));
 
             { var m = (NDArray)np.load(p, mmap_mode: "c"); Assert.IsTrue(m.Shape.IsWriteable); m[0] = 777; Assert.AreEqual(777, m.GetInt32(0)); m.Dispose(); }
-            FullGc();
+            ReleaseUndisposedViews();
 
             Assert.AreEqual(0, np.load_npy(p).GetInt32(0), "copy-on-write must NOT reach disk");
         }
@@ -103,7 +139,7 @@ namespace NumSharp.Tests.IO
         {
             string p = Write("a.npy", Arange(6));
             var m = (NDArray)np.load(p, mmap_mode: "r");
-            Assert.ThrowsException<NumSharpException>(() => m[0] = 5);
+            Assert.ThrowsException<ValueError>(() => m[0] = 5);
             m.Dispose();
         }
 
@@ -137,7 +173,12 @@ namespace NumSharp.Tests.IO
             var m = (NDArray)np.load(p, mmap_mode: "r");
             Assert.IsTrue(np.array_equal(m, np.load_npy(p)));
             m.Dispose();
-            FullGc();
+            ReleaseUndisposedViews();
+            // The claim is "released once disposed and collected". The young pass normally releases every view
+            // this test left; the full collection is the fallback for a view a mid-test GC promoted. A mapping
+            // that truly leaked survives both, and the exclusive open below still throws.
+            if (!CanOpenExclusively(p))
+                GcQuiescence.CollectFull();
 
             // If the mapping were leaked this exclusive open would throw IOException.
             using var ex = new FileStream(p, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
@@ -177,7 +218,7 @@ namespace NumSharp.Tests.IO
             var row = m["0"];      // row sub-array view (GetData, contiguous)
             Assert.IsFalse(row.Shape.IsWriteable, "m[0] row view");
             Assert.IsFalse(m["1, 2"].Shape.IsWriteable, "m[1,2] element view");
-            Assert.ThrowsException<NumSharpException>(() => row[0] = 9);
+            Assert.ThrowsException<ValueError>(() => row[0] = 9);
             m.Dispose();
         }
 
@@ -204,7 +245,7 @@ namespace NumSharp.Tests.IO
             var view = m["1:4"];
             // Guard: assert read-only FIRST so the write below can't reach the read-only pages.
             Assert.IsFalse(view.Shape.IsWriteable, "a slice of an 'r' memmap must be read-only");
-            Assert.ThrowsException<NumSharpException>(() => view[0] = 99);
+            Assert.ThrowsException<ValueError>(() => view[0] = 99);
             m.Dispose();
         }
 
@@ -254,7 +295,7 @@ namespace NumSharp.Tests.IO
                 Assert.AreEqual(0, m.size, name);
                 Assert.IsFalse(m.Shape.IsWriteable, name);
                 m.Dispose();
-                FullGc();
+                ReleaseUndisposedViews();
             }
         }
 
@@ -274,9 +315,9 @@ namespace NumSharp.Tests.IO
         {
             string p = Write("a.npy", Arange(6));
             var m = (NDArray)np.load(p, mmap_mode: "r");
-            // np.copyto routes through the standard write guard (NumSharpException:
+            // np.copyto routes through the standard write guard (ValueError:
             // "assignment destination is read-only"), same as every other write path.
-            Assert.ThrowsException<NumSharpException>(() => np.copyto(m, np.zeros(new Shape(6), NPTypeCode.Int32)));
+            Assert.ThrowsException<ValueError>(() => np.copyto(m, np.zeros(new Shape(6), NPTypeCode.Int32)));
             m.Dispose();
         }
 
@@ -287,7 +328,7 @@ namespace NumSharp.Tests.IO
 
             // The header guard applies to the mmap path, matching NumPy.
             Assert.ThrowsException<FormatException>(() => np.load(p, mmap_mode: "r", max_header_size: 10));
-            FullGc();
+            ReleaseUndisposedViews();
 
             // …and allow_pickle lifts it (declares the file trusted), also matching NumPy.
             var m = (NDArray)np.load(p, mmap_mode: "r", max_header_size: 10, allow_pickle: true);
@@ -303,7 +344,7 @@ namespace NumSharp.Tests.IO
             string dst = Path.Combine(_dir, "dst.npy");
             np.save(dst, m); // saving a mapped (read-only) array is a plain read
             m.Dispose();
-            FullGc();
+            ReleaseUndisposedViews();
             Assert.IsTrue(np.array_equal(np.load_npy(dst), Arange(6).reshape(2, 3)));
         }
 
@@ -377,12 +418,26 @@ namespace NumSharp.Tests.IO
 
         // ---- dtypes that cannot be zero-copy mapped ---------------------------------
 
+        /// <summary>
+        ///     Guards a fixed-width string file under mmap: a native <c>'&lt;U1'</c> file (here NumSharp's Char array,
+        ///     written as NumPy's <c>'&lt;U1'</c>) maps zero-copy as NumPy's U1 string array, and <c>r+</c> writes
+        ///     reach the file. (It was refused while <c>'&lt;U1'</c> read as Char, whose width differs from the file's.)
+        /// </summary>
         [TestMethod]
-        public void Mmap_Char_Rejected()
+        public void Mmap_StringFile_MapsAsAStringArray()
         {
             string p = Write("c.npy", np.array(new[] { 'A', 'B', 'C' }));
-            var e = Assert.ThrowsException<NotSupportedException>(() => np.load(p, mmap_mode: "r"));
-            StringAssert.Contains(e.Message, "cannot be memory-mapped");
+            using (var mapped = (NDArray)np.load(p, mmap_mode: "r"))
+            {
+                mapped.ToString(true).Should().Be("array(['A', 'B', 'C'], dtype='<U1')");
+                mapped.flags.owndata.Should().BeFalse();
+                mapped.flags.writeable.Should().BeFalse();
+            }
+
+            string q = Write("s.npy", np.array(new[] { "ab", "cde" }, dtype: "S3"));
+            using (var rw = (NDArray)np.load(q, mmap_mode: "r+"))
+                rw[0] = "zz";
+            np.load_npy(q).ToString(true).Should().Be("array([b'zz', b'cde'], dtype='|S3')");
         }
 
         [TestMethod]

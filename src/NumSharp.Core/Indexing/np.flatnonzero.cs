@@ -28,6 +28,8 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         public static NDArray<long> flatnonzero(NDArray a)
-            => a.TensorEngine.FlatNonZero(a);
+        {
+            return a.TensorEngine.FlatNonZero(a);
+        }
     }
 }

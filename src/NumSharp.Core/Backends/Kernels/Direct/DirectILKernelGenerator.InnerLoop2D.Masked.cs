@@ -39,6 +39,9 @@ using System.Runtime.Intrinsics.X86;
 //          whole and runs the plain full-vector loop + masked tail.
 //   • any other stride, or a dtype/op without vector support — the scalar 2-D block
 //          with a per-element (or per-row) mask test.
+// Inputs broadcast along the row (S) are dispatched per C/S pattern under each mask
+// mode: unary and binary inline, three or more inputs the all-C block inline and every
+// other pattern as a stage of its own (DirectILKernelGenerator.InnerLoop.BroadcastPatterns.cs).
 // The mask bytes of a full group are one 8-byte (32-bit lanes) or 4-byte (64-bit
 // lanes) load; a TAIL group assembles its word from exactly `tail` bytes, so the
 // kernel never reads past the end of the mask array.
@@ -267,15 +270,28 @@ namespace NumSharp.Backends.Kernels
 
                 // Which inputs are broadcast along the row is a runtime property of the strides;
                 // the emitter needs it at generation time, so every C/S pattern gets its own
-                // block, selected by a per-call dispatch (unary {C,S}, binary {CC,SC,CS}; wider
-                // ops require all-C, as the unmasked kernel does).
-                var patterns = ScalarPatterns(nIn);
+                // block, selected by a per-call dispatch: unary {C,S} and binary {CC,SC,CS}
+                // inline; three to MaxBroadcastPatternInputs inputs the all-C block inline and
+                // every other pattern as a stage of its own (InnerLoop.BroadcastPatterns.cs — one
+                // method per pattern keeps the JIT's per-method inline budget); wider ops all-C.
+                if (nIn >= 3 && nIn <= MaxBroadcastPatternInputs)
+                {
+                    il.MarkLabel(lblByteMask);
+                    Emit2DMaskedBroadcastPatternDispatch(il, operandTypes, ptrLocals, innerStrideLocals, outerStrideLocals, elemSize, ms, mw, vectorBody!, scalarBody, byteMask: true, cacheKey, lblScalar, lblEnd);
 
-                il.MarkLabel(lblByteMask);
-                EmitMaskedPatternDispatch(il, operandTypes, ptrLocals, innerStrideLocals, outerStrideLocals, patterns, elemSize, ms, mw, vectorBody!, scalarBody, byteMask: true, lblScalar, lblEnd);
+                    il.MarkLabel(lblRowGate);
+                    Emit2DMaskedBroadcastPatternDispatch(il, operandTypes, ptrLocals, innerStrideLocals, outerStrideLocals, elemSize, ms, mw, vectorBody!, scalarBody, byteMask: false, cacheKey, lblScalar, lblEnd);
+                }
+                else
+                {
+                    var patterns = ScalarPatterns(nIn);
 
-                il.MarkLabel(lblRowGate);
-                EmitMaskedPatternDispatch(il, operandTypes, ptrLocals, innerStrideLocals, outerStrideLocals, patterns, elemSize, ms, mw, vectorBody!, scalarBody, byteMask: false, lblScalar, lblEnd);
+                    il.MarkLabel(lblByteMask);
+                    EmitMaskedPatternDispatch(il, operandTypes, ptrLocals, innerStrideLocals, outerStrideLocals, patterns, elemSize, ms, mw, vectorBody!, scalarBody, byteMask: true, lblScalar, lblEnd);
+
+                    il.MarkLabel(lblRowGate);
+                    EmitMaskedPatternDispatch(il, operandTypes, ptrLocals, innerStrideLocals, outerStrideLocals, patterns, elemSize, ms, mw, vectorBody!, scalarBody, byteMask: false, lblScalar, lblEnd);
+                }
             }
 
             // ---- Scalar masked 2-D block (always present): per-element mask test with the mask's

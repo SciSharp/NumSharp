@@ -9,13 +9,15 @@ namespace NumSharp
         /// Counts the number of non-zero values in the array.
         /// </summary>
         /// <param name="a">The array for which to count non-zeros.</param>
-        /// <returns>Number of non-zero values in the array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.count_nonzero.html</remarks>
+        /// <returns>Number of non-zero values in the array (a text element counts when non-empty); 0 for an empty
+        ///     array.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.count_nonzero.html — the count is the engine's
+        ///     (<c>TensorEngine.CountNonZero</c>).</remarks>
         public static long count_nonzero(NDArray a)
         {
-            if (a.size == 0)
-                return 0;
-
+            // NumPy's count_nonzero over every element (multiarray.count_nonzero), text and empty arrays included, is the
+            // engine's: DefaultEngine.CountNonZero.
             return a.TensorEngine.CountNonZero(a);
         }
 
@@ -26,30 +28,14 @@ namespace NumSharp
         /// <param name="axis">Axis along which to count non-zeros.</param>
         /// <param name="keepdims">If True, the axes which are reduced are left in the result as dimensions with size one.</param>
         /// <returns>Number of non-zero values along the specified axis.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds (a 0-d string array accepts 0 and -1).</exception>
+        /// <remarks>A string array is counted by its truth values: NumPy's <c>a != ''</c> then the sum (a non-empty string
+        ///     counts; never raises).</remarks>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.count_nonzero.html</remarks>
         public static NDArray count_nonzero(NDArray a, int axis, bool keepdims = false)
         {
-            if (a.size == 0)
-            {
-                // Handle empty arrays - return zeros with reduced shape
-                var shape = a.Shape;
-                while (axis < 0)
-                    axis = a.ndim + axis;
-                if (axis >= a.ndim)
-                    throw new ArgumentOutOfRangeException(nameof(axis));
-
-                var resultShape = Shape.GetAxis(shape, axis);
-                var result = np.zeros(new Shape(resultShape), NPTypeCode.Int64);
-                if (keepdims)
-                {
-                    var ks = new long[a.ndim];
-                    for (int d = 0, sd = 0; d < a.ndim; d++)
-                        ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                    result.Storage.Reshape(new Shape(ks));
-                }
-                return result;
-            }
-
+            // NumPy's count_nonzero(a, axis, keepdims=) is `a_bool.sum(axis=axis, dtype=intp, keepdims=keepdims)` over the
+            // truth values (text through a != ''); the whole call, the empty array included, is the engine's.
             return a.TensorEngine.CountNonZero(a, axis, keepdims);
         }
     }

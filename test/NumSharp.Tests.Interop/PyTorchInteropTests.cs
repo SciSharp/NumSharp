@@ -15,6 +15,7 @@ namespace NumSharp.Tests.Interop
     ///     serialization round-trip.
     /// </summary>
     [TestClass]
+    [PythonEcosystem]
     public class PyTorchInteropTests : InteropTestBase
     {
         [TestMethod]

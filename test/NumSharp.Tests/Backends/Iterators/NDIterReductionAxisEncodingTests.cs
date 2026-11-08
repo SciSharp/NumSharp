@@ -125,9 +125,16 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.IsTrue(it.IsReduction);
         }
 
+        /// <summary>
+        ///     An EXPLICIT reduction axis (<see cref="NDIterUtils.ReductionAxis"/>) needs no <c>REDUCE_OK</c>: NumPy's
+        ///     <c>npyiter_fill_axisdata</c> marks it as a reduction without checking the flag (probed 2.4.2:
+        ///     <c>np.nditer([x, y], op_axes=[[0, 1], [(1 &lt;&lt; 30) - 1, 0]], op_flags=[['readonly'], ['readwrite']])</c>
+        ///     constructs and its <c>y[...] += x</c> walk sums the columns). Only the implicit reduction (a -1 entry, or a
+        ///     length-1 operand axis under a longer iterator axis) requires it. This test used to expect the construction
+        ///     to throw.
+        /// </summary>
         [TestMethod]
-        [ExpectedException(typeof(ArgumentException))]
-        public void ExplicitReduction_WithoutReduceOk_Throws()
+        public void ExplicitReduction_WithoutReduceOk_IsAllowed()
         {
             var x = np.arange(12).reshape(3, 4).astype(np.int32);
             var y = np.zeros(new int[] { 4 }, np.int32);
@@ -141,13 +148,48 @@ namespace NumSharp.Tests.Backends.Iterators
             using var it = NDIterRef.AdvancedNew(
                 nop: 2,
                 op: new[] { x, y },
-                flags: NDIterGlobalFlags.BUFFERED,  // No REDUCE_OK!
+                flags: NDIterGlobalFlags.BUFFERED,  // No REDUCE_OK: NumPy does not ask for it here.
                 order: NPY_ORDER.NPY_KEEPORDER,
                 casting: NPY_CASTING.NPY_SAFE_CASTING,
                 opFlags: new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READWRITE },
                 opDtypes: null,
                 opAxesNDim: 2,
                 opAxes: opAxes);
+
+            Assert.IsTrue(it.IsReduction);
+        }
+
+        /// <summary>
+        ///     An explicit reduction along an operand axis that is not of length 1 is NumPy's ValueError, with its text:
+        ///     "operand was set up as a reduction along axis 0, but the length of the axis is 3 (it has to be 1)".
+        /// </summary>
+        [TestMethod]
+        public void ExplicitReduction_OnAnAxisLongerThanOne_IsNumPysValueError()
+        {
+            var x = np.arange(12).reshape(3, 4).astype(np.int32);
+            var y = np.zeros(new int[] { 3, 4 }, np.int32);
+
+            var opAxes = new[]
+            {
+                new[] { 0, 1 },
+                new[] { NDIterUtils.ReductionAxis(0), 1 },
+            };
+
+            var e = Assert.ThrowsException<ValueError>(() =>
+            {
+                using var it = NDIterRef.AdvancedNew(
+                    nop: 2,
+                    op: new[] { x, y },
+                    flags: NDIterGlobalFlags.REDUCE_OK,
+                    order: NPY_ORDER.NPY_KEEPORDER,
+                    casting: NPY_CASTING.NPY_SAFE_CASTING,
+                    opFlags: new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READWRITE },
+                    opDtypes: null,
+                    opAxesNDim: 2,
+                    opAxes: opAxes);
+            });
+            Assert.AreEqual("operand was set up as a reduction along axis 0, but the length of the axis is 3 (it has to be 1)",
+                            e.Message);
         }
 
         [TestMethod]

@@ -1,0 +1,239 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+
+namespace NumSharp.Tests.Strings
+{
+    /// <summary>
+    ///     The string oracle's op for sections <c>strfn</c> / <c>tfn</c> (<c>gen_strfn</c> / <c>gen_tfn</c>, strings phase 2,
+    ///     P2.5), <c>strprop</c> / <c>tprop</c>, <c>strcase</c> / <c>tcase</c>, <c>strtrans</c> / <c>ttrans</c> and
+    ///     <c>strmod</c> / <c>tmod</c>, <c>strcodec</c> / <c>tcodec</c> (P2.6): one <c>numpy.strings</c> function per case — <c>str_len</c>, the find family,
+    ///     <c>startswith</c> / <c>endswith</c>, the strips, the pads, <c>zfill</c>, <c>expandtabs</c>, <c>replace</c>,
+    ///     <c>partition</c> / <c>rpartition</c>, <c>slice</c>, the comparison names, the predicates <c>isalpha</c> …
+    ///     <c>isnumeric</c>, the case maps <c>upper</c> / <c>lower</c> / <c>swapcase</c> / <c>capitalize</c> / <c>title</c>,
+    ///     <c>translate</c>, <c>mod</c>, <c>encode</c> and <c>decode</c> — called with the generator's positional arguments
+    ///     (translate's table and deletechars, mod's values, and encode / decode's encoding and errors, as C# objects:
+    ///     <see cref="StringsObjectArgument"/>).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///     Each argument is an operand (<c>{"op": i}</c>), a NumPy <c>np.str_</c> (<c>{"npstr": …}</c>: a 0-d text that HAS a
+    ///     dtype, <c>NDArray.Scalar(string)</c>), or a Python value (<c>{"py": …}</c>) passed the way a ported NumPy line
+    ///     passes it: a str as a C# <see cref="string"/> (NumPy's dtype-less Python str), an int as a C# <see cref="long"/>
+    ///     literal (a weak Python int), a float as a <see cref="double"/>, bytes as <c>NDArray.Scalar(byte[])</c> (the
+    ///     generator calls NumPy with <c>np.bytes_</c>, a dtype-carrying scalar), None as null — which the generator passes
+    ///     only where NumPy's None means what NumSharp's null default means (an <c>end</c>, a strip set, a slice bound).
+    ///     </para>
+    ///     <para>
+    ///     <c>slice</c>'s arity is NumPy's: one argument after the text is the STOP, so the overload follows the argument
+    ///     count. A function of three outputs returns them as an <c>object[]</c>, which the comparator reads as NumPy's
+    ///     tuple (arrays) or its items (the Python strs of 0-d <c>StringDType</c> parts).
+    ///     </para>
+    /// </remarks>
+    internal static partial class StringOracleOps
+    {
+        /// <summary>Replays one section strfn / tfn op, or reports that <paramref name="op"/> is not one.</summary>
+        /// <param name="op">The corpus op key.</param>
+        /// <param name="p">The case parameters: <c>name</c>, <c>args</c>, and an optional <c>kw</c>.</param>
+        /// <param name="ops">The reconstructed operands.</param>
+        /// <param name="result">The call's result.</param>
+        /// <returns>True when <paramref name="op"/> is <c>str_fn</c>.</returns>
+        /// <exception cref="InvalidOperationException">A function name or arity the op does not know (a generator / table
+        ///     mismatch).</exception>
+        private static bool TryInvokeMethods(string op, Dictionary<string, JsonElement> p, NDArray[] ops, out object result)
+        {
+            if (op != "str_fn")
+            {
+                result = null;
+                return false;
+            }
+            result = StringsFunction(p, ops);
+            return true;
+        }
+
+        /// <summary>One <c>np.strings.&lt;name&gt;(*args, **kw)</c> call with the generator's arguments.</summary>
+        /// <param name="p">The case parameters.</param>
+        /// <param name="ops">The reconstructed operands.</param>
+        /// <returns>The result (an <c>object[]</c> for the three parts of a partition).</returns>
+        /// <exception cref="InvalidOperationException">An unknown function name or arity.</exception>
+        private static object StringsFunction(Dictionary<string, JsonElement> p, NDArray[] ops)
+        {
+            string name = Str(p, "name");
+            if (name == "translate")
+            {
+                // translate's table and deletechars are Python objects (dicts, strs, bytes, numbers, lists): passed as the C#
+                // values a ported line passes, not through NumSharp's NDArray conversions (a dict has none).
+                var raw = p["args"].EnumerateArray().ToArray();
+                object table = StringsObjectArgument(raw[1], ops);
+                object deletechars = raw.Length > 2 ? StringsObjectArgument(raw[2], ops) : null;
+                return np.strings.translate(StringsArgument(raw[0], ops), table, deletechars);
+            }
+            if (name is "encode" or "decode")
+            {
+                // encode / decode's encoding and errors are Python objects too (strs, bytes, numbers, None, lists, arrays):
+                // passed as the C# values a ported line passes; an absent argument is the null default.
+                var raw = p["args"].EnumerateArray().ToArray();
+                object encoding = raw.Length > 1 ? StringsObjectArgument(raw[1], ops) : null;
+                object errors = raw.Length > 2 ? StringsObjectArgument(raw[2], ops) : null;
+                var text = StringsArgument(raw[0], ops);
+                return name == "encode" ? np.strings.encode(text, encoding, errors) : np.strings.decode(text, encoding, errors);
+            }
+            if (name == "mod")
+            {
+                // mod's values are a Python object too (numbers, strs, bytes, None, dicts, lists, arrays): passed as the C#
+                // value a ported line passes.
+                var raw = p["args"].EnumerateArray().ToArray();
+                return np.strings.mod(StringsArgument(raw[0], ops), StringsObjectArgument(raw[1], ops));
+            }
+            var args = p["args"].EnumerateArray().Select(e => StringsArgument(e, ops)).ToArray();
+            NDArray A(int i) => i < args.Length ? args[i] : null;
+            // The ufunc keywords of the ufunc-shaped functions (str_len, the predicates): out= / where= name operands,
+            // dtype= a descriptor string.
+            NDArray kwOut = null, kwWhere = null;
+            DType kwDtype = null;
+            if (p.TryGetValue("kw", out var kw))
+            {
+                if (kw.TryGetProperty("out", out var o))
+                    kwOut = ops[o.GetInt32()];
+                if (kw.TryGetProperty("where", out var w))
+                    kwWhere = ops[w.GetInt32()];
+                if (kw.TryGetProperty("dtype", out var d))
+                    kwDtype = np.dtype(d.GetString());
+            }
+            switch (name)
+            {
+                case "str_len": return np.strings.str_len(A(0), kwOut, kwWhere, kwDtype);
+                case "isalpha": return np.strings.isalpha(A(0), kwOut, kwWhere, kwDtype);
+                case "isdigit": return np.strings.isdigit(A(0), kwOut, kwWhere, kwDtype);
+                case "isspace": return np.strings.isspace(A(0), kwOut, kwWhere, kwDtype);
+                case "isalnum": return np.strings.isalnum(A(0), kwOut, kwWhere, kwDtype);
+                case "islower": return np.strings.islower(A(0), kwOut, kwWhere, kwDtype);
+                case "isupper": return np.strings.isupper(A(0), kwOut, kwWhere, kwDtype);
+                case "istitle": return np.strings.istitle(A(0), kwOut, kwWhere, kwDtype);
+                case "isdecimal": return np.strings.isdecimal(A(0), kwOut, kwWhere, kwDtype);
+                case "isnumeric": return np.strings.isnumeric(A(0), kwOut, kwWhere, kwDtype);
+                case "upper": return np.strings.upper(A(0));
+                case "lower": return np.strings.lower(A(0));
+                case "swapcase": return np.strings.swapcase(A(0));
+                case "capitalize": return np.strings.capitalize(A(0));
+                case "title": return np.strings.title(A(0));
+                case "find": return np.strings.find(A(0), A(1), A(2), A(3));
+                case "rfind": return np.strings.rfind(A(0), A(1), A(2), A(3));
+                case "index": return np.strings.index(A(0), A(1), A(2), A(3));
+                case "rindex": return np.strings.rindex(A(0), A(1), A(2), A(3));
+                case "count": return np.strings.count(A(0), A(1), A(2), A(3));
+                case "startswith": return np.strings.startswith(A(0), A(1), A(2), A(3));
+                case "endswith": return np.strings.endswith(A(0), A(1), A(2), A(3));
+                case "strip": return np.strings.strip(A(0), A(1));
+                case "lstrip": return np.strings.lstrip(A(0), A(1));
+                case "rstrip": return np.strings.rstrip(A(0), A(1));
+                case "center": return np.strings.center(A(0), A(1), A(2));
+                case "ljust": return np.strings.ljust(A(0), A(1), A(2));
+                case "rjust": return np.strings.rjust(A(0), A(1), A(2));
+                case "zfill": return np.strings.zfill(A(0), A(1));
+                case "expandtabs": return np.strings.expandtabs(A(0), A(1));
+                case "replace": return np.strings.replace(A(0), A(1), A(2), A(3));
+                case "partition":
+                {
+                    var (before, separator, after) = np.strings.partition(A(0), A(1));
+                    return new object[] { before, separator, after };
+                }
+                case "rpartition":
+                {
+                    var (before, separator, after) = np.strings.rpartition(A(0), A(1));
+                    return new object[] { before, separator, after };
+                }
+                case "slice":
+                    // NumPy's slice(a, start=None, stop=np._NoValue, step=None, /): one argument after the text is the stop.
+                    return args.Length switch
+                    {
+                        1 => np.strings.slice(A(0)),
+                        2 => np.strings.slice(A(0), A(1)),
+                        3 => np.strings.slice(A(0), A(1), A(2)),
+                        4 => np.strings.slice(A(0), A(1), A(2), A(3)),
+                        _ => throw new InvalidOperationException($"np.strings.slice takes 1 to 4 arguments, the case has {args.Length}"),
+                    };
+                case "equal": return np.strings.equal(A(0), A(1));
+                case "not_equal": return np.strings.not_equal(A(0), A(1));
+                case "less": return np.strings.less(A(0), A(1));
+                case "less_equal": return np.strings.less_equal(A(0), A(1));
+                case "greater": return np.strings.greater(A(0), A(1));
+                case "greater_equal": return np.strings.greater_equal(A(0), A(1));
+                default:
+                    throw new InvalidOperationException($"the string oracle has no numpy.strings function '{name}'");
+            }
+        }
+
+        /// <summary>
+        ///     One argument of an <c>object</c> parameter (translate's <c>table</c> / <c>deletechars</c>, mod's <c>values</c>) as a ported line
+        ///     passes it: an operand as itself, a <c>np.str_</c> as <c>NDArray.Scalar(string)</c>, and a Python value as the
+        ///     C# value standing in for it — a str as a <see cref="string"/>, bytes as a <c>byte[]</c> (Python bytes; NumPy's
+        ///     <c>np.asarray</c> makes the same 0-d <c>S</c> array of them), an int as a <see cref="long"/> or a
+        ///     <see cref="System.Numerics.BigInteger"/> past int64, a float as a <see cref="double"/>, None as null, a dict as a
+        ///     dictionary, and a Python list as a C# array (nested lists as nested arrays, so NumPy's object array of dicts /
+        ///     None keeps its shape; a list of only strs is a <c>string[]</c>).
+        /// </summary>
+        /// <param name="e">The encoded argument.</param>
+        /// <param name="ops">The reconstructed operands.</param>
+        /// <returns>The value.</returns>
+        /// <exception cref="FormatException">An unknown argument encoding.</exception>
+        private static object StringsObjectArgument(JsonElement e, NDArray[] ops)
+        {
+            if (e.TryGetProperty("op", out var op))
+                return ops[op.GetInt32()];
+            if (e.TryGetProperty("npstr", out var npstr))
+                return NDArray.Scalar((string)StringOracleCorpus.Decode(npstr));
+            if (!e.TryGetProperty("py", out var py))
+                throw new FormatException($"unknown numpy.strings argument {e}");
+            return PythonListsAsArrays(StringOracleCorpus.Decode(py));
+        }
+
+        /// <summary>
+        ///     A decoded Python value with its lists made C# arrays (recursively): a list of strings a <c>string[]</c>, a list
+        ///     of bytes a <c>byte[][]</c> (NumPy's <c>S</c> array of them), any other list an <c>object[]</c> of its converted
+        ///     items; dictionaries and scalars stay as they are.
+        /// </summary>
+        /// <param name="value">The decoded value.</param>
+        /// <returns>The converted value.</returns>
+        private static object PythonListsAsArrays(object value)
+        {
+            if (value is not List<object> list)
+                return value;
+            var items = list.Select(PythonListsAsArrays).ToArray();
+            if (items.Length > 0 && items.All(x => x is string))
+                return items.Cast<string>().ToArray();
+            if (items.Length > 0 && items.All(x => x is byte[]))
+                return items.Cast<byte[]>().ToArray();
+            return items;
+        }
+
+        /// <summary>
+        ///     One argument of a numpy.strings case as a ported line passes it (see the class remarks): an operand, a
+        ///     dtype-carrying 0-d text, or a Python value through NumSharp's literal conversions.
+        /// </summary>
+        /// <param name="e">The encoded argument.</param>
+        /// <param name="ops">The reconstructed operands.</param>
+        /// <returns>The argument (null for None).</returns>
+        /// <exception cref="FormatException">An unknown argument encoding.</exception>
+        private static NDArray StringsArgument(JsonElement e, NDArray[] ops)
+        {
+            if (e.TryGetProperty("op", out var op))
+                return ops[op.GetInt32()];
+            if (e.TryGetProperty("npstr", out var npstr))
+                return NDArray.Scalar((string)StringOracleCorpus.Decode(npstr));
+            if (!e.TryGetProperty("py", out var py))
+                throw new FormatException($"unknown numpy.strings argument {e}");
+            return StringOracleCorpus.Decode(py) switch
+            {
+                null => null,
+                // Python bytes reach NumPy as np.bytes_ (a 0-d S scalar with a dtype): NumSharp's NDArray.Scalar(byte[]).
+                byte[] bytes => NDArray.Scalar(bytes),
+                // A Python int past int64 and within uint64 is a C# ulong literal (np.asanyarray makes it uint64).
+                System.Numerics.BigInteger big when big >= 0 && big <= ulong.MaxValue => NDArray.FromPythonOperand((ulong)big),
+                // A str, an int, a float, a bool, a complex: the 0-d array its C# literal's implicit conversion makes.
+                var value => NDArray.FromPythonOperand(value),
+            };
+        }
+    }
+}

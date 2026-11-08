@@ -1,0 +1,369 @@
+using System;
+using System.Globalization;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
+using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
+using NumSharp.Tests.Fuzz;
+
+namespace NumSharp.Tests.Strings
+{
+    /// <summary>
+    ///     The committed NumPy 2.4.2 oracle for the string dtypes (<c>Strings/corpus/strings_&lt;section&gt;.jsonl</c>, one
+    ///     file per section, written by <c>test/oracle/gen_strings_oracle.py</c>): its case model, the exact reconstruction
+    ///     of every operand view from its raw bytes, and the decoding of the text values the generator stores as hex.
+    /// </summary>
+    /// <remarks>
+    ///     Text never travels as a JSON string: a Python <c>str</c> is <c>{"u": UTF-32LE hex}</c> and a <c>bytes</c> is
+    ///     <c>{"b": hex}</c>, so NULs, lone surrogates and supplementary-plane characters survive the round trip
+    ///     unchanged (System.Text.Json refuses lone surrogates in string literals).
+    /// </remarks>
+    internal static class StringOracleCorpus
+    {
+        private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
+
+        /// <summary>One recorded NumPy call (see the generator's module docstring for the field meanings).</summary>
+        internal sealed class Case
+        {
+            /// <summary>Unique id: <c>section/op/n</c> (or a descriptive id in the dtype section).</summary>
+            public string Id { get; set; }
+
+            /// <summary>The op key <see cref="StringOracleOps.Invoke"/> dispatches on.</summary>
+            public string Op { get; set; }
+
+            /// <summary>The call's arguments other than the operands.</summary>
+            public Dictionary<string, JsonElement> Params { get; set; }
+
+            /// <summary>The arrays the call reads, in call order.</summary>
+            public Operand[] Operands { get; set; }
+
+            /// <summary>1: NumSharp must match NumPy now. 2: NumPy computes on text, NumSharp may defer.</summary>
+            public int Phase { get; set; }
+
+            /// <summary>The operand layout name(s) (diagnostics only).</summary>
+            public string Layout { get; set; }
+
+            /// <summary>The expectation when NumPy returned (kind-dependent object); undefined when it raised.</summary>
+            public JsonElement Expected { get; set; }
+
+            /// <summary>NumPy's exception when it raised, else null.</summary>
+            public ErrorInfo Error { get; set; }
+        }
+
+        /// <summary>NumPy's exception: its first well-known class and <c>str(e)</c>, verbatim.</summary>
+        internal sealed class ErrorInfo
+        {
+            /// <summary>The Python class name (UFuncTypeError is recorded as TypeError).</summary>
+            public string Type { get; set; }
+
+            /// <summary>The message.</summary>
+            public string Text { get; set; }
+        }
+
+        /// <summary>An operand: a view (shape, element strides, element offset) over a 1-D base buffer.</summary>
+        internal sealed class Operand
+        {
+            /// <summary>The descriptor's <c>str</c> (<c>&lt;U3</c>, <c>|S5</c>, <c>|b1</c>, <c>&lt;i8</c>).</summary>
+            public string Dtype { get; set; }
+
+            /// <summary>The view's dimensions.</summary>
+            public long[] Shape { get; set; }
+
+            /// <summary>The view's strides in elements (negative and zero strides included).</summary>
+            public long[] Strides { get; set; }
+
+            /// <summary>The view's first element, in elements from the base start.</summary>
+            public long Offset { get; set; }
+
+            /// <summary>The base buffer's length in elements.</summary>
+            public long BufferSize { get; set; }
+
+            /// <summary>The base buffer's raw bytes as hex.</summary>
+            public string Buffer { get; set; }
+
+            /// <summary>False when NumPy's view was read-only beyond what its strides show; null otherwise.</summary>
+            public bool? Writeable { get; set; }
+
+            /// <summary>
+            ///     A NEP 55 <c>StringDType</c> operand's descriptor request (<c>{"coerce": bool, "na": value}</c>, the
+            ///     <c>na</c> member absent when the descriptor has no NA object); null for every other dtype.
+            /// </summary>
+            /// <remarks>A <c>StringDType</c> base carries <see cref="Values"/> instead of <see cref="Buffer"/>: its cells hold
+            ///     arena offsets and heap pointers that only NumPy's allocator could read.</remarks>
+            public JsonElement? T { get; set; }
+
+            /// <summary>
+            ///     A <c>StringDType</c> base's elements in order: <c>{"u": hex}</c> for a text, <c>{"na": true}</c> for an NA
+            ///     cell (the base is rebuilt by storing each value, the descriptor's NA object for an NA cell).
+            /// </summary>
+            public JsonElement[] Values { get; set; }
+        }
+
+        /// <summary>The corpus directory next to the test assembly (the csproj rule copies every <c>Strings\corpus\*.jsonl</c>).</summary>
+        internal static string CorpusDirectory => Path.Combine(AppContext.BaseDirectory, "Strings", "corpus");
+
+        /// <summary>
+        ///     The corpus files, one per section (<c>strings_&lt;section&gt;.jsonl</c>), in ordinal name order — the order
+        ///     <see cref="Load"/> reads them in, so a run is deterministic whatever order the file system lists them in.
+        /// </summary>
+        /// <exception cref="DirectoryNotFoundException">The corpus was not copied next to the test assembly.</exception>
+        internal static string[] CorpusFiles
+        {
+            get
+            {
+                var files = Directory.GetFiles(CorpusDirectory, "strings_*.jsonl");
+                Array.Sort(files, StringComparer.Ordinal);
+                return files;
+            }
+        }
+
+        /// <summary>
+        ///     Reads every case of the given JSON-lines files, in the order given: the randomized soak corpora of
+        ///     <c>test/oracle/soak_strings_oracle.py</c>, which live outside the committed corpus directory.
+        /// </summary>
+        /// <param name="files">The files (one case per non-empty line, the committed sections' format).</param>
+        /// <returns>The cases, file by file and in file order within a file.</returns>
+        /// <exception cref="FileNotFoundException">A file does not exist.</exception>
+        /// <exception cref="JsonException">A line is not a case.</exception>
+        internal static List<Case> LoadFiles(IEnumerable<string> files)
+        {
+            var cases = new List<Case>();
+            foreach (var file in files)
+                foreach (var line in File.ReadLines(file, Encoding.ASCII))
+                    if (line.Length > 0)
+                        cases.Add(JsonSerializer.Deserialize<Case>(line, Json));
+            return cases;
+        }
+
+        /// <summary>Reads every case of every section file.</summary>
+        /// <returns>The cases, file by file (in <see cref="CorpusFiles"/> order) and in file order within a file.</returns>
+        /// <exception cref="FileNotFoundException">No section file was copied next to the test assembly.</exception>
+        internal static List<Case> Load()
+        {
+            var files = CorpusFiles;
+            if (files.Length == 0)
+                throw new FileNotFoundException($"no string oracle section file (strings_*.jsonl) under {CorpusDirectory}");
+            var cases = new List<Case>();
+            foreach (var file in files)
+                foreach (var line in File.ReadLines(file, Encoding.ASCII))
+                    if (line.Length > 0)
+                        cases.Add(JsonSerializer.Deserialize<Case>(line, Json));
+            return cases;
+        }
+
+        /// <summary>
+        ///     Rebuilds the exact operand NumPy saw: the base buffer becomes a 1-D storage of its dtype that owns its data,
+        ///     and the operand is either that base itself (when NumPy's operand WAS the base: the whole buffer, stride 1,
+        ///     offset 0 — so <c>flags.owndata</c> is true as in NumPy) or a non-owning view of it with the recorded shape,
+        ///     strides and offset (so a reversed, strided, transposed, broadcast, empty or 0-d view is that view, not a
+        ///     copy).
+        /// </summary>
+        /// <param name="o">The operand descriptor.</param>
+        /// <returns>The base or the view.</returns>
+        /// <exception cref="NotSupportedException">A numeric dtype the general corpus has no mapping for.</exception>
+        internal static NDArray Reconstruct(Operand o)
+        {
+            if (o.T.HasValue)
+                return ReconstructVString(o);
+            var descr = np.dtype(o.Dtype);
+            bool isString = descr.Meta is StringDTypeMeta;
+            if (!isString)
+            {
+                // Numeric operands (masks, indices, numbers) ride the general corpus' reconstruction by NumPy dtype name.
+                return FuzzCorpus.Reconstruct(new FuzzCorpus.Operand
+                {
+                    Dtype = descr.name,
+                    Shape = o.Shape,
+                    Strides = o.Strides,
+                    Offset = o.Offset,
+                    BufferSize = o.BufferSize,
+                    Buffer = o.Buffer,
+                    Writeable = o.Writeable,
+                });
+            }
+
+            NDArray baseArray;
+            if (o.BufferSize == 0)
+            {
+                baseArray = np.zeros(new Shape(0L), descr);
+            }
+            else
+            {
+                var bytes = Convert.FromHexString(o.Buffer);
+                var slice = new StringArraySlice(ArraySlice.FromBuffer<byte>(bytes, true), descr);
+                baseArray = new NDArray(new UnmanagedStorage(slice, new Shape(new[] { o.BufferSize })));
+            }
+
+            bool isBase = o.Shape.Length == 1 && o.Shape[0] == o.BufferSize && o.Offset == 0
+                          && (o.BufferSize <= 1 || o.Strides[0] == 1);
+            NDArray view = isBase
+                ? baseArray
+                : new NDArray(baseArray.Storage.Alias(new Shape(o.Shape, o.Strides, o.Offset, o.BufferSize)));
+            if (o.Writeable == false)
+                view.setflags(write: false);
+            return view;
+        }
+
+        /// <summary>
+        ///     Rebuilds a NEP 55 <c>StringDType</c> operand: a base of <see cref="Operand.BufferSize"/> cells of the
+        ///     requested descriptor whose elements are stored one by one in index order (the order NumPy's
+        ///     <c>np.array(values, dtype)</c> stores them, so short, arena and heap placement — and with it <c>tobytes()</c> —
+        ///     is NumPy's), an NA cell by storing the descriptor's NA object; then the view over it, as for the fixed-width
+        ///     dtypes.
+        /// </summary>
+        /// <param name="o">The operand descriptor (with <see cref="Operand.T"/> and <see cref="Operand.Values"/>).</param>
+        /// <returns>The base or the view.</returns>
+        /// <exception cref="FormatException">A value encoding the decoder does not know.</exception>
+        private static NDArray ReconstructVString(Operand o)
+        {
+            var descr = StringOracleOps.VStringDescr(o.T.Value);
+            var baseArray = new NDArray(descr, new Shape(new[] { o.BufferSize }), true);
+            var slice = baseArray.Storage.VStringSlice;
+            for (long i = 0; i < o.BufferSize; i++)
+                slice.SetIndex(i, VStringValue(o.Values[i], descr));
+            bool isBase = o.Shape.Length == 1 && o.Shape[0] == o.BufferSize && o.Offset == 0
+                          && (o.BufferSize <= 1 || o.Strides[0] == 1);
+            NDArray view = isBase
+                ? baseArray
+                : new NDArray(baseArray.Storage.Alias(new Shape(o.Shape, o.Strides, o.Offset, o.BufferSize)));
+            if (o.Writeable == false)
+                view.setflags(write: false);
+            return view;
+        }
+
+        /// <summary>
+        ///     One encoded <c>StringDType</c> element as the C# value that stores it: <c>{"na": true}</c> → the descriptor's
+        ///     NA object, any other encoding → <see cref="Decode"/> (a text).
+        /// </summary>
+        /// <param name="e">The encoded element.</param>
+        /// <param name="descr">The <c>StringDType</c> descriptor.</param>
+        /// <returns>The value.</returns>
+        /// <exception cref="FormatException">An unknown encoding.</exception>
+        internal static object VStringValue(JsonElement e, DType descr)
+            => e.ValueKind == JsonValueKind.Object && e.TryGetProperty("na", out _) ? descr.na_object : Decode(e);
+
+        /// <summary>
+        ///     A value the generator encoded with <c>enc()</c>: <c>{"u"}</c> → <see cref="string"/>, <c>{"b"}</c> →
+        ///     <c>byte[]</c>, <c>{"none"}</c> → null, <c>{"bool"}</c> / <c>{"int"}</c> / <c>{"float"}</c> → bool / long /
+        ///     double (a non-finite float travels as <c>"nan"</c> / <c>"inf"</c> / <c>"-inf"</c>), a JSON array → a
+        ///     <see cref="List{T}"/> of decoded items, <c>{"dict": [[k, v], …]}</c> → a <see cref="Dictionary{TKey, TValue}"/>
+        ///     of object to object in the generator's item order, each key and value decoded with its own type (a Python
+        ///     float key stays a double, True a bool, a str a string — the C# values a ported translate table holds).
+        /// </summary>
+        /// <param name="e">The encoded value.</param>
+        /// <returns>The decoded value.</returns>
+        /// <exception cref="FormatException">An unknown encoding.</exception>
+        internal static object Decode(JsonElement e)
+        {
+            if (e.ValueKind == JsonValueKind.Array)
+                return e.EnumerateArray().Select(Decode).ToList();
+            if (e.ValueKind == JsonValueKind.Null)
+                return null;
+            if (e.TryGetProperty("dict", out var items))
+            {
+                var dict = new Dictionary<object, object>();
+                foreach (var item in items.EnumerateArray())
+                    dict[Decode(item[0])] = Decode(item[1]);
+                return dict;
+            }
+            if (e.TryGetProperty("u", out var u))
+                return Utf32HexToString(u.GetString());
+            if (e.TryGetProperty("b", out var b))
+                return Convert.FromHexString(b.GetString());
+            if (e.TryGetProperty("none", out _))
+                return null;
+            if (e.TryGetProperty("bool", out var bo))
+                return bo.GetBoolean();
+            if (e.TryGetProperty("int", out var i))
+            {
+                // A Python int past int64 (section strcharobj's limits) is a BigInteger, NumSharp's Python int of any size.
+                // Two returns, not a conditional: a conditional would type BOTH arms BigInteger (long converts to it).
+                if (i.TryGetInt64(out long l))
+                    return l;
+                return System.Numerics.BigInteger.Parse(i.GetRawText(), CultureInfo.InvariantCulture);
+            }
+            if (e.TryGetProperty("complex", out var cx))
+                return new System.Numerics.Complex(DecodeFloat(cx[0]), DecodeFloat(cx[1]));
+            if (e.TryGetProperty("float", out var f))
+                return DecodeFloat(f);
+            throw new FormatException($"unknown value encoding {e}");
+        }
+
+        /// <summary>A float as the generator writes it: a JSON number, or <c>"nan"</c> / <c>"inf"</c> / <c>"-inf"</c>
+        ///     (the corpus is written without JSON's non-standard literals).</summary>
+        /// <param name="f">The encoded float.</param>
+        /// <returns>The value; <c>"nan"</c> is CPython's <c>Py_NAN</c> (the POSITIVE quiet NaN <c>0x7ff8000000000000</c>, the
+        ///     bits of <c>float('nan')</c> and <c>np.nan</c>), not .NET's <see cref="double.NaN"/> (<c>0xfff8…</c>): a case
+        ///     that exposes a float's bytes — <c>b'%s' % np.nan</c> writes the buffer — sees NumPy's bits.</returns>
+        /// <exception cref="FormatException">An unknown spelling.</exception>
+        private static double DecodeFloat(JsonElement f)
+            => f.ValueKind == JsonValueKind.Number
+                ? f.GetDouble()
+                : f.GetString() switch
+                {
+                    "nan" => BitConverter.Int64BitsToDouble(0x7FF8000000000000),
+                    "inf" => double.PositiveInfinity,
+                    "-inf" => double.NegativeInfinity,
+                    var s => throw new FormatException($"unknown float spelling '{s}'"),
+                };
+
+        /// <summary>
+        ///     A Python <c>str</c> from its UTF-32LE bytes, mapped to .NET the way NumSharp's <c>U</c> decoding maps it: a
+        ///     supplementary code point becomes a surrogate pair, a lone surrogate code point stays one UTF-16 unit.
+        /// </summary>
+        /// <param name="hex">The UTF-32LE bytes as hex.</param>
+        /// <returns>The .NET string.</returns>
+        internal static string Utf32HexToString(string hex)
+        {
+            var bytes = Convert.FromHexString(hex);
+            var sb = new StringBuilder(bytes.Length / 4);
+            for (int i = 0; i + 3 < bytes.Length; i += 4)
+            {
+                int cp = BitConverter.ToInt32(bytes, i);
+                if (cp > 0xFFFF)
+                    sb.Append(char.ConvertFromUtf32(cp));
+                else
+                    sb.Append((char)cp);
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>
+        ///     The C-order bytes of an array of any layout — the bytes NumPy's <c>np.ascontiguousarray(r).tobytes()</c>
+        ///     gives, so a result is compared element for element in logical order whatever its strides.
+        /// </summary>
+        /// <param name="r">The array (any dtype NumSharp stores).</param>
+        /// <returns>size × itemsize bytes.</returns>
+        internal static unsafe byte[] CBytes(NDArray r)
+        {
+            if (r.size == 0)
+                return Array.Empty<byte>();
+            // A copy in C order is the logical element sequence; a C-contiguous non-broadcast array already is one.
+            var c = r.Shape.IsContiguous && !r.Shape.IsBroadcasted ? r : r.copy('C');
+            int isz = c.dtype.itemsize;
+            long n = c.size * isz;
+            var dst = new byte[n];
+            var src = (byte*)c.Storage.Address + c.Shape.offset * isz;
+            new ReadOnlySpan<byte>(src, checked((int)n)).CopyTo(dst);
+            return dst;
+        }
+
+        /// <summary>
+        ///     The whole base buffer under an operand view — after an in-place call, the bytes inside AND outside the
+        ///     view's window, so a write that strays outside the selected elements is caught.
+        /// </summary>
+        /// <param name="view">An operand built by <see cref="Reconstruct"/> (it shares its base's storage).</param>
+        /// <returns>The base buffer's bytes.</returns>
+        internal static unsafe byte[] BaseBytes(NDArray view)
+        {
+            var arr = view.Storage.InternalArray;
+            long n = arr is StringArraySlice s ? s.BytesLength : arr.Count * arr.ItemLength;
+            var dst = new byte[n];
+            new ReadOnlySpan<byte>(arr.Address, checked((int)n)).CopyTo(dst);
+            return dst;
+        }
+    }
+}

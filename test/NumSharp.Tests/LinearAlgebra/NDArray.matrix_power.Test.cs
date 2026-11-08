@@ -18,7 +18,7 @@ namespace NumSharp.Tests.LinearAlgebra
 
             for (int idx = 0; idx < 3; idx++)
             for (int jdx = 0; jdx < 3; jdx++)
-                Assert.IsTrue(expected[idx, jdx] == onces[idx, jdx]);
+                Assert.IsTrue(expected[idx, jdx] == (double)onces[idx, jdx]);
         }
 
         //[TestMethod]
@@ -32,7 +32,7 @@ namespace NumSharp.Tests.LinearAlgebra
 
             for (int idx = 0; idx < 3; idx++)
             for (int jdx = 0; jdx < 3; jdx++)
-                Assert.IsTrue(nd2[idx, jdx] == nd3[idx, jdx]);
+                Assert.IsTrue((double)nd2[idx, jdx] == (double)nd3[idx, jdx]);
         }
     }
 }

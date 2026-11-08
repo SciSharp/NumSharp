@@ -92,6 +92,44 @@ namespace NumSharp.Tests.Polynomial
             double.IsNaN(v).Should().BeTrue();
         }
 
+        /// <summary>
+        ///     NumPy's Horner loop starts from <c>y = zeros_like(x)</c>, so its FIRST product <c>y * x</c> is in x's own dtype
+        ///     and only the first add widens it: with complex coefficients and a real infinite x that product is the real
+        ///     NaN of <c>0 * inf</c> (the coefficient's imaginary part survives the add), and with float coefficients and an
+        ///     integer x it is an integer 0 (never -0.0). Raw bits, NumPy 2.4.2's (probed); the 1-D path used to take the
+        ///     first product in result_type(p, x) (the np-layer plan's NL4).
+        /// </summary>
+        [TestMethod]
+        public void Polyval_FirstProduct_IsInXsDtype()
+        {
+            static (long, long) Bits(Complex z) => (BitConverter.DoubleToInt64Bits(z.Real), BitConverter.DoubleToInt64Bits(z.Imaginary));
+            // 0 * inf is GENERATED, so its NaN is the CPU's default (x86 0xFFF8..., arm64 0x7FF8...); the later products only
+            // propagate it. No operand holds a NaN.
+            long NumPyNaN = (long)HostCpu.DefaultNaN64Bits;
+            using (var r = np.polyval(np.array(new[] { new Complex(1, 1) }), np.array(new[] { double.PositiveInfinity })))
+                Bits((Complex)r.GetValue(0)).Should().Be((NumPyNaN, BitConverter.DoubleToInt64Bits(1.0)), "[1+1j] at [inf] is nan+1j");
+            using (var r = np.polyval(np.array(new[] { new Complex(1, 0) }), np.array(new[] { double.PositiveInfinity })))
+                Bits((Complex)r.GetValue(0)).Should().Be((NumPyNaN, 0L), "[1+0j] at [inf] is nan+0j");
+            using (var r = np.polyval(np.array(new[] { new Complex(1, 1) }), np.array(new[] { double.NegativeInfinity })))
+                Bits((Complex)r.GetValue(0)).Should().Be((NumPyNaN, BitConverter.DoubleToInt64Bits(1.0)), "[1+1j] at [-inf] is nan+1j");
+            using (var r = np.polyval(np.array(new[] { new Complex(1, 1) }), np.array(new[] { float.PositiveInfinity })))
+                Bits((Complex)r.GetValue(0)).Should().Be((NumPyNaN, BitConverter.DoubleToInt64Bits(1.0)), "a float32 x: nan+1j");
+            // After the first add every product is complex: [2, 1+1j] at [inf] is nan+nanj, and [1+1j, 2] at [1, inf]
+            // is [3+1j, nan+nanj].
+            using (var r = np.polyval(np.array(new[] { new Complex(2, 0), new Complex(1, 1) }), np.array(new[] { double.PositiveInfinity })))
+                Bits((Complex)r.GetValue(0)).Should().Be((NumPyNaN, NumPyNaN), "[2, 1+1j] at [inf] is nan+nanj");
+            using (var r = np.polyval(np.array(new[] { new Complex(1, 1), new Complex(2, 0) }), np.array(new[] { 1.0, double.PositiveInfinity })))
+            {
+                Bits((Complex)r.GetValue(0)).Should().Be((BitConverter.DoubleToInt64Bits(3.0), BitConverter.DoubleToInt64Bits(1.0)));
+                Bits((Complex)r.GetValue(1)).Should().Be((NumPyNaN, NumPyNaN));
+            }
+            // An integer x with float coefficients: the first product is the integer 0, so -0.0 + 0 is +0.0.
+            using (var r = np.polyval(np.array(new[] { -0.0 }), np.array(new long[] { -3 })))
+                BitConverter.DoubleToInt64Bits((double)r.GetValue(0)).Should().Be(0L, "[-0.0] at int [-3] is +0.0");
+            using (var r = np.polyval(np.array(new[] { 1.5, -0.0 }), np.array(new long[] { 2, -2 })))
+                r.ToArray<double>().Should().Equal(3.0, -3.0);
+        }
+
         [TestMethod]
         public void Polyval_ZeroDCoeffs_Throws()
         {
@@ -125,6 +163,82 @@ namespace NumSharp.Tests.Polynomial
         {
             new Action(() => np.polyder(np.array(new double[] { 1, 2, 3 }), -1))
                 .Should().Throw<ValueError>().WithMessage("Order of derivative must be positive (see polyint)");
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2's polyder is <c>n = len(p) - 1; y = p[:-1] * arange(n, 0, -1); val = p if m == 0 else
+        ///     polyder(y, m - 1)</c>: the ramp has <c>len(p) - 1</c> terms (the FIRST axis), so a 2-D p is differentiated
+        ///     along its rows, the ramp broadcasting against each row's last axis. Probed: <c>np.polyder(np.ones((3, 2)))</c>
+        ///     is <c>[[2, 1], [2, 1]]</c>, <c>np.polyder(np.arange(6.).reshape(3, 2))</c> is <c>[[0, 1], [4, 3]]</c>,
+        ///     <c>np.polyder(np.ones((3, 2, 2)))</c> is four rows of <c>[2, 1]</c> in shape (2, 2, 2), and the order 0 of a
+        ///     (3, 2, 2) p is p itself. NumSharp's ramp had <c>p.size - 1</c> terms before the np-layer plan's NL9, and every
+        ///     2-D call raised.
+        /// </summary>
+        [TestMethod]
+        public void Polyder_TwoDimensionalP_DifferentiatesAlongTheFirstAxis()
+        {
+            using var d1 = np.polyder(np.ones(new Shape(3, 2)));
+            d1.Should().BeShaped(2, 2).And.BeOfValues(2.0, 1.0, 2.0, 1.0);
+            using var d2 = np.polyder(np.arange(6.0).reshape(3, 2));
+            d2.Should().BeOfValues(0.0, 1.0, 4.0, 3.0);
+            using var d3 = np.polyder(np.ones(new Shape(3, 2, 2)));
+            d3.Should().BeShaped(2, 2, 2).And.BeOfValues(2.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0);
+            using var d0 = np.polyder(np.ones(new Shape(3, 2, 2)), 0);
+            d0.Should().BeShaped(3, 2, 2);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>n = len(p) - 1</c> runs before the <c>m == 0</c> test, so a 0-d p raises <c>TypeError: len() of
+        ///     unsized object</c> at EVERY order, 0 included (probed for m = 0, 1 and 2). NumSharp returned the 0-d array for
+        ///     m = 0 and raised the slice's IndexError for m &gt;= 1 before NL9.
+        /// </summary>
+        [TestMethod]
+        public void Polyder_ZeroDimensionalP_IsLensTypeErrorAtEveryOrder()
+        {
+            using var p = np.array(5.0);
+            foreach (int m in new[] { 0, 1, 2 })
+                new Action(() => np.polyder(p, m)).Should().Throw<TypeError>().WithMessage("len() of unsized object", $"m = {m}");
+        }
+
+        /// <summary>
+        ///     NumPy's recursion computes <c>y = p[:-1] * arange(n, 0, -1)</c> at every level, the last one (m == 0) included,
+        ///     and discards that last product - but it still raises when the product does not broadcast. Probed:
+        ///     <c>np.polyder(np.ones((3, 4)), 0)</c> raises <c>operands could not be broadcast together with shapes (2,4) (2,)
+        ///     </c>, and <c>np.polyder(np.ones((3, 2)), 2)</c> and <c>(..., 3)</c> raise it for <c>(0,2) (0,) </c> (after the
+        ///     products that succeed). NumSharp raises a broadcast mismatch as IncorrectShapeException with NumPy's text (the
+        ///     house type for NumPy's ValueError there).
+        /// </summary>
+        [TestMethod]
+        public void Polyder_DiscardedOrderZeroProduct_StillRaises()
+        {
+            new Action(() => np.polyder(np.ones(new Shape(3, 4)), 0))
+                .Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (2,4) (2,) ");
+            new Action(() => np.polyder(np.ones(new Shape(3, 2)), 2))
+                .Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (0,2) (0,) ");
+            new Action(() => np.polyder(np.ones(new Shape(3, 2)), 3))
+                .Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (0,2) (0,) ");
+        }
+
+        /// <summary>
+        ///     The 1-D results the m == 0 shortcut must not change, against NumPy 2.4.2: bool coefficients lift to int64
+        ///     (<c>[True, False, True]</c> gives <c>[2, 0]</c>, then <c>[2]</c>), complex ones stay complex
+        ///     (<c>[1+2j, 3, 4j]</c> gives <c>[2+4j, 3]</c>), an empty float p stays an empty float64 at every order, and a
+        ///     one-term int p is an empty int64 from m = 1 on (the int64 ramp), itself at m = 0.
+        /// </summary>
+        [TestMethod]
+        public void Polyder_OneDimensional_DtypesAndEdgeOrders_MatchNumPy()
+        {
+            np.polyder(np.array(new[] { true, false, true })).Should().BeOfValues(2L, 0L).And.BeOfType(NPTypeCode.Int64);
+            np.polyder(np.array(new[] { true, false, true }), 2).Should().BeOfValues(2L);
+            np.polyder(np.array(new[] { true, false, true }), 0).Should().BeOfValues(true, false, true);
+            var c = np.polyder(np.array(new[] { new System.Numerics.Complex(1, 2), new System.Numerics.Complex(3, 0), new System.Numerics.Complex(0, 4) }));
+            c.Should().BeOfType(NPTypeCode.Complex).And.BeShaped(2);
+            c.GetAtIndex<System.Numerics.Complex>(0).Should().Be(new System.Numerics.Complex(2, 4));
+            c.GetAtIndex<System.Numerics.Complex>(1).Should().Be(new System.Numerics.Complex(3, 0));
+            foreach (int m in new[] { 0, 1, 2 })
+                np.polyder(np.array(new double[0]), m).Should().BeShaped(0).And.BeOfType(NPTypeCode.Double);
+            np.polyder(np.array(new long[] { 5 }), 0).Should().BeOfValues(5L);
+            np.polyder(np.array(new long[] { 5 }), 2).Should().BeShaped(0).And.BeOfType(NPTypeCode.Int64);
         }
 
         [TestMethod]
@@ -325,17 +439,26 @@ namespace NumSharp.Tests.Polynomial
                 .Should().Throw<ValueError>().WithMessage("Input must be a rank-1 array.");
         }
 
+        /// <summary>
+        ///     np.poly and np.roots refuse a 0-d input (and null, NumPy's None) as NumPy 2.4.2 does: their
+        ///     <c>@array_function_dispatch</c> dispatchers return the argument itself, which NumPy iterates before the
+        ///     function's body runs, and a 0-d array is not iterable. The engine member <c>Poly</c> is poly's body alone
+        ///     and still takes a 0-d input as one root, as NumPy's implementation function does.
+        /// </summary>
         [TestMethod]
-        [Misaligned]
-        public void ZeroDInput_AcceptedViaAtleast1d_DivergesFromNumpyDispatcher()
+        public void ZeroDInput_RaisesNumpysDispatcherTypeError()
         {
-            // NumPy's @array_function_dispatch decorator rejects a 0-d array before roots/poly's body
-            // runs ("dispatcher for __array_function__ did not return an iterable"), an internal
-            // dispatch artifact with no NumSharp analogue. NumSharp has no such dispatcher, so the
-            // function BODY runs — and NumPy's own body would accept it too, via atleast_1d. So:
-            //   roots(0-d 5.0) -> a constant has no roots -> empty; poly(0-d 5.0) -> (x - 5) -> [1,-5].
-            np.roots(NDArray.Scalar(5.0)).Should().BeShaped(0);           // no eigvals reached
-            np.poly(NDArray.Scalar(5.0)).Should().BeOfValues(1.0, -5.0);  // pure, no eigvals
+            const string text = "dispatcher for __array_function__ did not return an iterable";
+            new Action(() => np.roots(NDArray.Scalar(5.0))).Should().Throw<TypeError>().WithMessage(text);
+            new Action(() => np.poly(NDArray.Scalar(5.0))).Should().Throw<TypeError>().WithMessage(text);
+            new Action(() => np.roots(null)).Should().Throw<TypeError>().WithMessage(text);
+            new Action(() => np.poly(null)).Should().Throw<TypeError>().WithMessage(text);
+            // A one-element 1-D input is iterable: a constant has no roots, one root gives (x - 5).
+            np.roots(np.array(new[] { 5.0 })).Should().BeShaped(0);
+            np.poly(np.array(new[] { 5.0 })).Should().BeOfValues(1.0, -5.0);
+            // The body under the dispatcher (NumPy's poly.__wrapped__) takes the 0-d input through atleast_1d.
+            NDArray zeroD = NDArray.Scalar(5.0);
+            zeroD.TensorEngine.Poly(zeroD).Should().BeOfValues(1.0, -5.0);
         }
 
         #endregion

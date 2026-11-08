@@ -68,7 +68,7 @@ var b = np.broadcast_to(a, (4, 3));
 **Constraints:** The source shape must be unilaterally broadcastable to the target. You can only stretch dimensions that are size 1:
 
 ```csharp
-np.broadcast_to(np.ones((2,)), (3, 3));   // Error: can't stretch 2 to 3
+np.broadcast_to(np.ones(2), (3, 3));      // IncorrectShapeException (NumPy's ValueError): can't stretch 2 to 3
 np.broadcast_to(np.ones((1, 3)), (4, 3)); // OK: stretches 1 to 4
 ```
 
@@ -83,6 +83,8 @@ var b = np.array(new[,] {{1}, {2}});      // (2, 1)
 var (a_bc, b_bc) = np.broadcast_arrays(a, b);
 // Both now (2, 3)
 ```
+
+As in NumPy, an array that already has the common shape comes back as itself (no new view), and every other result is a view that is writeable only when its array is: a read-only array, or a `np.broadcast_to` view, gives a read-only view, so a write through it raises `ValueError: assignment destination is read-only`.
 
 Also available as:
 ```csharp
@@ -173,12 +175,11 @@ A stride of 0 means the index doesn't advance in memory-the same element is read
 var a = np.array([1, 2, 3]);
 var b = np.broadcast_to(a, (4, 3));
 
-// b's internal representation:
-// Shape:   (4, 3)
-// Strides: (0, 1)  ← stride 0 in first dimension
+b.shape;     // (4, 3)
+b.strides;   // (0, 4): bytes, as in NumPy - stride 0 in the first dimension (the Shape's element strides are (0, 1))
 ```
 
-This is tracked via `Shape.IsBroadcasted` and `BroadcastInfo`.
+The shape's `BROADCASTED` flag records it (`b.Shape.IsBroadcasted`), and the view is read-only (`b.Shape.IsWriteable` is false).
 
 ---
 
@@ -219,18 +220,18 @@ var normalized = batch - mean_image;         // (32, 28, 28)
 
 ## Troubleshooting
 
-### "shape mismatch: objects cannot be broadcast"
+### "operands could not be broadcast together" / "shape mismatch: objects cannot be broadcast"
 
-Shapes don't follow broadcasting rules. Check alignment:
+Shapes don't follow broadcasting rules (an operator or ufunc reports the first text, `np.broadcast_arrays` the second). Check alignment:
 
 ```csharp
 // Wrong
 var a = np.ones((3, 4));
-var b = np.ones((3,));    // Trailing dim 4 ≠ 3
-var c = a + b;            // Error
+var b = np.ones(3);       // Trailing dim 4 ≠ 3
+var c = a + b;            // IncorrectShapeException: operands could not be broadcast together with shapes (3,4) (3,)
 
 // Fix: reshape to column vector
-var c = a + b.reshape(3, 1);  // Now (3, 4) + (3, 1) works
+var fixedSum = a + b.reshape(3, 1);  // Now (3, 4) + (3, 1) works
 ```
 
 ### Unexpected Output Shape
@@ -253,7 +254,7 @@ var vec = np.array([1, 2, 3]);  // (3,) - not (1, 3) or (3, 1)
 // To broadcast as column:
 var col = vec.reshape(3, 1);          // (3, 1)
 // or
-var col = vec[np.newaxis].T;          // (3, 1)
+var col2 = vec[np.newaxis].T;         // (3, 1)
 ```
 
 ---

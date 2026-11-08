@@ -1,4 +1,6 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
+using System.Numerics;
 using NumSharp.Tests.Utilities;
 
 namespace NumSharp.Tests.LinearAlgebra
@@ -101,6 +103,70 @@ namespace NumSharp.Tests.LinearAlgebra
             var a = rng.randn(30, 300);
             var b = rng.randn(300, 30);
             var c = np.dot(a, b);
+        }
+
+        /// <summary>
+        ///     NumPy's N-D <c>np.dot</c> (the last route of <c>PyArray_MatrixProduct2</c>) calls the dtype's dot function once
+        ///     per output element: an integer dot sums in its own width and wraps (the sum modulo 2^bits), a complex dot keeps
+        ///     both parts, and float64 runs scipy-openblas' ddot, whose strided loop adds four products a step as
+        ///     <c>t1 += m1 + m3; t2 += m2 + m4</c>. NumSharp's former route summed every dtype's products in double and
+        ///     converted the sum. Each expected value is NumPy 2.4.2's answer, and each case gave other bits on the former
+        ///     route.
+        /// </summary>
+        [TestMethod]
+        public void Dot_ND_IsTheDtypesDotFunction()
+        {
+            // int64: [2**62, 3] . [4, 5] = 2**64 + 15, which wraps to 15. A double sum rounds it to 2**64, which no int64 holds.
+            var i8 = np.dot(np.array(new long[] {1L << 62, 3}).reshape(1, 1, 2), np.array(new long[] {4, 5}).reshape(2, 1));
+            i8.typecode.Should().Be(NPTypeCode.Int64);
+            i8.GetInt64(0, 0, 0).Should().Be(15L);
+
+            // uint16: every sum below wraps at 2**16 (65535 * 65535 alone is far past it).
+            var u = np.array(new ushort[]
+            {
+                3, 65535, 2, 0, 5, 65532, 1, 7, 65534, 6, 4, 65533, 8, 65531, 9, 65530, 10, 65529
+            }).reshape(2, 3, 3);
+            var ru = np.ravel(np.dot(u, u.T));
+            ru.typecode.Should().Be(NPTypeCode.UInt16);
+            Enumerable.Range(0, 8).Select(i => (long)ru.GetUInt16(i)).ToArray().Should()
+                .Equal(11L, 65534L, 6L, 37L, 6L, 65504L, 65532L, 64L);
+
+            // complex128: (1+2j)(2-1j) + (3-1j)(1+1j) = 8+5j. The former route multiplied the real parts: 5.
+            var c = np.array(new[] {new Complex(1, 2), new Complex(3, -1)}).reshape(1, 1, 2);
+            var d = np.array(new[] {new Complex(2, -1), new Complex(1, 1)}).reshape(2, 1);
+            np.dot(c, d).GetAtIndex<Complex>(0).Should().Be(new Complex(8, 5));
+
+            // float64: a (1, 1, 6) row against a (1, 6, 2) C-ordered matrix, whose contracted axis has a stride of 2: ddot's
+            // strided loop gives 0xc026b59bc33f8552, where a sequential sum gives ...8551.
+            var a = np.array(new[] {1.83, 1.848, 0.092, -1.285, -2.676, -0.7}).reshape(1, 1, 6);
+            var b = np.array(new[]
+            {
+                -0.549, -2.728, -2.707, 2.995, 0.914, -1.593, -0.39, 2.845, 2.386, 2.065, -0.646, -0.042
+            }).reshape(1, 6, 2);
+            var f8 = np.ravel(np.dot(a, b));
+            BitConverter.DoubleToInt64Bits(f8.GetDouble(0)).Should().Be(unchecked((long)0xC026B59BC33F8552UL));
+            BitConverter.DoubleToInt64Bits(f8.GetDouble(1)).Should().Be(unchecked((long)0xC0218346FDEB52CAUL));
+        }
+
+        /// <summary>
+        ///     FIXED 2026-10-26 (the np-layer dtype plan's P2; the matrix tier's gap MX10, pinned in OpenBugs.Matrix.cs until
+        ///     then): <c>np.dot(a, b)</c> with a (1, 4, 3) complex128 <c>a</c> and a (3, 4) complex128 <c>b</c> returns
+        ///     NumPy's <c>[32-8j, 38-8j, 44-8j, 50-8j]</c> in its first row. The N-D route converted every element to float64,
+        ///     which kept only the real parts. The contracted axis of <c>b</c> has a stride of 4 elements, so this case reaches
+        ///     the strided form of NumPy's complex dot, where <see cref="Dot_ND_IsTheDtypesDotFunction" /> reaches the
+        ///     contiguous one.
+        /// </summary>
+        [TestMethod]
+        public void Dot_NDWithMD_Complex_KeepsTheImaginaryParts()
+        {
+            using var real = np.arange(12).reshape(1, 4, 3).astype(np.complex128);
+            using var a = real + new Complex(0, 1);
+            using var b = np.arange(12).reshape(3, 4).astype(np.complex128) * new Complex(1, -1);
+            using var r = np.dot(a, b);
+
+            r.shape.Should().Equal(1L, 4L, 4L);
+            r.GetAtIndex<Complex>(0).Should().Be(new Complex(32, -8));
+            r.GetAtIndex<Complex>(3).Should().Be(new Complex(50, -8));
         }
     }
 }

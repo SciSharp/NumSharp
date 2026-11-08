@@ -9,16 +9,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="dtype">By default, the data-type is inferred from the input.</param>
-        /// <returns>The input a in Fortran, or column-major, order.</returns>
+        /// <returns>The input a in Fortran, or column-major, order.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asfortranarray.html</remarks>
         public static NDArray asfortranarray(NDArray a, DType dtype = null)
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            var result = asarray(a, dtype, 'F');
-            // Same ndim>=1 contract as ascontiguousarray. A 0-D scalar is both C/F contiguous,
-            // so NumPy returns a length-one view rather than materializing it.
-            return result.ndim == 0 ? result.reshape(1) : result;
+            return NDArray.asfortranarray(a, dtype);
         }
 
         /// <summary>

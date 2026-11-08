@@ -12,35 +12,19 @@ namespace NumSharp
         /// <param name="typeCode">Type of the returned array and of the accumulator in which the elements are summed. If dtype is not specified, it defaults to the dtype of a, unless a has an integer dtype with a precision less than that of the default platform integer. In that case, the default platform integer is used.</param>
         /// <param name="out">Alternate output array in which to place the result. It must have the same shape and buffer length as the expected output, but its dtype may differ (the result is cast into it with NumPy's unsafe casting) and a reference to <paramref name="out"/> is returned.</param>
         /// <returns>A new array holding the result is returned unless out is specified, in which case a reference to out is returned. The result has the same size as a, and the same shape as a if axis is not None or a is a 1-d array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a read-only <paramref name="out"/> (<c>output array is read-only</c>); text a numeric loop must parse that does not parse.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the input (a 0-d input counts as 1-D).</exception>
+        /// <exception cref="TypeError">Fixed-width text, or a string <paramref name="typeCode"/>, where NumPy's loop resolution refuses (its verbatim text); a <c>StringDType</c> input concatenates.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape: NumPy's text for the path its accumulate takes (parity QA-31): NpyIter's <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (4,3)-&gt;(4,3) (3,4)-&gt;(3,4) </c> and its siblings along an axis of an N-D input (or with another out dtype), <c>provided out is the wrong size for the accumulation.</c> on the direct 1-D path (the flattened form included).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html. The facade only calls <see
+        ///     cref="TensorEngine.ReduceCumAdd"/>, NumPy's whole call (its declaration answers for a subclass
+        ///     operand).</remarks>
         [NDScoped]
         public static NDArray cumsum(NDArray arr, int? axis = null, DType typeCode = null, NDArray @out = null)
         {
-            // np.cumsum == np.add.accumulate. With an axis argument it preserves the source
-            // memory layout (KEEPORDER); ReduceCumAdd now allocates the output in that layout
-            // directly (no post-hoc copy needed). axis=None ravels in C-order to a 1-D result.
-            NDArray result = arr.TensorEngine.ReduceCumAdd(arr, axis, typeCode);
-            return WriteScanToOut(result, @out);
-        }
-
-        // Shared out= writeback for np.cumsum/np.cumprod. NumPy's add.accumulate/multiply.accumulate
-        // require out to have the natural output shape (any layout) and store the result into it with
-        // UNSAFE casting (float->int truncates, complex->real drops the imaginary part), returning out.
-        internal static NDArray WriteScanToOut(NDArray result, NDArray @out)
-        {
-            if (@out is null)
-                return result;
-            // A read-only out refuses FIRST — probed 2.4.2: a wrong-sized read-only out reports
-            // "output array is read-only", not the size error (accumulate validates writeability
-            // ahead of the accumulation-shape check). Without the guard the copyto below raised
-            // the generic assignment text instead of NumPy's ufunc-out wording.
-            NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
-            if (!@out.Shape.Equals(result.Shape))
-                // NumPy 2.4.2 verbatim (PyUFunc_Accumulate); house IncorrectShapeException stands
-                // in for NumPy's ValueError per the long-standing shape-error convention.
-                throw new IncorrectShapeException("provided out is the wrong size for the accumulation.");
-            copyto(@out, result, casting: "unsafe");
-            return @out;
+            // np.cumsum IS np.add.accumulate, and NumPy's whole call (the text routes, the loop resolution, out=) is the
+            // engine's: DefaultEngine.ReduceCumAdd.
+            return arr.TensorEngine.ReduceCumAdd(arr, axis, typeCode, @out);
         }
     }
 }

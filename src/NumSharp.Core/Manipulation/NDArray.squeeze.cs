@@ -12,7 +12,10 @@ namespace NumSharp
         /// </param>
         /// <returns>A view of this array with the selected length-one axes removed. Shares memory with this array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.squeeze.html</remarks>
+        [PlainReceiver]
         public NDArray squeeze(int? axis = null)
-            => axis is null ? np.squeeze(this) : np.squeeze(this, axis.Value);
+        {
+            return axis is null ? np.squeeze(this) : np.squeeze(this, axis.Value);
+        }
     }
 }

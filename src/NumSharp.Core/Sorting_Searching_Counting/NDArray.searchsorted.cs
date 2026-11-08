@@ -11,12 +11,18 @@ namespace NumSharp
         /// <param name="sorter">Optional array of integer indices that sort this array (as from argsort).</param>
         /// <returns>The insertion index.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.searchsorted.html</remarks>
+        [PlainReceiver]
         public long searchsorted(int v, string side = "left", NDArray sorter = null)
-            => np.searchsorted(this, v, side, sorter);
+        {
+            return np.searchsorted(this, v, side, sorter);
+        }
 
         /// <inheritdoc cref="searchsorted(int, string, NDArray)"/>
+        [PlainReceiver]
         public long searchsorted(double v, string side = "left", NDArray sorter = null)
-            => np.searchsorted(this, v, side, sorter);
+        {
+            return np.searchsorted(this, v, side, sorter);
+        }
 
         /// <summary>
         ///     Find the indices into this SORTED array where each value in <paramref name="v"/> would be inserted
@@ -28,7 +34,10 @@ namespace NumSharp
         /// <param name="sorter">Optional array of integer indices that sort this array (as from argsort).</param>
         /// <returns>An array of insertion indices with the same shape as <paramref name="v"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.searchsorted.html</remarks>
+        [PlainReceiver]
         public NDArray searchsorted(NDArray v, string side = "left", NDArray sorter = null)
-            => np.searchsorted(this, v, side, sorter);
+        {
+            return np.searchsorted(this, v, side, sorter);
+        }
     }
 }

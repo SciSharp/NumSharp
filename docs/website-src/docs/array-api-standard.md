@@ -429,7 +429,7 @@ The Array API deliberately excludes some things to remain implementable across d
 ### Out of Scope
 
 - **I/O operations** - No `save`, `load`, `fromfile`
-- **String dtypes** - No `StringDType` or fixed-width strings
+- **String dtypes** - `StringDType` and fixed-width strings are outside this standard's scope, **not absent from NumSharp**. NumSharp supports `S`, `U`, `T` and the `np.@char` / `NDCharArray` surface; see [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md).
 - **Datetime dtypes** - No `datetime64`, `timedelta64`
 - **Object dtype** - No arrays of arbitrary Python objects
 - **Specific error types** - Error handling is implementation-defined

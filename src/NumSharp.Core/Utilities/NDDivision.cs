@@ -24,7 +24,7 @@ namespace NumSharp.Utilities
     /// edge cases like <c>0.7 // 0.1 == 6.0</c> and <c>-2.0 // inf == -1.0</c> match.</item>
     /// </list>
     /// </summary>
-    public static class NDDivision
+    public static partial class NDDivision
     {
         // ----------------------------------------------------------------------------------------
         // Signed integers — floor division (round toward -inf), divide-by-zero -> 0.
@@ -174,9 +174,25 @@ namespace NumSharp.Utilities
             return mod;
         }
 
-        private static double DivmodDouble(double a, double b, out double modulus)
+        /// <summary>
+        /// Fused floating divmod (CPython <c>npy_divmod</c> port): returns the floored quotient and
+        /// writes the floored remainder to <paramref name="modulus"/> in ONE pass — the shared core
+        /// behind <see cref="FloorDivDouble"/> / <see cref="RemDouble"/> and <c>np.divmod</c>'s fused
+        /// kernel. <c>b == 0</c> yields (a/b, a%b) = (±inf/nan, nan), never a forced NaN.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        public static double DivmodDouble(double a, double b, out double modulus)
         {
             double mod = a % b; // fmod
+
+            // b == 0 (not NaN): fmod is NaN and a/b is ±inf/nan — return those directly, matching
+            // npy_divmod's guard. (FloorDivDouble/RemDouble short-circuit b==0 before calling this,
+            // but np.divmod's fused kernel calls DivmodDouble directly, so the guard MUST live here.)
+            if (b == 0.0)
+            {
+                modulus = mod;
+                return a / b;
+            }
 
             // a - mod should be very nearly an integer multiple of b
             double div = (a - mod) / b;
@@ -228,9 +244,23 @@ namespace NumSharp.Utilities
             return mod;
         }
 
-        private static float DivmodSingle(float a, float b, out float modulus)
+        /// <summary>
+        /// Fused single-precision divmod — float32 twin of <see cref="DivmodDouble"/>. Returns the
+        /// floored quotient and writes the floored remainder; the shared core behind
+        /// <see cref="FloorDivSingle"/> / <see cref="RemSingle"/> and float32 <c>np.divmod</c>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        public static float DivmodSingle(float a, float b, out float modulus)
         {
             float mod = a % b; // fmodf
+
+            // b == 0: mirror DivmodDouble's guard (npy_divmodf). np.divmod's fused kernel calls this
+            // directly, so the guard must live here, not only in FloorDivSingle/RemSingle.
+            if (b == 0f)
+            {
+                modulus = mod;
+                return a / b;
+            }
 
             float div = (a - mod) / b;
 

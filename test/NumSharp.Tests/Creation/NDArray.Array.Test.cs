@@ -122,8 +122,8 @@ namespace NumSharp.Tests.Creation
             nd[1, 0] = 1.0;
             nd[0, 0] = 9.0;
             nd[2, 2] = 7.0;
-            nd[0, 2] = nd[0, 2] - 20.0;
-            nd[2, 2] += 23;
+            nd[0, 2] = (double)nd[0, 2] - 20.0;
+            nd[2, 2] = (double)nd[2, 2] + 23;
 
             var stringOfNp = nd.ToString();
 
@@ -138,9 +138,9 @@ namespace NumSharp.Tests.Creation
             var random = new MT19937();
             np.ReplaceData(np.Data<double>().Select(x => x + random.NextDouble()).ToArray());
             np[1] = 1;
-            np[2] -= 4;
-            np[3] -= 20;
-            np[8] += 23;
+            np[2] = (double)np[2] - 4;
+            np[3] = (double)np[3] - 20;
+            np[8] = (double)np[8] + 23;
 
             var stringOfNp = np.ToString();
         }
@@ -165,7 +165,7 @@ namespace NumSharp.Tests.Creation
             {
                 for (int jdx = 0; jdx < 3; jdx++)
                 {
-                    Assert.IsTrue(np1[idx, jdx] == np1_[idx][jdx]);
+                    Assert.IsTrue((double)np1[idx, jdx] == np1_[idx][jdx]);
                 }
             }
         }
@@ -185,7 +185,7 @@ namespace NumSharp.Tests.Creation
                 {
                     for (int kdx = 0; kdx < 3; kdx++)
                     {
-                        Assert.IsTrue(np2[idx, jdx, kdx] == np1_[idx][jdx][kdx]);
+                        Assert.IsTrue((double)np2[idx, jdx, kdx] == np1_[idx][jdx][kdx]);
                     }
                 }
             }

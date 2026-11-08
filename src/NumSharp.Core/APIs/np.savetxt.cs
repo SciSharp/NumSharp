@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Text;
 using NumSharp.Backends.Printing;
+using NumSharp.IO;
 
 namespace NumSharp
 {
@@ -17,7 +18,9 @@ namespace NumSharp
         // array is written row per line with `ncol == X.shape[1]` columns. Each row is rendered as
         // `format % tuple(row)` where `format` is either the single spec joined by `delimiter` `ncol`
         // times, a caller-supplied multi-% string (delimiter then ignored), or the list/tuple of specs
-        // joined by `delimiter`. The `%`-engine is PrintfFormatter (shared with ndarray.tofile).
+        // joined by `delimiter`. The `%`-engine is PrintfFormatter (shared with ndarray.tofile). The overloads here check
+        // their target; savetxt's body - the target opened as NumPy opens it, the format, the header, the rows and the
+        // footer - is IO/SaveTxtIO.cs.
 
         #region savetxt (filename)
 
@@ -25,7 +28,10 @@ namespace NumSharp
         ///     Save a 1-D or 2-D array to a text file.
         /// </summary>
         /// <param name="fname">
-        ///     Target path. If it ends in <c>.gz</c> the file is written gzip-compressed, as NumPy does.
+        ///     Target path. It is created (or truncated) first, as NumPy's <c>open(fname, 'wt').close()</c>; a name whose
+        ///     extension is exactly <c>.gz</c> is then written gzip-compressed, as NumPy does (<c>.GZ</c> is plain text, as
+        ///     in NumPy). NumPy writes <c>.bz2</c> / <c>.xz</c> / <c>.lzma</c> names compressed too; .NET has no compressor
+        ///     for them, so NumSharp refuses those names before touching the file.
         /// </param>
         /// <param name="X">The 1-D or 2-D array to save (a 0-D or ≥3-D array raises <see cref="ValueError"/>).</param>
         /// <param name="fmt">
@@ -38,7 +44,25 @@ namespace NumSharp
         /// <param name="header">String written at the beginning of the file, each line prefixed by <paramref name="comments"/>.</param>
         /// <param name="footer">String written at the end of the file, each line prefixed by <paramref name="comments"/>.</param>
         /// <param name="comments">String prepended to <paramref name="header"/>/<paramref name="footer"/> lines.</param>
-        /// <param name="encoding">Output encoding; <c>null</c> (default) and <c>bytes</c>/<c>utf-8</c> use UTF-8 with no BOM, <c>latin1</c> uses Latin-1.</param>
+        /// <param name="encoding">The file's encoding: any name Python's <c>codecs.lookup</c> resolves for UTF-8
+        ///     (<c>utf-8-sig</c> too), UTF-16 and UTF-32 (the BOM forms write their BOM once, at the start of the file),
+        ///     Latin-1, ASCII and the single-byte code pages (<c>cp1252</c>, <c>iso8859_15</c>, …). Null (and
+        ///     <c>"locale"</c>) is UTF-8 without a BOM — NumPy's locale encoding on Linux and macOS (Windows NumPy uses the
+        ///     ANSI code page). Every write is encoded strictly, as Python's TextIOWrapper encodes it after its newline
+        ///     translation: a header, row or footer the encoding cannot hold raises <see cref="UnicodeEncodeError"/> (its
+        ///     position counting the translated write), with the writes before it in the file. NumPy's <c>"bytes"</c> is
+        ///     no encoding here (<see cref="LookupError"/> <c>unknown encoding: bytes</c>), nor is the empty name.</param>
+        /// <exception cref="ValueError">A 0-d or more than 2-d array, a format with the wrong number of specs, or a null
+        ///     <paramref name="fmt"/> (Python's None: <c>invalid fmt: None</c>).</exception>
+        /// <exception cref="AttributeError">A null <paramref name="delimiter"/> where NumPy joins the specs with it (one spec
+        ///     repeated per column: <c>'NoneType' object has no attribute 'join'</c>; a multi-<c>%</c> format never reads
+        ///     it).</exception>
+        /// <exception cref="TypeError">An element its spec cannot convert, or a null <paramref name="newline"/> once a row is
+        ///     built (<c>Mismatch between array dtype …</c>; for a complex array the plain <c>can only concatenate str (not
+        ///     "NoneType") to str</c>); a null <paramref name="header"/> / <paramref name="footer"/> (<c>object of type
+        ///     'NoneType' has no len()</c>), or a null <paramref name="comments"/> / <paramref name="newline"/> while a
+        ///     non-empty header or footer is built. A footer's error comes after every row was written, as in
+        ///     NumPy.</exception>
         /// <remarks>
         ///     Byte-for-byte what NumPy 2.4.2's own <c>np.savetxt</c> writes for the same array — including
         ///     the Python text-mode newline translation on a filename target: every <c>\n</c> is written as
@@ -49,7 +73,7 @@ namespace NumSharp
         /// </remarks>
         public static void savetxt(string fname, NDArray X, string fmt = "%.18e", string delimiter = " ",
             string newline = "\n", string header = "", string footer = "", string comments = "# ", string encoding = null)
-            => SaveTxtToFile(fname, X, fmt, delimiter, newline, header, footer, comments, encoding);
+            => SaveTxtIO.SaveTxtToFile(fname, X, fmt, delimiter, newline, header, footer, comments, encoding);
 
         /// <summary>
         ///     Save a 1-D or 2-D array to a text file, with one <c>%</c>-format spec per column.
@@ -59,284 +83,162 @@ namespace NumSharp
         ///     <see cref="AttributeError"/> is raised. For a complex array each entry must itself contain
         ///     both the real and imaginary specs (e.g. <c>"%.3e%+.3ej"</c>).
         /// </param>
+        /// <exception cref="AttributeError">A spec list of the wrong length, or a null <paramref name="delimiter"/> (Python's
+        ///     None has no <c>join</c>).</exception>
+        /// <exception cref="TypeError">A null entry of <paramref name="fmt"/> (<c>sequence item 1: expected str instance,
+        ///     NoneType found</c>), an element its spec cannot convert, and the null header / footer / comments / newline
+        ///     errors of the single-spec overload.</exception>
+        /// <exception cref="ValueError">A 0-d or more than 2-d array, or a null <paramref name="fmt"/> (<c>invalid fmt:
+        ///     None</c>).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savetxt.html</remarks>
         public static void savetxt(string fname, NDArray X, string[] fmt, string delimiter = " ",
             string newline = "\n", string header = "", string footer = "", string comments = "# ", string encoding = null)
-            => SaveTxtToFile(fname, X, fmt, delimiter, newline, header, footer, comments, encoding);
+            => SaveTxtIO.SaveTxtToFile(fname, X, fmt, delimiter, newline, header, footer, comments, encoding);
 
         #endregion
 
         #region savetxt (stream)
 
         /// <summary>
-        ///     Write a 1-D or 2-D array as text to an open stream. The stream is written from its current
-        ///     position and left open (the caller owns it), and rows are separated by <paramref name="newline"/>
-        ///     verbatim — no platform newline translation, matching NumPy's file-handle path.
+        ///     Write a 1-D or 2-D array as text to an open byte stream (NumPy's binary file object). The stream is written
+        ///     from its current position and left open (the caller owns it), and rows are separated by
+        ///     <paramref name="newline"/> verbatim — no platform newline translation, matching NumPy's file-handle path.
         /// </summary>
+        /// <param name="stream">The byte stream.</param>
+        /// <param name="X">The 1-D or 2-D array to save.</param>
+        /// <param name="fmt">A single <c>%</c>-format spec, or a multi-<c>%</c> row format.</param>
+        /// <param name="delimiter">String separating columns.</param>
+        /// <param name="newline">String separating rows.</param>
+        /// <param name="header">String written first, each line prefixed by <paramref name="comments"/>.</param>
+        /// <param name="footer">String written last, each line prefixed by <paramref name="comments"/>.</param>
+        /// <param name="comments">String prepended to the header / footer lines.</param>
+        /// <param name="encoding">The encoding every write is encoded with, on its own (<c>str.encode</c>: the BOM forms
+        ///     write a BOM before EVERY write, as NumPy's <c>WriteWrap</c> does); null or empty is Latin-1, NumPy's default
+        ///     for a byte stream (<c>WriteWrap(fh, encoding or 'latin1')</c>), so a character past <c>U+00FF</c> raises
+        ///     <see cref="UnicodeEncodeError"/> (<c>'latin-1' codec can't encode character '\u4e2d' in position 0: ordinal
+        ///     not in range(256)</c>) with the writes before it in the stream. An unknown or non-text name (<c>"bytes"</c>
+        ///     included) raises <see cref="LookupError"/> at the first write, a codec NumSharp does not implement
+        ///     <see cref="NotSupportedException"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is null.</exception>
+        /// <exception cref="ValueError">A 0-d or more than 2-d array, a format with the wrong number of specs, or a null
+        ///     <paramref name="fmt"/> (<c>invalid fmt: None</c>).</exception>
+        /// <exception cref="AttributeError">A null <paramref name="delimiter"/> where NumPy joins the specs with
+        ///     it.</exception>
+        /// <exception cref="TypeError">An element its spec cannot convert (<c>Mismatch between array dtype …</c>), and the
+        ///     null newline / header / footer / comments errors of the file-name overload, at the same points.</exception>
+        /// <exception cref="UnicodeEncodeError">A write the encoding cannot encode.</exception>
+        /// <exception cref="LookupError">An unknown or non-text encoding, at the first write.</exception>
+        /// <exception cref="NotSupportedException">A codec NumSharp does not implement, at the first write.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savetxt.html</remarks>
         public static void savetxt(Stream stream, NDArray X, string fmt = "%.18e", string delimiter = " ",
             string newline = "\n", string header = "", string footer = "", string comments = "# ", string encoding = null)
-        {
-            if (stream is null) throw new ArgumentNullException(nameof(stream));
+            => SaveTxtIO.SaveTxtToStream(stream, X, fmt, delimiter, newline, header, footer, comments, encoding);
 
-            using (var sw = new StreamWriter(stream, ResolveSaveTxtEncoding(encoding), 1 << 16, leaveOpen: true))
-            {
-                SaveTxtCore(sw, X, fmt, delimiter, newline, header, footer, comments, translateNewlines: false);
-                sw.Flush();
-            }
-        }
-
-        /// <summary>Write a 1-D or 2-D array as text to an open stream, with one <c>%</c>-format spec per column.</summary>
+        /// <summary>Write a 1-D or 2-D array as text to an open byte stream, with one <c>%</c>-format spec per column.</summary>
+        /// <param name="stream">The byte stream.</param>
+        /// <param name="X">The 1-D or 2-D array to save.</param>
+        /// <param name="fmt">One format spec per column (else <see cref="AttributeError"/>).</param>
+        /// <param name="delimiter">String separating columns.</param>
+        /// <param name="newline">String separating rows.</param>
+        /// <param name="header">String written first.</param>
+        /// <param name="footer">String written last.</param>
+        /// <param name="comments">String prepended to the header / footer lines.</param>
+        /// <param name="encoding">As for the single-spec overload (null is Latin-1).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is null.</exception>
+        /// <exception cref="AttributeError">A spec list of the wrong length, or a null <paramref name="delimiter"/>.</exception>
+        /// <exception cref="TypeError">A null entry of <paramref name="fmt"/>, an element its spec cannot convert, and the
+        ///     null newline / header / footer / comments errors of the file-name overload.</exception>
+        /// <exception cref="ValueError">A 0-d or more than 2-d array, or a null <paramref name="fmt"/>.</exception>
+        /// <exception cref="UnicodeEncodeError">A write the encoding cannot encode.</exception>
+        /// <exception cref="LookupError">An unknown or non-text encoding, at the first write.</exception>
+        /// <exception cref="NotSupportedException">A codec NumSharp does not implement, at the first write.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savetxt.html</remarks>
         public static void savetxt(Stream stream, NDArray X, string[] fmt, string delimiter = " ",
             string newline = "\n", string header = "", string footer = "", string comments = "# ", string encoding = null)
-        {
-            if (stream is null) throw new ArgumentNullException(nameof(stream));
-
-            using (var sw = new StreamWriter(stream, ResolveSaveTxtEncoding(encoding), 1 << 16, leaveOpen: true))
-            {
-                SaveTxtCore(sw, X, fmt, delimiter, newline, header, footer, comments, translateNewlines: false);
-                sw.Flush();
-            }
-        }
+            => SaveTxtIO.SaveTxtToStream(stream, X, fmt, delimiter, newline, header, footer, comments, encoding);
 
         #endregion
 
         #region savetxt (text writer)
 
         /// <summary>
-        ///     Write a 1-D or 2-D array as text to an open <see cref="TextWriter"/>. The writer is left open
-        ///     and owns its encoding/newline policy; rows are separated by <paramref name="newline"/> verbatim.
+        ///     Write a 1-D or 2-D array as text to an open <see cref="TextWriter"/> (NumPy's text file object,
+        ///     <c>io.StringIO</c>). The writer is written from its current position, flushed and left open (the caller owns
+        ///     it); rows are separated by <paramref name="newline"/> verbatim, with no platform newline translation.
         /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savetxt.html</remarks>
+        /// <param name="writer">The text target.</param>
+        /// <param name="X">The 1-D or 2-D array to save (a 1-D array is one value per line).</param>
+        /// <param name="fmt">A single <c>%</c>-format spec (repeated for every column, joined by
+        ///     <paramref name="delimiter"/>), or a multi-<c>%</c> row format (<paramref name="delimiter"/> then unused).</param>
+        /// <param name="delimiter">String separating columns.</param>
+        /// <param name="newline">String separating rows.</param>
+        /// <param name="header">String written first, each line prefixed by <paramref name="comments"/>.</param>
+        /// <param name="footer">String written last, each line prefixed by <paramref name="comments"/>.</param>
+        /// <param name="comments">String prepended to the header / footer lines.</param>
+        /// <param name="encoding">Accepted for NumPy's signature and IGNORED, as NumPy ignores it for a text target (its
+        ///     <c>WriteWrap</c> encodes only for a stream that refuses <c>str</c>): any name, an unknown one included, writes
+        ///     the same text.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="writer"/> is null.</exception>
+        /// <exception cref="ValueError">A 0-d or more than 2-d array, a format with the wrong number of specs, or a null
+        ///     <paramref name="fmt"/> (<c>invalid fmt: None</c>).</exception>
+        /// <exception cref="AttributeError">A null <paramref name="delimiter"/> where NumPy joins the specs with
+        ///     it.</exception>
+        /// <exception cref="TypeError">An element its spec cannot convert (<c>Mismatch between array dtype …</c>), and the
+        ///     null newline / header / footer / comments errors of the file-name overload, at the same points.</exception>
+        /// <remarks>
+        ///     What reached the writer before an error stays written (NumPy writes each row as it formats it), and the
+        ///     writer is flushed in every case. https://numpy.org/doc/stable/reference/generated/numpy.savetxt.html
+        /// </remarks>
         public static void savetxt(TextWriter writer, NDArray X, string fmt = "%.18e", string delimiter = " ",
-            string newline = "\n", string header = "", string footer = "", string comments = "# ")
+            string newline = "\n", string header = "", string footer = "", string comments = "# ", string encoding = null)
         {
             if (writer is null) throw new ArgumentNullException(nameof(writer));
 
-            SaveTxtCore(writer, X, fmt, delimiter, newline, header, footer, comments, translateNewlines: false);
-            writer.Flush();
-        }
-
-        /// <summary>Write a 1-D or 2-D array to a <see cref="TextWriter"/>, with one <c>%</c>-format spec per column.</summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savetxt.html</remarks>
-        public static void savetxt(TextWriter writer, NDArray X, string[] fmt, string delimiter = " ",
-            string newline = "\n", string header = "", string footer = "", string comments = "# ")
-        {
-            if (writer is null) throw new ArgumentNullException(nameof(writer));
-
-            SaveTxtCore(writer, X, fmt, delimiter, newline, header, footer, comments, translateNewlines: false);
-            writer.Flush();
-        }
-
-        #endregion
-
-        #region internals
-
-        // Opens the file (gzip when the name ends in .gz) and drives the core with Python text-mode
-        // newline translation. Matching NumPy, the file is created/truncated BEFORE X is validated, so a
-        // validation error (bad ndim / fmt) leaves an empty file behind.
-        private static void SaveTxtToFile(string fname, NDArray X, object fmt, string delimiter,
-            string newline, string header, string footer, string comments, string encoding)
-        {
-            if (fname is null) throw new ArgumentNullException(nameof(fname));
-
-            Encoding enc = ResolveSaveTxtEncoding(encoding);
-            bool gz = fname.EndsWith(".gz", StringComparison.OrdinalIgnoreCase);
-
-            Stream fs = new FileStream(fname, FileMode.Create, FileAccess.Write);
+            // A text target takes any str (Python's StringIO.write): no codec check. What was written before an error
+            // stays written.
             try
             {
-                Stream outer = gz ? new GZipStream(fs, CompressionMode.Compress) : fs;
-                try
-                {
-                    using (var sw = new StreamWriter(outer, enc, 1 << 16, leaveOpen: true))
-                    {
-                        SaveTxtCore(sw, X, fmt, delimiter, newline, header, footer, comments, translateNewlines: true);
-                        sw.Flush();
-                    }
-                }
-                finally
-                {
-                    if (gz) outer.Dispose(); // finalize the gzip trailer before the FileStream closes
-                }
+                SaveTxtIO.SaveTxtCore(SaveTxtIO.SaveTxtWriter.ForText(writer), X, fmt, delimiter, newline, header, footer, comments);
             }
             finally
             {
-                fs.Dispose();
+                writer.Flush();
             }
         }
 
-        // The port of savetxt's body: validate rank, resolve the row `format`, then write header, one line
-        // per row, and footer — batched into ~32 KB chunks (translated to the OS line separator on flush
-        // when writing a text-mode file). Any layout is read in logical C-order via GetAtIndex.
-        private static void SaveTxtCore(TextWriter fh, NDArray X, object fmt, string delimiter,
-            string newline, string header, string footer, string comments, bool translateNewlines)
+        /// <summary>
+        ///     Write a 1-D or 2-D array to a <see cref="TextWriter"/>, with one <c>%</c>-format spec per column.
+        /// </summary>
+        /// <param name="writer">The text target.</param>
+        /// <param name="X">The 1-D or 2-D array to save.</param>
+        /// <param name="fmt">One format spec per column (else <see cref="AttributeError"/>), joined by
+        ///     <paramref name="delimiter"/>.</param>
+        /// <param name="delimiter">String separating columns.</param>
+        /// <param name="newline">String separating rows.</param>
+        /// <param name="header">String written first.</param>
+        /// <param name="footer">String written last.</param>
+        /// <param name="comments">String prepended to the header / footer lines.</param>
+        /// <param name="encoding">Accepted for NumPy's signature and ignored, as for the single-spec overload.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="writer"/> is null.</exception>
+        /// <exception cref="AttributeError">A spec list of the wrong length, or a null <paramref name="delimiter"/>.</exception>
+        /// <exception cref="TypeError">A null entry of <paramref name="fmt"/>, an element its spec cannot convert, and the
+        ///     null newline / header / footer / comments errors of the file-name overload.</exception>
+        /// <exception cref="ValueError">A 0-d or more than 2-d array, or a null <paramref name="fmt"/>.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savetxt.html</remarks>
+        public static void savetxt(TextWriter writer, NDArray X, string[] fmt, string delimiter = " ",
+            string newline = "\n", string header = "", string footer = "", string comments = "# ", string encoding = null)
         {
-            if (X is null) throw new ArgumentNullException(nameof(X));
+            if (writer is null) throw new ArgumentNullException(nameof(writer));
 
-            int ndim = X.ndim;
-            if (ndim == 0 || ndim > 2)
-                throw new ValueError($"Expected 1D or 2D array, got {ndim}D array instead");
-
-            long nrows, ncol;
-            if (ndim == 1) { nrows = X.shape[0]; ncol = 1; }
-            else { nrows = X.shape[0]; ncol = X.shape[1]; }
-
-            NPTypeCode tc = X.typecode;
-            bool iscomplex = tc == NPTypeCode.Complex;
-
-            string format = ResolveSaveTxtFormat(fmt, ncol, iscomplex, delimiter);
-
-            // NumPy writes the header immediately (before the row loop), so a mid-row format error leaves
-            // the header on disk. Rows are batched; the footer follows once the rows are flushed.
-            if (header.Length > 0)
-                WriteSaveTxt(fh, comments + header.Replace("\n", "\n" + comments) + newline, translateNewlines);
-
-            var chunk = new StringBuilder(1 << 16);
-
-            if (iscomplex)
+            // A text target takes any str (Python's StringIO.write): no codec check. What was written before an error
+            // stays written.
+            try
             {
-                var args = new object[checked(2 * ncol)];
-                var tcs = new NPTypeCode[args.Length];
-                for (int k = 0; k < tcs.Length; k++) tcs[k] = NPTypeCode.Double; // real/imag are Python floats
-
-                for (long r = 0; r < nrows; r++)
-                {
-                    long baseIdx = r * ncol;
-                    for (long c = 0; c < ncol; c++)
-                    {
-                        var z = (System.Numerics.Complex)X.GetAtIndex(baseIdx + c);
-                        args[2 * c] = z.Real;
-                        args[2 * c + 1] = z.Imaginary;
-                    }
-
-                    // NumPy: s = format % tuple(row2) + newline; fh.write(s.replace('+-', '-'))
-                    string s = (PrintfFormatter.FormatRow(format, args, tcs) + newline).Replace("+-", "-");
-                    chunk.Append(s);
-                    if (chunk.Length >= (1 << 15)) FlushSaveTxtChunk(fh, chunk, translateNewlines);
-                }
+                SaveTxtIO.SaveTxtCore(SaveTxtIO.SaveTxtWriter.ForText(writer), X, fmt, delimiter, newline, header, footer, comments);
             }
-            else
+            finally
             {
-                var args = new object[ncol];
-                var tcs = new NPTypeCode[ncol];
-                for (int k = 0; k < tcs.Length; k++) tcs[k] = tc;
-
-                for (long r = 0; r < nrows; r++)
-                {
-                    long baseIdx = r * ncol;
-                    for (long c = 0; c < ncol; c++)
-                        args[c] = X.GetAtIndex(baseIdx + c);
-
-                    try
-                    {
-                        // Append the row straight into the batch buffer — no per-row string allocation.
-                        PrintfFormatter.FormatRowInto(chunk, format, args, tcs);
-                    }
-                    catch (PrintfArgumentException ex)
-                    {
-                        // NumPy catches the TypeError from `format % tuple(row)` and re-raises this.
-                        throw new TypeError(
-                            $"Mismatch between array dtype ('{tc.AsNumpyDtypeName()}') and format specifier ('{format}')", ex);
-                    }
-
-                    chunk.Append(newline);
-                    if (chunk.Length >= (1 << 15)) FlushSaveTxtChunk(fh, chunk, translateNewlines);
-                }
-            }
-
-            FlushSaveTxtChunk(fh, chunk, translateNewlines);
-
-            if (footer.Length > 0)
-                WriteSaveTxt(fh, comments + footer.Replace("\n", "\n" + comments) + newline, translateNewlines);
-        }
-
-        // A single write with the same text-mode newline translation the batch flush uses.
-        private static void WriteSaveTxt(TextWriter fh, string s, bool translateNewlines)
-            => fh.Write(translateNewlines ? s.Replace("\n", Environment.NewLine) : s);
-
-        private static void FlushSaveTxtChunk(TextWriter fh, StringBuilder chunk, bool translateNewlines)
-        {
-            if (chunk.Length == 0) return;
-            string s = chunk.ToString();
-            // Python opens a filename target in text mode ('wt'), translating every '\n' to os.linesep on
-            // write (CRLF on Windows). A stream / file handle target is written verbatim.
-            fh.Write(translateNewlines ? s.Replace("\n", Environment.NewLine) : s);
-            chunk.Clear();
-        }
-
-        // Build the per-row `format` string exactly as savetxt does, with NumPy's verbatim errors.
-        private static string ResolveSaveTxtFormat(object fmt, long ncol, bool iscomplex, string delimiter)
-        {
-            if (fmt is string[] list)
-            {
-                if (list.Length != ncol)
-                    throw new AttributeError($"fmt has wrong shape.  {PyListRepr(list)}");
-                return string.Join(delimiter, list);
-            }
-
-            if (fmt is string s)
-            {
-                int nfmt = CountPercent(s);
-                if (nfmt == 1)
-                {
-                    // A single spec is replicated once per column (delimiter-joined); complex wraps it as
-                    // ' (spec+specj)'. ncol == 0 (a (n, 0) array) yields an empty format.
-                    var parts = new string[ncol];
-                    string unit = iscomplex ? $" ({s}+{s}j)" : s;
-                    for (long i = 0; i < ncol; i++) parts[i] = unit;
-                    return string.Join(delimiter, parts);
-                }
-
-                if (iscomplex && nfmt != 2 * ncol)
-                    throw new ValueError($"fmt has wrong number of % formats:  {s}");
-                if (!iscomplex && nfmt != ncol)
-                    throw new ValueError($"fmt has wrong number of % formats:  {s}");
-
-                return s; // a multi-% format string used directly (delimiter ignored)
-            }
-
-            throw new ValueError($"invalid fmt: {fmt}");
-        }
-
-        private static int CountPercent(string s)
-        {
-            int n = 0;
-            for (int i = 0; i < s.Length; i++)
-                if (s[i] == '%') n++;
-            return n;
-        }
-
-        // Python's str(list) — ['%d', '%.2f'] — reused only for the AttributeError message text.
-        private static string PyListRepr(string[] list)
-        {
-            var sb = new StringBuilder("[");
-            for (int i = 0; i < list.Length; i++)
-            {
-                if (i > 0) sb.Append(", ");
-                sb.Append('\'').Append(list[i]).Append('\'');
-            }
-            return sb.Append(']').ToString();
-        }
-
-        private static Encoding ResolveSaveTxtEncoding(string encoding)
-        {
-            if (string.IsNullOrEmpty(encoding))
-                return new UTF8Encoding(false);
-
-            switch (encoding.ToLowerInvariant())
-            {
-                case "bytes":
-                case "utf-8":
-                case "utf8":
-                    return new UTF8Encoding(false);
-                case "latin1":
-                case "latin-1":
-                case "iso-8859-1":
-                    return Encoding.Latin1;
-                default:
-                    return Encoding.GetEncoding(encoding);
+                writer.Flush();
             }
         }
 

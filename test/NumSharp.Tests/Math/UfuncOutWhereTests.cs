@@ -12,11 +12,17 @@ namespace NumSharp.Tests.Math
     /// Key probed semantics:
     ///  • out joins the broadcast — inputs broadcast UP to a larger out
     ///    (add((4,),(4,),out=(2,4)) repeats rows); out itself never stretches.
+    ///  • a shape error lists every operand (the inputs, then out, then where),
+    ///    and every operand broadcasts together before out's stretch is checked.
     ///  • the loop dtype comes from the INPUTS; out only needs a same_kind
     ///    cast from it (f64 result → i32 out raises; → f32/i16 fine).
     ///  • the out instance is returned (reference identity).
     ///  • where must be bool; it broadcasts and joins the output shape;
     ///    mask-false slots keep prior out contents.
+    ///  • out and where are parsed before any loop is resolved: a read-only
+    ///    out, then a non-bool mask, then the loop's own refusals.
+    ///  • a fresh result under where takes NumPy's iterator layout, the mask
+    ///    voting with the inputs (F operands under an F mask give an F result).
     ///  • out aliasing an input is well-defined (COPY_IF_OVERLAP).
     /// </summary>
     [TestClass]
@@ -74,7 +80,7 @@ namespace NumSharp.Tests.Math
         public void Out_FloatToInt_ThrowsNumPyText()
         {
             // NumPy: UFuncTypeError, exact text.
-            var ex = Assert.ThrowsException<ArgumentException>(() =>
+            var ex = Assert.ThrowsException<TypeError>(() =>
                 np.add(Af(), Bf(), np.empty(new Shape(4), np.int32)));
 
             Assert.AreEqual(
@@ -87,11 +93,11 @@ namespace NumSharp.Tests.Math
         public void Out_UfuncNamesInCastErrors()
         {
             // NumPy ufunc names: np.mod is 'remainder', np.sqrt is 'sqrt'.
-            var exMod = Assert.ThrowsException<ArgumentException>(() =>
+            var exMod = Assert.ThrowsException<TypeError>(() =>
                 np.mod(Af(), Bf(), np.empty(new Shape(4), np.int32)));
             StringAssert.Contains(exMod.Message, "ufunc 'remainder'");
 
-            var exSqrt = Assert.ThrowsException<ArgumentException>(() =>
+            var exSqrt = Assert.ThrowsException<TypeError>(() =>
                 np.sqrt(Af(), np.empty(new Shape(4), np.int32)));
             StringAssert.Contains(exSqrt.Message, "ufunc 'sqrt'");
         }
@@ -130,6 +136,72 @@ namespace NumSharp.Tests.Math
                 "non-broadcastable output operand with shape (4,) doesn't match the " +
                 "broadcast shape (2,4)",
                 ex2.Message);
+        }
+
+        [TestMethod]
+        public void ShapeErrors_ListEveryOperand_InNumPysTwoPhases()
+        {
+            // NumPy's iterator (npyiter_fill_axisdata) broadcasts every operand together first — the inputs, then out=,
+            // then where= — and its failure lists all of them; only then is an out checked for a stretch, against the
+            // joint shape. Texts probed against NumPy 2.4.2.
+            static void Throws<T>(Action call, string text) where T : Exception
+                => Assert.AreEqual(text, Assert.ThrowsException<T>(call).Message);
+
+            var a = np.ones(new Shape(3, 4), np.float64);
+            var m = np.ones(new Shape(3, 4), np.@bool);
+            var bad = np.ones(new Shape(5), np.float64);
+            var one3 = np.ones(new Shape(3), np.float64);
+            var one4 = np.ones(new Shape(4), np.float64);
+
+            // The inputs do not broadcast: out= and where= are listed after them (an input failure keeps its house type,
+            // IncorrectShapeException). The two-shape text listed the inputs only (plan api-parameter-parity X22).
+            Throws<IncorrectShapeException>(() => np.add(a, bad, np.zeros(new Shape(3, 4))),
+                "operands could not be broadcast together with shapes (3,4) (5,) (3,4) ");
+            Throws<IncorrectShapeException>(() => np.add(a, bad, np.zeros(new Shape(3, 4)), m),
+                "operands could not be broadcast together with shapes (3,4) (5,) (3,4) (3,4) ");
+            Throws<IncorrectShapeException>(() => np.add(a, bad, where: m),
+                "operands could not be broadcast together with shapes (3,4) (5,) (3,4) ");
+            Throws<IncorrectShapeException>(() => np.add(a, bad, np.zeros(new Shape(4))),
+                "operands could not be broadcast together with shapes (3,4) (5,) (4,) ");
+            Throws<IncorrectShapeException>(() => np.power(one3, one4, np.empty(new Shape(3))),
+                "operands could not be broadcast together with shapes (3,) (4,) (3,) ");
+            Throws<IncorrectShapeException>(() => np.less(one3, one4, np.zeros(new Shape(3), np.@bool), np.ones(new Shape(3), np.@bool)),
+                "operands could not be broadcast together with shapes (3,) (4,) (3,) (3,) ");
+            Throws<IncorrectShapeException>(
+                () => np.bitwise_and(np.ones(new Shape(3), np.int64), np.ones(new Shape(4), np.int64), np.zeros(new Shape(3), np.int64)),
+                "operands could not be broadcast together with shapes (3,) (4,) (3,) ");
+            Throws<IncorrectShapeException>(() => np.add(one3, one4, np.zeros(new Shape(3), np.dtype("U5"))),
+                "operands could not be broadcast together with shapes (3,) (4,) (3,) ");
+            // Without out= or where= the text is NumPy's two-shape one, as before.
+            Throws<IncorrectShapeException>(() => np.add(a, bad),
+                "operands could not be broadcast together with shapes (3,4) (5,) ");
+
+            // The out= join fails: the mask is listed too (it was left out).
+            Throws<ArgumentException>(() => np.add(a, a, np.zeros(new Shape(3, 5)), m),
+                "operands could not be broadcast together with shapes (3,4) (3,4) (3,5) (3,4) ");
+            Throws<ArgumentException>(() => np.sqrt(a, np.zeros(new Shape(3, 5)), m),
+                "operands could not be broadcast together with shapes (3,4) (3,5) (3,4) ");
+            Throws<ArgumentException>(() => np.less(a, a, np.zeros(new Shape(3, 5), np.@bool), m),
+                "operands could not be broadcast together with shapes (3,4) (3,4) (3,5) (3,4) ");
+
+            // Phase order: an out that would be stretched next to a mask that broadcasts with nothing reports the
+            // broadcast (the stretch was reported first).
+            var badMask = np.ones(new Shape(5), np.@bool);
+            Throws<ArgumentException>(() => np.add(a, a, np.zeros(new Shape(4)), badMask),
+                "operands could not be broadcast together with shapes (3,4) (3,4) (4,) (5,) ");
+            Throws<ArgumentException>(() => np.sqrt(a, np.zeros(new Shape(4)), badMask),
+                "operands could not be broadcast together with shapes (3,4) (4,) (5,) ");
+            Throws<ArgumentException>(() => np.less(a, a, np.zeros(new Shape(4), np.@bool), badMask),
+                "operands could not be broadcast together with shapes (3,4) (3,4) (4,) (5,) ");
+
+            // The stretch text names the joint shape, the mask's axes included (it named the inputs' and out's join).
+            var mask3 = np.ones(new Shape(2, 3, 4), np.@bool);
+            Throws<ArgumentException>(() => np.add(a, a, np.zeros(new Shape(4)), mask3),
+                "non-broadcastable output operand with shape (4,) doesn't match the broadcast shape (2,3,4)");
+            Throws<ArgumentException>(() => np.sqrt(a, np.zeros(new Shape(4)), mask3),
+                "non-broadcastable output operand with shape (4,) doesn't match the broadcast shape (2,3,4)");
+            Throws<ArgumentException>(() => np.add(one4, one4, np.zeros(new Shape(4)), mask3),
+                "non-broadcastable output operand with shape (4,) doesn't match the broadcast shape (2,3,4)");
         }
 
         [TestMethod]
@@ -213,6 +285,42 @@ namespace NumSharp.Tests.Math
         }
 
         [TestMethod]
+        public void ParseErrors_PrecedeTheLoopAnswer_InNumPysOrder()
+        {
+            // NumPy parses out= and where= before it resolves any loop: after the dtype= class check, a read-only out is
+            // reported first, then a non-bool mask, then the loop's own refusals (a dtype= with no loop, an input cast
+            // under dtype=). Texts probed against NumPy 2.4.2.
+            static void Throws<T>(Action call, string text) where T : Exception
+                => Assert.AreEqual(text, Assert.ThrowsException<T>(call).Message);
+
+            var a = np.arange(1.0, 13.0).reshape(3, 4);
+            var ai = np.arange(1, 13).astype(np.int64).reshape(3, 4);
+            NDArray ReadOnly(DType dtype)
+            {
+                var o = np.zeros(new Shape(3, 4), dtype);
+                o.setflags(write: false);
+                return o;
+            }
+            var wi = np.ones(new Shape(3, 4), np.int64);
+            const string readOnly = "output array is read-only";
+            const string maskCast = "Cannot cast array data from dtype('int64') to dtype('bool') according to the rule 'safe'";
+
+            // A read-only out comes before a dtype= with no loop (sqrt has float loops only, the comparisons and bitwise
+            // ufuncs no float output), before an input cast under dtype= (negative), and before a non-bool mask.
+            Throws<ValueError>(() => np.sqrt(a, ReadOnly(np.float64), dtype: np.int32), readOnly);
+            Throws<ValueError>(() => np.negative(a, ReadOnly(np.float64), dtype: np.int32), readOnly);
+            Throws<ValueError>(() => np.equal(a, a, ReadOnly(np.@bool), dtype: np.float64), readOnly);
+            Throws<ValueError>(() => np.bitwise_and(ai, ai, ReadOnly(np.int64), dtype: np.float64), readOnly);
+            Throws<ValueError>(() => np.arctan2(a, a, ReadOnly(np.float64), wi), readOnly);
+            Throws<ValueError>(() => np.logical_and(a, a, ReadOnly(np.@bool), wi, np.float64), readOnly);
+            // A non-bool mask comes before the loop's refusals.
+            Throws<ArgumentException>(() => np.sqrt(a, where: wi, dtype: np.int32), maskCast);
+            Throws<ArgumentException>(() => np.negative(a, where: wi, dtype: np.int32), maskCast);
+            Throws<ArgumentException>(() => np.isnan(a, where: wi, dtype: np.float64), maskCast);
+            Throws<ArgumentException>(() => np.left_shift(ai, ai, where: wi, dtype: np.float64), maskCast);
+        }
+
+        [TestMethod]
         public void Where_WithoutOut_MaskedSlotsComputed()
         {
             // NumPy: unmasked slots are uninitialized (unobservable); the
@@ -223,6 +331,50 @@ namespace NumSharp.Tests.Math
             Assert.AreEqual(4.5, r.GetDouble(2));
             Assert.AreEqual(4, (int)r.size);
             Assert.AreEqual(NPTypeCode.Double, r.typecode);
+        }
+
+        [TestMethod]
+        public void Where_WithoutOut_ResultTakesNumPysLayout()
+        {
+            // A fresh result under where= is allocated by NumPy's iterator, whose axis order the inputs and the mask vote
+            // on (npyiter_find_best_axis_ordering): F operands under an F mask, a row or a column give an F result, one C
+            // operand makes it C, a permuted operand's order is kept. Layouts probed against NumPy 2.4.2; every mask is
+            // all True, so the values must be the unmasked computation's everywhere.
+            static void Layout(NDArray r, NDArray expected, params long[] strides)
+            {
+                CollectionAssert.AreEqual(strides, r.Shape.Strides, "strides (elements)");
+                Assert.IsTrue(np.array_equal(r, expected), "values");
+            }
+
+            var a = np.asfortranarray(np.arange(12.0).reshape(3, 4));
+            var c = np.ascontiguousarray(a);
+            var mF = np.asfortranarray(np.ones(new Shape(3, 4), np.@bool));
+            var mC = np.ones(new Shape(3, 4), np.@bool);
+            var row = np.ones(new Shape(4), np.@bool);
+            var col = np.ones(new Shape(3, 1), np.@bool);
+            Layout(np.add(a, a, where: mF), np.add(a, a), 1, 3);
+            Layout(np.add(a, a, where: row), np.add(a, a), 1, 3);
+            Layout(np.add(a, a, where: col), np.add(a, a), 1, 3);
+            Layout(np.add(a, a, where: mC), np.add(a, a), 4, 1);
+            Layout(np.add(a, c, where: mF), np.add(a, c), 4, 1);
+            Layout(np.add(a, np.array(2.0), where: mF), np.add(a, np.array(2.0)), 1, 3);
+            Layout(np.sqrt(a, where: row), np.sqrt(a), 1, 3);
+            Layout(np.sqrt(c, where: mF), np.sqrt(c), 4, 1);
+            Layout(np.less(a, a, where: row), np.less(a, a), 1, 3);
+            Layout(np.logical_and(a, a, where: mF), np.logical_and(a, a), 1, 3);
+            Layout(np.logical_not(a, where: mF), np.logical_not(a), 1, 3);
+            // np.power's float loops allocate on their own routes: a 0-d exponent's fast path, an array exponent, a
+            // column exponent.
+            Layout(np.power(a, np.array(2.0), where: mF), np.power(a, np.array(2.0)), 1, 3);
+            Layout(np.power(a, a, where: mF), np.power(a, a), 1, 3);
+            var colExp = np.array(new double[,] { { 2.0 }, { 0.5 }, { 1.0 } });
+            Layout(np.power(a, colExp, where: mF), np.power(a, colExp), 1, 3);
+            var a3 = np.asfortranarray(np.arange(24.0).reshape(2, 3, 4));
+            Layout(np.add(a3, a3, where: np.asfortranarray(np.ones(new Shape(2, 3, 4), np.@bool))), np.add(a3, a3), 1, 2, 6);
+            var t = np.arange(24.0).reshape(2, 3, 4).transpose(new[] { 2, 0, 1 });
+            var mt = np.ones(new Shape(2, 3, 4), np.@bool).transpose(new[] { 2, 0, 1 });
+            Layout(np.add(t, t, where: mt), np.add(t, t), 1, 12, 4);
+            Layout(np.sqrt(t, where: mt), np.sqrt(t), 1, 12, 4);
         }
 
         [TestMethod]
@@ -300,58 +452,76 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Ufunc_Family_OutSmoke()
         {
-            // One value-pinned call per shipped out=-capable ufunc.
-            var af = Af();
-            var bf = Bf();
+            // One value-pinned call per shipped out=-capable ufunc — now checking EVERY element
+            // (not just [3]), the out= reference identity (the provided instance is returned), and
+            // that the loop wrote the float64 out. Full arrays probed against NumPy 2.4.2.
+            var af = Af();  // [0,1,2,3]
+            var bf = Bf();  // [0.5,1.5,2.5,3.5]
             var o = np.empty(new Shape(4), np.float64);
 
-            np.subtract(bf, af, o);
-            Assert.AreEqual(0.5, o.GetDouble(3));
+            // Reference identity is the out= contract; AssertRow re-checks size/dtype/every element.
+            Assert.IsTrue(ReferenceEquals(np.subtract(bf, af, o), o));
+            AssertRow(o, 0.5, 0.5, 0.5, 0.5);
 
-            np.multiply(af, bf, o);
-            Assert.AreEqual(10.5, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.multiply(af, bf, o), o));
+            AssertRow(o, 0.0, 1.5, 5.0, 10.5);
 
-            np.divide(bf, af + 1.0, o);
-            Assert.AreEqual(0.875, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.divide(bf, af + 1.0, o), o));
+            AssertRow(o, 0.5, 0.75, 0.8333333333333334, 0.875);
 
-            np.mod(bf, af + 1.0, o);
-            Assert.AreEqual(3.5, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.mod(bf, af + 1.0, o), o));
+            AssertRow(o, 0.5, 1.5, 2.5, 3.5);
 
-            np.power(af, np.full(new Shape(4), 2.0, np.float64), o);
-            Assert.AreEqual(9.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.power(af, np.full(new Shape(4), 2.0, np.float64), o), o));
+            AssertRow(o, 0.0, 1.0, 4.0, 9.0);
 
-            np.floor_divide(bf, af + 1.0, o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.floor_divide(bf, af + 1.0, o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.negative(af, o);
-            Assert.AreEqual(-3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.negative(af, o), o));
+            AssertRow(o, -0.0, -1.0, -2.0, -3.0);
 
-            np.abs(np.negative(af), o);
-            Assert.AreEqual(3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.abs(np.negative(af), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, 3.0);
 
-            np.absolute(np.negative(af), o);
-            Assert.AreEqual(3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.absolute(np.negative(af), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, 3.0);
 
-            np.exp(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(1.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.exp(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 1.0, 1.0, 1.0, 1.0);
 
-            np.log(np.ones(new Shape(4), np.float64), o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.log(np.ones(new Shape(4), np.float64), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.sin(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.sin(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.cos(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(1.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.cos(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 1.0, 1.0, 1.0, 1.0);
 
-            np.tan(np.zeros(new Shape(4), np.float64), o);
-            Assert.AreEqual(0.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.tan(np.zeros(new Shape(4), np.float64), o), o));
+            AssertRow(o, 0.0, 0.0, 0.0, 0.0);
 
-            np.square(af, o);
-            Assert.AreEqual(9.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.square(af, o), o));
+            AssertRow(o, 0.0, 1.0, 4.0, 9.0);
 
-            np.sqrt(np.array(new[] { 0.0, 1, 4, 9 }), o);
-            Assert.AreEqual(3.0, o.GetDouble(3));
+            Assert.IsTrue(ReferenceEquals(np.sqrt(np.array(new[] { 0.0, 1, 4, 9 }), o), o));
+            AssertRow(o, 0.0, 1.0, 2.0, 3.0);
+        }
+
+        /// <summary>
+        /// Assert a float64 <paramref name="o"/> has exactly <paramref name="expected"/>.Length elements,
+        /// is float64 dtype, and matches every element within a tight tolerance — the shared checker that
+        /// turns the family smoke test from a single-element pin into a full-row assertion.
+        /// </summary>
+        /// <param name="o">The out array to check.</param>
+        /// <param name="expected">The full expected row (probed against NumPy 2.4.2).</param>
+        private static void AssertRow(NDArray o, params double[] expected)
+        {
+            Assert.AreEqual(expected.Length, (int)o.size, "size");
+            Assert.AreEqual(NPTypeCode.Double, o.typecode, "dtype");
+            for (int i = 0; i < expected.Length; i++)
+                Assert.AreEqual(expected[i], o.GetDouble(i), 1e-12, $"element {i}");
         }
 
         [TestMethod]

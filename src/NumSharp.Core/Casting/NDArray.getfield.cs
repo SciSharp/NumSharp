@@ -12,7 +12,8 @@ namespace NumSharp
         ///     <paramref name="dtype"/>. Port of NumPy's <c>ndarray.getfield(dtype, offset=0)</c>.
         /// </summary>
         /// <param name="dtype">
-        ///     The dtype to read the field as. Its itemsize must be ≤ this array's itemsize.
+        ///     The dtype to read the field as. Its itemsize must be ≤ this array's itemsize. Null is Python's <c>None</c>,
+        ///     which NumPy's dtype converter (<c>PyArray_DescrConverter</c>) reads as the default float64.
         /// </param>
         /// <param name="offset">
         ///     Byte offset of the field within each element. Must be in <c>[0, itemsize − newItemsize]</c>.
@@ -32,15 +33,40 @@ namespace NumSharp
         ///     <c>getfield(int16, 0)</c> / <c>getfield(int16, 2)</c> are the low / high halves.
         ///     </para>
         /// </remarks>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is <c>null</c>.</exception>
         /// <exception cref="ValueError">
         ///     <c>new type is larger than original type</c>, <c>offset is negative</c>, or
-        ///     <c>new type plus offset is larger than original type</c> — the verbatim NumPy texts.
+        ///     <c>new type plus offset is larger than original type</c> — the verbatim NumPy texts (a null
+        ///     <paramref name="dtype"/>, float64, is larger than any field of an array of narrower items).
         /// </exception>
+        /// <exception cref="TypeError"><c>Cannot get/set field of an object array</c>: this array or the field holds
+        ///     references (a <c>StringDType</c>, whose cells point into its allocator) and the field is not the whole element
+        ///     in this array's own descriptor (NumPy's <c>_getfield_is_safe</c>, checked before the size checks).</exception>
+        /// <exception cref="NotSupportedException">A non-native field descriptor (<c>'&gt;i4'</c> on a little-endian host):
+        ///     NumPy reads the field byte-swapped, NumSharp stores every dtype natively and has no such view (raised after
+        ///     NumPy's size / offset checks, so <c>getfield('&gt;i8')</c> of an int32 array is still NumPy's ValueError);
+        ///     an unsized string field; or a string-route field whose byte strides are not whole field items
+        ///     (<c>S3 → S2</c>: NumSharp keeps strides in elements).</exception>
         public NDArray getfield(DType dtype, int offset = 0)
         {
-            if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
+            // array_getfield reads its dtype with PyArray_DescrConverter ("O&"), which reads None as the default float64.
+            dtype ??= np.float64;
+
+            // _getfield_is_safe: memory holding references (StringDType's cells: hasobject) may not be reinterpreted, so
+            // either side holding them allows only the whole element in its own descriptor — a view of the same dtype.
+            if (this.dtype.hasobject || dtype.hasobject)
+            {
+                if (offset == 0 && dtype.Equals(this.dtype))
+                    return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
+                throw new TypeError("Cannot get/set field of an object array");
+            }
+
+            // A parametric class on either side (NPY_DT_PARAMETRIC: a fixed-width string): the field's width is the
+            // descriptor's (not the storage lane's), and its item size need not divide the array's (S3 -> S1, int32 -> S2),
+            // so the descriptor route builds and checks the view. A NON-NATIVE field descriptor ('>i4') takes it too: after
+            // NumPy's three size / offset checks it refuses the byte order NumSharp cannot store (NotSupportedException),
+            // where the lane route below read the field in native order (258 for NumPy's 33619968: parity QA-38).
+            if (this.dtype.Meta._parametric || dtype.Meta._parametric || !dtype.isnative)
+                return new NDArray(Storage.GetFieldAliasDescr(dtype, offset)) { TensorEngine = TensorEngine };
 
             return new NDArray(Storage.GetFieldAlias(dtype.GetTypeCode(), offset)) { TensorEngine = TensorEngine };
         }
@@ -51,8 +77,22 @@ namespace NumSharp
         /// </summary>
         /// <typeparam name="T">The field dtype (its itemsize must be ≤ this array's itemsize).</typeparam>
         /// <param name="offset">Byte offset of the field within each element.</param>
+        /// <returns>The typed field view (shares memory with this array; keeps its buffer alive while it lives).</returns>
+        /// <exception cref="ValueError">One of <see cref="getfield(DType,int)"/>'s dtype / offset texts.</exception>
+        /// <exception cref="TypeError"><c>Cannot get/set field of an object array</c>: this array is a <c>StringDType</c> array
+        ///     (its cells hold references; a numeric field of them is never the whole element in its own descriptor).</exception>
+        /// <remarks>
+        ///     Built as the typed array directly: wrapping an untyped NDArray first and calling <c>AsGeneric</c> made a
+        ///     SECOND NDArray over the alias, leaving the first — a counted reference on this array's buffer — to the
+        ///     finalizer, and dropping the engine the first one carried.
+        /// </remarks>
         public NDArray<T> getfield<T>(int offset = 0) where T : unmanaged
-            => new NDArray(Storage.GetFieldAlias<T>(offset)) { TensorEngine = TensorEngine }.AsGeneric<T>();
+        {
+            // _getfield_is_safe, before the size checks: an unmanaged field of a reference-holding array is refused.
+            if (dtype.hasobject)
+                throw new TypeError("Cannot get/set field of an object array");
+            return new NDArray<T>(Storage.GetFieldAlias<T>(offset)) { TensorEngine = TensorEngine };
+        }
 
         /// <summary>
         ///     Puts a value into a specified place in a field defined by a dtype — writes <paramref name="value"/>
@@ -63,9 +103,11 @@ namespace NumSharp
         /// <param name="value">
         ///     Value(s) to place into the field. A scalar is broadcast; an array must broadcast to this array's
         ///     shape. Cast to <paramref name="dtype"/> with NumPy's assignment ('unsafe') rule (float → int
-        ///     truncates toward zero).
+        ///     truncates toward zero). <c>null</c> is Python's <c>None</c>: NaN / <c>nan+nanj</c> / <c>False</c> /
+        ///     <c>'None'</c> in the field's dtype, int()'s TypeError for an integer field.
         /// </param>
-        /// <param name="dtype">The dtype of the field being set (its itemsize must be ≤ this array's itemsize).</param>
+        /// <param name="dtype">The dtype of the field being set (its itemsize must be ≤ this array's itemsize). Null is Python's
+        ///     <c>None</c>, which NumPy's dtype converter reads as the default float64.</param>
         /// <param name="offset">Byte offset of the field within each element.</param>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.ndarray.setfield.html
@@ -75,34 +117,45 @@ namespace NumSharp
         ///     the dtype/offset validation), matching NumPy's <c>PyArray_SetField</c>.
         ///     </para>
         /// </remarks>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> or <paramref name="value"/> is <c>null</c>.</exception>
+        /// <exception cref="TypeError"><paramref name="value"/> is <c>null</c> (<c>None</c>) and <paramref name="dtype"/> is
+        ///     an integer (or <c>decimal</c>) dtype.</exception>
         /// <exception cref="ValueError">
         ///     <c>assignment destination is read-only</c> (this array is not writeable), or one of
         ///     <c>getfield</c>'s three dtype/offset <see cref="ValueError"/>s.
         /// </exception>
+        /// <exception cref="TypeError"><c>getfield</c>'s <c>Cannot get/set field of an object array</c> (a <c>StringDType</c>
+        ///     array or field other than the whole element in its own descriptor, which IS assigned).</exception>
+        /// <exception cref="NotSupportedException"><c>getfield</c>'s refusal of a non-native field descriptor
+        ///     (<c>setfield(1, '&gt;i4')</c>: NumPy stores the value's bytes big-endian, NumSharp has no non-native storage —
+        ///     nothing is written).</exception>
+        [NDScoped] // void boundary: reclaims the field view (a counted reference on this array's buffer) and a value converted here
         public void setfield(object value, DType dtype, int offset = 0)
         {
-            if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
+            // array_setfield reads its dtype with PyArray_DescrConverter ("O&", while it parses its arguments, before the
+            // writeability check), which reads None as the default float64.
+            dtype ??= np.float64;
 
             // NumPy checks writeability of SELF first (PyArray_FailUnlessWriteable), before building the
             // field view and validating the dtype/offset. Raise the exact ValueError NumPy raises.
             if (!Shape.IsWriteable)
                 throw new ValueError("assignment destination is read-only");
 
-            if (value is null)
-                throw new ArgumentNullException(nameof(value));
-
             // Build the byte-reinterpreting field view (validates dtype/offset), then copy value into it.
             NDArray view = getfield(dtype, offset);
+
+            // Python's None: PyArray_CopyObject packs it ONCE into the field's descriptor (PyArray_Pack of a scalar, before
+            // any broadcast), so an integer field raises int(None)'s TypeError even when the array is empty; a float field
+            // stores NaN's bits into the field (f8.setfield(None, f4) writes 0x7fc00000 into the low four bytes).
+            NDArray src = value is null ? NDArray.NoneForStore(view.dtype) : value as NDArray;
 
             // Convert value → NDArray. Genuine scalars build a 0-d array of their natural dtype (broadcast
             // by copyto); arrays / collections / Half / Complex go through asanyarray — mirroring how
             // fill_diagonal coerces its object-typed value.
-            NDArray src = value as NDArray;
             if (src is null)
             {
-                src = (value is IConvertible && !(value is string))
+                // A byte[] into a string field is ONE bytes value (NumPy's b'X'), not a uint8 sequence: NDArray.Scalar
+                // builds the 0-d S array the string copy converts.
+                src = (value is IConvertible && !(value is string)) || (value is byte[] && view.Storage.IsString)
                     ? NDArray.Scalar(value)
                     : np.asanyarray(value);
             }

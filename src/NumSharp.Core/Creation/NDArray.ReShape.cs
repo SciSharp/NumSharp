@@ -13,6 +13,7 @@ namespace NumSharp
         /// <param name="newShape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
         /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
+        [NewSubtype("this")]
         public NDArray reshape(Shape newShape)
         {
             return ReshapeCore(newShape, 'C');
@@ -37,6 +38,7 @@ namespace NumSharp
         ///     way, exactly like NumPy's reshape).
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
+        [NewSubtype("this")]
         public NDArray reshape(Shape newShape, char order)
         {
             return ReshapeCore(newShape, order);
@@ -48,6 +50,7 @@ namespace NumSharp
         /// <param name="newShape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
         /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
+        [NewSubtype("this")]
         public NDArray reshape(ref Shape newShape)
         {
             return ReshapeCore(newShape, 'C');
@@ -63,9 +66,10 @@ namespace NumSharp
         /// memory layout (C- or Fortran- contiguous) of the returned array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        [NewSubtype("this")]
         public NDArray reshape(int[] shape)
         {
-            return reshape(Shape.ComputeLongShape(shape));
+            return reshape(new Shape(Shape.ComputeLongShape(shape), copy: false));
         }
 
         /// <summary>
@@ -78,7 +82,32 @@ namespace NumSharp
         /// memory layout (C- or Fortran- contiguous) of the returned array.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        [NewSubtype("this")]
         public NDArray reshape(params long[] shape)
+        {
+            // The public Shape constructor copies the caller's array (bug 2d): the result must not change when the
+            // caller writes into it later. Inline values bind the span overload below and skip this copy.
+            return ReshapeCore(new Shape(shape), 'C');
+        }
+
+        /// <summary>
+        ///     Gives a new shape to an array without changing its data. This is the overload inline values bind
+        ///     (<c>a.reshape(2, 3)</c>, <c>a.reshape(-1)</c>): the values arrive on the caller's stack, so the call allocates
+        ///     only the dimension array the new shape keeps, as it did before the array form started to copy.
+        /// </summary>
+        /// <param name="shape">The new dimensions. One of them may be negative (the unknown dimension, inferred from the
+        ///     size); empty reshapes a one-element array to 0-d.</param>
+        /// <returns>A view whenever the reshape can be expressed over the existing strides, otherwise a view over an
+        ///     internal copy (NumPy's <c>reshape</c>; see <see cref="reshape(Shape, char)"/>).</returns>
+        /// <exception cref="IncorrectShapeException">The size does not match: NumPy's
+        ///     <c>cannot reshape array of size {n} into shape {s}</c>.</exception>
+        /// <exception cref="ValueError">More than one dimension is negative.</exception>
+        /// <remarks>
+        ///     An array argument binds <see cref="reshape(long[])"/> instead (an identity conversion beats the conversion
+        ///     to a span), which copies it. https://numpy.org/doc/stable/reference/generated/numpy.reshape.html
+        /// </remarks>
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        public NDArray reshape(params ReadOnlySpan<long> shape)
         {
             return ReshapeCore(new Shape(shape), 'C');
         }
@@ -155,13 +184,13 @@ namespace NumSharp
             // ---- _attempt_nocopy_reshape: express the reshape over the existing strides ----
             if (src.TryNocopyReshape(resolvedDims, order == 'F', out var nocopyStrides))
             {
-                var viewShape = new Shape((long[])resolvedDims.Clone(), nocopyStrides, src.offset,
+                var viewShape = new Shape(resolvedDims, nocopyStrides, src.offset,
                     src.bufferSize > 0 ? src.bufferSize : src.size);
                 return new NDArray(Storage.Alias(viewShape)) { TensorEngine = TensorEngine };
             }
 
             // ---- copy in the requested order, then hand back a VIEW of that internal copy ----
-            var copy = NDIter.CopyAs(this.typecode, this, order, TensorEngine);
+            var copy = NDIter.CopyAs(this.dtype, this, order, TensorEngine);
             var reshaped = MakeReshapeView(copy, resolvedDims, order);
             copy.Dispose(); // release the wrapper's counted ref — the returned view holds its own, so the buffer stays alive
             return reshaped;
@@ -220,7 +249,7 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public NDArray reshape_unsafe(int[] shape)
         {
-            return reshape_unsafe(Shape.ComputeLongShape(shape));
+            return reshape_unsafe(new Shape(Shape.ComputeLongShape(shape), copy: false));
         }
 
         /// <summary>
@@ -238,6 +267,25 @@ namespace NumSharp
             var ret = Storage.Alias();
             ret.Reshape(shape, true);
             return new NDArray(ret) { TensorEngine = TensorEngine };
+        }
+
+        /// <summary>
+        ///     Gives a new shape to an array without changing its data and without the size check of
+        ///     <see cref="reshape(long[])"/>. This is the overload inline values bind (<c>a.reshape_unsafe(2, 3)</c>): the
+        ///     call allocates only the dimension array the new shape keeps.
+        /// </summary>
+        /// <param name="shape">The new dimensions; one may be negative (inferred from the size).</param>
+        /// <returns>An alias of this array's storage with the new shape (a copy first when this array is not
+        ///     contiguous).</returns>
+        /// <remarks>
+        ///     Unsafe because the element count is not validated against the buffer: a shape larger than the buffer reads
+        ///     past it. An array argument binds <see cref="reshape_unsafe(long[])"/> instead, which copies it.
+        /// </remarks>
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        public NDArray reshape_unsafe(params ReadOnlySpan<long> shape)
+        {
+            var newShape = new Shape(shape);
+            return reshape_unsafe(ref newShape);
         }
     }
 }

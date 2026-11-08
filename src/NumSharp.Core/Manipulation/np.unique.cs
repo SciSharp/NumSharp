@@ -46,6 +46,7 @@ namespace NumSharp
             /// <summary>Per-value occurrence counts, or <c>null</c> when <c>return_counts</c> was False.</summary>
             public NDArray counts { get; }
 
+            [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Unique))]
             internal UniqueResult(NDArray[] outputs, bool hasIndex, bool hasInverse, bool hasCounts)
             {
                 _outputs = outputs;
@@ -183,7 +184,19 @@ namespace NumSharp
         ///   (NumPy's <c>sorted=False</c> hash-iteration order for integer/complex values is
         ///   platform-specific and not reproducible in C# — spec-compliant, the Array API leaves it
         ///   unspecified). See <see cref="unique_values"/>.</param>
-        /// <returns>A <see cref="UniqueResult"/> carrying <c>values</c> and the requested outputs.</returns>
+        /// <returns>A <see cref="UniqueResult"/> carrying <c>values</c> and the requested outputs.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of the unique values (NumPy's
+        ///     <c>_array_converter.wrap</c>); the index arrays stay plain.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> array with an <paramref name="axis"/> over two or more
+        ///     dimensions: NumPy's structured path refuses <c>StringDType</c> fields (<c>The axis argument to unique is not
+        ///     supported for dtype StringDType()</c>; rows of zero width: <c>Cannot change data-type for array of
+        ///     references.</c>).</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry (the sorted path: <paramref name="sorted"/> or a return
+        ///     flag; NumPy's values-only <c>sorted=False</c> hash pass compares nothing): NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
         public static UniqueResult unique(NDArray ar,
             bool return_index = false,
@@ -193,10 +206,8 @@ namespace NumSharp
             bool equal_nan = true,
             bool sorted = true)
         {
-            // Boundary scope: the instance unique's sort/argsort/mask internals are reclaimed at
-            // exit; the present outputs are yielded (the UniqueResult carries only those arrays).
-            using var scope = NDScope.Open();
-            NDArray[] outputs = scope.Returns(ar.unique(return_index, return_inverse, return_counts, axis, equal_nan, sorted));
+            // NumPy's statements on the plain views, TensorEngine.Unique (the text checks, the scope, the computation).
+            NDArray[] outputs = ar.TensorEngine.Unique(ar, return_index, return_inverse, return_counts, axis, equal_nan, sorted);
             return new UniqueResult(outputs, return_index, return_inverse, return_counts);
         }
     }

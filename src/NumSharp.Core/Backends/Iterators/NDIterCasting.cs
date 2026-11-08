@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Utilities;
@@ -230,8 +231,8 @@ namespace NumSharp.Backends.Iteration
                     if (!CanCast(srcType, dstType, casting))
                     {
                         throw new InvalidCastException(
-                            $"Iterator operand {op} dtype could not be cast from {srcType.AsNumpyDtypeName()} " +
-                            $"to {dstType.AsNumpyDtypeName()} according to the rule '{GetCastingName(casting)}'");
+                            string.Create(CultureInfo.InvariantCulture, $"Iterator operand {op} dtype could not be cast from {srcType.AsNumpyDtypeName()} " +
+                            $"to {dstType.AsNumpyDtypeName()} according to the rule '{GetCastingName(casting)}'"));
                     }
 
                     anyCast = true;
@@ -252,6 +253,29 @@ namespace NumSharp.Backends.Iteration
                 uint packed = ((uint)combinedFlags & 0xFFu) << NDIterConstants.TRANSFERFLAGS_SHIFT;
                 state.ItFlags = (state.ItFlags & ~NDIterConstants.TRANSFERFLAGS_MASK) | packed;
             }
+        }
+
+        /// <summary>
+        ///     Packs the combined transfer flags into the top 8 bits of <see cref="NDIterState.ItFlags"/> WITHOUT validating
+        ///     the casts — the descriptor construction path, which runs NumPy's own descriptor-level cast checks
+        ///     (<c>npyiter_check_casting</c>) and must not meet <see cref="ValidateCasts"/>' type-code check, which knows no
+        ///     string width or class.
+        /// </summary>
+        /// <param name="state">The iterator state (its operands' dtypes already set).</param>
+        /// <remarks>
+        ///     Every transfer NumSharp runs — a cast, a same-type copy, a string copy — reports the same characteristics
+        ///     (<see cref="ComputeCastTransferFlags"/>: unaligned-safe, no floating-point errors, reorderable; never
+        ///     <c>REQUIRES_PYAPI</c>), so the packed value equals what <see cref="ValidateCasts"/> would pack.
+        /// </remarks>
+        public static void PackTransferFlags(ref NDIterState state)
+        {
+            if (state.NOp <= 0)
+                return;
+            var combinedFlags = NDArrayMethodFlags.SUPPORTS_UNALIGNED |
+                                NDArrayMethodFlags.NO_FLOATINGPOINT_ERRORS |
+                                NDArrayMethodFlags.IS_REORDERABLE;
+            uint packed = ((uint)combinedFlags & 0xFFu) << NDIterConstants.TRANSFERFLAGS_SHIFT;
+            state.ItFlags = (state.ItFlags & ~NDIterConstants.TRANSFERFLAGS_MASK) | packed;
         }
 
         /// <summary>
@@ -287,19 +311,25 @@ namespace NumSharp.Backends.Iteration
         /// Find common dtype for all operands (for COMMON_DTYPE flag).
         /// Returns the dtype that all operands can be safely promoted to.
         /// </summary>
+        /// <param name="operands">The operands (the first <paramref name="nop"/> are read; none may be null).</param>
+        /// <param name="nop">The operand count.</param>
+        /// <returns>NumPy's <c>np.result_type</c> of the operands' dtypes (float64 for no operand).</returns>
+        /// <exception cref="NotSupportedException">An operand is a string array (the numeric promotion refuses text).</exception>
+        /// <remarks>
+        ///     NumPy's <c>npyiter_get_common_dtype</c> is <c>PyArray_ResultType</c> over the operands, which does not depend
+        ///     on their order (<c>int8, uint8, float16</c> is float16 in every order); the operands are arrays, so all of them
+        ///     are strong (NEP 50). This folded <see cref="PromoteTypes"/> left to right before, whose own rules differed from
+        ///     NumPy's (int32 + float32 gave float32, bool + int8 gave int16).
+        /// </remarks>
         public static NPTypeCode FindCommonDtype(NDArray[] operands, int nop)
         {
             if (nop == 0)
                 return NPTypeCode.Double;
 
-            NPTypeCode result = operands[0].typecode;
-
-            for (int i = 1; i < nop; i++)
-            {
-                result = PromoteTypes(result, operands[i].typecode);
-            }
-
-            return result;
+            var codes = new NPTypeCode[nop];
+            for (int i = 0; i < nop; i++)
+                codes[i] = operands[i].typecode;
+            return np._FindCommonType_Array(codes);
         }
 
         /// <summary>
@@ -307,68 +337,23 @@ namespace NumSharp.Backends.Iteration
         /// can resolve the common dtype of VIRTUAL operands across null slots
         /// (FindCommonDtype assumes a dense non-null operand array).
         /// </summary>
+        /// <param name="a">The first type.</param>
+        /// <param name="b">The second type.</param>
+        /// <returns>NumPy's <c>np.promote_types(a, b)</c>: the array-array promotion table
+        ///     (<c>np._nptypemap_arr_arr</c>, gated against NumPy by the <c>dtype_text</c> oracle tier).</returns>
+        /// <exception cref="NotSupportedException">One type is the string lane and the other is not.</exception>
+        /// <remarks>
+        ///     This carried its own rules before, which differed from NumPy's on 30 of the 225 pairs of NumSharp's dtypes:
+        ///     a float beside a wider integer kept the float (int32 + float32 gave float32, int16 + float16 gave float16;
+        ///     NumPy: float64 and float32), bool + int8 gave int16 (NumPy: int8), and char + uint16 gave char (the table:
+        ///     uint16). A set of three or more types goes through <see cref="FindCommonDtype"/> (order-independent), never a
+        ///     fold of this.
+        /// </remarks>
         internal static NPTypeCode PromoteTypes(NPTypeCode a, NPTypeCode b)
         {
             if (a == b)
                 return a;
-
-            // Complex absorbs everything (highest kind).
-            if (IsComplex(a) || IsComplex(b))
-                return NPTypeCode.Complex;
-
-            // Float always wins over int
-            if (IsFloatingPoint(a) && !IsFloatingPoint(b))
-                return a;
-            if (IsFloatingPoint(b) && !IsFloatingPoint(a))
-                return b;
-
-            // Both float - use larger
-            if (IsFloatingPoint(a) && IsFloatingPoint(b))
-            {
-                int sizeA = InfoOf.GetSize(a);
-                int sizeB = InfoOf.GetSize(b);
-                return sizeA >= sizeB ? a : b;
-            }
-
-            // Both int - complex promotion rules
-            bool aIsSigned = IsSignedInteger(a);
-            bool bIsSigned = IsSignedInteger(b);
-            int sizeA2 = InfoOf.GetSize(a);
-            int sizeB2 = InfoOf.GetSize(b);
-
-            if (aIsSigned == bIsSigned)
-            {
-                // Same signedness - use larger
-                return sizeA2 >= sizeB2 ? a : b;
-            }
-
-            // Mixed signedness - promote to signed of larger size or double size
-            int maxSize = Math.Max(sizeA2, sizeB2);
-            if (aIsSigned)
-            {
-                // a is signed, b is unsigned
-                if (sizeA2 > sizeB2) return a;  // Signed is larger
-                // Need next larger signed
-                return maxSize switch
-                {
-                    1 => NPTypeCode.Int16,
-                    2 => NPTypeCode.Int32,
-                    4 => NPTypeCode.Int64,
-                    _ => NPTypeCode.Double  // Fallback
-                };
-            }
-            else
-            {
-                // b is signed, a is unsigned
-                if (sizeB2 > sizeA2) return b;
-                return maxSize switch
-                {
-                    1 => NPTypeCode.Int16,
-                    2 => NPTypeCode.Int32,
-                    4 => NPTypeCode.Int64,
-                    _ => NPTypeCode.Double
-                };
-            }
+            return np._FindCommonArrayType(a, b);
         }
 
         // =========================================================================
@@ -378,10 +363,22 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// Convert a single value from srcType to dstType.
         /// </summary>
+        /// <param name="src">Address of one element of <paramref name="srcType"/>.</param>
+        /// <param name="dst">Address of one element of <paramref name="dstType"/> to write.</param>
+        /// <param name="srcType">The source element type.</param>
+        /// <param name="dstType">The destination element type.</param>
+        /// <exception cref="NotSupportedException">Either type is not one of the 15 storage dtypes.</exception>
         /// <remarks>
         /// Complex needs special handling on either end because a double intermediate
         /// would drop the imaginary component. Real -> Complex sets imaginary=0; Complex
         /// -> Real takes the real part (matching NumPy's ComplexWarning truncation).
+        /// <para>
+        /// float16 &lt;-&gt; float32 converts DIRECTLY, never through a double: NumPy converts
+        /// float16 bit by bit (npy_halfbits_to_floatbits / npy_floatbits_to_halfbits), so a
+        /// signalling NaN stays signalling, and the float32 &lt;-&gt; float64 hop in between would set
+        /// the quiet bit. float16 &lt;-&gt; float64 goes through the double, which the NaN-exact
+        /// <see cref="Converts.ToDouble(Half)"/> / <see cref="Converts.ToHalf(double)"/> make exact.
+        /// </para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static void ConvertValue(void* src, void* dst, NPTypeCode srcType, NPTypeCode dstType)
@@ -432,7 +429,25 @@ namespace NumSharp.Backends.Iteration
             switch (srcType)
             {
                 case NPTypeCode.Half:
+                    // float16 -> float32 directly (see remarks): the double route would quiet a signalling NaN in
+                    // the float64 -> float32 narrowing. Every other target is exact through the double.
+                    if (dstType == NPTypeCode.Single)
+                    {
+                        *(float*)dst = Converts.ToSingle(*(Half*)src);
+                        return;
+                    }
+                    WriteFromDouble(dst, ReadAsDouble(src, srcType), dstType);
+                    return;
                 case NPTypeCode.Single:
+                    // float32 -> float16 directly (see remarks): the float32 -> float64 widening would quiet a
+                    // signalling NaN, and NumPy's npy_floatbits_to_halfbits keeps the float32 payload's top bits.
+                    if (dstType == NPTypeCode.Half)
+                    {
+                        *(Half*)dst = Converts.ToHalf(*(float*)src);
+                        return;
+                    }
+                    WriteFromDouble(dst, ReadAsDouble(src, srcType), dstType);
+                    return;
                 case NPTypeCode.Double:
                     WriteFromDouble(dst, ReadAsDouble(src, srcType), dstType);
                     return;
@@ -471,6 +486,14 @@ namespace NumSharp.Backends.Iteration
         /// Complex must be handled by the caller — going through double would silently
         /// drop the imaginary component.
         /// </summary>
+        /// <param name="ptr">Address of one element of <paramref name="type"/>.</param>
+        /// <param name="type">The element type.</param>
+        /// <returns>
+        /// The element as float64 — exact except for Int64/UInt64/Decimal magnitudes beyond 2^53, which round ONCE
+        /// to nearest-even (UInt64 via <see cref="Converts.ToDouble(ulong)"/>, since .NET 8's own conversion rounds
+        /// twice from 2^63 on); a float16 NaN keeps its payload and signalling state (<see cref="Converts.ToDouble(Half)"/>).
+        /// </returns>
+        /// <exception cref="NotSupportedException"><paramref name="type"/> is Complex or not a storage dtype.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double ReadAsDouble(void* ptr, NPTypeCode type)
         {
@@ -484,8 +507,8 @@ namespace NumSharp.Backends.Iteration
                 NPTypeCode.Int32 => *(int*)ptr,
                 NPTypeCode.UInt32 => *(uint*)ptr,
                 NPTypeCode.Int64 => *(long*)ptr,
-                NPTypeCode.UInt64 => *(ulong*)ptr,
-                NPTypeCode.Half => (double)*(Half*)ptr,
+                NPTypeCode.UInt64 => Converts.ToDouble(*(ulong*)ptr),
+                NPTypeCode.Half => Converts.ToDouble(*(Half*)ptr),
                 NPTypeCode.Single => *(float*)ptr,
                 NPTypeCode.Double => *(double*)ptr,
                 NPTypeCode.Decimal => (double)*(decimal*)ptr,
@@ -535,8 +558,9 @@ namespace NumSharp.Backends.Iteration
                 case NPTypeCode.UInt64: *(ulong*)ptr = v; break;
                 case NPTypeCode.Char: *(char*)ptr = unchecked((char)v); break;
                 case NPTypeCode.Half: *(Half*)ptr = (Half)(double)v; break;
-                case NPTypeCode.Single: *(float*)ptr = v; break;
-                case NPTypeCode.Double: *(double*)ptr = v; break;
+                // Round ONCE like NumPy's C cast (.NET 8's own ulong -> float/double conversions round twice).
+                case NPTypeCode.Single: *(float*)ptr = Converts.ToSingle(v); break;
+                case NPTypeCode.Double: *(double*)ptr = Converts.ToDouble(v); break;
                 case NPTypeCode.Decimal: *(decimal*)ptr = v; break;
                 default: throw new NotSupportedException($"Unsupported type: {type}");
             }
@@ -562,7 +586,7 @@ namespace NumSharp.Backends.Iteration
                 case NPTypeCode.Int64: *(long*)ptr = Converts.ToInt64(value); break;
                 case NPTypeCode.UInt64: *(ulong*)ptr = Converts.ToUInt64(value); break;
                 case NPTypeCode.Char: *(char*)ptr = Converts.ToChar(value); break;
-                case NPTypeCode.Half: *(Half*)ptr = (Half)value; break;
+                case NPTypeCode.Half: *(Half*)ptr = Converts.ToHalf(value); break;
                 case NPTypeCode.Single: *(float*)ptr = (float)value; break;
                 case NPTypeCode.Double: *(double*)ptr = value; break;
                 case NPTypeCode.Decimal: *(decimal*)ptr = Converts.ToDecimal(value); break;
@@ -701,7 +725,7 @@ namespace NumSharp.Backends.Iteration
         /// size multiplication happens internally via <see cref="InfoOf.GetSize"/>.
         ///
         /// The per-element conversion runs through an IL-emitted inner-loop kernel
-        /// (<see cref="DirectILKernelGenerator.TryGetInnerCastKernel"/>) that issues a
+        /// (<see cref="NumSharp.Backends.Kernels.DirectILKernelGenerator.TryGetInnerCastKernel(NPTypeCode, NPTypeCode)"/>) that issues a
         /// DIRECT <c>call Converts.To{Dst}</c> — the JIT inlines it, so it runs at
         /// hand-written direct-call speed (probed: ~1.1-4.8× faster than the Func
         /// delegate it replaces, the lighter the conversion the bigger the win). The

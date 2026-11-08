@@ -204,7 +204,8 @@ namespace NumSharp.Tests.Sorting_Searching_Counting
         [TestMethod]
         public void TwoDimBins_Throws()
         {
-            var ex = Assert.ThrowsException<ArgumentException>(() =>
+            // NumPy 2.4.2: ValueError (PyArray_FROMANY's depth check on the bins).
+            var ex = Assert.ThrowsException<ValueError>(() =>
                 np.digitize(np.array(new[] { 0.2, 6.4 }), np.array(new[] { 0.0, 1.0, 2.0, 3.0 }).reshape(2, 2)));
             StringAssert.Contains(ex.Message, "object too deep for desired array");
         }
@@ -212,7 +213,8 @@ namespace NumSharp.Tests.Sorting_Searching_Counting
         [TestMethod]
         public void ZeroDimBins_Throws()
         {
-            var ex = Assert.ThrowsException<ArgumentException>(() =>
+            // NumPy 2.4.2: ValueError (PyArray_FROMANY's depth check on the bins).
+            var ex = Assert.ThrowsException<ValueError>(() =>
                 np.digitize(np.array(new[] { 1.0, 2.0 }), NDArray.Scalar(5.0)));
             StringAssert.Contains(ex.Message, "object of too small depth for desired array");
         }
@@ -220,7 +222,8 @@ namespace NumSharp.Tests.Sorting_Searching_Counting
         [TestMethod]
         public void NonMonotonicBins_Throws()
         {
-            var ex = Assert.ThrowsException<ArgumentException>(() =>
+            // NumPy 2.4.2: ValueError from _monotonicity's caller.
+            var ex = Assert.ThrowsException<ValueError>(() =>
                 np.digitize(np.array(new[] { 1.0 }), np.array(new[] { 0.0, 2.0, 1.0, 3.0 })));
             StringAssert.Contains(ex.Message, "bins must be monotonically increasing or decreasing");
         }

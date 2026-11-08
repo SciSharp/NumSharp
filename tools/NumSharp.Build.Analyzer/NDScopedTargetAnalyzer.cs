@@ -40,7 +40,8 @@ namespace NumSharp.Build.Analyzer
     ///     <c>build_property.NumSharpDisableWeaverMissingWarning</c> not set — this analyzer reports NDW013,
     ///     a WARNING, at every member the weaver WOULD have woven: a member carrying <c>[NDScoped]</c>/
     ///     <c>[NDScopedAsync]</c> itself, an override/implementation inheriting one (from this assembly or
-    ///     another), and a method with an own or inherited <c>[NDScopedExit]</c> parameter. It is the
+    ///     another), a method with an own or inherited <c>[NDScopedExit]</c> parameter, and a method carrying
+    ///     <c>[NDAnchored]</c> (whose operands would go unrooted). It is the
     ///     PRIMARY reporter (per site, IDE-visible); the MSBuild text scan in NumSharp's targets is the
     ///     fallback for a compile the analyzer is not applied to, and yields when it is. Absent property =
     ///     unknown (a source-mode build importing neither targets file) = silent. A member the gate rejects
@@ -120,25 +121,57 @@ namespace NumSharp.Build.Analyzer
             "[NDScopedExit] used, but the weaver is not installed",
             "[NDScopedExit] on parameter {0} of '{1}'{2} has no effect: the NumSharp.Build package is not installed (or weaving is disabled), so the argument is NOT detached from the caller's NDScope and may be reclaimed while '{1}' still holds it. " + InstallHint + ", or detach the argument by hand with NDScope.Detach");
 
+        /// <summary>
+        ///     NDW013 at a method carrying <c>[NDAnchored]</c> (an unscoped entry point whose operands the weaver roots) that
+        ///     draws no other NDW013: without the weaver its parameters are not rooted, so an operand the caller passes as a
+        ///     temporary can be collected while a kernel inside the method still reads it.
+        /// </summary>
+        internal static readonly DiagnosticDescriptor Nw013Anchored = Warning013("NDW013",
+            "[NDAnchored] used, but the weaver is not installed",
+            "[NDAnchored] on '{0}' has no effect: the NumSharp.Build package is not installed (or weaving is disabled), so the attribute is INERT — the method's operands are not rooted, and an operand the caller passes as a temporary can be collected while a kernel in '{0}' still reads it. " + InstallHint + ", or keep the operands alive by hand");
+
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-            ImmutableArray.Create(Nw002, Nw003, Nw005, Nw006, Nw009, Nw010, Nw011, Nw013, Nw013Inherited, Nw013Exit, Nw015);
+            ImmutableArray.Create(Nw002, Nw003, Nw005, Nw006, Nw009, Nw010, Nw011, Nw013, Nw013Inherited, Nw013Exit, Nw013Anchored, Nw015);
 
         public override void Initialize(AnalysisContext context)
         {
             context.EnableConcurrentExecution();
-            context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+            // Generated code is never analyzed (no Analyze flag), and a diagnostic that lands in it (the generated
+            // declaration of a partial method, a [GeneratedCode] parameter) is dropped by CompilationFacts.Generated
+            // before it is reported: ReportDiagnostics only switches off the driver's own per-diagnostic test, whose
+            // first use per tree rescans the tree on every thread that reports into it (GeneratedCodeFilter).
+            context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.ReportDiagnostics);
             context.RegisterCompilationStartAction(start =>
             {
-                var known = KnownTypes.Resolve(start.Compilation);
-                if (known == null)
+                // Shared with the leak and holder analyzers: the name index tells which methods can inherit a scope
+                // at all, so the override / interface walk runs only for those.
+                var facts = CompilationFacts.Get(start.Compilation);
+                if (facts == null)
                     return; // NumSharp not referenced — nothing to analyze
+                var known = facts.Known;
+                var names = facts.Names;
+                var generated = facts.Generated;
 
                 bool weaverInactive = WeaverKnownInactive(start.Options.AnalyzerConfigOptionsProvider.GlobalOptions);
 
-                start.RegisterSymbolAction(c => AnalyzeMethod((IMethodSymbol)c.Symbol, known, weaverInactive, c.ReportDiagnostic), SymbolKind.Method);
-                start.RegisterSymbolAction(c => AnalyzeProperty((IPropertySymbol)c.Symbol, known, weaverInactive, c.ReportDiagnostic), SymbolKind.Property);
+                start.RegisterSymbolAction(c => AnalyzeMethod((IMethodSymbol)c.Symbol, known, names, weaverInactive, ReporterFor(c, generated)), SymbolKind.Method);
+                start.RegisterSymbolAction(c => AnalyzeProperty((IPropertySymbol)c.Symbol, known, weaverInactive, ReporterFor(c, generated)), SymbolKind.Property);
             });
         }
+
+        /// <summary>
+        ///     The diagnostic sink of one symbol action: reports through the action's context unless the location is in
+        ///     generated code, the test the driver would have applied had the analyzer not opted out of it.
+        /// </summary>
+        /// <param name="c">The symbol action's context (copied into the sink: the struct outlives no callback).</param>
+        /// <param name="generated">The compilation's generated-code test.</param>
+        /// <returns>The sink the gate checks report into.</returns>
+        private static Action<Diagnostic> ReporterFor(SymbolAnalysisContext c, GeneratedCodeFilter generated)
+            => d =>
+            {
+                if (!generated.IsInGeneratedCode(d.Location, c.Options, c.CancellationToken))
+                    c.ReportDiagnostic(d);
+            };
 
         /// <summary>
         ///     True only when the build DECLARED the weaver inactive: <c>NumSharpBuildActive</c> is present
@@ -159,8 +192,22 @@ namespace NumSharp.Build.Analyzer
             return true;
         }
 
-        private static void AnalyzeMethod(IMethodSymbol m, KnownTypes k, bool weaverInactive, Action<Diagnostic> report)
+        /// <summary>
+        ///     The gate and the NDW013 guard for one method: its own scope attribute, else an inherited one (the
+        ///     override / interface walk, run only when the name index says a declaration of the method's name could
+        ///     be inherited), then its own or inherited [NDScopedExit] parameters and [NDAnchored] when the weaver is
+        ///     declared inactive.
+        /// </summary>
+        /// <param name="m">The method symbol.</param>
+        /// <param name="k">The compilation's NumSharp symbols.</param>
+        /// <param name="names">The compilation's name index (the inheritance walk's gate).</param>
+        /// <param name="weaverInactive">True when the build declared the weaver inactive (NDW013 applies).</param>
+        /// <param name="report">The diagnostic sink.</param>
+        private static void AnalyzeMethod(IMethodSymbol m, KnownTypes k, NumSharpNameIndex names, bool weaverInactive, Action<Diagnostic> report)
         {
+            // Asked at most once: both the scope walk and the [NDScopedExit] walk need it.
+            bool mayInherit = names.MayInheritScope(m);
+
             bool hasBody = !m.IsAbstract && !m.IsExtern
                            && !(m.IsPartialDefinition && m.PartialImplementationPart == null);
 
@@ -194,7 +241,7 @@ namespace NumSharp.Build.Analyzer
                 // AnalyzeProperty's target; otherwise an override/implementation may INHERIT its
                 // declaration's attribute — the overwhelmingly common plain method finds nothing here and
                 // falls through to the [NDScopedExit] check, before any type work.
-                if (ScopeInheritance.Inherited(m, k) is ScopeDeclaration decl)
+                if (mayInherit && ScopeInheritance.Inherited(m, k) is ScopeDeclaration decl)
                 {
                     sync = (decl.Kinds & ScopeKind.Sync) != 0;
                     async = (decl.Kinds & ScopeKind.Async) != 0;
@@ -227,18 +274,26 @@ namespace NumSharp.Build.Analyzer
                 if (ownExit.Length > 0)
                 {
                     report(Diagnostic.Create(Nw013Exit, Loc(m), ParameterNames(m, ownExit), Display(m), ""));
+                    inertReported = true;
                 }
                 else
                 {
-                    var source = ScopeInheritance.InheritedExitSource(m, k);
+                    var source = mayInherit ? ScopeInheritance.InheritedExitSource(m, k) : null;
                     if (source != null)
                     {
                         var positions = ScopeInheritance.OwnExitParameters(source, k).Where(i => i < m.Parameters.Length).ToArray();
                         report(Diagnostic.Create(Nw013Exit, Loc(m), ParameterNames(m, positions), Display(m),
                             " (inherited from '" + Display(source) + "')"));
+                        inertReported = true;
                     }
                 }
             }
+
+            // NDW013 ([NDAnchored]): the operand-root mark of an unscoped entry point, own attribute only (it is not
+            // inherited). Reported only when no other NDW013 already named this method — the fix is the same package. A
+            // scoped method carrying it too is the weaver's NDW019, not a second warning here.
+            if (weaverInactive && !inertReported && hasBody && HasAttr(m, k.AnchoredAttr))
+                report(Diagnostic.Create(Nw013Anchored, Loc(m), Display(m)));
         }
 
         private static void AnalyzeProperty(IPropertySymbol p, KnownTypes k, bool weaverInactive, Action<Diagnostic> report)

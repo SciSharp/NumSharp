@@ -59,7 +59,7 @@ namespace NumSharp.Tests.LinearAlgebra
         public void Matmul_Dtype_UnreachableLoopUnderSameKind_Raises()
         {
             new Action(() => np.matmul(M23, M32, dtype: NPTypeCode.Boolean))
-                .Should().Throw<ArgumentException>().WithMessage(
+                .Should().Throw<TypeError>().WithMessage(
                     "Cannot cast ufunc 'matmul' input 0 from dtype('float64') to dtype('bool') with casting rule 'same_kind'");
         }
 
@@ -67,7 +67,7 @@ namespace NumSharp.Tests.LinearAlgebra
         public void Matmul_OutCast_DefaultSameKindRejectsIntOut()
         {
             new Action(() => np.matmul(M23, M32, @out: np.zeros(new Shape(2, 2), NPTypeCode.Int32)))
-                .Should().Throw<ArgumentException>().WithMessage(
+                .Should().Throw<TypeError>().WithMessage(
                     "Cannot cast ufunc 'matmul' output from dtype('float64') to dtype('int32') with casting rule 'same_kind'");
         }
 

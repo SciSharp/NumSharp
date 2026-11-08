@@ -129,6 +129,35 @@ namespace NumSharp.Tests.Math
             r.GetAtIndex<Complex>(0).Should().Be(new Complex(7, 8));
         }
 
+        /// <summary>
+        ///     NumPy 2.4.2: <c>np.interp([0.5, nan], [0, 1], [1+1j, 2-3j])</c> is <c>[1.5-1j, nan+0j]</c> — arr_interp_complex
+        ///     stores a NaN coordinate as <c>npy_csetreal(x_val); npy_csetimag(0.0)</c> before the search, so the real part IS
+        ///     the coordinate's NaN (its bits, sign included) and the imaginary part is 0, with or without complex left / right
+        ///     (parity QA-49: the imaginary part used to be NaN too).
+        /// </summary>
+        [TestMethod]
+        public void ComplexFp_NaNCoordinate_IsNaNPlusZeroJ()
+        {
+            using var xp = np.array(new[] { 0.0, 1.0 });
+            using var fp = np.array(new[] { new Complex(1, 1), new Complex(2, -3) });
+            double positiveNaN = BitConverter.Int64BitsToDouble(0x7FF8000000000000L);
+            using var x = np.array(new[] { 0.5, double.NaN, positiveNaN });
+
+            using var r = np.interp(x, xp, fp);
+            r.GetAtIndex<Complex>(0).Should().Be(new Complex(1.5, -1.0));
+            var negative = r.GetAtIndex<Complex>(1);
+            BitConverter.DoubleToInt64Bits(negative.Real).Should().Be(BitConverter.DoubleToInt64Bits(double.NaN),
+                "the real part is the coordinate's own NaN");
+            BitConverter.DoubleToInt64Bits(negative.Imaginary).Should().Be(0L, "a +0.0 imaginary part");
+            var positive = r.GetAtIndex<Complex>(2);
+            BitConverter.DoubleToInt64Bits(positive.Real).Should().Be(0x7FF8000000000000L);
+            BitConverter.DoubleToInt64Bits(positive.Imaginary).Should().Be(0L);
+
+            using var withFills = np.interp(x, xp, fp, left: new Complex(0, 5), right: new Complex(0, 6));
+            double.IsNaN(withFills.GetAtIndex<Complex>(1).Real).Should().BeTrue();
+            withFills.GetAtIndex<Complex>(1).Imaginary.Should().Be(0.0);
+        }
+
         // ---------------------------------------------------------------- errors (verbatim NumPy text)
 
         [TestMethod]

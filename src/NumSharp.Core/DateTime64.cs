@@ -208,7 +208,7 @@ namespace NumSharp
             if (IsNaT)
                 throw new InvalidOperationException("DateTime64 is NaT (Not a Time); cannot be converted to System.DateTime.");
             if (!IsValidDateTime)
-                throw new InvalidOperationException($"DateTime64 ticks {_ticks} are outside System.DateTime's legal range [0, {DotNetMaxTicks}].");
+                throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"DateTime64 ticks {_ticks} are outside System.DateTime's legal range [0, {DotNetMaxTicks}]."));
             return new DateTime(_ticks);
         }
 
@@ -239,7 +239,7 @@ namespace NumSharp
             if (IsNaT)
                 throw new InvalidOperationException("DateTime64 is NaT; cannot be converted to System.DateTimeOffset.");
             if (!IsValidDateTime)
-                throw new InvalidOperationException($"DateTime64 ticks {_ticks} are outside System.DateTime's legal range.");
+                throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"DateTime64 ticks {_ticks} are outside System.DateTime's legal range."));
             return new DateTimeOffset(_ticks, TimeSpan.Zero);
         }
 

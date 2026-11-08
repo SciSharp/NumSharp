@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -697,7 +698,7 @@ namespace NumSharp.Backends.Kernels
                 2 => typeof(short),
                 4 => typeof(int),
                 8 => typeof(long),
-                _ => throw new NotSupportedException($"Unsupported dst size {dstSize} for mask expansion")
+                _ => throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"Unsupported dst size {dstSize} for mask expansion"))
             };
 
             // We need to load `vstep` mask bytes into V128/V256/V512 of bytes.
@@ -801,7 +802,7 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
-                throw new NotSupportedException($"Mask expansion not implemented for simdBits={simdBits}, dstSize={dstSize}");
+                throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"Mask expansion not implemented for simdBits={simdBits}, dstSize={dstSize}"));
             }
         }
 
@@ -1103,7 +1104,7 @@ namespace NumSharp.Backends.Kernels
                 // V<scanBits><byte>.Zero
                 var zeroProp = VType(scanBits, typeof(byte)).GetProperty("Zero",
                     BindingFlags.Public | BindingFlags.Static)
-                    ?? throw new InvalidOperationException($"Vector{scanBits}<byte>.Zero not found");
+                    ?? throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Vector{scanBits}<byte>.Zero not found"));
                 il.EmitCall(OpCodes.Call, zeroProp.GetGetMethod(), null);
 
                 // EqualsAll(v, Zero) — returns bool. If true, all bytes were 0.

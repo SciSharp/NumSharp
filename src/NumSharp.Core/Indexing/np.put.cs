@@ -1,5 +1,7 @@
 using System;
+using NumSharp.Backends;
 using NumSharp.Backends.Kernels;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
@@ -13,133 +15,88 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Target array (modified in place).</param>
         /// <param name="indices">
-        ///     Integer array of flat indices (cast to int64 internally). Indexing
-        ///     is into the C-order flattening of <paramref name="a"/>.
+        ///     Integer array of flat indices (cast to int64 internally, in C order whatever its layout). Indexing is into
+        ///     the C-order flattening of <paramref name="a"/>.
         /// </param>
         /// <param name="values">
-        ///     Values to write. Cast to <paramref name="a"/>'s dtype. Cycles
-        ///     modulo its size — shorter than <paramref name="indices"/> is fine.
+        ///     Values to write, read in C order. Cast to <paramref name="a"/>'s dtype (NumPy's FORCECAST); a C# literal is
+        ///     packed as the Python scalar it stands for (range-checked, never wrapped). Cycles modulo its size — shorter
+        ///     than <paramref name="indices"/> is fine; an empty array writes nothing (NumPy's no-op). <c>null</c> is
+        ///     Python's <c>None</c>, converted into <paramref name="a"/>'s dtype (<see cref="NDArray.NoneForStore"/>: NaN,
+        ///     <c>nan+nanj</c>, <c>False</c>, <c>'None'</c>, a <c>StringDType</c> NA object; int()'s TypeError for an integer
+        ///     array — raised before the indices' bounds and even for an empty index array, as NumPy converts first).
         /// </param>
         /// <param name="mode">
-        ///     Boundary mode: <c>"raise"</c> (default), <c>"wrap"</c>, or <c>"clip"</c>.
+        ///     Boundary mode: <c>"raise"</c> (default), <c>"wrap"</c>, or <c>"clip"</c>; <c>null</c> is NumPy's <c>None</c>
+        ///     (raise).
         /// </param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.put.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="indices"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="values"/> is null (<c>None</c>) and <paramref name="a"/> is an integer
+        ///     (or <c>decimal</c>) array.</exception>
+        /// <exception cref="ValueError">A bad <paramref name="mode"/> (NumPy's <c>clipmode_parser</c> texts, see
+        ///     <see cref="ClipModes.ClipmodeConverter"/>) — reported first, as NumPy parses it with the arguments —, then a read-only
+        ///     <paramref name="a"/> (<c>put: output array is read-only</c>).</exception>
+        /// <exception cref="TypeError">The index dtype cannot be cast to int64 under the <c>safe</c> rule (float, complex,
+        ///     uint64), an empty index array included.</exception>
+        /// <exception cref="IndexError"><paramref name="a"/> is empty while <paramref name="indices"/> is not
+        ///     (<c>cannot replace elements of an empty array</c>), or an index is out of bounds under <c>mode="raise"</c>
+        ///     (<c>index 9 is out of bounds for axis 0 with size 4</c>).</exception>
+        /// <exception cref="OverflowException">A C# literal value out of <paramref name="a"/>'s integer range (NumPy's
+        ///     OverflowError: "Python integer 1000 out of bounds for int8"), checked after the indices.</exception>
+        /// <exception cref="ValueError">A float NaN literal into an integer array ("cannot convert float NaN to
+        ///     integer").</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.put.html
+        ///     <para>The work is <see cref="UnmanagedStorage.PutTo"/>, NumPy's <c>PyArray_PutTo</c>: see there for the check order, the copy
+        ///     NumPy makes when the target overlaps the values or the indices, and which writes survive an out-of-bounds
+        ///     index.</para>
+        ///     <para>Scoped by <c>[NDScoped]</c>: the contiguous scratch of a non-contiguous or overlapping target and
+        ///     the int64 and dtype-converted copies are released on return, exceptions included. The caller's arrays were
+        ///     built before the scope opened, so the scope never disposes them.</para>
+        /// </remarks>
+        [NDScoped]
         public static void put(NDArray a, NDArray indices, NDArray values, string mode = "raise")
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
-            if (values is null) throw new ArgumentNullException(nameof(values));
 
-            // Writeability is checked FIRST — before the empty-indices no-op and the bounds/mode
-            // checks (probed 2.4.2: put(ro, [], []) and put(ro, [oob], v) both report read-only).
-            // The contiguous fast path (PutImpl) writes a.Address directly; the non-contiguous path
-            // is already guarded (it routes through np.copyto).
-            NumSharpException.ThrowIfNotWriteable(a.Shape, "put: output array");
-
-            int modeInt = ParseMode(mode, nameof(mode));
-
-            long indicesCount = indices.size;
-            if (indicesCount == 0)
-                return;   // nothing to do
-
-            if (a.size == 0)
-                throw new IndexOutOfRangeException("cannot replace elements of an empty array");
-
-            if (values.size == 0)
-                throw new ArgumentException("put: values cannot be empty when indices is non-empty.", nameof(values));
-
-            // NumPy WRITEBACKIFCOPY semantics: when the target is non-contig (e.g. a
-            // strided view), allocate a contig scratch with the view's content, run
-            // the kernel into the scratch, then np.copyto back to the view which
-            // propagates the writes through the original strides to the underlying
-            // storage. Slower than the contig fast path (extra O(view.size) traffic)
-            // but matches NumPy's "writes flow through to parent" semantics.
-            if (!a.Shape.IsContiguous)
-            {
-                var scratch = np.ascontiguousarray(a);
-                try
-                {
-                    PutImpl(scratch, indices, values, modeInt);
-                    np.copyto(a, scratch, casting: "unsafe");
-                }
-                finally { scratch.Dispose(); }
-                return;
-            }
-
-            PutImpl(a, indices, values, modeInt);
+            // A null `values` is Python's None: PutTo converts it at NumPy's conversion point (PutValuesLikeNumPy).
+            UnmanagedStorage.PutTo(a, indices, values, mode);
         }
 
         /// <summary>
         ///     Scalar-index, scalar-value convenience overload.
         /// </summary>
+        /// <param name="a">Target array (modified in place).</param>
+        /// <param name="index">The flat index into the C-order flattening of <paramref name="a"/>.</param>
+        /// <param name="value">The value to write. A C# number is packed into <paramref name="a"/>'s dtype by NumPy's
+        ///     <c>PyArray_Pack</c> rules for its kind (<see cref="NDArray.AsStoreValue"/>); <c>null</c> is Python's
+        ///     <c>None</c> (<see cref="NDArray.NoneForStore"/>); anything else is converted with
+        ///     <see cref="np.asanyarray(in object, DType, string)"/> and cast.</param>
+        /// <param name="mode">Boundary mode: <c>"raise"</c> (default), <c>"wrap"</c>, or <c>"clip"</c>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="value"/> is null (<c>None</c>) and <paramref name="a"/> is an integer
+        ///     (or <c>decimal</c>) array.</exception>
+        /// <exception cref="ValueError">A bad <paramref name="mode"/>, then a read-only <paramref name="a"/>.</exception>
+        /// <exception cref="IndexError"><paramref name="a"/> is empty, or <paramref name="index"/> is out of bounds under
+        ///     <c>mode="raise"</c>.</exception>
+        /// <exception cref="OverflowException">A C# integer out of <paramref name="a"/>'s range, or a float infinity into an
+        ///     integer array (NumPy's OverflowError texts).</exception>
+        /// <exception cref="ValueError">A float NaN into an integer array.</exception>
+        /// <exception cref="TypeError">A complex into a real array.</exception>
+        /// <remarks>
+        ///     Scoped by <c>[NDScoped]</c>: the 0-d index array and the conversion of <paramref name="value"/> are built
+        ///     in THIS frame, so this method needs a scope of its own to release them. An <see cref="NDArray"/> passed as
+        ///     <paramref name="value"/> comes back from <see cref="NDArray.AsStoreValue"/> unchanged and is never disposed.
+        /// </remarks>
+        [NDScoped]
         public static void put(NDArray a, long index, object value, string mode = "raise")
-            => put(a, NDArray.Scalar(index), np.asanyarray(value), mode);
-
-        private static unsafe void PutImpl(NDArray a, NDArray indices, NDArray values, int mode)
         {
-            // Cast indices to contig int64 (a contig int32 array is read in place); cast values to contig a.dtype.
-            var idx64 = CastIndicesToInt64(indices, "safe", out bool ownIdx, out bool idx32);
+            if (a is null) throw new ArgumentNullException(nameof(a));
 
-            NDArray valsCast;
-            bool ownVals;
-            if (values.GetTypeCode == a.GetTypeCode && values.Shape.IsContiguous)
-            {
-                valsCast = values;
-                ownVals = false;
-            }
-            else if (values.GetTypeCode == a.GetTypeCode)
-            {
-                var c = np.ascontiguousarray(values);
-                valsCast = c;
-                ownVals = !ReferenceEquals(c, values);
-            }
-            else
-            {
-                valsCast = values.astype(a.GetTypeCode);
-                ownVals = true;
-            }
-
-            try
-            {
-                int copyKind = DirectILKernelGenerator.CopyKindFor(a.dtypesize);
-
-                byte* dstPtr = (byte*)a.Storage.Address + a.Shape.offset * a.dtypesize;
-                // idx32: the index buffer holds int32 values; the kernels' `long*` parameter is a reinterpret.
-                long* idxPtr = idx32
-                    ? (long*)((int*)idx64.Storage.Address + idx64.Shape.offset)
-                    : (long*)idx64.Storage.Address + idx64.Shape.offset;
-                byte* valsPtr = (byte*)valsCast.Storage.Address + valsCast.Shape.offset * valsCast.dtypesize;
-
-                long status;
-                // The lean flat scatter (DirectILKernelGenerator.GatherFlat.cs) serves RAISE mode with a
-                // compile-time element width; wrap/clip keep the general kernel.
-                var flat = mode == 0 ? DirectILKernelGenerator.GetPutFlatKernel(copyKind, idx32) : null;
-                if (flat != null)
-                {
-                    status = flat(dstPtr, idxPtr, indices.size, valsPtr, valsCast.size, a.size);
-                }
-                else
-                {
-                    var kernel = DirectILKernelGenerator.GetPutKernel(copyKind, idx32);
-                    if (kernel == null)
-                        throw new NotSupportedException("np.put: IL kernel unavailable");
-                    status = kernel(dstPtr, idxPtr, indices.size,
-                                    valsPtr, valsCast.size,
-                                    a.size, a.dtypesize, mode);
-                }
-                if (status < indices.size)
-                {
-                    long badI = status;
-                    long badVal = idx32 ? ((int*)idxPtr)[badI] : idxPtr[badI];
-                    throw new IndexOutOfRangeException(
-                        $"index {badVal} is out of bounds for axis 0 with size {a.size}");
-                }
-            }
-            finally
-            {
-                if (ownIdx) idx64.Dispose();
-                if (ownVals) valsCast.Dispose();
-            }
+            // NumPy converts the index (a Python int) and the value inside PyArray_PutTo, after the mode, the
+            // writeability and the empty-target checks: PutTo runs them in that order (a null value is None, converted there).
+            UnmanagedStorage.PutTo(a, NDArray.Scalar(index), value, mode);
         }
     }
 }

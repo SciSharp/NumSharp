@@ -205,12 +205,13 @@ namespace NumSharp.Tests.View
         public void View_LastAxisNonContiguousDifferentSize_Throws()
         {
             // The last axis is NOT contiguous (reversed / transposed), so a different-size view is
-            // rejected — matching NumPy's ValueError "the last axis must be contiguous".
+            // rejected with NumPy's ValueError and text (probed 2.4.2).
+            const string text = "To change to a dtype of a different size, the last axis must be contiguous";
             Action reversed = () => np.arange(5).astype(np.int32)["::-1"].view<short>();
-            reversed.Should().Throw<InvalidOperationException>();
+            reversed.Should().Throw<ValueError>().WithMessage(text);
 
             Action transposed = () => np.arange(6).astype(np.int32).reshape(2, 3).T.view<short>();
-            transposed.Should().Throw<InvalidOperationException>();
+            transposed.Should().Throw<ValueError>().WithMessage(text);
         }
 
         [TestMethod]
@@ -246,6 +247,88 @@ namespace NumSharp.Tests.View
 
             Action act = () => arr.view<decimal>();
             act.Should().Throw<ArgumentException>();
+        }
+
+        #endregion
+
+        #region Non-native byte order (parity QA-38)
+
+        /// <summary>
+        ///     NumPy 2.4.2: <c>np.array([258], np.int32).view('&gt;i4')</c> is <c>[33619968]</c> (the bytes <c>02 01 00 00</c>
+        ///     read big-endian). NumSharp stores every dtype natively, so the view is refused with
+        ///     <see cref="NotSupportedException"/>; it used to return a native alias of the int32 lane that read 258. The
+        ///     decode route, <c>np.frombuffer(a.tobytes(), '&gt;i4')</c>, gives NumPy's value in a native copy.
+        /// </summary>
+        [TestMethod]
+        public void View_NonNativeSameSize_IsRefused_AndFrombufferDecodes()
+        {
+            using var a = np.array(new[] { 258 });
+            Action act = () => a.view(np.dtype(">i4")).Dispose();
+            act.Should().Throw<NotSupportedException>().WithMessage("*non-native byte order*np.frombuffer*");
+
+            using var decoded = np.frombuffer(a.tobytes(), ">i4");
+            decoded.GetInt32(0).Should().Be(33619968, "NumPy reads 02 01 00 00 big-endian");
+            a.GetInt32(0).Should().Be(258, "the refused view touched nothing");
+
+            // float64 too: np.array([1.0]).view('>f8') is [3.03865e-319].
+            using var f = np.array(new[] { 1.0 });
+            Action asF8 = () => f.view(np.dtype(">f8")).Dispose();
+            asF8.Should().Throw<NotSupportedException>();
+        }
+
+        /// <summary>
+        ///     A non-native view of ANOTHER item size that NumPy builds (<c>np.arange(4, dtype='&lt;i4').view('&gt;i8')</c> is
+        ///     <c>[16777216, 144115188126187520]</c>) is refused the same way, while one NumPy itself refuses keeps NumPy's
+        ///     <see cref="ValueError"/> and text: the itemsize checks run before the byte-order refusal.
+        /// </summary>
+        [TestMethod]
+        public void View_NonNativeOtherSize_RefusedOnlyAfterNumPysItemsizeChecks()
+        {
+            using var four = np.arange(4).astype(np.int32);
+            Action built = () => four.view(np.dtype(">i8")).Dispose();
+            built.Should().Throw<NotSupportedException>();
+
+            using var three = np.arange(3).astype(np.int32);
+            Action numpyRefuses = () => three.view(np.dtype(">i8")).Dispose();
+            numpyRefuses.Should().Throw<ValueError>().WithMessage(
+                "When changing to a larger dtype, its size must be a divisor of the total size in bytes of the last axis of the array.");
+
+            // The string class runs the same order: np.zeros(9, uint8).view('S3').view('>U1') is NumPy's ValueError.
+            using var u1x9 = np.zeros(new Shape(9), np.dtype("u1"));
+            using var s3 = u1x9.view(np.dtype("S3"));
+            Action toU1 = () => s3.view(np.dtype(">U1")).Dispose();
+            toU1.Should().Throw<ValueError>().WithMessage("When changing to a larger dtype*");
+        }
+
+        /// <summary>
+        ///     Only a NON-NATIVE descriptor is refused: an explicit native order (<c>'&lt;i4'</c>, <c>'=i4'</c>) views as before
+        ///     (<c>[258]</c>), and a one-byte descriptor has no byte order at all (<c>'&gt;i1'</c> is NumPy's <c>int8</c>,
+        ///     <c>'&gt;S1'</c> its <c>|S1</c>), so it views. A non-native string view NumPy builds (<c>'&gt;U2'</c> of a
+        ///     <c>&lt;U2</c> array) stays refused.
+        /// </summary>
+        [TestMethod]
+        public void View_NativeAndOneByteDescriptors_StillView_NonNativeStringRefused()
+        {
+            using var a = np.array(new[] { 258 });
+            using (var little = a.view(np.dtype("<i4")))
+                little.GetInt32(0).Should().Be(258);
+            using (var native = a.view(np.dtype("=i4")))
+                native.GetInt32(0).Should().Be(258);
+
+            using var bytes = np.array(new sbyte[] { 1, 2, 3 });
+            using (var i1 = bytes.view(np.dtype(">i1")))
+            {
+                i1.typecode.Should().Be(NPTypeCode.SByte);
+                i1.ToArray<sbyte>().Should().Equal((sbyte)1, (sbyte)2, (sbyte)3);
+            }
+
+            using var abc = np.array(new byte[] { 0x61, 0x62, 0x63 });
+            using (var s1 = abc.view(np.dtype(">S1")))
+                s1.dtype.str.Should().Be("|S1");
+
+            using var u2 = np.array(new[] { "ab" });
+            Action swapped = () => u2.view(np.dtype(">U2")).Dispose();
+            swapped.Should().Throw<NotSupportedException>();
         }
 
         #endregion

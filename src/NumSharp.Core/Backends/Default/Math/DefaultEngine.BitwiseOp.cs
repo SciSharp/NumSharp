@@ -23,8 +23,10 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray BitwiseAnd(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "bitwise_and", lhs, rhs, @out, where);
             ValidateWhereMask(where);
+            // bitwise_and has integer/bool loops only: text is refused before the numeric promotion table is read.
+            Strings.NDStringUfuncs.ThrowIfBinary("bitwise_and", lhs, rhs, @out, typeCode, where);
             ValidateBitwiseLoop(np._FindCommonType(lhs, rhs), "bitwise_and");
             // ufunc dtype= selects among the bool/int loops (probed 2.4.2:
             // bitwise_and(i32,i32,dtype=i64) widens, dtype=i16 narrows under
@@ -43,8 +45,10 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray BitwiseOr(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "bitwise_or", lhs, rhs, @out, where);
             ValidateWhereMask(where);
+            // bitwise_or has integer/bool loops only: text is refused before the numeric promotion table is read.
+            Strings.NDStringUfuncs.ThrowIfBinary("bitwise_or", lhs, rhs, @out, typeCode, where);
             ValidateBitwiseLoop(np._FindCommonType(lhs, rhs), "bitwise_or");
             // ufunc dtype= selects among the bool/int loops (probed 2.4.2:
             // bitwise_and(i32,i32,dtype=i64) widens, dtype=i16 narrows under
@@ -63,8 +67,10 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray BitwiseXor(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "bitwise_xor", lhs, rhs, @out, where);
             ValidateWhereMask(where);
+            // bitwise_xor has integer/bool loops only: text is refused before the numeric promotion table is read.
+            Strings.NDStringUfuncs.ThrowIfBinary("bitwise_xor", lhs, rhs, @out, typeCode, where);
             ValidateBitwiseLoop(np._FindCommonType(lhs, rhs), "bitwise_xor");
             // ufunc dtype= selects among the bool/int loops (probed 2.4.2:
             // bitwise_and(i32,i32,dtype=i64) widens, dtype=i16 narrows under

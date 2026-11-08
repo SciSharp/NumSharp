@@ -1,0 +1,152 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using NumSharp;
+using NumSharp.IO;
+using NumSharp.Tests.Utilities;
+
+namespace NumSharp.Tests.Documentation
+{
+    /// <summary>
+    ///     Executable coverage for every code example in
+    ///     <c>docs/website-src/docs/fundamentals/io.md</c> (the "I/O with NumSharp" fundamentals
+    ///     article). Each test mirrors one documented snippet and asserts the behaviour the page
+    ///     claims. Values were captured by running the snippets against this branch.
+    /// </summary>
+    [TestClass]
+    public class FundamentalsIoDocTests
+    {
+        private string _dir;
+
+        [TestInitialize]
+        public void Setup()
+        {
+            _dir = Path.Combine(Path.GetTempPath(), "ns_fund_io_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_dir);
+        }
+
+        [TestCleanup]
+        public void Cleanup()
+        {
+            try { Directory.Delete(_dir, recursive: true); }
+            catch (IOException) { /* a leaked handle fails the test that leaked it */ }
+        }
+
+        private string At(string name) => Path.Combine(_dir, name);
+
+        // ── .npy / .npz ────────────────────────────────────────────────────────────────────────────
+
+        [TestMethod]
+        public void Npy_SaveLoad_RoundTrip()
+        {
+            var arr = np.arange(10).reshape(2, 5);
+            np.save(At("array.npy"), arr);
+            NDArray w = np.load_npy(At("array.npy"));
+            np.array_equal(w, arr).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Npz_DictionaryKeys_And_DotAccess()
+        {
+            np.savez(At("bundle.npz"), new Dictionary<string, NDArray> { ["weights"] = np.arange(3), ["bias"] = np.zeros(2) });
+
+            using NpzFile npz = np.load_npz(At("bundle.npz"));
+            npz["weights"].ToArray<long>().Should().Equal(0L, 1, 2);      // by key
+            NDArray b = npz.f.bias;                                       // BagObj dot access
+            b.size.Should().Be(2);
+            npz.Files.Should().BeEquivalentTo(new[] { "weights", "bias" });
+        }
+
+        [TestMethod]
+        public void Load_ReturnsObject_DispatchedOnKind()
+        {
+            np.save(At("one.npy"), np.arange(3));
+            np.savez(At("many.npz"), np.arange(3));
+
+            np.load(At("one.npy")).Should().BeOfType<NDArray>();
+            object fromNpz = np.load(At("many.npz"));
+            fromNpz.Should().BeOfType<NpzFile>();
+            ((NpzFile)fromNpz).Dispose();
+        }
+
+        [TestMethod]
+        public void Mmap_Mode_R_IsReadOnly()
+        {
+            np.save(At("huge.npy"), np.arange(5));
+            var mapped = (NDArray)np.load(At("huge.npy"), mmap_mode: "r");
+            mapped.Shape.IsWriteable.Should().BeFalse("mmap_mode 'r' is a read-only view");
+            mapped.ToArray<long>().Should().Equal(0L, 1, 2, 3, 4);
+        }
+
+        // ── Text I/O ───────────────────────────────────────────────────────────────────────────────
+
+        [TestMethod]
+        public void SaveTxt_LoadTxt_RoundTrip()
+        {
+            var a = np.array(new[,] { { 1.0, 2.0 }, { 3.0, 4.0 } });
+            np.savetxt(At("out.csv"), a, fmt: "%.1f", delimiter: ",");
+            var back = np.loadtxt(At("out.csv"), delimiter: ",");
+            back.shape.Should().Equal(new long[] { 2, 2 });
+            back.ToArray<double>().Should().Equal(1.0, 2.0, 3.0, 4.0);
+        }
+
+        /// <summary>
+        ///     The "Text columns and mixed tables" example (probed against NumPy 2.4.2): one line list read twice, its text
+        ///     column whole as <c>StringDType</c> and its number column as int32, because one array holds one dtype.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void TextColumns_TextAndNumbersInSeparateArrays()
+        {
+            var lines = new[] { "Rex,9", "Fido,3" };
+            var labels = np.loadtxt(lines, dtype: np.dtypes.StringDType(), delimiter: ",", usecols: new[] { 0 });
+            var ages = np.loadtxt(lines, dtype: np.int32, delimiter: ",", usecols: new[] { 1 });
+            labels.ToString(true).Should().Be("array(['Rex', 'Fido'], dtype=StringDType())");
+            ages.ToString(true).Should().Be("array([9, 3], dtype=int32)");
+        }
+
+        /// <summary>The "Text encodings" example: a UTF-16 file (one BOM), a cp1252 byte stream, CPython's charmap error.</summary>
+        [TestMethod]
+        public void TextEncodings_Utf16AndCodePages()
+        {
+            var arr = np.array(new[] { "ab", "é" }, np.dtypes.StringDType());
+            np.savetxt(At("out.txt"), arr, fmt: "%s", encoding: "utf-16");
+            byte[] file = File.ReadAllBytes(At("out.txt"));
+            file[0].Should().Be(0xFF);
+            file[1].Should().Be(0xFE);
+            var back = np.loadtxt(At("out.txt"), np.dtypes.StringDType(), encoding: "UTF-16");
+            back.item(0).Should().Be("ab");
+            back.item(1).Should().Be("é");
+            using var ms = new MemoryStream();
+            np.savetxt(ms, arr, fmt: "%s", encoding: "Windows-1252");
+            ms.ToArray().Should().Equal(new byte[] { 0x61, 0x62, 0x0A, 0xE9, 0x0A });
+            ((Action)(() => np.savetxt(new MemoryStream(), np.array(new[] { "中" }, np.dtypes.StringDType()), fmt: "%s",
+                    encoding: "cp1252")))
+                .Should().Throw<UnicodeEncodeError>()
+                .WithMessage("'charmap' codec can't encode character '\\u4e2d' in position 0: character maps to <undefined>");
+        }
+
+        [TestMethod]
+        public void FromString_ParsesNumbers()
+        {
+            np.fromstring("1 2 3 4", sep: " ").ToArray<double>().Should().Equal(1.0, 2.0, 3.0, 4.0);
+            np.fromstring("1,2,3", np.int32, sep: ",").ToArray<int>().Should().Equal(1, 2, 3);
+        }
+
+        [TestMethod]
+        public void FromString_BinaryModeRemoved_Throws()
+        {
+            ((Action)(() => np.fromstring("garbage"))).Should().Throw<Exception>("binary mode of fromstring was removed");
+        }
+
+        // ── Raw binary ─────────────────────────────────────────────────────────────────────────────
+
+        [TestMethod]
+        public void Raw_TofileFromfile_RoundTrip()
+        {
+            var arr = np.array(new[] { 1.0, 2.0, 3.0 });
+            arr.tofile(At("data.bin"));
+            np.fromfile(At("data.bin"), np.float64).ToArray<double>().Should().Equal(1.0, 2.0, 3.0);
+        }
+    }
+}

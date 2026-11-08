@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics.Tensors;
 using System.Runtime.CompilerServices;
 using AwesomeAssertions;
@@ -123,6 +124,57 @@ namespace NumSharp.Tests.Interop.Tensors
         {
             var t = Tensor.Create(new double[] { 1, 2, 3, 4 }, new nint[] { 4 });
             return t.AsNDArray();                          // t goes out of scope; the view must keep it alive
+        }
+
+        /// <summary>
+        ///     Both export verbs refuse an array whose buffer has been released, whatever its layout. Regression:
+        ///     <c>ToTensor</c> densified a strided source (<c>copy()</c>) BEFORE its disposal check, so a released
+        ///     buffer was read silently — once the pool reused it, <c>ToTensor</c> returned another array's data.
+        ///     Only the contiguous path threw, and an empty array was never checked at all.
+        /// </summary>
+        [TestMethod]
+        public void ExportVerbs_ReleasedBuffer_Throw_EveryLayout()
+        {
+            foreach (string layout in new[] { "contiguous slice", "transposed", "stepped", "broadcast", "empty" })
+            {
+                NDArray released = Released(layout);
+                new Action(() => released.ToTensor<double>()).Should().Throw<ObjectDisposedException>($"ToTensor of a released {layout} array");
+                new Action(() => released.AsTensorSpan<double>()).Should().Throw<ObjectDisposedException>($"AsTensorSpan of a released {layout} array");
+            }
+        }
+
+        /// <summary>
+        ///     Builds a float64 view of the requested layout, then disposes it together with every array it was derived
+        ///     from, so no reference is left and the buffer goes back to the pool.
+        /// </summary>
+        /// <param name="layout">One of "contiguous slice", "transposed", "stepped", "broadcast" or "empty".</param>
+        /// <returns>The disposed view, whose buffer has been released.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="layout"/> is not one of the names above.</exception>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static NDArray Released(string layout)
+        {
+            var made = new List<NDArray>();
+            NDArray Keep(NDArray a)
+            {
+                made.Add(a);
+                return a;
+            }
+
+            NDArray owner = Keep(layout == "empty" ? np.zeros(new Shape(3, 0), np.float64) : np.arange(6.0));
+            NDArray view = layout switch
+            {
+                "contiguous slice" => Keep(owner["1:5"]),
+                "transposed" => Keep(Keep(owner.reshape(2, 3)).T),
+                "stepped" => Keep(owner["::2"]),
+                "broadcast" => Keep(np.broadcast_to(Keep(owner["0:3"]), new Shape(2, 3))),
+                "empty" => owner,
+                _ => throw new ArgumentOutOfRangeException(nameof(layout), layout, "unknown layout"),
+            };
+
+            // Dispose the view and every array it was derived from: only then is the buffer's last reference gone.
+            foreach (NDArray a in made)
+                a.Dispose();
+            return view;
         }
     }
 }

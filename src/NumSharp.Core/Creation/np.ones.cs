@@ -71,13 +71,16 @@ namespace NumSharp
         ///     implicitly. Default (null) is <see cref="float64"/> / <see cref="double"/>.
         /// </param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.ones.html. A string dtype is NumPy's
+        ///     <c>a = empty(shape, dtype); copyto(a, 1, casting='unsafe')</c>: every element is the text <c>'1'</c> (an
+        ///     unsized <c>'U'</c> / <c>'S'</c> request is ONE character, NumPy's allocation rule).
+        /// </remarks>
         public static NDArray ones(Shape shape, DType dtype, string device = null)
         {
-            ValidateDevice(device);
-            return OnesCore(shape, dtype?.GetTypeCode() ?? NPTypeCode.Double);
+            DeviceArguments.ValidateDevice(device);
+            return NDArray.ones(shape, dtype);
         }
-
 
         /// <summary>
         ///     Return a new array of given shape and type, filled with ones.
@@ -87,48 +90,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape)
         {
-            return OnesCore(shape, NPTypeCode.Double);
-        }
-
-        /// <summary>
-        ///     The storage-lane core behind every public <c>ones(..., dtype)</c> overload (which all take the single
-        ///     <see cref="DType"/> descriptor parameter, like NumPy's <c>dtype=</c>).
-        /// </summary>
-        /// <param name="shape">Shape of the new array.</param>
-        /// <param name="typeCode">The desired data-type for the array.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
-        private static NDArray OnesCore(Shape shape, NPTypeCode typeCode)
-        {
-            object one = null;
-            switch (typeCode)
-            {
-                case NPTypeCode.Complex:
-                    one = new Complex(1d, 0d);
-                    break;
-                case NPTypeCode.Half:
-                    one = (Half)1;
-                    break;
-                case NPTypeCode.SByte:
-                    one = (sbyte)1;
-                    break;
-                case NPTypeCode.String:
-                    one = "1";
-                    break;
-                case NPTypeCode.Char:
-                    // Char is NumSharp's uint16-like numeric dtype. Numeric one is U+0001;
-                    // the printable character '1' is 0x0031 and violates the uint16 oracle.
-                    one = (char)1;
-                    break;
-                default:
-                    one = Converts.ChangeType((byte)1, typeCode);
-                    break;
-            }
-
-            // Allocates from shape.size directly (not via UnmanagedStorage.Allocate), so the
-            // dimension guard has to be explicit here — see np.full.
-            AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
-
-            return new NDArray(ArraySlice.Allocate(typeCode, shape.size, one), shape);
+            return UnmanagedStorage.OnesCore(shape, DType.Double);
         }
 
         /// <summary>
@@ -142,9 +104,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape, char order, DType dtype = null)
         {
-            char physical = OrderResolver.Resolve(order);
-            var orderedShape = new Shape(shape.dimensions, physical);
-            return OnesCore(orderedShape, dtype?.GetTypeCode() ?? NPTypeCode.Double);
+            return NDArray.ones(shape, order, dtype);
         }
     }
 }

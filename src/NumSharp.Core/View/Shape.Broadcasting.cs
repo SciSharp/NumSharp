@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -24,8 +25,13 @@ namespace NumSharp
             if (leftShape == rightShape)
                 return leftShape;
 
-            if (leftShape.IsScalar || leftShape.NDim == 1 && leftShape[0] == 1)
+            // A 0-d left shape takes the right one; so does a one-element 1-d left shape, but only against a right shape
+            // of at least one axis: (1,) broadcast with () is (1,) — the RANK is the larger one's, so returning the 0-d
+            // right shape there dropped the axis (np.add(x1, x2, out=o, where=False) of one-element arrays refused its out).
+            if (leftShape.IsScalar || leftShape.NDim == 1 && leftShape[0] == 1 && rightShape.NDim >= 1)
                 return rightShape;
+
+            // Reached only with a left shape of at least one axis, so a 0-d or one-element 1-d right shape leaves it as is.
 
             if (rightShape.IsScalar || rightShape.NDim == 1 && rightShape[0] == 1)
                 return leftShape;
@@ -86,7 +92,7 @@ namespace NumSharp
             }
 
             // We don't need to mark it as IsBroadcasted because technically, it has not broadcasted strides.
-            return mit; // implicit cast
+            return new Shape(mit, copy: false); // mit is built here, so the shape takes it as is
         }
 
         /// <summary>
@@ -222,7 +228,7 @@ namespace NumSharp
                 // Create immutable shape via constructor
                 long bufSize = ogiter.bufferSize > 0 ? ogiter.bufferSize : ogiter.size;
                 ret[i] = new Shape(
-                    (long[])mitDims.Clone(),
+                    mitDims,
                     broadcastStrides,
                     ogiter.offset,
                     bufSize
@@ -268,7 +274,7 @@ namespace NumSharp
                 var zeroStrides = new long[rightShape.NDim];
                 long leftBufSize = leftShape.bufferSize > 0 ? leftShape.bufferSize : leftShape.size;
                 var left = new Shape(
-                    (long[])rightShape.dimensions.Clone(),
+                    rightShape.dimensions,
                     zeroStrides,
                     leftShape.offset,
                     leftBufSize
@@ -284,7 +290,7 @@ namespace NumSharp
                 var zeroStrides = new long[leftShape.NDim];
                 long rightBufSize = rightShape.bufferSize > 0 ? rightShape.bufferSize : rightShape.size;
                 var right = new Shape(
-                    (long[])leftShape.dimensions.Clone(),
+                    leftShape.dimensions,
                     zeroStrides,
                     rightShape.offset,
                     rightBufSize
@@ -355,9 +361,87 @@ namespace NumSharp
             long rightBufSize2 = rightShape.bufferSize > 0 ? rightShape.bufferSize : rightShape.size;
 
             var leftResult = new Shape(mitDims, leftStrides, leftShape.offset, leftBufSize2);
-            var rightResult = new Shape((long[])mitDims.Clone(), rightStrides, rightShape.offset, rightBufSize2);
+            var rightResult = new Shape(mitDims, rightStrides, rightShape.offset, rightBufSize2);
 
             return (leftResult, rightResult);
+        }
+
+        /// <summary>
+        ///     np.broadcast_to's layout: <paramref name="from"/> stretched to <paramref name="against"/>'s dimensions, after
+        ///     np.broadcast_to's check that only the source's length-1 axes stretch. It is the whole answer of the shape forms
+        ///     of np.broadcast_to, and the view's layout of <see cref="NDArray.broadcast_to(UnmanagedStorage, Shape)"/>; the
+        ///     engine calls it where it validates or lays out a copy's broadcast source (NDIter, the text copies).
+        /// </summary>
+        /// <param name="from">The source's shape: its dimensions are checked, its strides and offset become the result's.</param>
+        /// <param name="against">The target; only its dimensions are read.</param>
+        /// <returns><paramref name="against"/>'s dimensions over <paramref name="from"/>'s offset and buffer: the source's
+        ///     stride on every axis that keeps its length, 0 on a stretched length-1 axis and on every prepended axis. When the
+        ///     dimensions already agree it is <paramref name="from"/> itself (its strides and flags, WRITEABLE included); the
+        ///     array form clears WRITEABLE on the result, this one does not.</returns>
+        /// <exception cref="ValueError">A dimension of <paramref name="against"/> is negative (<c>all elements of broadcast
+        ///     shape must be non-negative</c>), checked after the 0-d target test and before the axes are compared.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="against"/> is 0-d and <paramref name="from"/> is not
+        ///     (<c>cannot broadcast a non-scalar to a scalar array</c>), <paramref name="from"/> has more axes than
+        ///     <paramref name="against"/> (<c>input operand has more dimensions than allowed by the axis remapping</c>), or an
+        ///     axis of a length other than 1 differs from the target's (<c>operands could not be broadcast together with
+        ///     remapped shapes [original-&gt;remapped]: (2,3)  and requested shape (4,3)</c>): NumPy's texts, checked before any
+        ///     shape is built (<see cref="ValidateBroadcastTo"/>).</exception>
+        internal static Shape BroadcastTo(Shape from, Shape against)
+        {
+            ValidateBroadcastTo(from, against);
+            return Broadcast(from, against).LeftShape;
+        }
+
+        /// <summary>
+        ///     The check of <see cref="BroadcastTo"/>: <paramref name="from"/> broadcasts to <paramref name="target"/> one way,
+        ///     as NumPy's broadcast_to does. Only a length-1 axis of the source stretches; the target never does, so a source
+        ///     with more axes, or with an axis longer than the target's, is refused where a two-way broadcast would accept it.
+        /// </summary>
+        /// <param name="from">The source's shape; only its dimensions are read.</param>
+        /// <param name="target">The requested shape; only its dimensions are read.</param>
+        /// <exception cref="IncorrectShapeException">The source does not broadcast to the target, with NumPy's three texts
+        ///     (parity QA-30): a 0-d target and a source with axes, <c>cannot broadcast a non-scalar to a scalar array</c>,
+        ///     checked first; a source with more axes than the target, <c>input operand has more dimensions than allowed
+        ///     by the axis remapping</c>; an axis of a length other than 1 that differs from the target's,
+        ///     <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (3,)  and requested
+        ///     shape (4,)</c> (NumPy's <c>convert_shape_to_string</c> shapes, two spaces before <c>and</c>). NumPy raises
+        ///     ValueError for all three; this is the house type of a broadcast refusal.</exception>
+        /// <exception cref="ValueError">A dimension of <paramref name="target"/> is negative: NumPy's <c>all elements of
+        ///     broadcast shape must be non-negative</c>, checked before the axis comparisons.</exception>
+        private static void ValidateBroadcastTo(Shape from, Shape target)
+        {
+            // _broadcast_to's first test, `if not shape and array.shape`: a 0-d target takes only a 0-d source. It used to
+            // fall into the more-axes text below.
+            if (target.NDim == 0 && from.NDim != 0)
+                throw new IncorrectShapeException("cannot broadcast a non-scalar to a scalar array");
+
+            // _broadcast_to refuses a negative target dimension before it broadcasts anything (`if any(size < 0 for size in
+            // shape)`); a Shape accepts negatives (reshape's -1), and the stride-0 view built from one had a negative size
+            // that broke every later read (parity QA-13).
+            foreach (long d in target.dimensions)
+                if (d < 0)
+                    throw new ValueError("all elements of broadcast shape must be non-negative");
+
+            // Then np.nditer((array,), itershape=shape): npyiter_fill_axisdata refuses an operand with more axes than the
+            // iteration before it compares any length (op_axes is set, op_axes[0] is NULL), with its own text.
+            if (from.NDim > target.NDim)
+                throw new IncorrectShapeException("input operand has more dimensions than allowed by the axis remapping");
+
+            // Right-aligned: a source axis of length 1 stretches, any other length must equal the target's. NumPy's loop also
+            // lets an operand expand a target axis of length 1, then refuses that expansion (`itershape[idim] == 1 &&
+            // broadcast_shape[idim] != 1`): the same condition, and the same broadcast_error text.
+            for (int i = 0; i < from.NDim; i++)
+            {
+                long fromDim = from.dimensions[from.NDim - 1 - i];
+                long targetDim = target.dimensions[target.NDim - 1 - i];
+
+                if (fromDim != 1 && fromDim != targetDim)
+                    // broadcast_error with op_axes set and itershape given: each operand's convert_shape_to_string followed
+                    // by a space, then " and requested shape " — hence NumPy's two spaces before "and".
+                    throw new IncorrectShapeException(
+                        "operands could not be broadcast together with remapped shapes [original->remapped]: " +
+                        ConvertShapeToString(from.dimensions) + "  and requested shape " + ConvertShapeToString(target.dimensions));
+            }
         }
 
         /// <summary>
@@ -470,6 +554,165 @@ namespace NumSharp
             }
 
             return true;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>NPY_MAXARGS</c>: the most operands one <c>np.broadcast</c> call takes, hence the size of the first
+        ///     group <see cref="BroadcastShape"/> broadcasts (each later group holds one fewer, the shape found so far).
+        /// </summary>
+        private const int MaxBroadcastArgs = 64;
+
+        /// <summary>
+        ///     NumPy's <c>_broadcast_shape(*args)</c> (<c>lib/_stride_tricks_impl.py</c>): the shape <c>np.broadcast</c>'s
+        ///     multi-iterator gives the operands, with NumPy's mismatch text naming the two operands that disagree. Use it
+        ///     where NumPy broadcasts arguments through <c>np.broadcast_arrays</c> or <c>np.broadcast_shapes</c> (np.select's two
+        ///     groups) and the error text is part of the contract; <see cref="ResolveReturnShape(Shape[])"/> computes the same
+        ///     shape with a generic text.
+        /// </summary>
+        /// <param name="shapes">The operand shapes in argument order; only their dimensions are read.</param>
+        /// <returns>A C-ordered shape of the broadcast dimensions; the scalar shape when there is no operand or every operand is
+        ///     0-d.</returns>
+        /// <exception cref="IncorrectShapeException">Two operands disagree on an axis: NumPy's ValueError text, verbatim
+        ///     (<c>shape mismatch: objects cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (7,) and
+        ///     arg 1 with shape (3, 4).</c>), under the house exception type of a broadcast failure.</exception>
+        /// <exception cref="ValueError">The broadcast shape's element count does not fit a 64-bit integer
+        ///     (<c>broadcast dimensions too large.</c>).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     The scan is <c>PyArray_Broadcast</c>'s (<c>iterators.c</c>): axis by axis from the first, the operands in order
+        ///     within each axis, so a mismatch names the operand that first set the axis's length and the first one that
+        ///     disagrees with it, on the LEFTMOST axis that has a conflict. A scan that walks operand by operand instead
+        ///     reports another pair when two axes conflict: <c>np.broadcast_shapes((1,4), (1,5), (2,1), (3,1))</c> names args 2
+        ///     and 3 in NumPy, not 0 and 1.
+        ///     </para>
+        ///     <para>
+        ///     <c>np.broadcast</c> takes at most 64 operands, so NumPy broadcasts the first 64, then each further group of 63
+        ///     together with the shape found so far (<c>broadcast_to(0, b.shape)</c>), which is that call's argument 0: past 64
+        ///     operands a mismatch numbers the operands within their group, as NumPy's text does
+        ///     (<c>Mismatch is between arg 0 with shape (4,) and arg 3 with shape (5,).</c> for the 67th operand).
+        ///     </para>
+        /// </remarks>
+        internal static Shape BroadcastShape(params Shape[] shapes)
+        {
+            // b = np.broadcast(*args[:64])
+            int count = shapes?.Length ?? 0;
+            long[] dims = MultiIterDims(null, shapes, 0, Math.Min(count, MaxBroadcastArgs));
+            // for pos in range(64, len(args), 63): b = broadcast_to(0, b.shape); b = np.broadcast(b, *args[pos:pos + 63])
+            for (int pos = MaxBroadcastArgs; pos < count; pos += MaxBroadcastArgs - 1)
+                dims = MultiIterDims(dims, shapes, pos, Math.Min(count, pos + MaxBroadcastArgs - 1));
+            return new Shape(dims, copy: false);
+        }
+
+        /// <summary>
+        ///     The shape of NumPy's <c>np.broadcast(*args)</c> multi-iterator: ONE <c>PyArray_Broadcast</c> scan over every
+        ///     operand, with NumPy's mismatch text naming the two operands that disagree. Use it for <c>np.broadcast</c>
+        ///     itself; np.broadcast_arrays and np.broadcast_shapes are <see cref="BroadcastShape"/>.
+        /// </summary>
+        /// <param name="shapes">The operand shapes in argument order (null or empty: the scalar shape); only their dimensions
+        ///     are read.</param>
+        /// <returns>A C-ordered shape of the broadcast dimensions.</returns>
+        /// <exception cref="IncorrectShapeException">Two operands disagree on an axis (<c>shape mismatch: objects cannot be
+        ///     broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1 with shape (4,).</c>), the
+        ///     house type of a broadcast failure (NumPy's ValueError).</exception>
+        /// <exception cref="ValueError">The broadcast shape's element count does not fit a 64-bit integer
+        ///     (<c>broadcast dimensions too large.</c>).</exception>
+        /// <remarks>
+        ///     The difference from <see cref="BroadcastShape"/> shows only past 64 operands: NumPy's np.broadcast refuses them
+        ///     (<c>Need at least 0 and at most 64 array objects.</c>) while NumSharp's takes any number, so they stay ONE scan
+        ///     numbered from 0 here, where <c>_broadcast_shape</c> regroups them and numbers within each group.
+        /// </remarks>
+        internal static Shape MultiIterShape(Shape[] shapes)
+            => new Shape(MultiIterDims(null, shapes, 0, shapes?.Length ?? 0), copy: false);
+
+        /// <summary>
+        ///     One <c>np.broadcast</c> call of <see cref="BroadcastShape"/>: <c>PyArray_Broadcast</c>'s scan over an optional
+        ///     leading operand (the dimensions the previous group broadcast to, this call's argument 0) followed by
+        ///     <c>shapes[from..to)</c>, then its overflow check of the element count.
+        /// </summary>
+        /// <param name="lead">The previous group's broadcast dimensions, or null for the first group.</param>
+        /// <param name="shapes">All the operand shapes (null only when the group is empty).</param>
+        /// <param name="from">The first operand of this group.</param>
+        /// <param name="to">One past the last operand of this group.</param>
+        /// <returns>This call's broadcast dimensions (a new array).</returns>
+        /// <exception cref="IncorrectShapeException">See <see cref="BroadcastShape"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="BroadcastShape"/>.</exception>
+        private static long[] MultiIterDims(long[] lead, Shape[] shapes, int from, int to)
+        {
+            // The argument numbers of this call: the lead (when there is one) is 0, shapes[from] the next.
+            int first = lead is null ? 0 : 1;
+            int count = first + (to - from);
+
+            // Discover the broadcast number of dimensions.
+            int nd = lead?.Length ?? 0;
+            for (int j = from; j < to; j++)
+                nd = Math.Max(nd, shapes[j].NDim);
+
+            var result = new long[nd];
+            // PyArray_Broadcast's src_iter: the operand that set the current axis's length (every axis starts at 1, so a
+            // conflict on an axis always follows the operand that set that axis).
+            int src = -1;
+            for (int i = 0; i < nd; i++)
+            {
+                result[i] = 1;
+                for (int j = 0; j < count; j++)
+                {
+                    long[] d = j < first ? lead : shapes[from + j - first].dimensions;
+                    // This prepends 1 to shapes shorter than nd (right alignment).
+                    int k = i + d.Length - nd;
+                    if (k < 0)
+                        continue;
+                    long tmp = d[k];
+                    if (tmp == 1)
+                        continue;
+                    if (result[i] == 1)
+                    {
+                        result[i] = tmp;
+                        src = j;
+                    }
+                    else if (result[i] != tmp)
+                    {
+                        // set_shape_mismatch_exception: both operands' WHOLE shapes, as Python tuple reprs.
+                        long[] s = src < first ? lead : shapes[from + src - first].dimensions;
+                        throw new IncorrectShapeException(
+                            "shape mismatch: objects cannot be broadcast to a single shape.  " +
+                            string.Create(CultureInfo.InvariantCulture, $"Mismatch is between arg {src} with shape {PythonTupleRepr(s)} and arg {j} with shape {PythonTupleRepr(d)}."));
+                    }
+                }
+            }
+
+            // PyArray_OverflowMultiplyList over the broadcast dimensions, left to right: a zero length ends the product (no
+            // overflow past it), a product past the 64-bit range is the error.
+            long product = 1;
+            for (int i = 0; i < nd; i++)
+            {
+                if (result[i] == 0)
+                    break;
+                if (product > long.MaxValue / result[i])
+                    throw new ValueError("broadcast dimensions too large.");
+                product *= result[i];
+            }
+
+            return result;
+        }
+
+        /// <summary>A shape tuple as Python's <c>repr</c> writes it: <c>()</c>, <c>(4,)</c>, <c>(2, 3)</c> (a space after each
+        ///     comma, unlike <see cref="PythonTuple"/>).</summary>
+        /// <param name="dims">The dimensions (not null).</param>
+        /// <returns>The tuple text.</returns>
+        private static string PythonTupleRepr(long[] dims)
+        {
+            if (dims.Length == 0)
+                return "()";
+            if (dims.Length == 1)
+                return "(" + dims[0].ToString(CultureInfo.InvariantCulture) + ",)";
+            var sb = new System.Text.StringBuilder("(");
+            for (int i = 0; i < dims.Length; i++)
+            {
+                if (i > 0)
+                    sb.Append(", ");
+                sb.Append(dims[i].ToString(CultureInfo.InvariantCulture));
+            }
+            return sb.Append(')').ToString();
         }
     }
 }

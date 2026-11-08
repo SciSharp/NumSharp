@@ -15,23 +15,32 @@ namespace NumSharp
         /// <param name="out">Optional destination array whose shape equals the broadcast result shape.</param>
         /// <param name="mode">Out-of-bounds behaviour: <c>"raise"</c> (default), <c>"wrap"</c> or <c>"clip"</c>.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.choose.html</remarks>
+        [PlainReceiver]
         public NDArray choose(object[] choices, NDArray @out = null, string mode = "raise")
-            => np.choose(this, choices, @out, mode);
+        {
+            return np.choose(this, choices, @out, mode);
+        }
 
         /// <summary>
         ///     Use this index array to choose from <paramref name="choices"/> (the common case — every
         ///     choice is an <see cref="NDArray"/>). Refer to
         ///     <see cref="np.choose(NDArray,NDArray[],NDArray,string)"/> for full documentation.
         /// </summary>
+        [PlainReceiver]
         public NDArray choose(NDArray[] choices, NDArray @out = null, string mode = "raise")
-            => np.choose(this, choices, @out, mode);
+        {
+            return np.choose(this, choices, @out, mode);
+        }
 
         /// <summary>
         ///     Use this index array to choose from a single <paramref name="choices"/> array whose
         ///     outermost dimension is the sequence. Refer to
         ///     <see cref="np.choose(NDArray,NDArray,NDArray,string)"/> for full documentation.
         /// </summary>
+        [PlainReceiver]
         public NDArray choose(NDArray choices, NDArray @out = null, string mode = "raise")
-            => np.choose(this, choices, @out, mode);
+        {
+            return np.choose(this, choices, @out, mode);
+        }
     }
 }

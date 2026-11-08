@@ -23,13 +23,20 @@ namespace NumSharp
             ///     <c>LinAlgError("Matrix is not positive definite")</c> from the factorisation.
             ///     </para>
             /// </remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
-            [NDScoped] // reclaims the ToCommon cast temp
+            /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+            /// <param name="a">The Hermitian positive-definite matrix, or a stack of them.</param>
+            /// <returns>The triangular factor, a fresh array (float64 for bool / integer operands).</returns>
+            /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or a matrix that is not positive
+            ///     definite.</exception>
+            /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
+            /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static NDArray cholesky(NDArray a, bool upper = false)
             {
-                AssertStackedSquare(a);
-                var common = CommonType(a);
-                return a.TensorEngine.Cholesky(ToCommon(a, common), upper);
+                if (a is null) throw new ArgumentNullException(nameof(a));
+                return a.TensorEngine.Linalg.Cholesky(a, upper);
             }
         }
     }

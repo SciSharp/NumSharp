@@ -10,7 +10,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Sqrt(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "sqrt", nd, null, @out, where);
             return ExecuteUnaryOp(nd, UnaryOp.Sqrt, ResolveUnaryFloatReturnType(nd, typeCode, "sqrt"), @out, where);
         }
     }

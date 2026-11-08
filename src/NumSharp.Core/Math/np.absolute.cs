@@ -13,6 +13,7 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>An ndarray containing the absolute value of each element in x.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray absolute(NDArray a) => a.TensorEngine.Abs(a);
 
         /// <summary>
@@ -24,6 +25,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the input must be same_kind-castable to it; for complex input it selects the magnitude dtype (float kinds only).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray absolute(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => a.TensorEngine.Abs(a, dtype, @out, where);
 
@@ -34,10 +36,11 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>An ndarray containing the absolute value of each element in x.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray abs(NDArray a) => a.TensorEngine.Abs(a);
 
         /// <summary>
-        ///     Calculate the absolute value element-wise (alias of <see cref="absolute(NDArray, NDArray, NDArray, NPTypeCode?)"/>).
+        ///     Calculate the absolute value element-wise (alias of <see cref="absolute(NDArray, NDArray, NDArray, DType)"/>).
         ///     Mirrors NumPy's ufunc signature: <c>absolute(x, /, out=None, *, where=True, dtype=None)</c>.
         /// </summary>
         /// <param name="a">Input value.</param>
@@ -45,6 +48,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the input must be same_kind-castable to it; for complex input it selects the magnitude dtype (float kinds only).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray abs(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => a.TensorEngine.Abs(a, dtype, @out, where);
     }

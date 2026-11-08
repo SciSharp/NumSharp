@@ -1,0 +1,2510 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Text.Json;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.Backends;
+
+namespace NumSharp.Tests.Strings
+{
+    /// <summary>
+    ///     Replays the NumPy 2.4.2 string oracle (<c>Strings/corpus/strings_&lt;section&gt;.jsonl</c>) against NumSharp's fixed-width
+    ///     string dtypes, one test per corpus section. Every case is compared byte for byte: an array result by its
+    ///     descriptor, shape, C-order bytes, strides, flags and memory sharing; an in-place call by its target AND the whole
+    ///     base buffer around it; a value, text, bool, descriptor or attribute set exactly; an error by NumPy's exception
+    ///     class and verbatim message.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///     <b>Strict.</b> Every case of every section must match NumPy (strings phase 2, P2.7, retired the "deferred"
+    ///     outcome: a phase-2 case — one NumPy answers by COMPUTING on text — is held to NumPy's answer like any other). A
+    ///     case's <c>phase</c> field records which stage of the string support answered it first; it no longer changes the
+    ///     verdict.
+    ///     </para>
+    ///     <para>
+    ///     <b>Comparison details.</b> Strides and contiguity are compared only on axes of more than one element of a
+    ///     non-empty result (NumPy's strides elsewhere are arbitrary); memory sharing is <c>np.shares_memory</c> with each
+    ///     operand.
+    ///     </para>
+    /// </remarks>
+    [TestClass]
+    [TestCategory("StringOracle")]
+    public class StringOracleTests
+    {
+        private static List<StringOracleCorpus.Case> _cases;
+
+        /// <summary>The corpus, loaded once per test run.</summary>
+        private static List<StringOracleCorpus.Case> Cases => _cases ??= StringOracleCorpus.Load();
+
+        /// <summary>The descriptors: attributes, promotion, result_type, can_cast, issubdtype.</summary>
+        [TestMethod] public void Dtypes() => Run("dtype");
+
+        /// <summary>Creation from C# values and from shapes, the *_like functions, asarray and frombuffer.</summary>
+        [TestMethod] public void Creation() => Run("creation");
+
+        /// <summary>Casts between string dtypes of every width, class, order and casting rule.</summary>
+        [TestMethod] public void Astype() => Run("astype");
+
+        /// <summary>Views: transposes, reshapes, flips, broadcasts, reinterpreting views, basic and advanced indexing.</summary>
+        [TestMethod] public void Views() => Run("views");
+
+        /// <summary>Copies and element movement: copy, take, repeat, pad, concatenate, where, split and the rest.</summary>
+        [TestMethod] public void Movement() => Run("movement");
+
+        /// <summary>In-place writes: setitem, fill, put, place, putmask, copyto, put_along_axis.</summary>
+        [TestMethod] public void Mutation() => Run("mutation");
+
+        /// <summary>Element access: item, tolist, iteration.</summary>
+        [TestMethod] public void Access() => Run("access");
+
+        /// <summary>Printing: str / repr / array2string / array_repr / array_str and print options.</summary>
+        [TestMethod] public void Printing() => Run("printing");
+
+        /// <summary>Ufuncs and comparison operators with string operands.</summary>
+        [TestMethod] public void Ufuncs() => Run("ufuncs");
+
+        /// <summary>Reductions and the other functions NumPy refuses or computes for text.</summary>
+        [TestMethod] public void Reductions() => Run("reductions");
+
+        /// <summary>
+        ///     An unsized string <c>dtype=</c> request (<c>'U'</c>, <c>'S'</c>) on every ufunc, reduction, scan, gufunc,
+        ///     <c>np.clip</c>, <c>np.einsum</c> and <c>np.trace</c>, over both string classes and every numeric dtype: NumPy's
+        ///     refusal, which names the requested CLASS, or its string loop (which computes).
+        /// </summary>
+        [TestMethod] public void StringDTypeRequests() => Run("strdtype");
+
+        /// <summary>
+        ///     The order NumPy reports a text ufunc call's problems in: a read-only <c>out=</c>, a non-bool <c>where=</c>,
+        ///     the loop answer, a computing loop's output cast and broadcast, and <c>np.divmod</c>'s two outputs.
+        /// </summary>
+        [TestMethod] public void TextCallPrecedence() => Run("strprec");
+
+        /// <summary>
+        ///     The axis rules of every reduction-style function over text (ufunc.reduce, the counting statistics, the
+        ///     ravelling arg / scan / sort family, tuple axes), the quantile family's q / axis / method / empty-axis order,
+        ///     <c>np.average</c>'s weights, partition's kth bounds and the in-place sort's read-only check.
+        /// </summary>
+        [TestMethod] public void TextReductionAxes() => Run("straxis");
+
+        /// <summary>
+        ///     <c>np.cov</c> / <c>np.corrcoef</c> over text: the descriptor the observations convert to, the text-to-text
+        ///     conversion errors, the empty and <c>y</c> shapes, and the weight checks, before the first reduction.
+        /// </summary>
+        [TestMethod] public void TextCovariance() => Run("strcov");
+
+        /// <summary>
+        ///     The text calls whose answer the SHAPE decides — truth tests, counts, index searches, sorts, arg-reductions,
+        ///     <c>np.unique</c>, the set routines and the equality tests over empty inputs, lines of one element, or a pair the
+        ///     comparison operators cannot compare — answered from the shape (phase 1); the same calls over text NumPy
+        ///     compares compute (phase 2) and are held to NumPy's results as well.
+        /// </summary>
+        [TestMethod] public void ShapeDecidedAnswers() => Run("strshape");
+
+        /// <summary>
+        ///     The checks NumPy makes before it converts or compares text, in its order: <c>np.interp</c>, <c>np.digitize</c>,
+        ///     <c>np.repeat</c> with array repeats, conversions of nothing (astype / copyto / setitem / where / concatenate /
+        ///     choose), place / putmask with ndarray values, insert / delete with an array obj, searchsorted's arguments.
+        /// </summary>
+        [TestMethod] public void TextValidationOrder() => Run("strvalid");
+
+        /// <summary>
+        ///     The rest of NumPy's surface over text operands: <c>np.linalg</c>, the products and sliding windows, random
+        ///     seeding (<c>SeedSequence</c>, <c>default_rng</c>, Philox counters) and integer bounds, the histogram family,
+        ///     quantile <c>q</c>, reductions and arg-reductions with <c>out=</c>, polynomials, <c>np.emath</c>, index
+        ///     conversions, dtype predicates, <c>np.ediff1d</c>, text <c>where=</c> masks, 0-d conversions to C# scalars and
+        ///     <c>fill</c> with a sequence — NumPy's refusals in its order, its answers where dtypes and shapes decide them.
+        /// </summary>
+        [TestMethod] public void TextSurface() => Run("strsurface");
+
+        /// <summary>
+        ///     <c>numpy.ma</c> over text: every module function over masked text arrays (1-D, 2-D, empty, 0-d, bytes, all
+        ///     masked, a fill value), the binary functions over text / number / bytes pairs, and the constructors' text masks
+        ///     and fill values — the fill machinery (<c>'N/A'</c> / <c>b'N/A'</c>, conversion to the data's width), the
+        ///     masks' forms, NumPy's refusals in its order, and its answers where dtypes and shapes decide them.
+        /// </summary>
+        [TestMethod] public void TextMaskedArrays() => Run("strma");
+
+        /// <summary>
+        ///     Section striter: <c>np.nditer</c> and <c>np.nested_iters</c> over fixed-width strings, as traces — the value
+        ///     stream of every layout under each order and flag set, buffered width / class conversions under every casting
+        ///     rule (NumPy's Unicode errors included), the copy routes and their write-backs, writes through the views,
+        ///     allocated outputs, mixed pairs, NumPy's refusals and ranges, and the text-number conversions.
+        /// </summary>
+        [TestMethod] public void TextIteration() => Run("striter");
+
+        /// <summary>
+        ///     Section strcomp (strings phase 2, P2.1): the six comparison ufuncs over two strings of one class across every
+        ///     layout kind, cross-layout broadcasts and width pairs (past one vector and past the kernels' unrolled chunk plan),
+        ///     special code units (bytes on both sides of 0x80, U units above U+10FFFF), the C# operators with a string operand,
+        ///     <c>out=</c> / <c>where=</c> / <c>dtype=</c>, and the truth readers (the bool cast and the nonzero route, along
+        ///     axes too). Every case is strict: NumSharp computes all of them.
+        /// </summary>
+        [TestMethod] public void TextComparisonsAndTruth() => Run("strcomp");
+
+        /// <summary>
+        ///     Section evaltext (docs/plans/evaluate-text.md, phase E1): np.evaluate trees whose six comparisons take S, U and
+        ///     StringDType operands of every core layout (and cross-layout broadcasts) or a Python str on either side, feeding
+        ///     the fused numeric remainder (bitwise / logical nodes, Where, arithmetic), the root reductions flat and per axis,
+        ///     dtype= and order=, StringDType's NA kinds, and NumPy's refusals of a comparison raised when the call runs.
+        ///     NumPy's answer is the tree's unfused statements; every case is strict.
+        /// </summary>
+        [TestMethod] public void EvaluateOverText() => Run("evaltext");
+
+        /// <summary>
+        ///     Section strarith (strings phase 2, P2.3): <c>np.add</c> over two strings of one class across every layout kind,
+        ///     cross-layout broadcasts and width pairs, special code units, <c>out=</c> (exact, narrower, wider, S into U,
+        ///     refused) / <c>where=</c> / <c>dtype=</c>, the byte-width limit; the string repeat (<c>np.multiply</c> into
+        ///     <c>out=</c>: every count dtype, both operand orders, cut and padded outputs, overflow, the refusals); the C#
+        ///     <c>+</c> / <c>*</c> operators with a string operand; <c>np.strings.add</c> and NumPy's two-pass
+        ///     <c>np.strings.multiply</c>. Every case is strict: NumSharp computes all of them.
+        /// </summary>
+        [TestMethod] public void TextConcatenationAndRepetition() => Run("strarith");
+
+        /// <summary>
+        ///     Section strconv (strings phase 1, P1.1): conversion between text and numbers through every route that
+        ///     converts — <c>astype</c> both ways (every numeric dtype and value class, every target width, layout,
+        ///     casting rule and order; every text grammar NumPy's <c>int()</c> / <c>float()</c> / <c>complex()</c> accept or
+        ///     refuse, Unicode digits and spaces, the 4300-digit limit, the first failing element in NumPy's order), element
+        ///     stores (setitem, fill, full, ones, a text array into a numeric one), <c>np.copyto</c> with every casting rule
+        ///     and a mask, <c>np.array</c> over mixed values, numeric ufuncs into a text <c>out=</c> (with <c>where=</c>
+        ///     reading the out's text first), the string-request <c>np.add</c> over numbers, numeric-dtype reductions and
+        ///     <c>np.cov</c> over text, <c>np.concatenate</c> / <c>np.where</c> / <c>np.pad</c> /
+        ///     <c>np.linalg.matrix_power(a, 0)</c> mixing text and numbers. Every case is strict.
+        /// </summary>
+        [TestMethod] public void TextNumberConversions() => Run("strconv");
+
+        /// <summary>
+        ///     Section tdtype (strings phase 1, P1.2): the NEP 55 <c>StringDType</c> descriptor without arrays — every
+        ///     attribute for every kind of <c>na_object</c> (None, NaN, text, numbers, bytes, <c>np.float16</c>, complex, big
+        ///     ints, tuples, lists; a lone surrogate is NumPy's encode error) and <c>coerce</c>, <c>np.dtype</c>'s spellings,
+        ///     equality (and against a dtype string), promotion with every class, common instances and sequences, the
+        ///     casting-rule table both ways under every rule, the scalar hierarchy, <c>np.isdtype</c>'s refusals,
+        ///     <c>newbyteorder</c> and the ufunc <c>dtype=</c> refusal. Every case is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeDescriptors() => Run("tdtype");
+
+        /// <summary>
+        ///     Section tstore (strings phase 1, P1.3): the cells of <c>StringDType</c> arrays — <c>tobytes()</c> after
+        ///     <c>np.array</c> (short / medium / long strings and their size boundaries, NA cells, empty strings, 1-D and 2-D)
+        ///     and after write sequences that walk static_string.c's state machine (a shorter rewrite reuses its arena slot,
+        ///     a longer one moves to the heap, a short write forgets the slot, an NA write and the empty string keep it), the
+        ///     values and layout of the same arrays, itemsize / nbytes / byte strides, and the raw cells of views. Heap pointers
+        ///     are masked; every other cell byte is compared. Every case is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeStorage() => Run("tstore");
+
+        /// <summary>
+        ///     Section tcreate (strings phase 1, P1.5): creating <c>StringDType</c> arrays (<c>np.array</c> from values of
+        ///     every kind under every descriptor, <c>zeros</c> / <c>empty</c> / <c>ones</c> / <c>full</c>, the <c>_like</c>
+        ///     forms, <c>asarray</c> and the contiguity conversions), element access (the NA object comes back as itself),
+        ///     setitem and <c>fill</c> with NumPy's coercion and NA rules, printing, <c>view</c>'s reference refusal,
+        ///     <c>np.nditer</c>'s <c>refs_ok</c> rule and the raw-buffer refusals. Every case is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeCreationAndAccess() => Run("tcreate");
+
+        /// <summary>
+        ///     Section tmove (strings phase 1, P1.4): moving <c>StringDType</c> elements — views, copies and every movement
+        ///     function over short, arena and long strings and NA cells, joining with <c>StringDType</c> / <c>U</c> / <c>S</c>
+        ///     / numbers (NumPy's promotion and common-instance errors), and the in-place writes (setitem of arrays, put,
+        ///     putmask, copyto under every casting rule and mask, put_along_axis, fill_diagonal, ndarray.resize). Every case
+        ///     is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeMovement() => Run("tmove");
+
+        /// <summary>
+        ///     Section tcast (strings phase 1, P1.6): the casts.cpp loops between <c>StringDType</c> and <c>StringDType</c>
+        ///     (NA conversion), <c>U</c> / <c>S</c> (sizes, truncation, ASCII, UTF-8), bool and every number (CPython's
+        ///     parse with NumPy's errors, the NumPy scalar's <c>str()</c>, NaN as NA) over every layout, order, copy flag and
+        ///     casting rule. Every case is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeCasts() => Run("tcast");
+
+        /// <summary>
+        ///     Section titer (strings phase 1, P1.7): np.nditer and np.nested_iters over <c>StringDType</c> operands,
+        ///     recorded as traces — the value stream of every layout, order and flag set; buffered casts out of and into
+        ///     <c>StringDType</c> (<c>U</c>, <c>S</c>, numbers, bool, complex, the NA descriptors) under every casting rule; the
+        ///     copy routes; writes through the views and through the setter (texts, arena and long strings, None, numbers,
+        ///     coerce=False refusals), plain, buffered and through cast buffers; allocated outputs; operand pairs with
+        ///     common_dtype; reductions (the stride-0 external-loop chunk, a cast reduction operand, a float64 one); nested
+        ///     iterators; NumPy's refusals. Every case is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeIteration() => Run("titer");
+
+        /// <summary>
+        ///     Section cvtext: NumSharp's <c>Converts</c> against NumPy's text — a number's text is the NumPy scalar's
+        ///     <c>str()</c>, a text becomes a number as NumPy stores a Python str (CPython's grammar, NumPy's range check, a
+        ///     bool target taking the str's truth), every Converts route agreeing. Every case is strict.
+        /// </summary>
+        [TestMethod] public void ConvertsText() => Run("cvtext");
+
+        /// <summary>
+        ///     Section promote: <c>np.result_type</c> of every triple (and a stride of the quadruples) of the 13 NumPy dtypes,
+        ///     <c>np.concatenate</c> / <c>np.stack</c> / <c>np.vstack</c> / <c>np.hstack</c> of three one-element arrays, and a
+        ///     Python scalar (a C# literal) beside text and numbers in <c>np.where</c>, <c>np.choose</c>, <c>np.select</c> and
+        ///     <c>np.r_</c> (NEP 50: weak; text beside a number is NumPy's DTypePromotionError). Every case is strict.
+        /// </summary>
+        [TestMethod] public void Promotion() => Run("promote");
+
+        /// <summary>
+        ///     Section storenone: <c>None</c> stored into <c>S</c> / <c>U</c> (its <c>str()</c>, truncated) and
+        ///     <c>StringDType</c> arrays (the NA object, <c>'None'</c>, or coerce=False's refusal) through every index form;
+        ///     <c>ndarray.__setitem__</c> with Python objects; a store through a sub-array of a writeable broadcast (stride 0,
+        ///     writeable as NumPy's views inherit WRITEABLE). Every case is strict.
+        /// </summary>
+        [TestMethod] public void StoresOfPythonObjects() => Run("storenone");
+
+        /// <summary>
+        ///     Section tma (strings phase 1, P1.7d): numpy.ma over NEP 55 <c>StringDType</c> — strma's tables over <c>T</c>
+        ///     arguments (14 one-argument variants incl. the NA descriptors and <c>coerce=False</c>, 20 argument pairs beside
+        ///     <c>T</c> / <c>U</c> / <c>S</c> / numbers / values, and the <c>T</c> constructors), plus element access, stores,
+        ///     casts and attributes. A case NumPy answers without computing on the text is strict (movement, printing, the
+        ///     <c>'N/A'</c> fill value, masks, casts, and the refusals NumPy raises before reading a string: no loop,
+        ///     <c>Unsuitable type ... for calculating minimum</c>, <c>Cannot convert fill_value</c>); one that computes on the
+        ///     text (concatenating sums, comparisons, logical reductions) is held to NumPy's result.
+        /// </summary>
+        [TestMethod] public void MaskedStringDType() => Run("tma");
+
+        /// <summary>
+        ///     Section tio (strings phase 1, P1.7c): text I/O over NEP 55 <c>StringDType</c> — <c>np.loadtxt</c> from every
+        ///     source (a list of lines, a text stream, a byte stream, a file name) with every option, every descriptor (the NA
+        ///     objects, <c>coerce=False</c>) and converters of every value kind, its result's layout and its cells (the order
+        ///     NumPy packs the strings in); the same reader for numeric and fixed-width dtypes; <c>np.savetxt</c> of
+        ///     <c>StringDType</c> arrays (the NA element as every kind of Python object under every %-conversion, the Latin-1
+        ///     default of a byte stream, what reached the target before an error); <c>ndarray.tofile</c>; the refusals of
+        ///     <c>np.fromfile</c> / <c>np.fromstring</c> / <c>np.frombuffer</c>; <c>loadtxt</c>'s comments as Python objects;
+        ///     and Python's codecs under both functions (names as <c>codecs.lookup</c> resolves them, the UTF-16 / UTF-32 /
+        ///     <c>utf-8-sig</c> BOM rules, the charmap codecs, TextIOWrapper's chunking of a file, which decides a decode
+        ///     error's position, and its encoder for a file target). Every case is strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeTextIO() => Run("tio");
+
+        /// <summary>
+        ///     Section strsort (strings phase 2, P2.2): sorting <c>S</c> / <c>U</c> text — <c>np.argsort</c>'s tie order for
+        ///     every kind spelling and the <c>stable</c> keyword (NumPy's introsort, its insertion-only lines of up to 16
+        ///     elements, its heapsort fallback driven by McIlroy's adversary, the stable order), over categorical, distinct,
+        ///     long-prefix, NUL and high-byte data, every <c>U</c> key packing (Latin-1, the BMP, astral code points, units
+        ///     above U+10FFFF), the catalog's layouts and wider lines along every axis; <c>np.sort</c>, <c>ndarray.sort</c> in
+        ///     place (the whole base buffer compared), <c>np.partition</c> / <c>np.argpartition</c>; and NumPy's argument
+        ///     errors in its order (the kind, the kind with <c>stable</c>, the order, the axis, a read-only target), and
+        ///     <c>StringDType</c>'s refusal of the heapsort kind. Every case is strict.
+        /// </summary>
+        [TestMethod] public void TextSorting() => Run("strsort");
+
+        /// <summary>
+        ///     Section strchar (the <c>numpy.char</c> plan's phase 1): <c>np.char</c>'s six comparisons that strip trailing NULs
+        ///     and ASCII whitespace over every layout kind, cross-layout broadcasts and width pairs on both sides of the
+        ///     kernels' 64-unit limit; every strip unit and the whitespace NumPy keeps, units past U+10FFFF; the arguments as
+        ///     Python values (str, bytes, lists, numbers) with NumPy's refusals in its order (non-string, StringDType, the
+        ///     <c>S</c> / <c>U</c> pair's <c>NotImplemented</c> — NumSharp's null — before the broadcast);
+        ///     <c>compare_chararrays</c> with every <c>cmp</c> spelling (str, bytes, refused, a lone surrogate, None) and both
+        ///     <c>rstrip</c> values; <c>np.char.add</c>; <c>np.char.multiply</c> with its <c>ValueError</c> rule (StringDType
+        ///     additions and repetitions included). Strict.
+        /// </summary>
+        [TestMethod] public void CharModuleFunctions() => Run("strchar");
+
+        /// <summary>
+        ///     Section strsearch (strings phase 2, P2.2 milestone B): searching <c>S</c> / <c>U</c> text —
+        ///     <c>np.argmax</c> / <c>np.argmin</c> / <c>np.nanargmax</c> / <c>np.nanargmin</c> and the ndarray methods (the
+        ///     first extreme element over random, categorical, long-prefix, all-equal and NUL / high-byte data, every
+        ///     <c>U</c> key packing, block boundaries, every axis with keepdims, the catalog's layouts, broadcast views,
+        ///     <c>out=</c> of every kind and NumPy's checks), <c>np.searchsorted</c> / <c>ndarray.searchsorted</c> (sorted and
+        ///     unsorted haystacks — NumPy's exact path with its monotonic carry —, both sides, sorted / descending / random
+        ///     keys, sorters reached and not reached, few keys against a long haystack, mixed widths and kinds, shared
+        ///     prefixes, numbers with text, keys of every layout, haystack views, keys that end before the strings, and the
+        ///     argument errors) and <c>np.digitize</c> of text. Every case is strict.
+        /// </summary>
+        [TestMethod] public void TextSearching() => Run("strsearch");
+
+        /// <summary>
+        ///     Section strchararray (the <c>numpy.char</c> plan's phase 2): <see cref="NDCharArray"/> as data. The constructor
+        ///     over shapes, widths, orders and every buffer kind (a str filler, bytes, a bytearray with offsets and strides, an
+        ///     ndarray, the refusals); <c>np.char.array</c> / <c>asarray</c> over every branch (str / bytes, lists, S / U arrays
+        ///     of every layout kind, numbers and bools through <c>tolist()</c>, StringDType, chararrays, Python scalars) with
+        ///     every <c>itemsize</c> / <c>copy</c> / <c>unicode</c> / <c>order</c>; element access through the three indexer
+        ///     spellings (the full integer index STRIPPED with Python's 29 whitespace code points / 6 bytes, every other index
+        ///     a chararray); iteration; the members that keep the class with NumPy's identities and finalize errors (the
+        ///     allocating ones recorded in isolated NumPy processes); <c>view(type)</c>; <c>repr</c> / <c>str</c>. Strict, but
+        ///     for the one documented class divergence (<see cref="ClassExcuse"/>).
+        /// </summary>
+        [TestMethod] public void CharArrayAsData() => Run("strchararray");
+
+        /// <summary>
+        ///     Section strcharops (the <c>numpy.char</c> plan's phase 3): the chararray OPERATORS with Python's binary-operator
+        ///     dispatch — the six stripping comparisons with the chararray on either side against str / bytes / plain arrays
+        ///     of both classes / chararrays / lists / numbers / StringDType / element stand-ins (NotImplemented for an S / U mix,
+        ///     a plain array's own answer, Python's fallback), <c>+</c> (np.add, a chararray view) and <c>*</c> (np.char.asarray
+        ///     of np.char.multiply) — and the members phase 3 adds: argmax / argmin / argpartition (NumPy's checks, then the
+        ///     finalize error; out= computes), partition (the sort form's TypeError; the STRING partition, which NumSharp
+        ///     defers to phase 5), sort in place, argsort and searchsorted plain. NumPy's outcomes are recorded in worker
+        ///     processes replaced after every finalize error (NumPy may corrupt its heap there).
+        /// </summary>
+        [TestMethod] public void CharArrayOperatorsAndMembers() => RunWithCharArrayOperandAudit("strcharops");
+
+        /// <summary>
+        ///     Section strcharfn (the <c>numpy.char</c> plan's phase 3): the <c>np.*</c> functions with chararray operands —
+        ///     the class, values, OWNDATA, identity and errors of the functions that keep the class (methods and
+        ///     <c>np.asanyarray</c> views), wrap a text result (the ufuncs, insert / delete / diagflat / take_along_axis /
+        ///     unique / setdiff1d: views; a chararray out= comes back as a new view), drop it (np.asarray, concatenate, where,
+        ///     the set operations), create a non-string result as the subclass (the index functions, *_like with a numeric
+        ///     dtype, the trivial-loop copy of a short input into bool or StringDType — and its absence for a 2-D or
+        ///     8,193-element input) or meet the string partition (np.partition, median, quantile, percentile).
+        /// </summary>
+        [TestMethod] public void CharArrayFunctions() => RunWithCharArrayOperandAudit("strcharfn");
+
+        /// <summary>
+        ///     Section strcharobj (the <c>numpy.char</c> plan's phase 4): the object path — <c>np.@char.split</c> /
+        ///     <c>rsplit</c> / <c>splitlines</c> / <c>join</c> over <c>S</c> / <c>U</c> / <c>StringDType</c> text (NA objects
+        ///     included) of every core layout, every separator / limit / keepends form and argument kind, NumPy's errors in
+        ///     NumPy's order (the first failing element ending the call), the whitespace and line-boundary sets
+        ///     exhaustively, long texts, the chararray members, the object result's views and printing, and join over it
+        ///     (NumPy 2.4.2's ObjectDType failure). An object result is compared piece by piece, with CPython's [self]
+        ///     pieces (<c>np.str_</c>) marked. Strict.
+        /// </summary>
+        [TestMethod] public void CharObjectPath() => Run("strcharobj");
+
+        /// <summary>
+        ///     Section strcharlist (C-D3's <see cref="NDListArray"/>): the ndarray members of numpy.char's object result that
+        ///     move the lists — T / mT / transpose / swapaxes, reshape / ravel / flatten / squeeze, copy / view, take /
+        ///     compress / repeat / diagonal and the outer array's attributes — over split results of every class and core
+        ///     layout and over views of them, each object result compared piece by piece together with its byte strides,
+        ///     flags and base relation. Strict.
+        /// </summary>
+        [TestMethod] public void CharListArrayMembers() => Run("strcharlist");
+
+        /// <summary>
+        ///     Section strcharmeth (the <c>numpy.char</c> plan's C4 / C5): numpy.char's string functions — its own
+        ///     <c>partition</c> / <c>rpartition</c> (the three parts stacked on a new last axis) and the functions it
+        ///     re-exports from numpy.strings — over plain and chararray operands of every core layout of both classes,
+        ///     <c>StringDType</c>, Python values and NumPy's refusals, and the chararray string members over them with their
+        ///     return rules (<c>asarray</c>: a <c>U</c> result owns its data, an <c>S</c> result views the computed array; the
+        ///     ufunc's chararray view; a plain int64 / bool array), each result's class, OWNDATA and strides compared. Run
+        ///     with the operand audit: no library call path may hand a chararray object to a public function.
+        /// </summary>
+        [TestMethod] public void CharStringMethods() => RunWithCharArrayOperandAudit("strcharmeth");
+
+        /// <summary>
+        ///     The plain-view contract over the WHOLE string corpus: every case of every section with an <c>S</c> / <c>U</c>
+        ///     operand is replayed with those operands viewed as chararrays while <see
+        ///     cref="NDSubclass.AuditInternalCallers"/>
+        ///     is on, and no method of the library itself may hand a chararray object to a public function (its subclass
+        ///     path would run for library code). This reaches every string function NumSharp has, far more
+        ///     than the two chararray sections, whose NumPy answers are the only ones recorded for chararray operands: the
+        ///     outcomes are not compared here, only the call paths are observed.
+        /// </summary>
+        /// <exception cref="AssertFailedException">A library call path reached a subclass path (the fix is a plain view —
+        ///     <c>NDSubclass.PlainView</c> / <c>Plain</c> in the member or function that passes its operand on — or a
+        ///     <c>[PlainReceiver]</c> declaration for the member), or fewer cases than the floor were replayed (a corpus
+        ///     that shrank or failed to copy).</exception>
+        /// <remarks>The hook reads the stack on every subclass path that runs, so this replay is slower than the
+        ///     sections' own; it is switched off again however the replay ends.</remarks>
+        [TestMethod]
+        public void CharArrayOperand_LibraryNeverReachesACharArrayRule()
+        {
+            int replayed = 0;
+            NDSubclass.InternalCallers.Clear();
+            NDSubclass.AuditInternalCallers = true;
+            try
+            {
+                foreach (var c in Cases)
+                {
+                    NDArray[] ops;
+                    try
+                    {
+                        ops = c.Operands.Select(StringOracleCorpus.Reconstruct).ToArray();
+                    }
+                    catch (Exception)
+                    {
+                        continue;   // an operand NumSharp cannot build is the section's own failure, not this audit's
+                    }
+                    bool any = false;
+                    for (int i = 0; i < ops.Length; i++)
+                    {
+                        if (ops[i] is null || ops[i] is NDCharArray || ops[i].dtype.@char is not ('S' or 'U'))
+                            continue;
+                        ops[i] = (NDCharArray)ops[i].view(typeof(NDCharArray));
+                        any = true;
+                    }
+                    if (!any)
+                        continue;
+                    replayed++;
+                    try
+                    {
+                        StringOracleOps.Invoke(c, ops);
+                    }
+                    catch (Exception)
+                    {
+                        // The outcome is not the subject (a chararray operand changes many answers): only the call paths
+                        // the audit records are.
+                    }
+                }
+            }
+            finally
+            {
+                NDSubclass.AuditInternalCallers = false;
+            }
+
+            var found = NDSubclass.InternalCallers.OrderByDescending(kv => kv.Value).ToList();
+            Console.WriteLine($"[chararray operand audit] {replayed} string cases replayed with chararray operands, " +
+                              $"{found.Count} library call paths reached a subclass path");
+            foreach (var kv in found)
+                Console.WriteLine($"  {kv.Value,6} x {kv.Key}");
+            Assert.IsTrue(replayed >= MinCharArrayAuditCases,
+                $"only {replayed} cases replayed (floor {MinCharArrayAuditCases}): the corpus shrank or failed to copy");
+            Assert.AreEqual(0, found.Count,
+                "library methods handed a chararray object to a public function (its subclass path ran):\n" +
+                string.Join("\n", found.Take(60).Select(kv => $"  {kv.Value,6} x {kv.Key}")));
+        }
+
+        /// <summary>The fewest cases <see cref="CharArrayOperand_LibraryNeverReachesACharArrayRule"/> must replay: a floor
+        ///     under the measured count, so an emptied or uncopied corpus cannot pass vacuously.</summary>
+        private const int MinCharArrayAuditCases = 30000;
+
+        /// <summary>
+        ///     <see cref="Run"/> with <see cref="NDSubclass.AuditInternalCallers"/> on, then the plain-view contract: no
+        ///     method of the library itself handed a chararray object to a public function. The subclass paths answer the
+        ///     USER's call (a library method that passes its operand on passes its plain view), so a recorded caller is a
+        ///     function that would hand a chararray result — or a finalize / partition error — to library code written for
+        ///     the plain answer.
+        /// </summary>
+        /// <param name="section">The chararray section (<c>strcharops</c> or <c>strcharfn</c>).</param>
+        /// <exception cref="AssertFailedException">A case diverged from NumPy, or a library call path reached a subclass path
+        ///     (the fix is a plain view where the operand is passed on, or a <c>[PlainReceiver]</c> declaration).</exception>
+        /// <remarks>The hook reads the stack on every subclass path that runs, so it is on only for these sections; it is
+        ///     switched off again however <see cref="Run"/> ends.</remarks>
+        private static void RunWithCharArrayOperandAudit(string section)
+        {
+            NDSubclass.InternalCallers.Clear();
+            NDSubclass.AuditInternalCallers = true;
+            try
+            {
+                Run(section);
+            }
+            finally
+            {
+                NDSubclass.AuditInternalCallers = false;
+            }
+
+            var found = NDSubclass.InternalCallers.OrderByDescending(kv => kv.Value).ToList();
+            Console.WriteLine($"[chararray operand audit] {section}: {found.Count} library call paths reached a " +
+                              "subclass path");
+            Assert.AreEqual(0, found.Count,
+                "library methods handed a chararray object to a public function (its subclass path ran):\n" +
+                string.Join("\n", found.Take(60).Select(kv => $"  {kv.Value,6} x {kv.Key}")));
+        }
+
+        /// <summary>
+        ///     Section strsets (strings phase 2, P2.2 milestone C): set routines and statistics over <c>S</c> / <c>U</c>
+        ///     text — <c>np.unique</c> with every flag, axis and keyword over categorical, distinct, NUL-holding, long-prefix
+        ///     and non-ASCII data (rows compared field by field along an axis), the Array-API unique family,
+        ///     <c>np.isin</c> along both of NumPy's paths (the loop, the sort that writes numbers as text and decodes bytes),
+        ///     <c>intersect1d</c> / <c>union1d</c> / <c>setdiff1d</c> / <c>setxor1d</c>, <c>np.lexsort</c> over text and mixed
+        ///     keys, <c>np.sort_complex</c> (the text's order, then the parse), <c>np.histogram</c> /
+        ///     <c>histogram_bin_edges</c> with text or number edges, weights, density and data past NumPy's 65,536-element
+        ///     block, and <c>np.quantile</c> / <c>np.percentile</c> with every method, q form (a float, a list, a Python int,
+        ///     arrays of every dtype up to rank 3), axis form, keepdims and <c>out=</c>, over the catalog's layouts and empty
+        ///     axes. Strict, but for the one documented order divergence (<see cref="OrderExcuse"/>).
+        /// </summary>
+        [TestMethod] public void SetRoutinesAndStatistics() => Run("strsets");
+
+        /// <summary>
+        ///     Section tcomp (strings phase 2, P2.T): comparisons and truth values over NEP 55 <c>StringDType</c> text — the
+        ///     six comparison ufuncs between two <c>StringDType</c> operands of every NA kind (none, <c>None</c>, NaN, a
+        ///     sentinel string, coerce off) and against <c>U</c> on either side, over the catalog's layouts and broadcasts,
+        ///     with short / medium / long / non-ASCII / NUL-holding texts and NA cells; the C# operators with a string
+        ///     operand; <c>out=</c>, <c>where=</c> and <c>dtype=</c>; NumPy's refusals (two incompatible NA objects, the
+        ///     <c>None</c>-like rule's ordering error, another class); the truth readers (<c>astype(bool)</c>, any / all /
+        ///     count_nonzero with an axis, nonzero / flatnonzero / argwhere, the logical ufuncs) and <c>np.isnan</c>. Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeComparisons() => Run("tcomp");
+
+        /// <summary>
+        ///     Section tarith (strings phase 2, P2.T): <c>np.add</c>, <c>np.multiply</c> (a <c>StringDType</c> text times an
+        ///     integer count of every width, either order), <c>np.maximum</c> and <c>np.minimum</c> over <c>StringDType</c>
+        ///     operands of every NA kind and against <c>U</c>, over the catalog's layouts and broadcasts; the C# operators;
+        ///     <c>out=</c> (a <c>StringDType</c> out of another NA kind, an <c>S</c> / <c>U</c> out, the input itself),
+        ///     <c>where=</c>; NumPy's refusals (the NA rules' errors, the repetition overflow, two incompatible NA objects,
+        ///     counts that are not integers). Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeArithmetic() => Run("tarith");
+
+        /// <summary>
+        ///     Section treduce (strings phase 2, P2.T): reductions over <c>StringDType</c> text — <c>np.sum</c>,
+        ///     <c>np.cumsum</c>, <c>np.max</c> / <c>np.min</c> (with <c>initial=</c>, <c>where=</c>, <c>out=</c>),
+        ///     <c>np.argmax</c> / <c>np.argmin</c>, the nan forms, <c>np.trace</c>, along every axis with keepdims over the
+        ///     catalog's layouts, the NA kinds' rules, empty and 0-d inputs; and the statistics that compute a sum or the
+        ///     extremes first and then meet NumPy's refusal (<c>np.mean</c> / <c>np.average</c> / <c>np.nanmean</c>,
+        ///     <c>np.var</c> / <c>np.std</c> and the nan forms, <c>np.ptp</c>): the division's or the subtraction's words for
+        ///     an ndarray, Python's for a 0-d result, and the NaN-like NA's one answer. Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeReductions() => Run("treduce");
+
+        /// <summary>
+        ///     Section tsort (strings phase 2, P2.2 over <c>StringDType</c>): sorting, searching, the set routines and the
+        ///     order statistics over <c>StringDType</c> text — <c>np.sort</c> / <c>np.argsort</c> / <c>np.partition</c> /
+        ///     <c>np.argpartition</c> / <c>ndarray.sort</c> with NumPy's ordering of missing values (a NaN-like NA last, a
+        ///     string NA as its text, a None-like NA refused in a line of two or more) over every NA kind and layout,
+        ///     <c>np.lexsort</c>, <c>np.searchsorted</c> / <c>np.digitize</c>, <c>np.unique</c> and its Array-API family,
+        ///     <c>np.isin</c> and the set routines, <c>np.sort_complex</c>, the histograms, the quantile family with every
+        ///     method (the interpolating methods' neighbours, a StringDType q), <c>np.median</c> / <c>np.nanmedian</c> and
+        ///     numpy.ma's sort / argsort / median / unique. Strict, except <c>np.unique_values</c>' hash order (an excused
+        ///     order).
+        /// </summary>
+        [TestMethod] public void StringDTypeSortingAndStatistics() => Run("tsort");
+
+        /// <summary>
+        ///     Section qfamily (the validation of strings phase 2): the quantile family's keywords over every dtype, numbers
+        ///     and text alike — NumPy's <c>weights=</c> (method <c>inverted_cdf</c>) through <c>np.quantile</c> /
+        ///     <c>np.percentile</c> / <c>np.nanquantile</c> / <c>np.nanpercentile</c> over 9 numeric dtypes, <c>U</c>,
+        ///     <c>S</c> and <c>StringDType</c> (three NA kinds), every layout, axis form, q form, weight dtype and value,
+        ///     out= and keepdims form, NumPy's order of checks and its own <c>np.nanquantile</c> IndexError; text with many
+        ///     ties under fractional weights (NumPy's introsort order of equal strings decides the sums' rounding). Strict.
+        /// </summary>
+        [TestMethod] public void QuantileFamilyKeywords() => Run("qfamily");
+
+        /// <summary>
+        ///     Section qprec (the validation of strings phase 2): the quantile family's index arithmetic in q's dtype — a
+        ///     float16 / float32 q array computes the virtual index, the neighbours, the weight and the lerp's dtype as NumPy
+        ///     does (11 data dtypes x the 13 methods x the four functions x three layouts), the partition's kth validation
+        ///     where float16 rounds an index to n or overflows ``n - 1`` (per slice for the nan forms), percentile's quotient
+        ///     in q's dtype and its range check; out= by NumPy's two routes (take: exact shape, safe cast, NaN slices'
+        ///     same_kind copy; lerp: same_kind cast, broadcast, the t &gt;= 0.5 branch in out's dtype) and the nan forms'
+        ///     assignment, keepdims' out index, read-only outs; an integer q array's int64 weight; empty data's errors; text
+        ///     with a float16 q. Strict.
+        /// </summary>
+        [TestMethod] public void QuantilePrecisionAndOut() => Run("qprec");
+
+        /// <summary>
+        ///     Section qprologue (the np-layer dtype plan, P1a step 2): NumPy's <c>_ureduce</c> prologue of <c>np.median</c> /
+        ///     <c>np.nanmedian</c> / <c>np.quantile</c> / <c>np.percentile</c> / <c>np.nanquantile</c> /
+        ///     <c>np.nanpercentile</c> — the axes, keepdims' <c>out</c> index, the merge of several reduced axes, whose
+        ///     <c>-1</c> NumPy cannot resolve beside a kept axis of length 0 — against every check that follows it (a bogus
+        ///     method, a 3-D q, a list or array q, a text q, weights, the text refusals, <c>isnan</c>), over numbers, bool,
+        ///     <c>U</c>, <c>S</c> and <c>StringDType</c> data. The family's routes each had their own copy of the prologue,
+        ///     and they disagreed (the plan's Appendix B1). Strict.
+        /// </summary>
+        [TestMethod] public void QuantilePrologue() => Run("qprologue");
+
+        /// <summary>
+        ///     Section strfn (strings phase 2, P2.5): numpy.strings' search, strip, pad, replace, partition and slice
+        ///     functions over S / U text — str_len (a ufunc with out= / where= / dtype=), find / rfind / index / rindex /
+        ///     count, startswith / endswith, strip / lstrip / rstrip, center / ljust / rjust, zfill, expandtabs, replace,
+        ///     partition / rpartition, slice and the comparison names — over every layout kind of both classes, every
+        ///     parameter form (Python ints, arrays of each integer width, broadcast operands, the defaults), NumPy's quirks
+        ///     (U expandtabs sized four times wide, the S buffer / U fill casts, a NUL separator that is empty) and the
+        ///     refusals in NumPy's order. Strict; partition's three parts are compared by value (NumPy's structured field
+        ///     views are the excused layout, a zero-width part is recorded as width 1).
+        /// </summary>
+        [TestMethod] public void StringFunctions() => Run("strfn");
+
+        /// <summary>
+        ///     Section tfn (strings phase 2, P2.5): the same functions over NEP 55 StringDType — every NA kind (none, None,
+        ///     NaN, a string sentinel, coerce off) with each loop's own NA rule, the layout kinds, U operands the promoters
+        ///     cast, S operands without a loop, two descriptors (the compatible NA object or NumPy's TypeError), NumPy's UTF-8
+        ///     rules (code points, trailing NULs, the strip quirks, slice's buffer end), results of every cell kind, and
+        ///     str_len's mask (an NA where it is off is never read). Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeFunctions() => Run("tfn");
+
+        /// <summary>
+        ///     Section strprop (strings phase 2, P2.6): numpy.strings' predicate ufuncs over S / U text — isalpha, isdigit,
+        ///     isspace, isalnum, islower, isupper, istitle, isdecimal and isnumeric (S has no loop for the last two) — over
+        ///     every layout kind and three widths of both classes, a width sweep of random texts over every lane-mask chunk
+        ///     class and the stream past 64 units (all-ASCII arrays, and arrays whose first non-ASCII element comes first,
+        ///     midway or last: the call's escalation), out= of every dtype kind, where= masks, dtype= requests, the refusals
+        ///     in NumPy's order, Python strs / bytes as the operand and code units past U+10FFFF (CPython's record 0). Strict.
+        /// </summary>
+        [TestMethod] public void StringPredicates() => Run("strprop");
+
+        /// <summary>
+        ///     Section tprop (strings phase 2, P2.6): the predicates over NEP 55 StringDType — every NA kind (a NaN-like NA is
+        ///     False, a string NA reads as its string, any other NA raises, but only where the mask selects it), the layout
+        ///     kinds, short / long / ASCII / non-ASCII texts and a length sweep over the short-cell vector, the chunk stream
+        ///     and the decoded path, out= of other dtypes and dtype= requests. Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypePredicates() => Run("tprop");
+
+        /// <summary>
+        ///     Section strcase (strings phase 2, P2.6): numpy.strings' case maps over S / U text — upper, lower, swapcase,
+        ///     capitalize and title (NumPy's _vec_string: a fresh C-ordered array of the operand's dtype, each element the
+        ///     bytes / str method's result cut to the width) over every layout kind and three widths of both classes, a width
+        ///     sweep over every chunk class and the stream past 64 units with the call's first non-ASCII element first,
+        ///     midway or last, the full mappings that grow cut at narrow widths, the final sigma, U units past U+10FFFF
+        ///     (CPython's SystemError), lone surrogates, Python strs / bytes and non-text operands. Strict.
+        /// </summary>
+        [TestMethod] public void StringCaseMaps() => Run("strcase");
+
+        /// <summary>
+        ///     Section tcase (strings phase 2, P2.6): the case maps over NEP 55 StringDType — every NA kind (an NA object
+        ///     that is not a str is the str method's TypeError; a string NA is computed as its text, and any result equal to
+        ///     it is stored as the NA), the layout kinds, results that change the UTF-8 size, sentinels equal to results, and
+        ///     a length sweep over the short-cell vector, the arena chunks and the decoded path. Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeCaseMaps() => Run("tcase");
+
+        /// <summary>
+        ///     Section strtrans (strings phase 2, P2.6): numpy.strings.translate over S / U text — every layout kind with the
+        ///     main tables; every str.translate table kind (dicts of every key / value kind incl. the values that raise, str /
+        ///     bytes / None / number tables, lists, arrays and object lists of tables, broadcast and mismatched tables) and
+        ///     every bytes.translate table / deletechars kind (256-byte tables, wrong lengths incl. a trailing NUL np.bytes_
+        ///     drops, np.str_ tables read as UCS-4 bytes, numbers, dicts, None, element-wise delete sets); the C-order first
+        ///     error; U units past U+10FFFF mapped, deleted, kept and alone; a width sweep; deletechars ignored for U; Python
+        ///     operands, 0-d, empty and non-text operands. Strict.
+        /// </summary>
+        [TestMethod] public void StringTranslate() => Run("strtrans");
+
+        /// <summary>
+        ///     Section ttrans (strings phase 2, P2.6): numpy.strings.translate over NEP 55 StringDType — every table kind x
+        ///     every NA kind (an NA object that is not a str is the descriptor's TypeError; a string NA is translated as its
+        ///     text, and a result equal to it is stored as the NA) x the layout kinds; deletechars (str.translate takes one
+        ///     argument), surrogate results (_vec_string's "result array type does not match underlying function"), the
+        ///     C-order first error, StringDType arrays of tables, and a length sweep over the byte routes and the UTF-8
+        ///     route. Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeTranslate() => Run("ttrans");
+
+        /// <summary>
+        ///     Section strmod (strings phase 2, P2.6): numpy.strings.mod over S / U formats — every layout kind with number
+        ///     values; every NumPy value dtype x every conversion (NumPy's scalar meets CPython's %: np.float64 repr, %d
+        ///     truncating, %x refusing floats and np.bool, %s over S writing a scalar's raw buffer); the flag / width /
+        ///     precision matrix; mappings (dicts with str / bytes keys and values of every kind, NumPy scalars' IndexError,
+        ///     the mapping and argument-count rules per value kind); CPython's parse errors in their order; units past
+        ///     U+10FFFF; result widths (trailing NULs, empty, 0-d, broadcast); long results past the 64-element sample
+        ///     NumSharp lays its result rows out from (widths growing after it, every value class, a format per element, a
+        ///     2-D broadcast, a late element error); Python operands; random formats. Strict.
+        /// </summary>
+        [TestMethod] public void StringMod() => Run("strmod");
+
+        /// <summary>
+        ///     Section tmod (strings phase 2, P2.6): numpy.strings.mod over NEP 55 StringDType formats — the layout kinds x
+        ///     every NA kind (a non-str NA is str.__mod__'s descriptor TypeError, a string NA formats as its text) with number
+        ///     values; StringDType values and their NA objects; the fresh default result descriptor and its U round trip
+        ///     (trailing NULs dropped, an invalid code point refused after every element was formatted); empty operands
+        ///     keeping their descriptor; a length sweep; long results packed cell by cell (a surrogate deferred behind 130
+        ///     elements and behind a later formatting error); random formats. Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeMod() => Run("tmod");
+
+        /// <summary>
+        ///     Section strcodec (strings phase 2, P2.6): numpy.strings.encode over U and decode over S — every layout kind
+        ///     of both classes; every codec NumSharp implements (UTF-8 and utf-8-sig, UTF-16 / UTF-32 with and without a BOM,
+        ///     Latin-1, ASCII, code pages with tables and with dictionaries, EBCDIC, 'undefined') x every error handler (the
+        ///     built-ins, an unknown name, a wrong case) x every text of the pools, one element per case; the codec
+        ///     spellings; the arguments' conversion and Argument Clinic's checks in CPython's order (non-str arguments of
+        ///     every kind, NULs, surrogates, names cut at 400 bytes, unknown and non-text codecs, decode's empty-bytes
+        ///     shortcut, _clean_args); arrays of encodings and errors broadcast; empty, 0-d and Python operands; units past
+        ///     U+10FFFF; long arrays past the 64-element row sample (widths growing, late errors, the direct row paths and
+        ///     the codec route mixed); random texts x codecs x handlers. Strict.
+        /// </summary>
+        [TestMethod] public void StringCodec() => Run("strcodec");
+
+        /// <summary>
+        ///     Section tcodec (strings phase 2, P2.6): numpy.strings.encode over NEP 55 StringDType text — the layout kinds x
+        ///     every NA kind (a non-str NA object is the method descriptor's TypeError, a string NA encodes as its text);
+        ///     every codec x handler over StringDType pools; StringDType arrays as the encoding / errors arguments; the
+        ///     descriptor check before the arguments' checks; empty and 0-d operands; long arrays; decode refused. Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeCodec() => Run("tcodec");
+
+        /// <summary>
+        ///     Section strout (strings phase 2, P2.7): reductions, accumulations and statistics that touch text — a text input,
+        ///     a text out= or a text dtype= request — through every entry point that takes out= or dtype=: np.cumsum /
+        ///     np.cumprod / np.nancumsum / np.nancumprod, np.trace, np.median / np.nanmedian, np.max / np.min and their nan
+        ///     forms, np.ptp, np.argmax / np.argmin, np.all / np.any, np.percentile / np.quantile, np.sum / np.prod, the mean /
+        ///     var / std families and the numpy.matrix reductions; every input kind (numbers, digits and letters as U / S /
+        ///     StringDType) x every out kind x every request; 2-D text along every axis with views and outs that are not
+        ///     C-ordered; np.trace over 3-D; the matrix reductions along axis 0 and over every element; the repeat through the
+        ///     loop's text; empty inputs (the identity written into a text out); the parse rules of a numeric loop; StringDType
+        ///     missing values; the accumulation iterator's outs; np.fft over StringDType. Every case was evaluated in a fresh
+        ///     NumPy process (NumPy's dispatch cache makes the answer depend on earlier calls); NumPy's own clear-loop
+        ///     MemoryError cases are not recorded. Strict.
+        /// </summary>
+        [TestMethod] public void TextReductionsIntoOut() => Run("strout");
+
+        /// <summary>
+        ///     Section strpad (strings phase 2, P2.7): np.pad over text with every mode but 'empty' and its keywords —
+        ///     linear_ramp's end_values (text, numbers, bytes, per-axis pairs), the statistic modes' stat_length, reflect_type,
+        ///     constant_values (text, numbers, bytes, mixed pairs) — over U / S / StringDType arrays of every rank (0-d, 1-D,
+        ///     2-D, empty, with missing values) and numeric arrays padded with text. Strict.
+        /// </summary>
+        [TestMethod] public void TextPad() => Run("strpad");
+
+        /// <summary>
+        ///     Section tsurface (strings phase 1, P1.7f, "the whole surface with T"): the six surface generators (the refusal
+        ///     table, the string dtype= requests, the precedence of a text call's problems, the shape-decided answers, the
+        ///     validation order, the rest of the surface) re-run with every U operand replaced by a StringDType operand of the
+        ///     same values and shape: NumPy's result where it computes on StringDType, its refusal in its order where it
+        ///     refuses. The calls NumPy 2.4.2 crashes on over StringDType (ndarray.byteswap, np.place) are not recorded.
+        ///     Strict: no route keeps a generic refusal.
+        /// </summary>
+        [TestMethod] public void StringDTypeSurface() => Run("tsurface");
+
+        /// <summary>
+        ///     Section qfamily with every weighted search of two or more rows FORCED onto NumPy's row-by-row route
+        ///     (<c>QuantileWeighted.ForceRowByRowTestHook</c>): the corpus's arrays are small, so they all take the counting
+        ///     route, and the row-by-row one (which long rows take) would otherwise run in no test. The answers must still be
+        ///     NumPy's, and the counter proves the route ran.
+        /// </summary>
+        [TestMethod]
+        public void QuantileFamilyKeywords_RowByRow()
+        {
+            int before = NumSharp.Statistics.QuantileWeighted.RowByRowRuns;
+            NumSharp.Statistics.QuantileWeighted.ForceRowByRowTestHook = true;
+            try
+            {
+                Run("qfamily");
+            }
+            finally
+            {
+                NumSharp.Statistics.QuantileWeighted.ForceRowByRowTestHook = false;
+            }
+            int ran = NumSharp.Statistics.QuantileWeighted.RowByRowRuns - before;
+            Assert.IsTrue(ran > 1000, $"the forced row-by-row route ran only {ran} times");
+        }
+
+        /// <summary>
+        ///     Section qfamily with every one-line search FORCED onto NumPy's statements
+        ///     (<c>QuantileWeighted.ForceEagerSearchTestHook</c>: the cdf divided, cast and fixed up, then searched) where a
+        ///     float64 search otherwise divides only the entries it probes. The answers must still be NumPy's, and the counter
+        ///     proves the route ran.
+        /// </summary>
+        [TestMethod]
+        public void QuantileFamilyKeywords_EagerSearch()
+        {
+            int before = NumSharp.Statistics.QuantileWeighted.EagerSearchRuns;
+            NumSharp.Statistics.QuantileWeighted.ForceEagerSearchTestHook = true;
+            try
+            {
+                Run("qfamily");
+            }
+            finally
+            {
+                NumSharp.Statistics.QuantileWeighted.ForceEagerSearchTestHook = false;
+            }
+            int ran = NumSharp.Statistics.QuantileWeighted.EagerSearchRuns - before;
+            Assert.IsTrue(ran > 1000, $"the forced eager search ran only {ran} times");
+        }
+
+        /// <summary>
+        ///     Lifetime gate of the <c>StringDType</c> sections (strings phase 1, P1.9): once every case of tstore / tcreate /
+        ///     tmove / tcast has been replayed and its arrays are garbage, no string allocator is left alive — every buffer the
+        ///     replay made (operands, results, temporaries of the gathers, scatters and casts, failed operations) ran its clear
+        ///     loop, through <c>Dispose</c> or the collector. An allocator held by a static cache, a block whose reference is
+        ///     never released, or a temporary kept reachable fails here.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_NoAllocatorOutlivesTheReplay()
+        {
+            GcQuiescence.CollectFull();
+            long baseline = NumSharp.Backends.Strings.VStringAllocator.LiveAllocators;
+            int replayed = ReplayForLifetime("tstore", "tcreate", "tmove", "tcast");
+            Assert.IsTrue(replayed > 8000, $"only {replayed} StringDType cases replayed");
+            // A buffer held only by finalizable wrappers needs a collection to finalize them and one more for what they held.
+            for (int i = 0; i < 3 && NumSharp.Backends.Strings.VStringAllocator.LiveAllocators != baseline; i++)
+                GcQuiescence.CollectFull();
+            Assert.AreEqual(baseline, NumSharp.Backends.Strings.VStringAllocator.LiveAllocators,
+                "string allocators outlived the replay of the StringDType sections");
+        }
+
+        /// <summary>Replays every case of the given sections, ignoring the verdicts (the section tests check them).</summary>
+        /// <param name="sections">The section prefixes.</param>
+        /// <returns>The number of cases replayed.</returns>
+        /// <remarks>NoInlining: no array of the replay stays reachable from the caller's frame.</remarks>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static int ReplayForLifetime(params string[] sections)
+        {
+            int n = 0;
+            foreach (var c in Cases)
+            {
+                string section = c.Id.Split('/')[0];
+                if (Array.IndexOf(sections, section) < 0)
+                    continue;
+                ReplayOne(c, out _);
+                n++;
+            }
+            return n;
+        }
+
+        /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
+        [TestMethod]
+        public void Corpus_EverySectionIsReplayed()
+        {
+            var sections = new HashSet<string>
+            {
+                "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
+                "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
+                "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
+                "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
+                "strcharmeth", "strcharlist", "strsets", "tcomp", "tarith",
+                "treduce", "tsort", "qfamily", "qprec", "qprologue", "strfn", "tfn", "strprop", "tprop", "strcase", "tcase", "strtrans",
+                "ttrans", "strmod", "tmod", "strcodec", "tcodec", "strout", "strpad", "tsurface", "evaltext",
+            };
+            var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
+            foreach (var s in sections)
+                Assert.IsTrue(bySection.TryGetValue(s, out var n) && n > 0, $"section '{s}' has no cases");
+            foreach (var s in bySection.Keys)
+                Assert.IsTrue(sections.Contains(s), $"section '{s}' has no test method");
+            Assert.IsTrue(Cases.Count >= 6000, $"the corpus has {Cases.Count} cases (truncated regeneration?)");
+        }
+
+        // ------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The environment variable naming a directory of randomized soak corpora — fresh random texts, NA kinds,
+        ///     layouts, sizes and keyword combinations for the computing families, recorded from NumPy 2.4.2 by
+        ///     <c>python test/oracle/soak_strings_oracle.py --seeds … --out DIR</c>; <see cref="StringSoak"/> replays them
+        ///     and is Inconclusive when it is unset (every per-push run).
+        /// </summary>
+        internal const string SoakDirVariable = "NUMSHARP_STRING_ORACLE_SOAK_DIR";
+
+        /// <summary>
+        ///     The randomized soak: replays every <c>*.jsonl</c> file of the directory in <see cref="SoakDirVariable"/>
+        ///     with the committed sections' comparator (<see cref="ReplayOne"/>: values, dtype, shape, layout, NumPy's
+        ///     exact errors, and the same computed excuses).
+        /// </summary>
+        /// <remarks>
+        ///     The committed sections gate one fixed matrix each; the soak draws a new one per seed, so a run with fresh
+        ///     seeds reaches input combinations no committed case holds. The generator's <c>manifest.json</c> (printed when
+        ///     present) lists the (seed, family) workers NumPy crashed, which contribute no cases.
+        /// </remarks>
+        [TestMethod]
+        [DoNotParallelize]
+        public void StringSoak()
+        {
+            string dir = Environment.GetEnvironmentVariable(SoakDirVariable);
+            if (string.IsNullOrEmpty(dir))
+                Assert.Inconclusive($"{SoakDirVariable} is not set: no randomized string-oracle soak corpus to replay.");
+            Assert.IsTrue(System.IO.Directory.Exists(dir), $"{SoakDirVariable}={dir} is not a directory");
+            string manifest = System.IO.Path.Combine(dir, "manifest.json");
+            if (System.IO.File.Exists(manifest))
+                Console.WriteLine($"[strings/soak] {System.IO.File.ReadAllText(manifest)}");
+            var files = System.IO.Directory.GetFiles(dir, "*.jsonl");
+            // Ordinal order: a run is deterministic whatever order the file system lists the files in.
+            Array.Sort(files, StringComparer.Ordinal);
+            Assert.IsTrue(files.Length > 0, $"{SoakDirVariable}={dir} holds no *.jsonl soak corpus");
+            var cases = StringOracleCorpus.LoadFiles(files);
+            var failures = new List<string>();
+            foreach (var c in cases)
+            {
+                // The same host rule as the committed sections (Run): a recorded allocator failure is Windows-only.
+                if (HostCommitsLazily && IsHostCommitDependent(c))
+                    continue;
+                if (ReplayOne(c, out var message) == Outcome.Failed)
+                    failures.Add($"{c.Id} [{c.Layout}]: {message}");
+            }
+            Console.WriteLine($"[strings/soak] {cases.Count} cases in {files.Length} file(s), {failures.Count} failed");
+            foreach (var f in failures)
+                Console.WriteLine("  " + f);
+            if (failures.Count > 0)
+                Assert.Fail($"{failures.Count}/{cases.Count} soak cases diverged from NumPy:\n  " + string.Join("\n  ", failures.Take(80)));
+        }
+
+        /// <summary>
+        ///     True on a host whose allocator commits memory lazily, so a request the corpus recorded as NumPy's
+        ///     <c>MemoryError</c> is granted there and then written page by page.
+        /// </summary>
+        /// <remarks>
+        ///     The corpus is recorded by NumPy 2.4.2 on win-amd64, where a request above the commit limit fails at once
+        ///     (<c>Failed to allocate string in multiply</c> for a <c>StringDType</c> text repeated 2^40 times). Linux
+        ///     with overcommit and macOS grant the same terabyte request as address space, so the replay writes the
+        ///     repeated text until the kernel's out-of-memory killer ends the process: measured 2026-11-02 under WSL
+        ///     (<c>vm.overcommit_memory=1</c>), where <c>StringDTypeArithmetic</c>'s test host was killed at 31 GB resident.
+        ///     The same replay passed with <c>vm.overcommit_memory=0</c> (GitHub's Ubuntu runners refuse such a request),
+        ///     but the rule cannot depend on a kernel setting, so every non-Windows host skips these cases; Windows keeps
+        ///     the strict gate.
+        /// </remarks>
+        private static readonly bool HostCommitsLazily = !OperatingSystem.IsWindows();
+
+        /// <summary>
+        ///     True on an x86 / x64 process, whose generated NaN (an invalid operation's: <c>0 / 0</c>, <c>inf - inf</c>) is
+        ///     the NEGATIVE one the corpus recorded on win-amd64. Off x86 a float NaN's sign and payload hold no contract, and
+        ///     the comparison takes a NaN as a token (<see cref="EqualWithNaNTokens"/>). The same host rule as the fuzz gate's
+        ///     <c>FuzzCorpusTests.NanSignIsX86Reference</c>.
+        /// </summary>
+        /// <remarks>arm64's default NaN is positive: macOS CI (2026-11-07) failed 466 cases of TextSurface,
+        ///     StringDTypeSurface, CharListArrayMembers and QuantilePrecisionAndOut on exactly that sign (np.var / np.std /
+        ///     np.mean of an empty slice, np.histogram's density over an empty range, a float16 index past the end), every
+        ///     other byte NumPy's.</remarks>
+        private static readonly bool NanSignIsX86Reference =
+            System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture
+                is System.Runtime.InteropServices.Architecture.X86 or System.Runtime.InteropServices.Architecture.X64;
+
+        /// <summary>
+        ///     Whether two C-order hex dumps of one float result agree once every slot where BOTH hold a NaN counts as equal,
+        ///     whatever its sign and payload; every other slot must match byte for byte.
+        /// </summary>
+        /// <param name="gotHex">NumSharp's bytes, lowercase hex.</param>
+        /// <param name="wantHex">NumPy's bytes, lowercase hex.</param>
+        /// <param name="tc">The result's dtype: float16, float32, float64 or complex128 (two float64 slots per element).</param>
+        /// <returns>False for any other dtype (nothing to tokenize), for dumps of different lengths, and for any slot that
+        ///     differs while not NaN on both sides.</returns>
+        private static bool EqualWithNaNTokens(string gotHex, string wantHex, NPTypeCode tc)
+        {
+            int width = tc switch
+            {
+                NPTypeCode.Half => 2,
+                NPTypeCode.Single => 4,
+                NPTypeCode.Double or NPTypeCode.Complex => 8,
+                _ => 0,
+            };
+            if (width == 0 || gotHex.Length != wantHex.Length || gotHex.Length % (2 * width) != 0)
+                return false;
+            byte[] got = Convert.FromHexString(gotHex), want = Convert.FromHexString(wantHex);
+            for (int i = 0; i < got.Length; i += width)
+            {
+                if (got.AsSpan(i, width).SequenceEqual(want.AsSpan(i, width)))
+                    continue;
+                bool bothNaN = width switch
+                {
+                    2 => Half.IsNaN(BitConverter.ToHalf(got, i)) && Half.IsNaN(BitConverter.ToHalf(want, i)),
+                    4 => float.IsNaN(BitConverter.ToSingle(got, i)) && float.IsNaN(BitConverter.ToSingle(want, i)),
+                    _ => double.IsNaN(BitConverter.ToDouble(got, i)) && double.IsNaN(BitConverter.ToDouble(want, i)),
+                };
+                if (!bothNaN)
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        ///     Whether a case's recorded answer is a <c>StringDType</c> allocator failure, an outcome that depends on the
+        ///     host's commit policy rather than on NumPy's or NumSharp's code (see <see cref="HostCommitsLazily"/>).
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>True for NumPy's <c>MemoryError: Failed to allocate string in …</c>.</returns>
+        /// <remarks>
+        ///     Only the allocator's own text is matched: a <c>MemoryError</c> NumPy raises from a size check before any
+        ///     allocation (a Python list repeated 2^62 times in section strcharlist) answers the same on every host and
+        ///     stays gated everywhere.
+        /// </remarks>
+        private static bool IsHostCommitDependent(StringOracleCorpus.Case c)
+            => c.Error is { Type: "MemoryError", Text: { } text } && text.StartsWith("Failed to allocate string", StringComparison.Ordinal);
+
+        /// <summary>Replays every case of one section and fails with the list of divergences.</summary>
+        /// <param name="section">The section prefix of the case ids.</param>
+        /// <exception cref="AssertFailedException">A case of the section diverged from NumPy.</exception>
+        private static void Run(string section)
+        {
+            var failures = new List<string>();
+            int total = 0, hostSkipped = 0;
+            foreach (var c in Cases)
+            {
+                if (!c.Id.StartsWith(section + "/", StringComparison.Ordinal))
+                    continue;
+                total++;
+                // Off Windows a recorded allocator failure would be a granted terabyte that the replay writes until the
+                // out-of-memory killer ends the whole test run (see HostCommitsLazily), so the case is skipped.
+                if (HostCommitsLazily && IsHostCommitDependent(c))
+                {
+                    hostSkipped++;
+                    continue;
+                }
+                if (ReplayOne(c, out var message) == Outcome.Failed)
+                    failures.Add($"{c.Id} [{c.Layout}]: {message}");
+            }
+            if (hostSkipped > 0)
+                Console.WriteLine($"[strings/{section}] {hostSkipped} allocator-failure case(s) skipped: this host commits memory lazily");
+            int excused = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedLayouts.ContainsKey(c.Id));
+            int excusedClass = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedClasses.ContainsKey(c.Id));
+            int excusedOrder = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedOrders.ContainsKey(c.Id));
+            int excusedIdentity = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedIdentities.ContainsKey(c.Id));
+            int excusedRefusal = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedRefusals.ContainsKey(c.Id));
+            Console.WriteLine($"[strings/{section}] {total} cases, " +
+                              $"{excused} with an excused layout, {excusedClass} with an excused class, " +
+                              $"{excusedOrder} with an excused order, {excusedIdentity} with an excused identity, " +
+                              $"{excusedRefusal} excused refusals, {failures.Count} failed");
+            // Every divergence goes to the test's standard output (the assertion message keeps the first 80).
+            foreach (var f in failures)
+                Console.WriteLine("  " + f);
+            if (failures.Count > 0)
+                Assert.Fail($"{failures.Count}/{total} cases diverged from NumPy:\n  " + string.Join("\n  ", failures.Take(80)));
+        }
+
+        /// <summary>The verdict for one case.</summary>
+        private enum Outcome
+        {
+            /// <summary>NumSharp matched NumPy.</summary>
+            Passed,
+
+            /// <summary>A divergence.</summary>
+            Failed,
+        }
+
+        /// <summary>Replays one case and compares it.</summary>
+        /// <param name="c">The case.</param>
+        /// <param name="message">The divergence, when the outcome is <see cref="Outcome.Failed"/>.</param>
+        /// <returns>The verdict.</returns>
+        private static Outcome ReplayOne(StringOracleCorpus.Case c, out string message)
+        {
+            message = null;
+            NDArray[] ops;
+            try
+            {
+                ops = c.Operands.Select(StringOracleCorpus.Reconstruct).ToArray();
+            }
+            catch (Exception e)
+            {
+                message = $"operand reconstruction threw {e.GetType().Name}: {e.Message}";
+                return Outcome.Failed;
+            }
+
+            object result;
+            var layoutExcuse = LayoutExcuse(c);
+            if (layoutExcuse != null)
+                ExcusedLayouts.TryAdd(c.Id, layoutExcuse);
+            try
+            {
+                result = StringOracleOps.Invoke(c, ops);
+            }
+            catch (Exception e)
+            {
+                if (c.Error is null && e is NotSupportedException && RefusalExcuse(c) is { } refusal)
+                {
+                    ExcusedRefusals.TryAdd(c.Id, refusal);
+                    return Outcome.Passed;
+                }
+                if (c.Error is null)
+                {
+                    message = $"NumPy returned a result, NumSharp threw {e.GetType().Name}: {Shorten(e.Message)}";
+                    return Outcome.Failed;
+                }
+                return CompareError(c.Error, e, out message) ? Outcome.Passed : Outcome.Failed;
+            }
+
+            // A call whose identity with its receiver is part of NumPy's answer (section strchararray: astype(copy=False),
+            // real, squeeze(), to_device, np.char.asarray of a chararray) comes back paired with that receiver.
+            object receiver = null;
+            bool hasReceiver = false;
+            if (result is StringOracleOps.SelfResult paired)
+            {
+                result = paired.Result;
+                receiver = paired.Receiver;
+                hasReceiver = true;
+            }
+
+            if (c.Error is not null)
+            {
+                message = $"NumPy raises {c.Error.Type}: {Shorten(c.Error.Text)} — NumSharp returned {Describe(result)}";
+                return Outcome.Failed;
+            }
+            try
+            {
+                var diffs = new List<string>();
+                // The one order divergence (OrderExcuse): NumSharp's sorted values are put in NumPy's hash order first, so
+                // the comparison below still requires NumPy's set, dtype, shape and layout.
+                var orderExcuse = OrderExcuse(c);
+                if (orderExcuse != null)
+                {
+                    ExcusedOrders.TryAdd(c.Id, orderExcuse);
+                    result = InNumPyOrder(c.Expected, result, diffs);
+                }
+                // The tie divergence (TieExcuse): NumSharp's elements that are TIED with NumPy's under NumPy's own string
+                // comparison are taken as NumPy's, so the comparison below still requires everything else.
+                var tieExcuse = TieExcuse(c);
+                if (tieExcuse != null && TakeNumPyTieRepresentatives(c.Expected, result))
+                    ExcusedTies.TryAdd(c.Id, tieExcuse);
+                // The one class divergence of section strchararray (ClassExcuse): the result's class is compared with the
+                // class NumSharp's typed API returns there, everything else with NumPy's answer.
+                var classExcuse = ClassExcuse(c);
+                if (classExcuse != null)
+                    ExcusedClasses.TryAdd(c.Id, classExcuse);
+                Compare(c.Expected, result, layoutExcuse is null ? ops : null, diffs, compareLayout: layoutExcuse is null,
+                        wantClassOverride: classExcuse is null ? null : "chararray", receiver: receiver);
+                var identityExcuse = IdentityExcuse(c);
+                if (identityExcuse != null)
+                    ExcusedIdentities.TryAdd(c.Id, identityExcuse);
+                if (identityExcuse is null && c.Expected.TryGetProperty("self", out var self))
+                {
+                    if (!hasReceiver)
+                        diffs.Add("NumPy's answer is compared with its receiver, but the replay returned no receiver");
+                    else if (ReferenceEquals(result, receiver) != self.GetBoolean())
+                        diffs.Add(self.GetBoolean()
+                            ? "NumPy returns the receiver ITSELF, NumSharp a new object"
+                            : "NumPy returns a new object, NumSharp the receiver itself");
+                }
+                if (diffs.Count == 0)
+                    return Outcome.Passed;
+                message = string.Join("; ", diffs);
+                return Outcome.Failed;
+            }
+            catch (Exception e)
+            {
+                message = $"comparison threw {e.GetType().Name}: {e.Message}";
+                return Outcome.Failed;
+            }
+        }
+
+        // ------------------------------------------------------------------------------------------------------------
+        // Errors
+
+        /// <summary>The .NET exception classes that stand for each NumPy exception class (besides a same-named one).</summary>
+        private static readonly Dictionary<string, string[]> ErrorTypes = new()
+        {
+            // The house equivalents the general oracle accepts too (FuzzCorpusTests.ErrorTypeMap): NumSharp keeps its
+            // long-standing .NET types for these NumPy classes and matches the MESSAGE verbatim.
+            ["TypeError"] = new[]
+            {
+                "TypeError", "IncorrectTypeException", "InvalidCastException", "UFuncTypeException", "ArgumentException",
+                "NotSupportedException",
+            },
+            ["ValueError"] = new[] { "ValueError", "ArgumentException", "IncorrectShapeException", "IncorrectSizeException" },
+            ["IndexError"] = new[]
+            {
+                "IndexError", "IndexOutOfRangeException", "ArgumentOutOfRangeException", "ArgumentException",
+            },
+            ["AxisError"] = new[] { "AxisError", "AxisOutOfRangeException" },
+            ["OverflowError"] = new[] { "OverflowException" },
+            ["DTypePromotionError"] = new[] { "DTypePromotionError" },
+            ["UnicodeEncodeError"] = new[] { "UnicodeEncodeError" },
+            ["UnicodeDecodeError"] = new[] { "UnicodeDecodeError" },
+            ["SystemError"] = new[] { "SystemError" },
+            // numpy.ma's rank checks (compress_rowcols / mask_rowcols on a non-2-D array) raise NotImplementedError; the
+            // .NET class with that meaning is NotImplementedException (the message is matched verbatim).
+            ["NotImplementedError"] = new[] { "NotImplementedException" },
+            // np.char.array of an empty str / bytes, or with itemsize 0: NumPy's `len(obj) // itemsize` raises Python's
+            // ZeroDivisionError; .NET's class with that meaning is DivideByZeroException (the message is matched verbatim).
+            ["ZeroDivisionError"] = new[] { "DivideByZeroException" },
+            // StringDType's allocation failures (`Failed to allocate string in add`, a repetition whose byte count wraps)
+            // raise MemoryError; .NET's class with that meaning is OutOfMemoryException (the message is matched verbatim).
+            ["MemoryError"] = new[] { "OutOfMemoryException" },
+        };
+
+        /// <summary>Compares NumSharp's exception with NumPy's: a corresponding class and the identical message.</summary>
+        /// <param name="want">NumPy's exception.</param>
+        /// <param name="got">NumSharp's exception.</param>
+        /// <param name="message">The divergence, when false.</param>
+        /// <returns>True when they correspond.</returns>
+        private static bool CompareError(StringOracleCorpus.ErrorInfo want, Exception got, out string message)
+        {
+            message = null;
+            string gotType = got.GetType().Name;
+            bool typeOk = gotType == want.Type || (ErrorTypes.TryGetValue(want.Type, out var allowed) && allowed.Contains(gotType));
+            string gotText = Normalize(got.Message);
+            bool textOk = gotText == want.Text.Trim();
+            if (typeOk && textOk)
+                return true;
+            message = $"error mismatch\n      numpy:    {want.Type}: {Shorten(want.Text)}\n      numsharp: {gotType}: {Shorten(gotText)}";
+            return false;
+        }
+
+        /// <summary>Strips .NET's " (Parameter 'x')" suffix so only the message itself is compared.</summary>
+        private static string Normalize(string m)
+        {
+            if (string.IsNullOrEmpty(m))
+                return "";
+            int p = m.IndexOf(" (Parameter '", StringComparison.Ordinal);
+            if (p >= 0)
+                m = m.Substring(0, p);
+            return m.Trim();
+        }
+
+        // ------------------------------------------------------------------------------------------------------------
+        // Results
+
+        /// <summary>
+        ///     The cases whose LAYOUT (strides, contiguity, ownership, memory sharing) is a known NumSharp divergence that
+        ///     is not about strings, keyed by case id with the reason; their values are still compared byte for byte.
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedLayouts = new();
+
+        /// <summary>
+        ///     The known layout divergences, all numeric-path behavior every dtype shares:
+        ///     <list type="bullet">
+        ///       <item><description>an integer-array or boolean index BEHIND a slice / newaxis / ellipsis
+        ///       (<c>a[:, [3, 1]]</c>) — NumPy returns its MapIter buffer as a transposed VIEW, NumSharp a fresh C-ordered
+        ///       copy (pinned in <c>OpenBugs.FancyIndex.cs</c>; plan <c>docs/plans/view-shape-open-bugs.md</c>);</description></item>
+        ///       <item><description><c>np.ma.compress_nd</c> / <c>compress_rowcols</c> / <c>compress_cols</c>, whose column
+        ///       selection is such an index.</description></item>
+        ///       <item><description>section strcharfn: <c>np.array</c> of a permuted or broadcast chararray (the
+        ///       array-object oracle's VF12, C-ordered where NumPy copies in K order), <c>np.tile</c> of a 0-d chararray with
+        ///       unit reps (VF26, an owning copy where NumPy returns a view of its <c>ndmin</c> copy), <c>np.choose</c> with a
+        ///       0-d index (VF01, a writeable 0-d array where NumPy returns a NumPy scalar), and a function of an element
+        ///       stand-in (read-only, where NumPy's <c>str</c> becomes a fresh writeable array).</description></item>
+        ///       <item><description>section strcharmeth: <c>np.char.strip</c> / <c>lstrip</c> / <c>rstrip</c> of a 0-d text
+        ///       (VF01: a writeable 0-d array where NumPy's ufunc returns an <c>np.str_</c> / <c>np.bytes_</c>).</description></item>
+        ///     </list>
+        ///     <c>np.argwhere</c> / <c>np.flatnonzero</c> (reached by an empty string array, whose index searches run the
+        ///     numeric path on a bool stand-in) and <c>np.unravel_index</c> (section M's bool index array) were excused here
+        ///     until the open-bugs rundown's bug 8 made them return NumPy's views, and <c>np.broadcast_arrays</c> of a
+        ///     read-only broadcast chararray (VF17) until parity QA-34 kept its result read-only; their layout is compared now.
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>The reason, or null when the layout must match.</returns>
+        private static string LayoutExcuse(StringOracleCorpus.Case c)
+        {
+            // (Section evaltext's two np.evaluate layout excuses are gone: an elementwise result takes NumPy's K-order layout
+            // over its operands, and an axis reduction NumPy's reduce layout - the child's K order, keepdims owning - so
+            // every one of its cases compares its layout.)
+            // (argwhere / flatnonzero / unravel_index were excused here until the open-bugs rundown's bug 8: they now
+            // return NumPy's views of nonzero's / the interleaved index buffer, and their layout is compared.)
+            // numpy.ma.compress_nd drops the masked columns of a 2-D array with `data[:, keep]`: a boolean index behind a
+            // slice, which NumPy returns as its transposed MapIter VIEW and NumSharp as a fresh C-ordered copy.
+            if (c.Op == "ma1" && c.Layout is "MU2" or "MT2" && c.Params is not null && c.Params.TryGetValue("name", out var maName)
+                && maName.GetString() is "compress_nd" or "compress_rowcols" or "compress_cols")
+                return "compress_nd's column selection is a fancy index behind a slice: NumPy's transposed MapIter view (OpenBugs.FancyIndex)";
+            // Section strchararray's element access: an ADVANCED entry (an index array, a mask, a 0-d integer array, a scalar
+            // bool) over a source that is not C-contiguous. NumPy's MapIter (and HAS_SCALAR_ARRAY's KEEPORDER copy) lays
+            // the other axes out in the SOURCE's memory order; NumSharp's advanced indexing of a numeric array returns them
+            // C-ordered (OpenBugs.FancyIndex), and a string array's unit route re-tags a C-contiguous unit result.
+            if (c.Op == "cha_item" && c.Params is not null && c.Params.TryGetValue("index", out var chaIndex)
+                && chaIndex.EnumerateArray().Any(e => e.TryGetProperty("a", out _) || e.TryGetProperty("z", out _)
+                                                      || e.TryGetProperty("m", out _) || e.TryGetProperty("b", out _))
+                && !IsCContiguous(c.Operands[0]))
+                return "advanced index of a non-C source: NumPy keeps the source's memory order for the other axes (OpenBugs.FancyIndex)";
+            // Section strcharfn, two plain-array gaps of the array-object oracle (view_flags.jsonl), not chararray rules:
+            // np.array(c) of a PERMUTED or BROADCAST chararray is copied in C order where NumPy copies in K order (VF12), and
+            // np.tile(c0, 1) of a 0-d chararray owns its copy where NumPy returns a view of its internal ndmin copy (VF26).
+            if (c.Op == "cha_fn" && c.Params is not null && c.Params.TryGetValue("fn", out var chfn))
+            {
+                if (chfn.GetString() == "array" && (c.Layout.Contains(":t3") || c.Layout.Contains(":bc")))
+                    return "VF12: np.array copies a permuted / broadcast input in C order, NumPy in K order";
+                if (chfn.GetString() == "tile" && c.Layout.Contains(":z0"))
+                    return "VF26: np.tile with unit reps of a 0-d input owns its copy, NumPy's is a view of an ndmin copy";
+                // np.choose of a 0-d index: NumPy's PyArray_Return makes the result a NumPy scalar (np.str_), NumSharp
+                // returns a writeable 0-d array — the class VF01 records for the ufuncs and the reductions.
+                if (chfn.GetString() == "choose" && c.Layout.Contains(":z0"))
+                    return "VF01: np.choose's 0-d result is a writeable 0-d array where NumPy returns a NumPy scalar";
+                // Section strcharmeth: numpy.char's strips of a 0-d text (a plain 0-d array, a Python str / bytes) end in
+                // the ufunc's PyArray_Return, a NumPy scalar (np.str_ / np.bytes_); NumSharp returns a writeable 0-d
+                // array — VF01's class. The value is still compared.
+                if (chfn.GetString() is "char.strip" or "char.lstrip" or "char.rstrip" && c.Error is null
+                    && c.Expected.ValueKind == JsonValueKind.Object && c.Expected.TryGetProperty("kind", out var stripKind)
+                    && stripKind.GetString() == "element")
+                    return "VF01: numpy.char's strip of a 0-d text is a writeable 0-d array where NumPy returns a NumPy scalar";
+            }
+            // Section strcharfn: a function of an element STAND-IN (NumPy's Python str). NumPy converts the str into a fresh,
+            // writeable array; NumSharp's stand-in is read-only, so a view of it (np.atleast_2d(c[0])) is read-only too.
+            if (c.Op == "cha_fn" && c.Params is not null && c.Params.TryGetValue("args", out var chargs)
+                && chargs.GetArrayLength() > 0 && chargs[0].ValueKind == JsonValueKind.Object && chargs[0].TryGetProperty("elem", out _)
+                && c.Params["fn"].GetString() == "atleast_2d")
+                return "a view of an element stand-in is read-only; NumPy's str becomes a fresh writeable array";
+            // Section strfn: np.strings.partition / rpartition of S / U text. NumPy returns three FIELD VIEWS of one structured
+            // array (np.empty_like(a, dtype="U3,U1,U5")["f0"] ...); NumSharp has no structured dtype and returns three arrays
+            // laid out like a (their values and descriptors are NumPy's; a zero-width part is recorded as width 1).
+            if (c.Op == "str_fn" && c.Params is not null && c.Params.TryGetValue("name", out var fnName)
+                && fnName.GetString() is "partition" or "rpartition" && c.Operands.Length > 0 && c.Operands[0].T is null)
+                return "partition of S / U: NumPy's three structured field views, NumSharp's three arrays (no structured dtype)";
+            if (c.Op != "getitem" || c.Params is null || !c.Params.TryGetValue("index", out var index))
+                return null;
+            bool basicSeen = false;
+            foreach (var e in index.EnumerateArray())
+            {
+                if (e.TryGetProperty("slice", out _) || e.TryGetProperty("none", out _) || e.TryGetProperty("ellipsis", out _))
+                    basicSeen = true;
+                else if (basicSeen && (e.TryGetProperty("arr", out _) || e.TryGetProperty("mask", out _) || e.TryGetProperty("mask2", out _)))
+                    return "fancy index behind a slice: NumPy's transposed MapIter view (OpenBugs.FancyIndex)";
+            }
+            return null;
+        }
+
+        /// <summary>Whether an operand descriptor is a C-contiguous view (its strides are C's on every axis longer than 1; an
+        ///     empty view is).</summary>
+        /// <param name="o">The operand descriptor.</param>
+        /// <returns>True for a C-contiguous layout.</returns>
+        private static bool IsCContiguous(StringOracleCorpus.Operand o)
+        {
+            long expected = 1;
+            for (int d = o.Shape.Length - 1; d >= 0; d--)
+            {
+                if (o.Shape[d] == 0)
+                    return true;
+                if (o.Shape[d] != 1 && o.Strides[d] != expected)
+                    return false;
+                expected *= o.Shape[d];
+            }
+            return true;
+        }
+
+        /// <summary>
+        ///     The cases whose result CLASS is a known, documented divergence, keyed by case id with the reason; the result is
+        ///     still compared in full (values, layout, flags, identity), its class against the class NumSharp's API returns.
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedClasses = new();
+
+        /// <summary>
+        ///     The one known class divergence: <c>np.char.array(obj, order=...)</c> / <c>np.char.asarray(obj, order=...)</c>
+        ///     of string data (an <c>S</c> / <c>U</c> ndarray or chararray, or a list NumPy turns into one). NumPy's
+        ///     <c>array</c> then runs <c>np.asarray(obj, order=order)</c>, which drops the subclass, so it returns a PLAIN
+        ///     ndarray — while every other branch of the same function returns a chararray. <c>np.@char.array</c> is typed
+        ///     <see cref="NDCharArray"/>, so NumSharp returns a chararray holding the same data with the same layout and
+        ///     flags (documented in <c>docs/plans/np-char.md</c> and on <see cref="CharModule"/>).
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>The reason, or null when the class must match NumPy's.</returns>
+        private static string ClassExcuse(StringOracleCorpus.Case c)
+        {
+            if (c.Op is not ("cha_array" or "cha_asarray") || c.Params is null || !c.Params.ContainsKey("order"))
+                return null;
+            if (c.Expected.ValueKind != JsonValueKind.Object || !c.Expected.TryGetProperty("class", out var cls)
+                || cls.GetString() != "ndarray")
+                return null;
+            return "np.char.array with order= over string data: NumPy's np.asarray drops the chararray class";
+        }
+
+        /// <summary>The cases whose identity with their receiver is a known, documented divergence, keyed by case id with the
+        ///     reason (everything else of the result is compared).</summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedIdentities = new();
+
+        /// <summary>
+        ///     The one identity divergence: <c>np.squeeze</c> of an array with no length-1 axis. NumPy's <c>PyArray_Squeeze</c>
+        ///     returns the operand itself; NumSharp returns a fresh view object by design (documented on
+        ///     <see cref="np.squeeze(NDArray)"/>: disposing the result must never dispose the input) — the array-object
+        ///     oracle's same gap for plain arrays.
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>The reason, or null when the identity must match NumPy's.</returns>
+        private static string IdentityExcuse(StringOracleCorpus.Case c)
+        {
+            if (c.Op == "cha_fn" && c.Params is not null && c.Params.TryGetValue("fn", out var fn) && fn.GetString() == "squeeze")
+                return "np.squeeze returns a fresh view object where NumPy returns an operand with no length-1 axis itself";
+            return null;
+        }
+
+        /// <summary>The cases NumSharp refuses by design where NumPy computes, keyed by case id with the reason.</summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedRefusals = new();
+
+        /// <summary>
+        ///     The one refusal divergence, in two places: a <see cref="NDCharArray"/>-typed answer where NumPy returns a
+        ///     PLAIN StringDType array — a StringDType argument beside a chararray NumPy's trivial loop does not copy (2-d and
+        ///     up here; a 1-d one past <c>np.getbufsize()</c> elements):
+        ///     <list type="bullet">
+        ///       <item><description><c>chararray + StringDType</c> (or the reverse): NumPy's <c>chararray.__add__</c>
+        ///       returns the plain array; NumSharp's <c>+</c> raises <see cref="NotSupportedException"/> naming
+        ///       <c>np.add</c> (documented on the operator).</description></item>
+        ///       <item><description>section strcharmeth's rule-2 members <c>strip</c> / <c>lstrip</c> / <c>rstrip</c> /
+        ///       <c>replace</c> with a StringDType set / old / new: NumPy's member returns the function's plain array;
+        ///       NumSharp's member raises <see cref="NotSupportedException"/> naming the <c>numpy.char</c> function, which
+        ///       returns it (documented on the members).</description></item>
+        ///     </list>
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>The reason, or null when NumSharp must answer.</returns>
+        private static string RefusalExcuse(StringOracleCorpus.Case c)
+        {
+            if (c.Params is null || c.Expected.ValueKind != JsonValueKind.Object || !c.Expected.TryGetProperty("class", out var cls)
+                || cls.GetString() != "ndarray")
+                return null;
+            if (c.Op == "cha_op" && c.Params["sym"].GetString() == "+")
+                return "chararray + StringDType: NumPy's plain StringDType result does not fit the operator's NDCharArray type";
+            if (c.Op == "cha_call" && c.Params.TryGetValue("name", out var name)
+                && name.GetString() is "strip" or "lstrip" or "rstrip" or "replace")
+                return $"chararray.{name.GetString()} with a StringDType argument: NumPy's plain StringDType result does not fit "
+                       + "the member's NDCharArray type";
+            return null;
+        }
+
+        /// <summary>
+        ///     The cases whose result ORDER is a known, documented divergence, keyed by case id with the reason. NumSharp's
+        ///     values are reordered into NumPy's order before the full comparison (<see cref="InNumPyOrder"/>), which therefore
+        ///     still requires NumPy's SET of values, its dtype, shape, layout and flags.
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedOrders = new();
+
+        /// <summary>
+        ///     The one known order divergence: the unique values of text that NumPy HASHES. NumPy's <c>_unique1d</c> sends a
+        ///     call without index outputs to <c>_unique_hash</c>, whose text loops (<c>unique.cpp</c>'s <c>unique_string</c> /
+        ///     <c>unique_vstring</c>) return the distinct strings in a <c>std::unordered_set</c>'s iteration order, and sorts
+        ///     them only for <c>sorted=True</c>: <c>np.unique_values</c> (always <c>sorted=False</c>) and <c>np.unique(...,
+        ///     sorted=False)</c> without flags or an axis keep that order, the C++ library's hash, not reproducible in C#.
+        ///     NumSharp returns them sorted (documented on <see cref="np.unique_values"/>, the numeric dtypes' same
+        ///     divergence); a <c>StringDType</c> result is reordered by its values (<see cref="InNumPyOrderVString"/>).
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>The reason, or null when the order must match NumPy's.</returns>
+        private static string OrderExcuse(StringOracleCorpus.Case c)
+        {
+            if (c.Error is not null || c.Params is null)
+                return null;
+            var p = c.Params;
+            if (c.Op == "unique_api" && p.TryGetValue("name", out var name) && name.ValueKind == JsonValueKind.String
+                && name.GetString() == "unique_values")
+                return "np.unique_values of text: NumPy's unordered_set hash order, NumSharp's sorted order (the same set)";
+            // `if axis is None or ar.ndim == 1`: a 1-D input's axis is only range-checked, and the flat path runs.
+            if (c.Op == "unique" && p.TryGetValue("sorted", out var sorted) && !sorted.GetBoolean()
+                && !p["ri"].GetBoolean() && !p["rv"].GetBoolean() && !p["rc"].GetBoolean()
+                && (p["axis"].ValueKind == JsonValueKind.Null || c.Operands.Length > 0 && c.Operands[0].Shape.Length == 1))
+                return "np.unique(sorted=False) of text: NumPy's unordered_set hash order, NumSharp's sorted order (the same set)";
+            return null;
+        }
+
+        /// <summary>
+        ///     The cases whose StringDType elements compared EQUAL by NumPy's string comparison but not byte for byte were
+        ///     taken as NumPy's (<see cref="TieExcuse"/>), keyed by case id with the reason.
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedTies = new();
+
+        /// <summary>
+        ///     The tie divergence of NumPy's hash route (randomized soak cases only, marked <c>hash_ties</c> by the
+        ///     generator when the operands hold two such values). NumPy's <c>NpyString_cmp</c> is <c>strncmp</c> over the common
+        ///     length, then the sizes, so two texts with the same bytes up to a NUL they share and the same size compare
+        ///     EQUAL while differing after it (<c>'a\0b'</c> and <c>'a\0c'</c>). The values-only <c>np.unique</c> hashes the
+        ///     FULL bytes (<c>unique_vstring</c>: FNV-1a + memcmp), keeps both, and sorts the hash set's iteration order with
+        ///     its unstable sort, so tied values come out in the C++ library's hash order — and <c>np.union1d</c> /
+        ///     <c>np.intersect1d</c> / <c>np.setdiff1d</c> without <c>assume_unique</c> (and numpy.ma's set routines), built on
+        ///     it, keep whichever tied value lands first. Neither is reproducible in C#; NumSharp keeps tied values in input
+        ///     order (a stable choice).
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>The reason, or null when every element must match byte for byte.</returns>
+        private static string TieExcuse(StringOracleCorpus.Case c)
+        {
+            if (c.Error is not null || c.Params is null)
+                return null;
+            if (!c.Params.TryGetValue("hash_ties", out var ties) || ties.ValueKind != JsonValueKind.True)
+                return null;
+            return "StringDType values tied under NumPy's strncmp comparison: the hash route's order / representative";
+        }
+
+        /// <summary>
+        ///     Replaces, IN PLACE, each element of a StringDType result (an array, or a masked array's data) that is tied
+        ///     with NumPy's element at the same position — both NA, or texts with the same bytes up to and including their
+        ///     first NUL and the same UTF-8 length — by NumPy's text, so the full comparison afterwards sees NumPy's
+        ///     representative. Elements that are not tied are left alone (the comparison reports them).
+        /// </summary>
+        /// <param name="exp">NumPy's answer (<c>array</c> or <c>masked</c> with <c>values</c>).</param>
+        /// <param name="r">NumSharp's fresh result.</param>
+        /// <returns>True when at least one element was replaced (the excuse was used).</returns>
+        private static unsafe bool TakeNumPyTieRepresentatives(JsonElement exp, object r)
+        {
+            NDArray a = r switch
+            {
+                NDMaskedArray m when !ReferenceEquals(m, np.ma.masked) => m.data,
+                NDArray x => x,
+                _ => null,
+            };
+            if (a is null || !a.Storage.IsVString || !exp.TryGetProperty("values", out var values)
+                || a.Storage.InternalArray is not NumSharp.Backends.Unmanaged.VStringArraySlice slice)
+                return false;
+            var items = values.EnumerateArray().ToArray();
+            if (items.Length != a.size)
+                return false;
+            bool used = false;
+            for (long i = 0; i < items.Length; i++)
+            {
+                var w = items[i];
+                if (w.ValueKind == JsonValueKind.Object && w.TryGetProperty("na", out _))
+                    continue;
+                long off = a.Shape.TransformOffset(i);
+                byte* cell = slice.Address + off * NumSharp.Backends.Strings.VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+                if (NumSharp.Backends.Strings.VStringAllocator.isnull(cell))
+                    continue;
+                string want = (string)StringOracleCorpus.Decode(w), got = (string)slice.GetIndex(off);
+                if (want == got || !TiedUnderStrncmp(System.Text.Encoding.UTF8.GetBytes(want), System.Text.Encoding.UTF8.GetBytes(got)))
+                    continue;
+                slice.SetIndex(off, want);
+                used = true;
+            }
+            return used;
+        }
+
+        /// <summary>
+        ///     Whether NumPy's <c>NpyString_cmp</c> calls two texts equal: <c>strncmp</c> over the shorter length stops at the
+        ///     first byte that differs or at a NUL both share, and only equal sizes then make the texts equal — so the texts
+        ///     are tied exactly when their sizes agree and their bytes agree up to and including the first NUL.
+        /// </summary>
+        /// <param name="x">One text's UTF-8 bytes.</param>
+        /// <param name="y">The other's.</param>
+        /// <returns>True when NumPy compares them equal.</returns>
+        private static bool TiedUnderStrncmp(byte[] x, byte[] y)
+        {
+            if (x.Length != y.Length)
+                return false;
+            for (int k = 0; k < x.Length; k++)
+            {
+                if (x[k] != y[k])
+                    return false;
+                if (x[k] == 0)
+                    return true;
+            }
+            return true;
+        }
+
+        /// <summary>
+        ///     A 1-D fixed-width text result reordered into NumPy's order: each of NumPy's elements (its C-order bytes, one
+        ///     element per itemsize) is found among NumSharp's, and NumSharp's array is gathered in NumPy's order. Every other
+        ///     result — another kind, another dtype or length (the comparison reports those) — is returned unchanged.
+        /// </summary>
+        /// <param name="exp">NumPy's answer.</param>
+        /// <param name="r">NumSharp's result.</param>
+        /// <param name="diffs">Receives the divergence when one of NumPy's values is not among NumSharp's.</param>
+        /// <returns>The reordered result (a fresh C-contiguous array, as NumPy's), or <paramref name="r"/>.</returns>
+        private static object InNumPyOrder(JsonElement exp, object r, List<string> diffs)
+        {
+            if (r is NDArray t && t.ndim == 1 && t.Storage.IsVString && exp.GetProperty("kind").GetString() == "array"
+                && exp.TryGetProperty("values", out var values))
+                return InNumPyOrderVString(values, t, diffs);
+            if (r is not NDArray a || a.ndim != 1 || exp.GetProperty("kind").GetString() != "array"
+                || !exp.TryGetProperty("buffer", out var buffer) || buffer.ValueKind != JsonValueKind.String
+                || a.dtype.str != exp.GetProperty("dtype").GetString() || a.dtype.itemsize == 0)
+                return r;
+            string gotHex = Convert.ToHexString(StringOracleCorpus.CBytes(a)).ToLowerInvariant();
+            string wantHex = buffer.GetString();
+            if (gotHex.Length != wantHex.Length)
+                return r;
+            int chunk = a.dtype.itemsize * 2;
+            int n = gotHex.Length / chunk;
+            // The values of a unique result are distinct, so each one names a single position.
+            var position = new Dictionary<string, long>(n);
+            for (int i = 0; i < n; i++)
+                position[gotHex.Substring(i * chunk, chunk)] = i;
+            var order = new long[n];
+            for (int i = 0; i < n; i++)
+            {
+                string want = wantHex.Substring(i * chunk, chunk);
+                if (!position.TryGetValue(want, out order[i]))
+                {
+                    diffs.Add($"NumSharp's values are not NumPy's set: NumPy's element {i} (bytes {want}) is missing");
+                    return r;
+                }
+            }
+            return a[np.array(order)];
+        }
+
+        /// <summary>
+        ///     <see cref="InNumPyOrder"/> for a 1-D <c>StringDType</c> result, whose expectation lists VALUES (a text, or
+        ///     <c>{"na": true}</c> for an NA cell): each of NumPy's values is found among NumSharp's (an NA and a text equal to a
+        ///     string NA object are different values) and NumSharp's array is gathered in NumPy's order.
+        /// </summary>
+        /// <param name="values">NumPy's encoded values.</param>
+        /// <param name="a">NumSharp's 1-D <c>StringDType</c> result (distinct values: a unique result).</param>
+        /// <param name="diffs">Receives the divergence when one of NumPy's values is not among NumSharp's.</param>
+        /// <returns>The reordered result, or <paramref name="a"/> when the lengths differ (the comparison reports that).</returns>
+        private static unsafe object InNumPyOrderVString(JsonElement values, NDArray a, List<string> diffs)
+        {
+            var items = values.EnumerateArray().ToArray();
+            if (items.Length != a.size || a.Storage.InternalArray is not NumSharp.Backends.Unmanaged.VStringArraySlice slice)
+                return a;
+            // The key of an element: "\u0001NA" for an NA cell, "\u0000" + the text otherwise (no text starts with \u0001
+            // after the \u0000 prefix, so the two families never collide).
+            var position = new Dictionary<string, long>(items.Length);
+            for (long i = 0; i < items.Length; i++)
+            {
+                long off = a.Shape.TransformOffset(i);
+                byte* cell = slice.Address + off * NumSharp.Backends.Strings.VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+                string key = NumSharp.Backends.Strings.VStringAllocator.isnull(cell) ? "\u0001NA" : "\u0000" + (string)slice.GetIndex(off);
+                position[key] = i;
+            }
+            var order = new long[items.Length];
+            for (int i = 0; i < items.Length; i++)
+            {
+                var w = items[i];
+                string key = w.ValueKind == JsonValueKind.Object && w.TryGetProperty("na", out _)
+                    ? "\u0001NA"
+                    : "\u0000" + (string)StringOracleCorpus.Decode(w);
+                if (!position.TryGetValue(key, out order[i]))
+                {
+                    diffs.Add($"NumSharp's values are not NumPy's set: NumPy's element {i} is missing");
+                    return a;
+                }
+            }
+            return a[np.array(order)];
+        }
+
+        /// <summary>Dispatches on the expectation kind.</summary>
+        /// <param name="exp">The expectation.</param>
+        /// <param name="result">NumSharp's result.</param>
+        /// <param name="ops">The operands (for memory sharing and mutation checks), or null to skip memory sharing.</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        /// <param name="compareLayout">False to compare values only (a <see cref="LayoutExcuse"/>d case).</param>
+        /// <param name="wantClassOverride">The array class to require instead of the expectation's <c>class</c> (a
+        ///     <see cref="ClassExcuse"/>d case), or null.</param>
+        /// <param name="receiver">The receiver a member's result came paired with (<see cref="StringOracleOps.SelfResult"/>),
+        ///     or null: a list array's <c>base</c> facet is compared against it.</param>
+        private static void Compare(JsonElement exp, object result, NDArray[] ops, List<string> diffs, bool compareLayout = true,
+                                    string wantClassOverride = null, object receiver = null)
+        {
+            string kind = exp.GetProperty("kind").GetString();
+            switch (kind)
+            {
+                case "array":
+                    CompareArray(exp, AsArray(result), ops, diffs, "", compareLayout, wantClassOverride);
+                    break;
+                case "element":
+                    CompareElement(exp, result, diffs, compareLayout);
+                    break;
+                case "items":
+                {
+                    // NumPy's list(chararray): each item by its own kind (a stripped element or a chararray row), the
+                    // item's index prefixed to its divergences.
+                    var want = exp.GetProperty("items").EnumerateArray().ToArray();
+                    if (result is not object[] items)
+                    {
+                        diffs.Add($"expected a list of {want.Length} items, got {Describe(result)}");
+                        return;
+                    }
+                    if (items.Length != want.Length)
+                    {
+                        diffs.Add($"{items.Length} items, NumPy {want.Length}");
+                        return;
+                    }
+                    for (int i = 0; i < items.Length; i++)
+                    {
+                        int before = diffs.Count;
+                        Compare(want[i], items[i], ops, diffs, compareLayout);
+                        for (int j = before; j < diffs.Count; j++)
+                            diffs[j] = $"[{i}] {diffs[j]}";
+                    }
+                    break;
+                }
+                case "pyvalue":
+                {
+                    // A Python value (item() / tolist()): a Python int equals an integer of any CLR width, a float a
+                    // double / float / Half, text ordinally, bytes by content, lists element by element.
+                    var want = StringOracleCorpus.Decode(exp.GetProperty("value"));
+                    var got = AsValue(result);
+                    if (!PyValueEquals(want, got))
+                        diffs.Add($"value {Show(got)} != NumPy {Show(want)}");
+                    break;
+                }
+                case "tuple":
+                {
+                    var items = AsArrays(result);
+                    var want = exp.GetProperty("items").EnumerateArray().ToArray();
+                    if (items.Length != want.Length)
+                    {
+                        diffs.Add($"tuple of {items.Length}, NumPy {want.Length}");
+                        return;
+                    }
+                    // A layout excuse covers every item of a tuple result (np.unravel_index's coordinates).
+                    for (int i = 0; i < items.Length; i++)
+                        CompareArray(want[i], items[i], ops, diffs, $"[{i}] ", compareLayout);
+                    break;
+                }
+                case "mutated":
+                {
+                    int k = exp.GetProperty("operand").GetInt32();
+                    CompareArray(exp.GetProperty("view"), ops[k], null, diffs, "view ");
+                    if (exp.TryGetProperty("basevalues", out var baseValues))
+                    {
+                        // A StringDType base: every cell of the whole buffer, by value and NA flag (its bytes are allocator
+                        // offsets and heap pointers).
+                        CompareVStringBase(baseValues, ops[k], diffs);
+                        break;
+                    }
+                    var baseHex = Convert.ToHexString(StringOracleCorpus.BaseBytes(ops[k])).ToLowerInvariant();
+                    var wantBase = exp.GetProperty("base").GetString();
+                    // The out's whole buffer: off x86 a float NaN slot in it is a token too (an out= quantile of float16
+                    // stores the CPU's default NaN, positive on arm64), as in CompareArray.
+                    if (baseHex != wantBase && (NanSignIsX86Reference || !EqualWithNaNTokens(baseHex, wantBase, ops[k].typecode)))
+                        diffs.Add($"base buffer {Shorten(baseHex)} != NumPy {Shorten(wantBase)}");
+                    break;
+                }
+                case "value":
+                {
+                    var want = StringOracleCorpus.Decode(exp.GetProperty("value"));
+                    var got = AsValue(result);
+                    if (!ValueEquals(want, got))
+                        diffs.Add($"value {Show(got)} != NumPy {Show(want)}");
+                    break;
+                }
+                case "text":
+                {
+                    // The text travels as UTF-32 hex (a printed lone surrogate is not valid JSON text), or as itself ("a")
+                    // when it is ASCII by construction (a titer trace: every value in it is hex). An integer index into a
+                    // StringDType array is NumPy's Python str; NumSharp's indexer returns the element as a 0-d view, whose
+                    // element is compared (only for StringDType, so a printing op that returns an array still fails).
+                    var want = exp.TryGetProperty("a", out var ascii)
+                        ? ascii.GetString()
+                        : StringOracleCorpus.Utf32HexToString(exp.GetProperty("u").GetString());
+                    var got = VStringElementOr(result);
+                    if (got is not string gs || gs != want)
+                        diffs.Add($"text {Show(got)} != NumPy {Show(want)}");
+                    break;
+                }
+                case "tcells":
+                {
+                    // The cells of a StringDType array (tobytes()), heap pointers masked on both sides.
+                    if (result is not byte[] cells)
+                    {
+                        diffs.Add($"expected the cells (byte[]), got {Describe(result)}");
+                        return;
+                    }
+                    var gotHex = MaskHeapPointers(cells);
+                    var wantHex = exp.GetProperty("hex").GetString();
+                    if (gotHex != wantHex)
+                        diffs.Add($"cells {Shorten(gotHex)} != NumPy {Shorten(wantHex)}");
+                    break;
+                }
+                case "bool":
+                {
+                    bool want = exp.GetProperty("value").GetBoolean();
+                    // A 0-d result of a masked reduction is an unmasked 0-d masked array (AsArray unwraps it to its data).
+                    bool? got = result switch
+                    {
+                        bool bo => bo,
+                        _ => AsArray(result) is NDArray nd && nd.ndim == 0 ? (bool)nd : null,
+                    };
+                    if (got != want)
+                        diffs.Add($"bool {Show(result)} != NumPy {want}");
+                    break;
+                }
+                case "dtype":
+                {
+                    if (result is not DType d)
+                    {
+                        diffs.Add($"expected a dtype, got {Describe(result)}");
+                        return;
+                    }
+                    if (d.str != exp.GetProperty("str").GetString())
+                        diffs.Add($"dtype {d.str} != NumPy {exp.GetProperty("str").GetString()}");
+                    if (d.ToString(true) != exp.GetProperty("repr").GetString())
+                        diffs.Add($"repr {d.ToString(true)} != NumPy {exp.GetProperty("repr").GetString()}");
+                    break;
+                }
+                case "props":
+                {
+                    if (result is not DType d)
+                    {
+                        diffs.Add($"expected a dtype, got {Describe(result)}");
+                        return;
+                    }
+                    void Check(string name, object got, object want)
+                    {
+                        if (!Equals(got, want))
+                            diffs.Add($"{name} {got} != NumPy {want}");
+                    }
+                    Check("str", d.str, exp.GetProperty("str").GetString());
+                    Check("name", d.name, exp.GetProperty("name").GetString());
+                    Check("char", d.@char.ToString(), exp.GetProperty("char").GetString());
+                    Check("kind", d.kind.ToString(), exp.GetProperty("dkind").GetString());
+                    Check("num", d.num, exp.GetProperty("num").GetInt32());
+                    Check("itemsize", d.itemsize, exp.GetProperty("itemsize").GetInt32());
+                    Check("byteorder", d.byteorder.ToString(), exp.GetProperty("byteorder").GetString());
+                    Check("isbuiltin", d.isbuiltin, exp.GetProperty("isbuiltin").GetInt32());
+                    Check("isnative", d.isnative, exp.GetProperty("isnative").GetBoolean());
+                    Check("alignment", d.alignment, exp.GetProperty("alignment").GetInt32());
+                    Check("repr", d.ToString(true), exp.GetProperty("repr").GetString());
+                    Check("str()", d.ToString(), exp.GetProperty("strfmt").GetString());
+                    // Section tdtype records what a StringDType adds (and hasobject / flags for every descriptor).
+                    if (exp.TryGetProperty("hasobject", out var hasobject))
+                        Check("hasobject", d.hasobject, hasobject.GetBoolean());
+                    if (exp.TryGetProperty("flags", out var flags))
+                        Check("flags", d.flags, flags.GetInt32());
+                    if (exp.TryGetProperty("coerce", out var coerce))
+                        Check("coerce", d.coerce, coerce.GetBoolean());
+                    if (exp.TryGetProperty("has_na", out var hasNA))
+                        Check("has na_object", d.HasNAObject, hasNA.GetBoolean());
+                    if (exp.TryGetProperty("na_repr", out var naRepr))
+                        Check("repr(na_object)", NumSharp.Backends.Strings.NDPyObject.Repr(d.na_object), naRepr.GetString());
+                    break;
+                }
+                case "masked":
+                    CompareMasked(exp, result, diffs);
+                    break;
+                case "lists":
+                    CompareLists(exp, result, diffs, receiver as NDListArray);
+                    break;
+                case "masked_constant":
+                    if (!ReferenceEquals(result, np.ma.masked))
+                        diffs.Add($"expected numpy.ma's masked constant, got {Describe(result)}");
+                    break;
+                case "notimplemented":
+                    // Python's NotImplemented (numpy.char's comparisons of an S / U pair): NumSharp answers null.
+                    if (result is not null)
+                        diffs.Add($"expected null (NumPy's NotImplemented), got {Describe(result)}");
+                    break;
+                case "none":
+                    // NumPy's None — also the NA object an integer index returns from a StringDType(na_object=None) array,
+                    // which NumSharp's indexer returns as a 0-d view holding it.
+                    if (VStringElementOr(result) is not null)
+                        diffs.Add($"expected None, got {Describe(result)}");
+                    break;
+                case "seq":
+                {
+                    // A tuple holding masked arrays (np.ma.average(..., returned=True)): each item by its own kind.
+                    var want = exp.GetProperty("items").EnumerateArray().ToArray();
+                    var items = result is ITuple t
+                        ? Enumerable.Range(0, t.Length).Select(i => t[i]).ToArray()
+                        : result as object[] ?? Array.Empty<object>();
+                    if (items.Length != want.Length)
+                    {
+                        diffs.Add($"sequence of {items.Length}, NumPy {want.Length}");
+                        return;
+                    }
+                    for (int i = 0; i < items.Length; i++)
+                        Compare(want[i], items[i], null, diffs, compareLayout: false);
+                    break;
+                }
+                default:
+                    diffs.Add($"unknown expectation kind '{kind}'");
+                    break;
+            }
+        }
+
+        /// <summary>
+        ///     Compares an object-path result (NumPy's object array of lists) with NumPy's: the shape, then every element's
+        ///     pieces in C order — bytes pieces by their bytes, str pieces by their code points (a NumPy str may hold one above
+        ///     U+10FFFF) — and the positions whose single piece is the element's own <c>np.str_</c> (CPython's [self]).
+        /// </summary>
+        /// <param name="exp">The <c>lists</c> expectation.</param>
+        /// <param name="result">NumSharp's result.</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        /// <param name="receiver">The member's receiver (section strcharlist), or null: the <c>layout</c> facet's <c>base</c>
+        ///     relation is read against it.</param>
+        private static unsafe void CompareLists(JsonElement exp, object result, List<string> diffs, NDListArray receiver = null)
+        {
+            if (result is not NDListArray l)
+            {
+                diffs.Add($"expected an object array of lists (NDListArray), got {Describe(result)}");
+                return;
+            }
+            // Section strcharlist's layout facets: the outer array's byte strides, C / F contiguity, OWNDATA, WRITEABLE, and
+            // how its base relates to the receiver (NumPy's object pointers and NumSharp's int64 list ids share one layout).
+            if (exp.TryGetProperty("layout", out var layout))
+                CompareListLayout(layout, l, receiver, diffs);
+            var wantShape = exp.GetProperty("shape").EnumerateArray().Select(e => e.GetInt64()).ToArray();
+            if (!wantShape.SequenceEqual(l.shape))
+            {
+                diffs.Add($"shape ({string.Join(",", l.shape)}) != NumPy ({string.Join(",", wantShape)})");
+                return;
+            }
+            var want = exp.GetProperty("lists").EnumerateArray().ToArray();
+            var wantSelf = new HashSet<long>(exp.GetProperty("strself").EnumerateArray().Select(e => e.GetInt64()));
+            // The elements' list ids in C order (a view's ids are strided), read through a flat copy; each list's pieces
+            // from the shared heap.
+            using var ids = l.Ids.flatten();
+            var heap = l.Heap;
+            long* offsets = heap.Offsets;
+            for (long pos = 0; pos < want.Length && diffs.Count < 20; pos++)
+            {
+                var (first, end) = heap.Range(ids.GetInt64(pos));
+                var pieces = want[pos].EnumerateArray().ToArray();
+                if (end - first != pieces.Length)
+                {
+                    diffs.Add($"[{pos}] {end - first} pieces, NumPy {pieces.Length}");
+                    continue;
+                }
+                for (int k = 0; k < pieces.Length; k++)
+                {
+                    long from = offsets[first + k], to = offsets[first + k + 1];
+                    bool bytesPiece = pieces[k].TryGetProperty("b", out var bhex);
+                    if (bytesPiece != (l.Kind == 'S'))
+                    {
+                        diffs.Add($"[{pos}][{k}] a {(l.Kind == 'S' ? "bytes" : "str")} piece, NumPy's is {(bytesPiece ? "bytes" : "str")}");
+                        continue;
+                    }
+                    string gotHex = bytesPiece
+                        ? Convert.ToHexString(new ReadOnlySpan<byte>(heap.Units + from, checked((int)(to - from)))).ToLowerInvariant()
+                        : Convert.ToHexString(new ReadOnlySpan<byte>((byte*)((uint*)heap.Units + from), checked((int)(to - from) * 4))).ToLowerInvariant();
+                    string wantHex = bytesPiece ? bhex.GetString() : pieces[k].GetProperty("u").GetString();
+                    if (gotHex != wantHex)
+                        diffs.Add($"[{pos}][{k}] piece {Shorten(gotHex)} != NumPy {Shorten(wantHex)}");
+                }
+                // NumPy's strself lists the elements holding an np.str_ piece (an element's own scalar).
+                bool gotSelf = false;
+                for (long k = first; k < end; k++)
+                    gotSelf |= heap.IsNpStr(k);
+                if (gotSelf != wantSelf.Contains(pos))
+                    diffs.Add($"[{pos}] np.str_ piece {gotSelf} != NumPy {wantSelf.Contains(pos)}");
+            }
+        }
+
+        /// <summary>
+        ///     Compares a list array's layout with NumPy's object array's: the byte strides, the C / F contiguity, OWNDATA and
+        ///     WRITEABLE flags, and the base relation — <c>recv</c> (the receiver itself), <c>recvbase</c> (the receiver's own
+        ///     base: a view of a view collapses to the owner), <c>none</c>, or <c>other</c> (NumPy's intermediate copy).
+        /// </summary>
+        /// <param name="layout">The <c>layout</c> facet.</param>
+        /// <param name="l">NumSharp's list array.</param>
+        /// <param name="receiver">The member's receiver, or null when the replay paired none.</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        private static void CompareListLayout(JsonElement layout, NDListArray l, NDListArray receiver, List<string> diffs)
+        {
+            // An empty result carries no strides (NumPy's all-zero strides of a zero-size allocation: OpenBugs.EmptyStrides).
+            if (layout.TryGetProperty("strides", out var stridesJson))
+            {
+                var wantStrides = stridesJson.EnumerateArray().Select(e => e.GetInt64()).ToArray();
+                if (!wantStrides.SequenceEqual(l.strides))
+                    diffs.Add($"strides ({string.Join(",", l.strides)}) != NumPy ({string.Join(",", wantStrides)})");
+            }
+            var flags = l.flags;
+            void Flag(string name, bool got)
+            {
+                bool want = layout.GetProperty(name).GetBoolean();
+                if (want != got)
+                    diffs.Add($"flag {name} {got} != NumPy {want}");
+            }
+            Flag("c", flags.c_contiguous);
+            Flag("f", flags.f_contiguous);
+            Flag("own", flags.owndata);
+            Flag("w", flags.writeable);
+            // NumSharp's base is a new list array over the owner's pointers (as NDArray.base is a new array over its
+            // owner's storage), so the relation is read through the storage it wraps: the receiver's own (it owns its
+            // pointers) or the storage the receiver itself views (a view of a view collapses to the owner).
+            string wantBase = layout.GetProperty("base").GetString();
+            using var b = l.@base;
+            var owner = b?.Ids.Storage;
+            string gotBase = b is null ? "none"
+                : receiver is null ? "unpaired"
+                : ReferenceEquals(owner, receiver.Ids.Storage) ? "recv"
+                : receiver.Ids.Storage._baseStorage is { } rb && ReferenceEquals(owner, rb) ? "recvbase"
+                : "other";
+            if (gotBase != wantBase)
+                diffs.Add($"base {gotBase} != NumPy {wantBase}");
+        }
+
+        /// <summary>
+        ///     Compares a masked result with NumPy's: the data's descriptor, shape and C-order bytes (masked slots included),
+        ///     the mask's FORM (<c>nomask</c> or an array) and bytes, the fill value its getter returns and the hard-mask flag.
+        /// </summary>
+        /// <param name="exp">The masked expectation.</param>
+        /// <param name="result">NumSharp's result.</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        private static void CompareMasked(JsonElement exp, object result, List<string> diffs)
+        {
+            if (result is not NDMaskedArray m || ReferenceEquals(result, np.ma.masked))
+            {
+                diffs.Add($"expected a masked array, got {Describe(result)}");
+                return;
+            }
+            string wantDtype = exp.GetProperty("dtype").GetString();
+            if (m.data.dtype.str != wantDtype)
+            {
+                diffs.Add($"data dtype {m.data.dtype.str} != NumPy {wantDtype}");
+                return;
+            }
+            var wantShape = exp.GetProperty("shape").EnumerateArray().Select(e => e.GetInt64()).ToArray();
+            if (!m.data.Shape.dimensions.SequenceEqual(wantShape))
+            {
+                diffs.Add($"shape ({string.Join(",", m.data.Shape.dimensions)}) != NumPy ({string.Join(",", wantShape)})");
+                return;
+            }
+            if (exp.TryGetProperty("values", out var tvalues))
+            {
+                // StringDType data (section tma): its elements by value and NA flag, masked slots included (the descriptor's
+                // str above already compared the NA object and coerce; the cells hold allocator offsets and pointers).
+                CompareVStringValues(tvalues, m.data, diffs, "data ");
+            }
+            else
+            {
+                // A null buffer is data NumPy left uninitialized (an S np.empty_like / masked_all): only its descriptor and
+                // shape are NumPy's.
+                var wantBuffer = exp.GetProperty("buffer");
+                var gotHex = Convert.ToHexString(StringOracleCorpus.CBytes(m.data)).ToLowerInvariant();
+                // Off x86 a float NaN slot of the data is a token, as in CompareArray (EqualWithNaNTokens).
+                if (wantBuffer.ValueKind != JsonValueKind.Null && gotHex != wantBuffer.GetString()
+                    && (NanSignIsX86Reference || !EqualWithNaNTokens(gotHex, wantBuffer.GetString(), m.data.typecode)))
+                    diffs.Add($"data bytes {Shorten(gotHex)} != NumPy {Shorten(wantBuffer.GetString())} (as text: {Show(Text(m.data))})");
+            }
+            var wantMask = exp.GetProperty("mask");
+            bool gotNomask = ReferenceEquals(m.mask, np.ma.nomask);
+            if (wantMask.ValueKind == JsonValueKind.Null)
+            {
+                if (!gotNomask)
+                    diffs.Add($"mask is an array ({Show(m.mask.tolist())}), NumPy nomask");
+            }
+            else if (gotNomask)
+                diffs.Add("mask is nomask, NumPy an array");
+            else
+            {
+                var gotMask = Convert.ToHexString(StringOracleCorpus.CBytes(m.mask)).ToLowerInvariant();
+                if (gotMask != wantMask.GetString())
+                    diffs.Add($"mask bytes {Shorten(gotMask)} != NumPy {Shorten(wantMask.GetString())}");
+            }
+            CompareFill(exp.GetProperty("fill"), m.fill_value, diffs);
+            if (m.hardmask != exp.GetProperty("hard").GetBoolean())
+                diffs.Add($"hardmask {m.hardmask} != NumPy {exp.GetProperty("hard").GetBoolean()}");
+        }
+
+        /// <summary>
+        ///     Compares a fill value with NumPy's getter result: text ordinally, bytes by content, numbers by value (a
+        ///     Python int against any C# integer, a float against any C# float), a complex both parts, an array fill as an
+        ///     array.
+        /// </summary>
+        /// <param name="want">NumPy's encoded fill.</param>
+        /// <param name="got">NumSharp's fill value.</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        private static void CompareFill(JsonElement want, object got, List<string> diffs)
+        {
+            if (want.ValueKind == JsonValueKind.Object && want.TryGetProperty("arr", out var arr))
+            {
+                CompareArray(arr, got as NDArray, null, diffs, "fill ", compareLayout: false);
+                return;
+            }
+            if (want.ValueKind == JsonValueKind.Object && want.TryGetProperty("complex", out var c))
+            {
+                var wc = new System.Numerics.Complex(c[0].GetDouble(), c[1].GetDouble());
+                if (got is not System.Numerics.Complex gc || !gc.Equals(wc))
+                    diffs.Add($"fill {Show(got)} != NumPy {wc}");
+                return;
+            }
+            var w = StringOracleCorpus.Decode(want);
+            bool same = (w, got) switch
+            {
+                (string ws, string gs) => string.Equals(ws, gs, StringComparison.Ordinal),
+                (byte[] wb, byte[] gb) => wb.AsSpan().SequenceEqual(gb),
+                (bool wb, bool gb) => wb == gb,
+                (long wl, char ch) => ch == wl,
+                (long wl, long or int or short or sbyte or byte or ushort or uint or ulong) => Convert.ToDecimal(got) == wl,
+                (double wd, Half h) => (double)h == wd || double.IsNaN((double)h) && double.IsNaN(wd),
+                (double wd, double or float) => Convert.ToDouble(got) == wd || double.IsNaN(Convert.ToDouble(got)) && double.IsNaN(wd),
+                _ => false,
+            };
+            if (!same)
+                diffs.Add($"fill {Show(got)} ({got?.GetType().Name}) != NumPy {Show(w)}");
+        }
+
+        /// <summary>Compares an array result with an array expectation.</summary>
+        /// <param name="exp">The array expectation.</param>
+        /// <param name="r">NumSharp's array.</param>
+        /// <param name="ops">The operands for the memory-sharing check (null to skip it).</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        /// <param name="prefix">A label for tuple items and mutation views.</param>
+        /// <param name="compareLayout">False to compare the descriptor, shape and bytes only.</param>
+        /// <param name="wantClassOverride">The array class to require instead of the expectation's <c>class</c>, or null.</param>
+        private static void CompareArray(JsonElement exp, NDArray r, NDArray[] ops, List<string> diffs, string prefix,
+                                         bool compareLayout = true, string wantClassOverride = null)
+        {
+            if (r is null)
+            {
+                diffs.Add(prefix + "expected an array, got null");
+                return;
+            }
+            // Section strchararray records the result's CLASS (chararray / ndarray / matrix): a chararray member that
+            // drops the subclass, or a plain call that invents it, fails here even when its data is NumPy's.
+            if (exp.TryGetProperty("class", out var wantClass))
+            {
+                string want = wantClassOverride ?? wantClass.GetString();
+                string got = r is NDCharArray ? "chararray" : r is NDMatrix ? "matrix" : "ndarray";
+                if (got != want)
+                    diffs.Add($"{prefix}class {got} != NumPy {want}");
+            }
+            string wantDtype = exp.GetProperty("dtype").GetString();
+            if (r.dtype.str != wantDtype)
+            {
+                diffs.Add($"{prefix}dtype {r.dtype.str} != NumPy {wantDtype}");
+                return;
+            }
+            var wantShape = exp.GetProperty("shape").EnumerateArray().Select(e => e.GetInt64()).ToArray();
+            var gotShape = r.Shape.dimensions;
+            if (!gotShape.SequenceEqual(wantShape))
+            {
+                diffs.Add($"{prefix}shape ({string.Join(",", gotShape)}) != NumPy ({string.Join(",", wantShape)})");
+                return;
+            }
+            if (exp.TryGetProperty("values", out var tvalues))
+            {
+                // A StringDType result: its elements by value and NA flag (the descriptor's str above already compared the NA
+                // object and coerce; its cells are allocator-specific).
+                CompareVStringValues(tvalues, r, diffs, prefix);
+            }
+            else if (exp.GetProperty("buffer").ValueKind != JsonValueKind.Null)
+            {
+                // A null buffer is data NumPy left uninitialized (an S chararray made without a buffer): only its
+                // descriptor, shape and layout are NumPy's.
+                var gotHex = Convert.ToHexString(StringOracleCorpus.CBytes(r)).ToLowerInvariant();
+                var wantHex = exp.GetProperty("buffer").GetString();
+                // Off x86 a float NaN slot is a token: its sign is the CPU's default NaN's (EqualWithNaNTokens).
+                if (gotHex != wantHex && (NanSignIsX86Reference || !EqualWithNaNTokens(gotHex, wantHex, r.typecode)))
+                    diffs.Add($"{prefix}bytes {Shorten(gotHex)} != NumPy {Shorten(wantHex)} (as text: {Show(Text(r))})");
+            }
+            if (!compareLayout)
+                return;
+
+            // Layout: strides on the axes that have more than one element of a non-empty result, then the flags.
+            if (r.size > 0 && exp.TryGetProperty("strides", out var ws))
+            {
+                var wantStrides = ws.EnumerateArray().Select(e => e.GetInt64()).ToArray();
+                var gotStrides = r.Shape.strides;
+                for (int i = 0; i < gotShape.Length; i++)
+                    if (gotShape[i] > 1 && gotStrides[i] != wantStrides[i])
+                    {
+                        diffs.Add($"{prefix}strides ({string.Join(",", gotStrides)}) != NumPy ({string.Join(",", wantStrides)})");
+                        break;
+                    }
+            }
+            if (exp.TryGetProperty("c", out var wc) && r.flags.c_contiguous != wc.GetBoolean())
+                diffs.Add($"{prefix}C_CONTIGUOUS {r.flags.c_contiguous} != NumPy {wc.GetBoolean()}");
+            if (exp.TryGetProperty("f", out var wf) && r.flags.f_contiguous != wf.GetBoolean())
+                diffs.Add($"{prefix}F_CONTIGUOUS {r.flags.f_contiguous} != NumPy {wf.GetBoolean()}");
+            if (exp.TryGetProperty("writeable", out var ww) && r.flags.writeable != ww.GetBoolean())
+                diffs.Add($"{prefix}WRITEABLE {r.flags.writeable} != NumPy {ww.GetBoolean()}");
+            if (exp.TryGetProperty("owndata", out var wo) && r.flags.owndata != wo.GetBoolean())
+                diffs.Add($"{prefix}OWNDATA {r.flags.owndata} != NumPy {wo.GetBoolean()}");
+            if (ops is not null && exp.TryGetProperty("shares", out var sh))
+            {
+                var want = sh.EnumerateArray().Select(e => e.GetBoolean()).ToArray();
+                for (int i = 0; i < want.Length && i < ops.Length; i++)
+                {
+                    bool got = np.shares_memory(r, ops[i]);
+                    if (got != want[i])
+                        diffs.Add($"{prefix}shares_memory(result, operand {i}) {got} != NumPy {want[i]}");
+                }
+            }
+        }
+
+        /// <summary>
+        ///     Compares the elements of a <c>StringDType</c> array with NumPy's in logical C order: an NA expectation needs the
+        ///     cell's MISSING flag, a text expectation needs a non-NA cell with that exact text.
+        /// </summary>
+        /// <param name="want">NumPy's encoded elements (<c>{"na": true}</c> or <c>{"u": hex}</c>).</param>
+        /// <param name="r">NumSharp's array (any layout; its descriptor already matched).</param>
+        /// <param name="diffs">Receives the divergences (the first few elements that differ).</param>
+        /// <param name="prefix">A label for tuple items and mutation views.</param>
+        private static unsafe void CompareVStringValues(JsonElement want, NDArray r, List<string> diffs, string prefix)
+        {
+            var items = want.EnumerateArray().ToArray();
+            if (items.Length != r.size)
+            {
+                diffs.Add($"{prefix}{r.size} elements, NumPy {items.Length}");
+                return;
+            }
+            if (r.Storage.InternalArray is not NumSharp.Backends.Unmanaged.VStringArraySlice slice)
+            {
+                diffs.Add($"{prefix}expected StringDType storage, got {r.Storage.InternalArray?.GetType().Name}");
+                return;
+            }
+            int reported = 0;
+            for (long i = 0; i < items.Length && reported < 3; i++)
+            {
+                // Logical C-order element i → its storage offset (strides, offset and broadcasting included).
+                long off = r.Shape.TransformOffset(i);
+                CompareVStringCell(items[i], slice, off, diffs, $"{prefix}[{i}]", ref reported);
+            }
+        }
+
+        /// <summary>
+        ///     Compares every cell of the whole <c>StringDType</c> buffer under an operand view with NumPy's base after an
+        ///     in-place call: the elements inside AND outside the view, so a write that strays is caught.
+        /// </summary>
+        /// <param name="want">NumPy's encoded base elements.</param>
+        /// <param name="view">The operand (it shares its base's storage).</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        private static void CompareVStringBase(JsonElement want, NDArray view, List<string> diffs)
+        {
+            var items = want.EnumerateArray().ToArray();
+            if (view.Storage.InternalArray is not NumSharp.Backends.Unmanaged.VStringArraySlice slice)
+            {
+                diffs.Add($"base: expected StringDType storage, got {view.Storage.InternalArray?.GetType().Name}");
+                return;
+            }
+            if (slice.Count != items.Length)
+            {
+                diffs.Add($"base: {slice.Count} cells, NumPy {items.Length}");
+                return;
+            }
+            int reported = 0;
+            for (long i = 0; i < items.Length && reported < 3; i++)
+                CompareVStringCell(items[i], slice, i, diffs, $"base[{i}]", ref reported);
+        }
+
+        /// <summary>Compares one cell with one encoded element (see <see cref="CompareVStringValues"/>).</summary>
+        /// <param name="want">The encoded element.</param>
+        /// <param name="slice">The cells.</param>
+        /// <param name="offset">The cell index.</param>
+        /// <param name="diffs">Receives a divergence.</param>
+        /// <param name="label">The element's label in the message.</param>
+        /// <param name="reported">Counts the divergences reported so far (the caller stops after a few).</param>
+        private static unsafe void CompareVStringCell(JsonElement want, NumSharp.Backends.Unmanaged.VStringArraySlice slice, long offset,
+                                                      List<string> diffs, string label, ref int reported)
+        {
+            byte* cell = slice.Address + offset * NumSharp.Backends.Strings.VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            bool gotNA = NumSharp.Backends.Strings.VStringAllocator.isnull(cell);
+            bool wantNA = want.ValueKind == JsonValueKind.Object && want.TryGetProperty("na", out _);
+            if (wantNA || gotNA)
+            {
+                if (wantNA != gotNA)
+                {
+                    diffs.Add($"{label} {(gotNA ? "NA" : Show(slice.GetIndex(offset)))} != NumPy {(wantNA ? "NA" : Show(StringOracleCorpus.Decode(want)))}");
+                    reported++;
+                }
+                return;
+            }
+            var w = (string)StringOracleCorpus.Decode(want);
+            var g = slice.GetIndex(offset) as string;
+            if (!string.Equals(w, g, StringComparison.Ordinal))
+            {
+                diffs.Add($"{label} {Show(g)} != NumPy {Show(w)}");
+                reported++;
+            }
+        }
+
+        /// <summary>
+        ///     The element of a 0-d <c>StringDType</c> array (NumSharp's indexer returns one where NumPy returns a Python
+        ///     <c>str</c> or the NA object); any other result unchanged.
+        /// </summary>
+        /// <param name="result">NumSharp's result.</param>
+        /// <returns>The element, or <paramref name="result"/>.</returns>
+        private static object VStringElementOr(object result)
+        {
+            // numpy.ma returns the Python str of an unmasked 0-d reduction (ma.sum over StringDType text); NumSharp keeps a
+            // 0-d masked array — the module's convention, as AsArray reads it — whose data holds that element.
+            if (UnmaskedScalarData(result) is { } data)
+                result = data;
+            return result is NDArray nd && nd.ndim == 0 && nd.Storage.IsVString ? nd.Storage.GetAtIndex(0) : result;
+        }
+
+        /// <summary>
+        ///     The data of an unmasked 0-d masked array — numpy.ma's NumPy scalar result, which NumSharp keeps as a 0-d masked
+        ///     array (<see cref="AsArray"/> unwraps it the same way) — or null for any other result.
+        /// </summary>
+        /// <param name="result">The call's result.</param>
+        /// <returns>The 0-d data array, or null.</returns>
+        private static NDArray UnmaskedScalarData(object result)
+            => result is NDMaskedArray m && !ReferenceEquals(m, np.ma.masked) && m.data.ndim == 0 && ReferenceEquals(m.mask, np.ma.nomask)
+                ? m.data
+                : null;
+
+        /// <summary>
+        ///     The generator's <c>_mask_heap</c>: cells as lowercase hex with the bytes that hold a heap pointer zeroed (a cell
+        ///     whose flags have both <c>OUTSIDE_ARENA</c> and <c>LONG</c>: a heap string, or a freed one keeping the stale
+        ///     pointer).
+        /// </summary>
+        /// <param name="cells">The cells (16 bytes each).</param>
+        /// <returns>The masked hex.</returns>
+        private static string MaskHeapPointers(byte[] cells)
+        {
+            var copy = (byte[])cells.Clone();
+            for (int i = 0; i + 15 < copy.Length; i += 16)
+                if ((copy[i + 15] & 0x30) == 0x30)
+                    Array.Clear(copy, i, 8);
+            return Convert.ToHexString(copy).ToLowerInvariant();
+        }
+
+        /// <summary>A result as one array: an NDArray, or a C# scalar NumSharp returns where NumPy returns a 0-d value.</summary>
+        private static NDArray AsArray(object r) => r switch
+        {
+            NDArray nd => nd,
+            bool b => NDArray.Scalar(b),
+            long l => NDArray.Scalar(l),
+            int i => NDArray.Scalar((long)i),
+            double d => NDArray.Scalar(d),
+            np.UniqueResult u => u,
+            // numpy.ma returns a NumPy scalar for an unmasked 0-d result; NumSharp keeps a 0-d masked array (the module's
+            // type-consistency choice), whose data is that scalar.
+            NDMaskedArray m when !ReferenceEquals(m, np.ma.masked) && m.data.ndim == 0 && ReferenceEquals(m.mask, np.ma.nomask) => m.data,
+            _ => null,
+        };
+
+        /// <summary>A tuple result as arrays: an <c>NDArray[]</c>, a C# value tuple of arrays, or a result struct.</summary>
+        private static NDArray[] AsArrays(object r)
+        {
+            switch (r)
+            {
+                case NDArray[] arr: return arr;
+                case ITuple t:
+                {
+                    var items = new NDArray[t.Length];
+                    for (int i = 0; i < t.Length; i++)
+                        items[i] = AsArray(t[i]);
+                    return items;
+                }
+                // A function of several outputs replayed as an object[] (section strfn's partition): its arrays.
+                case object[] objects when objects.All(o => o is NDArray):
+                    return objects.Cast<NDArray>().ToArray();
+                case IEnumerable<NDArray> e: return e.ToArray();
+            }
+            return Array.Empty<NDArray>();
+        }
+
+        /// <summary>
+        ///     A result as a Python value: a 0-d array is its element, a list stays a list (its 0-d arrays turned into
+        ///     elements), a string / byte[] stays itself.
+        /// </summary>
+        private static object AsValue(object r)
+        {
+            // An unmasked 0-d masked array stands for numpy.ma's NumPy scalar (ma.sum of NaN-like NA text is the float nan).
+            if (UnmaskedScalarData(r) is { } data)
+                r = data;
+            switch (r)
+            {
+                case NDArray nd when nd.ndim == 0:
+                    return nd.Storage.GetAtIndex(0);
+                case NDArray nd:
+                    return nd.tolist();
+                case IList list when r is not byte[]:
+                {
+                    var items = new List<object>();
+                    foreach (var x in list)
+                        items.Add(AsValue(x));
+                    return items;
+                }
+                default:
+                    return r;
+            }
+        }
+
+        /// <summary>Deep equality of decoded values: strings ordinally, bytes by content, lists element by element.</summary>
+        private static bool ValueEquals(object want, object got)
+        {
+            switch (want)
+            {
+                case null: return got is null;
+                case string ws: return got is string gs && string.Equals(ws, gs, StringComparison.Ordinal);
+                case byte[] wb: return got is byte[] gb && wb.AsSpan().SequenceEqual(gb);
+                case List<object> wl:
+                {
+                    if (got is not IList gl || got is byte[] || gl.Count != wl.Count)
+                        return false;
+                    for (int i = 0; i < wl.Count; i++)
+                        if (!ValueEquals(wl[i], gl[i]))
+                            return false;
+                    return true;
+                }
+                default: return Equals(want, got);
+            }
+        }
+
+        /// <summary>
+        ///     Deep equality of decoded values with Python's number semantics (section strchararray's <c>item()</c> /
+        ///     <c>tolist()</c> of a chararray over numbers): a Python int equals an integer of any CLR width, a Python float a
+        ///     <see cref="double"/> / <see cref="float"/> / <see cref="Half"/> of the same value (NaN equal to NaN); text,
+        ///     bytes, None and lists as <see cref="ValueEquals"/>.
+        /// </summary>
+        /// <param name="want">NumPy's decoded value.</param>
+        /// <param name="got">NumSharp's value (<see cref="AsValue"/>).</param>
+        /// <returns>True when they are the same Python value.</returns>
+        private static bool PyValueEquals(object want, object got)
+        {
+            switch (want)
+            {
+                case long wl:
+                    // Convert.ToDecimal refuses a char: its code point is the number.
+                    return got is sbyte or byte or short or ushort or int or uint or long or ulong or char
+                           && Convert.ToDecimal(got is char ch ? (int)ch : got) == wl;
+                case double wd:
+                {
+                    double? g = got switch { double d => d, float f => f, Half h => (double)h, _ => null };
+                    return g is double gd && (gd.Equals(wd) || double.IsNaN(gd) && double.IsNaN(wd));
+                }
+                case List<object> wl2:
+                {
+                    if (got is not IList gl || got is byte[] || gl.Count != wl2.Count)
+                        return false;
+                    for (int i = 0; i < wl2.Count; i++)
+                        if (!PyValueEquals(wl2[i], gl[i]))
+                            return false;
+                    return true;
+                }
+                default:
+                    return ValueEquals(want, got);
+            }
+        }
+
+        /// <summary>
+        ///     Compares a scalar element (section strchararray's <c>element</c> kind) with NumPy's: <c>py</c> is the Python
+        ///     type of NumPy's answer — <c>str</c> / <c>bytes</c> (an element <c>__getitem__</c> STRIPPED), <c>str_</c> /
+        ///     <c>bytes_</c> (NumPy's unstripped scalar: <c>c.flat[i]</c>, <c>c.take(i)</c>), or a numeric dtype name
+        ///     (<c>uint32</c>: an element of a chararray over numbers). NumSharp answers with a read-only 0-d stand-in (the
+        ///     chararray indexer, <c>take</c>) or the element itself (the flat iterator); either way the value is compared, and
+        ///     a stand-in must be read-only (NumPy's scalar is immutable).
+        /// </summary>
+        /// <param name="exp">The element expectation (<c>py</c>, <c>value</c>).</param>
+        /// <param name="result">NumSharp's result.</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        /// <param name="compareLayout">False for a <see cref="LayoutExcuse"/>d case: the value is compared, the read-only
+        ///     flag of a 0-d answer is not (a plain function's NumPy scalar that NumSharp returns as a writeable 0-d array,
+        ///     the array-object oracle's VF01).</param>
+        /// <remarks>
+        ///     A stripped text that ENDS in a NUL (<c>'a\0'</c>, the rstrip of <c>'a\0 '</c>) cannot be held by a fixed-width
+        ///     stand-in, whose storage drops trailing NULs as every <c>S</c> / <c>U</c> element does: NumPy's value is compared
+        ///     without its trailing NULs (pinned by the unit tests, <c>CharArrayTests</c>).
+        /// </remarks>
+        private static void CompareElement(JsonElement exp, object result, List<string> diffs, bool compareLayout = true)
+        {
+            string py = exp.GetProperty("py").GetString();
+            var want = StringOracleCorpus.Decode(exp.GetProperty("value"));
+            if (result is NDArray nd && nd.ndim != 0)
+            {
+                diffs.Add($"expected a {py} scalar, got {Describe(result)}");
+                return;
+            }
+            object got = result is NDArray zero ? zero.item() : result;
+            // Only a 0-d stand-in may lack the trailing NULs of NumPy's value (see the remarks); a .NET string / byte[]
+            // (the chararray enumerator's items, the flat iterator's element) must be the value exactly.
+            bool standIn = result is NDArray;
+            switch (py)
+            {
+                case "str":
+                case "str_":
+                {
+                    var ws = (string)want;
+                    if (got is not string gs || gs != ws && !(standIn && gs == ws.TrimEnd('\0')))
+                        diffs.Add($"element {Show(got)} != NumPy {py} {Show(want)}");
+                    break;
+                }
+                case "bytes":
+                case "bytes_":
+                {
+                    var wb = (byte[])want;
+                    int n = wb.Length;
+                    while (standIn && n > 0 && wb[n - 1] == 0)
+                        n--;
+                    if (got is not byte[] gb || !gb.AsSpan().SequenceEqual(wb.AsSpan(0, n)))
+                        diffs.Add($"element {Show(got)} != NumPy {py} {Show(want)}");
+                    break;
+                }
+                default:
+                {
+                    // A NumPy number: its dtype (the stand-in's, or the CLR type's) and its value.
+                    string gotDtype = result is NDArray s0 ? s0.dtype.name : got is null ? "null" : ((DType)got.GetType()).name;
+                    if (gotDtype != py)
+                        diffs.Add($"element dtype {gotDtype} != NumPy {py}");
+                    if (!PyValueEquals(want, got))
+                        diffs.Add($"element {Show(got)} != NumPy {py} {Show(want)}");
+                    break;
+                }
+            }
+            if (compareLayout && result is NDArray scalarArray && scalarArray.flags.writeable)
+                diffs.Add("the element's 0-d stand-in is writeable (NumPy's scalar is immutable)");
+        }
+
+        /// <summary>The decoded text of a string array (diagnostics), or its bytes otherwise.</summary>
+        private static object Text(NDArray r)
+        {
+            try
+            {
+                return r.typecode == NPTypeCode.String ? r.tolist() : r.ToString();
+            }
+            catch (Exception e)
+            {
+                return $"<{e.GetType().Name}>";
+            }
+        }
+
+        /// <summary>A short description of a result for a failure message.</summary>
+        private static string Describe(object r) => r switch
+        {
+            null => "null",
+            NDArray nd => $"an array {nd.dtype.str} ({string.Join(",", nd.Shape.dimensions)})",
+            _ => $"{r.GetType().Name} {Show(r)}",
+        };
+
+        /// <summary>A value rendered for a failure message: escapes control characters, lists items, caps the length.</summary>
+        private static string Show(object v)
+        {
+            var sb = new StringBuilder();
+            void Render(object x)
+            {
+                switch (x)
+                {
+                    case null: sb.Append("None"); break;
+                    case string s:
+                        sb.Append('"');
+                        foreach (var ch in s)
+                            sb.Append(ch < 0x20 || ch > 0x7E ? $"\\u{(int)ch:x4}" : ch.ToString());
+                        sb.Append('"');
+                        break;
+                    case byte[] b: sb.Append("b'").Append(Convert.ToHexString(b)).Append('\''); break;
+                    case IList l:
+                        sb.Append('[');
+                        for (int i = 0; i < l.Count; i++)
+                        {
+                            if (i > 0) sb.Append(", ");
+                            Render(l[i]);
+                        }
+                        sb.Append(']');
+                        break;
+                    default: sb.Append(x); break;
+                }
+            }
+            Render(v);
+            return Shorten(sb.ToString());
+        }
+
+        /// <summary>Caps a string for a failure line.</summary>
+        private static string Shorten(string s) => s is null ? "null" : s.Length <= 300 ? s : s.Substring(0, 300) + "…";
+    }
+}

@@ -13,68 +13,36 @@ namespace NumSharp
         /// <param name="shift">The number of places by which elements are shifted.</param>
         /// <param name="axis">Axis along which elements are shifted. By default, the array
         /// is flattened before shifting, after which the original shape is restored.</param>
-        /// <returns>Output array, with the same shape as <paramref name="a"/>.</returns>
+        /// <returns>Output array, with the same shape as <paramref name="a"/>.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>
-        /// Matches NumPy's algorithm: empty_like + slice-copy pairs.
+        /// Matches NumPy's algorithm: empty_like + slice-copy pairs (the array object's <c>NDArray.roll</c>, which releases
+        /// its intermediates).
         /// https://numpy.org/doc/stable/reference/generated/numpy.roll.html
         /// </remarks>
-        [NDScoped]
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>'s rank.</exception>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
         public static NDArray roll(NDArray a, long shift, int? axis = null)
         {
-            if (axis == null)
-                return roll(a.ravel(), shift, 0).reshape(a.shape);
 
-            int ax = axis.Value;
-            if (ax < 0) ax += a.ndim;
-            if (ax < 0 || ax >= a.ndim)
-                throw new ArgumentException(
-                    $"axis {axis.Value} is out of bounds for array of dimension {a.ndim}");
-
-            long n = a.shape[ax];
-
-            // Python-style modulo: always non-negative when n > 0.
-            // If n == 0 (empty axis), offset stays 0 — nothing to roll.
-            long offset = n == 0 ? 0 : ((shift % n) + n) % n;
-
-            if (offset == 0)
-                return a.copy();
-
-            var result = np.empty_like(a);
-
-            // Build Slice arrays for each dimension.
-            // For the rolled axis we split into body + tail:
-            //   result[..., offset:, ...] = a[..., :-offset, ...]   (body shifts)
-            //   result[..., :offset, ...] = a[..., -offset:, ...]   (tail wraps)
-            // All other axes use Slice.All (":").
-
-            var srcBody = new Slice[a.ndim];
-            var dstBody = new Slice[a.ndim];
-            var srcTail = new Slice[a.ndim];
-            var dstTail = new Slice[a.ndim];
-
-            for (int i = 0; i < a.ndim; i++)
-            {
-                if (i == ax)
-                {
-                    srcBody[i] = new Slice(null, -offset);   // :-offset
-                    dstBody[i] = new Slice(offset, null);    // offset:
-                    srcTail[i] = new Slice(-offset, null);   // -offset:
-                    dstTail[i] = new Slice(null, offset);    // :offset
-                }
-                else
-                {
-                    srcBody[i] = dstBody[i] = srcTail[i] = dstTail[i] = Slice.All;
-                }
-            }
-
-            result[dstBody] = a[srcBody];
-            result[dstTail] = a[srcTail];
-
-            return result;
+            // NumPy's statements (the flat roll, or empty_like and the two slice copies along the axis) are the array
+            // object's.
+            return NDArray.roll(a, shift, axis);
         }
 
-        /// <inheritdoc cref="roll(NDArray, long, int?)"/>
+        /// <summary>
+        /// Roll array elements along a given axis; the <see cref="int"/> shift of <see cref="roll(NDArray, long, int?)"/>.
+        /// </summary>
+        /// <param name="a">Input array.</param>
+        /// <param name="shift">The number of places by which elements are shifted.</param>
+        /// <param name="axis">Axis along which elements are shifted, or null to roll the flattened array.</param>
+        /// <returns>Output array, with the same shape as <paramref name="a"/> (see <see cref="roll(NDArray, long, int?)"/>).</returns>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>'s rank.</exception>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
         public static NDArray roll(NDArray a, int shift, int? axis = null)
-            => roll(a, (long)shift, axis);
+            => NDArray.roll(a, (long)shift, axis);   // the array object's statements, the shift widened
     }
 }

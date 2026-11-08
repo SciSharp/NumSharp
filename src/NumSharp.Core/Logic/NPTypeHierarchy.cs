@@ -21,6 +21,14 @@ namespace NumSharp
     // Since C# primitives don't have this hierarchy, we encode it explicitly
     // and provide IsSubType() which walks up the tree like issubclass().
     //
+    // Since 2026-10-16 the public type tests no longer go through this enum:
+    // np.issubdtype, isinstance (__instancecheck__) and issubclass (__subclasscheck__)
+    // use NDScalarType (DTypes/NDScalarType.cs), NumPy's class objects themselves
+    // (np.integer, np.floating, ...; the concrete class of every registered dtype,
+    // datetime64 / timedelta64 included). This file stays the enum form behind
+    // np.isdtype's named kinds ("integral", "real floating", ...) and the internal
+    // kind tests that take an NPTypeCode.
+    //
     // HIERARCHY (from NumPy):
     //
     //   Generic
@@ -36,8 +44,11 @@ namespace NumSharp
     //   │       │   └── float16, float32, float64
     //   │       └── ComplexFloating
     //   │           └── complex64, complex128
-    //   ├── Flexible (not used in NumSharp)
-    //   ├── Datetime (not used in NumSharp)
+    //   ├── Flexible
+    //   │   ├── Character
+    //   │   │   └── bytes_ (S), str_ (U)   — both share NPTypeCode.String
+    //   │   └── Void (not used in NumSharp)
+    //   ├── Datetime (descriptor level, see np.issubdtype)
     //   └── Object (not used in NumSharp)
     //
     // ================================================================================
@@ -62,6 +73,12 @@ namespace NumSharp
 
         // Bool is directly under Generic (NOT Number) in NumPy 2.x
         Boolean,
+
+        // Flexible branch: SINGLE_INHERIT(Flexible, Generic); SINGLE_INHERIT(Character, Flexible)
+        /// <summary>NumPy's <c>np.flexible</c>: the dtypes whose instances carry a length (<c>S</c>, <c>U</c>, <c>V</c>).</summary>
+        Flexible,
+        /// <summary>NumPy's <c>np.character</c>: the fixed-width string scalars <c>np.bytes_</c> and <c>np.str_</c>.</summary>
+        Character,
     }
 
     /// <summary>
@@ -85,6 +102,10 @@ namespace NumSharp
 
             // Bool is directly under Generic (NumPy 2.x behavior)
             [NPTypeKind.Boolean] = NPTypeKind.Generic,
+
+            // Flexible branch
+            [NPTypeKind.Character] = NPTypeKind.Flexible,
+            [NPTypeKind.Flexible] = NPTypeKind.Generic,
         };
 
         // Map concrete types to their immediate abstract parent
@@ -116,6 +137,11 @@ namespace NumSharp
 
             // Bool is under Generic directly
             [NPTypeCode.Boolean] = NPTypeKind.Boolean,
+
+            // The fixed-width string lane (S and U alike): DUAL_INHERIT(String, Bytes, Character),
+            // DUAL_INHERIT(Unicode, Unicode, Character). The S/U split itself is a descriptor question
+            // (np.issubdtype(DType, ...) compares the classes); the code-level hierarchy only knows "character".
+            [NPTypeCode.String] = NPTypeKind.Character,
         };
 
         /// <summary>
@@ -287,6 +313,8 @@ namespace NumSharp
                 "floating" or "float" or "real floating" => NPTypeKind.Floating,
                 "complexfloating" or "complex" or "complex floating" => NPTypeKind.ComplexFloating,
                 "bool" or "boolean" => NPTypeKind.Boolean,
+                "flexible" => NPTypeKind.Flexible,
+                "character" => NPTypeKind.Character,
 
                 // isdtype uses different names
                 "integral" => NPTypeKind.Integer,
@@ -301,15 +329,28 @@ namespace NumSharp
                 "generic" or "number" or "integer" or "signedinteger" or "signed" or "signed integer"
                 or "unsignedinteger" or "unsigned" or "unsigned integer" or "inexact"
                 or "floating" or "float" or "real floating" or "complexfloating" or "complex" or "complex floating"
-                or "bool" or "boolean" or "integral" or "numeric" => true,
+                or "bool" or "boolean" or "integral" or "numeric" or "flexible" or "character" => true,
                 _ => false
             };
         }
 
         /// <summary>
-        /// Check if a type belongs to a category specified by string name.
-        /// This is the core logic used by issubdtype(type, "category_name").
+        ///     Whether <paramref name="type"/> belongs to the category a NAME spells (<c>"integral"</c>,
+        ///     <c>"real floating"</c>, <c>"numeric"</c>, the family names, ...) — the named-kind half of
+        ///     <c>np.isdtype(dtype, kind)</c>, which has its own vocabulary. It is NOT <c>np.issubdtype</c>'s string rule:
+        ///     since 2026-10-16 a string handed to <c>np.issubdtype</c> is a dtype string (NumPy's <c>dtype(arg).type</c>),
+        ///     and the family is spelled by its scalar class (<c>np.integer</c>, <see cref="NDScalarType"/>).
         /// </summary>
+        /// <param name="type">The storage type to classify.</param>
+        /// <param name="categoryName">
+        ///     A category name, case-insensitive (the aliases <see cref="TryParseKind"/> accepts). <c>"numeric"</c> is
+        ///     NumPy's isdtype kind, which leaves out bool even though the number family's parser maps it to
+        ///     <c>number</c>.
+        /// </param>
+        /// <returns>
+        ///     True when the type belongs to the category; false for an unknown name (a caller that must reject unknown
+        ///     names, as <c>np.isdtype</c> does, validates the name first).
+        /// </returns>
         public static bool IsSubType(NPTypeCode type, string categoryName)
         {
             if (!TryParseKind(categoryName, out var category))

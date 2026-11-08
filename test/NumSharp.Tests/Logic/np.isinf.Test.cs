@@ -7,12 +7,19 @@ namespace NumSharp.Tests.Logic
     /// NumPy reference: https://numpy.org/doc/stable/reference/generated/numpy.isinf.html
     /// </summary>
     /// <remarks>
-    /// DEAD CODE: DefaultEngine.IsInfinite returns null.
-    /// Marked OpenBugs until np.isinf is implemented.
+    /// Written when DefaultEngine.IsInfinite returned null, and marked OpenBugs until np.isinf was implemented.
+    /// np.isinf has been implemented since (a fused predicate kernel, see "Comparison &amp; Logic" in CLAUDE.md), but the
+    /// class had no [TestClass] from the TUnit → MSTest migration (ac020336, 2026-04-15) until 2026-10-05, so MSTest never
+    /// ran these tests. The 2026-10-05 run of the whole OpenBugs category added the attribute, found all nine passing and
+    /// removed their [OpenBugs] tags.
     /// </remarks>
+    [TestClass]
     public class np_isinf_Test
     {
-        [TestMethod, OpenBugs]
+        /// <summary>
+        /// np.isinf marks exactly the two infinities of a float64 vector: π, NaN and 0 are not infinite.
+        /// </summary>
+        [TestMethod]
         public void np_isinf_1D()
         {
             var arr = new NDArray(new[] { 1.0, System.Math.PI, double.PositiveInfinity, double.NegativeInfinity, double.NaN, 0.0 });
@@ -24,7 +31,10 @@ namespace NumSharp.Tests.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), new[] { false, false, true, true, false, false }));
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        /// np.isinf keeps the input's 2-D shape and marks ±inf only: double.MaxValue and NaN are not infinite.
+        /// </summary>
+        [TestMethod]
         public void np_isinf_2D()
         {
             var arr = new NDArray(new[] {
@@ -38,7 +48,10 @@ namespace NumSharp.Tests.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), new[] { true, false, false, true, false, false }));
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        /// np.isinf of float32 returns a bool array that marks ±inf only; NaN and both signed zeros are not infinite.
+        /// </summary>
+        [TestMethod]
         public void np_isinf_Float32()
         {
             // Test with float32 array
@@ -50,7 +63,11 @@ namespace NumSharp.Tests.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), new[] { false, true, true, false, false, false }));
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        /// Integer dtypes have no infinity: np.isinf is all False for int32, uint8, int64 and int16, their extreme values
+        /// included (an extreme integer must not be mistaken for an overflowed float).
+        /// </summary>
+        [TestMethod]
         public void np_isinf_IntegerTypes_AlwaysFalse()
         {
             // Integer types cannot be infinity
@@ -60,7 +77,10 @@ namespace NumSharp.Tests.Logic
             Assert.IsFalse(np.any(np.isinf(np.array(new short[] { 0, short.MaxValue, short.MinValue }))));
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        /// np.isinf of 0-d arrays: True for ±inf, False for a finite value and for NaN.
+        /// </summary>
+        [TestMethod]
         public void np_isinf_Scalar()
         {
             Assert.IsFalse(np.isinf(np.array(1.0)).GetBoolean());
@@ -69,7 +89,10 @@ namespace NumSharp.Tests.Logic
             Assert.IsTrue(np.isinf(np.array(double.NegativeInfinity)).GetBoolean());
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        /// np.isinf of an empty float64 array is an empty bool array, not an error.
+        /// </summary>
+        [TestMethod]
         public void np_isinf_EmptyArray()
         {
             var empty = np.array(new double[0]);
@@ -78,7 +101,11 @@ namespace NumSharp.Tests.Logic
             Assert.AreEqual(typeof(bool), result.dtype);
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        /// np.isinf of a stepped view (<c>[::2]</c>) reads only the elements the view selects: the infinities and the NaN
+        /// sit between them, so every result is False.
+        /// </summary>
+        [TestMethod]
         public void np_isinf_SlicedArray()
         {
             // Test with non-contiguous (sliced) array
@@ -90,7 +117,11 @@ namespace NumSharp.Tests.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), new[] { false, false, false }));
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        /// NaN is not an infinity: np.isinf(NaN) is False (both are non-finite, so a predicate built on isfinite would
+        /// get this wrong).
+        /// </summary>
+        [TestMethod]
         public void np_isinf_NaNIsNotInfinity()
         {
             // Important: NaN is NOT infinity
@@ -99,7 +130,11 @@ namespace NumSharp.Tests.Logic
             Assert.IsFalse(result.GetBoolean(0));
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        /// The largest finite doubles are not infinities: np.isinf(double.MaxValue) and np.isinf(double.MinValue) are
+        /// False.
+        /// </summary>
+        [TestMethod]
         public void np_isinf_MaxValueIsNotInfinity()
         {
             // Important: MaxValue/MinValue are NOT infinity

@@ -1,0 +1,2 @@
+# The virtual environment that README.md creates beside the project (about 1 GB with PyTorch).
+.venv/

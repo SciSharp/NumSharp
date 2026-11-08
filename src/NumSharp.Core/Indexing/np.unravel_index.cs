@@ -1,5 +1,6 @@
 using System;
-using NumSharp.Backends.Kernels;
+using System.Globalization;
+using NumSharp.Backends.Iteration;
 using NumSharp.Generic;
 
 namespace NumSharp
@@ -7,98 +8,101 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Converts a flat index or array of flat indices into a tuple of coordinate
-        ///     arrays. Inverse of <see cref="ravel_multi_index"/>.
+        ///     Converts a flat index or an array of flat indices into a tuple of coordinate arrays — NumPy's
+        ///     <c>arr_unravel_index</c> (<c>numpy/_core/src/multiarray/compiled_base.c</c>), statement for statement.
+        ///     Inverse of <see cref="ravel_multi_index(NDArray[], int[], string, char)"/>.
         /// </summary>
         /// <param name="indices">
-        ///     An integer array whose elements are indices into the flattened version of
-        ///     an array of dimensions <paramref name="shape"/>. Cast to int64 internally.
+        ///     An integer (or bool) array of flat indices into an array of dimensions <paramref name="shape"/>, of any
+        ///     rank and layout. Read as int64: a uint64 index at or past 2^63 wraps negative and is out of bounds, as
+        ///     NumPy's same_kind cast to intp makes it.
         /// </param>
-        /// <param name="shape">The shape of the array to use for unraveling.</param>
-        /// <param name="order">
-        ///     <c>'C'</c> (row-major, default) or <c>'F'</c> (column-major) — selects the
-        ///     extraction order for the coordinate tuple.
+        /// <param name="shape">
+        ///     The dimensions to unravel into. An empty shape (NumPy's <c>()</c>) is legal: its one valid index is 0, and
+        ///     only a 0-d index array may use it.
         /// </param>
+        /// <param name="order"><c>'C'</c> (row-major, the default) or <c>'F'</c> (column-major), in either case.</param>
         /// <returns>
-        ///     A tuple of <c>shape.Length</c> NDArrays. Each output array has the same
-        ///     shape as <paramref name="indices"/>. Element dtype is always
-        ///     <see cref="NPTypeCode.Int64"/>.
+        ///     One int64 array per dimension of <paramref name="shape"/>, each of <paramref name="indices"/>' shape —
+        ///     NumPy's <c>ret_arr[..., j]</c>: the COLUMNS of one interleaved buffer of shape
+        ///     <c>indices.shape + (len(shape),)</c>, so every array is a strided VIEW (OWNDATA false, element stride
+        ///     <c>len(shape)</c> along the fastest axis) and they share that buffer. The buffer is laid out along
+        ///     <paramref name="indices"/>' iteration order: C for a C-ordered, broadcast or reversed index array, F for an
+        ///     F-ordered one, the same permutation for a transposed one. A 0-d <paramref name="indices"/> gives NumPy's
+        ///     scalars instead — fresh read-only 0-d arrays that own their value. An empty <paramref name="shape"/> with a
+        ///     0-d index gives an empty array (NumPy's <c>()</c>).
         /// </returns>
-        /// <exception cref="ArgumentException">
-        ///     <paramref name="shape"/> is empty, has non-positive dims, or the dims'
-        ///     product overflows int64.
+        /// <exception cref="ArgumentNullException"><paramref name="indices"/> or <paramref name="shape"/> is null.</exception>
+        /// <exception cref="ValueError">
+        ///     In NumPy's order: <paramref name="order"/> is not one of C / F / A / K in either case (<c>order must be one of
+        ///     'C', 'F', 'A', or 'K' (got 'X')</c>, the argument parse's error); the dimensions' product overflows int64 or
+        ///     is exactly -1 (<c>dimensions are too large; …</c>); then — after the <see cref="TypeError"/> below — an
+        ///     <c>'A'</c> or <c>'K'</c> order (<c>only 'C' or 'F' order is permitted</c>); an index outside
+        ///     <c>[0, prod(shape))</c>, the FIRST one in the iteration order (<c>index N is out of bounds for array with
+        ///     size M</c>; a shape with a zero or an odd number of negative dimensions has no valid index); and, for an
+        ///     empty <paramref name="shape"/>, an index array of rank 1 or more (<c>multiple indices are not supported for
+        ///     0d arrays</c>, checked after the indices).
         /// </exception>
-        /// <exception cref="ArgumentOutOfRangeException">
-        ///     Any index in <paramref name="indices"/> is &lt; 0 or
-        ///     &gt;= product of <paramref name="shape"/>.
-        /// </exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unravel_index.html</remarks>
+        /// <exception cref="TypeError"><paramref name="indices"/> is neither integer nor bool (<c>only int indices
+        ///     permitted</c>; a float is refused, never truncated, and text is refused, never parsed).</exception>
+        /// <exception cref="NotSupportedException">Runtime code generation is unavailable (the IL kernel cannot be
+        ///     emitted).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.unravel_index.html
+        ///     <para><b>BREAKING (NumPy parity):</b> the coordinate arrays used to be separate owning C-contiguous arrays.
+        ///     They are now views with an element stride of <c>len(shape)</c>, so code that reads their raw buffer
+        ///     (<c>Storage.Address</c>, <c>Unsafe.Span</c>) must go through the strides or take
+        ///     <c>np.ascontiguousarray</c> first. An out-of-range index raises <see cref="ValueError"/> (NumPy's type)
+        ///     where it raised <see cref="ArgumentOutOfRangeException"/>, and a lowercase order letter is accepted.</para>
+        ///     <para><b>Lifetime:</b> the shared buffer lives while any coordinate array does (each holds a counted
+        ///     reference); disposing one coordinate array leaves the others valid.</para>
+        ///     <para><b>Iteration order:</b> NumPy walks the indices with <c>NpyIter</c> (KEEPORDER,
+        ///     <c>DONT_NEGATE_STRIDES</c>) and writes the coordinates of the k-th element it visits into the k-th row of
+        ///     the buffer, which <c>NpyIter_CreateCompatibleStrides</c> lays out along that same order. NumSharp copies a
+        ///     non-int64 or differently laid out index array into that layout (an int64 array already laid out so —
+        ///     every C-contiguous one — is read in place) and runs one IL kernel over it linearly, so the rows, the
+        ///     strides and the out-of-range index that is reported first are NumPy's.</para>
+        ///     <para>The body is <see cref="TensorEngine.UnravelIndex"/> (the np-layer dtype plan): this facade computes
+        ///     a <c>numpy.matrix</c> operand as a plain array and calls the operand's engine.</para>
+        /// </remarks>
         [NDScoped]
         public static NDArray<long>[] unravel_index(NDArray indices, int[] shape, char order = 'C')
         {
-            ValidateOrder(order, nameof(order));
-            ValidateShapeForUnravel(shape, out long unravelSize);
-
-            int ndim = shape.Length;
-
-            // Cast indices to int64 contig. astype with copy: false returns the same
-            // NDArray if dtype already matches AND it's contig; otherwise it materializes.
-            var idx64 = indices.GetTypeCode == NPTypeCode.Int64
-                ? (indices.Shape.IsContiguous ? indices : np.ascontiguousarray(indices))
-                : indices.astype(NPTypeCode.Int64);
-
-            // ARC: idx64 may alias `indices` (no-op cast on contig int64); the explicit
-            // Dispose below only triggers when astype/ascontiguousarray actually allocated.
-            bool ownIdx64 = !ReferenceEquals(idx64, indices);
-
-            // Result NDArrays have the same DIMENSIONS as the input but with fresh
-            // C-contiguous strides. Cloning indices.Shape directly would copy
-            // broadcast / strided / sliced flags that, on read via
-            // Shape.TransformOffset, would collapse the result to the unbroadcast
-            // cell — the kernel writes correct sequential values to raw memory
-            // but the user would see duplicates.
-            var resultShape = new Shape((long[])indices.Shape.dimensions.Clone());
-            var result = new NDArray<long>[ndim];
-            for (int d = 0; d < ndim; d++)
-                result[d] = new NDArray<long>(resultShape);
-
-            long count = indices.size;
-            if (count == 0)
-            {
-                if (ownIdx64) idx64.Dispose();
-                return result;
-            }
-
-            try
-            {
-                ExecuteUnravelIndex(idx64, shape, unravelSize, result, order);
-            }
-            finally
-            {
-                if (ownIdx64) idx64.Dispose();
-            }
-
-            return result;
+            if (indices is null) throw new ArgumentNullException(nameof(indices));
+            return indices.TensorEngine.UnravelIndex(indices, shape, order);
         }
 
         /// <summary>
-        ///     Scalar convenience overload — converts a single flat index into a coord
-        ///     array. Equivalent to <c>unravel_index(NDArray.Scalar(index), shape, order)</c>
-        ///     but returns a <c>long[]</c> directly without NDArray wrapping.
+        ///     Scalar convenience overload — converts a single flat index into its coordinates, the values NumPy's
+        ///     <c>np.unravel_index(index, shape, order)</c> returns as a tuple of scalars, without NDArray wrapping.
         /// </summary>
+        /// <param name="index">The flat index.</param>
+        /// <param name="shape">The dimensions to unravel into; an empty shape (NumPy's <c>()</c>) accepts the index 0 and
+        ///     returns no coordinate.</param>
+        /// <param name="order"><c>'C'</c> (row-major, the default) or <c>'F'</c> (column-major), in either case.</param>
+        /// <returns>One coordinate per dimension of <paramref name="shape"/>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is null.</exception>
+        /// <exception cref="ValueError">In NumPy's order: an order letter that is not C / F / A / K; a dimensions' product
+        ///     that overflows int64 or is exactly -1; an <c>'A'</c> or <c>'K'</c> order (<c>only 'C' or 'F' order is
+        ///     permitted</c>); an index outside <c>[0, prod(shape))</c> (<c>index N is out of bounds for array with size
+        ///     M</c>).</exception>
         public static long[] unravel_index(long index, int[] shape, char order = 'C')
         {
-            ValidateOrder(order, nameof(order));
-            ValidateShapeForUnravel(shape, out long unravelSize);
+            if (shape is null) throw new ArgumentNullException(nameof(shape));
+            NPY_ORDER npyOrder = OrderResolver.Convert(order);
+            long unravelSize = Backends.DefaultEngine.UnravelSize(shape);
+            bool cOrder = OrderResolver.RequireCOrFOrder(npyOrder);
 
             if (index < 0 || index >= unravelSize)
-                throw new ArgumentOutOfRangeException(nameof(index),
-                    $"index {index} is out of bounds for array with size {unravelSize}");
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"index {index} is out of bounds for array with size {unravelSize}"));
 
             int ndim = shape.Length;
-            var coords = new long[ndim];
+            // shape=(): index 0 (the only valid one) has no coordinate — NumPy's empty tuple.
+            if (ndim == 0)
+                return Array.Empty<long>();
 
-            if (order == 'C')
+            var coords = new long[ndim];
+            if (cOrder)
             {
                 // C-order: from innermost dim down to outermost; skip last divmod
                 // because val < dims[0] after extracting the previous coords.
@@ -126,78 +130,5 @@ namespace NumSharp
             return coords;
         }
 
-        private static unsafe void ExecuteUnravelIndex(
-            NDArray idx64, int[] shape, long unravelSize,
-            NDArray<long>[] result, char order)
-        {
-            int ndim = shape.Length;
-            long count = idx64.size;
-
-            var kernel = DirectILKernelGenerator.GetUnravelIndexKernel();
-            if (kernel == null)
-                throw new NotSupportedException("np.unravel_index: IL kernel unavailable");
-
-            // Stack-allocate dims as long[] and grab per-axis result pointers.
-            Span<long> dims = stackalloc long[ndim];
-            for (int d = 0; d < ndim; d++)
-                dims[d] = shape[d];
-
-            long** outCols = stackalloc long*[ndim];
-            for (int d = 0; d < ndim; d++)
-                outCols[d] = (long*)result[d].Address;
-
-            long idxStart = order == 'C' ? ndim - 1 : 0;
-            long idxStep = order == 'C' ? -1 : 1;
-
-            long* idxPtr = (long*)idx64.Storage.Address + idx64.Shape.offset;
-
-            fixed (long* dimsPtr = dims)
-            {
-                long status = kernel(idxPtr, count, dimsPtr, unravelSize, outCols, ndim, idxStart, idxStep);
-                if (status < count)
-                {
-                    long badPos = status;
-                    long badVal = idxPtr[badPos];
-                    throw new ArgumentOutOfRangeException(nameof(idx64),
-                        $"index {badVal} is out of bounds for array with size {unravelSize}");
-                }
-            }
-        }
-
-        private static void ValidateOrder(char order, string paramName)
-        {
-            if (order != 'C' && order != 'F')
-                throw new ArgumentException($"only 'C' or 'F' order is permitted, got '{order}'", paramName);
-        }
-
-        private static void ValidateShapeForUnravel(int[] shape, out long unravelSize)
-        {
-            if (shape == null || shape.Length == 0)
-                throw new ArgumentException("shape must contain at least one dimension.", nameof(shape));
-
-            // NumPy parity: do NOT pre-reject zero or negative dims. Empty input
-            // arrays must work against any shape, including (0, 3). Non-empty input
-            // arrays against zero/negative shape are rejected naturally by the
-            // OOB check (val < 0 || val >= unravelSize) inside the kernel — for
-            // shape with zero or negative entries, unravelSize ≤ 0, so every
-            // non-negative index trips the check and we throw the same message
-            // NumPy does: "index N is out of bounds for array with size M".
-            long s = 1L;
-            for (int d = 0; d < shape.Length; d++)
-            {
-                long dim = shape[d];
-
-                // Overflow check on accumulated size — only meaningful for positive
-                // dims (with mixed signs the int64 math is well-defined and the OOB
-                // check downstream catches any inconsistency).
-                long next = unchecked(s * dim);
-                if (dim != 0 && s != 0 && next / dim != s)
-                    throw new ArgumentException(
-                        "invalid shape: array size defined by shape is larger than the maximum possible size.",
-                        nameof(shape));
-                s = next;
-            }
-            unravelSize = s;
-        }
     }
 }

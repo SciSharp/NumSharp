@@ -1,0 +1,1317 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Numerics;
+using System.Reflection;
+using System.Text;
+using System.Text.Json;
+using NumSharp.Backends.Iteration; // NPY_CASTING
+using NumSharp.Backends.Strings; // VStringAllocator: the port of NumPy's NpyString_ functions and static-string macros
+using NumSharp.IO; // PyLiteral.Repr: the Python repr the generator records
+
+namespace NumSharp.Tests.DTypes
+{
+    /// <summary>
+    ///     Replays the committed NumPy 2.4.2 oracle of <c>numpy.dtype</c> and the DType classes
+    ///     (<c>DTypes/corpus/dtype_oracle.&lt;model&gt;.jsonl</c>, written by <c>test/oracle/gen_dtype_oracle.py</c>)
+    ///     against <see cref="DType"/>, <see cref="DTypeMeta"/>, <see cref="DTypeFlags"/>, <c>np.dtypes</c> and the other
+    ///     NumPy structs the DTypes folder ports (<see cref="ArrayMethod"/>, <see cref="ArrayMethodContext"/>,
+    ///     <see cref="DatetimeMetaData"/>, <see cref="VStringParameters"/>), and the StringDType allocator
+    ///     (<see cref="VStringAllocator"/>, NumPy's <c>NpyString_*</c> functions and static-string macros): every member
+    ///     NumPy names must exist here under NumPy's exact spelling, the C enums NumSharp mirrors (<see cref="NPY_TYPES"/>,
+    ///     <see cref="NPY_TYPECHAR"/>, ...) must have the members, values and order of NumPy's headers, and every probed
+    ///     dtype string, value, error, comparison, promotion, class attribute and casting resolution must equal NumPy's.
+    ///     No Python runs at test time.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///     <b>Two files, one per C <c>long</c> model.</b> NumPy's type numbers and characters of the 4- and 8-byte
+    ///     integers, and which classes the C-name aliases are, follow the platform's C <c>long</c>; so does
+    ///     <see cref="DTypeRegistry"/>. The replay reads the file generated on a platform of its own model
+    ///     (<c>llp64</c>: Windows NumPy; <c>lp64</c>: Linux NumPy, also macOS's model), so each CI platform is gated in full.
+    ///     </para>
+    ///     <para>
+    ///     <b>Exemptions are explicit and self-retiring.</b> A NumPy member NumSharp does not port is listed with its
+    ///     reason, and the test asserts it is still absent — implementing one turns the test red until the entry moves to
+    ///     the compared set. Each test reports EVERY mismatch it finds in one failure message, not just the first.
+    ///     </para>
+    /// </remarks>
+    [TestClass]
+    public class DTypeOracleTests
+    {
+        /// <summary>The corpus, parsed once per test run.</summary>
+        private static readonly Lazy<Dictionary<string, List<JsonElement>>> Corpus = new(Load);
+
+        /// <summary>The C <c>long</c> model of this host, which names the oracle file to replay.</summary>
+        private static string Model => DTypeRegistry.CLongIs32Bit ? "llp64" : "lp64";
+
+        /// <summary>Loads the oracle file of this host's model and groups its records by kind.</summary>
+        /// <returns>The records by kind (<c>members</c>, <c>descr</c>, <c>error</c>, <c>compare</c>, …).</returns>
+        /// <exception cref="FileNotFoundException">The corpus was not copied to the test output (rebuild the test project).</exception>
+        private static Dictionary<string, List<JsonElement>> Load()
+        {
+            string path = Path.Combine(AppContext.BaseDirectory, "DTypes", "corpus", $"dtype_oracle.{Model}.jsonl");
+            if (!File.Exists(path))
+                throw new FileNotFoundException(
+                    $"dtype oracle not found at '{path}'. It is committed; rebuild the test project to copy it, or " +
+                    "regenerate it with: python test/oracle/gen_dtype_oracle.py", path);
+            var byKind = new Dictionary<string, List<JsonElement>>(StringComparer.Ordinal);
+            foreach (var line in File.ReadLines(path))
+            {
+                if (line.Length == 0)
+                    continue;
+                // Clone detaches the element from its JsonDocument, so the documents can be released while the
+                // elements stay readable for the whole run.
+                using var doc = JsonDocument.Parse(line);
+                var rec = doc.RootElement.Clone();
+                string kind = rec.GetProperty("kind").GetString();
+                if (!byKind.TryGetValue(kind, out var list))
+                    byKind[kind] = list = new List<JsonElement>();
+                list.Add(rec);
+            }
+            return byKind;
+        }
+
+        /// <summary>The records of one kind (empty when the corpus has none).</summary>
+        /// <param name="kind">The record kind.</param>
+        /// <returns>The records.</returns>
+        private static List<JsonElement> Of(string kind) => Corpus.Value.TryGetValue(kind, out var l) ? l : new List<JsonElement>();
+
+        /// <summary>
+        ///     Whether an error text is NumPy's "not understood" for a spelling of Linux's 16-byte long double width
+        ///     (<c>'f16'</c>, <c>'c32'</c>, <c>'float128'</c>, <c>'complex256'</c>): what NumPy and NumSharp both raise for
+        ///     those names on a host whose C long double is 8 bytes.
+        /// </summary>
+        /// <param name="message">The exception's message.</param>
+        /// <returns>True for exactly those four messages; any other "not understood" is a real mismatch.</returns>
+        private static bool NamesLinuxLongDoubleWidth(string message)
+            => message is "data type 'f16' not understood" or "data type 'c32' not understood"
+                       or "data type 'float128' not understood" or "data type 'complex256' not understood";
+
+        // ---------------------------------------------------------------------------------------------------------
+        // The corpus itself
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>The replayed file was generated by NumPy 2.4.2 on a host of this host's C long model, and holds every kind.</summary>
+        [TestMethod]
+        public void Corpus_IsNumPy242_OfThisHostsModel_AndNotVacuous()
+        {
+            var meta = Of("meta").Single();
+            meta.GetProperty("numpy").GetString().Should().Be("2.4.2");
+            meta.GetProperty("model").GetString().Should().Be(Model);
+            Of("members").Should().HaveCount(1);
+            Of("descr").Count.Should().BeGreaterThan(900);
+            Of("error").Count.Should().BeGreaterThan(80);
+            Of("compare").Count.Should().BeGreaterThan(700);
+            Of("promote").Count.Should().BeGreaterThan(700);
+            Of("class").Count.Should().BeGreaterThan(30);
+            Of("cast").Count.Should().BeGreaterThan(1500);
+            Of("parse").Count.Should().BeGreaterThan(1500);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Member names
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy dunders of <c>numpy.dtype</c> and the C# member each maps to, or <see langword="null"/> with the
+        ///     reason it has no C# counterpart. A dunder NumPy adds that is in neither table fails the test.
+        /// </summary>
+        private static readonly Dictionary<string, (string Member, string Reason)> DunderMap = new(StringComparer.Ordinal)
+        {
+            ["__eq__"] = ("op_Equality", null),
+            ["__ne__"] = ("op_Inequality", null),
+            ["__lt__"] = ("op_LessThan", null),
+            ["__le__"] = ("op_LessThanOrEqual", null),
+            ["__gt__"] = ("op_GreaterThan", null),
+            ["__ge__"] = ("op_GreaterThanOrEqual", null),
+            ["__hash__"] = ("GetHashCode", null),
+            ["__repr__"] = ("ToString", null),
+            ["__str__"] = ("ToString", null),
+            ["__len__"] = ("__len__", null),
+            ["__getitem__"] = ("__getitem__", null),
+            ["__new__"] = (null, "the constructor is np.dtype(dtype, align, copy, metadata), asserted separately"),
+            ["__bool__"] = (null, "C# has no truthiness; NumPy's bool(dtype) is always True"),
+            ["__mul__"] = (null, "dtype * n makes a sub-array dtype, which NumSharp cannot represent"),
+            ["__rmul__"] = (null, "n * dtype makes a sub-array dtype, which NumSharp cannot represent"),
+            ["__reduce__"] = (null, "pickling protocol; NumSharp has no pickle"),
+            ["__setstate__"] = (null, "pickling protocol; NumSharp has no pickle"),
+            ["__class_getitem__"] = (null, "typing only (np.dtype[np.float64] is a generic alias)"),
+            ["__class__"] = (null, "Python's object model; the class is DType.Meta"),
+            ["__doc__"] = (null, "docstring; the C# documentation is the XML docs"),
+            ["__init_subclass__"] = (null, "Python's class-creation hook"),
+            ["__subclasshook__"] = (null, "Python's abstract-base-class hook"),
+        };
+
+        /// <summary>
+        ///     NumPy C names of the DType class that NumSharp does not port, with the reason. Each must stay ABSENT from
+        ///     <see cref="DTypeMeta"/>: porting one makes this test fail until the entry is removed, so the list cannot rot.
+        /// </summary>
+        private static readonly Dictionary<string, string> NotPortedSlots = new(StringComparer.Ordinal)
+        {
+            ["setitem"] = "an internal DTypeMeta member (the np-layer dtype plan's P3) until a user-defined DType needs it public",
+            ["getitem"] = "an internal DTypeMeta member (the np-layer dtype plan's P3) until a user-defined DType needs it public",
+            ["finalize_descr"] = "no NumSharp class needs a per-array descriptor (NumPy uses it for StringDType)",
+            ["get_constant"] = "finfo / iinfo compute their constants per NPTypeCode",
+            ["f"] = "the legacy PyArray_ArrFuncs table: NumSharp's kernels select on NPTypeCode (copyswapn, fill and nonzero are internal DTypeMeta members)",
+            ["sort_meth"] = "sorting selects its kernel on NPTypeCode",
+            ["argsort_meth"] = "sorting selects its kernel on NPTypeCode",
+            ["dt_slots"] = "the C struct's indirection to its slot table; the slots are members of DTypeMeta itself",
+            ["reserved"] = "the C struct's reserved space",
+        };
+
+        /// <summary>
+        ///     The NumPy C structs that a class of the DTypes folder ports, each with the fields that class does not port and
+        ///     why. Every other field the generator reads from NumPy's headers (the <c>struct_fields</c> of the
+        ///     <c>members</c> record) must be a public member of the class under the field's exact name; a listed field must
+        ///     stay absent, so porting one turns the test red until its entry is removed. A struct in the record that is not
+        ///     here fails too: deciding which class ports it is part of adding it to the generator.
+        /// </summary>
+        private static readonly Dictionary<string, (Type Port, Dictionary<string, string> NotPorted)> StructPorts = new(StringComparer.Ordinal)
+        {
+            ["PyArrayMethodObject"] = (typeof(ArrayMethod), new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["static_data"] = "the data a NumPy loop reads (a function pointer); a NumSharp loop is a delegate that captures what it needs",
+                ["resolve_descriptors_with_scalars"] = "the NEP 50 scalar-aware resolver of ufunc loops; only casts register as ArrayMethods (Stage A)",
+                ["get_reduction_initial"] = "reductions do not run through ArrayMethod yet (Stage C)",
+                ["strided_loop"] = "a default loop NumPy's npy_default_get_strided_loop picks from; a NumSharp ArrayMethod returns its loop from get_strided_loop directly",
+                ["contiguous_loop"] = "a default loop NumPy's npy_default_get_strided_loop picks from; a NumSharp ArrayMethod returns its loop from get_strided_loop directly",
+                ["unaligned_strided_loop"] = "a default loop NumPy's npy_default_get_strided_loop picks from; a NumSharp ArrayMethod returns its loop from get_strided_loop directly",
+                ["unaligned_contiguous_loop"] = "a default loop NumPy's npy_default_get_strided_loop picks from; a NumSharp ArrayMethod returns its loop from get_strided_loop directly",
+                ["contiguous_indexed_loop"] = "the indexed loop of ufunc.at; only casts are ArrayMethods in NumSharp, and casts have no indexed loop",
+                ["wrapped_meth"] = "the umath method a wrapping ArrayMethod reuses for a new DType; NumSharp wraps no methods",
+                ["wrapped_dtypes"] = "the classes of a wrapped umath method; NumSharp wraps no methods",
+                ["translate_given_descrs"] = "the descriptor translation of a wrapping method; NumSharp wraps no methods",
+                ["translate_loop_descrs"] = "the descriptor translation of a wrapping method; NumSharp wraps no methods",
+                ["legacy_initial"] = "the initial-value storage of NumPy's legacy ufunc fallback; NumSharp has no legacy fallback",
+            }),
+            ["PyBoundArrayMethodObject"] = (typeof(ArrayMethod), new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["method"] = "NumSharp's ArrayMethod is its own bound method: it holds its operand classes (dtypes) itself",
+            }),
+            ["PyArrayMethod_Context"] = (typeof(ArrayMethodContext), new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["caller"] = "the ufunc a NumPy loop is called for; a NumSharp loop has no caller object",
+                ["_reserved"] = "NumPy 2.4's reserved space",
+                ["flags"] = "NumPy 2.4's per-call loop flags (NPY_SAME_VALUE_CONTEXT_FLAG); no NumSharp loop reads them",
+                ["parameters"] = "NumPy 2.4's run-time loop parameters (used by sorting); no NumSharp loop reads them",
+            }),
+            ["PyArray_DatetimeMetaData"] = (typeof(DatetimeMetaData), new Dictionary<string, string>(StringComparer.Ordinal)),
+            ["PyArray_StringDTypeObject"] = (typeof(VStringParameters), new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["base"] = "the PyArray_Descr header: the DType that holds the parameters",
+                ["array_owned"] = "NumPy gives each array its own descriptor copy; NumSharp's descriptors are shared and immutable",
+                ["allocator"] = "NumSharp keeps the string allocator on the array's buffer (VStringAllocator), not on the descriptor",
+            }),
+        };
+
+        /// <summary>
+        ///     The C macros a NumSharp class carries as a constant, with every class that carries it. The generator records
+        ///     each macro's value (the <c>macros</c> of the <c>members</c> record); each listed class must declare a constant
+        ///     of the macro's exact name with that value (public in a public class, internal allowed in an internal one). A
+        ///     macro can have several holders: the packed string's size is both the descriptor's itemsize
+        ///     (<see cref="VStringDTypeMeta"/>) and the cell stride of the allocator (<see cref="VStringAllocator"/>), and
+        ///     listing both keeps the two constants from drifting apart.
+        /// </summary>
+        private static readonly Dictionary<string, Type[]> MacroHolders = new(StringComparer.Ordinal)
+        {
+            ["NPY_NEEDS_INIT"] = new[] { typeof(DTypeMeta) },
+            ["SIZEOF_NPY_PACKED_STATIC_STRING"] = new[] { typeof(VStringDTypeMeta), typeof(VStringAllocator) },
+            ["ALIGNOF_NPY_PACKED_STATIC_STRING"] = new[] { typeof(VStringDTypeMeta) },
+            // static_string.c's flag byte and size limits, and static_string.h's NPY_MAX_STRING_SIZE.
+            ["NPY_STRING_MISSING"] = new[] { typeof(VStringAllocator) },
+            ["NPY_STRING_INITIALIZED"] = new[] { typeof(VStringAllocator) },
+            ["NPY_STRING_OUTSIDE_ARENA"] = new[] { typeof(VStringAllocator) },
+            ["NPY_STRING_LONG"] = new[] { typeof(VStringAllocator) },
+            ["NPY_STRING_FLAG_MASK"] = new[] { typeof(VStringAllocator) },
+            ["NPY_SHORT_STRING_SIZE_MASK"] = new[] { typeof(VStringAllocator) },
+            ["NPY_SHORT_STRING_MAX_SIZE"] = new[] { typeof(VStringAllocator) },
+            ["NPY_MEDIUM_STRING_MAX_SIZE"] = new[] { typeof(VStringAllocator) },
+            ["NPY_MAX_STRING_SIZE"] = new[] { typeof(VStringAllocator) },
+        };
+
+        /// <summary>
+        ///     The NumPy C function families a NumSharp class ports, keyed by the family's prefix, each with the functions
+        ///     that class does not port and why. The generator records every function of the family that NumPy's source
+        ///     defines (the <c>function_families</c> of the <c>members</c> record); each must be a method of the class named
+        ///     exactly as NumPy names it after the prefix (<c>NpyString_pack_null</c> is
+        ///     <see cref="VStringAllocator.pack_null"/>). A listed function must stay absent, so porting one turns the test
+        ///     red until its entry is removed; a family in the record that is not here fails too.
+        /// </summary>
+        private static readonly Dictionary<string, (Type Port, Dictionary<string, string> NotPorted)> FunctionPorts = new(StringComparer.Ordinal)
+        {
+            ["NpyString_"] = (typeof(VStringAllocator), new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["new_allocator"] = "the constructor (new VStringAllocator()): C# names a constructor after its class, and NumPy's malloc / free / realloc parameters are always NativeMemory here",
+                ["free_allocator"] = "the end of ClearAndFree, which the cells' memory block runs when its last view is released (NumPy's clear loop, then NpyString_free_allocator)",
+                ["cmp"] = "the order of two loaded strings, for StringDType's comparison ufuncs and sorting: phase 2 (docs/plans/strings-phase2.md, D12)",
+            }),
+        };
+
+        /// <summary>
+        ///     The numpy.dtypes classes NumSharp has no storage for. Each must stay absent from <c>np.dtypes</c> (absent,
+        ///     not stubbed); adding one makes this test fail until the entry moves to the compared classes.
+        /// </summary>
+        private static readonly Dictionary<string, string> AbsentClasses = new(StringComparer.Ordinal)
+        {
+            ["Complex64DType"] = "NumSharp has one complex width (complex128)",
+            ["ObjectDType"] = "no object storage",
+            ["VoidDType"] = "no void / structured storage",
+        };
+
+        /// <summary>
+        ///     The numpy.dtypes classes that C# exposes as a CALL instead of a class object: NumPy's <c>StringDType</c> is a
+        ///     class one calls with keyword arguments (<c>StringDType(na_object=None, coerce=False)</c>), and C# cannot make a
+        ///     member both a class and a call, so <c>np.dtypes.StringDType(...)</c> is a pair of factory methods and the
+        ///     class object is <see cref="DTypeRegistry.VString"/> (<c>type(dt)</c> is <see cref="DType.Meta"/>). The
+        ///     members test accepts the factory methods as the name's presence; the class records compare the class object.
+        /// </summary>
+        private static readonly Dictionary<string, DTypeMeta> CalledClasses = new(StringComparer.Ordinal)
+        {
+            ["StringDType"] = DTypeRegistry.VString,
+        };
+
+        /// <summary>True when <paramref name="type"/> declares a public member named exactly <paramref name="name"/> (instance or static).</summary>
+        /// <param name="type">The C# type to search, including its base types.</param>
+        /// <param name="name">The member name, case-sensitive.</param>
+        /// <returns>Whether such a member exists.</returns>
+        private static bool HasMember(Type type, string name)
+            => type.GetMember(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static).Length > 0;
+
+        /// <summary>
+        ///     Every name NumPy gives <c>numpy.dtype</c>, <c>numpy._DTypeMeta</c>, the DType class's C fields and NEP 42
+        ///     slots, the <c>NPY_DT_*</c> flags, the byte-order macros, <c>numpy.dtypes</c> and the fields of the other
+        ///     structs the DTypes folder ports (<see cref="StructPorts"/>: <see cref="ArrayMethod"/>,
+        ///     <see cref="ArrayMethodContext"/>, <see cref="DatetimeMetaData"/>, <see cref="VStringParameters"/>), the C
+        ///     macros NumSharp's classes carry as constants (<see cref="MacroHolders"/>, with NumPy's values) and the C
+        ///     function families a class ports (<see cref="FunctionPorts"/>: <c>NpyString_*</c> on
+        ///     <see cref="VStringAllocator"/>) exists in C# under NumPy's spelling (case-sensitive), or is an explicit
+        ///     exemption that is still absent.
+        /// </summary>
+        [TestMethod]
+        public void Members_ExistUnderNumPysNames()
+        {
+            var m = Of("members").Single();
+            var problems = new List<string>();
+
+            foreach (var name in m.GetProperty("dtype_public").EnumerateArray().Select(e => e.GetString()))
+                if (!HasMember(typeof(DType), name))
+                    problems.Add($"numpy.dtype.{name}: no DType member '{name}'");
+
+            foreach (var name in m.GetProperty("dtype_dunders").EnumerateArray().Select(e => e.GetString()))
+            {
+                if (!DunderMap.TryGetValue(name, out var map))
+                    problems.Add($"numpy.dtype.{name}: a NumPy dunder this test does not map (decide its C# counterpart)");
+                else if (map.Member != null && !HasMember(typeof(DType), map.Member))
+                    problems.Add($"numpy.dtype.{name}: no DType member '{map.Member}'");
+            }
+
+            // __new__: NumPy's constructor is np.dtype(dtype, align=False, copy=False, metadata=None).
+            var ctor = typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .Where(mi => mi.Name == "dtype")
+                .Select(mi => string.Join(",", mi.GetParameters().Select(p => p.Name)))
+                .ToArray();
+            if (!ctor.Contains("dtype,align,copy,metadata"))
+                problems.Add($"np.dtype: no overload with NumPy's parameters (dtype, align, copy, metadata); found {string.Join(" | ", ctor)}");
+
+            foreach (var name in m.GetProperty("dtypemeta_own").EnumerateArray().Select(e => e.GetString()))
+                if (!HasMember(typeof(DTypeMeta), name))
+                    problems.Add($"numpy._DTypeMeta.{name}: no DTypeMeta member '{name}'");
+
+            var cNames = m.GetProperty("dtypemeta_fields").EnumerateArray()
+                .Concat(m.GetProperty("dtype_slot_fields").EnumerateArray())
+                .Concat(m.GetProperty("dt_slots").EnumerateArray())
+                .Select(e => e.GetString()).Distinct();
+            foreach (var name in cNames)
+            {
+                // The C field scalar_type is the Python class attribute `type`; NumSharp exposes the Python spelling.
+                string member = name == "scalar_type" ? "type" : name;
+                bool present = HasMember(typeof(DTypeMeta), member);
+                if (NotPortedSlots.ContainsKey(name))
+                {
+                    if (present)
+                        problems.Add($"DType slot/field '{name}' is now ported: remove it from NotPortedSlots");
+                }
+                else if (!present)
+                {
+                    problems.Add($"DType slot/field '{name}': no DTypeMeta member '{member}'");
+                }
+            }
+
+            // The other NumPy structs the DTypes folder ports: each field is a member of its port, or a listed exemption
+            // that is still absent. GetMember reads the C# identifier without its '@', so DatetimeMetaData's `@base`
+            // is found as "base".
+            var structsSeen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var st in m.GetProperty("struct_fields").EnumerateObject())
+            {
+                structsSeen.Add(st.Name);
+                if (!StructPorts.TryGetValue(st.Name, out var port))
+                {
+                    problems.Add($"struct {st.Name}: a NumPy struct this test does not map (add it to StructPorts)");
+                    continue;
+                }
+                foreach (var field in st.Value.EnumerateArray().Select(e => e.GetString()))
+                {
+                    // An internal port (VStringParameters) declares internal members: look those up too.
+                    bool present = port.Port.IsPublic
+                        ? HasMember(port.Port, field)
+                        : port.Port.GetMember(field, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static).Length > 0;
+                    if (port.NotPorted.ContainsKey(field))
+                    {
+                        if (present)
+                            problems.Add($"{st.Name}.{field} is now ported by {port.Port.Name}: remove it from StructPorts' exemptions");
+                    }
+                    else if (!present)
+                    {
+                        problems.Add($"{st.Name}.{field}: no {port.Port.Name} member '{field}'");
+                    }
+                }
+            }
+            foreach (var mapped in StructPorts.Keys.Where(k => !structsSeen.Contains(k)))
+                problems.Add($"StructPorts maps {mapped}, which the oracle no longer records");
+
+            // The C macros a class carries as a constant: present under the macro's name in every holder, with NumPy's value.
+            var macrosSeen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var macro in m.GetProperty("macros").EnumerateObject())
+            {
+                macrosSeen.Add(macro.Name);
+                if (!MacroHolders.TryGetValue(macro.Name, out var holders))
+                {
+                    problems.Add($"macro {macro.Name}: a NumPy macro this test does not map (add it to MacroHolders)");
+                    continue;
+                }
+                foreach (var holder in holders)
+                {
+                    // A public class must expose the constant publicly; an internal class (VStringAllocator) declares
+                    // internal constants, so those are looked up too.
+                    var flags = BindingFlags.Public | BindingFlags.Static | (holder.IsPublic ? 0 : BindingFlags.NonPublic);
+                    var constant = holder.GetField(macro.Name, flags);
+                    if (constant == null || !constant.IsLiteral)
+                        problems.Add($"{macro.Name}: no {holder.Name} constant of that name");
+                    else if (Convert.ToInt64(constant.GetValue(null), CultureInfo.InvariantCulture) != macro.Value.GetInt64())
+                        problems.Add($"{macro.Name}: {holder.Name} has {constant.GetValue(null)}, NumPy {macro.Value.GetInt64()}");
+                }
+            }
+            foreach (var mapped in MacroHolders.Keys.Where(k => !macrosSeen.Contains(k)))
+                problems.Add($"MacroHolders maps {mapped}, which the oracle no longer records");
+
+            // The C function families a class ports: every function is a method of the port under NumPy's name after the
+            // prefix, or a listed exemption that is still absent. The ports are internal classes with internal methods, so
+            // every declared method counts; an exemption whose function NumPy's source no longer defines is stale.
+            var familiesSeen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var family in m.GetProperty("function_families").EnumerateObject())
+            {
+                familiesSeen.Add(family.Name);
+                if (!FunctionPorts.TryGetValue(family.Name, out var port))
+                {
+                    problems.Add($"function family {family.Name}*: a NumPy family this test does not map (add it to FunctionPorts)");
+                    continue;
+                }
+                var declared = port.Port
+                    .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                    .Select(mi => mi.Name)
+                    .ToHashSet(StringComparer.Ordinal);
+                var functions = family.Value.EnumerateArray().Select(e => e.GetString()).ToHashSet(StringComparer.Ordinal);
+                foreach (var fn in functions)
+                {
+                    if (port.NotPorted.ContainsKey(fn))
+                    {
+                        if (declared.Contains(fn))
+                            problems.Add($"{family.Name}{fn} is now ported by {port.Port.Name}: remove it from FunctionPorts' exemptions");
+                    }
+                    else if (!declared.Contains(fn))
+                    {
+                        problems.Add($"{family.Name}{fn}: no {port.Port.Name} method '{fn}'");
+                    }
+                }
+                foreach (var stale in port.NotPorted.Keys.Where(k => !functions.Contains(k)))
+                    problems.Add($"FunctionPorts exempts {family.Name}{stale}, which NumPy's source no longer defines");
+            }
+            foreach (var mapped in FunctionPorts.Keys.Where(k => !familiesSeen.Contains(k)))
+                problems.Add($"FunctionPorts maps {mapped}*, which the oracle no longer records");
+
+            foreach (var flag in m.GetProperty("dt_flags").EnumerateObject())
+            {
+                if (!Enum.TryParse<DTypeFlags>(flag.Name, ignoreCase: false, out var value) || !Enum.IsDefined(typeof(DTypeFlags), value))
+                    problems.Add($"{flag.Name}: no DTypeFlags member of that name");
+                else if ((int)value != flag.Value.GetInt32())
+                    problems.Add($"{flag.Name}: DTypeFlags value {(int)value}, NumPy {flag.Value.GetInt32()}");
+            }
+
+            foreach (var macro in m.GetProperty("byteorder_macros").EnumerateObject())
+            {
+                var field = typeof(DType).GetField(macro.Name, BindingFlags.Public | BindingFlags.Static);
+                if (field == null)
+                    problems.Add($"{macro.Name}: no DType constant of that name");
+                else if (!Equals(field.GetValue(null), macro.Value.GetString()[0]))
+                    problems.Add($"{macro.Name}: DType has '{field.GetValue(null)}', NumPy '{macro.Value.GetString()}'");
+            }
+
+            foreach (var name in m.GetProperty("dtypes_module").EnumerateArray().Select(e => e.GetString()))
+            {
+                // A class is present as a property (the class object) or, for the classes C# can only offer as a call,
+                // as public static factory methods of that name.
+                bool present = typeof(np.dtypes).GetProperty(name, BindingFlags.Public | BindingFlags.Static) != null
+                               || (CalledClasses.ContainsKey(name)
+                                   && typeof(np.dtypes).GetMethods(BindingFlags.Public | BindingFlags.Static).Any(mi => mi.Name == name));
+                if (AbsentClasses.ContainsKey(name))
+                {
+                    if (present)
+                        problems.Add($"np.dtypes.{name} now exists: remove it from AbsentClasses so the class records compare it");
+                }
+                else if (!present)
+                {
+                    problems.Add($"numpy.dtypes.{name}: no np.dtypes member '{name}'");
+                }
+            }
+
+            AssertNoProblems(problems);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // NumPy's C enums
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The C enums of NumPy's <c>ndarraytypes.h</c> that a NumSharp enum of the same name mirrors. A mirror must hold
+        ///     every NumPy member under NumPy's name and value, in NumPy's order, and nothing else, so a mirror that falls
+        ///     behind the header fails <see cref="CEnums_MirrorNumPysHeader"/> (as <see cref="NPY_TYPECHAR"/> had: it kept
+        ///     NumPy 1.x's <c>NPY_INTPLTR</c>/<c>NPY_UINTPLTR</c> and lacked NumPy 2's <c>NPY_VSTRINGLTR</c>).
+        /// </summary>
+        private static readonly Dictionary<string, Type> EnumPorts = new(StringComparer.Ordinal)
+        {
+            ["NPY_TYPES"] = typeof(NPY_TYPES),
+            ["NPY_TYPECHAR"] = typeof(NPY_TYPECHAR),
+            ["NPY_SCALARKIND"] = typeof(NPY_SCALARKIND),
+            ["NPY_ORDER"] = typeof(NPY_ORDER),
+            ["NPY_CASTING"] = typeof(NPY_CASTING),
+            ["NPY_DATETIMEUNIT"] = typeof(NPY_DATETIMEUNIT),
+            ["NPY_SORTKIND"] = typeof(NumSharp.Backends.Sorting.NPY_SORTKIND),
+        };
+
+        /// <summary>
+        ///     The <c>ndarraytypes.h</c> enums no NumSharp enum mirrors, and why. Each must stay without a NumSharp enum of its
+        ///     name: adding one turns the test red until its entry moves to <see cref="EnumPorts"/>.
+        /// </summary>
+        private static readonly Dictionary<string, string> NotPortedEnums = new(StringComparer.Ordinal)
+        {
+            ["NPY_SELECTKIND"] = "np.partition takes NumPy's kind string 'introselect'",
+            ["NPY_SEARCHSIDE"] = "np.searchsorted takes NumPy's side strings 'left' / 'right'",
+            ["NPY_CLIPMODE"] = "np.take / np.put / np.choose take NumPy's mode strings 'raise' / 'wrap' / 'clip'",
+            ["NPY_CORRELATEMODE"] = "np.correlate / np.convolve take NumPy's mode strings 'valid' / 'same' / 'full'",
+            ["NPY_BUSDAY_ROLL"] = "NumSharp has no business-day functions (np.busday_offset)",
+        };
+
+        /// <summary>The shared reason of the four <see cref="NPY_ORDER"/> divergences.</summary>
+        private const string NpyOrderNumbering =
+            "NumSharp numbers NPY_ORDER from NPY_KEEPORDER = 0 to NPY_ANYORDER = 3, NumPy from NPY_ANYORDER = -1 to NPY_KEEPORDER = 2; " +
+            "renumbering changes what default(NPY_ORDER) means (K today, C under NumPy's values), so it needs an audit of every use";
+
+        /// <summary>
+        ///     Members of a mirrored enum that knowingly differ from NumPy (absent, or another value), and why. Each must still
+        ///     differ: matching NumPy turns the test red until its entry is removed.
+        /// </summary>
+        private static readonly Dictionary<(string Enum, string Member), string> EnumMemberDivergences = new()
+        {
+            [("NPY_ORDER", "NPY_ANYORDER")] = NpyOrderNumbering,
+            [("NPY_ORDER", "NPY_CORDER")] = NpyOrderNumbering,
+            [("NPY_ORDER", "NPY_FORTRANORDER")] = NpyOrderNumbering,
+            [("NPY_ORDER", "NPY_KEEPORDER")] = NpyOrderNumbering,
+            [("NPY_CASTING", "_NPY_ERROR_OCCURRED_IN_CAST")] = "a NumSharp cast that fails throws; no call returns NumPy's -1 sentinel",
+            [("NPY_CASTING", "NPY_SAME_VALUE_CASTING")] = "NumPy 2.4's 'same_value' casting is not implemented",
+        };
+
+        /// <summary>
+        ///     Members of a mirrored enum with no NumPy counterpart, and why. Each must stay absent from NumPy's header: if
+        ///     NumPy gains the name, the test turns red so the two meanings are reconciled.
+        /// </summary>
+        private static readonly Dictionary<(string Enum, string Member), string> EnumExtensions = new()
+        {
+            [("NPY_TYPES", "NUMSHARP_DECIMAL")] = "NumSharp's decimal dtype, numbered in NumPy's user-defined range",
+            [("NPY_TYPES", "NUMSHARP_CHAR")] = "NumSharp's char dtype, numbered in NumPy's user-defined range",
+        };
+
+        /// <summary>
+        ///     Every named enum of NumPy's <c>ndarraytypes.h</c> (the <c>c_enums</c> of the <c>members</c> record, which the
+        ///     generator reads from the header with C's value rules) is mirrored by the NumSharp enum of its name, with NumPy's
+        ///     members, values and declaration order and only the listed extensions, or is listed as not mirrored.
+        /// </summary>
+        [TestMethod]
+        public void CEnums_MirrorNumPysHeader()
+        {
+            var m = Of("members").Single();
+            var problems = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var numSharpEnums = typeof(DType).Assembly.GetTypes().Where(t => t.IsEnum).Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+
+            foreach (var en in m.GetProperty("c_enums").EnumerateObject())
+            {
+                seen.Add(en.Name);
+                var numpy = en.Value.EnumerateArray().Select(p => (Name: p[0].GetString(), Value: p[1].GetInt64())).ToList();
+                if (!EnumPorts.TryGetValue(en.Name, out var port))
+                {
+                    if (!NotPortedEnums.ContainsKey(en.Name))
+                        problems.Add($"enum {en.Name}: a NumPy enum this test does not map (add it to EnumPorts or NotPortedEnums)");
+                    else if (numSharpEnums.Contains(en.Name))
+                        problems.Add($"enum {en.Name} now has a NumSharp mirror: move it from NotPortedEnums to EnumPorts");
+                    continue;
+                }
+
+                // An enum's fields come back from reflection in declaration (metadata) order, aliases included.
+                var mine = port.GetFields(BindingFlags.Public | BindingFlags.Static)
+                    .Select(f => (Name: f.Name, Value: Convert.ToInt64(f.GetRawConstantValue(), CultureInfo.InvariantCulture)))
+                    .ToList();
+                var mineByName = mine.ToDictionary(x => x.Name, x => x.Value, StringComparer.Ordinal);
+                var numpyNames = numpy.Select(x => x.Name).ToHashSet(StringComparer.Ordinal);
+
+                foreach (var (name, value) in numpy)
+                {
+                    bool present = mineByName.TryGetValue(name, out long mineValue);
+                    if (EnumMemberDivergences.ContainsKey((en.Name, name)))
+                    {
+                        if (present && mineValue == value)
+                            problems.Add($"{en.Name}.{name} now matches NumPy ({value}): remove it from EnumMemberDivergences");
+                    }
+                    else if (!present)
+                        problems.Add($"{en.Name}.{name} = {value}: missing from the NumSharp enum");
+                    else if (mineValue != value)
+                        problems.Add($"{en.Name}.{name}: NumSharp value {mineValue}, NumPy {value}");
+                }
+
+                foreach (var (name, _) in mine)
+                {
+                    bool extension = EnumExtensions.ContainsKey((en.Name, name));
+                    if (numpyNames.Contains(name))
+                    {
+                        if (extension)
+                            problems.Add($"{en.Name}.{name} is now NumPy's own name: remove it from EnumExtensions");
+                    }
+                    else if (!extension)
+                        problems.Add($"{en.Name}.{name}: not a member of NumPy's {en.Name} (removed from NumPy, or misspelled)");
+                }
+
+                // Order, over the members both sides have and agree on.
+                var compared = numpy.Select(p => p.Name)
+                    .Where(n => mineByName.ContainsKey(n) && !EnumMemberDivergences.ContainsKey((en.Name, n)))
+                    .ToList();
+                var comparedSet = compared.ToHashSet(StringComparer.Ordinal);
+                var mineOrder = mine.Select(x => x.Name).Where(comparedSet.Contains).ToList();
+                if (!compared.SequenceEqual(mineOrder, StringComparer.Ordinal))
+                    problems.Add($"{en.Name}: out of NumPy's order: NumPy [{string.Join(", ", compared)}], NumSharp [{string.Join(", ", mineOrder)}]");
+            }
+
+            foreach (var mapped in EnumPorts.Keys.Concat(NotPortedEnums.Keys).Where(k => !seen.Contains(k)))
+                problems.Add($"{mapped} is mapped here, but the oracle no longer records it");
+
+            AssertNoProblems(problems);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Descriptors
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Every probed descriptor: each numpy.dtype attribute, <c>str</c>, <c>repr</c>, <c>len</c>, the class name and
+        ///     the KeyError of <c>d[0]</c> equal NumPy's.
+        /// </summary>
+        [TestMethod]
+        public void Descriptors_MatchNumPy()
+        {
+            var problems = new List<string>();
+            foreach (var rec in Of("descr"))
+            {
+                string id = rec.GetProperty("id").GetString();
+                DType d;
+                try
+                {
+                    d = Build(rec.GetProperty("recipe"));
+                }
+                catch (Exception e)
+                {
+                    problems.Add($"{id}: building raised {e.GetType().Name}: {e.Message}");
+                    continue;
+                }
+
+                foreach (var attr in rec.GetProperty("attrs").EnumerateObject())
+                {
+                    string expected = attr.Value.ValueKind == JsonValueKind.Null ? null : attr.Value.GetString();
+                    if (attr.Name == "type" && d.type == null && (expected == "datetime64" || expected == "timedelta64"))
+                        continue; // No CLR scalar type for datetime64 / timedelta64 before Stage C (surface gap SU24).
+                    string actual = AttrText(d, attr.Name);
+                    if (!string.Equals(actual, expected, StringComparison.Ordinal))
+                        problems.Add($"{id}: .{attr.Name} = {Show(actual)}, NumPy {Show(expected)}");
+                }
+
+                Check(problems, id, "str", d.ToString(), rec.GetProperty("str").GetString());
+                Check(problems, id, "repr", d.ToString(true), rec.GetProperty("repr").GetString());
+                Check(problems, id, "len", d.__len__().ToString(CultureInfo.InvariantCulture), rec.GetProperty("len").GetInt32().ToString(CultureInfo.InvariantCulture));
+                Check(problems, id, "class", d.Meta.Name, rec.GetProperty("cls").GetString());
+                Check(problems, id, "d[0]", Raised(() => d.__getitem__(0)), ErrorText(rec.GetProperty("getitem")));
+            }
+            AssertNoProblems(problems);
+        }
+
+        /// <summary>Every recipe NumPy refuses raises here too, with NumPy's exception type and text.</summary>
+        [TestMethod]
+        public void Errors_MatchNumPy()
+        {
+            var problems = new List<string>();
+            foreach (var rec in Of("error"))
+            {
+                string id = rec.GetProperty("id").GetString();
+                string actual = Raised(() => Build(rec.GetProperty("recipe")));
+                Check(problems, id, "error", actual, ErrorText(rec.GetProperty("error")));
+            }
+            AssertNoProblems(problems);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // dtype strings
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumSharp's own C# spellings of <see cref="np.dtype(string, bool, bool, IReadOnlyDictionary{string, object})"/>
+        ///     (the documented superset of NumPy's grammar), the twin of the generator's <c>NUMSHARP_ALIASES</c>. NumPy
+        ///     must still refuse each one (the replay asserts it, so the list cannot rot) and NumSharp must accept it.
+        /// </summary>
+        private static readonly HashSet<string> NumSharpAliases = new(StringComparer.Ordinal)
+        {
+            "Int32", "Bool", "Boolean", "boolean", "Half", "Single", "Double", "Complex", "Char", "char", "Decimal",
+            "decimal", "SByte", "sbyte", "Byte", "UByte", "Int16", "UInt16", "UInt32", "Int64", "UInt64", "Float",
+            "String", "string",
+        };
+
+        /// <summary>
+        ///     The long-double classes: NumSharp's own classes over the 8-byte float64 / complex128 lanes, so a Linux NumPy
+        ///     record (a 16-byte long double) is compared by class only.
+        /// </summary>
+        private static readonly HashSet<string> LongDoubleClasses = new(StringComparer.Ordinal) { "LongDoubleDType", "CLongDoubleDType" };
+
+        /// <summary>
+        ///     Every probed dtype string through <c>np.dtype(str)</c>: the same descriptor as NumPy's (repr, str, byte order,
+        ///     isbuiltin, kind, item size, type number and character, the C-name classes NumSharp shares a lane with
+        ///     included) or the same error, type and text, under the house rules:
+        ///     <list type="bullet">
+        ///       <item><description>Every NumPy error keeps its type and text: <c>TypeError</c> "data type … not understood"
+        ///       / "Alias … was removed", the datetime parser's errors, and the comma-string errors of
+        ///       <c>_commastring</c> / <c>_convert_from_tuple</c> / <c>_convert_from_list</c> (<c>ValueError</c>, and the
+        ///       <c>SyntaxError</c> of <c>ast.literal_eval</c> over a repeat group).</description></item>
+        ///       <item><description>A valid NumPy dtype of a class NumSharp has no storage for (<see cref="AbsentClasses"/>,
+        ///       which takes in every sub-array and structured result of a comma string: their class is
+        ///       <c>VoidDType</c>) raises <see cref="NotSupportedException"/>.</description></item>
+        ///       <item><description>NumPy's long double (8 bytes on Windows, 16 on Linux) is NumSharp's own
+        ///       <c>LongDoubleDType</c> / <c>CLongDoubleDType</c> class over the 8-byte float64 / complex128 lane under its C
+        ///       names (<c>'g'</c>, <c>'longdouble'</c>, the type numbers): equal to NumPy's descriptor where NumPy's is 8 bytes
+        ///       too, the same class only on Linux; a spelling that names Linux's 16-byte width (<c>'f16'</c>,
+        ///       <c>'float128'</c>) has no NumSharp lane and raises <see cref="NotSupportedException"/>.</description></item>
+        ///     </list>
+        /// </summary>
+        [TestMethod]
+        public void Parse_Strings_MatchNumPy()
+        {
+            var problems = new List<string>();
+            foreach (var rec in Of("parse"))
+            {
+                string id = rec.GetProperty("id").GetString();
+                string spec = rec.GetProperty("spec").GetString();
+                var numpy = rec.GetProperty("outcome");
+                bool numpyOk = numpy.GetProperty("ok").GetBoolean();
+
+                DType d = null;
+                Exception error = null;
+                try
+                {
+                    d = np.dtype(spec);
+                }
+                catch (Exception e)
+                {
+                    error = e;
+                }
+
+                if (NumSharpAliases.Contains(spec))
+                {
+                    if (numpyOk)
+                        problems.Add($"{id}: NumPy now accepts this NumSharp alias; remove it from NumSharpAliases and the generator's NUMSHARP_ALIASES");
+                    if (error != null)
+                        problems.Add($"{id}: the NumSharp alias raised {ErrorText(error)}");
+                    continue;
+                }
+
+                if (!numpyOk)
+                {
+                    string type = numpy.GetProperty("type").GetString();
+                    string text = numpy.GetProperty("text").GetString();
+                    if (error == null)
+                    {
+                        problems.Add($"{id}: returned {d.ToString(true)}, NumPy raised {type}: {text}");
+                        continue;
+                    }
+                    // NumPy's errors, type and text: a string NumPy rejects is NumPy's TypeError in NumSharp too
+                    // ("data type '…' not understood", "Alias '…' was removed …"), a bad datetime unit its TypeError or
+                    // ValueError, a comma string its ValueError or (a repeat group that is no Python literal) SyntaxError -
+                    // also where a field before the failing one names a dtype NumSharp lacks ('F,xyz'). (The long double
+                    // widths NumPy ACCEPTS on a 16-byte host are checked in the LongDoubleClasses branch below.)
+                    string actualType = error switch { TypeError => "TypeError", ValueError => "ValueError", _ => error.GetType().Name };
+                    if (actualType != type || error.Message != text)
+                        problems.Add($"{id}: raised {actualType}: {Show(error.Message)}, expected {type}: {Show(text)}");
+                    continue;
+                }
+
+                string cls = numpy.GetProperty("cls").GetString();
+                if (AbsentClasses.ContainsKey(cls))
+                {
+                    // A sub-array of Linux's 16-byte long double ('2f16', '2c32': VoidDType there) replayed on a host whose
+                    // long double is 8 bytes (Apple arm64 reads the lp64 records) names a width NumPy has no dtype for there:
+                    // the field is NumPy's "not understood", as in NumSharp. The LongDoubleClasses rule below, for a field.
+                    if (DTypeRegistry.CLongDoubleSize != 16 && error is TypeError && NamesLinuxLongDoubleWidth(error.Message))
+                        continue;
+                    if (error is not NotSupportedException)
+                        problems.Add($"{id}: NumPy's {cls} has no NumSharp storage, so it must raise NotSupportedException; got {(error == null ? d.ToString(true) : ErrorText(error))}");
+                    continue;
+                }
+
+                if (LongDoubleClasses.Contains(cls))
+                {
+                    // NumSharp's long-double classes are classes of their own over the 8-byte float64 / complex128 lanes
+                    // (DTypeRegistry.LongDouble / CLongDouble): the C names ('g', 'longdouble') and the type numbers 13 / 16
+                    // give them.
+                    var own = cls == "LongDoubleDType" ? DTypeRegistry.LongDouble : DTypeRegistry.CLongDouble;
+                    int numpySize = numpy.GetProperty("itemsize").GetInt32();
+                    if (error != null)
+                    {
+                        // Linux's long double is 16 bytes: the spellings that name that WIDTH ('f16', 'c32', 'float128',
+                        // 'complex256') have no NumSharp lane. A host with the same long double refuses them as a NumPy
+                        // dtype NumSharp lacks; a host whose long double is 8 bytes (Apple arm64, replaying the Linux
+                        // records) has no such NumPy dtype and raises NumPy's "not understood".
+                        bool expected = numpySize != own.ItemSize && (DTypeRegistry.CLongDoubleSize * (cls == "LongDoubleDType" ? 1 : 2) == numpySize
+                            ? error is NotSupportedException
+                            : error is TypeError && error.Message.EndsWith(" not understood", StringComparison.Ordinal));
+                        if (!expected)
+                            problems.Add($"{id}: raised {ErrorText(error)}, NumPy {numpy.GetProperty("repr").GetString()}");
+                        continue;
+                    }
+                    if (!ReferenceEquals(d.Meta, own))
+                        problems.Add($"{id}: NumPy's {cls} must be NumSharp's {own}, got {d.Meta}");
+                    // Windows' long double is the 8-byte double: there the descriptor must equal NumPy's in every attribute.
+                    // Linux's 16-byte one differs from NumSharp's 8 bytes by design (the generator's UNMODELLED_CLASSES).
+                    if (numpySize == d.itemsize)
+                    {
+                        Check(problems, id, "repr", d.ToString(true), numpy.GetProperty("repr").GetString());
+                        Check(problems, id, "str", d.str, numpy.GetProperty("str").GetString());
+                        Check(problems, id, "kind", d.kind.ToString(), numpy.GetProperty("kind").GetString());
+                        Check(problems, id, "num", d.num.ToString(CultureInfo.InvariantCulture), numpy.GetProperty("num").GetInt32().ToString(CultureInfo.InvariantCulture));
+                        Check(problems, id, "char", d.@char.ToString(), numpy.GetProperty("char").GetString());
+                    }
+                    continue;
+                }
+
+                if (error != null)
+                {
+                    problems.Add($"{id}: raised {ErrorText(error)}, NumPy {numpy.GetProperty("repr").GetString()}");
+                    continue;
+                }
+
+                Check(problems, id, "repr", d.ToString(true), numpy.GetProperty("repr").GetString());
+                Check(problems, id, "str", d.str, numpy.GetProperty("str").GetString());
+                Check(problems, id, "byteorder", d.byteorder.ToString(), numpy.GetProperty("byteorder").GetString());
+                Check(problems, id, "isbuiltin", d.isbuiltin.ToString(CultureInfo.InvariantCulture), numpy.GetProperty("isbuiltin").GetInt32().ToString(CultureInfo.InvariantCulture));
+                Check(problems, id, "kind", d.kind.ToString(), numpy.GetProperty("kind").GetString());
+                Check(problems, id, "itemsize", d.itemsize.ToString(CultureInfo.InvariantCulture), numpy.GetProperty("itemsize").GetInt32().ToString(CultureInfo.InvariantCulture));
+                // A C-name class NumPy keeps beside the sized class of its width (IntDType on Windows, LongLongDType on
+                // Linux) has its own number and character, and so does NumSharp's lane-sharing class of that name
+                // (DTypeRegistry.CInt, CLongLong, ...): the number and the character are compared for every class.
+                Check(problems, id, "num", d.num.ToString(CultureInfo.InvariantCulture), numpy.GetProperty("num").GetInt32().ToString(CultureInfo.InvariantCulture));
+                Check(problems, id, "char", d.@char.ToString(), numpy.GetProperty("char").GetString());
+            }
+            AssertNoProblems(problems);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Comparisons and promotion
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The comparison pairs where NumSharp deliberately differs, with the reason. NumPy's <c>dtype.__eq__</c> is
+        ///     <c>PyArray_EquivTypes</c>, a cast-safety test whose metric-prefix fold reads one direction only
+        ///     (<c>M8[1000ms] == M8[s]</c> is True, <c>M8[s] == M8[1000ms]</c> False — and <c>&lt;</c> / <c>&gt;</c> follow
+        ///     it). NumSharp's equality is symmetric (the <see cref="object.Equals(object)"/> contract dictionaries rely on)
+        ///     and structural; NumPy's relation is <see cref="DTypeCasting.EquivTypes"/>.
+        /// </summary>
+        private static readonly Dictionary<string, string> KnownComparisonDivergences = new(StringComparer.Ordinal)
+        {
+            ["compare/M8[1000ms]|M8[s]"] = "NumPy's one-directional metric-prefix fold in PyArray_EquivTypes",
+        };
+
+        /// <summary>
+        ///     The six rich comparisons over every ordered pair equal NumPy's, and descriptors NumPy hashes equally hash
+        ///     equally here (unequal NumPy hashes are not asserted: <see cref="HashCode"/> is seeded per process, so a
+        ///     collision is allowed).
+        /// </summary>
+        [TestMethod]
+        public void Comparisons_MatchNumPy()
+        {
+            var problems = new List<string>();
+            foreach (var rec in Of("compare"))
+            {
+                string id = rec.GetProperty("id").GetString();
+                var a = Build(rec.GetProperty("a"));
+                var b = Build(rec.GetProperty("b"));
+                if (KnownComparisonDivergences.TryGetValue(id, out _))
+                {
+                    // Self-retiring: the exemption must still be needed (some comparison of the pair still differs).
+                    bool stillDiffers = (a == b) != rec.GetProperty("eq").GetBoolean() || (a < b) != rec.GetProperty("lt").GetBoolean()
+                                        || (a > b) != rec.GetProperty("gt").GetBoolean();
+                    if (!stillDiffers)
+                        problems.Add($"{id}: now matches NumPy; remove it from KnownComparisonDivergences");
+                    continue;
+                }
+                CheckBool(problems, id, "==", a == b, rec.GetProperty("eq").GetBoolean());
+                CheckBool(problems, id, "!=", a != b, rec.GetProperty("ne").GetBoolean());
+                CheckBool(problems, id, "<", a < b, rec.GetProperty("lt").GetBoolean());
+                CheckBool(problems, id, "<=", a <= b, rec.GetProperty("le").GetBoolean());
+                CheckBool(problems, id, ">", a > b, rec.GetProperty("gt").GetBoolean());
+                CheckBool(problems, id, ">=", a >= b, rec.GetProperty("ge").GetBoolean());
+                if (rec.GetProperty("hash_eq").GetBoolean() && a.GetHashCode() != b.GetHashCode())
+                    problems.Add($"{id}: hashes differ, NumPy's are equal");
+                if (a == b && a.GetHashCode() != b.GetHashCode())
+                    problems.Add($"{id}: equal descriptors with different hashes");
+            }
+            AssertNoProblems(problems);
+        }
+
+        /// <summary>
+        ///     <c>np.promote_types(a, b)</c> and <c>np.result_type(a)</c> give NumPy's descriptor — its repr, whether it is
+        ///     the builtin singleton, its stored byte order and its metadata — or NumPy's error.
+        /// </summary>
+        [TestMethod]
+        public void Promotions_MatchNumPy()
+        {
+            var problems = new List<string>();
+            foreach (var rec in Of("promote"))
+            {
+                string id = rec.GetProperty("id").GetString();
+                var a = Build(rec.GetProperty("a"));
+                var expected = rec.GetProperty("result");
+                DType r;
+                try
+                {
+                    r = rec.GetProperty("op").GetString() == "promote_types"
+                        ? np.promote_types(a, Build(rec.GetProperty("b")))
+                        : np.result_type(new[] { a });
+                }
+                catch (Exception e)
+                {
+                    string want = expected.TryGetProperty("error", out var ee) ? ErrorText(ee) : "(a result)";
+                    Check(problems, id, "error", ErrorText(e), want);
+                    continue;
+                }
+                if (expected.TryGetProperty("error", out var experr))
+                {
+                    problems.Add($"{id}: returned {r.ToString(true)}, NumPy raised {ErrorText(experr)}");
+                    continue;
+                }
+                Check(problems, id, "repr", r.ToString(true), expected.GetProperty("repr").GetString());
+                Check(problems, id, "isbuiltin", r.isbuiltin.ToString(CultureInfo.InvariantCulture), expected.GetProperty("isbuiltin").GetInt32().ToString(CultureInfo.InvariantCulture));
+                Check(problems, id, "byteorder", r.byteorder.ToString(), expected.GetProperty("byteorder").GetString());
+                var meta = expected.GetProperty("metadata");
+                Check(problems, id, "metadata", AttrText(r, "metadata"), meta.ValueKind == JsonValueKind.Null ? null : meta.GetString());
+                // The class: the repr cannot tell Windows' C int class ('i') from int32's ('l').
+                Check(problems, id, "char", r.@char.ToString(), expected.GetProperty("char").GetString());
+                Check(problems, id, "num", r.num.ToString(CultureInfo.InvariantCulture), expected.GetProperty("num").GetInt32().ToString(CultureInfo.InvariantCulture));
+            }
+            AssertNoProblems(problems);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // DType classes
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The numpy.dtypes classes whose INSTANCES differ from NumPy's on this host's model by design, with the reason:
+        ///     NumSharp's long double is the 8-byte double on every host, while Linux NumPy's is the 16-byte x87 extended
+        ///     type (<c>float128</c> / <c>complex256</c>). The class itself is NumSharp's lane-sharing class and is compared
+        ///     attribute by attribute; only the class call (the instance) is exempt, and it must still differ — the entry
+        ///     retires itself if NumSharp ever gains an extended-precision lane. Empty on Windows, whose long double is the
+        ///     double, as NumSharp's.
+        /// </summary>
+        /// <returns>The class names and reasons for this host's model.</returns>
+        private static Dictionary<string, string> DivergentClasses()
+        {
+            var map = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (!DTypeRegistry.CLongIs32Bit)
+            {
+                const string reason = "Linux NumPy's long double is the 16-byte x87 extended type, NumSharp's the 8-byte double";
+                map["LongDoubleDType"] = reason;
+                map["CLongDoubleDType"] = reason;
+            }
+            return map;
+        }
+
+        /// <summary>
+        ///     Every numpy.dtypes class NumSharp has: <c>__name__</c>, <c>__module__</c>, its repr, the scalar type name,
+        ///     <c>_abstract</c> / <c>_parametric</c> / <c>_legacy</c> / <c>_is_numeric</c> and the class call
+        ///     (<see cref="DTypeMeta.Instantiate"/>: the instance and whether it is the singleton, or the error) equal NumPy's.
+        /// </summary>
+        [TestMethod]
+        public void Classes_MatchNumPy()
+        {
+            var problems = new List<string>();
+            var divergent = DivergentClasses();
+            foreach (var rec in Of("class"))
+            {
+                string name = rec.GetProperty("name").GetString();
+                if (AbsentClasses.ContainsKey(name))
+                    continue; // Asserted absent by Members_ExistUnderNumPysNames.
+                var cls = DtypesClass(name);
+                string id = "class/" + name;
+                Check(problems, id, "__name__", cls.Name, rec.GetProperty("__name__").GetString());
+                Check(problems, id, "__module__", cls.ModulePath, rec.GetProperty("__module__").GetString());
+                Check(problems, id, "repr", cls.ToString(), rec.GetProperty("repr").GetString());
+                string typeName = rec.GetProperty("type_name").GetString();
+                if (!(cls.type == null && (typeName == "datetime64" || typeName == "timedelta64")))
+                    Check(problems, id, "type", ScalarTypeName(cls.type, cls), typeName); // datetime: Stage C (SU24)
+                CheckBool(problems, id, "_abstract", cls._abstract, rec.GetProperty("_abstract").GetBoolean());
+                CheckBool(problems, id, "_parametric", cls._parametric, rec.GetProperty("_parametric").GetBoolean());
+                CheckBool(problems, id, "_legacy", cls._legacy, rec.GetProperty("_legacy").GetBoolean());
+                CheckBool(problems, id, "_is_numeric", cls._is_numeric, rec.GetProperty("_is_numeric").GetBoolean());
+
+                var call = rec.GetProperty("call");
+                if (divergent.ContainsKey(name))
+                {
+                    // Self-retiring: the instance must still differ from NumPy's (an 8-byte double against float128).
+                    if (!call.TryGetProperty("error", out _) && cls.Instantiate().ToString(true) == call.GetProperty("repr").GetString())
+                        problems.Add($"{id}: the class call now matches NumPy; remove it from DivergentClasses");
+                    continue;
+                }
+                if (call.TryGetProperty("error", out var callErr))
+                {
+                    Check(problems, id, "call", Raised(() => cls.Instantiate()), ErrorText(callErr));
+                }
+                else
+                {
+                    var inst = cls.Instantiate();
+                    Check(problems, id, "call", inst.ToString(true), call.GetProperty("repr").GetString());
+                    CheckBool(problems, id, "call is singleton", ReferenceEquals(inst, cls.Instantiate()), call.GetProperty("is_singleton").GetBoolean());
+                }
+            }
+            AssertNoProblems(problems);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Casting implementations
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     For every ordered pair of classes, <see cref="DTypeMeta.GetCastingImpl"/> has an implementation exactly when
+        ///     NumPy has one, under NumPy's name, and its <see cref="ArrayMethod.resolve_descriptors"/> gives NumPy's casting
+        ///     level, loop descriptors and view offset for every given pair. NumPy 2.4's <c>NPY_SAME_VALUE_CASTING_FLAG</c>
+        ///     (64, reported by the numeric casts) is masked off: NumSharp has no same-value casting.
+        /// </summary>
+        [TestMethod]
+        public void Casts_MatchNumPy()
+        {
+            var problems = new List<string>();
+            foreach (var rec in Of("cast"))
+            {
+                string id = rec.GetProperty("id").GetString();
+                var from = DtypesClass(rec.GetProperty("frm").GetString());
+                var to = DtypesClass(rec.GetProperty("to").GetString());
+                var impl = from.GetCastingImpl(to);
+                bool exists = rec.GetProperty("exists").GetBoolean();
+                if ((impl != null) != exists)
+                {
+                    problems.Add($"{id}: implementation {(impl != null ? "exists" : "missing")}, NumPy {(exists ? "has one" : "has none")}");
+                    continue;
+                }
+                if (impl == null)
+                    continue;
+                Check(problems, id, "name", impl.name, rec.GetProperty("name").GetString());
+
+                var given = rec.GetProperty("given");
+                if (given.ValueKind == JsonValueKind.Null)
+                    continue;
+                var givenDescrs = new[]
+                {
+                    np.dtype(given[0].GetString()),
+                    given[1].ValueKind == JsonValueKind.Null ? null : np.dtype(given[1].GetString()),
+                };
+                var loop = new DType[2];
+                var expected = rec.GetProperty("resolved");
+                NPY_CASTING casting;
+                long view;
+                try
+                {
+                    casting = impl.resolve_descriptors(givenDescrs, loop, out view);
+                }
+                catch (Exception e)
+                {
+                    string want = expected.TryGetProperty("error", out var ee) ? ErrorText(ee) : "(a resolution)";
+                    Check(problems, id, "error", ErrorText(e), want);
+                    continue;
+                }
+                if (expected.TryGetProperty("error", out var experr))
+                {
+                    problems.Add($"{id}: resolved, NumPy raised {ErrorText(experr)}");
+                    continue;
+                }
+                Check(problems, id, "casting", ((int)casting).ToString(CultureInfo.InvariantCulture), expected.GetProperty("casting").GetInt32().ToString(CultureInfo.InvariantCulture));
+                var loopExpected = expected.GetProperty("loop");
+                Check(problems, id, "loop[0]", loop[0]?.ToString(true), loopExpected[0].GetString());
+                Check(problems, id, "loop[1]", loop[1]?.ToString(true), loopExpected[1].GetString());
+                var vo = expected.GetProperty("view_offset");
+                string wantView = vo.ValueKind == JsonValueKind.Null ? "None" : vo.GetInt64().ToString(CultureInfo.InvariantCulture);
+                string gotView = view == ArrayMethod.NoView ? "None" : view.ToString(CultureInfo.InvariantCulture);
+                Check(problems, id, "view_offset", gotView, wantView);
+            }
+            AssertNoProblems(problems);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Replay helpers (each is the C# twin of a step or a formatter of gen_dtype_oracle.py)
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Builds the descriptor a recipe describes — the twin of <c>run</c> in <c>gen_dtype_oracle.py</c>:
+        ///     <c>["dtype", spec, kw]</c>, <c>["dtype_of", kw]</c>, <c>["newbyteorder", code]</c>, <c>["instantiate", name]</c>.
+        /// </summary>
+        /// <param name="recipe">The JSON array of steps.</param>
+        /// <returns>The descriptor.</returns>
+        /// <exception cref="InvalidOperationException">A step this replay does not know.</exception>
+        internal static DType Build(JsonElement recipe)
+        {
+            DType d = null;
+            foreach (var step in recipe.EnumerateArray())
+            {
+                string op = step[0].GetString();
+                switch (op)
+                {
+                    case "dtype":
+                    {
+                        var (align, copy, metadata) = Keywords(step.GetArrayLength() > 2 ? step[2] : default);
+                        d = np.dtype(step[1].GetString(), align, copy, metadata);
+                        break;
+                    }
+                    case "dtype_of":
+                    {
+                        var (align, copy, metadata) = Keywords(step[1]);
+                        d = np.dtype(d, align, copy, metadata);
+                        break;
+                    }
+                    case "newbyteorder":
+                        d = step[1].ValueKind == JsonValueKind.Null ? d.newbyteorder() : d.newbyteorder(step[1].GetString());
+                        break;
+                    case "instantiate":
+                        d = DtypesClass(step[1].GetString()).Instantiate();
+                        break;
+                    default:
+                        throw new InvalidOperationException($"unknown recipe step '{op}'");
+                }
+            }
+            return d;
+        }
+
+        /// <summary>Reads the <c>align</c> / <c>copy</c> / <c>metadata</c> keywords of a recipe step.</summary>
+        /// <param name="kw">The JSON object, or <c>default</c> when the step has none.</param>
+        /// <returns>The keyword values (metadata null when not given).</returns>
+        private static (bool align, bool copy, IReadOnlyDictionary<string, object> metadata) Keywords(JsonElement kw)
+        {
+            if (kw.ValueKind != JsonValueKind.Object)
+                return (false, false, null);
+            bool align = kw.TryGetProperty("align", out var a) && a.GetBoolean();
+            bool copy = kw.TryGetProperty("copy", out var c) && c.GetBoolean();
+            Dictionary<string, object> metadata = null;
+            if (kw.TryGetProperty("metadata", out var md))
+            {
+                metadata = new Dictionary<string, object>(StringComparer.Ordinal);
+                foreach (var p in md.EnumerateObject())
+                    metadata[p.Name] = p.Value.ValueKind switch
+                    {
+                        JsonValueKind.String => p.Value.GetString(),
+                        JsonValueKind.True => true,
+                        JsonValueKind.False => false,
+                        // A Python int arrives as an integral JSON number, a Python float with a fraction or exponent.
+                        JsonValueKind.Number when p.Value.TryGetInt64(out long l) && !p.Value.GetRawText().Contains('.') => l,
+                        JsonValueKind.Number => p.Value.GetDouble(),
+                        _ => throw new InvalidOperationException($"metadata value kind {p.Value.ValueKind}"),
+                    };
+            }
+            return (align, copy, metadata);
+        }
+
+        /// <summary>
+        ///     The <c>np.dtypes</c> class of a NumPy class name, by reflection on the facade — or, for a class C# offers as a
+        ///     call (<see cref="CalledClasses"/>), the class object behind that call.
+        /// </summary>
+        /// <param name="name">The numpy.dtypes name.</param>
+        /// <returns>The class.</returns>
+        /// <exception cref="InvalidOperationException"><c>np.dtypes</c> has no such member.</exception>
+        private static DTypeMeta DtypesClass(string name)
+            => (DTypeMeta)(typeof(np.dtypes).GetProperty(name, BindingFlags.Public | BindingFlags.Static)?.GetValue(null))
+               ?? (CalledClasses.TryGetValue(name, out var called) ? called : null)
+               ?? throw new InvalidOperationException($"np.dtypes has no '{name}'");
+
+        /// <summary>
+        ///     The Python text of one numpy.dtype attribute of <paramref name="d"/>, in the form the generator records:
+        ///     strings raw, the scalar type by NumPy name, metadata as a dict repr (null for none), anything else as repr.
+        /// </summary>
+        /// <param name="d">The descriptor.</param>
+        /// <param name="attr">The NumPy attribute name.</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="InvalidOperationException">An attribute this replay does not format.</exception>
+        private static string AttrText(DType d, string attr) => attr switch
+        {
+            "alignment" => d.alignment.ToString(CultureInfo.InvariantCulture),
+            "base" => d.@base.ToString(true),
+            "byteorder" => d.byteorder.ToString(),
+            "char" => d.@char.ToString(),
+            "descr" => "[" + string.Join(", ", d.descr.Select(t => $"({PyLiteral.Repr(t.name)}, {PyLiteral.Repr(t.typestr)})")) + "]",
+            "fields" => d.fields == null ? "None" : "(fields)",
+            "flags" => d.flags.ToString(CultureInfo.InvariantCulture),
+            "hasobject" => d.hasobject ? "True" : "False",
+            "isalignedstruct" => d.isalignedstruct ? "True" : "False",
+            "isbuiltin" => d.isbuiltin.ToString(CultureInfo.InvariantCulture),
+            "isnative" => d.isnative ? "True" : "False",
+            "itemsize" => d.itemsize.ToString(CultureInfo.InvariantCulture),
+            "kind" => d.kind.ToString(),
+            "metadata" => d.metadata == null ? null : DictRepr(d.metadata),
+            "name" => d.name,
+            "names" => d.names == null ? "None" : "(names)",
+            "ndim" => d.ndim.ToString(CultureInfo.InvariantCulture),
+            "num" => d.num.ToString(CultureInfo.InvariantCulture),
+            "shape" => d.shape.Length == 0 ? "()" : "(" + string.Join(", ", d.shape) + ")",
+            "str" => d.str,
+            "subdtype" => d.subdtype == null ? "None" : "(subdtype)",
+            "type" => ScalarTypeName(d.type, d.Meta),
+            _ => throw new InvalidOperationException($"unformatted attribute '{attr}'"),
+        };
+
+        /// <summary>Python's <c>repr(dict)</c> of a metadata dictionary, in its iteration (insertion) order.</summary>
+        /// <param name="dict">The metadata.</param>
+        /// <returns>The repr, e.g. <c>{'a': 1, 'n': 2.5}</c>.</returns>
+        private static string DictRepr(IReadOnlyDictionary<string, object> dict)
+        {
+            var sb = new StringBuilder("{");
+            bool first = true;
+            foreach (var kv in dict)
+            {
+                if (!first)
+                    sb.Append(", ");
+                first = false;
+                sb.Append(PyLiteral.Repr(kv.Key)).Append(": ").Append(PyLiteral.Repr(kv.Value));
+            }
+            return sb.Append('}').ToString();
+        }
+
+        /// <summary>NumPy's name of the scalar type a C# element type stands for (<c>double</c> → <c>"float64"</c>).</summary>
+        /// <param name="t">The C# element type, or null.</param>
+        /// <param name="cls">
+        ///     The class the type belongs to. It decides the one C# type two NumPy types share: a C# <see cref="string"/> is
+        ///     NumPy's <c>np.str_</c> for <c>StrDType</c> and Python's <c>str</c> for <c>StringDType</c>, and a lane-sharing
+        ///     C-type class names its own scalar type (<c>LongDoubleDType</c>'s <see cref="double"/> is <c>longdouble</c>,
+        ///     Windows' <c>IntDType</c>'s <see cref="int"/> is <c>intc</c>).
+        /// </param>
+        /// <returns>The NumPy scalar type name, the C# name for a NumSharp-only type, or null.</returns>
+        private static string ScalarTypeName(Type t, DTypeMeta cls)
+        {
+            if (t == null) return null;
+            // A C-type class shares its storage lane's C# type with the canonical class; its scalar class carries the name.
+            if (cls is LegacyBuiltinDTypeMeta { OwnsScalarType: false } ctype && ctype.singleton != null)
+                return ((NDScalarType)ctype.singleton).__name__;
+            if (t == typeof(string)) return cls is VStringDTypeMeta ? "str" : "str_";
+            if (t == typeof(byte[])) return "bytes_";
+            if (t == typeof(bool)) return "bool";
+            if (t == typeof(sbyte)) return "int8";
+            if (t == typeof(byte)) return "uint8";
+            if (t == typeof(short)) return "int16";
+            if (t == typeof(ushort)) return "uint16";
+            if (t == typeof(int)) return "int32";
+            if (t == typeof(uint)) return "uint32";
+            if (t == typeof(long)) return "int64";
+            if (t == typeof(ulong)) return "uint64";
+            if (t == typeof(Half)) return "float16";
+            if (t == typeof(float)) return "float32";
+            if (t == typeof(double)) return "float64";
+            if (t == typeof(Complex)) return "complex128";
+            return t.Name;
+        }
+
+        /// <summary>The <c>Type: text</c> form of what <paramref name="act"/> raises, or <c>"(no error)"</c>.</summary>
+        /// <param name="act">The action.</param>
+        /// <returns>The error text.</returns>
+        private static string Raised(Action act)
+        {
+            try
+            {
+                act();
+            }
+            catch (Exception e)
+            {
+                return ErrorText(e);
+            }
+            return "(no error)";
+        }
+
+        /// <summary>The <c>Type: text</c> form of a C# exception, with NumSharp's Python-named exceptions under their Python names.</summary>
+        /// <param name="e">The exception.</param>
+        /// <returns>The text.</returns>
+        private static string ErrorText(Exception e) => e switch
+        {
+            // Most-derived first: DTypePromotionError is a TypeError, as NumPy's is.
+            DTypePromotionError => "DTypePromotionError: " + e.Message,
+            TypeError => "TypeError: " + e.Message,
+            ValueError => "ValueError: " + e.Message,
+            KeyError => "KeyError: " + e.Message,
+            _ => e.GetType().Name + ": " + e.Message,
+        };
+
+        /// <summary>The <c>Type: text</c> form of a recorded NumPy error, or <c>"(no error)"</c> for JSON null.</summary>
+        /// <param name="err">The JSON error object or null.</param>
+        /// <returns>The text.</returns>
+        private static string ErrorText(JsonElement err)
+            => err.ValueKind == JsonValueKind.Null ? "(no error)" : err.GetProperty("type").GetString() + ": " + err.GetProperty("text").GetString();
+
+        /// <summary>Adds a mismatch line when <paramref name="actual"/> differs from <paramref name="expected"/> (ordinal).</summary>
+        /// <param name="problems">The collected mismatches.</param>
+        /// <param name="id">The case id.</param>
+        /// <param name="what">What is compared.</param>
+        /// <param name="actual">NumSharp's value.</param>
+        /// <param name="expected">NumPy's value.</param>
+        private static void Check(List<string> problems, string id, string what, string actual, string expected)
+        {
+            if (!string.Equals(actual, expected, StringComparison.Ordinal))
+                problems.Add($"{id}: {what} = {Show(actual)}, NumPy {Show(expected)}");
+        }
+
+        /// <summary>Adds a mismatch line when two booleans differ.</summary>
+        /// <param name="problems">The collected mismatches.</param>
+        /// <param name="id">The case id.</param>
+        /// <param name="what">What is compared.</param>
+        /// <param name="actual">NumSharp's value.</param>
+        /// <param name="expected">NumPy's value.</param>
+        private static void CheckBool(List<string> problems, string id, string what, bool actual, bool expected)
+        {
+            if (actual != expected)
+                problems.Add($"{id}: {what} = {actual}, NumPy {expected}");
+        }
+
+        /// <summary>
+        ///     Fails with EVERY collected mismatch (an assertion library shows only the first items of a collection, which
+        ///     hides how many cases one divergence affects).
+        /// </summary>
+        /// <param name="problems">The collected mismatches.</param>
+        /// <exception cref="AssertFailedException">There is at least one mismatch.</exception>
+        private static void AssertNoProblems(List<string> problems)
+        {
+            if (problems.Count != 0)
+                throw new AssertFailedException($"{problems.Count} mismatch(es) against NumPy 2.4.2:{Environment.NewLine}" +
+                                                string.Join(Environment.NewLine, problems));
+        }
+
+        /// <summary>A value for a mismatch line: quoted, or <c>null</c>.</summary>
+        /// <param name="s">The value.</param>
+        /// <returns>The display text.</returns>
+        private static string Show(string s) => s == null ? "null" : "«" + s + "»";
+    }
+}

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using NumSharp.Fourier;
 using NumSharp.Backends.Iteration;
@@ -49,9 +50,9 @@ namespace NumSharp
                 throw new ArgumentException("FFT requires an array with at least one dimension.");
             int ax = axis < 0 ? axis + ndim : axis;
             if (ax < 0 || ax >= ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis), $"axis {axis} is out of bounds for array of dimension {ndim}");
+                throw new ArgumentOutOfRangeException(nameof(axis), string.Create(CultureInfo.InvariantCulture, $"axis {axis} is out of bounds for array of dimension {ndim}"));
             if (n < 1)
-                throw new ArgumentException($"Invalid number of FFT data points ({n}) specified.");
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Invalid number of FFT data points ({n}) specified."));
 
             // Resolve n_out and the input/output dtypes per transform kind.
             long nout;
@@ -72,10 +73,16 @@ namespace NumSharp
             // Coerce the input to the dtype the engine reads.
             NDArray src = a.GetTypeCode == inDtype ? a : a.astype(inDtype, copy: false);
 
-            // Build the output shape = input shape with axis -> nout.
+            // Build the output shape = input shape with axis -> nout, laid out as NumPy's _raw_fft allocates it:
+            // `out = empty_like(a, shape=..., dtype=...)`, whose order 'K' keeps the INPUT's axis order
+            // (PyArray_NewLikeArrayWithShape: C stays C, F stays F, a permutation or a broadcast's stride ranking is kept)
+            // with the transformed axis resized (parity QA-36 / QA-48: it was always C). copy_output below writes through
+            // outAxisStride and the lane strides, so any dense layout is written right; the N-D forms inherit each pass's
+            // order because every pass's input is the previous result. The original operand votes, not the dtype cast
+            // `src` (NumPy's empty_like sees `a`).
             var outDims = (long[])src.Shape.dimensions.Clone();
             outDims[ax] = nout;
-            var outShape = new Shape(outDims);
+            var outShape = Shape.NewLikeLayout(a.Shape, 'K', outDims);
 
             NDArray result;
             NDArray castTarget = null;   // set when out's dtype is a same_kind cast OF the loop dtype
@@ -84,7 +91,7 @@ namespace NumSharp
                 if (@out.ndim != ndim)
                     throw new ArgumentException("output array has wrong shape.");
                 for (int d = 0; d < ndim; d++)
-                    if (@out.shape[d] != outDims[d])
+                    if (@out.Shape.dimensions[d] != outDims[d])
                         throw new ArgumentException("output array has wrong shape.");
 
                 NPTypeCode outTc = @out.GetTypeCode;
@@ -99,14 +106,14 @@ namespace NumSharp
                     // irfft's float64 into a complex128 (imag=0) or float32 out. Compute in the loop
                     // dtype, then cast into out at the end. (fft/rfft's loop is complex128, whose only
                     // same_kind target here is complex128, so those still require a complex out.)
-                    result = new NDArray(outDtype, outShape, false);
+                    result = a.TensorEngine.NewArray(outDtype, outShape, false);
                     castTarget = @out;
                 }
                 else
                 {
-                    // Verbatim NumPy ufunc-cast rejection (house ArgumentException, exactly as
-                    // DefaultEngine.UfuncOut.ValidateOutCast renders it — no trailing period).
-                    throw new ArgumentException(
+                    // Verbatim NumPy ufunc-cast rejection (TypeError, the class of NumPy's UFuncTypeError, exactly
+                    // as DefaultEngine.UfuncOut.ValidateOutCast renders it — no trailing period).
+                    throw new TypeError(
                         $"Cannot cast ufunc '{UfuncName(isReal, isForward, n)}' output from " +
                         $"dtype('{outDtype.AsNumpyDtypeName()}') to " +
                         $"dtype('{outTc.AsNumpyDtypeName()}') with casting rule 'same_kind'");
@@ -114,10 +121,12 @@ namespace NumSharp
             }
             else
             {
-                result = new NDArray(outDtype, outShape, false);
+                // the transform's result binds the operand's engine, the engine whose np.fft call this is (the shared
+                // FFT sub-engine has none of its own)
+                result = a.TensorEngine.NewArray(outDtype, outShape, false);
             }
 
-            long nin = src.shape[ax];
+            long nin = src.Shape.dimensions[ax];
             long inAxisStride = src.Shape.strides[ax];
             long outAxisStride = result.Shape.strides[ax];
             long[] inStrides = src.Shape.strides;
@@ -127,7 +136,7 @@ namespace NumSharp
 
             // Number of independent 1-D transforms (product of all-but-axis dims).
             long lanes = 1;
-            for (int d = 0; d < ndim; d++) if (d != ax) lanes *= src.shape[d];
+            for (int d = 0; d < ndim; d++) if (d != ax) lanes *= src.Shape.dimensions[d];
             if (lanes == 0) return castTarget ?? result; // an empty non-axis dimension: nothing to do
 
             // Compute mode for a float32/float16-precision transform (numpy parity — see the docs on
@@ -195,10 +204,10 @@ namespace NumSharp
                 idx[d]++;
                 inBase += inStrides[d];
                 outBase += outStrides[d];
-                if (idx[d] < src.shape[d]) return;
+                if (idx[d] < src.Shape.dimensions[d]) return;
                 idx[d] = 0;
-                inBase -= src.shape[d] * inStrides[d];
-                outBase -= src.shape[d] * outStrides[d];
+                inBase -= src.Shape.dimensions[d] * inStrides[d];
+                outBase -= src.Shape.dimensions[d] * outStrides[d];
             }
         }
 

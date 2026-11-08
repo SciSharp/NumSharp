@@ -91,25 +91,25 @@ namespace NumSharp.Tests.RandomSampling;
     [TestMethod]
     public void Pareto_ZeroParameter_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.pareto(0.0, 5L));
+        Assert.ThrowsException<ValueError>(() => np.random.pareto(0.0, 5L));
     }
 
     [TestMethod]
     public void Pareto_NegativeParameter_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.pareto(-1.0, 5L));
+        Assert.ThrowsException<ValueError>(() => np.random.pareto(-1.0, 5L));
     }
 
     [TestMethod]
     public void Pareto_ScalarZeroParameter_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.pareto(0.0));
+        Assert.ThrowsException<ValueError>(() => np.random.pareto(0.0));
     }
 
     [TestMethod]
     public void Pareto_ScalarNegativeParameter_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.pareto(-2.0));
+        Assert.ThrowsException<ValueError>(() => np.random.pareto(-2.0));
     }
 
     [TestMethod]

@@ -14,7 +14,7 @@ namespace NumSharp.Backends
         /// Warning: The default `atol` is not appropriate for comparing numbers
         /// that are much smaller than one(see Notes).
         ///
-        /// See also <seealso cref="allclose"/>
+        /// See also <seealso cref="np.allclose(NDArray, NDArray, double, double, bool)"/>
         ///
         ///Notes:
         /// For finite values, isclose uses the following equation to test whether
@@ -41,8 +41,30 @@ namespace NumSharp.Backends
         /// given tolerance.If both `a` and `b` are scalars, returns a single
         /// boolean value.
         ///</returns>
+        /// <exception cref="DTypePromotionError"><paramref name="b"/> holds strings (NumPy's promotion refusal of text with
+        ///     a Python float).</exception>
+        /// <exception cref="TypeError">Only <paramref name="a"/> holds strings (subtract's no-loop text).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     Scoped by <c>[NDScoped]</c>: the formula builds a dozen transient arrays (and up to two
+        ///     dtype-promoted copies of the operands), and the woven scope releases every one of them on return,
+        ///     exceptions included, so a tight isclose/allclose loop does not pile them up for the finalizer. The
+        ///     returned typed array survives: the weaver yields it, and it holds its own reference on the buffer it
+        ///     shares with the last temporary.
+        ///     </para>
+        ///     <para>
+        ///     A C# number literal operand (<see cref="NDArray.WasPythonLiteral"/>) is NumPy's Python scalar and stays weak
+        ///     through the formula — <c>isclose(float32_array, 0.1)</c> compares in float32, with the tolerance
+        ///     <c>atol + rtol * abs(0.1)</c> computed as Python arithmetic. Any other 0-d operand is a NumPy scalar or 0-d
+        ///     array, which NEP 50 promotes (<c>isclose(float32_array, np.float64(0.1))</c> computes in float64, as NumPy
+        ///     does).
+        ///     </para>
+        /// </remarks>
+        [NDScoped]
         public override NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
         {
+            // NumPy promotes y with a weak Python float first (text refuses), then a string x meets subtract with no loop.
+            Strings.NDStringUfuncs.ThrowIfIsClose(a, b);
             // NumPy implementation (from numpy/_core/numeric.py):
             // result = (less_equal(abs(x - y), atol + rtol * abs(y))
             //           & isfinite(y)
@@ -61,64 +83,72 @@ namespace NumSharp.Backends
             // imaginary part (isclose([1+0j],[1+100j]) returned True where NumPy returns False).
             // float64/int/bool/char/decimal still map to Double, so their cast is byte-identical to
             // before. astype(copy:false) returns the input itself when no conversion is needed and a
-            // FRESH array otherwise — it never mutates a/b (NumPy semantics). So x/y are caller-owned
-            // when they alias a/b and method-owned temps when a conversion happened; the finally
-            // block below disposes exactly the converted case. Every other local is a FRESH
-            // allocation owned by this method (each elementwise operator/ufunc returns a new array),
-            // so each is wrapped in `using`: its unmanaged buffer is released synchronously instead
-            // of riding the finalizer queue. In a tight isclose/allclose loop the un-disposed temps
-            // accumulated as live allocations until GC, ballooning the process working set (the
-            // np.allclose / np.isclose leak guards). MakeGeneric<bool>() takes its own refcount on
-            // the final buffer, so disposing the backing temp leaves it alive.
-            var x = a.astype(InexactPromote(a.typecode), copy: false);
-            var y = b.astype(InexactPromote(b.typecode), copy: false);
-            try
+            // FRESH array otherwise — it never mutates a/b (NumPy semantics). Ownership is structural
+            // under the woven scope: a converted x/y is built inside it and released on return, while
+            // an unconverted x/y IS the caller's a/b, built before the scope opened, which the scope
+            // never tracks and so never disposes (no ReferenceEquals guard needed). Every other local
+            // is a fresh allocation (each elementwise operator/ufunc returns a new array), released
+            // on return the same way.
+            //
+            // A Python scalar operand stays a Python scalar in NumPy (`a if isinstance(a, (int, float, complex)) else
+            // asanyarray(a)`; an int y becomes float(y)): a C# literal (WasPythonLiteral) is that WEAK operand and is kept
+            // as one, so a float32 array compares with `0.1` in float32. Converting it with astype would make it a strong
+            // 0-d float64 array, which NEP 50 promotes (a NumPy scalar y — np.float64(0.1) — IS computed in float64 by
+            // NumPy, and a strong 0-d b here is too).
+            var x = a.WasPythonLiteral ? a : a.astype(InexactPromote(a.typecode), copy: false);
+            NDArray y, tolerance;
+            if (b.WasPythonLiteral)
             {
-                // Vectorized computation using existing np operations
-                using var xMinusY = x - y;
-                using var diff = np.abs(xMinusY);            // |a - b|
-                using var absY = np.abs(y);
-                using var rtolAbsY = rtol * absY;
-                using var tolerance = atol + rtolAbsY;       // atol + rtol * |b|
-
-                // Core formula: |a - b| <= tolerance AND diff is finite AND y is finite, OR exact equality
-                // Note: We explicitly check diffFinite because NumSharp's <= operator has a bug where
-                // NaN <= value returns True instead of False (IEEE 754 requires False for all NaN comparisons)
-                using var diffFinite = np.isfinite(diff);      // diff must be finite for tolerance check
-                using var withinTolerance = diff <= tolerance; // |a - b| <= (atol + rtol * |b|)
-                using var yFinite = np.isfinite(y);            // Only apply tolerance to finite values
-                using var exactEqual = x == y;                 // Handles infinities (inf == inf is true)
-
-                // Combine: (within tolerance & diff finite & y finite) | exact equality
-                using var withinAndFinite = withinTolerance & diffFinite;
-                using var toleranceMet = withinAndFinite & yFinite;
-
-                // The final combined array is captured in a `using` too: MakeGeneric<bool>() shares its
-                // storage and takes its own refcount, so disposing the backing temp on return leaves the
-                // returned array alive while keeping that last buffer off the finalizer queue as well.
-                if (!equal_nan)
-                {
-                    using var close = toleranceMet | exactEqual;
-                    return close.MakeGeneric<bool>();
-                }
-
-                // Handle NaN comparison if requested: result | (isnan(x) & isnan(y))
-                using var toleranceClose = toleranceMet | exactEqual;
-                using var nanX = np.isnan(x);
-                using var nanY = np.isnan(y);
-                using var bothNan = nanX & nanY;
-                using var close2 = toleranceClose | bothNan;
-                return close2.MakeGeneric<bool>();
+                // `atol + rtol * abs(y)` of a Python y is Python arithmetic: a Python float, weak against x like y itself.
+                object value = b.Storage.GetAtIndex(0);
+                double magnitude = value is System.Numerics.Complex z
+                    ? System.Numerics.Complex.Abs(z)
+                    : System.Math.Abs(Utilities.Converts.ToDouble(value));
+                // float(y) for an int literal; a float / complex literal is its own Python scalar already.
+                y = value is System.Numerics.Complex || b.typecode is NPTypeCode.Double or NPTypeCode.Single
+                    ? b
+                    : NDArray.PythonLiteral(Utilities.Converts.ToDouble(value));
+                tolerance = NDArray.PythonLiteral(atol + rtol * magnitude);
             }
-            finally
+            else
             {
-                // Dispose only the astype-converted temps — when no conversion happened x/y ARE
-                // the caller's arrays and must stay alive.
-                if (!ReferenceEquals(x, a))
-                    x.Dispose();
-                if (!ReferenceEquals(y, b))
-                    y.Dispose();
+                y = b.astype(InexactPromote(b.typecode), copy: false);
+                var absY = Abs(y);
+                var rtolAbsY = rtol * absY;
+                tolerance = atol + rtolAbsY;       // atol + rtol * |b|
             }
+
+            // Vectorized computation using existing np operations
+            var xMinusY = x - y;
+            var diff = Abs(xMinusY);               // |a - b|
+
+            // NumPy's formula: |a - b| <= tolerance AND y is finite, OR exact equality. A NaN difference fails the <= on
+            // its own (every NaN comparison is False), and an infinite difference passes an infinite tolerance
+            // (inf <= inf), as in NumPy: `np.isclose([1e308, inf], [-1e308, 1.0], rtol=0, atol=inf)` is [True, True]. (A
+            // third `isfinite(diff)` term, written for a NaN <= bug that no longer exists, made both False: parity QA-37.)
+            var withinTolerance = diff <= tolerance; // |a - b| <= (atol + rtol * |b|)
+            var yFinite = IsFinite(y);               // Only apply tolerance to finite values
+            var exactEqual = x == y;                 // Handles infinities (inf == inf is true)
+
+            // Combine: (within tolerance & y finite) | exact equality
+            var toleranceMet = withinTolerance & yFinite;
+
+            // MakeGeneric<bool>() returns a typed alias that takes its own reference on the combined
+            // array's buffer: the weaver yields the alias, and releasing the backing temp with the rest
+            // of the scope leaves the returned buffer alive.
+            if (!equal_nan)
+            {
+                var close = toleranceMet | exactEqual;
+                return close.MakeGeneric<bool>();
+            }
+
+            // Handle NaN comparison if requested: result | (isnan(x) & isnan(y))
+            var toleranceClose = toleranceMet | exactEqual;
+            var nanX = IsNan(x);
+            var nanY = IsNan(y);
+            var bothNan = nanX & nanY;
+            var close2 = toleranceClose | bothNan;
+            return close2.MakeGeneric<bool>();
         }
 
         /// <summary>

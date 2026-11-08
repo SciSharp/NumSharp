@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The TensorFlow.NET x NumSharp text probe of ../tensorflow-net-strings.md: can a TensorFlow.NET program use NumSharp's
+       text arrays (S / U / StringDType) as TensorFlow string tensors, in both directions? It references the PUBLISHED
+       TensorFlow.NET 0.150.0 package (TensorFlow.NET unchanged) and this repo's NumSharp.Core. It is not part of the
+       solution and no CI job builds it: build and run it by hand (the plan's section 7).
+
+       The assembly is named NumSharp.DotNetRunScript and is signed with the repo key (Directory.Build.props), so it may
+       reach NumSharp's internals: the "direct" routes in TfTextBridge.cs read StringDType cells through the internal
+       VStringAllocator, which an in-repo NumSharp.Interop.TensorFlow package could do and code inside TensorFlow.NET
+       could not. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>NumSharp.DotNetRunScript</AssemblyName>
+    <RootNamespace>TfProbe</RootNamespace>
+    <!-- SciSharp.TensorFlow.Redist ships win-x64 and linux-x64 native binaries only. -->
+    <PlatformTarget>x64</PlatformTarget>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CS1591;CS8981;NU1701</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- TensorFlow.NET exactly as a consumer installs it (its last release), plus the CPU native runtime it pairs with
+         (TensorFlow 2.16.0). -->
+    <PackageReference Include="TensorFlow.NET" Version="0.150.0" />
+    <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.16.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+  </ItemGroup>
+
+</Project>

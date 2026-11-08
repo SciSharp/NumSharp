@@ -60,7 +60,7 @@ namespace NumSharp.IO
             object v = p.ParseValue();
             p.SkipWhitespace();
             if (!p.AtEnd)
-                throw new SyntaxException($"unexpected trailing content at position {p.Position}");
+                throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"unexpected trailing content at position {p.Position}"));
             return v;
         }
 
@@ -138,36 +138,79 @@ namespace NumSharp.IO
         {
             char quote = s.Contains('\'') && !s.Contains('"') ? '"' : '\'';
             sb.Append(quote);
-            foreach (char c in s)
+            // Iterate CODE POINTS, not UTF-16 units: a non-printable supplementary character must escape
+            // as ONE \UNNNNNNNN (its scalar value), not as two lone-surrogate \uNNNN — matching CPython's
+            // unicode_repr. Rune enumeration also yields the scalar value its Unicode category is keyed on.
+            foreach (Rune rune in s.EnumerateRunes())
             {
-                switch (c)
-                {
-                    case '\\': sb.Append("\\\\"); break;
-                    case '\n': sb.Append("\\n"); break;
-                    case '\r': sb.Append("\\r"); break;
-                    case '\t': sb.Append("\\t"); break;
-                    default:
-                        if (c == quote) sb.Append('\\');
-                        sb.Append(c);
-                        break;
-                }
+                int cp = rune.Value;
+                if (cp == quote || cp == '\\')          // the active quote and backslash are backslash-escaped
+                    sb.Append('\\').Append((char)cp);
+                else if (cp == '\t') sb.Append("\\t");
+                else if (cp == '\n') sb.Append("\\n");
+                else if (cp == '\r') sb.Append("\\r");
+                else if (!IsPythonPrintable(cp))
+                    // Non-printable: \xNN (<0x100), \uNNNN (<0x10000), else \UNNNNNNNN. Lowercase hex, as
+                    // CPython — this is the branch that makes a control char / NBSP / zero-width space read
+                    // as '\x00' / '\xa0' / '​' instead of an invisible raw byte, so NumPy error text matches.
+                    sb.Append(cp < 0x100 ? "\\x" : cp < 0x10000 ? "\\u" : "\\U")
+                      .Append(cp.ToString(cp < 0x100 ? "x2" : cp < 0x10000 ? "x4" : "x8", CultureInfo.InvariantCulture));
+                else
+                    sb.Append(rune.ToString());         // printable (incl. non-ASCII like 'ü'/'😀'): verbatim
             }
             sb.Append(quote);
         }
 
+        /// <summary>
+        ///     CPython's <c>str.isprintable</c> for a single Unicode scalar: printable UNLESS its category is
+        ///     "Other" (Cc/Cf/Cs/Co/Cn) or "Separator" (Zs/Zl/Zp), with the one exception that U+0020 SPACE
+        ///     is printable (repr renders it verbatim, every other separator escapes). This decides which
+        ///     characters <see cref="ReprString"/> escapes, so the emitted string matches CPython's
+        ///     <c>repr()</c> byte-for-byte — the property NumPy's error messages rely on when they interpolate
+        ///     a repr. .NET's Unicode table drives this and agrees with CPython across the tested range
+        ///     (control, NBSP U+00A0, soft hyphen U+00AD, zero-width space U+200B, supplementary planes).
+        /// </summary>
+        /// <param name="codePoint">A Unicode scalar value (0..0x10FFFF), e.g. <see cref="Rune.Value"/>.</param>
+        /// <returns><c>true</c> if CPython renders it verbatim; <c>false</c> if it escapes it as \x/\u/\U.</returns>
+        private static bool IsPythonPrintable(int codePoint)
+        {
+            if (codePoint == 0x20) return true;   // SPACE — the sole Separator CPython keeps printable
+            switch (CharUnicodeInfo.GetUnicodeCategory(codePoint))
+            {
+                case UnicodeCategory.Control:            // Cc
+                case UnicodeCategory.Format:             // Cf (soft hyphen, zero-width space, …)
+                case UnicodeCategory.Surrogate:          // Cs
+                case UnicodeCategory.PrivateUse:         // Co
+                case UnicodeCategory.OtherNotAssigned:   // Cn
+                case UnicodeCategory.SpaceSeparator:     // Zs (NBSP, … — but NOT U+0020, handled above)
+                case UnicodeCategory.LineSeparator:      // Zl
+                case UnicodeCategory.ParagraphSeparator: // Zp
+                    return false;
+                default:
+                    return true;
+            }
+        }
+
+        /// <summary>
+        ///     Appends Python's <c>repr()</c> of a float: <c>nan</c> / <c>inf</c> / <c>-inf</c>, else the shortest digits that
+        ///     read back, positional from 1e-4 up to 1e16 (with <c>.0</c> on an integral value) and <c>d.ddde±XX</c> outside —
+        ///     NumPy's <c>str()</c> of a float64, which <see cref="NumSharp.Backends.Strings.NDTextFormat.FormatFloat"/> writes.
+        /// </summary>
+        /// <param name="d">The value.</param>
+        /// <param name="sb">The text being built.</param>
+        /// <remarks>
+        ///     .NET's <c>"R"</c> is not Python's repr: it writes <c>1E+16</c> where Python writes <c>1e+16</c>, and on the .NET
+        ///     10 runtime (10.0.1) 16 digits for 2^-25 and 2^-958 that read back as the neighbouring double.
+        /// </remarks>
         private static void ReprDouble(double d, StringBuilder sb)
         {
             if (double.IsNaN(d)) { sb.Append("nan"); return; }
             if (double.IsPositiveInfinity(d)) { sb.Append("inf"); return; }
             if (double.IsNegativeInfinity(d)) { sb.Append("-inf"); return; }
 
-            // "R" is shortest-round-trip, which is what Python's float repr produces. Python always
-            // shows a decimal point or exponent so the value reads as a float; .NET does not.
-            string s = d.ToString("R", CultureInfo.InvariantCulture);
-            if (s.IndexOf('.') < 0 && s.IndexOf('e') < 0 && s.IndexOf('E') < 0 &&
-                s.IndexOf("Inf", StringComparison.Ordinal) < 0 && s.IndexOf("NaN", StringComparison.Ordinal) < 0)
-                s += ".0";
-            sb.Append(s);
+            Span<char> buf = stackalloc char[NumSharp.Backends.Strings.NDTextFormat.MaxTextLength];
+            int n = NumSharp.Backends.Strings.NDTextFormat.FormatFloat(d, NumSharp.Backends.Printing.FloatKind.Double, buf);
+            sb.Append(buf.Slice(0, n));
         }
 
         private struct Parser
@@ -203,7 +246,7 @@ namespace NumSharp.IO
             {
                 SkipWhitespace();
                 if (_i >= _s.Length || _s[_i] != c)
-                    throw new SyntaxException($"expected '{c}' at position {_i}");
+                    throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"expected '{c}' at position {_i}"));
                 _i++;
             }
 
@@ -223,7 +266,7 @@ namespace NumSharp.IO
                     return ParseNumber();
                 if (char.IsLetter(c) || c == '_')
                     return ParseKeyword();
-                throw new SyntaxException($"invalid syntax at position {_i}: '{c}'");
+                throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"invalid syntax at position {_i}: '{c}'"));
             }
 
             private object ParseKeyword()
@@ -240,7 +283,7 @@ namespace NumSharp.IO
                     // Deliberately NOT nan/inf: they are Names, not literals, so ast.literal_eval
                     // rejects them too. Accepting them here would make this parser more permissive
                     // than the thing it stands in for.
-                    default: throw new SyntaxException($"unknown name '{word}' at position {start}");
+                    default: throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"unknown name '{word}' at position {start}"));
                 }
             }
 
@@ -255,7 +298,7 @@ namespace NumSharp.IO
                 {
                     SkipWhitespace();
                     if (Peek() != '\'' && Peek() != '"')
-                        throw new SyntaxException($"dict keys must be strings, at position {_i}");
+                        throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"dict keys must be strings, at position {_i}"));
                     string key = ParseString();
                     Expect(':');
                     dict[key] = ParseValue();
@@ -270,7 +313,7 @@ namespace NumSharp.IO
                         continue;
                     }
                     if (c == '}') { _i++; return dict; }
-                    throw new SyntaxException($"expected ',' or '}}' at position {_i}");
+                    throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"expected ',' or '}}' at position {_i}"));
                 }
             }
 
@@ -317,7 +360,7 @@ namespace NumSharp.IO
                         continue;
                     }
                     if (c == close) { _i++; return items; }
-                    throw new SyntaxException($"expected ',' or '{close}' at position {_i}");
+                    throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"expected ',' or '{close}' at position {_i}"));
                 }
             }
 
@@ -408,14 +451,14 @@ namespace NumSharp.IO
 
                 string text = _s.Substring(start, _i - start).Replace("_", "");
                 if (text.Length == 0 || text == "-" || text == "+")
-                    throw new SyntaxException($"invalid number at position {start}");
+                    throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"invalid number at position {start}"));
 
                 // Python 2 wrote longs as `3L`. NumPy strips the suffix via _filter_header, but only
                 // when retrying a v1.0/v2.0 header; v3.0 post-dates Python 2 and rejects it.
                 if (!isFloat && _i < _s.Length && (_s[_i] == 'L' || _s[_i] == 'l'))
                 {
                     if (!_allowLongSuffix)
-                        throw new SyntaxException($"invalid decimal literal at position {_i}");
+                        throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"invalid decimal literal at position {_i}"));
                     _i++;
                 }
 
@@ -423,7 +466,7 @@ namespace NumSharp.IO
                     return l;
                 if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double d))
                     return d;
-                throw new SyntaxException($"invalid number '{text}' at position {start}");
+                throw new SyntaxException(string.Create(CultureInfo.InvariantCulture, $"invalid number '{text}' at position {start}"));
             }
         }
     }

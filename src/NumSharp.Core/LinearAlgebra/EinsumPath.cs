@@ -20,7 +20,7 @@ namespace NumSharp
     ///     <para>
     ///     A value of this type round-trips into <c>optimize:</c> on both
     ///     <see cref="np.einsum_path(string, NDArray[], object)"/> and
-    ///     <see cref="np.einsum(string, NDArray[], NDArray, NPTypeCode?, char, string, object)"/>,
+    ///     <see cref="np.einsum(string, NDArray[], NDArray, DType, char, string, object)"/>,
     ///     exactly as NumPy accepts <c>path_info[0]</c> back as an explicit path.
     ///     </para>
     /// </remarks>

@@ -51,9 +51,9 @@ public class MinMaxBenchmarks : TypedBenchmarkBase
     [BenchmarkCategory("Min", "ApiEntryPoint")]
     public NDArray Min_Full() => np.min(_a1D);
 
-    [Benchmark(Description = "a.amin() [method]")]
+    [Benchmark(Description = "a.min() [method]")]
     [BenchmarkCategory("Min")]
-    public NDArray AMin_Method() => _a1D.amin();
+    public NDArray Min_Method() => _a1D.min();
 
     [Benchmark(Description = "np.amin(a, axis=0)")]
     [BenchmarkCategory("Min")]
@@ -71,9 +71,9 @@ public class MinMaxBenchmarks : TypedBenchmarkBase
     [BenchmarkCategory("Max", "ApiEntryPoint")]
     public NDArray Max_Full() => np.max(_a1D);
 
-    [Benchmark(Description = "a.amax() [method]")]
+    [Benchmark(Description = "a.max() [method]")]
     [BenchmarkCategory("Max")]
-    public NDArray AMax_Method() => _a1D.amax();
+    public NDArray Max_Method() => _a1D.max();
 
     [Benchmark(Description = "np.amax(a, axis=0)")]
     [BenchmarkCategory("Max")]

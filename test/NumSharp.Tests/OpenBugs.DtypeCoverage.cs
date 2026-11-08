@@ -42,13 +42,22 @@ namespace NumSharp.Tests
         }
 
         // ============================================================================
-        //  BUG: np.round_/around with NEGATIVE decimals is broken.
+        //  FIXED (6db8238a, a port of NumPy's PyArray_Round): np.round_/around with NEGATIVE
+        //  decimals was broken.
         //
         //  np.round([127,153,248], -1) == [130,150,250] (round to tens); float likewise.
-        //  NumSharp routes through System.Math.Round(value, digits), which only accepts digits in
-        //  [0,15] and THROWS ArgumentOutOfRangeException for the integer loop (and mis-rounds floats).
+        //  NumSharp routed through System.Math.Round(value, digits), which only accepts digits in
+        //  [0,15] and THREW ArgumentOutOfRangeException for the integer loop (and mis-rounded floats).
+        //  6db8238a also took the cells out of the rounding tier's carve, so the oracle gates them;
+        //  this pin stayed [OpenBugs] until the 2026-10-05 run of the whole OpenBugs category found it
+        //  passing.
         // ============================================================================
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.round_(int32, -1)</c> rounds to tens in the integer dtype: <c>[127, 153, 248]</c> →
+        ///     <c>[130, 150, 250]</c>, without the ArgumentOutOfRangeException that <c>Math.Round</c> throws for a
+        ///     negative digit count.
+        /// </summary>
+        [TestMethod]
         public void Round_NegativeDecimals_Broken()
         {
             var a = np.array(new int[] { 127, 153, 248 });
@@ -62,13 +71,20 @@ namespace NumSharp.Tests
         }
 
         // ============================================================================
-        //  BUG: np.round_ on float16 with decimals>=1 diverges from NumPy.
+        //  FIXED (6db8238a): np.round_ on float16 with decimals>=1 diverged from NumPy.
         //
         //  np.round(float16([2.75]), 1) == 2.80078 (banker's rounding of the TRUE float16 value).
-        //  NumSharp's float16 fractional rounding diverges (observed off by whole units on some pool
-        //  values). Carved from the rounding tier (float16 only kept at decimals=0).
+        //  NumSharp's float16 fractional rounding diverged (observed off by whole units on some pool
+        //  values). It was carved from the rounding tier (float16 only kept at decimals=0) until
+        //  6db8238a ported PyArray_Round at the input precision; the oracle gates the cells since, and
+        //  this pin stayed [OpenBugs] until the 2026-10-05 run of the whole OpenBugs category found it
+        //  passing.
         // ============================================================================
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.round_(float16, 1)</c> rounds the float16 value itself, as NumPy does: <c>2.75</c> → <c>2.80078</c>
+        ///     (the float16 nearest 2.8) and <c>0.05</c> → <c>0</c>.
+        /// </summary>
+        [TestMethod]
         public void Round_Float16_Fractional_Diverges()
         {
             var a = np.array(new float[] { 2.75f, 0.05f }).astype(NPTypeCode.Half);

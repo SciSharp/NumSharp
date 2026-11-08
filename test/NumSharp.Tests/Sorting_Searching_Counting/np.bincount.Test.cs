@@ -150,7 +150,7 @@ public class NpBincountTests
     public void Dtype_UInt64WrapsNegative_Raises()
     {
         // FORCECAST uint64 -> int64 wraps 2^63 to int64.MinValue (negative) => negative-element error.
-        var ex = Assert.ThrowsException<ArgumentException>(
+        var ex = Assert.ThrowsException<ValueError>(
             () => np.bincount(np.array(new ulong[] { 9223372036854775808UL })));
         Assert.AreEqual("'list' argument must have no negative elements", ex.Message);
     }
@@ -182,7 +182,7 @@ public class NpBincountTests
     [TestMethod]
     public void Error_NegativeElements()
     {
-        var ex = Assert.ThrowsException<ArgumentException>(
+        var ex = Assert.ThrowsException<ValueError>(
             () => np.bincount(np.array(new long[] { -1, 0, 1 })));
         Assert.AreEqual("'list' argument must have no negative elements", ex.Message);
     }
@@ -190,7 +190,7 @@ public class NpBincountTests
     [TestMethod]
     public void Error_MinlengthNegative()
     {
-        var ex = Assert.ThrowsException<ArgumentException>(
+        var ex = Assert.ThrowsException<ValueError>(
             () => np.bincount(np.array(new long[] { 0, 1 }), minlength: -1));
         Assert.AreEqual("'minlength' must not be negative", ex.Message);
     }
@@ -198,7 +198,7 @@ public class NpBincountTests
     [TestMethod]
     public void Error_WeightsLengthMismatch()
     {
-        var ex = Assert.ThrowsException<ArgumentException>(
+        var ex = Assert.ThrowsException<ValueError>(
             () => np.bincount(np.array(new long[] { 0, 1 }), np.array(new double[] { 1.0, 2.0, 3.0 })));
         Assert.AreEqual("The weights and list don't have the same length.", ex.Message);
     }
@@ -207,7 +207,7 @@ public class NpBincountTests
     public void Error_Ordering_NegativeBeforeWeightsMismatch()
     {
         // NumPy checks negative elements (minmax) BEFORE it ever validates weights length.
-        var ex = Assert.ThrowsException<ArgumentException>(
+        var ex = Assert.ThrowsException<ValueError>(
             () => np.bincount(np.array(new long[] { -1, 2 }), np.array(new double[] { 1.0 })));
         Assert.AreEqual("'list' argument must have no negative elements", ex.Message);
     }
@@ -216,7 +216,7 @@ public class NpBincountTests
     public void Error_Ordering_MinlengthBeforeNegative()
     {
         // minlength<0 is checked before the negative-element scan.
-        var ex = Assert.ThrowsException<ArgumentException>(
+        var ex = Assert.ThrowsException<ValueError>(
             () => np.bincount(np.array(new long[] { -1 }), minlength: -1));
         Assert.AreEqual("'minlength' must not be negative", ex.Message);
     }

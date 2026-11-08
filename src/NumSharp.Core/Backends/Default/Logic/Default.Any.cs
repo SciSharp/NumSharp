@@ -13,8 +13,21 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="nd">Input array</param>
         /// <returns>True if any element is non-zero</returns>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF: NumPy's <c>logical_or.reduce</c>
+        ///     reads a string's truth through the bool cast, which raises there. (A string is otherwise True when non-empty.)</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/>: the flat reduction reads <paramref name="nd"/>'s raw address, and
+        ///     <c>np.any(a)</c> / <c>ndarray.any()</c> reach it through this method, which opens no scope; the weaver roots
+        ///     <paramref name="nd"/> until it returns (the twin of <see cref="All(NDArray)"/>).</remarks>
+        [NDAnchored]
         public override bool Any(NDArray nd)
         {
+            // Text: NumPy's any reads the strings' truth values through the bool cast: the stand-in is the truth array
+            // (an empty one reduces to the identity).
+            if (Strings.NDStringUfuncs.ReduceStandIn("any", nd) is { } standIn)
+            {
+                using (standIn)
+                    return Any(standIn);
+            }
             return nd.GetTypeCode switch
             {
                 NPTypeCode.Boolean => AnyImpl<bool>(nd),
@@ -95,17 +108,6 @@ namespace NumSharp.Backends
                 using var iter = NDIterRef.New(nd, NDIterGlobalFlags.EXTERNAL_LOOP);
                 return iter.ExecuteReducing<ComplexAnyKernel, bool>(default, false);
             }
-        }
-
-        /// <summary>
-        /// Test whether any array element along a given axis evaluates to True.
-        /// </summary>
-        /// <param name="nd">Input array</param>
-        /// <param name="axis">Axis along which to reduce</param>
-        /// <returns>Array of bools with the axis dimension removed</returns>
-        public override NDArray<bool> Any(NDArray nd, int axis)
-        {
-            return Any(nd, axis, keepdims: false);
         }
     }
 }

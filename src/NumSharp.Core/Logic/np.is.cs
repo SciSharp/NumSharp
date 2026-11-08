@@ -46,7 +46,9 @@ namespace NumSharp
         ///</returns>
         public static NDArray<bool> isclose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8,
             bool equal_nan = false)
-            => a.TensorEngine.IsClose(a, b, rtol, atol, equal_nan);
+        {
+            return a.TensorEngine.IsClose(a, b, rtol, atol, equal_nan);
+        }
 
         /// <summary>
         /// Test element-wise for finiteness (not infinity and not Not a Number).
@@ -58,6 +60,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isfinite.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray isfinite(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => a.TensorEngine.IsFinite(a, dtype, @out, where);
 
@@ -71,6 +74,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isnan.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray isnan(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => a.TensorEngine.IsNan(a, dtype, @out, where);
 
@@ -89,38 +93,50 @@ namespace NumSharp
         /// - Integer types: Always False (integers cannot be Inf)
         /// - NaN: Returns False (NaN is not infinity)
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray isinf(NDArray a, NDArray @out = null, NDArray where = null, DType dtype = null)
             => a.TensorEngine.IsInf(a, dtype, @out, where);
 
         /// <summary>
+        /// Return element-wise True where the sign bit is set (negative numbers, and — for floats —
+        /// <c>-0.0</c> and a negative NaN). Mirrors NumPy's ufunc signature:
+        /// <c>signbit(x, /, out=None, *, where=True, dtype=None)</c>. A plain call returns a bool-dtype
+        /// array (the instance is an <see cref="NDArray{T}"/> of bool).
+        /// </summary>
+        /// <param name="x">Input array. Complex is unsupported (raises <see cref="TypeError"/>).</param>
+        /// <param name="out">A location into which the result is stored; any numeric dtype (bool casts same_kind to all, True→1); returned as-is.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
+        /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
+        /// <returns>A boolean array (or <paramref name="out"/>), True where <paramref name="x"/>'s sign bit is set.</returns>
+        /// <exception cref="TypeError"><paramref name="x"/> is complex — signbit has no complex loop (NumPy raises the same, its signbit is ambiguous on complex).</exception>
+        /// <remarks>
+        /// https://numpy.org/doc/stable/reference/generated/numpy.signbit.html
+        /// <para>
+        /// This is NOT <c>x &lt; 0</c>: it tests the raw sign bit, so on floats <c>-0.0</c> → True and a
+        /// negative NaN → True while <c>+0.0</c>/<c>+inf</c>/positive NaN → False. Signed integers follow
+        /// <c>x &lt; 0</c> (their two's-complement MSB IS the sign bit); unsigned integers and bool are
+        /// always False; float16/float32/float64 test the IEEE sign bit. It is the primitive
+        /// <see cref="isposinf"/>/<see cref="isneginf"/> are defined on (<c>isinf(x) &amp; ~signbit(x)</c>
+        /// / <c>isinf(x) &amp; signbit(x)</c>).
+        /// </para>
+        /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        public static NDArray signbit(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => x.TensorEngine.SignBit(x, dtype, @out, where);
+
+        /// <summary>
         ///     Returns true incase of a number, bool or string. If null, returns false.
         /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isscalar.html</remarks>
-        public static bool isscalar(object obj)
-        {
-            switch (obj)
-            {
-                case null:
-                    return false;
-                case NDArray nd:
-                    return nd.ndim == 0 && nd.size == 1;
-                case Type _:
-                    break;
-                case Complex _:
-                case string _:
-                case bool _:
-                    return true;
-            }
-
-            var type = obj as Type ?? obj.GetType();
-            if (type.IsArray)
-            {
-                return false;
-            }
-
-            //type.IsPrimitive checks for: Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, IntPtr, UIntPtr, Char, Double, and Single.
-            return type.IsPrimitive || obj is decimal;
-        }
+        /// <param name="obj">Any object, null included.</param>
+        /// <returns>True for a C# number (a primitive, a decimal, a <see cref="Complex"/>, a <see cref="Half"/>, a
+        ///     <see cref="System.Numerics.BigInteger"/>), a bool, a string, a <see cref="Char8"/>, a <see cref="DateTime64"/>
+        ///     and a 0-d one-element NDArray (NumSharp's stand-in for a NumPy scalar); false for null, any other NDArray, a C#
+        ///     array, a <see cref="Type"/> (NumPy's <c>isscalar(int)</c> is False) and any other object.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isscalar.html
+        ///     <para>NumPy's statement is the array object's (<c>NDArray.isscalar</c>, whose remarks hold the one answer that
+        ///     differs from NumPy's: a 0-d NDArray is a scalar, because it is what a NumPy scalar becomes). The object has no
+        ///     array class to decide, so no class rule applies.</para></remarks>
+        public static bool isscalar(object obj) => NDArray.isscalar(obj);
 
         /// <summary>
         ///     Check whether or not an object can be iterated over. Returns <c>true</c> if
@@ -162,27 +178,8 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         public static bool iterable(object y)
-        {
-            switch (y)
-            {
-                case null:
-                    return false;
-                case NDArray nd:
-                    // A 0-d array is the only non-iterable array: iter() on it raises TypeError, exactly
-                    // as NDArray.GetEnumerator() does; every rank>=1 array (incl. empty) iterates. Checked
-                    // ahead of the IEnumerable case because NDArray itself implements IEnumerable.
-                    return nd.ndim != 0;
-                case string _:
-                    // Python str is iterable (np.iterable("abc") == True). string is also IEnumerable, so
-                    // this branch documents the deliberate parity choice rather than changing the outcome.
-                    return true;
-                case IEnumerable _:
-                    return true;
-                default:
-                    // Scalar value types (bool/byte/sbyte/short/ushort/int/uint/long/ulong/char/float/
-                    // double/Half/decimal/Complex) are not iterable — matching iter() on a NumPy scalar.
-                    return false;
-            }
-        }
+            // NumPy's `try: iter(y)` is the array object's type test (NDArray.iterable); an object has no array class to
+            // decide, so no class rule applies.
+            => NDArray.iterable(y);
     }
 }

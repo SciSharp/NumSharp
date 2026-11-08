@@ -160,7 +160,7 @@ namespace NumSharp.Tests.Math
             // NumPy: power(i32,i32,out=i32,dtype=f32) raises against the
             // dtype-overridden loop: "Cannot cast ufunc 'power' output from
             // dtype('float32') to dtype('int32') with casting rule 'same_kind'"
-            var ex = Assert.ThrowsException<ArgumentException>(() =>
+            var ex = Assert.ThrowsException<TypeError>(() =>
                 np.power(np.array(new int[] { 10 }), np.array(new int[] { 8 }),
                          np.zeros(new Shape(1), np.int32), dtype: NPTypeCode.Single));
             Assert.AreEqual(
@@ -226,7 +226,7 @@ namespace NumSharp.Tests.Math
         {
             // NumPy: "Cannot cast ufunc 'floor_divide' input 0 from
             // dtype('float64') to dtype('int32') with casting rule 'same_kind'"
-            var ex = Assert.ThrowsException<ArgumentException>(() =>
+            var ex = Assert.ThrowsException<TypeError>(() =>
                 np.floor_divide(np.array(new double[] { 7.0 }), np.array(new double[] { 2.0 }),
                                 dtype: NPTypeCode.Int32));
             Assert.AreEqual(
@@ -241,17 +241,17 @@ namespace NumSharp.Tests.Math
             //   negative(f64, dtype=i32), square(f64, dtype=i32), abs(f64, dtype=i32)
             var f = np.array(new double[] { 1.5 });
 
-            var exNeg = Assert.ThrowsException<ArgumentException>(() => np.negative(f, dtype: NPTypeCode.Int32));
+            var exNeg = Assert.ThrowsException<TypeError>(() => np.negative(f, dtype: NPTypeCode.Int32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'negative' input from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
                 exNeg.Message);
 
-            var exSq = Assert.ThrowsException<ArgumentException>(() => np.square(f, dtype: NPTypeCode.Int32));
+            var exSq = Assert.ThrowsException<TypeError>(() => np.square(f, dtype: NPTypeCode.Int32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'square' input from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
                 exSq.Message);
 
-            var exAbs = Assert.ThrowsException<ArgumentException>(() => np.abs(f, dtype: NPTypeCode.Int32));
+            var exAbs = Assert.ThrowsException<TypeError>(() => np.abs(f, dtype: NPTypeCode.Int32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'absolute' input from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
                 exAbs.Message);
@@ -296,6 +296,10 @@ namespace NumSharp.Tests.Math
             Assert.IsTrue(double.IsNegative(r.GetDouble(1)), "NumPy yields -0.0 for negative(False)");
         }
 
+        /// <summary>
+        ///     np.negative raises NumPy's TypeError, verbatim, for a bool input and for an explicit dtype=bool loop (the loop is
+        ///     what NumPy refuses).
+        /// </summary>
         [TestMethod]
         public void Negative_BoolLoop_RaisesNumPyText()
         {
@@ -305,10 +309,10 @@ namespace NumSharp.Tests.Math
                 "The numpy boolean negative, the `-` operator, is not supported, " +
                 "use the `~` operator or the logical_not function instead.";
 
-            var ex1 = Assert.ThrowsException<NotSupportedException>(() => np.negative(np.array(new[] { true })));
+            var ex1 = Assert.ThrowsException<TypeError>(() => np.negative(np.array(new[] { true })));
             Assert.AreEqual(text, ex1.Message);
 
-            var ex2 = Assert.ThrowsException<NotSupportedException>(() =>
+            var ex2 = Assert.ThrowsException<TypeError>(() =>
                 np.negative(np.array(new double[] { 1.0 }), dtype: NPTypeCode.Boolean));
             Assert.AreEqual(text, ex2.Message);
         }
@@ -442,17 +446,81 @@ namespace NumSharp.Tests.Math
             Assert.ThrowsException<IncorrectTypeException>(() => np.divide(x, x, dtype: NPTypeCode.Boolean));
 
             // same_kind input casts, NumPy names ('remainder' for np.mod) + index.
-            var exMod = Assert.ThrowsException<ArgumentException>(() =>
+            var exMod = Assert.ThrowsException<TypeError>(() =>
                 np.mod(np.array(new double[] { 7.5 }), np.array(new double[] { 2.0 }), dtype: NPTypeCode.Int32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'remainder' input 0 from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
                 exMod.Message);
 
-            var exAdd = Assert.ThrowsException<ArgumentException>(() =>
+            var exAdd = Assert.ThrowsException<TypeError>(() =>
                 np.add(a, a, dtype: NPTypeCode.Boolean));
             Assert.AreEqual(
                 "Cannot cast ufunc 'add' input 0 from dtype('int32') to dtype('bool') with casting rule 'same_kind'",
                 exAdd.Message);
+        }
+
+        /// <summary>
+        ///     Parity QA-53: floor_divide, remainder (np.mod is its alias and quotes its name) and fmod register integer and
+        ///     float loops only, so a bool or complex <c>dtype=</c> request finds no loop for ANY operand dtype — NumPy 2.4.2's
+        ///     <c>No loop matching the specified signature and casting was found for ufunc X</c>, raised after a read-only out
+        ///     and a non-bool mask are reported and before any input cast, out cast or shape check (scratchpad probe
+        ///     p165_numpy.py). Before the fix a bool request raised the input-cast text and a complex request reached the
+        ///     kernel's NotSupportedException.
+        /// </summary>
+        [TestMethod]
+        public void DivModFamily_BoolOrComplexDtype_RaiseNumPysNoLoopTypeError()
+        {
+            using var f8 = np.array(new[] { 2.0, 1.0 });
+            using var i4 = np.array(new[] { 2, 1 });
+            using var b1 = np.array(new[] { true, false });
+            using var c16 = np.array(new[] { new System.Numerics.Complex(2, 1), new System.Numerics.Complex(1, 0) });
+            using var three = np.zeros(new Shape(3));
+            using var emptyComplex = np.zeros(new Shape(0), NPTypeCode.Complex);
+            using var intMask = np.array(new long[] { 1, 0 });
+            using var complexOut = np.zeros(new Shape(2), NPTypeCode.Complex);
+            using var boolOut = np.zeros(new Shape(2), NPTypeCode.Boolean);
+            using var readOnly = np.zeros(new Shape(2));
+            readOnly.setflags(write: false);
+            using var trues = np.array(new[] { true, true });
+            const string maskCast = "Cannot cast array data from dtype('int64') to dtype('bool') according to the rule 'safe'";
+
+            var calls = new (string Name, Func<NDArray, NDArray, DType, NDArray, NDArray, NDArray> Call)[]
+            {
+                ("floor_divide", (x, y, dt, o, w) => np.floor_divide(x, y, o, w, dtype: dt)),
+                ("remainder", (x, y, dt, o, w) => np.remainder(x, y, o, w, dtype: dt)),
+                ("remainder", (x, y, dt, o, w) => np.mod(x, y, o, w, dtype: dt)),
+                ("fmod", (x, y, dt, o, w) => np.fmod(x, y, o, w, dtype: dt)),
+            };
+
+            foreach (var (name, call) in calls)
+            {
+                string noLoop = $"No loop matching the specified signature and casting was found for ufunc {name}";
+                foreach (DType dt in new DType[] { NPTypeCode.Boolean, NPTypeCode.Complex })
+                {
+                    // Every operand dtype, a complex pair included: the request itself has no loop.
+                    foreach (var x in new[] { f8, i4, b1, c16 })
+                        Assert.AreEqual(noLoop, Assert.ThrowsException<IncorrectTypeException>(() => call(x, x, dt, null, null)).Message,
+                            $"{name}({x.dtype}, {x.dtype}, dtype={dt})");
+
+                    // Before the shape check (the operands do not broadcast), and for a zero-size operand.
+                    Assert.AreEqual(noLoop, Assert.ThrowsException<IncorrectTypeException>(() => call(f8, three, dt, null, null)).Message);
+                    Assert.AreEqual(noLoop, Assert.ThrowsException<IncorrectTypeException>(() => call(emptyComplex, emptyComplex, dt, null, null)).Message);
+
+                    // A non-bool mask is reported first (NumPy parses where= before it resolves the loop), and so is a
+                    // read-only out.
+                    Assert.AreEqual(maskCast, Assert.ThrowsException<ArgumentException>(() => call(f8, f8, dt, null, intMask)).Message);
+                    Assert.AreEqual("output array is read-only",
+                        Assert.ThrowsException<ValueError>(() => call(f8, f8, dt, readOnly, null)).Message);
+                }
+
+                // An out of the requested class does not create the loop.
+                Assert.AreEqual(noLoop, Assert.ThrowsException<IncorrectTypeException>(() => call(f8, f8, NPTypeCode.Complex, complexOut, null)).Message);
+                Assert.AreEqual(noLoop, Assert.ThrowsException<IncorrectTypeException>(() => call(f8, f8, NPTypeCode.Boolean, boolOut, null)).Message);
+
+                // Without dtype= a bool pair still runs the int8 loop (NumPy's 'bb->b').
+                using var boolPair = call(b1, trues, null, null, null);
+                Assert.AreEqual(NPTypeCode.SByte, boolPair.typecode, name);
+            }
         }
 
         // =====================================================================
@@ -541,7 +609,7 @@ namespace NumSharp.Tests.Math
             Assert.AreEqual(0.0, ok.GetDouble(1));
 
             // non-bool dtype follows the same_kind input rule
-            var ex3 = Assert.ThrowsException<ArgumentException>(() => np.positive(x, dtype: NPTypeCode.Int32));
+            var ex3 = Assert.ThrowsException<TypeError>(() => np.positive(x, dtype: NPTypeCode.Int32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'positive' input from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
                 ex3.Message);

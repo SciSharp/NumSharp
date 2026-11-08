@@ -45,6 +45,10 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             }
         }
 
+        /// <summary>
+        ///     The default mode shares a C-contiguous array: ORT's tensor pointer IS the NumSharp buffer's address, and
+        ///     the handle reports a view whose <c>Source</c> is the caller's array.
+        /// </summary>
         [TestMethod]
         public unsafe void AsOrtValue_IsZeroCopy_TensorPointerIsTheNumSharpBuffer()
         {
@@ -56,6 +60,45 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             void* ndPtr = nd.GetData().Address;
             ((IntPtr)ortPtr).Should().Be((IntPtr)ndPtr, "no copy: ORT's tensor points straight at NumSharp's memory");
             raw.Length.Should().Be(20 * sizeof(float));
+            t.IsView.Should().BeTrue("a C-contiguous array of a bit-exact dtype is shared under the default mode");
+            t.Source.Should().BeSameAs(nd);
+        }
+
+        /// <summary>
+        ///     <see cref="OnnxCodecMode.Copy"/> copies even an array ORT could share: the tensor points at a temporary
+        ///     the handle owns, and a write on one side is not visible on the other.
+        /// </summary>
+        [TestMethod]
+        public unsafe void AsOrtValue_CopyMode_IsIndependent_EvenForACContiguousArray()
+        {
+            using NDArray nd = Arange(NPTypeCode.Single, 4, 5);
+            using (OrtTensor t = nd.AsOrtValue(OnnxCodecMode.Copy))
+            {
+                t.IsView.Should().BeFalse();
+                t.Source.Should().NotBeSameAs(nd, "the tensor reads the handle's own copy");
+                Span<byte> raw = t.Value.GetTensorMutableRawData();
+                ((IntPtr)Unsafe.AsPointer(ref MemoryMarshal.GetReference(raw))).Should().NotBe((IntPtr)nd.GetData().Address);
+                t.Value.GetTensorDataAsSpan<float>().ToArray().Should().Equal(nd.ToArray<float>());
+
+                t.Value.GetTensorMutableDataAsSpan<float>()[2] = 42f;
+                nd.GetSingle(0, 2).Should().Be(2f, "ORT wrote the copy, not the source");
+                t.Source.GetSingle(0, 2).Should().Be(42f, "the copy is readable through Source");
+                nd[0, 3] = 7f;
+                t.Value.GetTensorDataAsSpan<float>()[3].Should().Be(3f, "the copy does not see later writes to the source");
+            }
+
+            NDArrayOnnxInterop.LiveExports.Should().Be(0);
+            nd.Storage.InternalArray.IsUniquelyReferenced.Should().BeTrue("a copy holds no reference on the source's buffer");
+        }
+
+        /// <summary>A value that is not a member of <see cref="OnnxCodecMode"/> (a cast integer) is refused before anything is read.</summary>
+        [TestMethod]
+        public void UndefinedMode_IsRefused_ByBothHandleVerbs()
+        {
+            using NDArray nd = Arange(NPTypeCode.Single, 4);
+            new Action(() => nd.AsOrtValue((OnnxCodecMode)3)).Should().Throw<ArgumentOutOfRangeException>().WithMessage("*OnnxCodecMode*");
+            new Action(() => nd.AsDenseTensor<float>((OnnxCodecMode)(-1))).Should().Throw<ArgumentOutOfRangeException>().WithMessage("*OnnxCodecMode*");
+            NDArrayOnnxInterop.LiveExports.Should().Be(0);
         }
 
         [TestMethod]
@@ -88,8 +131,13 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             }
         }
 
+        /// <summary>
+        ///     A view ONNX Runtime cannot read in place (it has no strides): the strict mode refuses it and names the
+        ///     two modes that accept it; the default mode gives ORT a C-order copy with the view's logical elements,
+        ///     owned by the handle, and ORT's writes land in that copy.
+        /// </summary>
         [TestMethod]
-        public void AsOrtValue_NonContiguousViews_AreRefused_WithTheMaterializeHint()
+        public void AsOrtValue_NonContiguousViews_AreCopiedUnderAuto_AndRefusedUnderView()
         {
             using NDArray m = Arange(NPTypeCode.Double, 4, 6);
             using NDArray transposed = m.T;
@@ -101,11 +149,27 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             foreach ((NDArray view, string why) in new[] { (transposed, "transposed"), (stepped, "stepped"), (reversed, "reversed"), (broadcast, "broadcast"), (fortran, "fortran") })
             {
                 view.Shape.IsContiguous.Should().BeFalse(why);
-                new Action(() => view.AsOrtValue()).Should().Throw<InvalidOperationException>(why)
-                    .WithMessage("*not C-contiguous*ToOrtValue*");
-            }
+                new Action(() => view.AsOrtValue(OnnxCodecMode.View)).Should().Throw<InvalidOperationException>(why)
+                    .WithMessage("*OnnxCodecMode.View*not C-contiguous*OnnxCodecMode.Auto*OnnxCodecMode.Copy*");
+                NDArrayOnnxInterop.LiveExports.Should().Be(0, "a refused export pins nothing");
 
-            NDArrayOnnxInterop.LiveExports.Should().Be(0, "a refused export pins nothing");
+                using NDArray expected = view.copy();
+                double first = view.GetAtIndex<double>(0);
+                using (OrtTensor t = view.AsOrtValue())
+                {
+                    t.IsView.Should().BeFalse(why);
+                    t.Source.Should().NotBeSameAs(view, why);
+                    t.Source.Shape.IsContiguous.Should().BeTrue(why);
+                    t.Value.GetTensorTypeAndShape().Shape.Should().Equal(view.shape, why);
+                    t.Value.GetTensorDataAsSpan<double>().ToArray().Should().Equal(expected.ToArray<double>(), $"{why}: the copy holds the view's elements in logical C order");
+
+                    t.Value.GetTensorMutableDataAsSpan<double>()[0] = -99;
+                    view.GetAtIndex<double>(0).Should().Be(first, $"{why}: ORT wrote the copy, not the view");
+                    t.Source.GetAtIndex<double>(0).Should().Be(-99, $"{why}: the write is readable through Source");
+                }
+
+                NDArrayOnnxInterop.LiveExports.Should().Be(0, "the handle released its copy");
+            }
         }
 
         [TestMethod]
@@ -143,6 +207,10 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             back.typecode.Should().Be(NPTypeCode.UInt16, "directional: UInt16 comes back as UInt16, not Char");
         }
 
+        /// <summary>
+        ///     Decimal has no ONNX element type: the default mode converts it to a float64 temporary the handle owns
+        ///     (a copy, so ORT's writes do not reach the Decimal source), and the strict mode refuses it.
+        /// </summary>
         [TestMethod]
         public void AsOrtValue_Decimal_ConvertsToAFloat64Temporary_TheHandleOwns()
         {
@@ -152,6 +220,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             using (OrtTensor t = dec.AsOrtValue())
             {
                 t.ElementType.Should().Be(TensorElementType.Double);
+                t.IsView.Should().BeFalse("a conversion is a copy");
                 t.Source.Should().NotBeSameAs(dec, "the tensor reads the conversion temporary");
                 t.Source.typecode.Should().Be(NPTypeCode.Double);
                 t.Value.GetTensorDataAsSpan<double>().ToArray().Should().Equal(1.5, -2.25, 1e10);
@@ -161,6 +230,32 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
 
             // the temporary is released with the handle: only the source's own buffer remains
             dec.IsDisposed.Should().BeFalse();
+
+            // The strict mode has no view to offer for a dtype that must be converted.
+            new Action(() => dec.AsOrtValue(OnnxCodecMode.View)).Should().Throw<InvalidOperationException>()
+                .WithMessage("*OnnxCodecMode.View*Decimal*float64*");
+            NDArrayOnnxInterop.LiveExports.Should().Be(0);
+        }
+
+        /// <summary>
+        ///     A Decimal view that is also not C-contiguous needs both steps (the float64 conversion keeps the memory
+        ///     order, then a C-order pass): the tensor holds the view's logical elements, and both temporaries are
+        ///     given back when the handle is disposed.
+        /// </summary>
+        [TestMethod]
+        public void AsOrtValue_TransposedDecimal_IsConvertedAndLaidOutInCOrder()
+        {
+            long balance = Pool.Balance(() =>
+            {
+                using NDArray dec = Arange(NPTypeCode.Decimal, 2, 3);
+                using NDArray transposed = dec.T;   // (3,2): [[0,3],[1,4],[2,5]]
+                using OrtTensor t = transposed.AsOrtValue();
+                t.IsView.Should().BeFalse();
+                t.Source.Shape.IsContiguous.Should().BeTrue();
+                t.Value.GetTensorTypeAndShape().Shape.Should().Equal(3L, 2L);
+                t.Value.GetTensorDataAsSpan<double>().ToArray().Should().Equal(0.0, 3.0, 1.0, 4.0, 2.0, 5.0);
+            });
+            balance.Should().Be(0, "the conversion and the C-order copy are both released");
         }
 
         [TestMethod]

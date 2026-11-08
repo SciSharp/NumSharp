@@ -1,7 +1,3 @@
-using System;
-using System.Runtime.CompilerServices;
-using NumSharp.Generic;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -9,86 +5,72 @@ namespace NumSharp
         /// <summary>
         ///     Draw a single sample from a Gamma distribution.
         /// </summary>
+        /// <param name="shape">The shape of the gamma distribution. Must be non-negative.</param>
+        /// <param name="scale">The scale of the gamma distribution. Must be non-negative. Default is 1.0.</param>
+        /// <returns>A 0-d float64 array holding the draw.</returns>
+        /// <exception cref="ValueError"><paramref name="shape"/> or <paramref name="scale"/> is negative (including <c>-0.0</c>).</exception>
         public NDArray gamma(double shape, double scale = 1.0) => gamma(shape, scale, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a Gamma distribution.
         /// </summary>
-        /// <param name="shape">The shape of the gamma distribution. Must be non-negative.</param>
+        /// <param name="shape">The shape of the gamma distribution. Must be non-negative (0 gives all zeros without drawing;
+        ///     NaN is accepted and samples NaN, as in NumPy).</param>
         /// <param name="scale">The scale of the gamma distribution. Must be non-negative. Default is 1.0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized gamma distribution.</returns>
+        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <returns>Drawn samples from the parameterized gamma distribution (float64).</returns>
+        /// <exception cref="ValueError"><paramref name="shape"/> (<c>shape &lt; 0</c>, checked first) or <paramref name="scale"/>
+        ///     (<c>scale &lt; 0</c>) is negative — <c>-0.0</c> included, as NumPy tests the sign bit — or <paramref name="size"/>
+        ///     has a negative dimension.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.gamma.html
         ///     <br/>
         ///     Samples are drawn from a Gamma distribution with specified parameters,
         ///     shape (sometimes designated "k") and scale (sometimes designated "theta"),
         ///     where both parameters are > 0.
+        ///     <br/>
+        ///     NumPy's <c>legacy_gamma</c> = <c>scale * legacy_standard_gamma(shape)</c>, so <c>shape &lt; 1</c> takes the same
+        ///     Johnk/Ahrens-Dieter branch as <see cref="standard_gamma(double, Shape)"/> (the former two-argument path used a
+        ///     different <c>shape + 1</c> boost and diverged from NumPy). Byte-identical to
+        ///     <c>np.random.RandomState(seed).gamma</c>; holds the bit generator's lock for the draws.
         /// </remarks>
-        [NDScoped]
         public NDArray gamma(double shape, double scale, Shape size)
         {
-            if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar(SampleStandardGamma(shape) * scale);
+            RandomConstraints.Check(shape, "shape", ConstraintType.CONS_NON_NEGATIVE);
+            RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (shape < 1)
+            // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
+            var setup = new GammaSetup(shape);
+
+            if (IsScalarDraw(size))
             {
-                double d = shape + 1.0 - 1.0 / 3.0;
-                double c = (1.0 / 3.0) / Math.Sqrt(d);
-
-                NDArray u = uniform(0, 1, size);
-                return scale * Marsaglia(d, c, size) * np.power(u, 1.0 / shape);
-            }
-            else
-            {
-                double d = shape - 1.0 / 3.0;
-                double c = (1.0 / 3.0) / Math.Sqrt(d);
-
-                return scale * Marsaglia(d, c, size);
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private NDArray Marsaglia(double d, double c, Shape size)
-        {
-            var result = new NDArray<double>(size);
-            unsafe
-            {
-                var dst = result.Address;
-                var len = result.size;
-                Func<double> nextDouble = randomizer.NextDouble;
-                for (long i = 0; i < len; i++)
+                unsafe
                 {
-                    while (true)
-                    {
-                        double x, t, v;
-
-                        do
-                        {
-                            x = NextGaussian();
-                            t = (1.0 + c * x);
-                            v = t * t * t;
-                        } while (v <= 0);
-
-                        double U = nextDouble();
-                        double x2 = x * x;
-
-                        if (U < 1 - 0.0331 * x2 * x2)
-                        {
-                            dst[i] = d * v;
-                            break;
-                        }
-
-                        if (Math.Log(U) < 0.5 * x2 + d * (1.0 - v + Math.Log(v)))
-                        {
-                            dst[i] = d * v;
-                            break;
-                        }
-                    }
+                    // A one-double buffer IS NumPy's per-draw call sequence.
+                    double word;
+                    var one = new DrawBufferDouble(randomizer, &word, 1);
+                    lock (randomizer.@lock)
+                        return NDArray.Scalar(LegacyGamma(ref one, in setup, scale));
                 }
             }
 
-            return result;
+            var ret = LegacyOutput(NPTypeCode.Double, size);
+            unsafe
+            {
+                var dst = (double*)ret.Address;
+                long n = ret.size;
+                // Read-ahead draws (bulk-filled by the bit generator): every value draws unless shape == 0 (then no draws at all — per-draw).
+                double* storage = stackalloc double[DrawBufferDouble.Capacity];
+                var src = new DrawBufferDouble(randomizer, storage, setup.Draws ? DrawBufferDouble.Capacity : 1);
+                lock (randomizer.@lock)
+                    for (long i = 0; i < n; i++)
+                    {
+                        src.Owed = n - i;
+                        dst[i] = LegacyGamma(ref src, in setup, scale);
+                    }
+            }
+
+            return ret;
         }
     }
 }

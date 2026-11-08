@@ -99,12 +99,12 @@ namespace NumSharp.Tests.Backends.Kernels
         #region Min/Max Tests
 
         [TestMethod]
-        public async Task Min_EmptyAxis0_ThrowsArgumentException()
+        public async Task Min_EmptyAxis0_ThrowsValueError()
         {
             // NumPy: np.min(np.zeros((0, 3)), axis=0) raises ValueError
             var arr = np.zeros(new Shape(0, 3));
 
-            Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<ArgumentException>(() => np.amin(arr, axis: 0));
+            Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<ValueError>(() => np.amin(arr, axis: 0));
         }
 
         [TestMethod]
@@ -119,12 +119,12 @@ namespace NumSharp.Tests.Backends.Kernels
         }
 
         [TestMethod]
-        public async Task Max_EmptyAxis0_ThrowsArgumentException()
+        public async Task Max_EmptyAxis0_ThrowsValueError()
         {
             // NumPy: np.max(np.zeros((0, 3)), axis=0) raises ValueError
             var arr = np.zeros(new Shape(0, 3));
 
-            Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<ArgumentException>(() => np.amax(arr, axis: 0));
+            Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<ValueError>(() => np.amax(arr, axis: 0));
         }
 
         [TestMethod]
@@ -143,12 +143,12 @@ namespace NumSharp.Tests.Backends.Kernels
         #region ArgMax/ArgMin Tests
 
         [TestMethod]
-        public async Task ArgMax_EmptyAxis0_ThrowsArgumentException()
+        public async Task ArgMax_EmptyAxis0_ThrowsValueError()
         {
             // NumPy: np.argmax(np.zeros((0, 3)), axis=0) raises ValueError
             var arr = np.zeros(new Shape(0, 3));
 
-            Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<ArgumentException>(() => np.argmax(arr, axis: 0));
+            Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<ValueError>(() => np.argmax(arr, axis: 0));
         }
 
         [TestMethod]
@@ -164,12 +164,12 @@ namespace NumSharp.Tests.Backends.Kernels
         }
 
         [TestMethod]
-        public async Task ArgMin_EmptyAxis0_ThrowsArgumentException()
+        public async Task ArgMin_EmptyAxis0_ThrowsValueError()
         {
             // NumPy: np.argmin(np.zeros((0, 3)), axis=0) raises ValueError
             var arr = np.zeros(new Shape(0, 3));
 
-            Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<ArgumentException>(() => np.argmin(arr, axis: 0));
+            Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<ValueError>(() => np.argmin(arr, axis: 0));
         }
 
         [TestMethod]

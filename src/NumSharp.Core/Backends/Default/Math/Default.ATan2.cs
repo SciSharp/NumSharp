@@ -16,7 +16,7 @@ namespace NumSharp.Backends
         /// <returns>Array of angles in radians, range [-pi, pi]</returns>
         public override NDArray ATan2(NDArray y, NDArray x, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "arctan2", y, x, @out, where);
             // NumPy validation order: where parse -> loop resolution -> out
             // cast -> shape (probed 2.4.2).
             ValidateWhereMask(where);
@@ -27,6 +27,24 @@ namespace NumSharp.Backends
             if (typeCode.HasValue && typeCode.Value < NPTypeCode.Single)
                 throw new IncorrectTypeException(
                     "No loop matching the specified signature and casting was found for ufunc arctan2");
+
+            // Text has no arctan2 loop (the legacy resolver's text, or the input-cast text under a float dtype=).
+            Strings.NDStringUfuncs.ThrowIfBinary("arctan2", y, x, @out, typeCode, where);
+
+            // Complex has NO arctan2 loop (float-only ufunc). This guard is LOAD-BEARING, not cosmetic:
+            // without it a complex128 input falls through to ExecuteATan2Kernel, whose mixed-type kernel
+            // has no complex path and writes out of bounds on the 16-byte lanes -> heap corruption /
+            // fatal ExecutionEngineException (found by the ma differential fuzz). NumPy raises TypeError
+            // "ufunc 'arctan2' not supported for the input types ..." (probed 2.4.2); mirror hypot's guard.
+            if (y.GetTypeCode == NPTypeCode.Complex || x.GetTypeCode == NPTypeCode.Complex)
+                throw new IncorrectTypeException(
+                    "ufunc 'arctan2' not supported for the input types, and the inputs " +
+                    "could not be safely coerced to any supported types according to the casting rule ''safe''");
+
+            // NEP 50: a 0-d int64 / uint64 operand past 2^53 is a weak Python int that NumPy packs into a float32 loop
+            // through the correctly rounded double (two roundings); the kernels' operand cast rounds once
+            // (AdoptWeakIntOperand). The replacement is disposed at every exit.
+            using var weakInt = AdoptWeakIntOperand(ref y, ref x, typeCode ?? PromoteATan2Binary(y, x));
 
             // ufunc out=/where= ride the shared binary Into-path:
             // EmitScalarOperation special-cases ATan2 (Math.Atan2 /
@@ -41,16 +59,17 @@ namespace NumSharp.Backends
                     y.GetTypeCode, x.GetTypeCode, loopType, @out, where);
             }
 
-            // Handle empty array
-            if (y.size == 0)
-                return y.Clone();
-
-            if (x.size == 0)
-                return x.Clone();
+            // An empty operand: NumPy still broadcasts the operands (its error for shapes that do not broadcast) and
+            // allocates the result in the loop dtype (np.arctan2(0, empty int8) is float16, of the broadcast shape). The
+            // kernels need no call for zero elements. This returned a clone of the empty operand: its own dtype and
+            // shape, and no broadcast check.
+            if (y.size == 0 || x.size == 0)
+                return EmptyBinaryResult(y, x, typeCode ?? PromoteATan2Binary(y, x));
 
             // Execute using IL kernel infrastructure
-            // ATan2 is a binary operation: atan2(y, x)
-            return ExecuteATan2Op(y, x, typeCode);
+            // ATan2 is a binary operation: atan2(y, x). NumPy's ufunc output layout (parity QA-36): the route writes C,
+            // so a permuted or F operand is computed in its K order and relabelled.
+            return KOrderBinary(y, x, (engine: this, typeCode), static (s, a, b) => s.engine.ExecuteATan2Op(a, b, s.typeCode));
         }
 
         /// <summary>
@@ -83,7 +102,7 @@ namespace NumSharp.Backends
             var resultShape = yShape.Clean();
 
             // Allocate result
-            var result = new NDArray(resultType, resultShape, false);
+            var result = NewArray(resultType, resultShape, false);
 
             // Classify execution path using strides
             ExecutionPath path;
@@ -116,15 +135,43 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Maps a single input dtype to its NumPy arctan2 output target.
-        /// NumPy 2.x rules: bool/i8/u8 → f16, i16/u16 → f32, i32+/i64+/char → f64,
+        ///     The result of a binary float-tier ufunc (<see cref="ATan2"/> and the <c>ExecuteFloatTierBinary</c> family:
+        ///     logaddexp, logaddexp2, nextafter, copysign, hypot, heaviside) when an operand is EMPTY: NumPy still
+        ///     broadcasts the operands and allocates the result in the loop dtype; no element is computed.
+        /// </summary>
+        /// <param name="a">The first operand.</param>
+        /// <param name="b">The second operand.</param>
+        /// <param name="loopType">The resolved loop dtype, which is the result's dtype.</param>
+        /// <returns>A fresh empty array of <paramref name="loopType"/> and the operands' broadcast shape.</returns>
+        /// <exception cref="IncorrectShapeException">The shapes do not broadcast (NumPy's <c>operands could not be broadcast
+        ///     together with shapes (0,3) (2,) </c>, raised by <see cref="Broadcast(Shape, Shape)"/>).</exception>
+        /// <remarks>
+        ///     The callers used to return a clone of the empty operand: its own dtype (an integer for an integer input,
+        ///     where NumPy's loop is float16 / float32 / float64), its own shape (a (0, 1) operand against a (5,) one gave
+        ///     (0, 1), NumPy (0, 5)) and no broadcast error.
+        /// </remarks>
+        private NDArray EmptyBinaryResult(NDArray a, NDArray b, NPTypeCode loopType)
+        {
+            var (shape, _) = Broadcast(a.Shape, b.Shape);
+            return NewArray(loopType, shape.Clean(), false);
+        }
+
+        /// <summary>
+        /// Maps a single input dtype to its NumPy arctan2 output target: the float loop table every float-tier binary ufunc
+        /// (arctan2, hypot, copysign, heaviside, logaddexp, logaddexp2, nextafter) reads.
+        /// NumPy 2.x rules: bool/i8/u8 → f16, i16/u16/char → f32, i32+/i64+ → f64,
         /// float types preserved, decimal preserved (NumSharp extension).
         /// </summary>
+        /// <param name="t">One operand's dtype.</param>
+        /// <returns>The float loop that operand reaches safely.</returns>
+        /// <remarks>NumSharp's char is uint16 to every promotion table (the "uint16 masquerade"); it ranked with the 32/64-bit
+        ///     integers here, so <c>np.hypot(char, float32)</c> and <c>np.arctan2(char, char)</c> were float64 where uint16's
+        ///     NumPy answer is float32 (parity QA-17).</remarks>
         private static NPTypeCode PromoteATan2Single(NPTypeCode t) => t switch
         {
             NPTypeCode.Boolean or NPTypeCode.SByte or NPTypeCode.Byte => NPTypeCode.Half,
-            NPTypeCode.Int16 or NPTypeCode.UInt16 => NPTypeCode.Single,
-            NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 or NPTypeCode.Char => NPTypeCode.Double,
+            NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Char => NPTypeCode.Single,
+            NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 => NPTypeCode.Double,
             NPTypeCode.Half => NPTypeCode.Half,
             NPTypeCode.Single => NPTypeCode.Single,
             NPTypeCode.Double => NPTypeCode.Double,
@@ -137,20 +184,25 @@ namespace NumSharp.Backends
         /// Order: Decimal > Double > Single > Half.
         /// </summary>
         /// <summary>
-        ///     The NEP50-aware form the ufunc entry points use: a 0-d operand is a weak scalar (a C# literal arrives as
-        ///     one — <c>np.arctan2(f32, 1)</c> is <c>f32 × int32-0-d</c>), so the common type is resolved by
+        ///     The NEP50-aware form the ufunc entry points use: a C# literal (<see cref="NDArray.WasPythonLiteral"/>) is a
+        ///     weak scalar — <c>np.arctan2(f32, 1)</c> is <c>f32 × marked int32-0-d</c> — so the common type is resolved by
         ///     <see cref="np._FindCommonType(NDArray, NDArray)"/> exactly as every other binary ufunc does and THEN
         ///     mapped to the float tier: <c>arctan2(f32, 1)</c> stays float32, <c>arctan2(i32, 1.5)</c> is float64.
-        ///     The dtype-only overload below combines two ARRAY dtypes and sent every int literal on a float32/float16
+        ///     The dtype-only overload below combines two STRONG dtypes and sent every int literal on a float32/float16
         ///     array to float64.
         /// </summary>
+        /// <param name="y">The first operand.</param>
+        /// <param name="x">The second operand.</param>
+        /// <returns>The float loop dtype (decimal for a decimal operand, NumSharp's extension).</returns>
+        /// <remarks>Two strong operands — arrays, strong 0-d arrays (an element read, <c>np.array(x)</c>), or two literals —
+        ///     take NumPy's loop-list rule: the first float loop BOTH inputs cast to safely (<c>uint8 × int8</c> is the
+        ///     <c>ee->e</c> float16 loop, where <c>result_type</c>'s int16 would give float32; the oracle's arctan2 cells
+        ///     and the relayout tier's 0-d views pin it).</remarks>
         private static NPTypeCode PromoteATan2Binary(NDArray y, NDArray x)
         {
-            // Two ARRAYS keep the loop-list rule (uint8 × int8 → float16, exactly NumPy's `ee->e` loop, which
-            // result_type's int16 → float32 would get wrong — the oracle's arctan2/uint8,int8 cells pin it).
-            // Only a lone 0-d operand is the weak scalar that adopts the array's dtype-kind.
-            bool ys = y.ndim == 0, xs = x.ndim == 0;
-            if (ys == xs)
+            // Only a lone weak literal adopts the strong operand's dtype-kind; any other pair keeps the loop-list rule.
+            bool yw = y.WasPythonLiteral, xw = x.WasPythonLiteral;
+            if (yw == xw)
                 return PromoteATan2Binary(y.GetTypeCode, x.GetTypeCode);
             return PromoteATan2Single(np._FindCommonType(y, x));
         }
@@ -176,12 +228,29 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Execute scalar x scalar ATan2 operation.
+        /// Execute scalar x scalar ATan2 operation: each operand reaches the loop dtype, then the loop's function runs —
+        /// NumPy's HALF_arctan2 (<see cref="DirectILKernelGenerator.ATan2HalfNumPy"/>) for float16, the CRT's <c>atan2f</c>
+        /// for float32 (parity QA-24: <see cref="MathF.Atan2(float, float)"/>, the call NumPy's float32 loop makes),
+        /// <see cref="Math.Atan2(double, double)"/> for float64 and the decimal helper for decimal.
         /// </summary>
-        private static NDArray ExecuteATan2ScalarScalar(
+        /// <param name="y">The 0-d ordinate.</param>
+        /// <param name="x">The 0-d abscissa.</param>
+        /// <param name="yType">The ordinate's dtype.</param>
+        /// <param name="xType">The abscissa's dtype.</param>
+        /// <param name="resultType">The loop dtype.</param>
+        /// <returns>The 0-d angle in <paramref name="resultType"/>.</returns>
+        private NDArray ExecuteATan2ScalarScalar(
             NDArray y, NDArray x,
             NPTypeCode yType, NPTypeCode xType, NPTypeCode resultType)
         {
+            // float16 / float32: NumPy's float32 function on the operands cast to the loop dtype. A float16 operand keeps
+            // its own bits (a signalling NaN stays signalling into atan2f, as NumPy's widening keeps it); every other
+            // source dtype promoted to these loops (bool, 8- and 16-bit integers) is exact in double first.
+            if (resultType == NPTypeCode.Half)
+                return NewScalar(DirectILKernelGenerator.ATan2HalfNumPy(ScalarAsHalf(y, yType), ScalarAsHalf(x, xType)));
+            if (resultType == NPTypeCode.Single)
+                return NewScalar(MathF.Atan2(ScalarAsSingle(y, yType), ScalarAsSingle(x, xType)));
+
             // Get values as double for Math.Atan2
             double yVal = ConvertToDouble(y, yType);
             double xVal = ConvertToDouble(x, xType);
@@ -191,14 +260,38 @@ namespace NumSharp.Backends
             // Convert to result type
             return resultType switch
             {
-                NPTypeCode.Half => NDArray.Scalar((Half)result),
-                NPTypeCode.Single => NDArray.Scalar((float)result),
-                NPTypeCode.Double => NDArray.Scalar(result),
-                NPTypeCode.Decimal => NDArray.Scalar(Utilities.DecimalMath.ATan2(
+                NPTypeCode.Half => NewScalar((Half)result),
+                NPTypeCode.Single => NewScalar((float)result),
+                NPTypeCode.Double => NewScalar(result),
+                NPTypeCode.Decimal => NewScalar(Utilities.DecimalMath.ATan2(
                     ConvertToDecimal(y, yType), ConvertToDecimal(x, xType))),
-                _ => NDArray.Scalar(result)
+                _ => NewScalar(result)
             };
         }
+
+        /// <summary>
+        /// A 0-d operand cast to a float16 loop: a float16 element read as its own bits (no widen-and-narrow that could
+        /// quiet a signalling NaN), any other promoted dtype through its exact double value.
+        /// </summary>
+        /// <param name="arr">The 0-d operand.</param>
+        /// <param name="type">Its dtype (one NumPy promotes to the float16 loop).</param>
+        /// <returns>The operand as the loop's float16.</returns>
+        private static Half ScalarAsHalf(NDArray arr, NPTypeCode type)
+            => type == NPTypeCode.Half ? arr.GetAtIndex<Half>(0) : (Half)ConvertToDouble(arr, type);
+
+        /// <summary>
+        /// A 0-d operand cast to a float32 loop: a float32 element as it is, a float16 one widened bit for bit (NumPy's
+        /// <c>npy_half_to_float</c>), any other promoted dtype through its exact double value.
+        /// </summary>
+        /// <param name="arr">The 0-d operand.</param>
+        /// <param name="type">Its dtype (one NumPy promotes to the float32 loop).</param>
+        /// <returns>The operand as the loop's float32.</returns>
+        private static float ScalarAsSingle(NDArray arr, NPTypeCode type) => type switch
+        {
+            NPTypeCode.Single => arr.GetAtIndex<float>(0),
+            NPTypeCode.Half => DirectILKernelGenerator.HalfToFloatScalarExact(BitConverter.HalfToUInt16Bits(arr.GetAtIndex<Half>(0))),
+            _ => (float)ConvertToDouble(arr, type),
+        };
 
         /// <summary>
         /// Convert NDArray scalar to double.
@@ -302,7 +395,7 @@ namespace NumSharp.Backends
 
             fixed (long* yStrides = yShape.strides)
             fixed (long* xStrides = xShape.strides)
-            fixed (long* shape = result.shape)
+            fixed (long* shape = result.Shape.dimensions)
             {
                 kernel(
                     (void*)yAddr,

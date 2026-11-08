@@ -12,7 +12,7 @@
         public void SeedTest()
         {
             NumPyRandom rando = np.random.RandomState(1000);
-            Assert.AreEqual(1000, rando.Seed, "The seed value given in the ctor does not match the seed value attribute.");
+            Assert.AreEqual(1000u, rando.Seed, "The seed value given in the ctor does not match the seed value attribute.");
         }
 
         [TestMethod]
@@ -35,7 +35,6 @@
         }
 
         [TestMethod]
-        [OpenBugs] // BUG: default(Shape) handling causes "index < Count" error
         public void UniformMultipleSample()
         {
             NumPyRandom rando = np.random.RandomState(1000);
@@ -51,7 +50,7 @@
                 rando.seed(1000);
                 NDArray test = rando.choice(high, (Shape)nrSamples);
                 for (int j = 0; j < actual.size; j++) {
-                    Assert.AreEqual(actual.GetInt64(j), test.GetInt64(j), "Inconsistent choice sampling with the same seed. Expected the results to always be the same.");
+                    Assert.AreEqual(System.Convert.ToInt64(actual.GetAtIndex(j)), System.Convert.ToInt64(test.GetAtIndex(j)), "Inconsistent choice sampling with the same seed. Expected the results to always be the same.");
                 }
             }
         }
@@ -72,21 +71,20 @@
                 rando.seed(1000);
                 NDArray test = rando.choice(5, (Shape)nrSamples, p: probabilities);
                 for (int j = 0; j < actual.size; j++) {
-                    Assert.AreEqual(actual.GetInt64(j), test.GetInt64(j), "Inconsistent choice sampling with the same seed. Expected the results to always be the same.");
+                    Assert.AreEqual(System.Convert.ToInt64(actual.GetAtIndex(j)), System.Convert.ToInt64(test.GetAtIndex(j)), "Inconsistent choice sampling with the same seed. Expected the results to always be the same.");
                 }
             }
         }
 
 
         [TestMethod]
-        [OpenBugs] // BUG: default(Shape) handling causes "index < Count" error
         public void IntegerArraySample()
         {
             NumPyRandom rando = np.random.RandomState(1000);
             int nrSamples = 5;
 
             NDArray int_arr = new int[] { 42, 96, 3, 101 };
-            double[] probabilities = new double[] { 0.5, 0.1, 0.0, 0.3 };
+            double[] probabilities = new double[] { 0.5, 0.2, 0.0, 0.3 };
 
             NDArray actual = rando.choice(int_arr, (Shape)nrSamples, p: probabilities);
 
@@ -96,7 +94,9 @@
                 NDArray test = rando.choice(int_arr, (Shape)nrSamples, p: probabilities);
                 for (int j = 0; j < actual.size; j++)
                 {
-                    Assert.AreEqual(actual.GetInt64(j), test.GetInt64(j), "Inconsistent choice sampling with the same seed. Expected the results to always be the same.");
+                    // The sampled elements keep int_arr's int32 dtype, so read them by value — GetInt64 would
+                    // reinterpret 8 bytes of an int32 buffer.
+                    Assert.AreEqual(System.Convert.ToInt64(actual.GetAtIndex(j)), System.Convert.ToInt64(test.GetAtIndex(j)), "Inconsistent choice sampling with the same seed. Expected the results to always be the same.");
                 }
             }
         }

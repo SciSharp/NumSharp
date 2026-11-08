@@ -163,7 +163,7 @@ public class NpSearchsortedSideSorterTests
     }
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
+    [ExpectedException(typeof(ValueError))]
     public void Sorter_WrongSize_Throws()
     {
         // NumPy: ValueError "sorter.size must equal a.size"
@@ -173,21 +173,68 @@ public class NpSearchsortedSideSorterTests
     }
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
+    [ExpectedException(typeof(ValueError))]
     public void Sorter_EmptyForNonEmptyA_Throws()
     {
+        // NumPy: ValueError "sorter.size must equal a.size"
         var a = np.array(new[] { 1, 2, 3 });
         var sorter = np.array(Array.Empty<long>());
         np.searchsorted(a, 2, sorter: sorter);
     }
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
+    [ExpectedException(typeof(TypeError))]
     public void Sorter_MultidimSorter_Throws()
     {
+        // NumPy: TypeError "could not parse sorter argument" (the sorter's depth check, before its size)
         var a = np.array(new[] { 1, 2, 3, 4 });
         var sorter = np.array(new long[,] { { 0, 1 }, { 2, 3 } });
         np.searchsorted(a, 2, sorter: sorter);
+    }
+
+    /// <summary>
+    ///     A sorter entry outside the haystack is NumPy's <c>ValueError: Sorter index out of range.</c> when the bisection
+    ///     reaches it (argbinsearch checks each entry it reads before the entry addresses the haystack), and never read, so
+    ///     never an error, when it does not. NumSharp's kernel read the haystack at the entry: memory outside it, an answer
+    ///     that changed from run to run. NumPy 2.4.2's answers for every overload, both sides, an int32 sorter, a strided
+    ///     haystack and a huge index.
+    /// </summary>
+    [TestMethod]
+    public void Sorter_IndexOutsideTheHaystack_IsNumPysValueErrorWhenReached()
+    {
+        var a = np.array(new long[] { 10, 20, 30, 40 });
+        var oob = np.array(new long[] { 0, 1, 2, 4 });
+        const string text = "Sorter index out of range.";
+        void Refused(Action call) => new Action(call).Should().Throw<ValueError>().WithMessage(text);
+
+        Refused(() => np.searchsorted(a, 35, sorter: oob));
+        Refused(() => np.searchsorted(a, 35.0, sorter: oob));
+        Refused(() => np.searchsorted(a, np.array(new long[] { 15, 35 }), sorter: oob));
+        Refused(() => np.searchsorted(a, 30, side: "right", sorter: oob));
+        Refused(() => np.searchsorted(a, 35, sorter: np.array(new long[] { 0, 1, 2, -1 })));
+        Refused(() => np.searchsorted(a, 35, sorter: np.array(new long[] { 0, 1, 2, 1L << 40 })));
+        Refused(() => np.searchsorted(a, 35, sorter: np.array(new[] { 0, 1, 2, 4 })));
+        Refused(() => np.searchsorted(np.array(new long[] { 10, 0, 20, 0, 30, 0, 40, 0 })["::2"], 35, sorter: oob));
+
+        // Not reached: the bisection for 15 reads sorter[2], sorter[1] and sorter[0] only.
+        np.searchsorted(a, 15, sorter: oob).Should().Be(1);
+        np.searchsorted(a, np.array(new long[] { 15, 12 }), sorter: oob).ToArray<long>().Should().Equal(1L, 1L);
+    }
+
+    /// <summary>
+    ///     Keys and a sorter that are C-contiguous views at a non-zero offset (np.split children) are read from the view, for
+    ///     the scalar keys as for the array ones (gap VA01: the kernel calls passed the storage's start). NumPy 2.4.2: with
+    ///     a = [5, 1, 3, 2, 8] and the sorter [1, 3, 2, 0, 4] (offset 2 of its owner), 7.5 and 2 on the right are 4 and 2.
+    /// </summary>
+    [TestMethod]
+    public void Sorter_ViewAtAnOffset_IsReadFromTheView_ForEveryKeyForm()
+    {
+        var a = np.array(new double[] { 5, 1, 3, 2, 8 });
+        var sorter = np.split(np.array(new long[] { 7, 7, 1, 3, 2, 0, 4 }), new[] { 2 })[1];
+        np.searchsorted(a, 7.5, side: "right", sorter: sorter).Should().Be(4);
+        np.searchsorted(a, 2, side: "right", sorter: sorter).Should().Be(2);
+        var keys = np.split(np.array(new double[] { 9, 2, 7.5 }), new[] { 1 })[1];
+        np.searchsorted(a, keys, "right", sorter).ToArray<long>().Should().Equal(2L, 4L);
     }
 
     #endregion
@@ -195,7 +242,7 @@ public class NpSearchsortedSideSorterTests
     #region Multidim 'a' validation
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
+    [ExpectedException(typeof(ValueError))]
     public void Multidim_A_2D_Throws()
     {
         // NumPy: ValueError "object too deep for desired array"
@@ -204,17 +251,19 @@ public class NpSearchsortedSideSorterTests
     }
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
+    [ExpectedException(typeof(ValueError))]
     public void Multidim_A_3D_Throws()
     {
+        // NumPy: ValueError "object too deep for desired array"
         var a = np.arange(24).reshape(2, 3, 4);
         np.searchsorted(a, 5);
     }
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
+    [ExpectedException(typeof(ValueError))]
     public void Multidim_A_2D_WithNDArrayV_Throws()
     {
+        // NumPy: ValueError "object too deep for desired array"
         var a = np.arange(20).reshape(4, 5);
         var v = np.array(new[] { 5, 10 });
         np.searchsorted(a, v);

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
@@ -49,12 +50,12 @@ namespace NumSharp.Backends
             // Trailing block size B = prod(arr.shape[leadNdim:]) (1 for a full element mask).
             long blockSize = 1;
             for (int d = leadNdim; d < arr.ndim; d++)
-                blockSize *= arr.shape[d];
+                blockSize *= arr.Shape.dimensions[d];
 
             long trueCount = CountMaskTrue(mask.MakeGeneric<bool>());
 
             if (trueCount == 0)
-                return new NDArray(arr.dtype, BooleanMaskResultShape(0, arr, leadNdim));
+                return NewArray(arr.dtype, BooleanMaskResultShape(0, arr, leadNdim), true);
 
             // An EMPTY trailing block (blockSize == 0 — a mask on an array with a 0-length
             // trailing axis, e.g. arr[:, 6:-4][mask] where the slice emptied the last axis)
@@ -64,10 +65,13 @@ namespace NumSharp.Backends
             // zero-length buffer, an out-of-bounds heap write. (NumPy: arr shaped (3,0), mask
             // (3,) -> result (3,0), empty.)
             if (blockSize == 0)
-                return new NDArray(arr.dtype, BooleanMaskResultShape(trueCount, arr, leadNdim));
+                return NewArray(arr.dtype, BooleanMaskResultShape(trueCount, arr, leadNdim), true);
 
-            // Flat gather buffer of trueCount*B elements, reshaped to (count,)+trailing below.
-            var result = new NDArray(arr.dtype, new Shape(trueCount * blockSize));
+            // Flat gather buffer of trueCount*B elements, reshaped to (count,)+trailing below. Both gathers below write
+            // EVERY element (one per True, counted from the same mask bytes), so the buffer is not zero-filled: the zero
+            // fill came from OS-zeroed pages, whose first touch page-faulted on every call — 165 of the 184 us of a
+            // 40,000-element int64 selection (2026-10-08; the pool's recycled buffer costs nothing to touch).
+            var result = NDArray.ForOverwrite(arr.dtype, new Shape(trueCount * blockSize), this);
 
             bool simd = DirectILKernelGenerator.Enabled && DirectILKernelGenerator.VectorBits > 0;
 
@@ -78,14 +82,27 @@ namespace NumSharp.Backends
             }
             else
             {
-                // General NDIter gather (layout-aware: honors strides/offset/broadcast).
-                NDArray gatherMask = blockSize == 1 ? mask : BroadcastMaskAcrossBlock(mask, arr);
+                // General NDIter gather (layout-aware: honors strides/offset/broadcast). The mask is the operand's element
+                // mask only when it has the operand's RANK: a leading mask over trailing extents of 1 (blockSize 1 all the
+                // same, e.g. a (2,) mask over an (m[:, :1]) (2, 1) view) still names rows and must be laid over those axes,
+                // or the iterator right-aligns (2,) against (2, 1) and refuses (parity QA-23; the setter's scatter already
+                // tests the rank).
+                NDArray gatherMask = leadNdim == arr.ndim ? mask : BroadcastMaskAcrossBlock(mask, arr);
                 BooleanMaskGather(arr, gatherMask, result);
             }
 
-            return leadNdim == arr.ndim
-                ? result
-                : result.reshape(BooleanMaskResultShape(trueCount, arr, leadNdim));
+            if (leadNdim == arr.ndim)
+                return result; // full element mask -> the owned 1-D gather buffer IS the result
+
+            // Partial/row mask (mask.ndim < arr.ndim): the flat gather buffer needs its trailing
+            // axes restored. Reshape the OWNED result IN PLACE (a pure relabel of the already
+            // C-contiguous buffer, preserving OWNDATA) and return it — NOT result.reshape(...),
+            // which returns a VIEW of this internal buffer (owndata=False) and so diverged from
+            // NumPy, whose boolean-mask selection is an owned copy (probed 2.4.2:
+            // np.arange(12).reshape(3,4)[[True,False,True]].flags.owndata is True). This mirrors
+            // the full-mask branch above and the leading-integer fancy path, which already own.
+            result.Storage.Reshape(new Shape(BooleanMaskResultShape(trueCount, arr, leadNdim).dimensions, copy: false));
+            return result;
         }
 
         // =====================================================================
@@ -113,15 +130,39 @@ namespace NumSharp.Backends
 
             int leadNdim = mask.ndim;
 
+            // NumPy has TWO assignment rules for a boolean index (mapping.c). A mask of the array's own shape is
+            // HAS_BOOL -> array_assign_boolean_subscript: the value must be 0-d or 1-d, and a 1-d value longer
+            // than one element must hold exactly one element per True. Every other mask (a leading prefix, a
+            // 0-d bool, an empty one) is a fancy index -> MapIter's value rule (NDArray.PrepareAssignedValue).
+            bool ownShapeMask = leadNdim == arr.ndim && mask.Shape.dimensions.AsSpan().SequenceEqual(arr.Shape.dimensions);
+            if (ownShapeMask && value.ndim > 1)
+                throw new TypeError("NumPy boolean array indexing assignment requires a 0 or 1-dimensional input, " +
+                                    string.Create(CultureInfo.InvariantCulture, $"input has {value.ndim} dimensions"));
+
             // Trailing block size B = prod(arr.shape[leadNdim:]). An empty trailing block
             // (B == 0 — arr shaped (0,3), or a mask on an array whose last axis a prior basic
             // slice emptied) makes the selection (trueCount,)+trailing EMPTY regardless of the
             // true-count.
             long blockSize = 1;
             for (int d = leadNdim; d < arr.ndim; d++)
-                blockSize *= arr.shape[d];
+                blockSize *= arr.Shape.dimensions[d];
 
             long trueCount = CountMaskTrue(mask.MakeGeneric<bool>());
+            if (ownShapeMask)
+            {
+                // array_assign_boolean_subscript: `if (PyArray_NDIM(v) > 0 && PyArray_DIMS(v)[0] != 1)` the length
+                // must equal the True count — also when that count is 0 (an all-False mask refuses a 3-vector).
+                if (value.ndim == 1 && value.Shape.dimensions[0] != 1 && value.Shape.dimensions[0] != trueCount)
+                    throw new ValueError("NumPy boolean array indexing assignment cannot assign " +
+                                         string.Create(CultureInfo.InvariantCulture, $"{value.Shape.dimensions[0]} input values to the {trueCount} output values where the mask is true"));
+            }
+            else if (trueCount != 0 && blockSize != 0 && value.size != 1)
+            {
+                // A prefix mask is a fancy index: leading axes of the value beyond the result's rank are dropped
+                // and a value that still does not fit raises NumPy's "shape mismatch: value array ..." text.
+                value = NDArray.PrepareAssignedValue(value, BooleanMaskResultShape(trueCount, arr, leadNdim).dimensions);
+            }
+
             if (trueCount == 0 || blockSize == 0)
             {
                 // The selection is EMPTY ((trueCount,)+trailing carries a 0 axis). NumPy still
@@ -132,14 +173,8 @@ namespace NumSharp.Backends
                 // buffer when arr / the trailing block is empty — e.g. E03[True] = -7.)
                 if (value.size != 1)
                 {
-                    var emptySel = BooleanMaskResultShape(trueCount, arr, leadNdim);
-                    string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
-                    try { np.broadcast_to(value, emptySel); }
-                    catch (IncorrectShapeException ex)
-                    {
-                        throw new ValueError($"shape mismatch: value array of shape {Tup(value.Shape.dimensions)} " +
-                                             $"could not be broadcast to indexing result of shape {Tup(emptySel.dimensions)}", ex);
-                    }
+                    // MapIter's value rule against the empty selection (leading axes dropped, NumPy's text).
+                    NDArray.PrepareAssignedValue(value, BooleanMaskResultShape(trueCount, arr, leadNdim).dimensions);
                 }
                 return;
             }
@@ -183,8 +218,8 @@ namespace NumSharp.Backends
             var dims = new long[1 + trailing];
             dims[0] = count;
             for (int i = 0; i < trailing; i++)
-                dims[i + 1] = arr.shape[leadNdim + i];
-            return new Shape(dims);
+                dims[i + 1] = arr.Shape.dimensions[leadNdim + i];
+            return new Shape(dims, copy: false);
         }
 
         /// <summary>
@@ -198,10 +233,12 @@ namespace NumSharp.Backends
             int trailing = arr.ndim - mask.ndim;
             var reshaped = new long[mask.ndim + trailing];
             for (int i = 0; i < mask.ndim; i++)
-                reshaped[i] = mask.shape[i];
+                reshaped[i] = mask.Shape.dimensions[i];
             for (int i = 0; i < trailing; i++)
                 reshaped[mask.ndim + i] = 1;
-            return np.broadcast_to(mask.reshape(reshaped), arr.Shape);
+            // np.broadcast_to's body for an array source (the read-only stride-0 view; no numpy.matrix region is needed
+            // around it: the view is built from the storage and calls no np.* function).
+            return NDArray.broadcast_to(mask.reshape(new Shape(reshaped, copy: false)), arr.Shape);
         }
 
         /// <summary>
@@ -211,7 +248,7 @@ namespace NumSharp.Backends
         /// </summary>
         private static NDArray MaterializeMaskValue(NDArray value, Shape target, NDArray arr)
         {
-            var flat = np.broadcast_to(value, target).flatten(); // contiguous C-order copy
+            var flat = NDArray.broadcast_to(value, target).flatten(); // np.broadcast_to's view, then a contiguous C-order copy
             if (flat.typecode != arr.typecode)
                 flat = flat.astype(arr.typecode);
             return flat;

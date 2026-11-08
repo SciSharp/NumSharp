@@ -41,6 +41,9 @@ namespace NumSharp.Tests.Backends.Iterators
             var second = new List<int>();
             do { second.Add(it.GetValue<int>(0)); } while (it.Iternext());
             CollectionAssert.AreEqual(new[] { 0, 10, 20, 30, 40 }, second.ToArray());
+            // A raw pointer does not root its array: keep every reset target alive past the iterator's last read, or a
+            // collection (frequent while other tests run in parallel) frees and recycles the buffer under it.
+            GC.KeepAlive(b);
         }
 
         // ================================================================
@@ -75,6 +78,10 @@ namespace NumSharp.Tests.Backends.Iterators
             do { second.Add(it.GetValue<int>(0)); } while (it.Iternext());
             // Should iterate b in memory order: [0,10,20,30,40]
             CollectionAssert.AreEqual(new[] { 0, 10, 20, 30, 40 }, second.ToArray());
+            // A raw pointer does not root its array: keep every reset target alive past the iterator's last read, or a
+            // collection (frequent while other tests run in parallel) frees and recycles the buffer under it.
+            GC.KeepAlive(b);
+            GC.KeepAlive(b_rev);
         }
 
         // ================================================================
@@ -99,6 +106,9 @@ namespace NumSharp.Tests.Backends.Iterators
             var vals = new List<int>();
             do { vals.Add(it.GetValue<int>(0)); } while (it.Iternext());
             CollectionAssert.AreEqual(new[] { 100, 101, 102, 103, 104, 105 }, vals.ToArray());
+            // A raw pointer does not root its array: keep every reset target alive past the iterator's last read, or a
+            // collection (frequent while other tests run in parallel) frees and recycles the buffer under it.
+            GC.KeepAlive(b);
         }
 
         // ================================================================
@@ -146,6 +156,10 @@ namespace NumSharp.Tests.Backends.Iterators
             CollectionAssert.AreEqual(new[] { 30, 33, 36, 39 }, y2.ToArray<int>());
             // y1 should be unchanged from first pass
             CollectionAssert.AreEqual(new[] { 0, 2, 4, 6 }, y1.ToArray<int>());
+            // A raw pointer does not root its array: keep every reset target alive past the iterator's last read, or a
+            // collection (frequent while other tests run in parallel) frees and recycles the buffer under it.
+            GC.KeepAlive(x2);
+            GC.KeepAlive(y2);
         }
 
         // ================================================================
@@ -170,6 +184,9 @@ namespace NumSharp.Tests.Backends.Iterators
             var second = new List<int>();
             do { second.Add(it.GetValue<int>(0)); } while (it.Iternext());
             CollectionAssert.AreEqual(new[] { 100, 101, 102, 103, 104, 105 }, second.ToArray());
+            // A raw pointer does not root its array: keep every reset target alive past the iterator's last read, or a
+            // collection (frequent while other tests run in parallel) frees and recycles the buffer under it.
+            GC.KeepAlive(b);
         }
 
         // ================================================================
@@ -199,6 +216,10 @@ namespace NumSharp.Tests.Backends.Iterators
             var second = new List<int>();
             do { second.Add(it.GetValue<int>(0)); } while (it.Iternext());
             CollectionAssert.AreEqual(new[] { 0, 10, 20, 30, 40, 50 }, second.ToArray());
+            // A raw pointer does not root its array: keep every reset target alive past the iterator's last read, or a
+            // collection (frequent while other tests run in parallel) frees and recycles the buffer under it.
+            GC.KeepAlive(b);
+            GC.KeepAlive(b_rev);
         }
 
         // ================================================================
@@ -234,6 +255,9 @@ namespace NumSharp.Tests.Backends.Iterators
             var vals = new List<int>();
             do { vals.Add(it.GetValue<int>(0)); } while (it.Iternext());
             CollectionAssert.AreEqual(new[] { 50, 51, 52, 53, 54 }, vals.ToArray());
+            // A raw pointer does not root its array: keep every reset target alive past the iterator's last read, or a
+            // collection (frequent while other tests run in parallel) frees and recycles the buffer under it.
+            GC.KeepAlive(b);
         }
 
         [TestMethod]

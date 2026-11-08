@@ -1,0 +1,15 @@
+# PyTorch for the `ecosystem` environment (make_env.py), installed before ecosystem.txt.
+#
+# Its own file because --index-url applies to a whole requirements file: torch must come from
+# PyTorch's CPU-only index. PyPI's default Linux wheel is the CUDA build, which drags ~3 GB of
+# nvidia-* libraries onto a runner that has no GPU; the CPU index serves torch AND its dependencies
+# (filelock, sympy, networkx, jinja2, fsspec, typing-extensions) for win_amd64, manylinux x86_64
+# and macOS arm64 (macOS wheels carry no +cpu label; the other two resolve to 2.13.0+cpu, which
+# ==2.13.0 matches under PEP 440's local-version rule).
+#
+# 2.13.0 is the release the PyTorch bridge was validated on (examples/NumSharp.Interop.pythonnet.
+# Examples/requirements.txt); PyTorchTestGate only requires >= 2.3, so bumping this pin is a
+# deliberate choice, never a requirement. numpy is held at the manifest pin by make_env.py's
+# constraint, so this install can never move it.
+--index-url https://download.pytorch.org/whl/cpu
+torch==2.13.0

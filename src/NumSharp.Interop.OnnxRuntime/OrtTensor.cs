@@ -1,44 +1,130 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Backends.Unmanaged.Pooling;
 
 namespace NumSharp.Interop.OnnxRuntime
 {
     /// <summary>
-    ///     A zero-copy ONNX Runtime tensor over a NumSharp buffer — the handle
-    ///     <see cref="NDArrayOnnxInterop.AsOrtValue"/> returns. It owns BOTH the <see cref="OrtValue"/>
-    ///     (which does not own the memory it points at) and an ARC reference on the NumSharp buffer, so the
-    ///     memory stays valid for ORT even if the source <see cref="NDArray"/> is disposed or collected
-    ///     while the tensor is in use; disposing the handle disposes the OrtValue and releases the pin.
+    ///     An ONNX Runtime tensor over a NumSharp buffer — the handle
+    ///     <see cref="NDArrayOnnxInterop.AsOrtValue"/> returns. The buffer is the caller's array (a zero-copy
+    ///     view, <see cref="IsView"/> is <c>true</c>) or a temporary copy this handle owns (<see cref="IsView"/>
+    ///     is <c>false</c>), as the <see cref="OnnxCodecMode"/> of the export decided. The handle owns BOTH the
+    ///     <see cref="OrtValue"/> (which does not own the memory it points at) and an ARC reference on the buffer,
+    ///     so the memory stays valid for ORT even if the source <see cref="NDArray"/> is disposed or collected
+    ///     while the tensor is in use; disposing the handle disposes the OrtValue, releases the reference and
+    ///     frees the temporary copy, if there is one.
     ///
-    ///     <para><b>Keep the handle alive across <c>session.Run</c>.</b> Pass <see cref="Value"/> to ORT, and
-    ///     dispose the handle (<c>using</c>) after the run returns — exactly like keeping a pinned buffer
-    ///     alive across a native call. Letting the handle be collected mid-run would free the buffer under
-    ///     ORT; the finalizer is a leak-prevention safety net, not a lifetime model.</para>
+    ///     <para><b>Reachable means valid.</b> The handle and its <see cref="Value"/> keep each other alive: holding
+    ///     either one keeps the buffer referenced, so a caller that keeps only the <see cref="OrtValue"/> (in an input
+    ///     list, say) never sees it disposed or its memory freed by a collection. When both become unreachable the
+    ///     finalizer drops the reference — abandoning it, never freeing eagerly, so an alias of the buffer the caller
+    ///     still holds stays valid — and ORT's own finalizer releases the native value.</para>
+    ///
+    ///     <para><b>Keep the handle (or its <see cref="Value"/>) reachable across <c>session.Run</c>.</b> ORT's own
+    ///     <c>Run</c> copies the inputs' native handles and then no longer references the managed <see cref="OrtValue"/>s,
+    ///     so a value referenced only by the argument list can be collected while the native run reads it — the rule ORT
+    ///     sets for every <see cref="OrtValue"/>. A <c>using</c> around the run is the idiom. The same holds for every
+    ///     native consumer that keeps the value past the call (<c>OrtIoBinding</c>, <c>SessionOptions.AddInitializer</c>,
+    ///     a sequence built with <c>OrtValue.CreateSequence</c>): native references are invisible to the GC.</para>
     ///
     ///     <para>This is the deterministic analog of the pythonnet bridge's export keeper: ORT hands us a
     ///     real <c>Dispose</c>, so no <c>weakref.finalize</c> dance is needed.</para>
     /// </summary>
     public sealed class OrtTensor : IDisposable
     {
+        /// <summary>
+        ///     Every live <see cref="OrtValue"/> this package created over a NumSharp buffer, mapped to its handle. A
+        ///     conditional weak table keeps the VALUE (the handle) alive exactly as long as the KEY (the OrtValue) is
+        ///     reachable, without keeping the key alive itself — the only way to attach a reference to an object of a type
+        ///     we do not own.
+        /// </summary>
+        /// <remarks>
+        ///     Without it a caller holding just the <see cref="OrtValue"/> had nothing rooting the handle: the handle's
+        ///     finalizer disposed the OrtValue under the caller (the next native call on it faults) and released the buffer
+        ///     reference, so the native tensor pointed into freed memory. The handle → value → handle cycle is ephemeral:
+        ///     the table does not count as a root for its own keys, so the pair is collected together once nothing else
+        ///     reaches either.
+        /// </remarks>
+        private static readonly ConditionalWeakTable<OrtValue, OrtTensor> ValueOwners = new ConditionalWeakTable<OrtValue, OrtTensor>();
+
+        /// <summary>
+        ///     Every <see cref="OrtValue"/> whose handle has been DISPOSED and that a caller can still reach. The table
+        ///     keeps nothing alive: its keys are weak and its one value is a shared marker.
+        /// </summary>
+        /// <remarks>
+        ///     A caller can keep <see cref="Value"/> past the handle (<c>v = h.Value; h.Dispose();</c>). ONNX Runtime has
+        ///     released that value, and its managed API does not guard a released value: the next native call on it is an
+        ///     access violation that ends the process (measured: <c>value.AsNDArray()</c> after the handle's dispose). The
+        ///     value leaves <see cref="ValueOwners"/> on dispose (it must not keep the handle, and through it the source
+        ///     array, reachable), so without this table the import verbs could not tell it from a live value of ONNX
+        ///     Runtime's own and passed it on. With it they throw <see cref="ObjectDisposedException"/>.
+        /// </remarks>
+        private static readonly ConditionalWeakTable<OrtValue, object> DisposedValues = new ConditionalWeakTable<OrtValue, object>();
+
+        /// <summary>The one value of <see cref="DisposedValues"/>: the table records membership only.</summary>
+        private static readonly object DisposedMarker = new object();
+
         private readonly OrtValue _value;
         private readonly NDArray _source;
         private readonly IArraySlice _slice;
+        private readonly IntPtr _data;
+        private readonly long _byteLength;
+        private readonly bool _sourceWriteable;
         private readonly bool _ownsSource;
+        private readonly bool _isView;
         private readonly TensorElementType _elementType;
         private readonly long[] _shape;
         private int _disposed;
 
-        internal OrtTensor(OrtValue value, NDArray source, IArraySlice slice, bool ownsSource, TensorElementType elementType, long[] shape)
+        /// <summary>Takes ownership of <paramref name="value"/> and of the reference <paramref name="slice"/> carries.</summary>
+        /// <param name="value">The OrtValue (created by the caller; owned by the handle from here on).</param>
+        /// <param name="source">The array ORT reads (the caller's, or a temporary the handle owns); for a text tensor, the array the strings were copied from.</param>
+        /// <param name="slice">
+        ///     The buffer, on which the caller already took the reference this handle now owns; <c>null</c> for a TEXT tensor,
+        ///     whose strings live in ONNX Runtime's own memory, so there is no NumSharp buffer to keep alive.
+        /// </param>
+        /// <param name="data">The address of the tensor's first element inside <paramref name="slice"/> (the pointer the OrtValue was created over); zero for a text tensor.</param>
+        /// <param name="byteLength">The byte length of the tensor's elements, starting at <paramref name="data"/>; 0 for a text tensor.</param>
+        /// <param name="ownsSource"><c>true</c> when <paramref name="source"/> is a temporary the handle must dispose.</param>
+        /// <param name="isView"><c>true</c> when <paramref name="source"/> is the array the export verb was given (shared memory); <c>false</c> when it is a copy the verb made.</param>
+        /// <param name="elementType">The ONNX element type the value was created with.</param>
+        /// <param name="shape">The value's row-major shape.</param>
+        /// <exception cref="OutOfMemoryException">The value could not be registered (the handle is then left unconstructed: its finalizer is suppressed, and the caller still owns the value and the reference).</exception>
+        internal OrtTensor(OrtValue value, NDArray source, IArraySlice slice, IntPtr data, long byteLength, bool ownsSource, bool isView, TensorElementType elementType, long[] shape)
         {
             _value = value;
             _source = source;
             _slice = slice;
+            _data = data;
+            _byteLength = byteLength;
+            // Read now, while the source is certainly alive: the caller may dispose its array before it asks for a view of
+            // the value, and a view must still know whether the array it came from was read-only.
+            _sourceWriteable = source.Shape.IsWriteable;
             _ownsSource = ownsSource;
+            _isView = isView;
             _elementType = elementType;
             _shape = shape;
+            try
+            {
+                // The value carries its ARC from birth (OrtValueBooking; no booking: the memory is NumSharp's, or a text
+                // tensor's strings): a Dispose of the value itself - by this handle, by a caller holding Value, on any number
+                // of threads at once - releases the native value exactly once.
+                OrtValueBooking.Track(value, bytes: 0);
+                ValueOwners.AddOrUpdate(value, this);
+            }
+            catch
+            {
+                // An object with a finalizer is registered for finalization when it is ALLOCATED, so a constructor that
+                // throws still leaves its finalizer to run — which would abandon the reference the caller's cleanup also
+                // releases (one reference given back twice, the second one someone else's). Nothing of this handle was
+                // handed out, so its finalizer must not run at all.
+                GC.SuppressFinalize(this);
+                throw;
+            }
             NDArrayOnnxInterop.ExportOpened();
         }
 
@@ -53,11 +139,26 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     The NumSharp array ORT reads — the array passed to <see cref="NDArrayOnnxInterop.AsOrtValue"/>,
-        ///     or, for a <see cref="NPTypeCode.Decimal"/> source, the float64 conversion temporary this handle
-        ///     owns (mutations through ORT land in the temporary, not in the Decimal source).
+        ///     The NumSharp array ORT reads: the array passed to <see cref="NDArrayOnnxInterop.AsOrtValue"/> when
+        ///     <see cref="IsView"/> is <c>true</c>, otherwise the temporary copy this handle owns (a C-order copy of a
+        ///     non-contiguous view, or the float64 conversion of a <see cref="NPTypeCode.Decimal"/> array). Writes by
+        ///     ORT land in this array, so for a copy this is where a caller reads them. The temporary is disposed
+        ///     with the handle.
         /// </summary>
+        /// <remarks>
+        ///     A TEXT tensor is the exception: ONNX Runtime keeps its own copy of every string, so there is no NumSharp
+        ///     array that ORT reads. <see cref="Source"/> is then the array the strings were copied from; it never
+        ///     changes through ORT and it is not disposed with the handle.
+        /// </remarks>
         public NDArray Source => _source;
+
+        /// <summary>
+        ///     <c>true</c> when the tensor shares the memory of the array the export verb was given (zero-copy: a write
+        ///     on either side is visible on the other); <c>false</c> when the tensor is over a copy this handle owns
+        ///     (<see cref="OnnxCodecMode.Copy"/>, or <see cref="OnnxCodecMode.Auto"/> for an array ONNX Runtime cannot
+        ///     read in place). Check it before relying on ORT writing into the caller's array.
+        /// </summary>
+        public bool IsView => _isView;
 
         /// <summary>The ONNX element type the tensor was created with.</summary>
         public TensorElementType ElementType => _elementType;
@@ -69,8 +170,59 @@ namespace NumSharp.Interop.OnnxRuntime
         public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
         /// <summary>
+        ///     The handle that owns <paramref name="value"/>, when this package made the value over a NumSharp buffer
+        ///     (<see cref="NDArrayOnnxInterop.AsOrtValue"/>) and the handle is not disposed yet. The import verbs use it to
+        ///     treat such a value as NumSharp memory (a counted alias of the buffer) instead of leasing it like foreign memory.
+        /// </summary>
+        /// <param name="value">Any OrtValue.</param>
+        /// <param name="owner">The value's handle, or <c>null</c> for a value this package did not make (or whose handle was disposed).</param>
+        /// <returns><c>true</c> when <paramref name="owner"/> was found.</returns>
+        internal static bool TryGetOwner(OrtValue value, out OrtTensor owner) => ValueOwners.TryGetValue(value, out owner);
+
+        /// <summary>
+        ///     Is <paramref name="value"/> the value of an export handle that has been disposed? ONNX Runtime has released
+        ///     such a value, so nothing may call into it (see <see cref="DisposedValues"/>).
+        /// </summary>
+        /// <param name="value">Any OrtValue.</param>
+        /// <returns><c>true</c> for a value this package made and has since disposed.</returns>
+        internal static bool IsValueOfDisposedHandle(OrtValue value) => DisposedValues.TryGetValue(value, out _);
+
+        /// <summary>
+        ///     The buffer the tensor lies in; the handle holds one counted reference on it until it is disposed. <c>null</c>
+        ///     for a text tensor (see <see cref="IsNumSharpMemory"/>).
+        /// </summary>
+        internal IArraySlice Slice => _slice;
+
+        /// <summary>
+        ///     <c>true</c> when the tensor's memory is a NumSharp buffer (every numeric tensor); <c>false</c> for a text
+        ///     tensor, whose strings ONNX Runtime owns. The import verbs alias the buffer only when this is <c>true</c>;
+        ///     a text tensor is read through ORT like any string tensor.
+        /// </summary>
+        internal bool IsNumSharpMemory => _slice is not null;
+
+        /// <summary>The address of the tensor's first element inside <see cref="Slice"/>.</summary>
+        internal unsafe byte* Data => (byte*)_data;
+
+        /// <summary>
+        ///     The byte length of the memory ONNX Runtime reads or writes through this tensor: <c>[Data, Data + ByteLength)</c>.
+        ///     Two tensors whose ranges intersect share memory, which is what the pre-allocated-output run checks before it
+        ///     lets ORT write one of them while it reads the other.
+        /// </summary>
+        internal long ByteLength => _byteLength;
+
+        /// <summary>
+        ///     Whether the array ORT reads was writeable when it was exported. A NumSharp view of the value inherits it, so
+        ///     a read-only array cannot be written through a round trip.
+        /// </summary>
+        internal bool SourceWriteable => _sourceWriteable;
+
+        /// <summary>The tensor's row-major shape, NOT copied: callers must not write into it.</summary>
+        internal long[] ShapeNoCopy => _shape;
+
+        /// <summary>
         ///     Dispose the <see cref="OrtValue"/> and release this handle's reference on the NumSharp buffer
-        ///     (freeing the memory if it was the last one). Idempotent.
+        ///     (freeing the memory if it was the last one), then the owned temporary copy, if any.
+        ///     Idempotent.
         /// </summary>
         public void Dispose()
         {
@@ -83,41 +235,43 @@ namespace NumSharp.Interop.OnnxRuntime
             }
             finally
             {
-                ReleaseCore();
+                // The disposed value no longer needs to keep the handle alive. It is remembered as disposed instead, so
+                // an import verb refuses it rather than call ONNX Runtime with a released value (a process crash).
+                ValueOwners.Remove(_value);
+                DisposedValues.AddOrUpdate(_value, DisposedMarker);
+                _slice?.Release();   // a text tensor holds no NumSharp buffer
+                NDArrayOnnxInterop.ExportClosed();
+                if (_ownsSource)
+                    _source.Dispose();   // the temporary (a copy, a conversion, a caller's hand-over) nobody else can dispose
+                else
+                    GC.KeepAlive(_source);
             }
         }
 
         /// <summary>
-        ///     Safety net for a handle that was never disposed: drop the ARC pin so the NumSharp buffer is
-        ///     not leaked for the life of the process. <see cref="OrtValue"/> is disposed too (its own
-        ///     <c>Dispose</c> is idempotent, so the order relative to its finalizer does not matter).
+        ///     Safety net for a handle that was never disposed: gives the handle's reference on the NumSharp buffer back
+        ///     so the buffer is not referenced for the life of the process — and does nothing else.
         /// </summary>
+        /// <remarks>
+        ///     <para><b>Abandon, not release.</b> The handle being unreachable proves nothing about OTHER reachable aliases
+        ///     of the buffer that hold no counted reference (a bare <c>IArraySlice</c> or <c>UnmanagedStorage</c> taken from
+        ///     the array): releasing the last reference here freed the buffer under such an alias, which then read whatever
+        ///     the pool handed out next. <see cref="IArraySlice.Abandon"/> drops the count without freeing; the memory
+        ///     block's own finalizer frees the buffer once nothing can reach it (the rule NumSharp's own <c>~NDArray</c>
+        ///     follows).</para>
+        ///     <para><b>Nothing else is touched.</b> The <see cref="OrtValue"/> is unreachable whenever this runs (it keeps the
+        ///     handle reachable through <c>ValueOwners</c>), so ORT's own finalizer releases it; and the owned conversion
+        ///     temporary, which a caller may still hold through <see cref="Source"/>, is released by its own finalizer if it
+        ///     is unreachable too. Disposing either from here disposed objects a caller could still be using.</para>
+        ///     <para><b>Any finalization order is safe:</b> this only decrements a count (an abandon after the block was freed
+        ///     is a no-op on memory) and a counter.</para>
+        /// </remarks>
         ~OrtTensor()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
                 return;
-            try
-            {
-                _value.Dispose();
-            }
-            catch
-            {
-                // a failing native release must never take down the finalizer thread
-            }
-            finally
-            {
-                ReleaseCore();
-            }
-        }
-
-        private void ReleaseCore()
-        {
-            _slice.Release();
+            _slice?.Abandon();   // a text tensor holds no NumSharp buffer
             NDArrayOnnxInterop.ExportClosed();
-            if (_ownsSource)
-                _source.Dispose();   // the Decimal→Double conversion temporary nobody else can dispose
-            else
-                GC.KeepAlive(_source);
         }
 
         private void ThrowIfDisposed()
@@ -128,15 +282,33 @@ namespace NumSharp.Interop.OnnxRuntime
     }
 
     /// <summary>
-    ///     A zero-copy <see cref="DenseTensor{T}"/> over a NumSharp buffer — the handle
-    ///     <see cref="NDArrayOnnxInterop.AsDenseTensor{T}"/> returns. The tensor's <see cref="DenseTensor{T}.Buffer"/>
+    ///     A row-major <see cref="DenseTensor{T}"/> over a NumSharp buffer — the handle
+    ///     <see cref="NDArrayOnnxInterop.AsDenseTensor{T}"/> returns. The buffer is the caller's array (a zero-copy
+    ///     view, <see cref="IsView"/> is <c>true</c>) or a temporary copy this handle owns, as the
+    ///     <see cref="OnnxCodecMode"/> of the export decided. The tensor's <see cref="DenseTensor{T}.Buffer"/>
     ///     is a <see cref="Memory{T}"/> fronting NumSharp's unmanaged memory (through an internal
     ///     <see cref="System.Buffers.MemoryManager{T}"/>), and the handle holds the ARC reference that keeps
-    ///     that memory alive; disposing it releases the reference and invalidates the Memory.
+    ///     that memory alive; disposing it releases the reference, invalidates the Memory and frees the temporary
+    ///     copy, if there is one.
     ///
     ///     <para>Feed <see cref="Tensor"/> to the legacy <c>NamedOnnxValue.CreateFromTensor</c> /
     ///     <c>session.Run(IReadOnlyCollection&lt;NamedOnnxValue&gt;)</c> API, or wrap <see cref="Memory"/> with
-    ///     <c>OrtValue.CreateTensorValueFromMemory</c>. Keep the handle alive across the run.</para>
+    ///     <c>OrtValue.CreateTensorValueFromMemory</c>. Keep the handle — or the tensor — reachable across the run.</para>
+    ///
+    ///     <para><b>Reachable means valid.</b> The tensor's memory keeps this handle reachable, so as long as the caller
+    ///     holds the <see cref="Tensor"/> or the <see cref="Memory"/> the handle keeps its reference on the buffer and a
+    ///     collection never disables them; only <see cref="Dispose"/> does. When nothing reaches any of them the
+    ///     finalizer drops the reference (abandoning it, never freeing eagerly, so an alias of the buffer the caller still
+    ///     holds stays valid).</para>
+    ///
+    ///     <para><b>Pins outlive the handle safely.</b> Every pin of <see cref="Memory"/> — the one
+    ///     <c>CreateTensorValueFromMemory</c> keeps inside the <c>OrtValue</c>, any <c>Memory.Pin()</c> — holds its own
+    ///     reference on the NumSharp buffer, given back exactly once when the pin is disposed or, if it never is, when it
+    ///     is collected; and a NumSharp view made with <c>Tensor.AsNDArray()</c> is an ordinary alias of the buffer, counted
+    ///     on it like any view. So the buffer stays alive until the last of them is gone even if this handle and the source
+    ///     array are disposed first. What the disposed handle refuses is NEW access: <c>Memory.Span</c>,
+    ///     <c>Memory.Pin()</c>, <c>Tensor.AsNDArray()</c> and the properties below throw
+    ///     <see cref="ObjectDisposedException"/>.</para>
     /// </summary>
     public sealed class OrtTensor<T> : IDisposable where T : unmanaged
     {
@@ -145,15 +317,27 @@ namespace NumSharp.Interop.OnnxRuntime
         private readonly NDArray _source;
         private readonly IArraySlice _slice;
         private readonly bool _ownsSource;
+        private readonly bool _isView;
         private int _disposed;
 
-        internal OrtTensor(DenseTensor<T> tensor, UnmanagedMemoryManager<T> manager, NDArray source, IArraySlice slice, bool ownsSource)
+        /// <summary>Takes ownership of the reference <paramref name="slice"/> carries and ties the manager's lifetime to this handle.</summary>
+        /// <param name="tensor">The tensor over <paramref name="manager"/>'s memory.</param>
+        /// <param name="manager">The memory manager fronting the buffer; it keeps this handle reachable from now on.</param>
+        /// <param name="source">The array the tensor reads (the caller's, or a temporary the handle owns).</param>
+        /// <param name="slice">The buffer, on which the caller already took the reference this handle now owns.</param>
+        /// <param name="ownsSource"><c>true</c> when <paramref name="source"/> is a temporary the handle must dispose.</param>
+        /// <param name="isView"><c>true</c> when <paramref name="source"/> is the array the export verb was given (shared memory); <c>false</c> when it is a copy the verb made.</param>
+        internal OrtTensor(DenseTensor<T> tensor, UnmanagedMemoryManager<T> manager, NDArray source, IArraySlice slice, bool ownsSource, bool isView)
         {
             _tensor = tensor;
             _manager = manager;
             _source = source;
             _slice = slice;
             _ownsSource = ownsSource;
+            _isView = isView;
+            // The memory keeps the handle reachable: while the caller holds the tensor or its Memory, the handle's
+            // reference stays counted and its finalizer cannot run (see AttachLifetimeOwner).
+            manager.AttachLifetimeOwner(this);
             NDArrayOnnxInterop.ExportOpened();
         }
 
@@ -167,7 +351,12 @@ namespace NumSharp.Interop.OnnxRuntime
             }
         }
 
-        /// <summary>The tensor's backing <see cref="Memory{T}"/> — NumSharp's memory, for <c>OrtValue.CreateTensorValueFromMemory</c>.</summary>
+        /// <summary>
+        ///     The tensor's backing <see cref="Memory{T}"/> — NumSharp's memory, for <c>OrtValue.CreateTensorValueFromMemory</c>.
+        ///     A pin taken on it (which that factory takes and keeps in the <c>OrtValue</c>) holds its own reference on the
+        ///     NumSharp buffer until the pin is released, so the <c>OrtValue</c> stays valid even after this handle is disposed.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The handle has been disposed.</exception>
         public Memory<T> Memory
         {
             get
@@ -178,33 +367,34 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     The NumSharp array the tensor reads — the array passed to <see cref="NDArrayOnnxInterop.AsDenseTensor{T}"/>,
-        ///     or the float64 conversion temporary this handle owns for a <see cref="NPTypeCode.Decimal"/> source.
+        ///     The NumSharp array the tensor reads: the array passed to <see cref="NDArrayOnnxInterop.AsDenseTensor{T}"/>
+        ///     when <see cref="IsView"/> is <c>true</c>, otherwise the temporary copy this handle owns (a C-order copy of
+        ///     a non-contiguous view, or the float64 conversion of a <see cref="NPTypeCode.Decimal"/> array). Writes
+        ///     through the tensor land in this array. The temporary is disposed with the handle.
         /// </summary>
         public NDArray Source => _source;
+
+        /// <summary>
+        ///     <c>true</c> when the tensor shares the memory of the array the export verb was given (zero-copy: a write
+        ///     on either side is visible on the other); <c>false</c> when the tensor is over a copy this handle owns
+        ///     (<see cref="OnnxCodecMode.Copy"/>, or <see cref="OnnxCodecMode.Auto"/> for an array ONNX Runtime cannot
+        ///     read in place).
+        /// </summary>
+        public bool IsView => _isView;
 
         /// <summary><c>true</c> once <see cref="Dispose"/> ran.</summary>
         public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
-        /// <summary>Release this handle's reference on the NumSharp buffer and invalidate the Memory. Idempotent.</summary>
+        /// <summary>
+        ///     Invalidate the Memory (new spans and pins are refused from now on; pins taken before stay valid), release
+        ///     this handle's reference on the NumSharp buffer, then the owned temporary copy, if any.
+        ///     Idempotent.
+        /// </summary>
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
                 return;
             GC.SuppressFinalize(this);
-            ReleaseCore();
-        }
-
-        /// <summary>Safety net for a handle that was never disposed (drops the ARC pin).</summary>
-        ~OrtTensor()
-        {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0)
-                return;
-            ReleaseCore();
-        }
-
-        private void ReleaseCore()
-        {
             ((IDisposable)_manager).Dispose();
             _slice.Release();
             NDArrayOnnxInterop.ExportClosed();
@@ -212,6 +402,29 @@ namespace NumSharp.Interop.OnnxRuntime
                 _source.Dispose();
             else
                 GC.KeepAlive(_source);
+        }
+
+        /// <summary>
+        ///     Safety net for a handle that was never disposed: gives the handle's reference on the NumSharp buffer back —
+        ///     abandoning it, never freeing eagerly — and does nothing else.
+        /// </summary>
+        /// <remarks>
+        ///     <para>This runs only once nothing reaches the tensor or its Memory either (the memory manager keeps the handle
+        ///     reachable), so the manager needs no disposing — it used to be disposed here, which turned a tensor the caller
+        ///     still held into <see cref="ObjectDisposedException"/> after a mere collection. The owned conversion temporary,
+        ///     which a caller may still hold through <see cref="Source"/>, is released by its own finalizer once it is
+        ///     unreachable too.</para>
+        ///     <para><see cref="IArraySlice.Abandon"/> rather than <see cref="IArraySlice.Release"/>: an alias of the buffer
+        ///     that holds no counted reference (a bare <c>IArraySlice</c> taken from the array) may still be reachable, and
+        ///     releasing the last reference here freed the buffer under it. Any finalization order is safe: this only
+        ///     decrements a count and a counter.</para>
+        /// </remarks>
+        ~OrtTensor()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                return;
+            _slice.Abandon();
+            NDArrayOnnxInterop.ExportClosed();
         }
 
         private void ThrowIfDisposed()
@@ -235,17 +448,44 @@ namespace NumSharp.Interop.OnnxRuntime
         private readonly long _bytes;
         private int _released;
 
-        internal ImportLease(Action release, long bytes)
+        /// <summary>Opens a lease and counts it in <see cref="NDArrayOnnxInterop.LiveImports"/>.</summary>
+        /// <param name="release">What to run when the last NumSharp view over the memory is gone (dispose the OrtValue, release a pin, or only keep an object reachable until then).</param>
+        /// <param name="ownedBytes">
+        ///     The bytes this lease keeps alive, booked with NumSharp's memory accounting for the lease's lifetime
+        ///     (<see cref="SizeBucketedBufferPool.BookForeign"/>); 0 books nothing. Two kinds of view pass a count: a view
+        ///     that owns its OrtValue (its ORT buffer lives exactly as long as the view, and the GC cannot see it), and a
+        ///     <c>DenseTensor&lt;T&gt;</c> view of a pinned MANAGED array (the GC counts the array, but the pin keeps it
+        ///     alive past the collection that finds a forgotten view dead, so unbooked forgotten views grew without bound:
+        ///     P8 Q3, the owner's decision of 2026-11-06). A non-owning view (the caller owns the value) and a legacy output
+        ///     tensor (its results collection owns the memory) pass 0: their bytes neither live nor die with the view, and
+        ///     reporting them for every view made the GC collect more often for memory no collection can free.
+        /// </param>
+        /// <remarks>
+        ///     The bytes are BOOKED, not reported with <see cref="GC.AddMemoryPressure"/>: the GC counts every addition
+        ///     toward its next full collection even after the matching removal, so 5,000 owning views of 602 KB, each
+        ///     disposed at once, ran 45 gen-2 collections (47 at ORT 1.16.0); booked, none, and 9.0 us per view became 4.9
+        ///     (measured 2026-11-06, P8). A view dropped undisposed still gets collected: a growing booking paces a gen-0
+        ///     collection.
+        /// </remarks>
+        internal ImportLease(Action release, long ownedBytes)
         {
             _release = release;
-            _bytes = bytes;
+            _bytes = ownedBytes;
             if (_bytes > 0)
-                GC.AddMemoryPressure(_bytes);
+            {
+                SizeBucketedBufferPool.BookForeign(_bytes);
+                NDArrayOnnxInterop.ImportPressureChanged(_bytes);
+            }
             NDArrayOnnxInterop.ImportOpened();
         }
 
+        /// <summary><c>true</c> once the lease was released or disarmed.</summary>
         internal bool IsReleased => Volatile.Read(ref _released) != 0;
 
+        /// <summary>
+        ///     Ends the lease and runs its release action, once: the dispose hook of the memory block calls it when the last
+        ///     NumSharp view over the memory is gone. Later calls do nothing.
+        /// </summary>
         internal void Release()
         {
             if (Interlocked.Exchange(ref _released, 1) != 0)
@@ -257,10 +497,37 @@ namespace NumSharp.Interop.OnnxRuntime
             }
             finally
             {
-                if (_bytes > 0)
-                    GC.RemoveMemoryPressure(_bytes);
+                RemovePressure();
                 NDArrayOnnxInterop.ImportClosed();
             }
+        }
+
+        /// <summary>
+        ///     Ends the lease WITHOUT running its release action: for a view that could not be built. The caller keeps what
+        ///     the action would have disposed (an OrtValue handed over with <c>ownsValue: true</c> is still the caller's when
+        ///     the import throws), and the memory block that already carries <see cref="Release"/> as its dispose hook finds
+        ///     the lease ended when its finalizer runs, so it disposes nothing later either.
+        /// </summary>
+        internal void Disarm()
+        {
+            if (Interlocked.Exchange(ref _released, 1) != 0)
+                return;
+            Interlocked.Exchange(ref _release, null);
+            RemovePressure();
+            NDArrayOnnxInterop.ImportClosed();
+        }
+
+        /// <summary>
+        ///     Gives back the booking the constructor made, if it made one. Called exactly once, by whichever of
+        ///     <see cref="Release"/> and <see cref="Disarm"/> wins the lease's released flag; counters only, so it is safe
+        ///     on the finalizer thread that may run <see cref="Release"/>.
+        /// </summary>
+        private void RemovePressure()
+        {
+            if (_bytes <= 0)
+                return;
+            SizeBucketedBufferPool.ReturnForeign(_bytes);
+            NDArrayOnnxInterop.ImportPressureChanged(-_bytes);
         }
     }
 }

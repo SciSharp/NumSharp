@@ -177,6 +177,58 @@ namespace NumSharp.Tests.DTypes
             np.can_cast(np.dtype("i4"), np.dtype("i8"), NPY_CASTING.NPY_SAFE_CASTING).Should().BeTrue();
         }
 
+        /// <summary>
+        ///     NumPy's None handling of <c>np.can_cast</c> (probed against 2.4.2): a None <c>from_</c> or <c>to</c> is
+        ///     "did not understand one of the types; 'None' not accepted", a None <c>casting</c> is
+        ///     <c>PyArray_CastingConverter</c>'s "casting must be str, not NoneType" (TypeErrors both), and NumPy converts
+        ///     <c>to</c> and <c>casting</c> while parsing the arguments, before <c>from_</c>. The ValueError text quotes the
+        ///     bad name with Python's repr.
+        /// </summary>
+        [TestMethod]
+        public void CanCast_NoneArguments_AreNumPysTypeErrors_InNumPysOrder()
+        {
+            const string NoneType = "did not understand one of the types; 'None' not accepted";
+            new Action(() => np.can_cast((DType)null, DType.Int64)).Should().Throw<TypeError>().WithMessage(NoneType);
+            new Action(() => np.can_cast((string)null, DType.Int64)).Should().Throw<TypeError>().WithMessage(NoneType);
+            new Action(() => np.can_cast((NDArray)null, DType.Int64)).Should().Throw<TypeError>().WithMessage(NoneType);
+            new Action(() => np.can_cast((DType)null, DType.Int64, NPY_CASTING.NPY_SAFE_CASTING)).Should().Throw<TypeError>().WithMessage(NoneType);
+            new Action(() => np.can_cast(DType.Int32, DType.Int64, (string)null)).Should().Throw<TypeError>()
+                .WithMessage("casting must be str, not NoneType");
+            // Order: `to`, then `casting`, then `from_`.
+            new Action(() => np.can_cast((DType)null, (DType)null, "bogus")).Should().Throw<TypeError>().WithMessage(NoneType);
+            new Action(() => np.can_cast((DType)null, DType.Int64, "bogus")).Should().Throw<ValueError>();
+            new Action(() => np.can_cast("not-a-dtype", (DType)null)).Should().Throw<TypeError>().WithMessage(NoneType);
+            new Action(() => np.can_cast("not-a-dtype", DType.Int64, "bogus")).Should().Throw<ValueError>();
+            new Action(() => np.can_cast(DType.Int32, DType.Int64, "it's")).Should().Throw<ValueError>()
+                .WithMessage("casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got \"it's\")");
+        }
+
+        /// <summary>
+        ///     <c>array_can_cast_safely</c> converts <c>from_</c> with <c>PyArray_DescrConverter2</c> and then REPLACES the
+        ///     converter's error, while <c>to</c> keeps it (it is converted while the arguments are parsed, so it also comes
+        ///     first). Probed against NumPy 2.4.2: <c>can_cast('garbage', 'f8')</c>, <c>('bool8', 'f8')</c>,
+        ///     <c>('M8[5]', 'f8')</c>, <c>('M8[s/7]', 'M8')</c> and <c>('', 'f8')</c> all raise <c>TypeError: did not
+        ///     understand one of the types; 'None' not accepted</c>; <c>('f8', 'garbage')</c> raises <c>data type 'garbage'
+        ///     not understood</c>, <c>('f8', 'M8[s/7]')</c> the divisor ValueError, <c>('garbage', 'also_bad')</c> the
+        ///     <c>'also_bad'</c> text. A valid NumPy dtype NumSharp lacks (<c>'c8'</c>, NumPy: True) stays NumSharp's
+        ///     NotSupportedException.
+        /// </summary>
+        [TestMethod]
+        public void CanCast_UnparseableFromString_IsNumPysReplacedTypeError()
+        {
+            const string Replaced = "did not understand one of the types; 'None' not accepted";
+            foreach (var from in new[] { "garbage", "bool8", "M8[5]", "" })
+                new Action(() => np.can_cast(from, DType.Double)).Should().Throw<TypeError>(from).Which.Message.Should().Be(Replaced);
+            new Action(() => np.can_cast("M8[s/7]", np.dtype("M8"))).Should().Throw<TypeError>().Which.Message.Should().Be(Replaced);
+
+            new Action(() => np.can_cast("f8", "garbage")).Should().Throw<TypeError>().Which.Message.Should().Be("data type 'garbage' not understood");
+            new Action(() => np.can_cast("f8", "M8[s/7]")).Should().Throw<ValueError>()
+                .WithMessage("divisor (7) is not a multiple of a lower-unit in datetime metadata \"[s/7]\"");
+            new Action(() => np.can_cast("garbage", "also_bad")).Should().Throw<TypeError>().Which.Message.Should().Be("data type 'also_bad' not understood");
+            new Action(() => np.can_cast("c8", DType.Complex)).Should().Throw<NotSupportedException>();
+            np.can_cast("i4", DType.Int64).Should().BeTrue();
+        }
+
         [TestMethod]
         public void MinCastSafety_TakesTheLessSafe()
         {
@@ -196,26 +248,32 @@ namespace NumSharp.Tests.DTypes
         [TestMethod]
         public void CastingImpls_CarryNumPysMinimalSafety()
         {
-            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int32DType).Casting.Should().Be(NPY_CASTING.NPY_EQUIV_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int64DType).Casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Int64DType, np.dtypes.Int32DType).Casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Float64DType, np.dtypes.Int32DType).Casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Float64DType).Casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.CharDType, np.dtypes.UInt16DType).Casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.UInt16DType, np.dtypes.CharDType).Casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.TimeDelta64DType).Casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.UInt64DType, np.dtypes.TimeDelta64DType).Casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Float64DType, np.dtypes.TimeDelta64DType).Casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
-            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.DateTime64DType).Casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int32DType).casting.Should().Be(NPY_CASTING.NPY_EQUIV_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int64DType).casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Int64DType, np.dtypes.Int32DType).casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Float64DType, np.dtypes.Int32DType).casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Float64DType).casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.CharDType, np.dtypes.UInt16DType).casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.UInt16DType, np.dtypes.CharDType).casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.TimeDelta64DType).casting.Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.UInt64DType, np.dtypes.TimeDelta64DType).casting.Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Float64DType, np.dtypes.TimeDelta64DType).casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
+            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.DateTime64DType).casting.Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
             DTypeCasting.GetCastingImpl(np.dtypes.DateTime64DType, np.dtypes.DateTime64DType).Should().BeOfType<TimeToTimeCastingImpl>();
             DTypeCasting.GetCastingImpl(np.dtypes.TimeDelta64DType, np.dtypes.DateTime64DType).Should().BeOfType<DatetimeTimedeltaCastingImpl>();
-            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, DTypeRegistry.Str).Should().BeNull("no cast is registered for the vestigial string slot");
-            np.can_cast(np.dtype("i4"), np.dtype("String")).Should().BeFalse("an unregistered cast is simply impossible");
+            // NumPy registers a legacy cast from every numeric class to text; int32's longest text is 11 characters, so the
+            // cast is 'safe' into a <U11 or wider and into the unsized class (probed 2.4.2), 'same_kind' into anything shorter.
+            DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, DTypeRegistry.Str).name.Should().Be("legacy_cast_to_string");
+            np.can_cast(np.dtype("i4"), np.dtype("U")).Should().BeTrue();
+            np.can_cast(np.dtype("i4"), np.dtype("U11")).Should().BeTrue();
+            np.can_cast(np.dtype("i4"), np.dtype("U10")).Should().BeFalse("int32 needs 11 characters");
+            np.can_cast(np.dtype("U3"), np.dtype("S3")).Should().BeFalse("str to bytes is never safe (the text may not be ASCII)");
+            np.can_cast(np.dtype("S3"), np.dtype("U3")).Should().BeTrue();
             var impl = DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int64DType);
-            impl.Name.Should().Be("numeric_cast");
-            impl.NIn.Should().Be(1);
-            impl.NOut.Should().Be(1);
-            impl.DTypes.Should().Equal(np.dtypes.Int32DType, np.dtypes.Int64DType);
+            impl.name.Should().Be("numeric_cast");
+            impl.nin.Should().Be(1);
+            impl.nout.Should().Be(1);
+            impl.dtypes.Should().Equal(np.dtypes.Int32DType, np.dtypes.Int64DType);
             impl.From.Should().BeSameAs(np.dtypes.Int32DType);
             impl.To.Should().BeSameAs(np.dtypes.Int64DType);
             impl.IsWithinDType.Should().BeFalse();
@@ -226,10 +284,10 @@ namespace NumSharp.Tests.DTypes
         {
             var impl = DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int32DType);
             var loop = new DType[2];
-            impl.ResolveDescriptors(new[] { DType.Int32, (DType)null }, loop, out long view).Should().Be(NPY_CASTING.NPY_NO_CASTING);
+            impl.resolve_descriptors(new[] { DType.Int32, (DType)null }, loop, out long view).Should().Be(NPY_CASTING.NPY_NO_CASTING);
             view.Should().Be(0);
             loop[1].Should().BeSameAs(DType.Int32);
-            impl.ResolveDescriptors(new[] { np.dtype(">i4"), DType.Int32 }, loop, out view).Should().Be(NPY_CASTING.NPY_EQUIV_CASTING);
+            impl.resolve_descriptors(new[] { np.dtype(">i4"), DType.Int32 }, loop, out view).Should().Be(NPY_CASTING.NPY_EQUIV_CASTING);
             view.Should().Be(ArrayMethod.NoView);
 
             DTypeCasting.GetCastInfo(DType.Int32, DType.Int64, null, out view).Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
@@ -238,19 +296,51 @@ namespace NumSharp.Tests.DTypes
             DTypeCasting.GetCastInfo(np.dtype("M8"), np.dtype("M8[s]"), null, out view).Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
             DTypeCasting.GetCastInfo(np.dtype("M8[s]"), np.dtype("M8"), null, out view).Should().Be(NPY_CASTING.NPY_UNSAFE_CASTING);
             DTypeCasting.GetCastInfo(np.dtype("i4"), null, np.dtypes.TimeDelta64DType, out view).Should().Be(NPY_CASTING.NPY_SAFE_CASTING, "a null 'to' asks about the class");
-            DTypeCasting.GetCastInfo(np.dtype("i4"), np.dtype("String"), null, out view).Should().BeNull();
+            // An unsized target descriptor holds no characters, so the resolved cast is not 'safe' (NumPy's
+            // cast_to_string_resolve_descriptors compares the given width); can_cast instead asks about the class.
+            DTypeCasting.GetCastInfo(np.dtype("i4"), np.dtype("U"), null, out view).Should().Be(NPY_CASTING.NPY_SAME_KIND_CASTING);
+            DTypeCasting.GetCastInfo(np.dtype("i4"), np.dtype("U11"), null, out view).Should().Be(NPY_CASTING.NPY_SAFE_CASTING);
             DTypeCasting.EquivTypes(DType.Int32, new DType(typeof(int))).Should().BeTrue();
             DTypeCasting.EquivTypes(DType.Int32, np.dtype(">i4")).Should().BeFalse();
             DTypeCasting.EquivTypes(np.dtype("M8[1000ms]"), np.dtype("M8[s]")).Should().BeTrue();
         }
 
+        /// <summary>
+        ///     A datetime cast has no storage before Stage C, so its impl keeps the base <c>get_strided_loop</c>, which raises
+        ///     (the storage classes' casts provide their loops: <see cref="DTypeTransferFunctionTests"/>).
+        /// </summary>
         [TestMethod]
-        public void GetStridedLoop_IsNotProvidedInStageA()
+        public void GetStridedLoop_DatetimeCastsHaveNoLoopBeforeStageC()
+        {
+            var impl = DTypeCasting.GetCastingImpl(np.dtypes.DateTime64DType, np.dtypes.DateTime64DType);
+            var ctx = new ArrayMethodContext(impl, new[] { np.dtype("M8[s]"), np.dtype("M8[ms]") });
+            Action act = () => impl.get_strided_loop(ctx, aligned: true, new long[] { 8, 8 }, out _);
+            act.Should().Throw<NotSupportedException>().WithMessage("*does not provide a strided loop yet*Stage C*");
+        }
+
+        /// <summary>
+        ///     A builtin numeric cast's loop is the engine's IL inner cast kernel of the two lanes: int32 → int64 widens each
+        ///     element of a strided run (here every other element).
+        /// </summary>
+        [TestMethod]
+        public unsafe void GetStridedLoop_NumericCastIsTheInnerCastKernel()
         {
             var impl = DTypeCasting.GetCastingImpl(np.dtypes.Int32DType, np.dtypes.Int64DType);
             var ctx = new ArrayMethodContext(impl, new[] { DType.Int32, DType.Int64 });
-            Action act = () => impl.GetStridedLoop(ctx, aligned: true, new long[] { 4, 8 }, out _);
-            act.Should().Throw<NotSupportedException>().WithMessage("*does not provide a strided loop yet*Stage C*");
+            var loop = impl.get_strided_loop(ctx, aligned: true, new long[] { 8, 8 }, out var flags);
+            flags.Should().Be(impl.flags);
+            int* src = stackalloc int[] { 1, -9, -2, -9, 300, -9 };
+            long* dst = stackalloc long[3];
+            void** ptrs = stackalloc void*[2];
+            long* strides = stackalloc long[2];
+            ptrs[0] = src;
+            ptrs[1] = dst;
+            strides[0] = 8; // every other int32
+            strides[1] = 8;
+            loop(ptrs, strides, 3, null);
+            dst[0].Should().Be(1L);
+            dst[1].Should().Be(-2L);
+            dst[2].Should().Be(300L);
         }
     }
 }

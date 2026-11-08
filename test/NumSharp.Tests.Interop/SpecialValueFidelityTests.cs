@@ -254,30 +254,57 @@ namespace NumSharp.Tests.Interop
             }
         }
 
+        /// <summary>
+        ///     <c>'&lt;U1'</c> holds one UCS-4 code point per element, and so does NumSharp's <c>U1</c>: every code-point
+        ///     boundary — the BMP edges, the surrogate range's neighbours, the last BMP unit, the first and last astral code
+        ///     points — crosses byte-identically as a copy AND as a view, and reads back as the .NET string of that code
+        ///     point (a surrogate pair for an astral one).
+        /// </summary>
         [TestMethod]
-        public void Ucs4Text_BmpBoundaries_NarrowToChar_ByteExact()
+        public void Ucs4Text_CodePointBoundaries_ByteExact()
         {
+            string[] expected = { "\0", "A", "\u007f", "\u0800", "\uD7FF", "\uE000", "\uFFFF", "\U00010000", "\U0010FFFF" };
             using (Py.GIL())
             {
-                // '<U1' holds one UCS-4 code point per element; the copy path narrows each to a UTF-16 Char.
-                using PyObject src = Python.np.eval("np.array(['\\u0000', 'A', '\\u007f', '\\u0800', '\\ud7ff', '\\ue000', '\\uffff'], dtype='<U1')");
-                using NDArray nd = src.ToNDArray();
-                nd.typecode.Should().Be(NPTypeCode.Char, "UCS-4 text narrows to Char");
-
-                using PyObject expected = Python.np.eval("np.array([0x0000, 0x0041, 0x007f, 0x0800, 0xd7ff, 0xe000, 0xffff], dtype='<u2')");
-                ByteContract.AssertSameBytes(nd, expected, "BMP UCS-4 narrows to byte-identical uint16");
+                using PyObject src = Python.np.eval(
+                    "np.array(['\\u0000', 'A', '\\u007f', '\\u0800', '\\ud7ff', '\\ue000', '\\uffff', '\\U00010000', '\\U0010ffff'], dtype='<U1')");
+                using NDArray copy = src.ToNDArray();
+                using NDArray view = src.AsNDArray();
+                foreach (NDArray nd in new[] { copy, view })
+                {
+                    nd.dtype.Should().Be(np.dtype("U1"));
+                    ByteContract.AssertSameBytes(nd, src, "UCS-4 code points cross as the same 4-byte units");
+                    for (int i = 0; i < expected.Length; i++)
+                        // NumPy reads a trailing NUL as padding: the U+0000 element is ''.
+                        nd.GetValue(i).Should().Be(i == 0 ? "" : expected[i], $"element {i}");
+                }
             }
         }
 
+        /// <summary>
+        ///     Units NO .NET string can hold — a lone surrogate (Python can hold it) and a value above <c>U+10FFFF</c> (Python
+        ///     cannot) — cross as RAW units both ways: a view shares them, a copy keeps them, an export hands numpy the same
+        ///     bytes. Reading such an element as a string is NumSharp's error (CPython's for the out-of-range one), never a
+        ///     silently changed value.
+        /// </summary>
         [TestMethod]
-        public void Ucs4Text_NonBmp_IsRejected_NotSilentlyMangled()
+        public void Ucs4Text_InvalidUnits_CrossAsRawUnits()
         {
             using (Py.GIL())
             {
-                // U+10000 needs a surrogate pair — a single System.Char cannot hold it, so the narrow throws.
-                using PyObject src = Python.np.eval("np.array(['\\U00010000'], dtype='<U1')");
-                ((Action)(() => { using var _ = src.ToNDArray(); }))
-                    .Should().Throw<NotSupportedException>().WithMessage("*non-BMP*");
+                using PyObject src = Python.np.eval("np.array([[0x41, 0xD800], [0x110000, 0x42]], dtype='<u4').view('<U2')");
+                using NDArray view = src.AsNDArray();
+                using NDArray copy = src.ToNDArray();
+                foreach (NDArray nd in new[] { view, copy })
+                {
+                    nd.dtype.Should().Be(np.dtype("U2"));
+                    ByteContract.AssertSameBytes(nd, src, "invalid units survive the crossing unchanged");
+                }
+
+                using PyObject back = copy.ToNumpy();
+                ByteContract.AssertSameBytes(back, src, "the export hands numpy the same units");
+                using PyObject roundTrip = Python.np.with("a.view('<u4').tolist()", ("a", back));
+                roundTrip.ToString().Should().Be("[[65, 55296], [1114112, 66]]");
             }
         }
     }

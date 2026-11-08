@@ -494,18 +494,31 @@ namespace NumSharp.Tests.Creation
 
         #region Error cases
 
+        /// <summary>
+        ///     A null is Python's <c>None</c> (P1.7b): without a dtype NumPy builds an object array, which NumSharp refuses
+        ///     (<see cref="NotSupportedException"/>); with one it is <c>np.asanyarray(None, dtype)</c>'s 0-d value — NaN for
+        ///     float64 (the positive quiet NaN), <c>int(None)</c>'s TypeError for an integer dtype.
+        /// </summary>
         [TestMethod]
         public void Null_ThrowsArgumentNullException()
         {
-            Assert.ThrowsException<ArgumentNullException>(() => np.asanyarray(null));
+            Assert.ThrowsException<NotSupportedException>(() => np.asanyarray(null));
+            var nan = np.asanyarray(null, np.float64);
+            nan.ndim.Should().Be(0);
+            BitConverter.DoubleToInt64Bits(nan.GetDouble()).Should().Be(0x7FF8_0000_0000_0000L);
+            Assert.ThrowsException<TypeError>(() => np.asanyarray(null, np.int32));
         }
 
         [TestMethod]
-        public void UnsupportedType_ThrowsNotSupportedException()
+        public void StringList_CreatesUnicodeArray()
         {
-            // String collections are not supported (string is not primitive/decimal)
+            // NumPy 2.4.2: np.asanyarray(['a', 'b', 'c']) -> array(['a', 'b', 'c'], dtype='<U1').
+            // (String collections were refused before the fixed-width string dtypes.)
             var stringList = new List<string> { "a", "b", "c" };
-            Assert.ThrowsException<NotSupportedException>(() => np.asanyarray(stringList));
+            var result = np.asanyarray(stringList);
+            result.dtype.str.Should().Be("<U1");
+            result.Should().BeShaped(3);
+            NDArray.AsStringArray(result).Should().Equal("a", "b", "c");
         }
 
         [TestMethod]
@@ -520,26 +533,32 @@ namespace NumSharp.Tests.Creation
         #region String special case
 
         [TestMethod]
-        public void String_CreatesCharArray()
+        public void String_CreatesUnicodeScalar()
         {
+            // NumPy 2.4.2: np.asanyarray("hello") -> array('hello', dtype='<U5')
             var result = np.asanyarray("hello");
 
-            result.Should().BeShaped(5);
-            result.dtype.Should().Be(typeof(char));
+            result.ndim.Should().Be(0);
+            result.dtype.str.Should().Be("<U5");
+            result.GetValue().Should().Be("hello");
         }
 
         #endregion
 
         #region Non-generic IEnumerable fallback
 
+        /// <summary>
+        ///     A non-generic collection is NumPy's Python list, and its C# ints are Python ints: np.asanyarray([1, 2, 3, 4, 5])
+        ///     is int64 (probed 2.4.2; it was int32, the C# type, until the coercion of a sequence read it).
+        /// </summary>
         [TestMethod]
         public void ArrayList_Int()
         {
             var arrayList = new System.Collections.ArrayList { 1, 2, 3, 4, 5 };
             var result = np.asanyarray(arrayList);
 
-            result.Should().BeShaped(5).And.BeOfValues(1, 2, 3, 4, 5);
-            result.dtype.Should().Be(typeof(int));
+            result.Should().BeShaped(5).And.BeOfValues(1L, 2L, 3L, 4L, 5L);
+            result.dtype.Should().Be(typeof(long));
         }
 
         [TestMethod]
@@ -558,8 +577,9 @@ namespace NumSharp.Tests.Creation
             var hashtable = new System.Collections.Hashtable { { 1, "a" }, { 2, "b" }, { 3, "c" } };
             var result = np.asanyarray(hashtable.Keys);
 
+            // Python ints: int64, as np.asanyarray of a list of ints.
             result.size.Should().Be(3);
-            result.dtype.Should().Be(typeof(int));
+            result.dtype.Should().Be(typeof(long));
         }
 
         #endregion
@@ -587,22 +607,18 @@ namespace NumSharp.Tests.Creation
         #region NumPy Parity - Misaligned Behaviors
 
         /// <summary>
-        /// NumPy treats strings as scalar Unicode values, NumSharp treats as char arrays.
-        /// NumPy: np.asanyarray("hello") -> dtype=&lt;U5, shape=(), ndim=0 (SCALAR)
-        /// NumSharp: dtype=Char, shape=(5), ndim=1 (ARRAY)
+        ///     A string is a scalar Unicode value, as in NumPy: np.asanyarray("hello") -> dtype=&lt;U5, shape=(), ndim=0.
+        ///     (Before the fixed-width string dtypes, NumSharp made it a 1-D char vector, which NDArray.FromString still does.)
         /// </summary>
         [TestMethod]
-        [Misaligned]
-        public void String_IsCharArray_NotScalar()
+        public void String_IsUnicodeScalar_LikeNumPy()
         {
             var result = np.asanyarray("hello");
 
-            // NumSharp behavior: char array
-            result.ndim.Should().Be(1);
-            result.shape.Should().BeEquivalentTo(new[] { 5 });
-            result.dtype.Should().Be(typeof(char));
-
-            // NumPy would be: ndim=0, shape=(), dtype=<U5 (scalar)
+            result.ndim.Should().Be(0);
+            result.shape.Should().BeEmpty();
+            result.dtype.str.Should().Be("<U5");
+            NDArray.FromString("hello").Should().BeOfType<char>().And.BeShaped(5);
         }
 
         /// <summary>
@@ -678,12 +694,13 @@ namespace NumSharp.Tests.Creation
             var tuple = (1, 2, 3);
             var result = np.asanyarray(tuple);
 
-            result.Should().BeShaped(3).And.BeOfValues(1, 2, 3);
-            result.dtype.Should().Be(typeof(int));
+            result.Should().BeShaped(3).And.BeOfValues(1L, 2L, 3L);
+            result.dtype.Should().Be(typeof(long));
         }
 
         /// <summary>
         /// C# Tuple class is iterable like Python tuples.
+        /// NumPy: np.asanyarray((1,2,3)) -> dtype=int64, shape=(3,)
         /// </summary>
         [TestMethod]
         public void Tuple_IsIterable()
@@ -691,8 +708,8 @@ namespace NumSharp.Tests.Creation
             var tuple = Tuple.Create(1, 2, 3);
             var result = np.asanyarray(tuple);
 
-            result.Should().BeShaped(3).And.BeOfValues(1, 2, 3);
-            result.dtype.Should().Be(typeof(int));
+            result.Should().BeShaped(3).And.BeOfValues(1L, 2L, 3L);
+            result.dtype.Should().Be(typeof(long));
         }
 
         [TestMethod]
@@ -709,12 +726,12 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void ValueTuple_IntAndBool_PromotesToInt()
         {
-            // Mixed int + bool promotes to int (NumPy behavior)
+            // Mixed int + bool promotes to the Python int's int64 (NumPy: np.asanyarray((1, True, 3)) is int64)
             var tuple = (1, true, 3);
             var result = np.asanyarray(tuple);
 
             result.Should().BeShaped(3);
-            result.dtype.Should().Be(typeof(int));
+            result.dtype.Should().Be(typeof(long));
         }
 
         [TestMethod]
@@ -752,11 +769,12 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void ObjectArray_Homogeneous_Int()
         {
+            // C# ints in an object list are Python ints: np.asanyarray([1, 2, 3]) is int64 (it was int32).
             var arr = new object[] { 1, 2, 3 };
             var result = np.asanyarray(arr);
 
-            result.dtype.Should().Be(typeof(int));
-            result.Should().BeShaped(3).And.BeOfValues(1, 2, 3);
+            result.dtype.Should().Be(typeof(long));
+            result.Should().BeShaped(3).And.BeOfValues(1L, 2L, 3L);
         }
 
         [TestMethod]
@@ -772,11 +790,12 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void ObjectArray_MixedBoolInt_PromotesToInt()
         {
+            // np.asanyarray([True, 2, False]) is int64.
             var arr = new object[] { true, 2, false };
             var result = np.asanyarray(arr);
 
-            result.dtype.Should().Be(typeof(int));
-            result.Should().BeShaped(3).And.BeOfValues(1, 2, 0);
+            result.dtype.Should().Be(typeof(long));
+            result.Should().BeShaped(3).And.BeOfValues(1L, 2L, 0L);
         }
 
         [TestMethod]
@@ -791,15 +810,17 @@ namespace NumSharp.Tests.Creation
         }
 
         [TestMethod]
-        public void ObjectArray_AllFloat_PreservesSingle()
+        public void ObjectArray_AllFloat_ArePythonFloats()
         {
-            // Regression: an earlier FindCommonNumericType short-circuit promoted any float
-            // to double. NumPy preserves float32 for homogeneous float32 inputs.
+            // A C# float in an object list is a Python float (the boundary map), so the list is float64, as
+            // np.asanyarray([1.5, 2.5, 3.5]) is; it was float32 while the list was read with C#'s types. A float32 array is
+            // what an ndarray item (float[], an NDArray) keeps.
             var arr = new object[] { 1.5f, 2.5f, 3.5f };
             var result = np.asanyarray(arr);
 
-            result.dtype.Should().Be(typeof(float));
-            result.Should().BeShaped(3).And.BeOfValues(1.5f, 2.5f, 3.5f);
+            result.dtype.Should().Be(typeof(double));
+            result.Should().BeShaped(3).And.BeOfValues(1.5, 2.5, 3.5);
+            np.asanyarray(new object[] { new[] { 1.5f, 2.5f } }).dtype.Should().Be(typeof(float));
         }
 
         [TestMethod]
@@ -811,6 +832,43 @@ namespace NumSharp.Tests.Creation
 
             result.dtype.Should().Be(typeof(double));
             result.Should().BeShaped(3);
+        }
+
+        /// <summary>
+        ///     A rectangular <c>object[,]</c> is NumPy's nested list of its rows: <c>np.asarray([[1, 2.5], [3, 4]])</c> is the
+        ///     (2, 2) float64 array, C-contiguous and owning its data (probed 2.4.2). It threw "Cannot interpret 'System.Object'
+        ///     as a data type" until np.char.array's oracle section reached it (2026-10-15).
+        /// </summary>
+        [TestMethod]
+        public void ObjectGrid_IsANestedListOfRows()
+        {
+            var result = np.asanyarray(new object[,] { { 1L, 2.5 }, { 3L, 4L } });
+
+            result.dtype.Should().Be(np.float64);
+            result.shape.Should().Equal(2L, 2L);
+            result.ToArray<double>().Should().Equal(1.0, 2.5, 3.0, 4.0);
+            result.flags.c_contiguous.Should().BeTrue();
+            result.flags.owndata.Should().BeTrue();
+
+            var ints = np.asanyarray(new object[,,] { { { 1L }, { 2L } } });
+            ints.dtype.Should().Be(np.int64);
+            ints.shape.Should().Equal(1L, 2L, 1L);
+        }
+
+        /// <summary>
+        ///     An empty grid keeps its dimensions as NumPy's float64 empty array (<c>np.asarray([[], []])</c> is (2, 0)); a
+        ///     null leaf (Python's None: NumPy's object dtype) is refused rather than dropped, which would shift every later
+        ///     leaf into the wrong cell.
+        /// </summary>
+        [TestMethod]
+        public void ObjectGrid_EmptyKeepsTheDims_NullIsRefused()
+        {
+            var empty = np.asanyarray(new object[2, 0]);
+            empty.dtype.Should().Be(np.float64);
+            empty.shape.Should().Equal(2L, 0L);
+
+            Action none = () => np.asanyarray(new object[,] { { 1L, null } });
+            none.Should().Throw<NotSupportedException>();
         }
 
         #endregion

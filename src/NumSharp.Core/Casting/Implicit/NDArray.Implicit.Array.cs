@@ -26,158 +26,57 @@ namespace NumSharp
 {
     public partial class NDArray
     {
+        /// <summary>
+        ///     Converts a managed array (any rank, or jagged) into an <see cref="NDArray"/> copy of its data; a null array
+        ///     converts to a null <see cref="NDArray"/>. Text — a <see cref="string"/> array, or an <c>object</c> array holding
+        ///     strings / <c>byte[]</c> values — becomes NumPy's fixed-width string array (<c>np.array(['a', 'bb'])</c> is
+        ///     <c>&lt;U2</c>), so <c>NDArray x = new[] { "a", "bb" }</c> and every <c>NDArray</c> parameter fed a C# string
+        ///     array (C# prefers the <c>NDArray</c> overload to an <c>object</c> one) read the text as NumPy does.
+        /// </summary>
+        /// <param name="array">The array to convert, or null. An <c>NDArray[]</c> is NumPy's list of arrays and is stacked
+        ///     (<c>np.asarray(new[] { a, b })</c> of two <c>(3,)</c> arrays is <c>(2, 3)</c>).</param>
+        /// <returns>A new array holding a copy of the elements, or null when <paramref name="array"/> is null.</returns>
+        /// <exception cref="NotSupportedException">The element type is not one of NumSharp's dtypes.</exception>
+        /// <exception cref="ValueError">A ragged jagged array (text or numbers) or a list of arrays of unequal shapes
+        ///     (NumPy's inhomogeneous-shape text).</exception>
+        /// <remarks>
+        ///     C# runs a user-defined conversion even for a null source, so without the null pass-through an optional
+        ///     <see cref="NDArray"/> parameter fed from a null <c>double[]</c> variable (a common way to spell NumPy's
+        ///     <c>p=None</c>) crashed with a <see cref="NullReferenceException"/> instead of meaning "not given".
+        /// </remarks>
         public static implicit operator NDArray(Array array)
         {
-            // ReSharper disable once PossibleNullReferenceException
-            bool isJaggedArray = array.GetType().GetElementType().IsArray;
-            var underlying = array.ResolveElementType();
-            if (isJaggedArray)
-            {
-                var nd = new NDArray(underlying);
-                switch (nd.GetTypeCode)
-                {
-	                // %foreach supported_dtypes,supported_dtypes_lowercase%
-	                // case NPTypeCode.#1: return NDArray.FromJaggedArray<#2>(array);
-	                // %
-	                // default:
-		                // throw new NotSupportedException();
-                    case NPTypeCode.Boolean: return NDArray.FromJaggedArray<bool>(array);
-	                case NPTypeCode.Byte: return NDArray.FromJaggedArray<byte>(array);
-	                case NPTypeCode.SByte: return NDArray.FromJaggedArray<sbyte>(array);
-	                case NPTypeCode.Int16: return NDArray.FromJaggedArray<short>(array);
-	                case NPTypeCode.UInt16: return NDArray.FromJaggedArray<ushort>(array);
-	                case NPTypeCode.Int32: return NDArray.FromJaggedArray<int>(array);
-	                case NPTypeCode.UInt32: return NDArray.FromJaggedArray<uint>(array);
-	                case NPTypeCode.Int64: return NDArray.FromJaggedArray<long>(array);
-	                case NPTypeCode.UInt64: return NDArray.FromJaggedArray<ulong>(array);
-	                case NPTypeCode.Char: return NDArray.FromJaggedArray<char>(array);
-	                case NPTypeCode.Half: return NDArray.FromJaggedArray<Half>(array);
-	                case NPTypeCode.Double: return NDArray.FromJaggedArray<double>(array);
-	                case NPTypeCode.Single: return NDArray.FromJaggedArray<float>(array);
-	                case NPTypeCode.Decimal: return NDArray.FromJaggedArray<decimal>(array);
-	                case NPTypeCode.Complex: return NDArray.FromJaggedArray<System.Numerics.Complex>(array);
-	                default:
-		                throw new NotSupportedException();
-                }
-            }
-            else
-            {
+            if (array is null)
+                return null;
 
-                var nd = new NDArray(underlying);
-                switch (nd.GetTypeCode)
-                {
-	                // %foreach supported_dtypes,supported_dtypes_lowercase%
-	                // case NPTypeCode.#1: return NDArray.FromMultiDimArray<#2>(array);
-	                // %
-	                // default:
-		                // throw new NotSupportedException();
-                    case NPTypeCode.Boolean: return NDArray.FromMultiDimArray<bool>(array);
-	                case NPTypeCode.Byte: return NDArray.FromMultiDimArray<byte>(array);
-	                case NPTypeCode.SByte: return NDArray.FromMultiDimArray<sbyte>(array);
-	                case NPTypeCode.Int16: return NDArray.FromMultiDimArray<short>(array);
-	                case NPTypeCode.UInt16: return NDArray.FromMultiDimArray<ushort>(array);
-	                case NPTypeCode.Int32: return NDArray.FromMultiDimArray<int>(array);
-	                case NPTypeCode.UInt32: return NDArray.FromMultiDimArray<uint>(array);
-	                case NPTypeCode.Int64: return NDArray.FromMultiDimArray<long>(array);
-	                case NPTypeCode.UInt64: return NDArray.FromMultiDimArray<ulong>(array);
-	                case NPTypeCode.Char: return NDArray.FromMultiDimArray<char>(array);
-	                case NPTypeCode.Half: return NDArray.FromMultiDimArray<Half>(array);
-	                case NPTypeCode.Double: return NDArray.FromMultiDimArray<double>(array);
-	                case NPTypeCode.Single: return NDArray.FromMultiDimArray<float>(array);
-	                case NPTypeCode.Decimal: return NDArray.FromMultiDimArray<decimal>(array);
-	                case NPTypeCode.Complex: return NDArray.FromMultiDimArray<System.Numerics.Complex>(array);
-	                default:
-		                throw new NotSupportedException();
-                }
-            }
-
-            throw new NotImplementedException("implicit operator NDArray(Array array)");
+            return UnmanagedStorage.FromManagedArray(array);
         }
 
         public static explicit operator Array(NDArray nd)
         {
-            switch (nd.GetTypeCode)
-            {
-	            // %foreach supported_dtypes,supported_dtypes_lowercase%
-	            // case NPTypeCode.#1: return nd.ToMuliDimArray<#2>();
-	            // %
-	            // default:
-		            // throw new NotSupportedException();
-	            case NPTypeCode.Boolean: return nd.ToMuliDimArray<bool>();
-	            case NPTypeCode.Byte: return nd.ToMuliDimArray<byte>();
-	            case NPTypeCode.SByte: return nd.ToMuliDimArray<sbyte>();
-	            case NPTypeCode.Int16: return nd.ToMuliDimArray<short>();
-	            case NPTypeCode.UInt16: return nd.ToMuliDimArray<ushort>();
-	            case NPTypeCode.Int32: return nd.ToMuliDimArray<int>();
-	            case NPTypeCode.UInt32: return nd.ToMuliDimArray<uint>();
-	            case NPTypeCode.Int64: return nd.ToMuliDimArray<long>();
-	            case NPTypeCode.UInt64: return nd.ToMuliDimArray<ulong>();
-	            case NPTypeCode.Char: return nd.ToMuliDimArray<char>();
-	            case NPTypeCode.Half: return nd.ToMuliDimArray<Half>();
-	            case NPTypeCode.Double: return nd.ToMuliDimArray<double>();
-	            case NPTypeCode.Single: return nd.ToMuliDimArray<float>();
-	            case NPTypeCode.Decimal: return nd.ToMuliDimArray<decimal>();
-	            case NPTypeCode.Complex: return nd.ToMuliDimArray<System.Numerics.Complex>();
-	            default:
-		            throw new NotSupportedException();
-            }
+            return UnmanagedStorage.ToManagedArray(nd);
         }
 
+        /// <summary>
+        ///     A C# string is a Python <c>str</c>: the 0-d text array <c>np.array(str)</c> builds (<c>&lt;U{len}</c>), marked as
+        ///     the Python str it stands for (<see cref="NDArray.WasPythonStr"/>), so <c>a[i] = "xy"</c> stores text into an
+        ///     S / U array and <c>a[i] = "12"</c> parses it into a numeric one with NumPy's setitem texts.
+        /// </summary>
+        /// <param name="str">The text.</param>
+        /// <returns>The 0-d text array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="str"/> is null.</exception>
+        /// <remarks>
+        ///     A text shaped like <c>"[1, 2, 3]"</c> or <c>"[1 2; 3 4]"</c> stays text, because NumPy never reads a str as
+        ///     numbers in <c>np.array</c> (<c>np.array('[1, 2, 3]')</c> is the 0-d <c>&lt;U9</c> text). Breaking change: older
+        ///     NumSharp parsed such a text into a float64 vector or matrix here. Parse delimited numbers with
+        ///     <c>np.fromstring</c>; <see cref="np.matrix(string, DType, bool)"/> keeps its own literal grammar
+        ///     (<c>"1 2; 3 4"</c>).
+        /// </remarks>
         public static implicit operator NDArray(string str)
         {
-            // process "[1, 2, 3]" 
-            if (new Regex(@"^\[[\d,\s\.]+\]$").IsMatch(str))
-            {
-                var data = str.Substring(1, str.Length - 2)
-                    .Split(',')
-                    .Select(x => double.Parse(x)).ToArray();
-                var nd = new NDArray(data, new Shape(data.Length));
-                return nd;
-            }
-
-            Regex reg = new Regex(@"\[((\d,?)+|;)+\]");
-
-            if (reg.IsMatch(str))
-            {
-                NDArray nd = null;
-
-                string[][] splitted = null;
-                str = str.Substring(1, str.Length - 2);
-
-                if (str.Contains(","))
-                {
-                    splitted = str.Split(';')
-                        .Select(x => x.Split(','))
-                        .ToArray();
-                }
-                else
-                {
-                    splitted = str.Split(';')
-                        .Select(x => x.Split(' '))
-                        .ToArray();
-                }
-
-
-                var shape = Shape.Matrix(splitted.Length, splitted[0].Length);
-
-                nd = new NDArray(typeof(double), shape);
-
-                for (int idx = 0; idx < splitted.Length; idx++)
-                {
-                    for (int jdx = 0; jdx < splitted[0].Length; jdx++)
-                    {
-                        nd[idx, jdx] = (NDArray)Double.Parse(splitted[idx][jdx]);
-                    }
-                }
-
-                return nd;
-            }
-            else
-            {
-                // UTF8Encoding.UTF8.GetBytes(str)
-                var nd = new NDArray(str.ToArray());
-                return nd;
-            }
+            if (str is null)
+                throw new ArgumentNullException(nameof(str));
+            return NDArray.PythonStrLiteral(str);
         }
     }
 }

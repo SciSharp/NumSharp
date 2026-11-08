@@ -611,7 +611,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Sum_WithTypeDtype_Compiles()
     {
         var a = np.array(new int[] { 1, 2, 3 });
-        var result = np.sum(a, typeof(double));
+        var result = np.sum(a, dtype: typeof(double));
         result.Should().NotBeNull();
     }
 
@@ -619,7 +619,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Sum_WithNPTypeCode_Compiles()
     {
         var a = np.array(new int[] { 1, 2, 3 });
-        var result = np.sum(a, NPTypeCode.Int64);
+        var result = np.sum(a, dtype: NPTypeCode.Int64);
         result.Should().NotBeNull();
     }
 
@@ -752,7 +752,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Std_WithKeepdimsDdofDtype_Compiles()
     {
         var a = np.array(new double[] { 1, 2, 3, 4, 5 });
-        var result = np.std(a, keepdims: false, ddof: null, dtype: null);
+        var result = np.std(a, keepdims: false, ddof: 0, dtype: null);
         result.Should().NotBeNull();
         // std of [1,2,3,4,5] with ddof=0 is sqrt(2) approximately 1.4142
         result.GetDouble(0).Should().BeApproximately(System.Math.Sqrt(2.0), 1e-10);
@@ -762,7 +762,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Std_WithAxisTypeDtypeKeepdimsDdof_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
-        var result = np.std(a, axis: 0, dtype: typeof(double), keepdims: false, ddof: null);
+        var result = np.std(a, axis: 0, dtype: typeof(double), keepdims: false, ddof: 0);
         result.Should().NotBeNull();
     }
 
@@ -770,7 +770,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Std_WithAxisNPTypeCodeKeepdimsDdof_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
-        var result = np.std(a, axis: 0, dtype: NPTypeCode.Double, keepdims: false, ddof: null);
+        var result = np.std(a, axis: 0, dtype: NPTypeCode.Double, keepdims: false, ddof: 0);
         result.Should().NotBeNull();
     }
 
@@ -779,7 +779,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
         // Explicitly pass NPTypeCode? to avoid ambiguity with Type overload
-        var result = np.std(a, axis: 0, keepdims: false, ddof: null, dtype: (NPTypeCode?)null);
+        var result = np.std(a, axis: 0, keepdims: false, ddof: 0, dtype: (NPTypeCode?)null);
         result.Should().NotBeNull();
     }
 
@@ -787,7 +787,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Var_WithKeepdimsDdofDtype_Compiles()
     {
         var a = np.array(new double[] { 1, 2, 3, 4, 5 });
-        var result = np.var(a, keepdims: false, ddof: null, dtype: null);
+        var result = np.var(a, keepdims: false, ddof: 0, dtype: null);
         result.Should().NotBeNull();
         // var of [1,2,3,4,5] with ddof=0 is 2.0
         result.GetDouble(0).Should().Be(2.0);
@@ -797,7 +797,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Var_WithAxisTypeDtypeKeepdimsDdof_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
-        var result = np.var(a, axis: 0, dtype: typeof(double), keepdims: false, ddof: null);
+        var result = np.var(a, axis: 0, dtype: typeof(double), keepdims: false, ddof: 0);
         result.Should().NotBeNull();
     }
 
@@ -805,7 +805,7 @@ public class NpApiOverloadTests_BinaryReductions
     public void Var_WithAxisNPTypeCodeKeepdimsDdof_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
-        var result = np.var(a, axis: 0, dtype: NPTypeCode.Double, keepdims: false, ddof: null);
+        var result = np.var(a, axis: 0, dtype: NPTypeCode.Double, keepdims: false, ddof: 0);
         result.Should().NotBeNull();
     }
 
@@ -814,7 +814,7 @@ public class NpApiOverloadTests_BinaryReductions
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
         // Explicitly pass NPTypeCode? to avoid ambiguity with Type overload
-        var result = np.var(a, axis: 0, keepdims: false, ddof: null, dtype: (NPTypeCode?)null);
+        var result = np.var(a, axis: 0, keepdims: false, ddof: 0, dtype: (NPTypeCode?)null);
         result.Should().NotBeNull();
     }
 

@@ -17,7 +17,7 @@ namespace NumSharp
         {
             if (dtype is null || dtype.DatetimeMetadata is not { } meta)
                 throw new TypeError("cannot get datetime metadata from non-datetime type");
-            return (meta.UnitString, meta.Num);
+            return (meta.UnitString, meta.num);
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -17,16 +18,36 @@ namespace NumSharp
     {
         /// <summary>
         ///     Create an array from an existing <see cref="NDArray"/>. Matches NumPy's default
-        ///     <c>np.array(a)</c> which always copies (NumPy 2.x: <c>copy=True</c> by default).
+        ///     <c>np.array(a)</c> which always copies (NumPy 2.x: <c>copy=True</c> by default) into a FRESH, WRITEABLE array
+        ///     laid out in the source's K order — <see cref="copy(NDArray, char, bool)"/>'s route with <c>order='K'</c>, so a
+        ///     read-only, F-ordered or broadcast source gives a writeable copy that keeps the source's memory order (a
+        ///     <c>(0, 8)</c>-strided broadcast copies F-contiguous).
         /// </summary>
         /// <param name="nd">Source array.</param>
-        /// <param name="copy">When <c>true</c> (default) the source storage is cloned; when <c>false</c> the storage is shared (alias). For "copy only if needed" semantics use <see cref="asarray(NDArray, Type, char, bool?, NDArray, string)"/>.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
+        /// <param name="copy">When <c>true</c> (default) the data is copied as described above; when <c>false</c> the
+        ///     storage is shared (alias), flags included. For "copy only if needed" semantics use
+        ///     <see cref="asarray(NDArray, DType, char, bool?, NDArray, string)"/>.</param>
+        /// <returns>A new array object, a plain array whatever <paramref name="nd"/>'s class (NumPy's <c>subok=False</c>).
+        ///     A 0-d source that was built as an explicit 0-d ARRAY (<see cref="NDArray.IsExplicitZeroDimArray"/>) gives an
+        ///     explicit 0-d array again, as NumPy's <c>np.array(np.array(2))</c> is a 0-d array.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="nd"/> is <c>null</c>.</exception>
+        /// <remarks>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.array.html</para>
+        ///     <para>Until parity QA-35 the copy was a storage clone that kept the source's flags: a read-only C, F or 0-d
+        ///     source gave a READ-ONLY copy (a write raised "assignment destination is read-only"), and a broadcast source
+        ///     came back C-ordered where NumPy's K-order copy is F-contiguous.</para>
+        /// </remarks>
         [MethodImpl(OptimizeAndInline)]
-        public static NDArray array(NDArray nd, bool copy = true) =>
-            copy
-                ? new NDArray(nd.Storage.Clone()) { TensorEngine = nd.TensorEngine }
+        public static NDArray array(NDArray nd, bool copy = true)
+        {
+            // PyArray_NewCopy(a, NPY_KEEPORDER): a fresh owner, writeable, in the iterator's K order - exactly np.copy's
+            // copy (which also keeps the array's engine). `np.` qualifies the call: the bool parameter shadows the name.
+            var result = copy
+                ? np.copy(nd, 'K')
                 : new NDArray(nd.Storage) { TensorEngine = nd.TensorEngine };
+            // The mark is per object, so a new object must receive it explicitly.
+            return nd.IsExplicitZeroDimArray ? result.MarkExplicitZeroDimArray() : result;
+        }
 
         /// <summary>
         ///     Create an array from a <see cref="MemoryView"/> (obtained from <see cref="NDArray.data"/>) —
@@ -53,11 +74,20 @@ namespace NumSharp
         /// <param name="scalar">The scalar value.</param>
         /// <returns>A 0-dimensional <see cref="NDArray"/> containing the scalar value.</returns>
         /// <remarks>
+        ///     <para>
         ///     NumPy: np.array(42) creates a 0-dimensional array with shape ().
         ///     https://numpy.org/doc/stable/reference/generated/numpy.array.html
+        ///     </para>
+        ///     <para>
+        ///     The result is marked as an explicit 0-d ARRAY (<see cref="NDArray.IsExplicitZeroDimArray"/>), which
+        ///     one operator reads: <c>matrix * np.array(2)</c> is the product with a 1 x 1 matrix, as in NumPy, and
+        ///     raises unless the matrix has one column. Use <see cref="NDArray.Scalar{T}(T)"/> or a C# number for a
+        ///     value that must SCALE a matrix; library code that builds a computed scalar must use
+        ///     <see cref="NDArray.Scalar{T}(T)"/> too.
+        ///     </para>
         /// </remarks>
         [MethodImpl(OptimizeAndInline)]
-        public static NDArray array<T>(T scalar) where T : unmanaged => NDArray.Scalar(scalar);
+        public static NDArray array<T>(T scalar) where T : unmanaged => NDArray.Scalar(scalar).MarkExplicitZeroDimArray();
 
         /// <summary>
         ///     Creates an <see cref="NDArray"/> from an array with an unknown size or dtype.
@@ -73,43 +103,7 @@ namespace NumSharp
             if (array == null)
                 throw new ArgumentNullException(nameof(array));
 
-            var arrType = array.ResolveElementType();
-
-            //handle dim expansion and extract shape
-            Shape shape;
-            var dims = array.ResolveRank();
-            var missing = dims - ndmin;
-
-            if (missing < 0)
-            {
-                shape = Arrays.Concat(Enumerable.Repeat(1, Math.Abs(missing)).ToArray(), Shape.ExtractShape(array));
-            }
-            else
-            {
-                shape = Shape.ExtractShape(array);
-            }
-
-            //flatten
-            if (shape.NDim > 1)
-            {
-                array = Arrays.Flatten(array);
-                copy = false;
-            }
-
-            if (dtype != null && !dtype.Equals(arrType))
-            {
-                array = ArrayConvert.To(array, (Type)dtype);
-                copy = false;
-            }
-
-            // C-contiguous materialization from the managed array.
-            var result = new NDArray(copy ? (Array)array.Clone() : array, shape, 'C');
-
-            // Honor F-order request: relay out into F-contig layout.
-            char physical = OrderResolver.Resolve(order, result.Shape);
-            if (physical == 'F' && result.Shape.NDim > 1 && !result.Shape.IsFContiguous)
-                result = result.copy('F');
-            return result;
+            return NDArray.array(array, dtype, ndmin, copy, order);
         }
 
         /// <summary>
@@ -135,10 +129,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[] data, DType dtype) where T : unmanaged
         {
-            var arr = new NDArray(ArraySlice.FromArray(data, true), Shape.Vector(data.Length));
-            if (dtype != null && dtype.GetTypeCode() != InfoOf<T>.NPTypeCode)
-                return arr.astype(dtype);
-            return arr;
+            return NDArray.array(data, dtype);
         }
 
         /// <summary>
@@ -155,92 +146,158 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Creates a Vector <see cref="NDArray"/> from given <paramref name="data"/>.
+        ///     Creates a vector of exactly <paramref name="size"/> elements, the first <paramref name="size"/> items
+        ///     of <paramref name="data"/>: NumPy's <c>np.fromiter(data, dtype=T, count=size)</c>. Use it to read a
+        ///     known number of items from a long or endless sequence; an enumeration that holds fewer items is an
+        ///     error, not a shorter array.
         /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The enumeration of data to create <see cref="NDArray"/> from.</param>
-        /// <param name="size">Maximum number of items to read from <paramref name="data"/>.</param>
-        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>
-        ///     Always performs a copy.<br></br>
-        ///     <paramref name="size"/> can be used to limit the amount of items to read form <paramref name="data"/>. Reading stops on either size or <paramref name="data"/> ends.
-        /// </remarks>
+        /// <typeparam name="T">The element type, one of NumSharp's dtypes; the result's dtype.</typeparam>
+        /// <param name="data">The enumeration to read. It is enumerated once, and at most <paramref name="size"/>
+        ///     items are taken from it (<c>MoveNext</c> is called <paramref name="size"/> times when it holds that
+        ///     many).</param>
+        /// <param name="size">The number of items to read, and the result's length.</param>
+        /// <returns>A fresh 1-D array of <paramref name="size"/> elements.</returns>
+        /// <exception cref="ValueError"><paramref name="data"/> holds fewer than <paramref name="size"/> items
+        ///     (NumPy's text, <c>iterator too short: Expected 5 but iterator had only 2 items.</c>), or
+        ///     <paramref name="size"/> is negative (<c>negative dimensions are not allowed</c>).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="data"/> is null.</exception>
+        /// <remarks>See <see cref="array{T}(IEnumerable{T}, long)"/>, which this overload calls.</remarks>
         public static NDArray array<T>(IEnumerable<T> data, int size) where T : unmanaged
             => array(data, (long)size);
 
         /// <summary>
-        ///     Creates a Vector <see cref="NDArray"/> from given <paramref name="data"/>.
+        ///     Creates a vector of exactly <paramref name="size"/> elements, the first <paramref name="size"/> items
+        ///     of <paramref name="data"/>: NumPy's <c>np.fromiter(data, dtype=T, count=size)</c>. Use it to read a
+        ///     known number of items from a long or endless sequence; an enumeration that holds fewer items is an
+        ///     error, not a shorter array.
         /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The enumeration of data to create <see cref="NDArray"/> from.</param>
-        /// <param name="size">Maximum number of items to read from <paramref name="data"/>.</param>
-        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <typeparam name="T">The element type, one of NumSharp's dtypes; the result's dtype.</typeparam>
+        /// <param name="data">The enumeration to read. It is enumerated once, and at most <paramref name="size"/>
+        ///     items are taken from it (<c>MoveNext</c> is called <paramref name="size"/> times when it holds that
+        ///     many).</param>
+        /// <param name="size">The number of items to read, and the result's length.</param>
+        /// <returns>A fresh 1-D array of <paramref name="size"/> elements.</returns>
+        /// <exception cref="ValueError"><paramref name="data"/> holds fewer than <paramref name="size"/> items
+        ///     (NumPy's text, <c>iterator too short: Expected 5 but iterator had only 2 items.</c>), or
+        ///     <paramref name="size"/> is negative (<c>negative dimensions are not allowed</c>).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="data"/> is null.</exception>
         /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>
-        ///     Always performs a copy.<br></br>
-        ///     <paramref name="size"/> can be used to limit the amount of items to read form <paramref name="data"/>. Reading stops on either size or <paramref name="data"/> ends.
+        ///     <para>
+        ///         NumPy's <c>PyArray_FromIter</c> (<c>ctors.c</c>): the array of <c>count</c> elements is allocated
+        ///         first, one <c>PyIter_Next</c> fills each element and none runs past <c>count</c> (a longer iterator
+        ///         keeps its remaining items), and an iterator that ends early raises the <c>ValueError</c> above. An
+        ///         exception the enumeration throws propagates unchanged, as an iterator's error does in NumPy. Either
+        ///         way the buffer is released before the exception leaves, so a failed call holds no memory.
+        ///     </para>
+        ///     <para>
+        ///         Until 2026-10-30 a short enumeration returned an array of <paramref name="size"/> elements whose
+        ///         tail was never written (heap contents).
+        ///     </para>
+        ///     <para>
+        ///         Not NumPy's: a negative <paramref name="size"/> is refused. NumPy's <c>count=-1</c> reads every
+        ///         item, which is <see cref="array{T}(IEnumerable{T})"/> here, and its other negative counts return an
+        ///         empty array without reading.
+        ///     </para>
         /// </remarks>
         public static NDArray array<T>(IEnumerable<T> data, long size) where T : unmanaged
         {
             var slice = new ArraySlice<T>(new UnmanagedMemoryBlock<T>(size));
-            unsafe
+            // The items read so far; fewer than `size` once the enumeration ends is NumPy's "iterator too short".
+            long i = 0;
+            bool filled = false;
+            try
             {
-                using (var enumerator = data.GetEnumerator())
+                unsafe
                 {
-                    Func<bool> next = enumerator.MoveNext;
-
-                    var addr = slice.Address;
-                    for (long i = 0; i < size && next(); i++)
+                    using (var enumerator = data.GetEnumerator())
                     {
-                        addr[i] = enumerator.Current;
+                        Func<bool> next = enumerator.MoveNext;
+
+                        var addr = slice.Address;
+                        // `i < size` is tested first, so a longer enumeration is advanced exactly `size` times.
+                        for (; i < size && next(); i++)
+                        {
+                            addr[i] = enumerator.Current;
+                        }
                     }
                 }
+
+                if (i < size)
+                    throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"iterator too short: Expected {size} but iterator had only {i} items."));
+                filled = true;
+            }
+            finally
+            {
+                // Cleanup on failure: no NDArray holds the slice yet, so its only reference is this one. Freeing it
+                // here returns the buffer to the pool now rather than leaving it to the block's finalizer.
+                if (!filled)
+                    slice.DangerousFree();
             }
 
             return new NDArray(slice, Shape.Vector(slice.Count));
         }
 
         /// <summary>
-        ///     Create a vector <see cref="NDArray"/> of dtype <see cref="char"/>.
+        ///     Creates a 0-d fixed-width Unicode array holding <paramref name="value"/> — NumPy's <c>np.array('abc')</c>,
+        ///     <c>array('abc', dtype='&lt;U3')</c> with shape <c>()</c>. The width is the value's length in code points (a surrogate
+        ///     pair counts once); an empty value is <c>&lt;U1</c>, NumPy's minimum.
         /// </summary>
-        /// <param name="chars"></param>
-        /// <returns></returns>
+        /// <param name="value">The text.</param>
+        /// <returns>A 0-d <c>U</c> array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        /// <remarks>
+        ///     <b>Breaking (NumPy parity):</b> this overload used to build a 1-D <see cref="char"/> vector of the characters.
+        ///     That conversion remains available as <see cref="NDArray.FromString(string)"/> and
+        ///     <c>np.array(value.ToCharArray())</c>.
+        /// </remarks>
         [MethodImpl(Inline)]
-        public static NDArray array(string chars)
+        public static NDArray array(string value)
         {
-            if (chars == null)
-                throw new ArgumentNullException(nameof(chars));
-            if (chars.Length == 0)
-                return new NDArray(NPTypeCode.Char, 0);
-
-            unsafe
-            {
-                var ret = new ArraySlice<char>(new UnmanagedMemoryBlock<char>(chars.Length));
-                fixed (char* strChars = chars)
-                {
-                    var src = strChars;
-                    var dst = ret.Address;
-                    var len = sizeof(char) * chars.Length;
-                    Buffer.MemoryCopy(src, dst, len, len);
-                }
-
-                return new NDArray(ret);
-            }
+            if (value == null)
+                throw new ArgumentNullException(nameof(value));
+            return UnmanagedStorage.FromAnyScalar(value, null);
         }
 
         /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
+        ///     Creates a 0-d fixed-width string array holding <paramref name="value"/> with the given string dtype —
+        ///     NumPy's <c>np.array('abc', dtype='U5')</c> / <c>dtype='S'</c>.
+        /// </summary>
+        /// <param name="value">The text.</param>
+        /// <param name="dtype">A string dtype (<c>"U"</c>, <c>"U5"</c>, <c>"S"</c>, <c>np.str_</c>, <c>np.bytes_</c>) or null to discover.</param>
+        /// <returns>A 0-d <c>S</c>/<c>U</c> array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+        /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
+        /// <exception cref="ValueError">A numeric dtype and text that does not parse as that number (<c>could not convert
+        ///     string to float: 'x'</c>, NumPy's <c>int()</c> / <c>float()</c> texts).</exception>
+        /// <exception cref="OverflowException">An integer text outside an integer dtype's range.</exception>
+        public static NDArray array(string value, DType dtype)
+        {
+            if (value == null)
+                throw new ArgumentNullException(nameof(value));
+            return UnmanagedStorage.FromAnyScalar(value, dtype);
+        }
+
+        /// <summary>
+        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/> — NumPy's <c>np.array</c> of nested lists:
+        ///     every row must have the same length.
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from. Shape is taken from the first item of each array/nested array.</param>
+        /// <param name="data">The array to create <see cref="NDArray"/> from. Its shape is NumPy's discovery
+        ///     (<see cref="NDArray.DiscoverJaggedShape"/>): every row is checked, and no rows at all gives shape <c>(0,)</c>.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <exception cref="ValueError">A ragged or null row (NumPy's <c>setting an array element with a sequence. The
+        ///     requested array has an inhomogeneous shape after 1 dimensions. The detected shape was (2,) + inhomogeneous
+        ///     part.</c>): a longer row used to be cut silently and a shorter one to throw IndexOutOfRange (parity QA-45).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
         [MethodImpl(Optimize)]
         public static NDArray array<T>(T[][] data) where T : unmanaged
         {
+            // NumPy's discovery first: a ragged input raises before anything is allocated; an empty level ends the dims.
+            long[] dims = NDArray.DiscoverJaggedShape(data);
+            if (dims.Length < 2)
+                return new NDArray(InfoOf<T>.NPTypeCode, new Shape(dims, copy: false));
             unsafe
             {
                 int len1 = data.Length;
@@ -248,7 +305,7 @@ namespace NumSharp
 
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2));
 
-                var strides = @out.Shape.Strides;
+                var strides = @out.Shape.strides;
                 long stride1 = strides[0];
                 Debug.Assert(strides[1] == 1);
 
@@ -268,17 +325,26 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
+        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/> — NumPy's <c>np.array</c> of nested lists:
+        ///     every child at every level must have its level's length.
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from. Shape is taken from the first item of each array/nested array.</param>
+        /// <param name="data">The array to create <see cref="NDArray"/> from. Its shape is NumPy's discovery
+        ///     (<see cref="NDArray.DiscoverJaggedShape"/>): every child is checked, and the dims end at the first empty level
+        ///     (<c>[[], []]</c> is <c>(2, 0)</c>).</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <exception cref="ValueError">A ragged or null child (NumPy's inhomogeneous-shape text, naming the depth the
+        ///     children agreed to).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
         [MethodImpl(Optimize)]
         public static NDArray array<T>(T[][][] data) where T : unmanaged
         {
+            // NumPy's discovery first: a ragged input raises before anything is allocated; an empty level ends the dims.
+            long[] dims = NDArray.DiscoverJaggedShape(data);
+            if (dims.Length < 3)
+                return new NDArray(InfoOf<T>.NPTypeCode, new Shape(dims, copy: false));
             unsafe
             {
                 int len1 = data.Length;
@@ -287,7 +353,7 @@ namespace NumSharp
 
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2, len3));
 
-                var strides = @out.Shape.Strides;
+                var strides = @out.Shape.strides;
                 long stride1 = strides[0];
                 long stride2 = strides[1];
                 Debug.Assert(strides[2] == 1);
@@ -313,17 +379,26 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
+        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/> — NumPy's <c>np.array</c> of nested lists:
+        ///     every child at every level must have its level's length.
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from. Shape is taken from the first item of each array/nested array.</param>
+        /// <param name="data">The array to create <see cref="NDArray"/> from. Its shape is NumPy's discovery
+        ///     (<see cref="NDArray.DiscoverJaggedShape"/>): every child is checked, and the dims end at the first empty
+        ///     level.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <exception cref="ValueError">A ragged or null child (NumPy's inhomogeneous-shape text, naming the depth the
+        ///     children agreed to).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
         [MethodImpl(Optimize)]
         public static NDArray array<T>(T[][][][] data) where T : unmanaged
         {
+            // NumPy's discovery first: a ragged input raises before anything is allocated; an empty level ends the dims.
+            long[] dims = NDArray.DiscoverJaggedShape(data);
+            if (dims.Length < 4)
+                return new NDArray(InfoOf<T>.NPTypeCode, new Shape(dims, copy: false));
             unsafe
             {
                 int len1 = data.Length;
@@ -333,7 +408,7 @@ namespace NumSharp
 
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2, len3, len4));
 
-                var strides = @out.Shape.Strides;
+                var strides = @out.Shape.strides;
                 long stride1 = strides[0];
                 long stride2 = strides[1];
                 long stride3 = strides[2];
@@ -365,17 +440,26 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
+        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/> — NumPy's <c>np.array</c> of nested lists:
+        ///     every child at every level must have its level's length.
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from. Shape is taken from the first item of each array/nested array.</param>
+        /// <param name="data">The array to create <see cref="NDArray"/> from. Its shape is NumPy's discovery
+        ///     (<see cref="NDArray.DiscoverJaggedShape"/>): every child is checked, and the dims end at the first empty
+        ///     level.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <exception cref="ValueError">A ragged or null child (NumPy's inhomogeneous-shape text, naming the depth the
+        ///     children agreed to).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
         [MethodImpl(Optimize)]
         public static NDArray array<T>(T[][][][][] data) where T : unmanaged
         {
+            // NumPy's discovery first: a ragged input raises before anything is allocated; an empty level ends the dims.
+            long[] dims = NDArray.DiscoverJaggedShape(data);
+            if (dims.Length < 5)
+                return new NDArray(InfoOf<T>.NPTypeCode, new Shape(dims, copy: false));
             unsafe
             {
                 int len1 = data.Length;
@@ -386,7 +470,7 @@ namespace NumSharp
 
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2, len3, len4, len5));
 
-                var strides = @out.Shape.Strides;
+                var strides = @out.Shape.strides;
                 long stride1 = strides[0];
                 long stride2 = strides[1];
                 long stride3 = strides[2];
@@ -502,10 +586,7 @@ namespace NumSharp
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
 
-            var arr = new NDArray(ArraySlice.FromArray(data, true), new Shape(data.GetLength(0), data.GetLength(1)));
-            if (dtype != null && dtype.GetTypeCode() != InfoOf<T>.NPTypeCode)
-                return arr.astype(dtype);
-            return arr;
+            return NDArray.array(data, dtype);
         }
 
         /// <summary>

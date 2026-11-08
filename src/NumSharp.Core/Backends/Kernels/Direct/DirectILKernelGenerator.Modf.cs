@@ -92,15 +92,77 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// SIMD-optimized Modf operation for contiguous float arrays.
-        /// Computes fractional and integral parts in-place.
-        /// Handles special values (NaN, Inf) according to C standard modf.
+        /// Scalar modf for Half — a byte-exact port of NumPy 2.4.2's HALF_modf loop
+        /// (loops.c.src:1908): widen to float, run the float modf (<see cref="ModfScalar(float, out float, out float)"/>
+        /// == C <c>modff</c>), then narrow BOTH results to Half. There is no vector f16 truncate in the
+        /// BCL and NumPy's own half loop is scalar, so this stays scalar.
         /// </summary>
-        /// <param name="data">Input array (will contain fractional parts after)</param>
-        /// <param name="integral">Output array for integral parts</param>
-        /// <param name="size">Number of elements</param>
+        /// <param name="value">The input value.</param>
+        /// <param name="fractional">The signed fractional part (Half).</param>
+        /// <param name="integral">The signed integral part (Half).</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static void ModfScalar(Half value, out Half fractional, out Half integral)
+        {
+            // NumPy: half -> float -> modff -> narrow both to half. The float ModfScalar already carries
+            // the inf/nan/signed-zero fixups of C modff, so the widen/narrow inherits them exactly
+            // (modf(inf)=(+0,inf), modf(-inf)=(-0,-inf), modf(nan)=(nan,nan), modf(-0)=(-0,-0)).
+            ModfScalar((float)value, out float f, out float ig);
+            fractional = (Half)f;
+            integral = (Half)ig;
+        }
+
+        /// <summary>
+        /// Modf over a contiguous Half array (scalar loop; see <see cref="ModfScalar(Half, out Half, out Half)"/>).
+        /// Byte-exact with NumPy's HALF_modf. Writes fractional parts back into <paramref name="data"/>.
+        /// </summary>
+        /// <param name="data">Input array (holds the fractional parts on return).</param>
+        /// <param name="integral">Output array for the integral parts.</param>
+        /// <param name="size">Number of elements.</param>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public static unsafe void ModfHelper(Half* data, Half* integral, long size)
+            => ModfHelper(data, data, integral, size);
+
+        /// <summary>
+        /// Out-of-place Half modf: reads <paramref name="input"/> once, writes fractional/integral to their
+        /// own buffers (see the float overload; NumPy's HALF_modf is scalar so this is a scalar loop).
+        /// </summary>
+        /// <param name="input">Source array (read-only unless it aliases an output).</param>
+        /// <param name="frac">Destination for the fractional parts.</param>
+        /// <param name="integral">Destination for the integral parts.</param>
+        /// <param name="size">Number of elements.</param>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public static unsafe void ModfHelper(Half* input, Half* frac, Half* integral, long size)
+        {
+            for (long i = 0; i < size; i++)
+                ModfScalar(input[i], out frac[i], out integral[i]);
+        }
+
+        /// <summary>
+        /// In-place SIMD Modf wrapper for contiguous float arrays: <paramref name="data"/> holds the input
+        /// on entry and the fractional parts on return. Kept for callers that mutate the input copy in
+        /// place; forwards to the out-of-place kernel with input==frac (which is a safe per-element alias).
+        /// </summary>
+        /// <param name="data">Input array (holds the fractional parts on return).</param>
+        /// <param name="integral">Output array for the integral parts.</param>
+        /// <param name="size">Number of elements.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe void ModfHelper(float* data, float* integral, long size)
+            => ModfHelper(data, data, integral, size);
+
+        /// <summary>
+        /// Out-of-place SIMD Modf for contiguous float arrays: reads <paramref name="input"/> ONCE and
+        /// writes the fractional and integral parts to their own buffers — NumPy's 3-touch pattern (1 read,
+        /// 2 writes), avoiding the extra input-copy + write-back pass an in-place kernel needs when the
+        /// caller supplies output arrays. Any two of the three pointers may alias per-element (input==frac
+        /// gives the in-place case; a provided out that equals the input is handled the same way). Handles
+        /// the special values (NaN, ±inf, signed zero) per C standard modf.
+        /// </summary>
+        /// <param name="input">Source array (read-only unless it aliases an output).</param>
+        /// <param name="frac">Destination for the fractional parts.</param>
+        /// <param name="integral">Destination for the integral parts.</param>
+        /// <param name="size">Number of elements.</param>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public static unsafe void ModfHelper(float* input, float* frac, float* integral, long size)
         {
             if (size == 0) return;
 
@@ -119,7 +181,7 @@ namespace NumSharp.Backends.Kernels
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
-                    var vec = Vector512.Load(data + i);
+                    var vec = Vector512.Load(input + i);
                     var truncVec = Vector512.Truncate(vec);
                     var fracVec = vec - truncVec;
 
@@ -134,7 +196,7 @@ namespace NumSharp.Backends.Kernels
                     var zeroMask = Vector512.Equals(fracVec, zero);
                     fracVec = Vector512.ConditionalSelect(zeroMask, signedZero | fracVec, fracVec);
 
-                    fracVec.Store(data + i);
+                    fracVec.Store(frac + i);
                     truncVec.Store(integral + i);
                 }
             }
@@ -149,7 +211,7 @@ namespace NumSharp.Backends.Kernels
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
-                    var vec = Vector256.Load(data + i);
+                    var vec = Vector256.Load(input + i);
                     var truncVec = Vector256.Truncate(vec);
                     var fracVec = vec - truncVec;
 
@@ -164,7 +226,7 @@ namespace NumSharp.Backends.Kernels
                     var zeroMask = Vector256.Equals(fracVec, zero);
                     fracVec = Vector256.ConditionalSelect(zeroMask, signedZero | fracVec, fracVec);
 
-                    fracVec.Store(data + i);
+                    fracVec.Store(frac + i);
                     truncVec.Store(integral + i);
                 }
             }
@@ -179,7 +241,7 @@ namespace NumSharp.Backends.Kernels
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
-                    var vec = Vector128.Load(data + i);
+                    var vec = Vector128.Load(input + i);
                     var truncVec = Vector128.Truncate(vec);
                     var fracVec = vec - truncVec;
 
@@ -194,29 +256,42 @@ namespace NumSharp.Backends.Kernels
                     var zeroMask = Vector128.Equals(fracVec, zero);
                     fracVec = Vector128.ConditionalSelect(zeroMask, signedZero | fracVec, fracVec);
 
-                    fracVec.Store(data + i);
+                    fracVec.Store(frac + i);
                     truncVec.Store(integral + i);
                 }
             }
 #endif
 
-            // Scalar tail (or full loop on .NET 8) - handles special values correctly
+            // Scalar tail (or full loop on .NET 8) - handles special values correctly. Read input[i] into a
+            // local FIRST so an input==frac alias is safe (the store below may overwrite input[i]).
             for (; i < size; i++)
             {
-                ModfScalar(data[i], out data[i], out integral[i]);
+                ModfScalar(input[i], out frac[i], out integral[i]);
             }
         }
 
         /// <summary>
-        /// SIMD-optimized Modf operation for contiguous double arrays.
-        /// Computes fractional and integral parts in-place.
-        /// Handles special values (NaN, Inf) according to C standard modf.
+        /// In-place SIMD Modf wrapper for contiguous double arrays (see the float overload). Forwards to
+        /// the out-of-place kernel with input==frac.
         /// </summary>
-        /// <param name="data">Input array (will contain fractional parts after)</param>
-        /// <param name="integral">Output array for integral parts</param>
-        /// <param name="size">Number of elements</param>
+        /// <param name="data">Input array (holds the fractional parts on return).</param>
+        /// <param name="integral">Output array for the integral parts.</param>
+        /// <param name="size">Number of elements.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe void ModfHelper(double* data, double* integral, long size)
+            => ModfHelper(data, data, integral, size);
+
+        /// <summary>
+        /// Out-of-place SIMD Modf for contiguous double arrays: reads <paramref name="input"/> once and
+        /// writes fractional/integral to their own buffers (NumPy's 3-touch pattern). See the float
+        /// overload for the aliasing and special-value contract.
+        /// </summary>
+        /// <param name="input">Source array (read-only unless it aliases an output).</param>
+        /// <param name="frac">Destination for the fractional parts.</param>
+        /// <param name="integral">Destination for the integral parts.</param>
+        /// <param name="size">Number of elements.</param>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public static unsafe void ModfHelper(double* input, double* frac, double* integral, long size)
         {
             if (size == 0) return;
 
@@ -235,7 +310,7 @@ namespace NumSharp.Backends.Kernels
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
-                    var vec = Vector512.Load(data + i);
+                    var vec = Vector512.Load(input + i);
                     var truncVec = Vector512.Truncate(vec);
                     var fracVec = vec - truncVec;
 
@@ -250,7 +325,7 @@ namespace NumSharp.Backends.Kernels
                     var zeroMask = Vector512.Equals(fracVec, zero);
                     fracVec = Vector512.ConditionalSelect(zeroMask, signedZero | fracVec, fracVec);
 
-                    fracVec.Store(data + i);
+                    fracVec.Store(frac + i);
                     truncVec.Store(integral + i);
                 }
             }
@@ -265,7 +340,7 @@ namespace NumSharp.Backends.Kernels
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
-                    var vec = Vector256.Load(data + i);
+                    var vec = Vector256.Load(input + i);
                     var truncVec = Vector256.Truncate(vec);
                     var fracVec = vec - truncVec;
 
@@ -280,7 +355,7 @@ namespace NumSharp.Backends.Kernels
                     var zeroMask = Vector256.Equals(fracVec, zero);
                     fracVec = Vector256.ConditionalSelect(zeroMask, signedZero | fracVec, fracVec);
 
-                    fracVec.Store(data + i);
+                    fracVec.Store(frac + i);
                     truncVec.Store(integral + i);
                 }
             }
@@ -295,7 +370,7 @@ namespace NumSharp.Backends.Kernels
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
-                    var vec = Vector128.Load(data + i);
+                    var vec = Vector128.Load(input + i);
                     var truncVec = Vector128.Truncate(vec);
                     var fracVec = vec - truncVec;
 
@@ -310,16 +385,16 @@ namespace NumSharp.Backends.Kernels
                     var zeroMask = Vector128.Equals(fracVec, zero);
                     fracVec = Vector128.ConditionalSelect(zeroMask, signedZero | fracVec, fracVec);
 
-                    fracVec.Store(data + i);
+                    fracVec.Store(frac + i);
                     truncVec.Store(integral + i);
                 }
             }
 #endif
 
-            // Scalar tail (or full loop on .NET 8) - handles special values correctly
+            // Scalar tail (or full loop on .NET 8) - handles special values correctly.
             for (; i < size; i++)
             {
-                ModfScalar(data[i], out data[i], out integral[i]);
+                ModfScalar(input[i], out frac[i], out integral[i]);
             }
         }
 

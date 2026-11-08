@@ -155,8 +155,14 @@ public static class S
             CollectionAssert.AreEqual(expected, nd.ToArray<double>(), $"{Label(run)} — {what}: values");
         }
 
+        /// <summary>
+        ///     Every attributed member of the shape fixture is woven — the hand-scoped one included, which keeps its own scope
+        ///     and gains only its operand roots (until 2026-10-09 it was the one skipped body) — and each carries a scope
+        ///     local.
+        /// </summary>
+        /// <exception cref="AssertFailedException">A member was skipped, left unwoven, or carries no scope local.</exception>
         [TestMethod]
-        public void Fixture_WeavesEveryAttributedBody_AndSkipsTheHandScopedOne()
+        public void Fixture_WeavesEveryAttributedBody_TheHandScopedOneGainsOnlyRoots()
         {
             foreach (var run in Runs.Value)
             {
@@ -165,8 +171,10 @@ public static class S
                 int attributed = WeaveRun.AllMethods(asm.MainModule).Count(m =>
                     m.CustomAttributes.Any(a => a.AttributeType.Name is "NDScopedAttribute" or "NDScopedAsyncAttribute"))
                     + asm.MainModule.Types.SelectMany(t => t.Properties).Count(p => p.CustomAttributes.Any(a => a.AttributeType.Name == "NDScopedAttribute"));
-                Assert.AreEqual(1, run.Result.Skipped, $"{Label(run)}: exactly the hand-scoped body is skipped");
-                Assert.AreEqual(attributed, run.Result.Woven + run.Result.Skipped, $"{Label(run)}: every attributed member is either woven or skipped:\n{run.Report}");
+                Assert.AreEqual(0, run.Result.Skipped, $"{Label(run)}: no body is skipped — the hand-scoped one gains its operand roots");
+                Assert.AreEqual(1, run.CountScopeCalls("S", "Hand", "Open"), $"{Label(run)}: the hand-scoped body keeps its one scope");
+                Assert.IsTrue(run.CountScopeCalls("S", "Hand", "Anchor") >= 1, $"{Label(run)}: the hand-scoped body roots its operand");
+                Assert.AreEqual(attributed, run.Result.Woven, $"{Label(run)}: every attributed member is woven:\n{run.Report}");
                 Assert.IsTrue(run.Result.Woven >= 28, $"{Label(run)}: the fixture should carry 28+ woven shapes (got {run.Result.Woven})");
                 foreach (var m in WeaveRun.AllMethods(asm.MainModule))
                 {
@@ -396,8 +404,13 @@ public static class S
             }
         }
 
+        /// <summary>
+        ///     The hand-scoped body keeps its single, author-written scope (the weave adds only operand roots) and that scope
+        ///     still reclaims its temporary while the result survives.
+        /// </summary>
+        /// <exception cref="AssertFailedException">The scope was doubled, the result was reclaimed, or the temporary was not.</exception>
         [TestMethod]
-        public void HandScoped_IsSkipped_AndStillReclaims()
+        public void HandScoped_KeepsItsScope_AndStillReclaims()
         {
             foreach (var run in Runs.Value)
             {
@@ -510,14 +523,20 @@ public static class S
                 var keep = new List<NDArray>();
                 for (int i = 0; i < 25; i++)
                 {
+                    // Epoch BEFORE this round's calls, so CollectSince can prove the young collection below reaches
+                    // every intermediate the round dropped. That is what the forced collection is for: it finalizes
+                    // the dropped intermediates so their pooled buffers go home and the NEXT round's calls reuse
+                    // them — a wrongly released live result then shows up as corrupted values. A young collection
+                    // decides those objects' fates exactly as the former full pair did while no collection ran
+                    // mid-round (and CollectSince falls back to the full pair when one did); it just no longer marks
+                    // this host's whole heap, which is dominated by the Roslyn compilations the weaver tests keep.
+                    var roundStart = GcQuiescence.Epoch.Capture();
                     var a = Input();
                     var bare = (NDArray)run.Invoke("S", "Bare", null, a);
                     var tuple = ((NDArray, NDArray))run.Invoke("S", "Tuple2", null, a);
                     var arr = (NDArray[])run.Invoke("S", "Arr", null, a);
                     keep.Add(bare); keep.Add(tuple.Item1); keep.Add(arr[1]);
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-                    GC.Collect();
+                    GcQuiescence.CollectSince(roundStart);
                     CollectionAssert.AreEqual(new[] { 1.0, 3.0, 5.0 }, bare.ToArray<double>(), $"{Label(run)}: Bare at iteration {i}");
                     CollectionAssert.AreEqual(new[] { 1.0, 2.0, 3.0 }, tuple.Item1.ToArray<double>(), $"{Label(run)}: Tuple2 at iteration {i}");
                     CollectionAssert.AreEqual(new[] { -1.0, 1.0, 3.0 }, arr[1].ToArray<double>(), $"{Label(run)}: Arr at iteration {i}");

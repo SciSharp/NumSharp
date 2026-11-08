@@ -11,7 +11,11 @@ namespace NumSharp
         ///     Remove single-dimensional entries from the shape of an array.
         /// </summary>
         /// <param name="a">Input data.</param>
-        /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
+        /// <returns>A view of <paramref name="a"/> with all the dimensions of length 1 removed: a fresh view object every
+        ///     time, <c>a.view()</c> when there is nothing to remove (NumPy returns <c>a</c> itself there; a fresh view keeps
+        ///     disposing the result from disposing the input - the plan's D15). A <c>numpy.char.chararray</c> operand gives a
+        ///     chararray over the result (NumPy creates it as the subclass), owning its data exactly when the plain result
+        ///     would.</returns>
         /// <remarks>
         ///     A pure VIEW like NumPy's <c>PyArray_Squeeze</c>: the length-one axes are dropped from the
         ///     dims AND strides while offset/buffer stay — never a reshape (which rebuilds C-strides and
@@ -20,6 +24,7 @@ namespace NumSharp
         ///     input stays a strided view, and a broadcast input keeps stride-0 (read-only).
         ///     https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray squeeze(NDArray a)
         {
             var dims = a.Shape.dimensions;
@@ -27,8 +32,11 @@ namespace NumSharp
             for (int i = 0; i < dims.Length; i++)
                 if (dims[i] != 1)
                     keep++;
+            // Nothing to remove: NumPy's PyArray_Squeeze returns the array itself (Py_INCREF(self)); NumSharp returns
+            // a.view(), a fresh view object over the same memory and engine, so disposing the result never disposes the
+            // input (D15; the view-flags oracle carves the identity difference).
             if (keep == dims.Length)
-                return new NDArray(a.Storage.Alias()); // nothing to remove — still a fresh view object
+                return a.view();
 
             return SqueezeView(a, keep, onlyAxis: -1);
         }
@@ -38,19 +46,35 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input data.</param>
         /// <param name="axis">Selects a subset of the single-dimensional entries in the shape. If an axis is selected with shape entry greater than one, an error is raised.</param>
-        /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html</remarks>
-        /// <exception cref="IncorrectShapeException">If axis is not None, and an axis being squeezed is not of length 1</exception>
+        /// <returns>A view of <paramref name="a"/> without the named axis (a fresh view object; <c>a.view()</c> for the 0-d
+        ///     case, which removes nothing).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
+        /// <remarks>
+        ///     NumPy's <c>PyArray_ConvertMultiAxis</c> (its integer branch) then <c>PyArray_SqueezeSelected</c>: a 0-d input
+        ///     lets axis 0 and -1 through (no axis is selected, so nothing is removed), every other axis must be in range
+        ///     (<c>normalize_axis_index</c>), and the selected axis must have length one.
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html
+        /// </remarks>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range ("axis … is out of bounds for array of
+        ///     dimension …").</exception>
+        /// <exception cref="ValueError">The selected axis does not have length one ("cannot select an axis to squeeze out
+        ///     which has size not equal to one").</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray squeeze(NDArray a, int axis)
         {
-            while (axis < 0)
-                axis = a.ndim + axis; //handle negative axis
+            // The backward-compatibility special case of PyArray_ConvertMultiAxis: axis 0 / -1 of a 0-d input selects no
+            // axis. NumPy then returns the array itself; NumSharp returns a.view(), a fresh view object (as squeeze(NDArray)
+            // does for an array with nothing to remove), so disposing the result never disposes the input.
+            if (a.ndim == 0 && (axis == 0 || axis == -1))
+                return a.view();
 
-            if (axis >= a.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis));
+            // normalize_axis_index on the axis as given. The wrap-then-test loop this replaces never ended for a negative
+            // axis of a 0-d input, and wrapped -ndim - 1 to the last axis.
+            axis = Shape.check_and_adjust_axis(a.ndim, axis);
 
-            if (a.shape[axis] != 1)
-                throw new IncorrectShapeException($"Unable to squeeze axis {axis} because it is of length {a.shape[axis]} and not 1.");
+            if (a.Shape.dimensions[axis] != 1)
+                throw new ValueError("cannot select an axis to squeeze out which has size not equal to one");
 
             // Stride-dropping VIEW (see squeeze(NDArray)) removing ONLY the named axis.
             return SqueezeView(a, a.ndim - 1, onlyAxis: axis);
@@ -62,6 +86,7 @@ namespace NumSharp
         ///     <c>PyArray_Squeeze</c>/<c>SelectedSqueeze</c>. Writeability/read-onlyness inherit through
         ///     <see cref="UnmanagedStorage.Alias(Shape)"/>.
         /// </summary>
+        [NewSubtype("a")]
         private static NDArray SqueezeView(NDArray a, int keep, int onlyAxis)
         {
             var dims = a.Shape.dimensions;
@@ -97,7 +122,7 @@ namespace NumSharp
         public static Shape squeeze(Shape shape)
         {
             //TODO! what will happen if its a slice?
-            return new Shape(shape.dimensions.Where(d => d != 1).ToArray());
+            return new Shape(shape.dimensions.Where(d => d != 1).ToArray(), copy: false);
         }
 
         /// <summary>
@@ -133,7 +158,7 @@ namespace NumSharp
             if (r.Length == 0)
                 return Shape.Scalar;
 
-            return new Shape(r);
+            return new Shape(r, copy: false);
         }
     }
 }

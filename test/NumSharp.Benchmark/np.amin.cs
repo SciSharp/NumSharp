@@ -31,7 +31,7 @@ namespace NumSharp.Benchmark
         {
             var nd2 = new NDArray(typeof(double));
             nd2 = np.arange(1000 * 8 * 8 * 8).reshape(1000, 8, 8, 8);
-            var nd3 = nd2.amin(0);
+            var nd3 = np.amin(nd2, 0);
         }
 
         [Benchmark]

@@ -177,6 +177,24 @@ namespace NumSharp.Tests.Build.Analyzer
                     "the suppression knob must silence NDW013"));
         }
 
+        /// <summary>
+        ///     An <c>[NDAnchored]</c>-only consumer is inert without the weaver too (its operands go unrooted), so the fallback
+        ///     scan matches <c>NDAnchoredAttribute</c> as well — no analyzer here, the scan is the reporter.
+        /// </summary>
+        /// <exception cref="AssertFailedException">The fallback did not report NDW013 for the anchored consumer.</exception>
+        [TestMethod]
+        public void Ndw013_Fallback_Fires_ForAnchoredOnlyConsumer()
+        {
+            RunConsumer(
+                "using NumSharp;\npublic static class A { [NDAnchored] public static double First(NDArray a) => a.GetDouble(0); }\n",
+                "",
+                output =>
+                {
+                    StringAssert.Contains(output, "NDW013", "NDW013 must fire for an [NDAnchored]-only consumer when the weaver is absent");
+                    StringAssert.Contains(output, ScanForm, "without an analyzer the MSBuild fallback is the reporter");
+                });
+        }
+
         [TestMethod]
         public void Ndw013_Fires_ForAsyncOnlyConsumer()
         {

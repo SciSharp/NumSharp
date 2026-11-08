@@ -227,6 +227,43 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
+        /// <summary>
+        ///     True iff the difference at <paramref name="index"/> is EXACTLY a signed-zero sign flip:
+        ///     both values are numerically zero (+0.0 / -0.0) with opposite sign bits, and nothing else.
+        ///     Unlike <see cref="DiffHasSignFlip"/> this EXCLUDES NaN sign/payload flips, so it captures
+        ///     precisely the NON-CONTRACTUAL ±0 result of the min/max family — NumPy's own maximum/fmax
+        ///     pick the sign of a zero by SIMD lane, so <c>fmax(+0, -0)</c> comes back +0 in one array
+        ///     context and -0 in another (probed against 2.4.2: a 4-element vs a 20-element array differ),
+        ///     making the sign bit-irreproducible — without also excusing a genuine NaN-bit divergence.
+        /// </summary>
+        public static bool IsSignedZeroFlip(byte[] exp, byte[] act, int index, NPTypeCode tc)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Double:
+                {
+                    double x = BitConverter.ToDouble(exp, index * 8), y = BitConverter.ToDouble(act, index * 8);
+                    // both exactly zero (x == 0.0 is true for +0 AND -0) with different sign bits.
+                    return x == 0.0 && y == 0.0
+                        && BitConverter.DoubleToInt64Bits(x) != BitConverter.DoubleToInt64Bits(y);
+                }
+                case NPTypeCode.Single:
+                {
+                    float x = BitConverter.ToSingle(exp, index * 4), y = BitConverter.ToSingle(act, index * 4);
+                    return x == 0.0f && y == 0.0f
+                        && BitConverter.SingleToInt32Bits(x) != BitConverter.SingleToInt32Bits(y);
+                }
+                case NPTypeCode.Half:
+                {
+                    Half x = BitConverter.ToHalf(exp, index * 2), y = BitConverter.ToHalf(act, index * 2);
+                    return x == (Half)0.0 && y == (Half)0.0
+                        && BitConverter.HalfToInt16Bits(x) != BitConverter.HalfToInt16Bits(y);
+                }
+                default:
+                    return false;
+            }
+        }
+
         private static bool SignFlipD(byte[] e, byte[] a, int off)
         {
             double x = BitConverter.ToDouble(e, off), y = BitConverter.ToDouble(a, off);

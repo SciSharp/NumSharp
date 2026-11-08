@@ -2,17 +2,17 @@
 
 Every array in NumSharp has a **dtype**-a data type that determines what kind of values the array stores, how many bytes each element takes, and which operations are valid. When you write `np.zeros(10, np.int32)`, the `np.int32` is the dtype. When you call `arr.astype(np.float64)`, you're converting to a different dtype.
 
-This page covers the 15 dtypes NumSharp supports, how they map to NumPy's types, how to refer to them in code, and the places where NumSharp's behavior diverges from NumPy (and why).
+This page covers NumSharp's supported dtypes, how they map to NumPy's types, how to refer to them in code, and the places where NumSharp's behavior differs from NumPy.
 
 ---
 
-## The 15 Supported Dtypes
+## Supported dtypes
 
-NumSharp supports every numeric dtype NumPy defines, plus a few .NET-specific ones:
+NumSharp supports the following dtypes:
 
 | NPTypeCode | C# Type | NumPy Equivalent | Bytes | Kind | SIMD |
 |------------|---------|------------------|-------|------|------|
-| `Boolean`  | `bool`                     | `bool`       | 1  | `?` † | Limited |
+| `Boolean`  | `bool`                     | `bool`       | 1  | `b` | Operation-dependent |
 | `SByte`    | `sbyte`                    | `int8`       | 1  | `i` | Yes |
 | `Byte`     | `byte`                     | `uint8`      | 1  | `u` | Yes |
 | `Int16`    | `short`                    | `int16`      | 2  | `i` | Yes |
@@ -21,35 +21,36 @@ NumSharp supports every numeric dtype NumPy defines, plus a few .NET-specific on
 | `UInt32`   | `uint`                     | `uint32`     | 4  | `u` | Yes |
 | `Int64`    | `long`                     | `int64`      | 8  | `i` | Yes |
 | `UInt64`   | `ulong`                    | `uint64`     | 8  | `u` | Yes |
-| `Half`     | `System.Half`              | `float16`    | 2  | `f` | None |
+| `Half`     | `System.Half`              | `float16`    | 2  | `f` | Specialized kernels |
 | `Single`   | `float`                    | `float32`    | 4  | `f` | Yes |
 | `Double`   | `double`                   | `float64`    | 8  | `f` | Yes |
-| `Decimal`  | `decimal`                  | *no equiv*   | 32 ‡ | `f` | None |
-| `Complex`  | `System.Numerics.Complex`  | `complex128` | 16 | `c` | None |
-| `Char`     | `char`                     | *no equiv*   | 1 ‡ | `S` | None |
+| `Decimal`  | `decimal`                  | *no equiv*   | 16 | `f` | Scalar arithmetic |
+| `Complex`  | `System.Numerics.Complex`  | `complex128` | 16 | `c` | Operation-dependent |
+| `Char`     | `char`                     | *no equiv*   | 2  | `u` | Through uint16 kernels where supported |
+| `String`   | `byte[]` values            | `bytes_` (`S`) | n | `S` | Specialized kernels |
+| `String`   | `string` values            | `str_` (`U`) | 4 × n | `U` | Specialized kernels |
+| `String`   | `string` or NA values      | `StringDType` (`T`) | 16-byte cell | `T` | Specialized kernels |
 
-**Bytes column reports `NPTypeCode.SizeOf()` / `DType.itemsize`** - what NumSharp actually returns to your code. Two of these diverge from both NumPy and the underlying .NET type:
-- † `Boolean.kind` is `'?'` in NumSharp; NumPy uses `'b'`. (NumSharp stores the type-char in the `kind` slot for bool.)
-- ‡ **`Decimal.itemsize == 32` and `Char.itemsize == 1`** are NumSharp reporting bugs. The actual .NET memory footprint is 16 bytes for `decimal` and 2 bytes for `char`. `InfoOf<decimal>.Size == 16` and `InfoOf<char>.Size == 2` give you the correct values. Storage allocation uses the correct .NET size; only the `DType.itemsize` property is wrong.
+**Bytes** and **Kind** are the descriptor's `itemsize` and `kind`. For `S` and `U`, **n** is the width in bytes or Unicode code points; shorter values are NUL-padded and longer writes truncate. `StringDType` has no fixed text width: each element has a 16-byte cell, with longer text stored separately. Its `nbytes` counts the cells, not that extra storage.
 
-**Half**, **SByte**, and **Complex** are the newest additions-see [Breaking Changes](#breaking-changes) below.
+The three string dtypes share `NPTypeCode.String`. Their full descriptors distinguish the representation and carry the width, byte order or `na_object` / `coerce` settings. Use `arr.dtype` when preserving a dtype. See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md) for creation, operations, missing values and interop.
 
-**Decimal** and **Char** are NumSharp-specific types with no NumPy counterpart-see [NumSharp-Specific Types](#numsharp-specific-types-decimal-and-char) for how they behave and when to use them.
+**Decimal** and **Char** are NumSharp-specific types with no NumPy counterpart; see [NumSharp-specific types](#numsharp-specific-types-decimal-and-char).
 
 ---
 
 ## Referring to Dtypes in Code
 
-There are three ways to name a dtype:
+Every public `dtype` parameter takes a **`DType` descriptor**. You can name a dtype with an `np.*` alias, a C# `Type`, an `NPTypeCode` or a dtype string:
 
-### 1. `NPTypeCode` enum (fastest, internal-style)
+### 1. `NPTypeCode` enum
 
 ```csharp
 var arr = np.zeros(new Shape(10), NPTypeCode.Int32);
 var cplx = np.zeros(new Shape(2, 3), NPTypeCode.Complex);
 ```
 
-Use this when you want zero overhead and the type is known at compile time. `NPTypeCode` values are stable enum constants.
+Use the enum when the element type is already known. String dtypes need a descriptor such as `"U10"`, `"S5"` or `np.dtypes.StringDType()` because `NPTypeCode.String` alone carries no width or NA policy.
 
 ### 2. `np.*` class-level aliases (idiomatic)
 
@@ -71,13 +72,13 @@ var d = np.dtype("i4");         // NumPy shorthand
 var e = np.dtype("<f8");        // with byte-order prefix
 ```
 
-Use strings when the dtype is dynamic (from config, JSON, a file header). NumSharp accepts every dtype string NumPy 2.x accepts-see [the parsing table](#dtype-string-parsing) below.
+Use strings when the dtype is dynamic (from config, JSON, a file header), or to name a fixed string width. Supported forms and explicit refusals are listed in [the parsing table](#dtype-string-parsing).
 
 ---
 
 ## Dtype String Parsing
 
-NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp has a type for, and throws `NotSupportedException` for forms it doesn't.
+NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp has a type for, throws NumPy's `TypeError` for a string NumPy rejects too, and throws `NotSupportedException` for valid NumPy forms it has no type for (`V`, `O`, `complex64`, sub-array and structured dtypes).
 
 ### Single-char codes
 
@@ -87,17 +88,23 @@ NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp 
 | `"b"` | `SByte` | NumPy: int8 (signed, C `char` convention) |
 | `"B"` | `Byte` | NumPy: uint8 |
 | `"h"` / `"H"` | `Int16` / `UInt16` | |
-| `"i"` / `"I"` | `Int32` / `UInt32` | always 32-bit per NumPy spec |
+| `"i"` / `"I"` | `Int32` / `UInt32` | C `int`, always 32-bit; on Windows its own class `np.intc` / `np.uintc` (see [C-type classes](#c-type-classes)) |
 | `"l"` / `"L"` | **platform-dependent** | C `long` - see [Platform-Dependent Types](#platform-dependent-types) |
-| `"q"` / `"Q"` | `Int64` / `UInt64` | C `long long`-always 64-bit |
+| `"q"` / `"Q"` | `Int64` / `UInt64` | C `long long`, always 64-bit; on Linux/macOS its own class `np.longlong` / `np.ulonglong` |
+| `"n"` / `"N"` | pointer-sized | NumPy 2.x's letters for `np.intp` / `np.uintp` |
 | `"p"` / `"P"` | pointer-sized | see [Platform-Dependent Types](#platform-dependent-types) |
 | `"e"` | `Half` | NumPy: float16 |
 | `"f"` | `Single` | NumPy: float32 |
-| `"d"` / `"g"` | `Double` | `g` (long double) collapses to float64 |
-| `"D"` / `"G"` | `Complex` | `G` (long-double complex) collapses to complex128 |
+| `"d"` / `"g"` | `Double` | `g` is the long double: its own class `np.longdouble`, stored as float64 (8 bytes, as on NumPy's Windows build) |
+| `"D"` / `"G"` | `Complex` | `G` is the long-double complex: its own class `np.clongdouble`, stored as complex128 |
 | `"F"` | **throws** | complex64 - NumSharp only has complex128 |
-| `"c"` | **throws** | NumPy: `S1` (1-byte string)-not supported |
-| `"S"` / `"U"` / `"V"` / `"O"` / `"M"` / `"m"` | **throws** | bytestring, unicode, void, object, datetime64, timedelta64-not supported |
+| `"c"` | `S1` | a 1-byte bytestring (NumPy's `'c'`) |
+| `"S"` / `"a"` / `"U"` | `S` / `S` / `<U` | unsized string descriptors (`itemsize` 0): a creation or a cast sizes them from the data |
+| `"T"` | `StringDType()` | variable-width UTF-8; use `np.dtypes.StringDType(na_object: ..., coerce: ...)` for parameters |
+| `"V"` / `"O"` | **throws** | void, object-not supported |
+| `"M"` / `"m"` | datetime64 / timedelta64 descriptors | parse, promote and cast-check; arrays cannot be allocated yet |
+
+A single control character below `"\x18"` is a type NUMBER, as in NumPy (`np.dtype("\x0c")` is float64, `np.dtype("\x00")` bool, `np.dtype("\x13")` the unsized `<U`).
 
 ### Sized variants
 
@@ -109,6 +116,8 @@ NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp 
 | `"i4"` / `"u4"` / `"f4"` | `Int32` / `UInt32` / `Single` | |
 | `"i8"` / `"u8"` / `"f8"` / `"c16"` | `Int64` / `UInt64` / `Double` / `Complex` | |
 | `"c8"` | **throws** | complex64-not supported |
+| `"S5"` / `"a5"` / `"\|S5"` | `\|S5` | a 5-byte bytestring (`itemsize` 5) |
+| `"U5"` / `"<U5"` / `">U5"` | `<U5` / `<U5` / `>U5` | 5 UCS-4 code points (`itemsize` 20); a `>` prefix is kept |
 | `"i3"`, `"f3"`, `"f16"`, `"b4"`, ... | **throws** | invalid NumPy dtype strings |
 
 ### Named forms
@@ -120,10 +129,11 @@ NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp 
 | `"byte"` | **`SByte`** (NumPy convention: `byte` = int8, signed) |
 | `"int16"` / `"short"` | `Int16` |
 | `"uint16"` / `"ushort"` | `UInt16` |
-| `"int32"` / `"intc"` | `Int32` |
-| `"uint32"` / `"uintc"` | `UInt32` |
-| `"int64"` / `"longlong"` | `Int64` |
-| `"uint64"` / `"ulonglong"` | `UInt64` |
+| `"int32"` / `"intc"` | `Int32` (`"intc"` is its own class on Windows) |
+| `"uint32"` / `"uintc"` | `UInt32` (`"uintc"` is its own class on Windows) |
+| `"int64"` / `"longlong"` | `Int64` (`"longlong"` is its own class on Linux/macOS) |
+| `"uint64"` / `"ulonglong"` | `UInt64` (`"ulonglong"` is its own class on Linux/macOS) |
+| `"longdouble"` / `"clongdouble"` | `Double` / `Complex`, each its own class |
 | `"int"` / `"int_"` / `"intp"` | **pointer-sized**-int64 on 64-bit |
 | `"uint"` / `"uintp"` | **pointer-sized**-uint64 on 64-bit |
 | `"long"` / `"ulong"` | **platform-dependent** C long/ulong |
@@ -131,36 +141,72 @@ NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp 
 | `"float32"` / `"single"` | `Single` |
 | `"float64"` / `"double"` | `Double` |
 | `"float"` | `Double` (NumPy: `float` → float64) |
-| `"complex128"` / `"complex"` | `Complex` |
-| `"complex64"` | **throws** |
+| `"complex128"` / `"complex"` / `"cdouble"` | `Complex` |
+| `"complex64"` / `"csingle"` | **throws** |
 | `"bool"` / `"bool_"` | `Boolean` |
+| `"str"` / `"str_"` / `"unicode"` | `<U` (unsized) |
+| `"bytes"` / `"bytes_"` | `S` (unsized) |
 
-Byte-order prefixes (`<`, `>`, `=`, `|`) are accepted and ignored: `np.dtype("<i4")` works just like `np.dtype("i4")`. NumSharp is always host-endian.
+Byte-order prefixes (`<`, `>`, `=`, `|`) are parsed, not discarded, before a single-character or sized code. An explicit host order normalizes to native (`np.dtype("<i4")` on a little-endian host); a non-native descriptor keeps its order (`np.dtype(">U5").byteorder == '>'`, `np.dtype(">i4").isnative` is false). Buffer and file readers convert non-native data where required. `S` has no byte order. `StringDType` also has no byte order, and its `newbyteorder` operation raises NumPy's `TypeError`. A NAME takes no prefix, as in NumPy, which looks names up by the whole string: `np.dtype("<float64")` throws `data type '<float64' not understood`, and `np.dtype("<str")` throws the same way.
+
+An invalid string throws NumPy's `TypeError` with NumPy's text, the string quoted the way Python's `repr` quotes it
+(`data type "a'b" not understood`); a removed alias says `Alias 'bool8' was removed in NumPy 2.0. Use a name without a
+digit at the end.` A string that NumPy accepts but whose dtype NumSharp has no storage for (complex64, void, object,
+and the 16-byte long double `f16` / `float128` where the platform has one, as 64-bit Linux does) throws
+`NotSupportedException` saying `is not supported by NumSharp`, so a caller can tell "not a dtype" from "a dtype
+NumSharp lacks".
+
+A comma string - a top-level comma, a leading digit or a leading `()` - is read the way NumPy's `_commastring` reads
+it: each field is `[byte order][repeat count][byte order]dtype`. A field whose NumPy result is a plain dtype parses:
+`np.dtype("()f8")` is float64 (an empty repeat count is the type itself), and a count sizes an unsized string class,
+so `np.dtype("5U")` is `<U5`, `np.dtype("2>U")` is `>U2` and `np.dtype("3S")` is `S3`. A sub-array (`"3f8"`,
+`"(2,3)i4"`) or a structured dtype (`"i4,f8"`) throws `NotSupportedException` (`NumPy dtype '3f8' (a sub-array
+dtype) is not supported by NumSharp`), and only after NumPy's own errors in the string, which keep NumPy's type and
+text: a `ValueError` such as `invalid shape in fixed-type tuple: dimension does not fit into a C int.`,
+`inconsistent byte-order specification < and >` or `invalid itemsize in generic type tuple` (`"()U"`), a `TypeError`
+for a field NumPy does not understand (`np.dtype("F,xyz")` names `'xyz'`, although NumSharp has no `F`), and a
+`SyntaxError` for a repeat count that is not a Python literal (`np.dtype("01f8")`: `leading zeros in decimal integer
+literals are not permitted; use an 0o prefix for octal integers (<unknown>, line 1)`).
 
 ---
 
 ## Class-level Aliases
 
-Every dtype name from NumPy's Python API is available as a `public static readonly Type` on `np`:
+The supported dtype aliases on `np` are **`DType` descriptors**, not `System.Type` objects:
 
 ```csharp
-Type t1 = np.int32;        // typeof(int)
-Type t2 = np.float16;      // typeof(Half)
-Type t3 = np.complex128;   // typeof(Complex)
-Type t4 = np.@long;        // platform-dependent C long
-Type t5 = np.intp;         // pointer-sized int
+DType integers = np.int32;
+DType unicode = np.str_;                         // unsized U; creation infers a width
+DType bytes = np.bytes_;                         // unsized S
+DType text = np.dtypes.StringDType(na_object: null);
+Type clr = np.int32.type;                        // typeof(int)
 ```
 
-Names that clash with C# keywords are prefixed with `@`: `np.@byte`, `np.@short`, `np.@long`, `np.@ushort`, `np.@ulong`, `np.@bool`, `np.@uint`, `np.@double`, `np.@decimal`.
+Names that clash with C# keywords use `@`: `np.@byte`, `np.@short`, `np.@long`, `np.@bool`, `np.@decimal`. **`np.@char` is the `numpy.char` module**, with an implicit conversion to the existing Char descriptor for compatibility. Use `np.dtype(typeof(char))` when you want the descriptor itself; `np.@char.array(...)` creates a chararray of `S` / `U` strings, not a `Char` array.
 
-The class-level aliases and the string parser always resolve to the same .NET type-this invariant is guaranteed:
+Aliases and parsed descriptors compare as descriptors, and a builtin alias and the string parser resolve to the same descriptor object (this invariant is guaranteed):
 
 ```csharp
+np.int32 == np.dtype("int32");     // true
+np.str_ == np.dtype("U");         // true
+np.dtype("U3") == np.dtype("U5"); // false: width matters
 // These are always true on every platform:
-np.int32 == np.dtype("int32").type
-np.@long == np.dtype("long").type
-np.float16 == np.dtype("float16").type
+ReferenceEquals(np.int32, np.dtype("int32"));
+ReferenceEquals(np.@long, np.dtype("long"));
+ReferenceEquals(np.float16, np.dtype("float16"));
 ```
+
+A descriptor also compares with a dtype string, as NumPy's `dtype.__eq__` does: the string is parsed and compared, and a string that is not a dtype is simply unequal, never an error. A `StringDType` descriptor equals no string, and a `null` string stands for "no descriptor":
+
+```csharp
+np.int32 == "i4";                  // true
+np.int32 != "bogus";               // true: not a dtype, so unequal
+np.dtype("T") == "T";              // false, as in NumPy
+DType none = null;
+none == null;                      // true: there is no descriptor
+```
+
+Use `.type` or an explicit `(Type)` cast only when a .NET API needs the CLR element type. It is not a replacement for a text descriptor.
 
 ---
 
@@ -171,17 +217,19 @@ NumSharp uses `System.Numerics.Complex`, which is two 64-bit floats-equivalent t
 ```csharp
 // These all resolve to Complex (complex128):
 np.complex128;
-np.complex_;
+np.complex_;          // NumPy 1.x's name, removed in NumPy 2.0: kept so ported code compiles (np.dtype("complex_") throws)
 np.cdouble;           // NumPy alias for complex128
-np.clongdouble;       // NumPy: long-double complex, collapses to complex128
+np.clongdouble;       // NumPy's long-double complex: its own class, stored as complex128 (equal to it)
 np.dtype("complex");  // NumPy 2.x default complex is complex128
 np.dtype("D");
 np.dtype("c16");
 np.dtype("G");
 
-// These all throw NotSupportedException:
-np.complex64;
-np.csingle;              // NumPy alias for complex64
+// Class objects exist, but no complex64 array storage exists:
+np.complex64;           // NDScalarType, usable in type checks
+np.csingle;             // the same scalar class
+
+// These descriptor requests throw NotSupportedException:
 np.dtype("complex64");
 np.dtype("F");
 np.dtype("c8");
@@ -189,7 +237,7 @@ np.dtype("c8");
 
 Why throw instead of silently widening to complex128? Because quietly upgrading a user's `complex64` request to `complex128` doubles their memory use without telling them. If you need complex arrays in NumSharp, use `complex128` explicitly-the throw is there to prevent surprise.
 
-**Converting from complex arrays to real arrays:** `(int)complexScalar` and `(float)complexScalar` throw `TypeError` ("can't convert complex to int"), matching Python's built-in behavior. NumPy 2.x emits a `ComplexWarning` and drops the imaginary part; NumSharp has no warning system, so we treat this as a hard error. If you want the real part, use `np.real(arr)` first.
+**Converting from complex arrays to real arrays:** `(int)complexScalar` and `(float)complexScalar` throw `TypeError` with Python's text (`int() argument must be a string, a bytes-like object or a real number, not 'complex'`), matching Python's built-in behavior. NumPy 2.x emits a `ComplexWarning` and drops the imaginary part; NumSharp has no warning system, so we treat this as a hard error. If you want the real part, use `np.real(arr)` first.
 
 ```csharp
 var c = NDArray.Scalar<Complex>(new Complex(3, 4));
@@ -201,25 +249,23 @@ var r = (int)np.real(c);  // 3 - explicit, unambiguous
 
 ## NumPy Types NumSharp Doesn't Support
 
-NumPy has several dtype families that NumSharp deliberately does not implement. Attempting to construct or parse any of these throws `NotSupportedException` (never silent misbehavior):
+NumPy has several dtype families that NumSharp does not store as arrays. They are separate from the **supported** text families: `bytes_` (`S`), `str_` (`U`) and variable-width `StringDType` (`T`). See [Working with arrays of strings and bytes](fundamentals/strings-and-bytes.md).
 
 | NumPy dtype | NumPy character | Why not in NumSharp |
 |-------------|-----------------|---------------------|
 | `complex64` | `F`, `c8` | NumSharp has only one complex type (`complex128`). Silently widening would double memory without asking. See [Complex: Only 128-bit Is Supported](#complex-only-128-bit-is-supported). |
-| `bytes_` / `S` / `a` | `S`, `a`, `c` (=S1) | NumPy bytestrings are a variable-length null-terminated byte sequence type. Not a natural fit for .NET where `string` is UTF-16 and `byte[]` is a separate concept. Use .NET strings directly. |
-| `str_` / `U` | `U` | NumPy unicode strings (UCS-4 fixed-width). Same reason-use `string` / `string[]`. |
 | `void` / `V` | `V` | NumPy "raw bytes" scalar. No .NET equivalent; use `byte[]` or `Memory<byte>`. |
-| `object` / `O` | `O` | NumPy boxed-Python-object arrays. Use `object[]` or `NDArray<object>` conceptually. |
-| `datetime64` | `M`, `M8[ns]` etc. | Needs nanosecond-epoch semantics and unit metadata that NumSharp doesn't model. Use `DateTime[]` directly, or `long[]` with epoch seconds. |
-| `timedelta64` | `m`, `m8[us]` etc. | Same reason as `datetime64`. Use `TimeSpan[]` or `long[]`. |
-| Structured / record dtypes | `(...)` in dtype string | NumPy allows composite dtypes like `np.dtype([('x', 'f4'), ('y', 'i4')])` for heterogeneous records. NumSharp throws on any dtype string containing `(`. Use a struct array or multiple parallel `NDArray`s. |
-| Sub-array dtypes | `('f4', (3,))` | NumPy dtype-with-subshape. Not supported. |
+| `object` / `O` | `O` | Arbitrary Python-object arrays. Use .NET collections; `NDArray<object>` is not supported. The string split functions return the specialized `NDListArray`, not a general object dtype. |
+| `datetime64` | `M`, `M8[ns]` etc. | The descriptors exist (they parse, print, promote and cast-check with NumPy's unit rules), but arrays of them cannot be allocated yet. Use `DateTime[]` directly, or `long[]` with epoch seconds. |
+| `timedelta64` | `m`, `m8[us]` etc. | Same as `datetime64`: descriptors only. Use `TimeSpan[]` or `long[]`. |
+| Structured / record dtypes | comma strings with several fields: `"f8,i4"`, `"f8,"` | NumPy allows composite dtypes like `np.dtype([('x', 'f4'), ('y', 'i4')])` for heterogeneous records. NumSharp throws on every comma string whose NumPy result is structured, after NumPy's own errors in it. Use a struct array or multiple parallel `NDArray`s. |
+| Sub-array dtypes | `('f4', (3,))`; comma strings with a repeat count: `"3f8"`, `"(2,)f8"` | NumPy dtype-with-subshape. Not supported. A count on an unsized string class is no sub-array: `"5U"` is `<U5`, and `"()f8"` is float64. |
 
 Every row above is tested in `test/NumSharp.Tests/Creation/DTypeStringParityTests.cs` with an `ExpectThrow` assertion. If you run into one of these in ported NumPy code, the exception message tells you which NumSharp alternative to use.
 
 ### Why Throw Instead of Silent Approximation?
 
-A recurring temptation is to "do the nearest thing"-e.g., widen `complex64` to `complex128` or map `S10` to `string`. NumSharp refuses this because:
+A recurring temptation is to "do the nearest thing"-e.g., widen `complex64` to `complex128` or map `V7` to `byte[]`. NumSharp refuses this because:
 
 1. **Memory surprise**: doubling precision doubles allocation; a user loading a gigabyte of `complex64` data would unexpectedly use two gigabytes.
 2. **Precision surprise**: downstream computations on the "wrong" type produce results the user didn't request.
@@ -244,11 +290,12 @@ var total = np.sum(prices);     // exact decimal sum, no float drift
 
 **Characteristics:**
 - `kind == 'f'` (float-like-it's a fractional type even though internally integer-based)
+- `char == 'A'`, a type character of its own, as NumPy's user-defined dtypes have one: no NumPy dtype uses it, so `np.dtype("A")` is NumPy's "not understood" rather than some other dtype
 - No SIMD acceleration (decimal arithmetic is scalar-only; much slower than `double`)
 - No IEEE special values: no NaN, no Infinity, no subnormals
 - `np.finfo(NPTypeCode.Decimal)` works and returns limited info (bits=128, precision=28, no subnormals)
 - Boundary values: `Decimal.MinValue` / `Decimal.MaxValue` (±79228162514264337593543950335)
-- **Known quirk:** `NPTypeCode.Decimal.SizeOf()` and `DType.itemsize` both report `32` instead of the correct `16`. Use `InfoOf<decimal>.Size` for the true byte count.
+- `np.dtype(typeof(decimal)).itemsize == 16`, matching `InfoOf<decimal>.Size`.
 
 **When to use:**
 - Financial calculations (currency, tax, interest)
@@ -269,21 +316,23 @@ letters.typecode;               // NPTypeCode.Char
 InfoOf<char>.Size;              // 2 (actual memory footprint)
 ```
 
-**Important:** NumSharp's `Char` is **not** the same as NumPy's `'c'` / `S1` (which is a 1-byte bytestring). They have different sizes, different encodings, different semantics. Porting NumPy bytestring code to NumSharp `Char` will almost always be wrong-use `byte` arrays for bytestring data and `string` for actual text.
+**Important:** NumSharp's `Char` is **not** the same as NumPy's `'c'` / `S1` (a 1-byte bytestring) or `<U1` (a 4-byte code point). They have different sizes, different encodings, different semantics. Porting NumPy text code to NumSharp `Char` will almost always be wrong-use NumSharp's `S` and `U` string arrays, which are NumPy's.
 
 **Characteristics:**
-- `kind == 'S'` (bytestring-like category, chosen for NumPy roundtrip ergonomics despite the semantic difference)
+- `kind == 'u'` (unsigned-integer semantics, not the `S` / `U` text families)
+- `char == 'u'`, PEP 3118's code for a 2-byte UCS-2 character, which its memoryview reports as the format too; NumPy reads `'u'` only as the unsigned-integer kind (`'u2'`), so `np.dtype("u")` is "not understood" (NumPy's `'c'` is `S1`)
 - Treated as `ushort` for many operations (same byte width)
 - Boundary values: `'\0'` (0) to `char.MaxValue` (65535)
-- **Known quirk:** `NPTypeCode.Char.SizeOf()` and `DType.itemsize` both report `1` instead of the correct `2`. Use `InfoOf<char>.Size` for the true byte count. Storage allocation uses the correct 2-byte size.
+- `np.dtype(typeof(char)).itemsize == 2`, matching `InfoOf<char>.Size`.
+- A cast to text formats the numeric code unit: `'a'` becomes `"97"`. To build text from characters, first build the intended .NET `string`; do not use `astype("U")` as a UTF-16 decoder.
 
 **When to use:**
 - Arrays of individual characters where type annotation matters
 - Interop with APIs that treat char specifically
 
 **When NOT to use:**
-- Text data-use `string` or `string[]`
-- Porting NumPy bytestring arrays-use `byte[]` with explicit encoding
+- Text data-use a `U` array (`np.array(new[] { "a", "bc" })`) or a .NET `string[]`
+- Porting NumPy bytestring arrays-use an `S` array (`arr.astype("S5")`) or `byte[]`
 
 ---
 
@@ -310,8 +359,8 @@ Everything else is fixed across platforms:
 | Spelling | Always |
 |----------|--------|
 | `np.int_`, `np.intp`, `"int"`, `"int_"`, `"intp"`, `"p"` | pointer-sized (int64 on 64-bit platforms) |
-| `np.longlong`, `"longlong"`, `"q"`, `"i8"` | `Int64` |
-| `np.int32`, `"int32"`, `"i"`, `"i4"` | `Int32` |
+| `np.longlong`, `"longlong"`, `"q"`, `"i8"` | `Int64` storage (the class of `np.longlong` is int64's on Windows, its own on Linux/macOS) |
+| `np.int32`, `"int32"`, `"i"`, `"i4"` | `Int32` storage (the class of `"i"` / `np.intc` is int32's on Linux/macOS, its own on Windows) |
 | `np.int16`, `"int16"`, `"h"`, `"i2"` | `Int16` |
 
 ### Recommendation
@@ -387,10 +436,11 @@ var scalar = np.array([42])[0];  // 0-d view
 int x = (int)scalar;                     // works
 
 var oneD = np.array([42]);
-int y = (int)oneD;   // throws IncorrectShapeException (ndim == 1)
+int y = (int)oneD;   // throws TypeError: only 0-dimensional arrays can be converted to Python scalars
+bool b = (bool)oneD; // true: bool() reads the only element of a one-element array of any rank
 ```
 
-This matches NumPy 2.x's strict behavior: `int(np.array([42]))` raises `TypeError: only 0-dimensional arrays can be converted to Python scalars`.
+This matches NumPy 2.x's strict behavior: `int(np.array([42]))` raises `TypeError: only 0-dimensional arrays can be converted to Python scalars`, while `bool(np.array([42]))` is NumPy's truth test (one element of any rank; a larger or empty array raises `ValueError`).
 
 ---
 
@@ -408,7 +458,7 @@ var d = NDArray.Scalar<double>(double.PositiveInfinity);
 double.IsPositiveInfinity((double)d);  // true
 ```
 
-`Decimal` and `Complex` have no NaN/Inf equivalents (Complex's real/imag components individually can be `double.NaN`, but there's no single `Complex.NaN`).
+`Decimal` has no NaN or infinity. A `Complex` value is NaN or infinite through its parts, as in NumPy's complex128: .NET's `Complex.NaN` and `Complex.Infinity` are such values, `np.isnan` is true when either part is NaN, and `np.isinf` when either part is infinite.
 
 ### Boundary values
 
@@ -428,6 +478,128 @@ np.finfo(np.float64).max;              // double.MaxValue
 `iinfo.max` is declared as `long`-for `uint64` its value is clamped to `long.MaxValue`. Use `maxUnsigned` (a `ulong`) to get the true 64-bit-unsigned max.
 
 `np.finfo(np.complex128)` reports the **underlying float64 precision**, matching NumPy-its `dtype` property is `Double`, `bits == 64`, `precision == 15`. This is NumPy's convention: a complex number's precision is the precision of its real and imaginary components.
+
+---
+
+## Scalar Types and Type Checks
+
+NumPy's type tests are written against its scalar **classes**: `np.issubdtype(a.dtype, np.integer)`,
+`isinstance(x, np.floating)`, `issubclass(t, np.number)`. NumSharp has the same classes, as `NDScalarType` objects with
+NumPy's names:
+
+```
+object (Python's)
+ \-> generic
+      +-> bool
+      +-> number
+      |    +-> integer
+      |    |    +-> signedinteger     int8 int16 intc° int32 int64 longlong° timedelta64
+      |    |    \-> unsignedinteger   uint8 uint16 uintc° uint32 uint64 ulonglong° (char)
+      |    \-> inexact
+      |         +-> floating          float16 float32 float64 (+ float) longdouble (decimal)
+      |         \-> complexfloating   complex64* complex128 (+ complex) clongdouble
+      +-> flexible
+      |    +-> character            bytes_ (+ bytes) str_ (+ str)
+      |    \-> void*
+      +-> datetime64
+      \-> object_*
+
+* a NumPy class NumSharp has no dtype for     (+ x) a second base: Python's class x
+° a class of its own on one platform only: intc / uintc on Windows, longlong / ulonglong on Linux and macOS
+```
+
+`np.generic`, `np.number`, `np.integer`, `np.signedinteger`, `np.unsignedinteger`, `np.inexact`, `np.floating`,
+`np.complexfloating`, `np.flexible` and `np.character` are the abstract classes. A concrete class is spelled by its
+dtype, as everywhere else in NumSharp (`np.float64` is a `DType`), and a dtype converts to its class implicitly, which
+is NumPy's `dtype.type`. NumSharp's own `decimal` and `char` dtypes sit in the family of their kind.
+
+The hierarchy is NumPy's whole one. Python's built-in classes are part of it (`NDScalarType.PyObject`, `PyInt`,
+`PyBool`, `PyFloat`, `PyComplex`, `PyStr`, `PyBytes`, `PyMemoryView`): `numpy.generic` derives from `object`,
+`numpy.float64` also from `float`, `numpy.complex128` from `complex`, and `numpy.bytes_` / `numpy.str_` from `bytes` /
+`str`, so every `__mro__` is NumPy's tuple. The NumPy classes NumSharp has no dtype for, `np.complex64` (`np.csingle`),
+`np.object_` and `np.void`, are classes too: every type test sees them, and only the conversion to a dtype refuses
+(`np.dtype(np.complex64)` raises `NotSupportedException`).
+
+```csharp
+np.issubdtype(a.dtype, np.integer);          // the most common NumPy type test
+np.issubdtype(np.float32, np.floating);      // True
+np.issubdtype(np.bool_, np.number);          // False: bool is not a number in NumPy 2.x
+np.issubdtype("m8[s]", np.signedinteger);    // True: timedelta64 is a signed integer
+
+np.floating.__instancecheck__(a.mean());     // isinstance(a.mean(), np.floating)
+np.integer.__subclasscheck__(a.dtype.type);  // issubclass(a.dtype.type, np.integer)
+
+NDScalarType t = a.dtype;                    // a.dtype.type: <class 'numpy.float64'>
+t.__mro__;                                   // [float64, floating, inexact, number, generic, float, object]
+np.floating.__subclasses__();                // [float16, float32, float64, longdouble, decimal]
+DType d = (DType)t;                          // np.dtype(t): back to the descriptor
+
+NDScalarType.PyFloat.__subclasscheck__(np.float64);   // issubclass(np.float64, float): True
+NDScalarType.PyFloat.__subclasscheck__(np.float32);   // False
+np.issubdtype(NDScalarType.PyFloat, np.floating);     // np.issubdtype(float, np.floating): True
+np.issubdtype(NDScalarType.PyBool, NDScalarType.PyInt); // np.issubdtype(bool, int): False (numpy.bool vs numpy.int64)
+np.issubdtype(np.complex64, np.complexfloating);      // True
+np.finfo(np.complex64).dtype;                         // float32
+```
+
+Rules worth knowing:
+
+- **An abstract class is not a dtype.** NumPy raises `TypeError` for `np.dtype(np.integer)` and for any `dtype=` that
+  receives one; in NumSharp `np.dtype(np.integer)` raises NumPy's text and passing `np.integer` where a `DType` is
+  expected does not compile. The conversion from a class to a dtype is explicit for that reason.
+- **A string argument of `np.issubdtype` is a dtype string**, as in NumPy: `np.issubdtype(np.float32, "float")` is False,
+  because `"float"` is float64. Families are classes (`np.floating`), never strings.
+- **`np.isdtype` compares classes by identity**, not by subclass: `np.isdtype(np.int64, np.integer)` is False. Use
+  `np.issubdtype` for the hierarchy, or `np.isdtype`'s kind names (`"integral"`, `"real floating"`, ...).
+- **A C# value is a NumPy scalar and a Python object.** NumSharp has no scalar objects, so `__instancecheck__` treats a
+  C# value of a dtype's element type as a scalar of that dtype (a `double` is a `numpy.float64`), and a 0-d array that
+  NumSharp computed (`a.sum()`, `a[0]`) as well. A C# value is also the Python object it stands for (an `int` is a Python
+  `int`, a `double` a `float`, a `string` a `str`), so `NDScalarType.PyFloat.__instancecheck__(1.5)` is True. A 0-d
+  array follows NumPy's classes exactly: a float64 scalar is a Python `float`, an int64 one is not an `int`. An explicit
+  `np.array(5)` is a 0-d ndarray, not a scalar, exactly as in NumPy.
+- **A Python built-in class is no NumPy dtype.** `np.issubdtype` reads one as NumPy does, as the class of
+  `np.dtype(cls)` (`float` is numpy.float64, `int` numpy.int64, `object` numpy.object_), while `np.isdtype` refuses it
+  with NumPy's `TypeError`.
+
+The type tables are there too: `np.typecodes` (NumPy's type-code strings), `np.sctypeDict` (NumPy's type names, each
+mapped to the NumSharp dtype; the names of `complex64`, `object_` and `void`, which have no dtype, are absent),
+`np.ScalarType` (every scalar class, Python's seven first, in NumPy's order: 31 classes), and `np.True_` / `np.False_`
+(C# `bool`s).
+
+### C-type classes
+
+NumPy keeps a class for each C type, and where two C types have the same size and kind, two classes share one
+storage format: the long double (`np.longdouble`, `'g'`) beside float64 and its complex twin (`np.clongdouble`, `'G'`)
+beside complex128 everywhere; the C `int` (`np.intc`, `'i'`) beside int32 on Windows, where int32 is the C `long`; the
+C `long long` (`np.longlong`, `'q'`) beside int64 on Linux and macOS, where int64 is the C `long`. NumSharp has the same
+classes, each stored like its twin:
+
+```csharp
+np.dtype("g");                                // dtype('float64'), char 'g', type longdouble
+np.longdouble == np.float64;                  // True: equal descriptors (and equal hashes)
+np.issubdtype(np.float64, np.longdouble);     // False: different classes, as in NumPy
+np.can_cast(np.longdouble, np.float64, "no"); // True: the same bytes
+np.promote_types(np.float64, np.longdouble);  // longdouble
+np.zeros(3, np.longdouble).dtype.@char;       // 'g': creation, views, copies, joins and gathers keep the class
+```
+
+Two differences from NumPy remain. Computing routines (`x + x`, `np.sum`, `np.clip`, ...) return the class of the
+storage format, float64 for a long double array, where NumPy keeps the long double; the values are the same, and the
+result's dtype still compares equal to `np.longdouble`. And NumSharp's long double is 8 bytes on every platform, as on
+NumPy's Windows build: on Linux, NumPy's long double is the 16-byte extended type (`float128`), which NumSharp does not
+have.
+
+### `np.typing`
+
+`numpy.typing`'s aliases are annotations, and C# annotations are C# types, so `np.typing` names the type NumSharp uses
+in each role: `np.typing.NDArray` is `NDArray<T>` (`npt.NDArray[np.float64]` is `NDArray<double>`), `np.typing.ArrayLike`
+is `NDArray` (every array_like parameter, which accepts scalars and C# arrays implicitly) and `np.typing.DTypeLike` is
+`DType` (every `dtype=` parameter). `np.typing.NBitBase` exists but is deprecated, as in NumPy 2.3.
+
+```csharp
+// def scale(x: npt.ArrayLike, dtype: npt.DTypeLike = None) -> npt.NDArray[np.float64]:
+static NDArray scale(NDArray x, DType dtype = null) => np.asarray(x, dtype) * 2.0;
+```
 
 ---
 
@@ -451,9 +623,21 @@ Quick reference for common pairs:
 | `int32` | `uint64` | `float64` | no common integer type |
 | `float16` | `int16` | `float32` | precision of float16 insufficient |
 | `float16` | `float32` | `float32` | higher precision wins |
-| any | `complex128` | `complex128` | complex absorbs |
+| numeric | `complex128` | `complex128` | complex absorbs numeric operands; text follows descriptor promotion |
 
-For full 15×15 promotion rules see `np.find_common_type` (`src/NumSharp.Core/Logic/np.find_common_type.cs`). Tests in `test/NumSharp.Tests/Casting/DtypeConversionMatrixTests.cs` verify every pair against NumPy 2.4.2.
+For any pair, ask `np.promote_types(a, b)` or `np.result_type(...)`; the full 15×15 table is `_nptypemap_arr_arr` in `src/NumSharp.Core/Logic/np.find_common_type.cs`. Tests in `test/NumSharp.Tests/Casting/DtypeConversionMatrixTests.cs` verify every pair against NumPy 2.4.2.
+
+`np.find_common_type` is not this rule. It is NumPy 1.26.4's older function (deprecated in 1.25, removed in 2.0), ported as it was: the arrays' type is the first entry of the list `?bBhHiIlLqQefdgFDGO` that every array type casts to safely, and a scalar type changes it only when it is of a higher kind. So `np.find_common_type(new[] { np.int8 }, new[] { np.int64 })` is int8, where `np.result_type(np.int8, np.int64)` is int64.
+
+String promotion also accounts for the descriptor's width and missing-value policy: `S3` with `U2` promotes to `U3`; `T` with `U` promotes to `T`; `T` with `S` or a numeric dtype has no common dtype. Fixed-width text can promote with a strong numeric dtype to a wide enough string, but an individual ufunc still needs a loop for its operands. Promotion does not make `text + number` numeric addition or implicit concatenation.
+
+```csharp
+np.promote_types(np.dtype("S3"), np.dtype("U2")); // dtype('<U3')
+np.promote_types(np.dtype("T"), np.dtype("U2")); // StringDType()
+np.promote_types(np.dtype("T"), np.int32);       // DTypePromotionError
+```
+
+Explicitly cast numeric values to text before concatenating them. The [text guide](fundamentals/strings-and-bytes.md#dtype-integration) describes cast safety, truncation and encoding errors.
 
 For the deeper story on how NumPy 2.x promotion differs from NumPy 1.x, see [NumPy Compliance](compliance.md).
 
@@ -462,6 +646,13 @@ For the deeper story on how NumPy 2.x promotion differs from NumPy 1.x, see [Num
 ## Breaking Changes
 
 If you're upgrading from an earlier NumSharp, be aware of these dtype-related changes:
+
+### Text and descriptor migration
+
+- `NDArray x = "[1, 2, 3]"` now holds one text element; it no longer parses a numeric list. Use explicit numeric input or `np.fromstring` for delimited numbers.
+- NumPy `<U1` files and Python arrays load/import as **U1**, not `Char`. A UCS-4 code point is four bytes; a C# char is two.
+- `np.@char` is the module object. It still converts to the Char descriptor in a dtype parameter, but use `np.dtype(typeof(char))` for descriptor member access.
+- `arr.dtype` and numeric `np.*` dtype aliases are `DType`, not `System.Type`. Use `.type` when a CLR type is required, and keep the descriptor when allocating/casting text.
 
 ### `np.byte` now returns `sbyte` (int8), not `byte` (uint8)
 
@@ -472,14 +663,17 @@ NumPy convention: `np.byte = int8` (signed, C `char`-style). NumSharp now follow
 Type t = np.@byte;  // typeof(byte) - uint8
 
 // After:
-Type t = np.@byte;  // typeof(sbyte) - int8
+DType t = np.@byte;  // int8; t.type == typeof(sbyte)
 // If you meant uint8, use:
-Type t = np.uint8;  // or np.ubyte
+DType u = np.uint8;  // or np.ubyte
 ```
 
-### `np.complex64` now throws
+### `np.complex64` is a class without a dtype
 
-Previously it was a silent alias for `np.complex128`. It now raises `NotSupportedException` with a message pointing users to `np.complex128`. Same for `np.dtype("complex64")` / `"F"` / `"c8"`.
+Previously it was a silent alias for `np.complex128`. It is now NumPy's scalar class (an `NDScalarType`, as are
+`np.csingle`, `np.object_` and `np.void`): type tests over it work, and converting it to a dtype raises
+`NotSupportedException` with a message pointing users to `np.complex128`. `np.zeros(3, np.complex64)` does not compile
+(a class converts to a dtype only explicitly). Same refusal for `np.dtype("complex64")` / `"F"` / `"c8"`.
 
 ### `np.intp` / `np.uintp` now return `long` / `ulong` (not `IntPtr` / `UIntPtr`)
 
@@ -497,24 +691,35 @@ NumPy 2.x made `int` an alias for `intp` (pointer-sized). NumSharp now follows. 
 
 ## Invalid Dtype Strings
 
-`np.dtype(s)` throws `NotSupportedException` (with a descriptive message) for any string that isn't a valid NumPy dtype:
+`np.dtype(s)` throws NumPy's `TypeError` (`data type 'xyz' not understood`) for any string that isn't a valid NumPy
+dtype:
 
 ```csharp
 np.dtype("xyz");       // throws - not a dtype
-np.dtype("f16");       // throws - f is 2/4/8 bytes only
+np.dtype("f32");       // throws - f is 2/4/8 bytes only (and 16 where the platform's long double is)
 np.dtype("i3");        // throws - i is 1/2/4/8 bytes only
 np.dtype("?1");        // throws - ? is not sized
 np.dtype("   i4");     // throws - no whitespace trimming
 ```
 
-It also throws for NumPy dtypes NumSharp doesn't implement:
+It throws `NotSupportedException` instead for NumPy dtypes NumSharp doesn't implement:
 
 ```csharp
-np.dtype("S10");       // throws - bytestring
-np.dtype("U32");       // throws - unicode string
-np.dtype("M8");        // throws - datetime64
+np.dtype("V7");        // throws - raw void bytes
 np.dtype("object");    // throws - object dtype
+np.dtype("3f8");       // throws - a sub-array of three float64
+np.dtype("i4,f8");     // throws - a structured dtype
 ```
+
+A comma string NumPy refuses throws NumPy's error instead:
+
+```csharp
+np.dtype("3000000000f8");  // ValueError - invalid shape in fixed-type tuple: dimension does not fit into a C int.
+np.dtype("1 2f8");         // SyntaxError - invalid syntax (<unknown>, line 1)
+```
+
+`np.dtype("S10")` and `np.dtype("U32")` are NumPy's fixed-width string dtypes, which NumSharp supports, and so are
+their comma-string spellings `np.dtype("10S")` and `np.dtype("32U")`. A `datetime64` descriptor (`np.dtype("M8")`) parses, but `np.zeros(3, np.dtype("M8[s]"))` throws until its storage lands.
 
 This is strict on purpose: silently accepting "close enough" dtype strings produces hard-to-debug corruption downstream.
 
@@ -532,22 +737,24 @@ var readings = np.frombuffer(raw, np.float16);  // interpret as float16
 ### Making arrays with matching dtype
 
 ```csharp
-var template = np.zeros(shape, np.int8);
-var sameType = np.ones(template.shape, template.typecode);  // template.typecode, not template.dtype.typecode
-// or more concisely:
-var sameType = np.ones_like(template);
+var template = np.array(new[] { "cat", "bird" }, "U8");
+var sameType = np.ones(template.shape, template.dtype); // keeps U8, not just NPTypeCode.String
+var sameShapeAndType = np.ones_like(template);
 ```
 
 ### Force-cast vs safe-cast
 
 ```csharp
-// Force: silently wraps/truncates - fastest
+// Force: the default casting "unsafe" converts every value, so 300.0 wraps
 var forced = np.array([300.0]).astype(NPTypeCode.Byte);
 // forced[0] == 44 (300 wrapped modulo 256)
 
-// Safe: raise on overflow (if NumSharp had this; currently matches NumPy's behavior
-// which wraps by default and requires explicit casting='safe' for stricter modes).
+// Safe: casting "safe" checks the dtype pair, not the values: float64 never casts safely to uint8
+np.array([300.0]).astype(np.uint8, true, 'K', "safe");
+// InvalidCastException (NumPy's TypeError): Cannot cast array data from dtype('float64') to dtype('uint8') according to the rule 'safe'
 ```
+
+Neither rule checks a value against the target's range: use `np.can_cast` to test a dtype pair, and compare against `np.iinfo` before a cast that must not wrap.
 
 ---
 
@@ -558,32 +765,33 @@ var forced = np.array([300.0]).astype(NPTypeCode.Byte);
 | Form | Example | When to use |
 |------|---------|-------------|
 | `NPTypeCode` enum | `NPTypeCode.Int32` | Internal code, compile-time known |
-| `Type` via `np.*` | `np.int32`, `np.complex128` | Idiomatic user code |
+| `DType` via `np.*` | `np.int32`, `np.complex128` | Idiomatic user code |
 | String via `np.dtype()` | `np.dtype("i4")`, `np.dtype("complex128")` | Runtime / config-driven |
 
 ### Introspection
 
-On `NDArray` itself the key properties are `.dtype` (a `System.Type`) and `.typecode` (an `NPTypeCode`). The `DType` class (with itemsize, kind, char, name, byteorder) is only returned by `np.dtype(string)`; construct it explicitly with `new DType(arr.dtype)` if you need those fields from an array.
+On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray.dtype`) and `.typecode` (an `NPTypeCode`). `np.float64` and the other `np.*` dtype names are `DType` descriptors too, so `arr.dtype == np.float64` compares descriptors.
 
 | Expression | Returns | Notes |
 |------------|---------|-------|
-| `arr.dtype` | `System.Type` | The .NET type (e.g. `typeof(int)`)-NOT a `DType` object |
+| `arr.dtype` | `DType` | The descriptor (`int32`, `float64`, ...) |
+| `arr.dtype.type` | `System.Type` | The C# element type (e.g. `typeof(int)`) |
+| `(NDScalarType)arr.dtype` | `NDScalarType` | NumPy's `dtype.type`: the scalar class (`<class 'numpy.int32'>`); see [Scalar Types and Type Checks](#scalar-types-and-type-checks) |
 | `arr.typecode` | `NPTypeCode` | Enum value (`NPTypeCode.Int32`, etc.) |
-| `arr.typecode.SizeOf()` | `int` | Bytes per element (see quirks table for Decimal/Char) |
+| `arr.itemsize` / `arr.dtype.itemsize` | `int` | Bytes per element; for `T`, the 16-byte cell, not the text payload |
+| `arr.typecode.SizeOf()` | `int` | Numeric lane size only; cannot describe the three string families |
 | `arr.typecode.AsNumpyDtypeName()` | `string` | e.g. `"int32"`, `"float16"`, `"complex128"` |
 | `np.dtype("int32")` | `DType` | Full descriptor object |
-| `np.dtype("int32").type` | `System.Type` | Same as `arr.dtype` would be |
 | `np.dtype("int32").typecode` | `NPTypeCode` | Same as `arr.typecode` would be |
-| `np.dtype("int32").itemsize` | `int` | Bytes (via `typecode.SizeOf()`) |
-| `np.dtype("int32").kind` | `char` | `'?'`/`'i'`/`'u'`/`'f'`/`'c'`/`'S'` (see ‡ below) |
-| `np.dtype("int32").@char` | `char` | NumPy type char (e.g. `'i'`, `'b'`, `'e'`) |
-| `np.dtype("int32").name` | `string` | .NET `Type.Name` (e.g. `"Int32"`)-NOT the NumPy dtype name |
-| `np.dtype("int32").byteorder` | `char` | Always `'='` (native) in NumSharp |
-| `new DType(arr.dtype)` | `DType` | Construct `DType` from an `NDArray`'s `.dtype` |
-| `InfoOf<T>.Size` | `int` | Byte size of CLR type `T` (correct for all 15 types, including Decimal/Char) |
+| `np.dtype("int32").itemsize` | `int` | Bytes |
+| `np.dtype("int32").kind` | `char` | NumPy's kind: `'b'`/`'i'`/`'u'`/`'f'`/`'c'`/`'M'`/`'m'` |
+| `np.dtype("int32").@char` | `char` | NumPy type char (e.g. `'b'`, `'e'`; int32 is `'l'` on Windows, `'i'` on Linux and macOS, as in NumPy) |
+| `np.dtype("int32").name` | `string` | NumPy's dtype name (`"int32"`, `"datetime64[s]"`) |
+| `np.dtype("int32").byteorder` | `char` | `'='` native, `'\|'` for 1-byte dtypes, `'>'` / `'<'` when given explicitly non-native (`np.dtype(">i4")`) |
+| `DType d = typeof(int);` | `DType` | A C# type, an `NPTypeCode` or a dtype string converts to `DType` implicitly |
+| `np.dtype((DType)null)` | `DType` | NumPy's `np.dtype(None)`: the float64 descriptor, for every `np.dtype` overload and every `np.result_type` operand. Write the null typed: a bare `null` matches the string and `Type` overloads alike |
+| `InfoOf<T>.Size` | `int` | Byte size of an unmanaged CLR element type; use `arr.itemsize` for a string dtype |
 | `InfoOf<T>.NPTypeCode` | `NPTypeCode` | `NPTypeCode` for CLR type `T` |
-
-‡ `kind` for `NPTypeCode.Boolean` returns `'?'` rather than NumPy's `'b'`; for Complex it's `'c'` (matches NumPy).
 
 ### Machine limits
 
@@ -596,10 +804,15 @@ On `NDArray` itself the key properties are `.dtype` (a `System.Type`) and `.type
 
 | Exception | When |
 |-----------|------|
-| `NotSupportedException` | dtype string unrecognized, or NumPy dtype NumSharp doesn't implement (`S`/`U`/`M`/`complex64`/…); access to `np.complex64` / `np.csingle` class-level aliases |
+| `TypeError` | A dtype string NumPy rejects too (`data type 'xyz' not understood`, a removed alias such as `'bool8'`) |
+| `ValueError` / `SyntaxError` | A comma string NumPy refuses (`invalid shape in fixed-type tuple.`, `format number 2 of "f8,x y" is not recognized`; a repeat count that is not a Python literal) |
+| `NotSupportedException` | A NumPy dtype NumSharp doesn't implement (`V`/`O`/`complex64`/…, a sub-array or structured comma string); an array of a descriptor with no storage yet (`M8`, `m8`); the conversion of `np.complex64` / `np.csingle` / `np.object_` / `np.void` to a dtype |
+| `StringComputationNotSupportedException` | A delegate node of the expression engine (`NDExpr.Call` inside `np.evaluate`) given a text argument: its parameters are numbers. Every other node computes on text as NumPy does, or raises NumPy's own error |
+| `DTypePromotionError` | No common dtype, such as `StringDType` with a numeric dtype or `S` |
+| `UnicodeEncodeError` / `UnicodeDecodeError` | An invalid encoding conversion, such as non-ASCII `U` → `S` or invalid UTF-8 `S` → `T` |
 | `TypeError` | Complex → non-complex scalar cast (`(int)complexScalar`, etc.) |
-| `IncorrectShapeException` | NDArray → scalar cast on non-0-d array (matches NumPy 2.x's strict 0-d requirement) |
-| `ArgumentNullException` | `np.dtype(null)` |
+| `TypeError` | NDArray → numeric scalar cast on a non-0-d array (NumPy 2.x's strict 0-d requirement and text) |
+| `ValueError` | `(bool)` of an array with more than one element or none (NumPy's truth-value texts) |
 
 ---
 

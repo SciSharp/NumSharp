@@ -21,20 +21,20 @@ namespace NumSharp.Tests.Casting
         [TestMethod]
         public void IsSubDtype_Int8_IsSignedInteger()
         {
-            np.issubdtype(NPTypeCode.SByte, "signedinteger").Should().BeTrue();
-            np.issubdtype(NPTypeCode.SByte, "integer").Should().BeTrue();
-            np.issubdtype(NPTypeCode.SByte, "number").Should().BeTrue();
-            np.issubdtype(NPTypeCode.SByte, "unsignedinteger").Should().BeFalse();
-            np.issubdtype(NPTypeCode.SByte, "floating").Should().BeFalse();
+            np.issubdtype(NPTypeCode.SByte, np.signedinteger).Should().BeTrue();
+            np.issubdtype(NPTypeCode.SByte, np.integer).Should().BeTrue();
+            np.issubdtype(NPTypeCode.SByte, np.number).Should().BeTrue();
+            np.issubdtype(NPTypeCode.SByte, np.unsignedinteger).Should().BeFalse();
+            np.issubdtype(NPTypeCode.SByte, np.floating).Should().BeFalse();
         }
 
         [TestMethod]
         public void IsSubDtype_Float16_IsFloating()
         {
-            np.issubdtype(NPTypeCode.Half, "floating").Should().BeTrue();
-            np.issubdtype(NPTypeCode.Half, "inexact").Should().BeTrue();
-            np.issubdtype(NPTypeCode.Half, "number").Should().BeTrue();
-            np.issubdtype(NPTypeCode.Half, "integer").Should().BeFalse();
+            np.issubdtype(NPTypeCode.Half, np.floating).Should().BeTrue();
+            np.issubdtype(NPTypeCode.Half, np.inexact).Should().BeTrue();
+            np.issubdtype(NPTypeCode.Half, np.number).Should().BeTrue();
+            np.issubdtype(NPTypeCode.Half, np.integer).Should().BeFalse();
         }
 
         // ---- maximum_sctype: int8 -> int64, float16 -> float64 -------------------------------

@@ -163,33 +163,33 @@ public class RandomHypergeometricTests : TestClass
     [TestMethod]
     public void Hypergeometric_NegativeNgood_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(-1, 15, 10, 5L));
+        Assert.ThrowsException<ValueError>(() => np.random.hypergeometric(-1, 15, 10, 5L));
     }
 
     [TestMethod]
     public void Hypergeometric_NegativeNbad_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, -1, 10, 5L));
+        Assert.ThrowsException<ValueError>(() => np.random.hypergeometric(15, -1, 10, 5L));
     }
 
     [TestMethod]
     public void Hypergeometric_ZeroNsample_ThrowsArgumentException()
     {
         // NumPy requires nsample >= 1
-        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, 15, 0, 5L));
+        Assert.ThrowsException<ValueError>(() => np.random.hypergeometric(15, 15, 0, 5L));
     }
 
     [TestMethod]
     public void Hypergeometric_NegativeNsample_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, 15, -1, 5L));
+        Assert.ThrowsException<ValueError>(() => np.random.hypergeometric(15, 15, -1, 5L));
     }
 
     [TestMethod]
     public void Hypergeometric_NsampleTooLarge_ThrowsArgumentException()
     {
         // nsample > ngood + nbad should throw
-        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, 15, 40, 5L));
+        Assert.ThrowsException<ValueError>(() => np.random.hypergeometric(15, 15, 40, 5L));
     }
 
     [TestMethod]

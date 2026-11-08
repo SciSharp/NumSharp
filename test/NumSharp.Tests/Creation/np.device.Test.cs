@@ -44,17 +44,26 @@ namespace NumSharp.Tests.Creation
             a.to_device("cpu").Should().BeSameAs(a);
         }
 
+        /// <summary>NumPy 2.4.2: <c>np.zeros(3).to_device('gpu')</c> raises ValueError, <c>Unsupported device: gpu. Only
+        ///     'cpu' is accepted.</c> (ArgumentException before the device errors were made NumPy's type).</summary>
         [TestMethod]
         public void ToDevice_BadDevice_Throws_SingleQuoted()
             => new Action(() => np.zeros(new Shape(3)).to_device("gpu")).Should()
-                .Throw<ArgumentException>()
-                .WithMessage("Unsupported device: gpu. Only 'cpu' is accepted.*");
+                .ThrowExactly<ValueError>()
+                .WithMessage("Unsupported device: gpu. Only 'cpu' is accepted.");
 
+        /// <summary>NumPy 2.4.2: <c>to_device('cuda')</c> and the case-sensitive <c>to_device('CPU')</c> raise the same
+        ///     ValueError text.</summary>
         [TestMethod]
         public void ToDevice_Cuda_Throws()
-            => new Action(() => np.zeros(new Shape(3)).to_device("cuda")).Should()
-                .Throw<ArgumentException>()
-                .WithMessage("Unsupported device: cuda. Only 'cpu' is accepted.*");
+        {
+            new Action(() => np.zeros(new Shape(3)).to_device("cuda")).Should()
+                .ThrowExactly<ValueError>()
+                .WithMessage("Unsupported device: cuda. Only 'cpu' is accepted.");
+            new Action(() => np.zeros(new Shape(3)).to_device("CPU")).Should()
+                .ThrowExactly<ValueError>()
+                .WithMessage("Unsupported device: CPU. Only 'cpu' is accepted.");
+        }
 
         [TestMethod]
         public void ToDevice_Null_Throws()
@@ -62,49 +71,71 @@ namespace NumSharp.Tests.Creation
             => new Action(() => np.zeros(new Shape(3)).to_device(null)).Should()
                 .Throw<ArgumentNullException>();
 
+        /// <summary>NumPy 2.4.2: <c>to_device('cpu', stream=1)</c> raises ValueError, <c>The stream argument in to_device()
+        ///     is not supported</c>.</summary>
         [TestMethod]
         public void ToDevice_Stream_Throws()
             => new Action(() => np.zeros(new Shape(3)).to_device("cpu", stream: new object())).Should()
-                .Throw<ArgumentException>()
-                .WithMessage("The stream argument in to_device() is not supported*");
+                .ThrowExactly<ValueError>()
+                .WithMessage("The stream argument in to_device() is not supported");
 
         [TestMethod]
         public void ToDevice_BadStream_BeatsBadDevice()
             // NumPy checks the stream before the device VALUE, so a bad-device + bad-stream call
             // reports the stream error first (both non-cpu; stream wins).
             => new Action(() => np.zeros(new Shape(3)).to_device("gpu", stream: new object())).Should()
-                .Throw<ArgumentException>()
-                .WithMessage("The stream argument in to_device() is not supported*");
+                .ThrowExactly<ValueError>()
+                .WithMessage("The stream argument in to_device() is not supported");
 
         // ─── creation device= — the double-quoted rejection message ─────────
 
         static Action Reject(Action call) => call;
 
+        /// <summary>NumPy 2.4.2's text for <c>device='gpu'</c> on every creation function (probed: zeros, ones, empty,
+        ///     full, eye, arange, linspace, asarray, asanyarray, zeros_like, np.fft.fftfreq).</summary>
+        const string BadDeviceText = "Device not understood. Only \"cpu\" is allowed, but received: gpu";
+
+        /// <summary>NumPy 2.4.2: <c>np.zeros(3, device='gpu')</c> raises ValueError with the text alone. NumSharp raised an
+        ///     ArgumentException whose message .NET extended with <c> (Parameter 'device')</c>.</summary>
         [TestMethod]
         public void Creation_BadDevice_Throws_DoubleQuoted()
             => new Action(() => np.zeros(new Shape(3), typeof(double), device: "gpu")).Should()
-                .Throw<ArgumentException>()
-                .WithMessage("Device not understood. Only \"cpu\" is allowed, but received: gpu*");
+                .ThrowExactly<ValueError>()
+                .WithMessage("Device not understood. Only \"cpu\" is allowed, but received: gpu");
+
+        /// <summary>NumPy 2.4.2: the device name is compared exactly, so <c>'CPU'</c> is refused, and an empty name is
+        ///     quoted as nothing (<c>... but received: </c>).</summary>
+        [TestMethod]
+        public void Creation_BadDevice_CaseAndEmpty_AreNumPysText()
+        {
+            new Action(() => np.zeros(new Shape(3), typeof(double), device: "CPU")).Should()
+                .ThrowExactly<ValueError>()
+                .WithMessage("Device not understood. Only \"cpu\" is allowed, but received: CPU");
+            new Action(() => np.zeros(new Shape(3), typeof(double), device: "")).Should()
+                .ThrowExactly<ValueError>()
+                .WithMessage("Device not understood. Only \"cpu\" is allowed, but received: ");
+        }
 
         [TestMethod]
         public void Creation_BadDevice_Throws_AcrossBlessedConstructors()
         {
             var a = np.arange(6.0).reshape(2, 3);
 
-            Reject(() => np.zeros(new Shape(3), typeof(double), device: "gpu")).Should().Throw<ArgumentException>();
-            Reject(() => np.ones(new Shape(3), typeof(double), device: "gpu")).Should().Throw<ArgumentException>();
-            Reject(() => np.empty(new Shape(3), typeof(double), device: "gpu")).Should().Throw<ArgumentException>();
-            Reject(() => np.full(new Shape(3), 1.0, device: "gpu")).Should().Throw<ArgumentException>();
-            Reject(() => np.eye(3, device: "gpu")).Should().Throw<ArgumentException>();
-            Reject(() => np.asanyarray(new[] { 1, 2, 3 }, device: "gpu")).Should().Throw<ArgumentException>();
+            Reject(() => np.zeros(new Shape(3), typeof(double), device: "gpu")).Should().ThrowExactly<ValueError>().WithMessage(BadDeviceText);
+            Reject(() => np.ones(new Shape(3), typeof(double), device: "gpu")).Should().ThrowExactly<ValueError>().WithMessage(BadDeviceText);
+            Reject(() => np.empty(new Shape(3), typeof(double), device: "gpu")).Should().ThrowExactly<ValueError>().WithMessage(BadDeviceText);
+            Reject(() => np.full(new Shape(3), 1.0, device: "gpu")).Should().ThrowExactly<ValueError>().WithMessage(BadDeviceText);
+            Reject(() => np.eye(3, device: "gpu")).Should().ThrowExactly<ValueError>().WithMessage(BadDeviceText);
+            Reject(() => np.asanyarray(new[] { 1, 2, 3 }, device: "gpu")).Should().ThrowExactly<ValueError>().WithMessage(BadDeviceText);
+            Reject(() => np.asarray(a, device: "gpu")).Should().ThrowExactly<ValueError>().WithMessage(BadDeviceText);
 
-            Reject(() => np.zeros_like(a, device: "gpu")).Should().Throw<ArgumentException>();
-            Reject(() => np.ones_like(a, device: "gpu")).Should().Throw<ArgumentException>();
-            Reject(() => np.empty_like(a, device: "gpu")).Should().Throw<ArgumentException>();
-            Reject(() => np.full_like(a, 1.0, device: "gpu")).Should().Throw<ArgumentException>();
+            Reject(() => np.zeros_like(a, device: "gpu")).Should().ThrowExactly<ValueError>().WithMessage(BadDeviceText);
+            Reject(() => np.ones_like(a, device: "gpu")).Should().ThrowExactly<ValueError>().WithMessage(BadDeviceText);
+            Reject(() => np.empty_like(a, device: "gpu")).Should().ThrowExactly<ValueError>().WithMessage(BadDeviceText);
+            Reject(() => np.full_like(a, 1.0, device: "gpu")).Should().ThrowExactly<ValueError>().WithMessage(BadDeviceText);
 
-            Reject(() => np.arange(5.0, typeof(int), device: "gpu")).Should().Throw<ArgumentException>();
-            Reject(() => np.linspace(0.0, 1.0, 5, endpoint: true, dtype: typeof(double), device: "gpu")).Should().Throw<ArgumentException>();
+            Reject(() => np.arange(5.0, typeof(int), device: "gpu")).Should().ThrowExactly<ValueError>().WithMessage(BadDeviceText);
+            Reject(() => np.linspace(0.0, 1.0, 5, endpoint: true, dtype: typeof(double), device: "gpu")).Should().ThrowExactly<ValueError>().WithMessage(BadDeviceText);
         }
 
         // ─── creation device="cpu"/null are accepted and produce the same array ──

@@ -90,18 +90,24 @@ public class NpResultTypeBattleTests
         np.result_type(a, b).Should().Be(NPTypeCode.Int64);
     }
 
+    /// <summary>
+    ///     A null operand is NumPy's <c>None</c>, which <c>np.result_type</c> converts with <c>PyArray_DescrConverter</c>
+    ///     into the strong float64 descriptor: <c>np.result_type(None, np.array([1, 2], np.int32))</c> is float64 in NumPy
+    ///     2.4.2, in either order.
+    /// </summary>
     [TestMethod]
-    public void ResultType_TwoArg_NDArray_NullFirst_Throws()
+    public void ResultType_TwoArg_NDArray_NullFirst_IsNumPysNone()
     {
         var b = np.array(new int[] { 1, 2 });
-        new Action(() => np.result_type((NDArray)null!, b)).Should().Throw<Exception>();
+        np.result_type((NDArray)null!, b).Should().Be(NPTypeCode.Double);
     }
 
+    /// <summary>The mirror of <see cref="ResultType_TwoArg_NDArray_NullFirst_IsNumPysNone"/>.</summary>
     [TestMethod]
-    public void ResultType_TwoArg_NDArray_NullSecond_Throws()
+    public void ResultType_TwoArg_NDArray_NullSecond_IsNumPysNone()
     {
         var a = np.array(new int[] { 1, 2 });
-        new Action(() => np.result_type(a, (NDArray)null!)).Should().Throw<Exception>();
+        np.result_type(a, (NDArray)null!).Should().Be(NPTypeCode.Double);
     }
 
     #endregion

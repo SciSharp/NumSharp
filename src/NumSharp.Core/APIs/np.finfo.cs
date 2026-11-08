@@ -73,9 +73,13 @@ namespace NumSharp
         public int minexp { get; }
 
         /// <summary>
-        /// The NPTypeCode of this floating point type.
+        /// The dtype of this floating point type — NumPy's <c>finfo.dtype</c> (a <see cref="DType"/> descriptor,
+        /// like <c>np.finfo(np.float64).dtype</c>). For a complex input this is the underlying REAL float dtype
+        /// (<c>float64</c> for complex128), matching NumPy. Being a <see cref="DType"/> it exposes
+        /// <see cref="DType.kind"/> / <see cref="DType.name"/> / <see cref="DType.itemsize"/> and compares
+        /// structurally (<c>info.dtype == np.float64</c>); an <see cref="NPTypeCode"/> also converts back implicitly.
         /// </summary>
-        public NPTypeCode dtype { get; }
+        public DType dtype { get; }
 
         /// <summary>
         /// Create finfo for the specified dtype.
@@ -87,6 +91,10 @@ namespace NumSharp
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
 
+            // Text is not inexact: NumPy names the scalar type (data type <class 'numpy.str_'> not inexact).
+            if (dtype.Meta is StringDTypeMeta text)
+                throw new ArgumentException($"data type <class 'numpy.{text.ScalarName}'> not inexact", nameof(dtype));
+
             NPTypeCode typeCode = dtype.GetTypeCode();
             if (!IsFloatType(typeCode))
                 throw new ArgumentException($"data type '{typeCode.AsNumpyDtypeName()}' not inexact", nameof(dtype));
@@ -94,8 +102,13 @@ namespace NumSharp
             // NumPy parity: np.finfo(np.complex128).dtype == np.float64.
             // The finfo represents the precision of the underlying real component, so
             // we report float64's machine limits with dtype set to the real type.
-            // System.Numerics.Complex is 2 × float64 → underlying dtype is Double.
-            this.dtype = typeCode == NPTypeCode.Complex ? NPTypeCode.Double : typeCode;
+            // System.Numerics.Complex is 2 × float64 → underlying dtype is Double. NumPy's _convert_to_float maps each
+            // complex CLASS to its real class, and a real class to itself, so the long-double classes stay long double:
+            // np.finfo(np.longdouble).dtype and np.finfo(np.clongdouble).dtype are both 'g' (the float64 lane).
+            if (ReferenceEquals(dtype.Meta, DTypeRegistry.LongDouble) || ReferenceEquals(dtype.Meta, DTypeRegistry.CLongDouble))
+                this.dtype = DTypeRegistry.LongDouble.singleton;
+            else
+                this.dtype = typeCode == NPTypeCode.Complex ? NPTypeCode.Double : typeCode;
 
             switch (typeCode)
             {
@@ -171,11 +184,20 @@ namespace NumSharp
             }
         }
 
-        /// <inheritdoc />
-        public override string ToString()
-        {
-            return $"finfo(resolution={resolution}, min={min:E}, max={max:E}, dtype={dtype.AsNumpyDtypeName()})";
-        }
+        /// <summary>
+        ///     NumPy's <c>repr(np.finfo(dtype))</c>, the same text under every culture:
+        ///     <c>finfo(resolution=1e-06, min=-3.4028235e+38, max=3.4028235e+38, dtype=float32)</c>.
+        /// </summary>
+        /// <returns>The repr text.</returns>
+        /// <remarks>
+        ///     NumPy's <c>finfo.__repr__</c>, printed by <see cref="Backends.Printing.MachineLimitsRepr.Finfo"/>: the
+        ///     resolution through the dtype's own scalar <c>str()</c>, min / max through the dtype's <c>_MACHAR_PARAMS</c>
+        ///     printf format (<c>%24.16e</c> / <c>%15.7e</c> / <c>%12.5e</c>), the long double's and decimal's <c>str()</c>.
+        ///     A complex dtype reports its real part (<c>dtype=float64</c>). Never .NET's current culture (parity QA-41:
+        ///     this text was <c>finfo(resolution=1E-06, min=-3.402823E+038, ...)</c>, with a decimal comma under de-DE and
+        ///     U+2212 minus signs under sv-SE).
+        /// </remarks>
+        public override string ToString() => Backends.Printing.MachineLimitsRepr.Finfo(dtype, resolution, min, max);
 
         private static bool IsFloatType(NPTypeCode typeCode)
         {
@@ -222,6 +244,42 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Machine limits of a floating-point scalar CLASS — NumPy's <c>np.finfo(cls)</c>: a concrete class gives its
+        ///     dtype's limits (<c>np.finfo((NDScalarType)np.float32)</c> is <c>np.finfo(np.float32)</c>), a complex class its
+        ///     real part's (<c>np.finfo(np.complex64)</c> is float32's, although NumSharp has no complex64 dtype), and a
+        ///     Python built-in class the limits of the NumPy class NumPy reads it as (<c>np.finfo(NDScalarType.PyFloat)</c>
+        ///     is float64's).
+        /// </summary>
+        /// <param name="dtype">The scalar class.</param>
+        /// <returns>The limits.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="ValueError">
+        ///     The class is not inexact — NumPy's text, which names the class: <c>data type &lt;class 'numpy.int64'&gt; not
+        ///     inexact</c> (also for <c>int</c>, whose NumPy class is int64). An abstract class is <c>data type &lt;class
+        ///     'numpy.object_'&gt; not inexact</c>: NumPy's <c>finfo</c> retries a value that converts to no dtype with the
+        ///     dtype of its TYPE, and the type of a class is Python's <c>type</c>, an object dtype — so even
+        ///     <c>np.finfo(np.floating)</c> names <c>object_</c>.
+        /// </exception>
+        public static finfo finfo(NDScalarType dtype)
+        {
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
+            if (dtype.IsAbstract)
+                throw new ValueError("data type <class 'numpy.object_'> not inexact");
+
+            // A Python built-in class is read as NumPy's dtype(cls).type (float -> float64, int -> int64), as every NumPy
+            // dtype argument is; then NumPy's obj2sctype(dtype) must be inexact, and its error names that class.
+            var cls = dtype.NumPyClass;
+            if (!inexact.__subclasscheck__(cls))
+                throw new ValueError($"data type {cls} not inexact");
+            // NumPy's _convert_to_float: a complex class has its real part's limits. complex64 has no NumSharp dtype, so
+            // its float32 part is named here instead of reached through the descriptor.
+            if (cls.IsDtypeless)
+                return new finfo(float32);
+            return new finfo(cls.ToDescriptor());
+        }
+
+        /// <summary>
         /// Machine limits for floating point types.
         /// </summary>
         /// <typeparam name="T">A floating point type (float, double, decimal).</typeparam>
@@ -251,7 +309,8 @@ namespace NumSharp
         {
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
-            return new finfo(arr.GetTypeCode);
+            // The descriptor, so a string array reports its text class rather than failing on the storage lane.
+            return new finfo(arr.dtype);
         }
 
         /// <summary>

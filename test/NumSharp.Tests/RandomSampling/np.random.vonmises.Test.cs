@@ -198,13 +198,13 @@ namespace NumSharp.Tests.RandomSampling
         [TestMethod]
         public void VonMises_NegativeKappa_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.vonmises(0, -1));
+            Assert.ThrowsException<ValueError>(() => np.random.vonmises(0, -1));
         }
 
         [TestMethod]
         public void VonMises_SmallNegativeKappa_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.vonmises(0, -0.001));
+            Assert.ThrowsException<ValueError>(() => np.random.vonmises(0, -0.001));
         }
 
         #endregion

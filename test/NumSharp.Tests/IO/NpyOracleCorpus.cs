@@ -59,8 +59,22 @@ namespace NumSharp.Tests.IO
         ///     F-contiguous array with the same logical values — which is what a fortran_order case needs.
         /// </remarks>
         public static unsafe NDArray Build(NPTypeCode typeCode, long[] shape, byte[] data, bool fortranOrder)
+            => Build(typeCode, null, shape, data, fortranOrder);
+
+        /// <summary>
+        ///     <see cref="Build(NPTypeCode, long[], byte[], bool)"/> for any dtype the manifest names: a fixed-width string
+        ///     case carries its descriptor in <paramref name="descr"/> (<c>'&lt;U3'</c>, <c>'|S5'</c>), because the
+        ///     <see cref="NPTypeCode.String"/> lane alone has no width.
+        /// </summary>
+        /// <param name="typeCode">The storage lane.</param>
+        /// <param name="descr">The string descriptor, or null for every other dtype.</param>
+        /// <param name="shape">The dimensions.</param>
+        /// <param name="data">The raw C-order element bytes.</param>
+        /// <param name="fortranOrder">Return an F-contiguous copy.</param>
+        /// <returns>The array.</returns>
+        public static unsafe NDArray Build(NPTypeCode typeCode, string descr, long[] shape, byte[] data, bool fortranOrder)
         {
-            var arr = new NDArray(typeCode, new Shape(shape));
+            var arr = descr != null ? new NDArray(np.dtype(descr), new Shape(shape)) : new NDArray(typeCode, new Shape(shape));
             if (data.Length > 0)
                 Marshal.Copy(data, 0, (IntPtr)arr.Storage.Address, data.Length);
             return fortranOrder ? arr.copy('F') : arr;
@@ -90,6 +104,10 @@ namespace NumSharp.Tests.IO
         public byte[] Bytes { get; private init; }
 
         public NPTypeCode? NsDtype { get; private init; }
+
+        /// <summary>The native descriptor a fixed-width string case materializes as (<c>'&lt;U3'</c>), else null.</summary>
+        public string NsDescr { get; private init; }
+
         public long[] Shape { get; private init; }
         public bool FortranOrder { get; private init; }
         public string Descr { get; private init; }
@@ -134,6 +152,39 @@ namespace NumSharp.Tests.IO
 
         public bool Compressed { get; private init; }
 
+        /// <summary>A StringDType case's descriptor (<c>{"coerce": …, "na": …}</c>), or default for every other kind.</summary>
+        public JsonElement TSpec { get; private init; }
+
+        /// <summary>A StringDType case's C-order values: the text, or <see cref="NpyTNA.Instance"/> for an NA cell.</summary>
+        public object[] TValues { get; private init; }
+
+        /// <summary>How NumSharp rebuilds a <c>tpickle</c> array for the byte-exact write: C, F, strided or reversed.</summary>
+        public string TBuild { get; private init; }
+
+        /// <summary>The memory-order cells of the array NumPy's np.load(allow_pickle=True) returned.</summary>
+        public byte[] TCells { get; private init; }
+
+        /// <summary>The header-only file NumPy's write_array leaves with allow_pickle=False.</summary>
+        public byte[] NoPickleBytes { get; private init; }
+
+        /// <summary>The ValueError NumPy raises for that write.</summary>
+        public string NoPickleError { get; private init; }
+
+        /// <summary>The error np.load raises for the file without allow_pickle.</summary>
+        public string NoPickleLoadError { get; private init; }
+
+        /// <summary>The format version a <c>tpickle</c> case was written with explicitly, or null (the default guess).</summary>
+        public byte[] TExplicitVersion { get; private init; }
+
+        /// <summary>A <c>tnpz</c> case's members: a StringDType member by its spec and values, another by its bytes.</summary>
+        public Dictionary<string, JsonElement> TEntries { get; private init; }
+
+        /// <summary>A <c>tnpz</c> case's archive members: name → NumPy's own .npy bytes.</summary>
+        public Dictionary<string, byte[]> TMembers { get; private init; }
+
+        /// <summary>The error a <c>tnpz</c> StringDType member raises without allow_pickle.</summary>
+        public string TMemberError { get; private init; }
+
         public override string ToString() => Name ?? "<unnamed>";
 
         public static NpyCase Parse(JsonElement e, ZipArchive zip)
@@ -153,6 +204,7 @@ namespace NumSharp.Tests.IO
                 Note = Str(e, "note"),
                 Bytes = ReadEntry(e.GetProperty("file").GetString()),
                 NsDtype = Str(e, "ns_dtype") is { } d ? Enum.Parse<NPTypeCode>(d) : null,
+                NsDescr = Str(e, "ns_descr"),
                 Shape = Longs(e, "shape"),
                 FortranOrder = Bool(e, "fortran_order") ?? false,
                 Descr = Str(e, "descr"),
@@ -172,6 +224,21 @@ namespace NumSharp.Tests.IO
                 Sequence = e.TryGetProperty("sequence", out JsonElement s) && s.ValueKind == JsonValueKind.Array
                     ? s.EnumerateArray().Select(NpyMember.Parse).ToArray()
                     : null,
+                TSpec = e.TryGetProperty("t_spec", out JsonElement ts) ? ts.Clone() : default,
+                TValues = e.TryGetProperty("t_values", out JsonElement tv) && tv.ValueKind == JsonValueKind.Array
+                    ? NpyTNA.DecodeValues(tv)
+                    : null,
+                TBuild = Str(e, "t_build"),
+                TCells = Hex(Str(e, "t_cells")),
+                NoPickleBytes = Str(e, "nopickle_file") is { } nf ? ReadEntry(nf) : null,
+                NoPickleError = Str(e, "nopickle_error"),
+                NoPickleLoadError = Str(e, "nopickle_load_error"),
+                TExplicitVersion = Bytes8(e, "t_explicit_version"),
+                TEntries = e.TryGetProperty("t_entries", out JsonElement te) && te.ValueKind == JsonValueKind.Object
+                    ? te.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone(), StringComparer.Ordinal)
+                    : null,
+                TMembers = RawMembers(e, "t_members"),
+                TMemberError = Str(e, "t_member_error"),
             };
         }
 
@@ -220,16 +287,73 @@ namespace NumSharp.Tests.IO
         }
     }
 
+    /// <summary>
+    ///     The marker of an NA cell in a StringDType case's values (the manifest's <c>{"na": true}</c>), and the decoding of
+    ///     those values and of a case's descriptor.
+    /// </summary>
+    internal sealed class NpyTNA
+    {
+        /// <summary>The one marker.</summary>
+        public static readonly NpyTNA Instance = new NpyTNA();
+
+        private NpyTNA()
+        {
+        }
+
+        /// <summary>Decodes the manifest's values: a JSON string is the text, <c>{"na": true}</c> the NA marker.</summary>
+        /// <param name="values">The JSON array.</param>
+        /// <returns>The values.</returns>
+        public static object[] DecodeValues(JsonElement values)
+            => values.EnumerateArray().Select(v => v.ValueKind == JsonValueKind.String ? v.GetString() : (object)Instance).ToArray();
+
+        /// <summary>
+        ///     The descriptor a manifest spec names: <c>StringDType(coerce)</c>, or with its na_object (<c>None</c>, a float by
+        ///     its bits, a str, a bool, an int).
+        /// </summary>
+        /// <param name="spec">The spec.</param>
+        /// <returns>A new descriptor.</returns>
+        public static DType Descriptor(JsonElement spec)
+        {
+            bool coerce = spec.GetProperty("coerce").GetBoolean();
+            if (!spec.TryGetProperty("na", out JsonElement na))
+                return np.dtypes.StringDType(coerce);
+            object value;
+            if (na.TryGetProperty("none", out _))
+                value = null;
+            else if (na.TryGetProperty("float_bits", out JsonElement fb))
+                value = BitConverter.ToDouble(System.Convert.FromHexString(fb.GetString()), 0);
+            else if (na.TryGetProperty("str", out JsonElement st))
+                value = st.GetString();
+            else if (na.TryGetProperty("bool", out JsonElement bo))
+                value = bo.GetBoolean();
+            else
+                value = na.GetProperty("int").GetInt64();
+            return np.dtypes.StringDType(value, coerce);
+        }
+
+        /// <summary>The values to store for a descriptor: the NA marker becomes the descriptor's na_object.</summary>
+        /// <param name="values">The decoded values.</param>
+        /// <param name="descr">The descriptor.</param>
+        /// <returns>The objects setitem stores.</returns>
+        public static object[] StoreValues(object[] values, DType descr)
+            => values.Select(v => v is NpyTNA ? descr.VString.na_object : v).ToArray();
+    }
+
     /// <summary>One array inside an npz archive or an appended stream.</summary>
     internal sealed class NpyMember
     {
         public NPTypeCode NsDtype { get; private init; }
+
+        /// <summary>The native descriptor of a fixed-width string member (<c>'&lt;U2'</c>), else null.</summary>
+        public string NsDescr { get; private init; }
+
         public long[] Shape { get; private init; }
         public byte[] NsBytes { get; private init; }
 
         public static NpyMember Parse(JsonElement e) => new()
         {
             NsDtype = Enum.Parse<NPTypeCode>(e.GetProperty("ns_dtype").GetString()!),
+            NsDescr = e.TryGetProperty("ns_descr", out JsonElement nd) && nd.ValueKind == JsonValueKind.String ? nd.GetString() : null,
             Shape = e.GetProperty("shape").EnumerateArray().Select(x => x.GetInt64()).ToArray(),
             NsBytes = NpyCase.Hex(e.GetProperty("ns_bytes").GetString()),
         };

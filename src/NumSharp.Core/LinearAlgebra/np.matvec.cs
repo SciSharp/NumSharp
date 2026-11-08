@@ -3,11 +3,6 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     The gufunc signature <c>np.matvec</c> matches its core dimensions against.
-        /// </summary>
-        internal const string MatvecSignature = "(m,n),(n)->(m)";
-
-        /// <summary>
         ///     Matrix-vector product (NumPy 2.2) — the gufunc <c>(m,n),(n)->(m)</c>, NumPy's
         ///     <c>gemv</c> route.
         /// </summary>
@@ -31,6 +26,14 @@ namespace NumSharp
         /// <param name="dtype">
         ///     Selects the LOOP: computation runs at this dtype, not merely the result.
         /// </param>
+        /// <param name="casting">NumPy's <c>casting=</c>: the rule each input's cast to the loop, and the answer's cast
+        ///     into <paramref name="out"/>, is checked under - <c>no</c>, <c>equiv</c>, <c>safe</c>, <c>same_kind</c>
+        ///     (the default) or <c>unsafe</c>.</param>
+        /// <param name="order">NumPy's <c>order=</c>, the layout of an allocated result: <c>'K'</c> (the default: the
+        ///     loop axes in the inputs' memory order), <c>'C'</c>, <c>'F'</c>, or <c>'A'</c> (F when both inputs are
+        ///     F-contiguous, else C); lowercase is accepted, and it is ignored with <paramref name="out"/>.</param>
+        /// <returns>The matrix-vector products (the operands' loop axes broadcast together), or <paramref name="out"/>
+        ///     itself holding them.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.matvec.html
         ///     <para>
@@ -41,48 +44,38 @@ namespace NumSharp
         ///     product, is what this computes.
         ///     </para>
         ///     <para>
-        ///     NumPy's remaining ufunc keywords (<c>casting</c>, <c>order</c>, <c>subok</c>,
-        ///     <c>signature</c>) are not modelled anywhere in NumSharp's ufunc surface and are
-        ///     absent here too. See <see cref="vecdot"/>.
+        ///     NumPy's <c>subok</c> and <c>signature</c> keywords are absent: <c>subok</c> concerns ndarray
+        ///     subclasses, which the woven subclass path already decides, and <c>signature</c> is what
+        ///     <paramref name="dtype"/> does.
+        ///     </para>
+        ///     <para>
+        ///     The whole call is the engine member <c>TensorEngine.Matvec(x1, x2, out, axes, axis, keepdims, dtype, casting, order)</c>
+        ///     since the np-layer dtype plan's P2; this function's woven subclass path answers for a numpy.matrix operand.
         ///     </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes
+        ///     longer than 1 (<c>shape too large to be a matrix.</c>); an operand with too few dimensions; core axes of
+        ///     different lengths; an <paramref name="axes"/> list without three entries; loop axes that do not broadcast
+        ///     together, or a read-only <paramref name="out"/> or one the answer does not broadcast into (NumPy's gufunc
+        ///     iterator texts).</exception>
+        /// <exception cref="TypeError"><paramref name="axis"/> with <paramref name="axes"/>, or either given; a
+        ///     <paramref name="dtype"/> with details beyond its class; text operands or a text <paramref name="dtype"/>;
+        ///     <paramref name="keepdims"/>.</exception>
+        /// <exception cref="AxisError">An <paramref name="axes"/> entry of the wrong length, or an axis out of
+        ///     range.</exception>
+        /// <exception cref="TypeError">An input cannot be cast to the loop, or the answer into
+        ///     <paramref name="out"/>, under <paramref name="casting"/> (NumPy's UFuncTypeError text: <c>Cannot cast ufunc
+        ///     'matvec' input 0 from dtype('int32') to dtype('float64') with casting rule 'no'</c>).</exception>
+        /// <exception cref="ValueError">A <paramref name="casting"/> or <paramref name="order"/> name NumPy
+        ///     refuses (casting first).</exception>
+        /// <exception cref="IncorrectShapeException">Loop axes that do not broadcast.</exception>
+        /// <exception cref="System.NullReferenceException"><paramref name="x1"/> or <paramref name="x2"/> is null.</exception>
         [NDScoped]
         public static NDArray matvec(NDArray x1, NDArray x2, NDArray @out = null, int[][] axes = null,
-            int? axis = null, bool keepdims = false, DType dtype = null)
+            int? axis = null, bool keepdims = false, DType dtype = null, string casting = "same_kind",
+            char order = 'K')
         {
-            GufuncGuard.RejectAxisWithAxes(axes, axis);
-            GufuncGuard.RejectAxisAndKeepdims("matvec", MatvecSignature, axis, keepdims, 1);
-
-            GufuncGuard.RequireRank("matvec", MatvecSignature, 0, x1, 2);
-            GufuncGuard.RequireRank("matvec", MatvecSignature, 1, x2, 1);
-
-            var a = x1;
-            var b = x2;
-            int[] outputAxes = System.Array.Empty<int>();
-
-            if (axes is not null)
-            {
-                var resolved = GufuncGuard.NormalizeAxes("matvec", axes, new[] {2, 1, 1}, x1, x2);
-                outputAxes = resolved[2];
-
-                // Bring (m,n) and (n) to the trailing positions the kernel expects; the result's
-                // own core axis goes back to where `axes` asked for it once the loop has run.
-                a = moveaxis(a, resolved[0], new[] {a.ndim - 2, a.ndim - 1});
-                b = moveaxis(b, resolved[1][0], -1);
-            }
-
-            GufuncGuard.RequireCoreSize("matvec", MatvecSignature, 1, 0,
-                b.shape[b.ndim - 1], a.shape[a.ndim - 1]);
-
-            a = GufuncGuard.ToLoop(a, dtype);
-            b = GufuncGuard.ToLoop(b, dtype);
-
-            var result = a.TensorEngine.Matvec(a, b);
-
-            if (outputAxes.Length == 1)
-                result = moveaxis(result, -1, outputAxes[0]);
-
-            return GufuncGuard.Deliver(result, @out);
+            return x1.TensorEngine.Matvec(x1, x2, @out, axes, axis, keepdims, dtype, casting, order);
         }
     }
 }

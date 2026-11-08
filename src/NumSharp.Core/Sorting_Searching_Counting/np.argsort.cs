@@ -1,4 +1,4 @@
-﻿namespace NumSharp
+namespace NumSharp
 {
     public static partial class np
     {
@@ -15,10 +15,27 @@
             => nd.argsort<T>(axis);
 
         /// <summary>
-        ///     Returns the indices that would sort <paramref name="nd"/> along <paramref name="axis"/>
-        ///     (default last; <c>null</c> flattens). Returns int64 indices. NumPy <c>np.argsort</c>.
+        ///     Returns the indices that would sort <paramref name="a"/> along <paramref name="axis"/> (default last;
+        ///     <c>null</c> flattens). Returns int64 indices. NumPy's
+        ///     <c>np.argsort(a, axis=-1, kind=None, order=None, *, stable=None)</c>.
         /// </summary>
-        public static NDArray argsort(NDArray nd, int? axis = -1)
-            => nd.argsort(axis);
+        /// <param name="a">Array to sort.</param>
+        /// <param name="axis">Axis to sort along; null sorts the flattened array.</param>
+        /// <param name="kind">The sort algorithm (see <see cref="NDArray.argsort(int?, string, object, bool?)"/>): over text
+        ///     the default and heapsort kinds give NumPy's introsort tie order, the stable kinds the stable one.</param>
+        /// <param name="order">Field names; any value is refused (no NumSharp dtype has fields).</param>
+        /// <param name="stable">True asks for the stable kind; cannot be combined with <paramref name="kind"/>.</param>
+        /// <returns>A fresh, C-contiguous int64 array of indices.</returns>
+        /// <exception cref="ValueError">An unknown <paramref name="kind"/>, <paramref name="kind"/> given with
+        ///     <paramref name="stable"/>, or an <paramref name="order"/>; or a <c>numpy.matrix</c> operand whose result
+        ///     cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="AxisError">The axis is out of bounds.</exception>
+        /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort kind</c>).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements that holds an NA of a descriptor
+        ///     whose NA object is neither a string nor NaN-like (NumPy's <c>Cannot compare null that is not a nan-like
+        ///     value</c>, raised after the lines before it were sorted).</exception>
+        /// <exception cref="System.OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        public static NDArray argsort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null)
+            => a.argsort(axis, kind, order, stable);
     }
 }

@@ -49,25 +49,25 @@ namespace NumSharp.Tests.RandomSampling
         [TestMethod]
         public void F_DfnumZero_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.f(0, 10));
+            Assert.ThrowsException<ValueError>(() => np.random.f(0, 10));
         }
 
         [TestMethod]
         public void F_DfdenZero_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.f(5, 0));
+            Assert.ThrowsException<ValueError>(() => np.random.f(5, 0));
         }
 
         [TestMethod]
         public void F_DfnumNegative_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.f(-1, 10));
+            Assert.ThrowsException<ValueError>(() => np.random.f(-1, 10));
         }
 
         [TestMethod]
         public void F_DfdenNegative_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.f(5, -1));
+            Assert.ThrowsException<ValueError>(() => np.random.f(5, -1));
         }
 
         [TestMethod]

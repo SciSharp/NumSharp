@@ -10,6 +10,42 @@ namespace NumSharp.Tests.Interop.MLNet
     [TestClass]
     public class DtypeMapEdgeTests : MLNetTestBase
     {
+        /// <summary>
+        ///     A descriptor whose class has no NumSharp storage (datetime64, timedelta64, with any unit) is a dtype with no
+        ///     ML.NET column type, like Complex: the <c>Try</c> map answers <c>false</c>, the CLR-type map answers
+        ///     <c>null</c>, and the throwing map throws this package's own message. All three threw NumSharp's "has no
+        ///     NumSharp storage yet" error, the <c>Try</c> form included (the ONNX Runtime bridge's maps already answered
+        ///     this way). A non-native descriptor maps like its native twin, and a null dtype is <c>false</c> for
+        ///     <c>Try</c> and an argument error for the other two.
+        /// </summary>
+        [TestMethod]
+        public void DescriptorsWithoutStorage_AreUnmappedDtypes_NotErrors()
+        {
+            foreach (string spelling in new[] { "M8[ns]", "m8", "datetime64[10ns]", "timedelta64[s]", "M8" })
+            {
+                DType descriptor = np.dtype(spelling);
+                Assert.AreEqual(NPTypeCode.Empty, descriptor.Meta.TypeCode, $"{spelling} has no storage lane");
+
+                Assert.IsFalse(NDArrayMLNetInterop.TryToDataViewType(descriptor, out PrimitiveDataViewType type), spelling);
+                Assert.IsNull(type, spelling);
+                Assert.IsNull(NDArrayMLNetInterop.ToDataViewClrType(descriptor), spelling);
+                NotSupportedException ex = Assert.ThrowsException<NotSupportedException>(() => NDArrayMLNetInterop.ToDataViewType(descriptor), spelling);
+                StringAssert.Contains(ex.Message, descriptor.name, spelling);
+                StringAssert.Contains(ex.Message, "no arrays of this dtype yet", spelling);
+            }
+
+            DType bigEndian = np.dtype(">i4");
+            Assert.IsFalse(bigEndian.isnative);
+            Assert.IsTrue(NDArrayMLNetInterop.TryToDataViewType(bigEndian, out PrimitiveDataViewType int32));
+            Assert.AreEqual(NumberDataViewType.Int32, int32, "a non-native descriptor maps like its native twin");
+            Assert.AreEqual(NumberDataViewType.Int32, NDArrayMLNetInterop.ToDataViewType(bigEndian));
+            Assert.AreEqual(typeof(int), NDArrayMLNetInterop.ToDataViewClrType(bigEndian));
+
+            Assert.IsFalse(NDArrayMLNetInterop.TryToDataViewType(null, out _), "Try never throws");
+            Assert.ThrowsException<ArgumentNullException>(() => NDArrayMLNetInterop.ToDataViewType(null));
+            Assert.ThrowsException<ArgumentNullException>(() => NDArrayMLNetInterop.ToDataViewClrType(null));
+        }
+
         [TestMethod]
         public void ToDataViewClrType_MapsEveryDtype()
         {

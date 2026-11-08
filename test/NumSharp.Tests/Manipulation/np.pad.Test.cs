@@ -360,6 +360,25 @@ namespace NumSharp.Tests.Manipulation
             act.Should().Throw<ArgumentException>().WithMessage("*negative*");
         }
 
+        /// <summary>
+        ///     A negative width is NumPy's ValueError (<c>_as_pairs</c>: "index can't contain negative values", a subclass of
+        ///     the ArgumentException it used to be) in every pad_width form; in a stat_length dict (a NumSharp extension:
+        ///     NumPy refuses a dict there) a negative side of a tuple is refused like a negative scalar, where it used to
+        ///     pass and reach the slicing as a garbage shape.
+        /// </summary>
+        [TestMethod]
+        public void NegativeWidths_RaiseNumPysValueError()
+        {
+            var arr = np.array(new long[] { 1, 2, 3 });
+            Action scalar = () => np.pad(arr, -1);
+            scalar.Should().ThrowExactly<ValueError>().WithMessage("index can't contain negative values");
+            Action pair = () => np.pad(arr, (1, -1));
+            pair.Should().ThrowExactly<ValueError>().WithMessage("index can't contain negative values");
+            Action stat = () => np.pad(arr, 1, mode: "maximum",
+                stat_length: new System.Collections.Generic.Dictionary<int, object> { { 0, (1, -2) } });
+            stat.Should().ThrowExactly<ValueError>().WithMessage("index can't contain negative values");
+        }
+
         [TestMethod]
         public void UnknownMode_Throws()
         {
@@ -368,12 +387,17 @@ namespace NumSharp.Tests.Manipulation
             act.Should().Throw<ArgumentException>();
         }
 
+        /// <summary>
+        ///     NumPy has no check of <c>reflect_type</c>'s value: its loop tests <c>method == "odd"</c> and reflects every
+        ///     other value as <c>'even'</c> (NumPy 2.4.2: <c>np.pad([1, 2, 4], 2, 'reflect', reflect_type='weird')</c> is
+        ///     <c>[4, 2, 1, 2, 4, 2, 1]</c>). NumSharp used to refuse anything but 'even' / 'odd'.
+        /// </summary>
         [TestMethod]
-        public void ReflectType_Invalid_Throws()
+        public void ReflectType_OtherThanOdd_IsEven()
         {
-            var arr = np.array(new long[] { 1, 2, 3 });
-            Action act = () => np.pad(arr, 1, mode: "reflect", reflect_type: "weird");
-            act.Should().Throw<ArgumentException>();
+            var arr = np.array(new long[] { 1, 2, 4 });
+            var r = np.pad(arr, 2, mode: "reflect", reflect_type: "weird");
+            r.ToArray<long>().Should().Equal(4L, 2L, 1L, 2L, 4L, 2L, 1L);
         }
 
         [TestMethod]

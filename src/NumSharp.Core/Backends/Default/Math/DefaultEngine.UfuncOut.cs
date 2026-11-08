@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
@@ -32,8 +33,8 @@ namespace NumSharp.Backends
     /// iterator as a trailing ARRAYMASK operand and <see cref="NDIterRef.ForEach"/>
     /// decomposes each inner chunk into mask-true runs, invoking the unmasked
     /// kernel per run. A dtype-mismatched out additionally engages the
-    /// Wave-4 windowed buffer machinery (kernel writes the loop dtype into the
-    /// out operand's buffer; the flush casts — and, under WRITEMASKED, masks).
+    /// iterator's buffering (NumPy's, NDIterBufferManager.Buffering.cs: the kernel writes the loop dtype into the
+    /// out operand's buffer; the write-back casts — and, under WRITEMASKED, masks).
     /// </summary>
     public partial class DefaultEngine
     {
@@ -46,11 +47,18 @@ namespace NumSharp.Backends
             NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
         };
 
+        // The MASKED configs flag the output READWRITE, not WRITEONLY: NumPy's masked ufunc loop does the
+        // same for a passed-in out (ufunc_object.c: "In the masked version, we consider the output
+        // read-write"). It decides the overlap case. COPY_IF_OVERLAP computes into a temporary and writes
+        // it back WHOLE, and only a READ operand has that temporary initialized from the array, so with
+        // WRITEONLY the mask's False positions came back as heap bytes (np.add(x[:-1], 1, out=x[1:],
+        // where=m) wrote 6.95e-310 where NumPy keeps x). For a fresh result (no out) the flag changes
+        // nothing: the target overlaps no input and needs no cast, so it is never copied or buffered.
         private static readonly NDIterPerOpFlags[] s_ufuncBinaryOutMaskedFlags =
         {
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READWRITE | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.ARRAYMASK,
         };
 
@@ -60,10 +68,11 @@ namespace NumSharp.Backends
             NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
         };
 
+        // READWRITE output for the same reason as s_ufuncBinaryOutMaskedFlags.
         private static readonly NDIterPerOpFlags[] s_ufuncUnaryOutMaskedFlags =
         {
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READWRITE | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
             NDIterPerOpFlags.READONLY | NDIterPerOpFlags.ARRAYMASK,
         };
 
@@ -73,19 +82,34 @@ namespace NumSharp.Backends
         // np.abs is 'absolute', np.negative is 'negative'.
         // =====================================================================
 
-        private static string UfuncName(BinaryOp op) => op switch
+        /// <summary>
+        ///     NumPy's ufunc name of a binary operation, as NumPy's error texts quote it (<c>remainder</c>, <c>divide</c>,
+        ///     <c>left_shift</c>, ...); also the name the string guard answers by, so np.evaluate's binary text stage
+        ///     (NDExpr.TextResults.cs) reports the same ufunc its call runs.
+        /// </summary>
+        /// <param name="op">The operation.</param>
+        /// <returns>The ufunc name.</returns>
+        internal static string UfuncName(BinaryOp op) => op switch
         {
             BinaryOp.Add => "add",
             BinaryOp.Subtract => "subtract",
             BinaryOp.Multiply => "multiply",
             BinaryOp.Divide => "divide",
             BinaryOp.Mod => "remainder",
+            BinaryOp.Fmod => "fmod",
             BinaryOp.Power => "power",
             BinaryOp.FloorDivide => "floor_divide",
             BinaryOp.BitwiseAnd => "bitwise_and",
             BinaryOp.BitwiseOr => "bitwise_or",
             BinaryOp.BitwiseXor => "bitwise_xor",
+            // NumPy spells the shift ufuncs with an underscore ("left_shift"/"right_shift"); without
+            // these the switch would fall to op.ToString().ToLowerInvariant() = "leftshift", so a
+            // dtype=/out= cast error on a shift routed through ExecuteBinaryOp would leak the wrong name.
+            BinaryOp.LeftShift => "left_shift",
+            BinaryOp.RightShift => "right_shift",
             BinaryOp.ATan2 => "arctan2",
+            BinaryOp.Gcd => "gcd",
+            BinaryOp.Lcm => "lcm",
             _ => op.ToString().ToLowerInvariant(),
         };
 
@@ -100,10 +124,19 @@ namespace NumSharp.Backends
             _ => op.ToString().ToLowerInvariant(),
         };
 
-        private static string UfuncName(UnaryOp op) => op switch
+        /// <summary>
+        ///     NumPy's ufunc name of a unary operation for the ufunc entry's error texts (<c>absolute</c>, <c>invert</c>,
+        ///     <c>arcsinh</c>, ...); an operation without an entry here falls back to its lower-cased enum name, which is
+        ///     NumPy's for the plain math ufuncs (callers needing a NumPy FUNCTION name for np.isposinf / np.real / np.angle
+        ///     spell it themselves).
+        /// </summary>
+        /// <param name="op">The operation.</param>
+        /// <returns>The ufunc name.</returns>
+        internal static string UfuncName(UnaryOp op) => op switch
         {
             UnaryOp.Sqrt => "sqrt",
             UnaryOp.Abs => "absolute",
+            UnaryOp.Fabs => "fabs",
             UnaryOp.Negate => "negative",
             UnaryOp.Exp => "exp",
             UnaryOp.Log => "log",
@@ -124,6 +157,7 @@ namespace NumSharp.Backends
             UnaryOp.BitwiseNot => "invert",
             UnaryOp.LogicalNot => "logical_not",
             UnaryOp.Positive => "positive",
+            UnaryOp.Spacing => "spacing",
             _ => op.ToString().ToLowerInvariant(),
         };
 
@@ -134,39 +168,61 @@ namespace NumSharp.Backends
         {
             var dims = s.dimensions;
             if (dims.Length == 0) return "()";
-            if (dims.Length == 1) return $"({dims[0]},)";
-            return $"({string.Join(",", dims)})";
+            if (dims.Length == 1) return string.Create(CultureInfo.InvariantCulture, $"({dims[0]},)");
+            return $"({string.Join(",", Array.ConvertAll(dims, d => d.ToString(CultureInfo.InvariantCulture)))})";
         }
 
         /// <summary>
         /// NumPy requires the where mask to be exactly bool — its converter
         /// casts with the 'safe' rule, and only bool→bool passes
         /// (_wheremask_converter, ufunc_object.c:580). Error text verbatim.
+        /// Shared by the elementwise ufuncs and every reduction's <c>where=</c>
+        /// (<see cref="ReductionArguments"/>), which use the same converter.
         /// </summary>
-        private static void ValidateWhereMask(NDArray? where)
+        /// <param name="where">The caller's mask, or <c>null</c> for NumPy's <c>where=True</c>.</param>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array. NumPy raises
+        /// <c>TypeError</c>; the house type for this check is <see cref="ArgumentException"/>, with NumPy's text:
+        /// "Cannot cast array data from …" for an array, "Cannot cast scalar from …" for a 0-d array
+        /// (PyArray_FromAny reports a 0-d source as a scalar; probed 2.4.2 with <c>np.array(1)</c>).</exception>
+        internal static void ValidateWhereMask(NDArray? where)
         {
             if (where is null || where.typecode == NPTypeCode.Boolean)
                 return;
+            // A string mask is named by its descriptor (dtype('<U2'), dtype('S2')), as NumPy names it; its storage lane
+            // has no NumPy name. Every other dtype keeps the lane name the numeric texts have always used.
+            string from = where.typecode == NPTypeCode.String
+                ? where.dtype.ToString(true)
+                : $"dtype('{where.typecode.AsNumpyDtypeName()}')";
             throw new ArgumentException(
-                $"Cannot cast array data from dtype('{where.typecode.AsNumpyDtypeName()}') " +
+                $"Cannot cast {(where.ndim == 0 ? "scalar" : "array data")} from {from} " +
                 "to dtype('bool') according to the rule 'safe'");
         }
 
         /// <summary>
-        /// out must be reachable from the loop result dtype by a same_kind cast
-        /// (NumPy's default ufunc casting rule). Error text verbatim
-        /// (UFuncTypeError in NumPy).
+        /// out must be reachable from the loop result dtype under <paramref name="casting"/>
+        /// (NumPy's default ufunc rule is same_kind; np.evaluate's <c>casting=</c> keyword can
+        /// tighten it to safe/equiv/no or loosen it to unsafe). Error text verbatim
+        /// (UFuncTypeError in NumPy), naming the rule that failed.
         /// </summary>
-        private static void ValidateOutCast(NPTypeCode resultType, NPTypeCode outType, string ufuncName)
+        /// <param name="resultType">The computed (loop) result dtype the write must cast FROM.</param>
+        /// <param name="outType">The caller <c>out=</c> dtype the write must cast TO.</param>
+        /// <param name="ufuncName">The ufunc name for the message ("evaluate" for the fused path).</param>
+        /// <param name="casting">The cast rule to enforce; defaults to NumPy's ufunc <c>same_kind</c>.</param>
+        /// <exception cref="TypeError"><paramref name="resultType"/> is not castable to <paramref name="outType"/> under <paramref name="casting"/>.</exception>
+        /// <remarks>Internal (not private) because a composition that writes a ufunc result back into an operand the way
+        ///     NumPy's in-place operator does (<c>np.cov</c>'s <c>X -= avg[:, None]</c>) refuses with the same rule and
+        ///     text.</remarks>
+        internal static void ValidateOutCast(NPTypeCode resultType, NPTypeCode outType, string ufuncName,
+            NPY_CASTING casting = NPY_CASTING.NPY_SAME_KIND_CASTING)
         {
             if (resultType == outType)
                 return;
-            if (NDIterCasting.CanCast(resultType, outType, NPY_CASTING.NPY_SAME_KIND_CASTING))
+            if (NDIterCasting.CanCast(resultType, outType, casting))
                 return;
-            throw new ArgumentException(
+            throw new TypeError(
                 $"Cannot cast ufunc '{ufuncName}' output from " +
                 $"dtype('{resultType.AsNumpyDtypeName()}') to " +
-                $"dtype('{outType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+                $"dtype('{outType.AsNumpyDtypeName()}') with casting rule '{DTypeCasting.CastingToString(casting)}'");
         }
 
         /// <summary>
@@ -184,7 +240,7 @@ namespace NumSharp.Backends
                 return;
             if (NDIterCasting.CanCast(inputType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 return;
-            throw new ArgumentException(
+            throw new TypeError(
                 $"Cannot cast ufunc '{ufuncName}' input from " +
                 $"dtype('{inputType.AsNumpyDtypeName()}') to " +
                 $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
@@ -194,50 +250,60 @@ namespace NumSharp.Backends
         /// Comparison/predicate ufuncs have bool-output loops ONLY: a dtype=
         /// request other than bool has no loop to select — NumPy raises the
         /// no-loop TypeError (probed 2.4.2: equal(a,b,dtype=f64/i32) and
-        /// isnan(x,dtype=f64) raise; dtype=bool is a legal no-op).
+        /// isnan(x,dtype=f64) raise; dtype=bool is a legal no-op). With a
+        /// <c>StringDType</c> operand the refusal is the new-style dispatcher's,
+        /// which names the operands' classes and the requested one
+        /// (<c>ufunc 'equal' did not contain a loop with signature matching types
+        /// (StringDType, StringDType) -&gt; Float64DType</c>); legacy operands keep
+        /// the type resolver's "No loop matching ..." text.
         /// </summary>
-        private static void ValidateBoolLoopDtype(NPTypeCode? dtype, string ufuncName)
+        /// <param name="dtype">The resolved dtype= request, or null.</param>
+        /// <param name="ufuncName">The ufunc NumPy names.</param>
+        /// <param name="x1">The first operand, or null (a caller that predates the StringDType words).</param>
+        /// <param name="x2">The second operand, or null (a unary ufunc).</param>
+        /// <exception cref="IncorrectTypeException">A non-bool request over legacy operands.</exception>
+        /// <exception cref="TypeError">A non-bool request with a <c>StringDType</c> operand.</exception>
+        private static void ValidateBoolLoopDtype(NPTypeCode? dtype, string ufuncName, NDArray x1 = null, NDArray x2 = null)
         {
-            if (dtype.HasValue && dtype.Value != NPTypeCode.Boolean)
-                throw new IncorrectTypeException(
-                    $"No loop matching the specified signature and casting was found for ufunc {ufuncName}");
+            if (!dtype.HasValue || dtype.Value == NPTypeCode.Boolean)
+                return;
+            if (Strings.NDStringUfuncs.IsVString(x1) || Strings.NDStringUfuncs.IsVString(x2))
+            {
+                // The StringDType loops register with the new-style dispatcher: its refusal prints the operand classes.
+                var inputs = x2 is null
+                    ? new[] { Strings.NDStringUfuncs.DispatchClass(x1) }
+                    : new[] { Strings.NDStringUfuncs.DispatchClass(x1), Strings.NDStringUfuncs.DispatchClass(x2) };
+                throw Strings.NDStringUfuncs.VStringNoLoop(ufuncName, inputs, DTypeRegistry.FromTypeCode(dtype.Value).ToString());
+            }
+            throw new IncorrectTypeException(
+                $"No loop matching the specified signature and casting was found for ufunc {ufuncName}");
         }
 
         /// <inheritdoc cref="ValidateUnaryInputCast"/>
         private static void ValidateBinaryInputCasts(NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode loopType, string ufuncName)
         {
             if (lhsType != loopType && !NDIterCasting.CanCast(lhsType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new ArgumentException(
+                throw new TypeError(
                     $"Cannot cast ufunc '{ufuncName}' input 0 from " +
                     $"dtype('{lhsType.AsNumpyDtypeName()}') to " +
                     $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
             if (rhsType != loopType && !NDIterCasting.CanCast(rhsType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new ArgumentException(
+                throw new TypeError(
                     $"Cannot cast ufunc '{ufuncName}' input 1 from " +
                     $"dtype('{rhsType.AsNumpyDtypeName()}') to " +
                     $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
         }
 
         /// <summary>
-        /// Resolve the iteration (= output) shape for a ufunc call with
-        /// optional out/where, with NumPy's exact error texts:
-        ///   • out joins the broadcast: inputs may broadcast UP to out's shape.
-        ///   • out itself may never be stretched ("non-broadcastable output
-        ///     operand with shape (1,) doesn't match the broadcast shape (4,)").
-        ///   • an out incompatible with the inputs raises "operands could not
-        ///     be broadcast together with shapes (4,) (4,) (5,) " (NumPy lists
-        ///     every operand shape, trailing space included).
-        ///   • where broadcasts with everything and, when out is absent,
-        ///     participates in the output shape (verified: add((4,),(4,),
-        ///     where=(2,4)-mask) returns shape (2,4)).
-        /// </summary>
-        /// <summary>
         /// True when two shapes have the same rank and identical dimensions — the case in
         /// which the ufunc's broadcast and out/where joins are identity transforms, so the
-        /// out= routes skip <see cref="Broadcast"/> and <see cref="ResolveUfuncIterationShape"/>
+        /// out= routes skip <see cref="Broadcast(Shape, Shape)"/> and <see cref="ResolveUfuncIterationShape"/>
         /// (which allocate and cannot raise there). Strides are irrelevant to that decision:
         /// <see cref="Shape.Equals(Shape)"/>, which the join validates with, compares dims only.
         /// </summary>
+        /// <param name="a">The first shape.</param>
+        /// <param name="b">The second shape.</param>
+        /// <returns>True when the ranks and every dimension agree (two shapes without a dimension array agree).</returns>
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         private static bool SameDims(in Shape a, in Shape b)
         {
@@ -253,71 +319,250 @@ namespace NumSharp.Backends
             return true;
         }
 
+        /// <summary>
+        ///     NumPy's operand list in a ufunc's broadcast error: each operand's shape (<see cref="NumPyShapeRepr"/>) and a
+        ///     space, in the iterator's operand order — the inputs, then <paramref name="out"/>, then <paramref name="where"/>
+        ///     when given. A call without <c>out=</c> lists no output: NumPy's iterator allocates that operand itself.
+        /// </summary>
+        /// <param name="inputs">The inputs, in operand order.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="where">The <c>where=</c> mask, or null.</param>
+        /// <returns>The shapes, each followed by a space: <c>"(3,4) (5,) (3,4) "</c>.</returns>
+        private static string UfuncOperandShapes(NDArray[] inputs, NDArray? @out, NDArray? where)
+        {
+            string shapes = string.Empty;
+            foreach (var inp in inputs)
+                shapes += NumPyShapeRepr(inp.Shape) + " ";
+            if (@out is not null)
+                shapes += NumPyShapeRepr(@out.Shape) + " ";
+            if (where is not null)
+                shapes += NumPyShapeRepr(where.Shape) + " ";
+            return shapes;
+        }
+
+        /// <summary>
+        ///     The layout of a ufunc's fresh result in a call with <c>where=</c> and no <c>out=</c>: NumPy's iterator allocates
+        ///     the output by the operands' axis order, the mask voting with the inputs (<see cref="Shape.NpyIterOutputShape"/>;
+        ///     probed 2.4.2: <c>np.add(F, F, where=F_mask)</c> and <c>np.sqrt(F, where=row)</c> are F-contiguous,
+        ///     <c>np.add(F, F, where=C_mask)</c> and <c>np.add(F, C, where=F_mask)</c> are C, a permuted operand's order is
+        ///     kept). Without a mask the routes that call this are only reached with an out=, so the shape is the
+        ///     iteration's own C layout.
+        /// </summary>
+        /// <param name="iterShape">The iteration shape (the inputs, out= and where= joined), in C order.</param>
+        /// <param name="first">The first input's shape.</param>
+        /// <param name="second">The second input's shape, or null for a unary ufunc.</param>
+        /// <param name="where">The mask, or null.</param>
+        /// <returns>The fresh result's shape: NumPy's layout under a mask, else <paramref name="iterShape"/>.</returns>
+        /// <remarks>
+        ///     Only the layout changes, never a value: the kernels walk the result through its strides like any operand.
+        ///     A result of fewer than two axes has one layout, so it skips the vote (and its allocation of a strides
+        ///     array).
+        /// </remarks>
+        private static Shape WhereResultShape(Shape iterShape, Shape first, Shape? second, NDArray? where)
+        {
+            if (where is null || iterShape.NDim < 2)
+                return iterShape;
+            // The vote adopts the dims array it is given; a clone keeps it apart from the iteration shape's, which may
+            // be an operand's own.
+            var dims = (long[])iterShape.dimensions.Clone();
+            return second is { } s
+                ? Shape.NpyIterOutputShape(dims, new[] { first, s, where.Shape })
+                : Shape.NpyIterOutputShape(dims, new[] { first, where.Shape });
+        }
+
+        /// <summary>
+        ///     The broadcast of a binary ufunc's two inputs in a call with <c>out=</c> or <c>where=</c>. NumPy broadcasts every
+        ///     iterator operand at once, so its error lists all of them: the inputs, then <paramref name="out"/> and
+        ///     <paramref name="where"/> when given (probed 2.4.2: <c>np.power(ones(3), ones(4), out=empty(3))</c> is
+        ///     "operands could not be broadcast together with shapes (3,) (4,) (3,) "). The engine's two-shape
+        ///     <see cref="Broadcast(Shape, Shape)"/> lists the inputs only, which is NumPy's text for a call without them.
+        /// </summary>
+        /// <param name="lhs">The first input.</param>
+        /// <param name="rhs">The second input.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="where">The <c>where=</c> mask, or null.</param>
+        /// <returns>The two inputs' broadcast shapes, as <see cref="Broadcast(Shape, Shape)"/> returns them.</returns>
+        /// <exception cref="IncorrectShapeException">The inputs do not broadcast together (NumPy's ValueError; the house
+        ///     type of an input broadcast failure, as <see cref="Broadcast(Shape, Shape)"/> raises it).</exception>
+        /// <remarks>The try/catch costs nothing on the success path; it only unwinds when the broadcast fails.</remarks>
+        private static (Shape LeftShape, Shape RightShape) BroadcastUfuncInputs(NDArray lhs, NDArray rhs, NDArray? @out,
+            NDArray? where)
+        {
+            try
+            {
+                return Shape.Broadcast(lhs.Shape, rhs.Shape);
+            }
+            catch (IncorrectShapeException e)
+            {
+                throw new IncorrectShapeException(
+                    $"operands could not be broadcast together with shapes {UfuncOperandShapes(new[] { lhs, rhs }, @out, where)}", e);
+            }
+        }
+
+        /// <summary>
+        ///     The iteration (= output) shape of a ufunc call with <c>out=</c> and / or <c>where=</c>, in the two phases of
+        ///     NumPy's iterator (<c>npyiter_fill_axisdata</c>) and with its texts:
+        ///     <list type="number">
+        ///         <item>Every operand broadcasts together: the inputs (joined into <paramref name="inputBroadcast"/>), then
+        ///         <paramref name="out"/>, then <paramref name="where"/>. Inputs may broadcast UP to out's shape, and the mask
+        ///         joins the shape even without an out (<c>np.add((4,), (4,), where=(2,4)-mask)</c> is (2,4)). A failure lists
+        ///         every operand's shape, trailing space included: "operands could not be broadcast together with shapes
+        ///         (4,) (4,) (5,) ".</item>
+        ///         <item>An output is never stretched to the joint shape: "non-broadcastable output operand with shape (1,)
+        ///         doesn't match the broadcast shape (4,)", naming the joint shape (a mask's extra axes included).</item>
+        ///     </list>
+        /// </summary>
+        /// <param name="inputBroadcast">The inputs' broadcast shape. The caller computes it, and its own failure lists every
+        ///     operand too (<see cref="BroadcastUfuncInputs"/>).</param>
+        /// <param name="inputs">The inputs, for the error text.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="where">The <c>where=</c> mask, or null.</param>
+        /// <returns>The joint shape: out's dimensions when an out is given. It may be an operand's own shape (strides
+        ///     included), so a caller allocating from it takes <see cref="Shape.Clean"/> first.</returns>
+        /// <exception cref="ArgumentException">An operand that does not broadcast with the others, or an out that would be
+        ///     stretched (NumPy's ValueError texts; ArgumentException is the house type of these two checks).</exception>
+        /// <remarks>
+        ///     The phase order shows only when both checks would fail: an out that would be stretched next to a mask that
+        ///     broadcasts with nothing reports the broadcast (probed 2.4.2: <c>np.add(ones((3,4)), ones((3,4)),
+        ///     out=zeros(4), where=ones(5, bool))</c> lists all four shapes). Checking the stretch before the mask joined
+        ///     reported the stretch there, and an out-join failure left the mask out of the list.
+        /// </remarks>
         private static Shape ResolveUfuncIterationShape(
             Shape inputBroadcast, NDArray[] inputs, NDArray? @out, NDArray? where)
         {
+            // Phase 1: the joint broadcast. ResolveReturnShape is the pairwise broadcast, so folding out= and then the mask
+            // into the inputs' shape is the N-way broadcast NumPy's iterator computes.
             Shape full = inputBroadcast;
-
-            if (@out is not null)
+            try
             {
-                Shape withOut;
-                try
-                {
-                    withOut = Shape.ResolveReturnShape(full, @out.Shape);
-                }
-                catch (Exception e)
-                {
-                    string shapes = string.Empty;
-                    foreach (var inp in inputs)
-                        shapes += NumPyShapeRepr(inp.Shape) + " ";
-                    shapes += NumPyShapeRepr(@out.Shape) + " ";
-                    throw new ArgumentException(
-                        $"operands could not be broadcast together with shapes {shapes}", e);
-                }
-
-                // out can absorb the inputs but may not be stretched itself.
-                if (!withOut.Equals(@out.Shape))
-                {
-                    throw new ArgumentException(
-                        $"non-broadcastable output operand with shape {NumPyShapeRepr(@out.Shape)} " +
-                        $"doesn't match the broadcast shape {NumPyShapeRepr(withOut)}");
-                }
-
-                full = withOut;
+                if (@out is not null)
+                    full = Shape.ResolveReturnShape(full, @out.Shape);
+                if (where is not null)
+                    full = Shape.ResolveReturnShape(full, where.Shape);
+            }
+            catch (Exception e)
+            {
+                throw new ArgumentException(
+                    $"operands could not be broadcast together with shapes {UfuncOperandShapes(inputs, @out, where)}", e);
             }
 
-            if (where is not null)
-            {
-                Shape withWhere;
-                try
-                {
-                    withWhere = Shape.ResolveReturnShape(full, where.Shape);
-                }
-                catch (Exception e)
-                {
-                    string shapes = string.Empty;
-                    foreach (var inp in inputs)
-                        shapes += NumPyShapeRepr(inp.Shape) + " ";
-                    if (@out is not null)
-                        shapes += NumPyShapeRepr(@out.Shape) + " ";
-                    shapes += NumPyShapeRepr(where.Shape) + " ";
-                    throw new ArgumentException(
-                        $"operands could not be broadcast together with shapes {shapes}", e);
-                }
-
-                if (@out is not null && !withWhere.Equals(full))
-                {
-                    // The mask would stretch the provided out — same
-                    // non-broadcastable-output rule as above.
-                    throw new ArgumentException(
-                        $"non-broadcastable output operand with shape {NumPyShapeRepr(@out.Shape)} " +
-                        $"doesn't match the broadcast shape {NumPyShapeRepr(withWhere)}");
-                }
-
-                full = withWhere;
-            }
+            // Phase 2: an output operand may not be stretched (NumPy's iterator flags it NO_BROADCAST), so the joint shape
+            // must be out's own dimensions.
+            if (@out is not null && !full.Equals(@out.Shape))
+                throw new ArgumentException(
+                    $"non-broadcastable output operand with shape {NumPyShapeRepr(@out.Shape)} " +
+                    $"doesn't match the broadcast shape {NumPyShapeRepr(full)}");
 
             return full;
+        }
+
+        /// <summary>
+        ///     A numeric ufunc whose <c>out=</c> is TEXT (no input is text): NumPy runs the numeric loop and its output cast
+        ///     writes each result as the loop dtype's scalar <c>str()</c>, cut to <paramref name="out"/>'s width
+        ///     (<c>np.add(f8, f8, out=U5)</c> is <c>['2.0', '5.5']</c>, <c>np.equal(..., out=U1)</c> is <c>['T', 'F']</c>,
+        ///     probed against NumPy 2.4.2). The loop result is computed into a fresh array and copied into
+        ///     <paramref name="out"/> under the mask (<see cref="Strings.NDStringArithmetic.CastInto"/>).
+        /// </summary>
+        /// <param name="ufunc">NumPy's ufunc name (quoted by the cast refusal).</param>
+        /// <param name="loop">The loop's output dtype.</param>
+        /// <param name="inputBroadcast">The inputs' broadcast shape.</param>
+        /// <param name="inputs">The inputs (for NumPy's broadcast error text).</param>
+        /// <param name="out">The text output (writeable; checked by the caller).</param>
+        /// <param name="where">The bool mask (checked by the caller), or null.</param>
+        /// <param name="compute">Computes the loop result without <c>out=</c>, under the given mask (a fresh array whose
+        ///     masked-off slots are left uninitialized — the masked copy never reads them).</param>
+        /// <returns><paramref name="out"/> itself.</returns>
+        /// <exception cref="TypeError">The loop dtype does not cast to <paramref name="out"/> under same_kind (NumPy's
+        ///     <c>Cannot cast ufunc 'add' output from dtype('float64') to dtype('&lt;U5') …</c>).</exception>
+        /// <exception cref="ArgumentException">The operands do not broadcast into <paramref name="out"/> (NumPy's
+        ///     texts).</exception>
+        /// <exception cref="ValueError">With <paramref name="where"/>: an element of <paramref name="out"/> that does not
+        ///     parse into the loop dtype (see the remarks).</exception>
+        /// <exception cref="OverflowException">With <paramref name="where"/>: an integer text of <paramref name="out"/> outside
+        ///     an integer loop dtype.</exception>
+        /// <remarks>
+        ///     NumPy's checks come in its order: the output cast (while it resolves the loop), the broadcast (NpyIter), then
+        ///     the loop. With <c>where=</c> NumPy's out operand is READWRITE, so its buffered iteration first casts the out's
+        ///     CURRENT text into the loop dtype — a parse of every element, masked-off ones included
+        ///     (<c>np.sqrt(f8, out=['4', 'x'], where=[True, False])</c> raises <c>could not convert string to float:
+        ///     np.str_('x')</c>; a bool loop reads the text's truth, which never fails) — and writes back only the selected
+        ///     elements (a masked-off <c>'8'</c> stays <c>'8'</c>). The parse runs here for its errors only, before the loop.
+        ///     NumPy does this per buffer of <c>np.getbufsize()</c> elements, so a parse error past the first buffer leaves
+        ///     the earlier buffers written there; here nothing is written (a difference only an out of more than 8,192
+        ///     elements with an unparsable element can show).
+        /// </remarks>
+        private static NDArray IntoTextOut(string ufunc, NPTypeCode loop, Shape inputBroadcast, NDArray[] inputs,
+            NDArray @out, NDArray where, Func<NDArray, NDArray> compute)
+        {
+            ThrowIfTextOutCastFails(ufunc, "output", loop, @out);
+            ResolveUfuncIterationShape(inputBroadcast.Clean(), inputs, @out, where);
+            ReadMaskedTextOut(@out, loop, where);
+            return Strings.NDStringArithmetic.CastInto(@out, where, () => compute(where));
+        }
+
+        /// <summary>
+        ///     The output-cast check of a ufunc loop into a TEXT <c>out=</c>, by descriptor (the string storage lane alone
+        ///     carries no width or class): NumPy's <c>validate_casting</c> under same_kind.
+        /// </summary>
+        /// <param name="ufunc">NumPy's ufunc name.</param>
+        /// <param name="outputLabel"><c>"output"</c> for a single-output ufunc, <c>"output 1"</c> / <c>"output 2"</c> for
+        ///     the outputs of a multi-output one (NumPy numbers them by operand position).</param>
+        /// <param name="loop">The loop's output dtype.</param>
+        /// <param name="out">The text output.</param>
+        /// <exception cref="TypeError">The cast is not same_kind (NumPy's UFuncTypeError text; every number → text
+        ///     cast NumPy has is same_kind, so this guards the contract rather than a reachable case).</exception>
+        internal static void ThrowIfTextOutCastFails(string ufunc, string outputLabel, NPTypeCode loop, NDArray @out)
+        {
+            DType loopDescr = loop;
+            if (!DTypeCasting.CanCastTypeTo(loopDescr, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
+                throw new TypeError(
+                    $"Cannot cast ufunc '{ufunc}' {outputLabel} from {loopDescr.ToString(true)} to {@out.dtype.ToString(true)} " +
+                    "with casting rule 'same_kind'");
+        }
+
+        /// <summary>
+        ///     The first buffer fill of a TEXT <c>out=</c> under <c>where=</c>: NumPy's masked out operand is READWRITE, so
+        ///     its buffered iteration casts the out's current text into the loop dtype before the loop runs — a parse of
+        ///     every element, masked-off ones included (a bool loop reads the text's truth, which never fails). The parsed
+        ///     values are never used (a selected slot is overwritten, a masked-off one keeps its text); only the errors are.
+        /// </summary>
+        /// <param name="out">The text output, or null (nothing to read).</param>
+        /// <param name="loop">The loop's output dtype.</param>
+        /// <param name="where">The mask, or null (no mask: the out is WRITEONLY and never read).</param>
+        /// <exception cref="ValueError">An element that does not parse into <paramref name="loop"/>
+        ///     (<c>could not convert string to float: np.str_('x')</c>).</exception>
+        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="loop"/>.</exception>
+        /// <remarks>NumPy reads per buffer of <c>np.getbufsize()</c> elements, so an unparsable element past the first
+        ///     buffer is reported after the earlier buffers were written; here the whole out is read before anything is
+        ///     written (the difference needs an out of more than 8,192 elements with an unparsable one).</remarks>
+        internal static void ReadMaskedTextOut(NDArray @out, NPTypeCode loop, NDArray where)
+        {
+            if (where is null || @out is null || @out.typecode != NPTypeCode.String)
+                return;
+            using var read = @out.astype((DType)loop, true, 'K', "unsafe");
+        }
+
+        /// <summary>
+        ///     The output-cast check of one output of a multi-output ufunc, numbered as NumPy numbers it (<c>"output 1"</c>,
+        ///     <c>"output 2"</c>), by descriptor for a text output.
+        /// </summary>
+        /// <param name="ufunc">NumPy's ufunc name.</param>
+        /// <param name="position">The output's position (1-based, after the inputs: NumPy's operand index).</param>
+        /// <param name="loop">The loop's dtype for this output.</param>
+        /// <param name="out">The provided output.</param>
+        /// <exception cref="TypeError">The cast is not same_kind (NumPy's UFuncTypeError text).</exception>
+        private static void ValidateNumberedOutCast(string ufunc, int position, NPTypeCode loop, NDArray @out)
+        {
+            if (@out.typecode == NPTypeCode.String)
+            {
+                ThrowIfTextOutCastFails(ufunc, $"output {position}", loop, @out);
+                return;
+            }
+            if (loop == @out.typecode || NDIterCasting.CanCast(loop, @out.typecode, NPY_CASTING.NPY_SAME_KIND_CASTING))
+                return;
+            throw new TypeError(
+                string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc '{ufunc}' output {position} from dtype('{loop.AsNumpyDtypeName()}') to " +
+                $"dtype('{@out.typecode.AsNumpyDtypeName()}') with casting rule 'same_kind'"));
         }
 
         // =====================================================================
@@ -334,6 +579,24 @@ namespace NumSharp.Backends
         /// output operand, optional trailing ARRAYMASK, buffered cast when
         /// out's dtype differs from the loop dtype).
         /// </summary>
+        /// <param name="lhs">The first input.</param>
+        /// <param name="rhs">The second input.</param>
+        /// <param name="op">The binary operation.</param>
+        /// <param name="lhsType">The first input's dtype.</param>
+        /// <param name="rhsType">The second input's dtype.</param>
+        /// <param name="resultType">The loop's output dtype.</param>
+        /// <param name="out">The provided output, or null (a fresh result); a TEXT output receives the loop's results
+        ///     formatted as text (<see cref="IntoTextOut"/>).</param>
+        /// <param name="where">The bool write mask, or null.</param>
+        /// <returns><paramref name="out"/> itself, or the fresh result.</returns>
+        /// <exception cref="INumSharpException">A read-only <paramref name="out"/>: NumPy's ValueError "output array is
+        ///     read-only", raised first (<see cref="NumSharpException.ThrowIfNotWriteable"/>).</exception>
+        /// <exception cref="TypeError">A loop dtype <paramref name="out"/> cannot hold under same_kind (NumPy's
+        ///     UFuncTypeError text).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or operands that do not broadcast
+        ///     into <paramref name="out"/> (NumPy's texts).</exception>
+        /// <exception cref="ValueError">A text <paramref name="out"/> under <paramref name="where"/> whose current text does
+        ///     not parse into the loop dtype.</exception>
         private unsafe NDArray ExecuteBinaryUfuncInto(
             NDArray lhs, NDArray rhs, BinaryOp op,
             NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode resultType,
@@ -350,6 +613,10 @@ namespace NumSharp.Backends
             ValidateWhereMask(where);
 
             string name = UfuncName(op);
+            // A text out= (no input is text — the string guard answered those): the numeric loop's results formatted into it.
+            if (@out is not null && @out.typecode == NPTypeCode.String)
+                return IntoTextOut(name, resultType, BroadcastUfuncInputs(lhs, rhs, @out, where).LeftShape, new[] { lhs, rhs },
+                    @out, where, w => ExecuteBinaryUfuncInto(lhs, rhs, op, lhsType, rhsType, resultType, null, w));
             if (@out is not null)
                 ValidateOutCast(resultType, @out.typecode, name);
 
@@ -364,15 +631,17 @@ namespace NumSharp.Backends
             }
             else
             {
-                // Inputs broadcast first (their own incompatibility raises the
-                // pre-existing broadcast error), then out/where join per NumPy.
-                var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
+                // Inputs broadcast first (a failure lists every operand, out= and where= included, as NumPy's iterator
+                // does), then out/where join per NumPy.
+                var (leftShape, rightShape) = BroadcastUfuncInputs(lhs, rhs, @out, where);
                 var iterShape = ResolveUfuncIterationShape(
                     leftShape.Clean(), new[] { lhs, rhs }, @out, where);
 
                 // NumPy: 'where' without 'out' leaves unmasked slots uninitialized
                 // (it warns; values are unobservable). fillZeros:false matches.
-                target = @out ?? new NDArray(resultType, iterShape.Clean(), false);
+                // The fresh result takes NumPy's ufunc output layout: the inputs and the mask vote
+                // (NpyIter's allocation; two F inputs under an F mask stay F, one C operand makes it C).
+                target = @out ?? NewArray(resultType, WhereResultShape(iterShape.Clean(), lhs.Shape, rhs.Shape, where), false);
             }
 
             if (target.size == 0)
@@ -383,10 +652,13 @@ namespace NumSharp.Backends
             bool simdViable = sameDtype
                               && DirectILKernelGenerator.CanUseSimdBinary(op, resultType);
 
+            // NumPy's elementwise NaN operand order (float add/multiply keep the SECOND operand's NaN when both are
+            // NaN): see DirectILKernelGenerator.NaNOperandOrder.cs.
             Action<ILGenerator> scalarBody;
             if (sameDtype)
             {
-                scalarBody = il => DirectILKernelGenerator.EmitScalarOperation(il, op, resultType);
+                // The one definition every caller of this kernel key shares (DefaultEngine.SameDtypeBinaryScalarBody).
+                scalarBody = SameDtypeBinaryScalarBody(op, resultType);
             }
             else
             {
@@ -395,16 +667,25 @@ namespace NumSharp.Backends
                 scalarBody = il => EmitMixedScalarBody(il, capLhs, capRhs, capRes, capOp);
             }
 
+            // Shifts are excluded from CanUseSimdBinary (CanUseSimdForOp lists no shift), so simdViable is
+            // false for them — but the same-dtype case has a per-lane VARIABLE shift kernel
+            // (EmitShiftVectorBody, the one ExecuteShiftViaNDIter drives). Supply it here too so the hot
+            // out= / where= shift path vectorizes instead of falling to the scalar body (the count operand
+            // is broadcast or an array; a variable shift covers both, and the overflow rule is baked in).
+            bool shiftSimd = sameDtype && (op == BinaryOp.LeftShift || op == BinaryOp.RightShift)
+                             && DirectILKernelGenerator.ShiftVariableSupported(resultType, op == BinaryOp.LeftShift);
             Action<ILGenerator>? vectorBody = simdViable
-                ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType)
-                : null;
+                ? SameDtypeBinaryVectorBody(op, resultType)
+                : shiftSimd
+                    ? il => DirectILKernelGenerator.EmitShiftVectorBody(il, resultType, op == BinaryOp.LeftShift)
+                    : null;
 
             // Packed key (no per-call string): npy_binop_{op}_{lhsType}_{rhsType}_{resultType}.
             var cacheKey = InnerLoopKernelKey.Binary(op, lhsType, rhsType, resultType);
 
             // Iterator config. A dtype-mismatched out becomes a CAST operand:
-            // the kernel writes the loop dtype into its buffer and the windowed
-            // flush casts to the array (Wave 4 machinery); casting was already
+            // the kernel writes the loop dtype into its buffer and the buffer
+            // write-back casts to the array (NDIterBufferManager); casting was already
             // validated as same_kind above, so the iterator runs UNSAFE exactly
             // like NumPy (loop dtypes are resolved by then; ufunc_object.c
             // passes the user casting to the iterator the same way).
@@ -433,7 +714,11 @@ namespace NumSharp.Backends
                     s_ufuncBinaryOutFlags,
                     opDtypes);
 
-                iter.ExecuteElementWiseBinary(lhsType, rhsType, resultType, scalarBody, vectorBody, cacheKey);
+                // How NumPy would split this iteration into inner-loop calls (read only when a float add/multiply's
+                // broadcast operand is NaN); the struct outlives the call below.
+                BroadcastNaNRule nanRule = NumPyBroadcastNaNRule(op, lhsType, rhsType, resultType, target.typecode,
+                    lhs.size, rhs.size, masked: false, iter.NDim, iter.HasNegPerm, iter.GetInnerStrideArray());
+                iter.ExecuteElementWiseBinary(lhsType, rhsType, resultType, scalarBody, vectorBody, cacheKey, &nanRule);
             }
             else
             {
@@ -451,8 +736,11 @@ namespace NumSharp.Backends
                     s_ufuncBinaryOutMaskedFlags,
                     opDtypes);
 
+                // NumPy calls the inner loop once per mask-true run; the rule applies per run.
+                BroadcastNaNRule nanRule = NumPyBroadcastNaNRule(op, lhsType, rhsType, resultType, target.typecode,
+                    lhs.size, rhs.size, masked: true, iter.NDim, iter.HasNegPerm, iter.GetInnerStrideArray());
                 iter.ExecuteElementWise(
-                    new[] { lhsType, rhsType, resultType }, scalarBody, vectorBody, cacheKey);
+                    new[] { lhsType, rhsType, resultType }, scalarBody, vectorBody, cacheKey, &nanRule);
             }
 
             return target;
@@ -468,7 +756,7 @@ namespace NumSharp.Backends
         /// dtype is Boolean: the kernel compares at result_type(lhs, rhs)
         /// INSIDE the body (fused per-element converts — the Wave-4 measured
         /// winner for cheap ops) and emits bool; a non-bool out is a CAST
-        /// operand handled by the windowed flush. bool casts same_kind to
+        /// operand handled by the buffer write-back. bool casts same_kind to
         /// EVERY numeric dtype (probed: less(f8,f8,out=complex128) works,
         /// True→1), so <see cref="ValidateOutCast"/> is structural here.
         /// The scalar body and npy_cmp_* cache key are shared with
@@ -477,6 +765,23 @@ namespace NumSharp.Backends
         /// operand layout) — no new statics. No F-layout post-step: NumPy
         /// returns the provided out untouched (reference identity).
         /// </summary>
+        /// <param name="lhs">The first input.</param>
+        /// <param name="rhs">The second input.</param>
+        /// <param name="op">The comparison.</param>
+        /// <param name="lhsType">The first input's dtype.</param>
+        /// <param name="rhsType">The second input's dtype.</param>
+        /// <param name="out">The provided output, or null (a fresh result); a TEXT output receives the loop's results
+        ///     formatted as text (<see cref="IntoTextOut"/>).</param>
+        /// <param name="where">The bool write mask, or null.</param>
+        /// <returns><paramref name="out"/> itself, or the fresh result.</returns>
+        /// <exception cref="INumSharpException">A read-only <paramref name="out"/>: NumPy's ValueError "output array is
+        ///     read-only", raised first (<see cref="NumSharpException.ThrowIfNotWriteable"/>).</exception>
+        /// <exception cref="TypeError">A loop dtype <paramref name="out"/> cannot hold under same_kind (NumPy's
+        ///     UFuncTypeError text).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or operands that do not broadcast
+        ///     into <paramref name="out"/> (NumPy's texts).</exception>
+        /// <exception cref="ValueError">A text <paramref name="out"/> under <paramref name="where"/> whose current text does
+        ///     not parse into the loop dtype.</exception>
         private unsafe NDArray ExecuteComparisonUfuncInto(
             NDArray lhs, NDArray rhs, ComparisonOp op,
             NPTypeCode lhsType, NPTypeCode rhsType,
@@ -489,6 +794,10 @@ namespace NumSharp.Backends
             ValidateWhereMask(where);
 
             string name = UfuncName(op);
+            // A text out= (no input is text): the bools formatted into it ('True' / 'False', cut to its width).
+            if (@out is not null && @out.typecode == NPTypeCode.String)
+                return IntoTextOut(name, NPTypeCode.Boolean, BroadcastUfuncInputs(lhs, rhs, @out, where).LeftShape,
+                    new[] { lhs, rhs }, @out, where, w => ExecuteComparisonUfuncInto(lhs, rhs, op, lhsType, rhsType, null, w));
             if (@out is not null)
                 ValidateOutCast(NPTypeCode.Boolean, @out.typecode, name);
 
@@ -500,13 +809,14 @@ namespace NumSharp.Backends
             }
             else
             {
-                var (leftShape, _) = Broadcast(lhs.Shape, rhs.Shape);
+                // A failure lists every operand (see the binary route).
+                var (leftShape, _) = BroadcastUfuncInputs(lhs, rhs, @out, where);
                 var iterShape = ResolveUfuncIterationShape(
                     leftShape.Clean(), new[] { lhs, rhs }, @out, where);
 
                 // 'where' without 'out': unmasked slots stay uninitialized
-                // (NumPy warns; values are unobservable garbage).
-                target = @out ?? new NDArray(NPTypeCode.Boolean, iterShape.Clean(), false);
+                // (NumPy warns; values are unobservable garbage). The layout is NumPy's (see the binary route).
+                target = @out ?? NewArray(NPTypeCode.Boolean, WhereResultShape(iterShape.Clean(), lhs.Shape, rhs.Shape, where), false);
             }
 
             if (target.size == 0)
@@ -514,10 +824,11 @@ namespace NumSharp.Backends
 
             // Comparison computes at the NumPy common dtype inside the kernel
             // (probed A3: greater(i8 2^53+1, f8 2^53) → False, equal → True —
-            // both operands cast to f64 first).
-            var comparisonType = lhsType == rhsType
-                ? lhsType
-                : np._FindCommonScalarType(lhsType, rhsType);
+            // both operands cast to f64 first). The rule is the bare route's, so an
+            // int64 / uint64 pair compares EXACTLY at Decimal here too (NumPy's qQ / Qq
+            // loops): the plain promotion compared it at float64, so
+            // equal(int64 2^53+1, uint64 2^53, out=o) was True where NumPy says False.
+            var comparisonType = ComparisonKernelKey.GetComparisonType(lhsType, rhsType);
 
             NPTypeCode capLhs = lhsType, capRhs = rhsType, capCmp = comparisonType;
             ComparisonOp capOp = op;
@@ -569,6 +880,18 @@ namespace NumSharp.Backends
                     s_ufuncBinaryOutFlags,
                     opDtypes);
 
+                // Chunks long enough for a vector loop go through the comparison run
+                // (Backends/Kernels/ComparisonRun.cs): contiguous and one-value operands are read in
+                // place, stepped / reversed / other-dtype inputs are staged 8 KB at a time, a strided
+                // bool out receives each block through a strided store, and an out of another dtype
+                // is filled through the iterator's Boolean buffer. Before it, every one of these ran
+                // the per-element kernel below or — same-dtype stepped inputs into a contiguous out —
+                // the whole-array kernel's coordinate loop (np.less(f64, f64, out=strided bool) at
+                // 100K: 105 us, NumPy 65). Narrow rows and tiny arrays are declined and keep the
+                // routes below.
+                if (iter.TryExecuteComparisonRun(ComparisonRun.Get(op, lhsType, rhsType)))
+                    return target;
+
                 // Same-dtype inputs into a bool out that is contiguous in iteration order:
                 // run the whole-array SIMD comparison kernel (Vector.Compare + mask packing —
                 // the kernel the no-out route uses for contiguous inputs) through the
@@ -616,6 +939,22 @@ namespace NumSharp.Backends
         /// provided out: the out operand simply requests the compute dtype too
         /// and the flush casts (and masks) on write-back.
         /// </summary>
+        /// <param name="nd">The input.</param>
+        /// <param name="op">The unary operation.</param>
+        /// <param name="inputType">The input's dtype.</param>
+        /// <param name="outputType">The loop's output dtype.</param>
+        /// <param name="out">The provided output, or null (a fresh result); a TEXT output receives the loop's results
+        ///     formatted as text (<see cref="IntoTextOut"/>).</param>
+        /// <param name="where">The bool write mask, or null.</param>
+        /// <returns><paramref name="out"/> itself, or the fresh result.</returns>
+        /// <exception cref="INumSharpException">A read-only <paramref name="out"/>: NumPy's ValueError "output array is
+        ///     read-only", raised first (<see cref="NumSharpException.ThrowIfNotWriteable"/>).</exception>
+        /// <exception cref="TypeError">A loop dtype <paramref name="out"/> cannot hold under same_kind (NumPy's
+        ///     UFuncTypeError text).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or operands that do not broadcast
+        ///     into <paramref name="out"/> (NumPy's texts).</exception>
+        /// <exception cref="ValueError">A text <paramref name="out"/> under <paramref name="where"/> whose current text does
+        ///     not parse into the loop dtype.</exception>
         private unsafe NDArray ExecuteUnaryUfuncInto(
             NDArray nd, UnaryOp op,
             NPTypeCode inputType, NPTypeCode outputType,
@@ -628,6 +967,10 @@ namespace NumSharp.Backends
             ValidateWhereMask(where);
 
             string name = UfuncName(op);
+            // A text out= (the input is not text): the numeric loop's results formatted into it.
+            if (@out is not null && @out.typecode == NPTypeCode.String)
+                return IntoTextOut(name, outputType, nd.Shape, new[] { nd }, @out, where,
+                    w => ExecuteUnaryUfuncInto(nd, op, inputType, outputType, null, w));
             if (@out is not null)
                 ValidateOutCast(outputType, @out.typecode, name);
 
@@ -642,7 +985,8 @@ namespace NumSharp.Backends
                 var iterShape = ResolveUfuncIterationShape(
                     nd.Shape.Clean(), new[] { nd }, @out, where);
 
-                target = @out ?? new NDArray(outputType, iterShape.Clean(), false);
+                // A fresh result under where= takes NumPy's layout (see the binary route).
+                target = @out ?? NewArray(outputType, WhereResultShape(iterShape.Clean(), nd.Shape, null, where), false);
             }
 
             if (target.size == 0)
@@ -653,7 +997,7 @@ namespace NumSharp.Backends
             bool simdViable = DirectILKernelGenerator.CanUseUnarySimd(key);
 
             bool bufferedPromoting = inputType != outputType
-                && !IsUnaryPredicateOp(op)
+                && !UnaryOpReadsInputType(op)
                 && !(op == UnaryOp.Abs && inputType == NPTypeCode.Complex)
                 && DirectILKernelGenerator.CanUseUnarySimd(
                        new UnaryKernelKey(outputType, outputType, op, IsContiguous: true))
@@ -674,7 +1018,7 @@ namespace NumSharp.Backends
             {
                 scalarBody = il =>
                 {
-                    if (IsUnaryPredicateOp(capOp))
+                    if (UnaryOpReadsInputType(capOp))
                     {
                         DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capIn);
                     }
@@ -699,7 +1043,7 @@ namespace NumSharp.Backends
 
             // Buffering engages when the input promotes (bufferedPromoting) or
             // the out dtype differs from the compute dtype — both are CAST
-            // operands handled by the windowed machinery.
+            // operands handled by the iterator's buffering.
             bool outNeedsCast = target.typecode != outputType;
             var globalFlags = NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP;
             var casting = NPY_CASTING.NPY_SAFE_CASTING;

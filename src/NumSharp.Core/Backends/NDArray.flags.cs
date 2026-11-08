@@ -27,9 +27,12 @@ namespace NumSharp
     ///     verified equal to NumPy across every layout (C/F/strided/transposed/broadcast/0-d/empty).
     ///
     ///     <para>
-    ///     ALIGNED is true for every fresh array (managed allocations are always aligned) and can only be
-    ///     cleared through <see cref="NDArray.setflags"/> / <c>flags["A"] = false</c> — NumPy parity, the
-    ///     flag then reads back False and <c>num</c>/<c>behaved</c>/<c>carray</c>/<c>farray</c> follow.
+    ///     ALIGNED is true for every array over NumSharp's own memory (its allocations are always aligned).
+    ///     It is false for an array over a caller's buffer at a byte offset that splits the dtype's alignment
+    ///     (<c>np.ndarray(shape, buffer=b, offset=3)</c>, <c>np.frombuffer(b, offset=3)</c>) and for every view
+    ///     of one, as NumPy computes it from the data pointer. <see cref="NDArray.setflags"/> /
+    ///     <c>flags["A"] = false</c> clears it on one array object — NumPy parity, the flag then reads back
+    ///     False and <c>num</c>/<c>behaved</c>/<c>carray</c>/<c>farray</c> follow.
     ///     WRITEBACKIFCOPY is always false (NumSharp has no copy-on-write handoff), matching what a
     ///     NumSharp array can be.
     ///     </para>
@@ -51,10 +54,11 @@ namespace NumSharp
             _arr = arr ?? throw new ArgumentNullException(nameof(arr));
         }
 
-        // ALIGNED is read live from the Shape: every fresh array has it (managed allocations are always
-        // aligned) and only setflags(align: false) clears it (NumPy parity) — fresh views/copies of an
-        // align-cleared array come back aligned, since every new Shape recomputes its flags.
-        private bool A => (_arr.Shape.Flags & ArrayFlags.ALIGNED) != 0;
+        // ALIGNED is the Shape's bit AND the memory's real alignment. The bit is set on every fresh Shape and
+        // only setflags(align: false) clears it, so fresh views/copies of an align-cleared array come back
+        // aligned (NumPy recomputes per array object). The memory half is NumPy's raw_array_is_aligned: false
+        // for an array over a caller's buffer at an odd byte offset, and for every view of it.
+        private bool A => (_arr.Shape.Flags & ArrayFlags.ALIGNED) != 0 && _arr.Storage.IsDataAligned;
         private bool C => _arr.Shape.IsContiguous;
         private bool F => _arr.Shape.IsFContiguous;
         private bool W => _arr.Shape.IsWriteable;
@@ -81,9 +85,9 @@ namespace NumSharp
         public bool owndata => O;
 
         /// <summary>
-        ///     The data and all elements are aligned appropriately for the hardware — true for every fresh
-        ///     NumSharp array; clearable via <see cref="NDArray.setflags"/> (<c>align: false</c>) for NumPy
-        ///     parity.
+        ///     The data and all elements are aligned appropriately for the hardware — true for every array
+        ///     over NumSharp's own memory; false over a caller's buffer at a misaligning byte offset (and for
+        ///     its views); clearable via <see cref="NDArray.setflags"/> (<c>align: false</c>) for NumPy parity.
         /// </summary>
         public bool aligned => A;
 
@@ -105,7 +109,7 @@ namespace NumSharp
         /// <summary>
         ///     NumPy's <c>farray</c>: <c>(ALIGNED | WRITEABLE | F_CONTIGUOUS) != 0</c> AND NOT C-contiguous —
         ///     the hand-written any-bit form (so it is true for e.g. a strided or broadcast non-C view because
-        ///     ALIGNED alone satisfies the left side; since NumSharp is always aligned this reduces to
+        ///     ALIGNED alone satisfies the left side; for an aligned array this reduces to
         ///     <c>!c_contiguous</c>, exactly reproducing NumPy across every probed layout).
         /// </summary>
         public bool farray => (A || W || F) && !C;

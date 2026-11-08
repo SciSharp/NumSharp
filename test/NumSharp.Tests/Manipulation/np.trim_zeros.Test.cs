@@ -145,14 +145,19 @@ namespace NumSharp.Tests.Manipulation
                 .Throw<ArgumentException>().WithMessage("*repeated axis*");
         }
 
+        /// <summary>
+        ///     np.trim_zeros names its argument in the AxisError (NumPy's <c>normalize_axis_tuple(axis, ndim, argname="axis")</c>:
+        ///     "axis: axis 2 is out of bounds …"), on either side.
+        /// </summary>
         [TestMethod]
         public void OutOfRangeAxis_Throws()
         {
             var b = np.arange(6).reshape(2, 3);
+            // NumPy names the argument: normalize_axis_tuple(axis, ndim, argname="axis").
             new Action(() => np.trim_zeros(b, "fb", 2)).Should()
-                .Throw<AxisOutOfRangeException>().WithMessage("*out of bounds*");
+                .Throw<AxisError>().WithMessage("axis: axis 2 is out of bounds for array of dimension 2*");
             new Action(() => np.trim_zeros(b, "fb", -3)).Should()
-                .Throw<AxisOutOfRangeException>().WithMessage("*out of bounds*");
+                .Throw<AxisError>().WithMessage("axis: axis -3 is out of bounds for array of dimension 2*");
         }
 
         // ---- 0-D ----
@@ -163,11 +168,15 @@ namespace NumSharp.Tests.Manipulation
             np.trim_zeros(NDArray.Scalar(0)).Should().BeShaped(size: 1, ndim: 0);
         }
 
+        /// <summary>
+        ///     np.trim_zeros of a 0-d input with an explicit axis raises NumPy's prefixed AxisError against rank 0 (only the
+        ///     axis=None form returns the input).
+        /// </summary>
         [TestMethod]
         public void ZeroD_ExplicitAxis_Throws()
         {
             new Action(() => np.trim_zeros(NDArray.Scalar(5), "fb", 0)).Should()
-                .Throw<AxisOutOfRangeException>();
+                .Throw<AxisError>().WithMessage("axis: axis 0 is out of bounds for array of dimension 0*");
         }
 
         // ---- dtypes / value semantics ----

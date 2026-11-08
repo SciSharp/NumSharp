@@ -80,7 +80,9 @@ using (Py.GIL())
     Exception? categorical = Throws(() => cat.AsNDArray(allowReadonly: true));   // NotSupportedException: categorical — View declines
     NDArray catCopy = cat.ToNDArray();                                        // the category VALUES: [3, 1, 3]
     using PyObject text = py.text;
-    Exception? strings = Throws(() => text.ToNDArray());                      // NotSupportedException: object/string columns have no NumSharp dtype (both paths refuse)
+    Exception? textView = Throws(() => text.AsNDArray(allowReadonly: true));  // NotSupportedException: its to_numpy() is an object array — Python objects, nothing to share
+    NDArray textCopy = text.ToNDArray();                                      // dtype StringDType(): an object column whose every element is a str crosses as text ('a', 'b');
+                                                                              // a column with a missing value (None / NaN / pd.NA) is refused — convert it explicitly first
 }
 
 // labels are metadata: only the value matrix crosses

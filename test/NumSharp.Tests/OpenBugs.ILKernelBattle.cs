@@ -15,10 +15,16 @@ namespace NumSharp.Tests
     ///
     ///     Bug summary:
     ///       Bug 81: FIXED - Shift by full bit width now returns 0 (see ILKernelPassingTests)
-    ///       Bug 82: Dot product with transposed arrays produces wrong results
-    ///       Bug 83: 1D x 2D dot throws instead of computing (missing API)
-    ///       Bug 84: Empty bool prod returns bool dtype instead of int64
+    ///       Bug 82: FIXED - Dot product with transposed arrays produced wrong results
+    ///       Bug 83: FIXED - 1D x 2D dot threw instead of computing (missing API)
+    ///       Bug 84: FIXED - Empty bool prod returned bool dtype instead of int64
     /// </summary>
+    /// <remarks>
+    ///     The class had no <c>[TestClass]</c> from the TUnit → MSTest migration (ac020336, 2026-04-15) until
+    ///     2026-10-05, so MSTest never discovered its test. The 2026-10-05 run of the whole OpenBugs category added the
+    ///     attribute, found Bug 84 passing and removed its <c>[OpenBugs]</c> tag.
+    /// </remarks>
+    [TestClass]
     public class ILKernelBattleTests
     {
         // ================================================================
@@ -39,10 +45,11 @@ namespace NumSharp.Tests
         //
         //  BUG 84: Empty bool prod returns bool dtype instead of int64
         //
+        //  STATUS: FIXED (found passing by the 2026-10-05 OpenBugs run)
         //  SEVERITY: Low — minor type difference, values are equivalent.
         //
         //  NumPy: prod([]) for bool returns int64(1)
-        //  NumSharp: Returns bool(True)
+        //  NumSharp (before the fix): returned bool(True)
         //
         //  PYTHON VERIFICATION (NumPy 2.4.2):
         //    >>> np.prod(np.array([], dtype=bool))
@@ -53,9 +60,10 @@ namespace NumSharp.Tests
         // ================================================================
 
         /// <summary>
-        ///     BUG 84: prod(empty bool) should return int64, not bool.
+        ///     BUG 84: prod(empty bool) returns int64 1, the multiplicative identity in NumPy's int64 accumulator, not
+        ///     bool True.
         /// </summary>
-        [TestMethod, OpenBugs]
+        [TestMethod]
         public void Bug84_Prod_EmptyBool_ReturnsInt64()
         {
             var a = np.array(new bool[0]);
@@ -79,11 +87,21 @@ namespace NumSharp.Tests
     ///     Passing tests that verify IL kernel migrations work correctly.
     ///     These are NOT OpenBugs - they should always pass.
     /// </summary>
+    /// <remarks>
+    ///     All 18 tests carried <c>[OpenBugs]</c> from 60053e26 (2026-04-11), and the class had no <c>[TestClass]</c> from
+    ///     the TUnit → MSTest migration (ac020336, 2026-04-15) until 2026-10-05, so none of them ran under MSTest. The
+    ///     2026-10-05 run of the whole OpenBugs category added the attribute, found all 18 passing and removed the tags.
+    /// </remarks>
+    [TestClass]
     public class ILKernelPassingTests
     {
         // ----- STD/VAR TESTS -----
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.std</c> / <c>np.var</c> of <c>[1..5]</c> are √2 / 2 for int32, int64 and float64 inputs: the integer
+        ///     inputs reduce in float64 like NumPy, so the integer SIMD path must not truncate the result.
+        /// </summary>
+        [TestMethod]
         public void StdVar_BasicDtypes_MatchNumPy()
         {
             var a_int32 = np.array(new int[] { 1, 2, 3, 4, 5 });
@@ -102,7 +120,11 @@ namespace NumSharp.Tests
             np.var(a_float64).GetDouble(0).Should().BeApproximately(2.0, 1e-10);
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.std</c> along each axis of <c>[[1, 2, 3], [4, 5, 6]]</c>: <c>[1.5, 1.5, 1.5]</c> for axis 0 and
+        ///     <c>[0.8165, 0.8165]</c> for axis 1 (NumPy, ddof=0) — one output per position of the kept axis.
+        /// </summary>
+        [TestMethod]
         public void StdVar_WithAxis_MatchNumPy()
         {
             var a = np.array(new double[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -119,7 +141,11 @@ namespace NumSharp.Tests
             std_axis1.GetDouble(1).Should().BeApproximately(0.81649658, 1e-6);
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.std</c> / <c>np.var</c> of an empty array are NaN (NumPy's <c>0 / 0</c>, with a RuntimeWarning NumSharp
+        ///     does not model), never an exception or 0.
+        /// </summary>
+        [TestMethod]
         public void StdVar_EmptyArray_ReturnsNaN()
         {
             var empty = np.array(new double[0]);
@@ -127,7 +153,11 @@ namespace NumSharp.Tests
             double.IsNaN(np.var(empty).GetDouble(0)).Should().BeTrue("var(empty) = NaN");
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>ddof=1</c> on one element divides a zero sum of squares by <c>max(n - ddof, 0) = 0</c>: NumPy's
+        ///     <c>0 / 0</c> is NaN for both <c>np.std</c> and <c>np.var</c>.
+        /// </summary>
+        [TestMethod]
         public void StdVar_SingleElement_Ddof1_ReturnsNaN()
         {
             var single = np.array(new double[] { 5.0 });
@@ -137,7 +167,12 @@ namespace NumSharp.Tests
 
         // ----- CUMSUM TESTS -----
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.cumsum</c> widens small integers to the 64-bit integer of the same signedness (int32 → int64,
+        ///     uint8 → uint64) and keeps float32, as NumPy 2.x does on 64-bit platforms; a narrower accumulator would
+        ///     overflow on long inputs.
+        /// </summary>
+        [TestMethod]
         public void CumSum_TypePromotion_MatchNumPy()
         {
             // int32 -> int64
@@ -156,7 +191,11 @@ namespace NumSharp.Tests
             cs_float32.dtype.Should().Be(typeof(float), "cumsum(float32) -> float32");
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.cumsum</c> along axis 0 and axis 1 of an int32 <c>(2, 3)</c> array accumulates down the columns and
+        ///     along the rows respectively, in int64, with NumPy's values.
+        /// </summary>
+        [TestMethod]
         public void CumSum_WithAxis_MatchNumPy()
         {
             var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -174,7 +213,11 @@ namespace NumSharp.Tests
             cs_axis1.GetInt64(1, 2).Should().Be(15L);
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.cumsum</c> of a bool array counts the Trues in int64: <c>[T, F, T, T, F]</c> → <c>[1, 1, 2, 3, 3]</c>
+        ///     (NumPy), not a bool running OR.
+        /// </summary>
+        [TestMethod]
         public void CumSum_BoolArray_MatchNumPy()
         {
             var a = np.array(new bool[] { true, false, true, true, false });
@@ -191,7 +234,11 @@ namespace NumSharp.Tests
 
         // ----- SHIFT TESTS -----
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.left_shift</c> / <c>np.right_shift</c> by 1 on int32 double and halve the values (the baseline the
+        ///     full-bit-width tests below build on).
+        /// </summary>
+        [TestMethod]
         public void Shift_BasicOperations_MatchNumPy()
         {
             var a = np.array(new int[] { 1, 2, 4, 8, 16 });
@@ -207,7 +254,11 @@ namespace NumSharp.Tests
             rs.GetInt32(4).Should().Be(8);
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.right_shift</c> of a signed integer is ARITHMETIC (sign-filling): <c>-1 &gt;&gt; 1</c> is -1 and
+        ///     <c>-16 &gt;&gt; 1</c> is -8. A logical shift would turn small negatives into huge positives.
+        /// </summary>
+        [TestMethod]
         public void Shift_SignedRightShift_IsArithmetic()
         {
             // NumPy uses arithmetic right shift for signed types
@@ -226,7 +277,12 @@ namespace NumSharp.Tests
         // These tests verify the fix for Bug 81 where shift by >= bit width
         // returned the original value instead of 0 (due to C# masking behavior).
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     Bug 81: shifting int32 by 32 or 64 bits gives 0 (NumPy), not the original value. C# masks a shift count to
+        ///     the operand width (<c>x &lt;&lt; 32 == x</c> for an int), so a kernel that uses the C# operator directly
+        ///     returns the input unchanged.
+        /// </summary>
+        [TestMethod]
         public void Shift_FullBitWidth_ReturnsZero()
         {
             // int32 << 32 should return 0 (not original value)
@@ -247,7 +303,10 @@ namespace NumSharp.Tests
             result.GetInt32(0).Should().Be(0, "NumPy: 1 << 64 = 0 for int32");
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     Bug 81, unsigned form: uint32 <c>0xFFFFFFFF &lt;&lt; 32</c> is 0.
+        /// </summary>
+        [TestMethod]
         public void Shift_UInt32_FullBitWidth_ReturnsZero()
         {
             var a = np.array(new uint[] { 0xFFFFFFFF });
@@ -255,7 +314,11 @@ namespace NumSharp.Tests
             result.GetUInt32(0).Should().Be(0u, "NumPy: 0xFFFFFFFF << 32 = 0 for uint32");
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     Bug 81, negative form: a negative int32 right-shifted by 32 bits is -1 (every bit a copy of the sign), not
+        ///     the C#-masked shift that returns the input unchanged.
+        /// </summary>
+        [TestMethod]
         public void Shift_NegativeRightShift_FullBitWidth_ReturnsMinusOne()
         {
             // Negative values right-shifted by >= bit width should return -1
@@ -265,7 +328,12 @@ namespace NumSharp.Tests
             result.GetInt32(1).Should().Be(-1, "NumPy: -100 >> 32 = -1 for int32");
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     Per-element shift amounts below, at and past the bit width (1, 32, 64) apply Bug 81's rule element by
+        ///     element: <c>[5, 10, 15] &lt;&lt; [1, 32, 64]</c> is <c>[10, 0, 0]</c> and <c>&gt;&gt;</c> gives
+        ///     <c>[2, 0, 0]</c> (the array-shift kernel is a separate path from the scalar-shift one).
+        /// </summary>
+        [TestMethod]
         public void Shift_ArrayShifts_WithOverflow()
         {
             // Test array shift amounts where some are >= bit width
@@ -284,7 +352,11 @@ namespace NumSharp.Tests
 
         // ----- DOT TESTS (contiguous) -----
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.dot</c> of two contiguous 1-D float64 vectors is their inner product, a scalar:
+        ///     <c>[1, 2, 3] · [4, 5, 6] = 32</c>.
+        /// </summary>
+        [TestMethod]
         public void Dot_1Dx1D_InnerProduct()
         {
             var a = np.array(new double[] { 1, 2, 3 });
@@ -295,7 +367,12 @@ namespace NumSharp.Tests
             result.GetDouble(0).Should().Be(32.0);
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.dot</c> of two contiguous 2-D float64 matrices is the matrix product
+        ///     <c>[[1, 2], [3, 4]] @ [[5, 6], [7, 8]] = [[19, 22], [43, 50]]</c> (the contiguous baseline for the
+        ///     transposed Bug 82 tests below).
+        /// </summary>
+        [TestMethod]
         public void Dot_2Dx2D_MatrixMultiply()
         {
             var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -315,7 +392,7 @@ namespace NumSharp.Tests
         ///     BUG 82 (FIXED): Dot product with both operands transposed.
         ///     Previously produced wrong results due to incorrect stride handling.
         /// </summary>
-        [TestMethod, OpenBugs]
+        [TestMethod]
         public void Dot_BothTransposed_MatchNumPy()
         {
             // Original arrays before transpose
@@ -351,7 +428,7 @@ namespace NumSharp.Tests
         /// <summary>
         ///     BUG 82b (FIXED): Dot with one transposed operand.
         /// </summary>
-        [TestMethod, OpenBugs]
+        [TestMethod]
         public void Dot_OneTransposed_MatchNumPy()
         {
             // One contiguous, one transposed
@@ -384,7 +461,11 @@ namespace NumSharp.Tests
 
         // ----- BOOL PROD TESTS -----
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.prod</c> of a bool array multiplies in NumPy's int64 accumulator: 1 when every element is True, 0 as
+        ///     soon as one is False.
+        /// </summary>
+        [TestMethod]
         public void Prod_BoolArray_MatchNumPy()
         {
             // prod([True, True, True]) = 1

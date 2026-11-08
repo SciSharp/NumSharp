@@ -4,7 +4,10 @@ using System.Linq;
 namespace NumSharp.Tests
 {
     // =====================================================================
-    // OPEN BUG — NEP50 out-of-range python-int scalar is NOT range-checked
+    // FIXED (d0a6f4c8, plan api-parameter-parity X2) — NEP50 out-of-range python-int scalar was NOT range-checked.
+    // The binary ufuncs pack a weak Python int into the loop dtype as NumPy's PyArray_Pack does (OverflowError
+    // "Python integer 70000 out of bounds for uint16" before any element is read). These tests are the regression
+    // pins of that fix; the history below is how the gap looked.
     // =====================================================================
     //
     // Collected while making Char promote as the uint16 masquerade (the Char≡uint16
@@ -40,14 +43,14 @@ namespace NumSharp.Tests
     // OverflowException (NDExpr.Typing.cs: "Python integer {value} out of bounds for
     // {dtype}"). Only the operator / ufunc path skips the check.
     //
-    // EXPECTED (when fixed): each op below throws OverflowException (NumPy's
-    // OverflowError), matching np.evaluate. Remove [OpenBugs] when fixed.
+    // FIXED: each op below throws OverflowException (NumPy's OverflowError), matching np.evaluate.
     // =====================================================================
     public partial class OpenBugs
     {
         private static NDArray CharArr(params int[] xs) => np.array(xs.Select(v => (char)v).ToArray());
 
-        [TestMethod, OpenBugs(IssueUrl = "nep50-scalar-out-of-range")]
+        /// <summary>Guards NEP 50's range check of a weak Python int against the array's integer loop.</summary>
+        [TestMethod]
         public void ScalarOverflow_UInt16_PlusTooLargeInt_ShouldRaise()
         {
             // NumPy: uint16 array + 70000 -> OverflowError (70000 > 65535).
@@ -56,7 +59,8 @@ namespace NumSharp.Tests
                 "a Python int outside the uint16 range must raise, not wrap to [4465,4466]");
         }
 
-        [TestMethod, OpenBugs(IssueUrl = "nep50-scalar-out-of-range")]
+        /// <summary>Guards NEP 50's range check of a weak Python int against the array's integer loop.</summary>
+        [TestMethod]
         public void ScalarOverflow_Char_PlusTooLargeInt_ShouldRaise()
         {
             // Char is the uint16 masquerade -> same rule as uint16.
@@ -64,7 +68,8 @@ namespace NumSharp.Tests
             act.Should().Throw<OverflowException>();
         }
 
-        [TestMethod, OpenBugs(IssueUrl = "nep50-scalar-out-of-range")]
+        /// <summary>Guards NEP 50's range check of a weak Python int against the array's integer loop.</summary>
+        [TestMethod]
         public void ScalarOverflow_Unsigned_TimesNegativeOne_ShouldRaise()
         {
             // NumPy: uint16 array * -1 -> OverflowError (-1 < 0 for unsigned).
@@ -75,7 +80,8 @@ namespace NumSharp.Tests
             actByte.Should().Throw<OverflowException>("-1 is out of range for uint8");
         }
 
-        [TestMethod, OpenBugs(IssueUrl = "nep50-scalar-out-of-range")]
+        /// <summary>Guards NEP 50's range check of a weak Python int against the array's integer loop.</summary>
+        [TestMethod]
         public void ScalarOverflow_Signed_OutOfRangeInt_ShouldRaise()
         {
             // NumPy: int8 array + 200 -> OverflowError (200 > 127); int16 + 40000 -> OverflowError.
@@ -86,7 +92,8 @@ namespace NumSharp.Tests
             actI16.Should().Throw<OverflowException>("40000 is out of range for int16");
         }
 
-        [TestMethod, OpenBugs(IssueUrl = "nep50-scalar-out-of-range")]
+        /// <summary>Guards NEP 50's range check of a weak Python int against the array's integer loop.</summary>
+        [TestMethod]
         public void ScalarOverflow_Power_UnsignedBase_NegativeIntExponent_ShouldRaise()
         {
             // NumPy: power(uint16, -1) -> OverflowError (-1 out of uint16 range), checked

@@ -37,8 +37,8 @@ namespace NumSharp.Tests.IO
                 {
                     var loaded = (NDArray)np.load(c.Bytes);
 
-                    if (loaded.typecode != c.NsDtype)
-                        f.Add(c, $"dtype: expected {c.NsDtype}, got {loaded.typecode}");
+                    if (DtypeMismatch(loaded, c.NsDtype, c.NsDescr) is { } why)
+                        f.Add(c, "dtype: " + why);
                     else if (!loaded.shape.SequenceEqual(c.Shape))
                         f.Add(c, $"shape: expected ({string.Join(", ", c.Shape)}), got ({string.Join(", ", loaded.shape)})");
                     else
@@ -68,11 +68,13 @@ namespace NumSharp.Tests.IO
         {
             var f = new Failures("write");
 
-            foreach (NpyCase c in NpyOracleCorpus.OfKind("npy").Where(c => c.WriteExact))
+            // The write-only cases are NumSharp's Char arrays, written as NumPy's '<U1' (a '<U1' file READS as a
+            // U1 string array, so they cannot be read cases).
+            foreach (NpyCase c in NpyOracleCorpus.OfKind("npy", "write_only").Where(c => c.WriteExact))
             {
                 try
                 {
-                    NDArray arr = NpyOracleCorpus.Build(c.NsDtype.Value, c.Shape, c.NsBytes, c.FortranOrder);
+                    NDArray arr = NpyOracleCorpus.Build(c.NsDtype.Value, c.NsDescr, c.Shape, c.NsBytes, c.FortranOrder);
 
                     // The corpus records which version NumPy chose. Pass it through only when it is not
                     // the default, so the common path exercises NumSharp's own version auto-selection.
@@ -248,8 +250,8 @@ namespace NumSharp.Tests.IO
                     var original = (NDArray)np.load(c.Bytes);
                     var reloaded = (NDArray)np.load(np.save(original));
 
-                    if (reloaded.typecode != original.typecode)
-                        f.Add(c, $"dtype: {original.typecode} -> {reloaded.typecode}");
+                    if (reloaded.typecode != original.typecode || reloaded.dtype.str != original.dtype.str)
+                        f.Add(c, $"dtype: {original.dtype.str} -> {reloaded.dtype.str}");
                     else if (!reloaded.shape.SequenceEqual(original.shape))
                         f.Add(c, $"shape: ({string.Join(", ", original.shape)}) -> ({string.Join(", ", reloaded.shape)})");
                     else if (!NpyOracleCorpus.RawBytes(reloaded).SequenceEqual(c.NsBytes))
@@ -293,8 +295,8 @@ namespace NumSharp.Tests.IO
                     {
                         NDArray arr = npz[kv.Key];
 
-                        if (arr.typecode != kv.Value.NsDtype)
-                            f.Add(c, $"['{kv.Key}'] dtype: expected {kv.Value.NsDtype}, got {arr.typecode}");
+                        if (DtypeMismatch(arr, kv.Value.NsDtype, kv.Value.NsDescr) is { } why)
+                            f.Add(c, $"['{kv.Key}'] dtype: " + why);
                         else if (!arr.shape.SequenceEqual(kv.Value.Shape))
                             f.Add(c, $"['{kv.Key}'] shape: expected ({string.Join(", ", kv.Value.Shape)}), got ({string.Join(", ", arr.shape)})");
                         else if (!NpyOracleCorpus.RawBytes(arr).SequenceEqual(kv.Value.NsBytes))
@@ -342,8 +344,8 @@ namespace NumSharp.Tests.IO
                     NDArray arr = np.load_npy(ms);
                     NpyMember want = c.Sequence[i];
 
-                    if (arr.typecode != want.NsDtype)
-                        f.Add(c, $"[{i}] dtype: expected {want.NsDtype}, got {arr.typecode}");
+                    if (DtypeMismatch(arr, want.NsDtype, want.NsDescr) is { } why)
+                        f.Add(c, $"[{i}] dtype: " + why);
                     else if (!arr.shape.SequenceEqual(want.Shape))
                         f.Add(c, $"[{i}] shape: expected ({string.Join(", ", want.Shape)}), got ({string.Join(", ", arr.shape)})");
                     else if (!NpyOracleCorpus.RawBytes(arr).SequenceEqual(want.NsBytes))
@@ -358,10 +360,10 @@ namespace NumSharp.Tests.IO
             using (var ms = new MemoryStream())
             {
                 foreach (NpyMember m in c.Sequence)
-                    np.save(ms, NpyOracleCorpus.Build(m.NsDtype, m.Shape, m.NsBytes, false));
+                    np.save(ms, NpyOracleCorpus.Build(m.NsDtype, m.NsDescr, m.Shape, m.NsBytes, false));
 
                 if (!ms.ToArray().SequenceEqual(c.Bytes))
-                    f.Add(c, "writing the three arrays to one stream: " + Diff(c.Bytes, ms.ToArray()));
+                    f.Add(c, $"writing the {c.Sequence.Length} arrays to one stream: " + Diff(c.Bytes, ms.ToArray()));
             }
 
             f.Assert();
@@ -422,15 +424,38 @@ namespace NumSharp.Tests.IO
             var expected = new[]
             {
                 NPTypeCode.Boolean, NPTypeCode.Byte, NPTypeCode.SByte, NPTypeCode.Int16, NPTypeCode.UInt16,
-                NPTypeCode.Int32, NPTypeCode.UInt32, NPTypeCode.Int64, NPTypeCode.UInt64, NPTypeCode.Char,
+                NPTypeCode.Int32, NPTypeCode.UInt32, NPTypeCode.Int64, NPTypeCode.UInt64, NPTypeCode.String,
                 NPTypeCode.Half, NPTypeCode.Single, NPTypeCode.Double, NPTypeCode.Complex,
             };
             CollectionAssert.AreEquivalent(expected, covered.ToArray(),
                 "every NumPy-representable NumSharp dtype must be exercised by the corpus " +
-                "(Decimal is excluded: it has no NumPy dtype)");
+                "(Decimal is excluded: it has no NumPy dtype; Char is written as '<U1' by the write-only cases)");
+
+            // Both string classes are read, and Char is written: the three text lanes keep their coverage.
+            var descrs = NpyOracleCorpus.OfKind("npy").Where(c => c.NsDescr != null).Select(c => c.NsDescr[1]).ToHashSet();
+            CollectionAssert.IsSubsetOf(new[] { 'S', 'U' }, descrs.ToArray(), "both string classes must be read");
+            Assert.IsTrue(NpyOracleCorpus.OfKind("write_only").Any(c => c.NsDtype == NPTypeCode.Char),
+                "NumSharp's Char must be written as '<U1' by at least one case");
         }
 
         #region helpers
+
+        /// <summary>
+        ///     Why <paramref name="a"/>'s dtype is not the manifest's, or null when it is: the storage lane, and for a
+        ///     fixed-width string also the descriptor (class and width), which the lane alone does not carry.
+        /// </summary>
+        /// <param name="a">The loaded array.</param>
+        /// <param name="lane">The expected storage lane.</param>
+        /// <param name="descr">The expected string descriptor, or null.</param>
+        /// <returns>The mismatch description, or null.</returns>
+        private static string DtypeMismatch(NDArray a, NPTypeCode? lane, string descr)
+        {
+            if (a.typecode != lane)
+                return $"expected {lane}, got {a.typecode}";
+            if (descr != null && a.dtype.str != descr)
+                return $"expected {descr}, got {a.dtype.str}";
+            return null;
+        }
 
         private static string First(string message) => message.Split('\n')[0].TrimEnd('\r');
 

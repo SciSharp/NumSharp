@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public static partial class np
@@ -9,7 +11,9 @@ namespace NumSharp
         ///     to complex. Always returns a fresh complex array; the input is never mutated.
         /// </summary>
         /// <param name="a">Input array.</param>
-        /// <returns>Sorted complex array (sorted along the last axis).</returns>
+        /// <returns>Sorted complex array (sorted along the last axis).
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.sort_complex.html<br></br>
         ///     NumPy widths: int8/uint8/int16/uint16 up-cast to complex64, longdouble to clongdouble,
@@ -20,15 +24,23 @@ namespace NumSharp
         ///     NaN floats sort to the end (→ <c>nan+0j</c>); complex sorts lexicographically with NumPy's
         ///     any-NaN-part-last ordering. A 0-d input leaks <c>ndarray.sort()</c>'s own
         ///     "axis -1 is out of bounds for array of dimension 0" — exactly as NumPy leaks it.
+        ///     <para>A <c>StringDType</c> text converts with the value Python's <c>complex()</c> parses: NumPy 2.4.2's
+        ///     StringDType to complex loop stores the REAL part into both parts (<c>'1+2j'</c> becomes <c>1+1j</c>, <c>'-0'</c>
+        ///     becomes <c>-0-0j</c>), a bug NumSharp's cast does not reproduce.</para>
         /// </remarks>
+        /// <exception cref="AxisError">A 0-d array (<c>axis -1 is out of bounds for array of dimension 0</c>, which NumPy's
+        ///     <c>b.sort()</c> raises).</exception>
+        /// <exception cref="ValueError">Text that is not a complex number (<c>complex() arg is a malformed string</c>): NumPy
+        ///     sorts the text, then <c>astype('D')</c> parses it, the first malformed string in the sorted array's C order
+        ///     raising. A <c>StringDType</c> array: a None-like NA in a line of two or more elements (the sort's <c>Cannot
+        ///     compare null that is not a nan-like value</c>), or any NA left for the cast (<c>Arrays with missing data cannot
+        ///     be converted to a non-nullable type</c>).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         [NDScoped]
         public static NDArray sort_complex(NDArray a)
         {
-            // np.sort == array(a, copy=True) + in-place sort along the default last axis; the sort
-            // runs in the ORIGINAL dtype (an int64 past 2^53 must order by its exact value, not by
-            // its double image), and only the sorted result is widened.
-            var b = np.sort(a, -1);
-            return b.typecode == NPTypeCode.Complex ? b : b.astype(NPTypeCode.Complex);
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.SortComplex(a);
         }
     }
 }

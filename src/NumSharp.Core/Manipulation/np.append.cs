@@ -33,49 +33,59 @@ namespace NumSharp
         ///     flattens both <paramref name="arr"/> and <paramref name="values"/>
         ///     to 1-D before concatenation.</param>
         /// <returns>A new array with <paramref name="values"/> appended to
-        ///     <paramref name="arr"/> along <paramref name="axis"/>.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.append.html</remarks>
+        ///     <paramref name="arr"/> along <paramref name="axis"/>: a plain array for <c>numpy.char.chararray</c> operands too
+        ///     (NumPy's <c>np.concatenate</c> drops the class).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="values"/> is null.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.append.html
+        ///     <para>NumPy's statements are the array object's (<c>NDArray.append</c>), which releases the raveled copies
+        ///     (or views) of a multi-dimensional <paramref name="arr"/> or <paramref name="values"/>, exceptions included,
+        ///     and yields the concatenated result. A 1-D input is passed to concatenate as-is.</para>
+        /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the inputs' rank.</exception>
+        /// <exception cref="IncorrectShapeException">With an axis, the inputs' ranks or other axes differ.</exception>
+        /// <exception cref="InvalidCastException">An input that does not cast to the result dtype.</exception>
         public static NDArray append(NDArray arr, NDArray values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
-            if (axis is null)
-            {
-                // Both inputs ravel'd into 1-D, then concatenate along axis 0.
-                // Mirrors NumPy's `arr.ravel() if arr.ndim != 1 else arr`.
-                NDArray flatArr = arr.ndim == 1 ? arr : np.ravel(arr);
-                NDArray flatVals = values.ndim == 1 ? values : np.ravel(values);
-                try
-                {
-                    return np.concatenate(new[] { flatArr, flatVals }, axis: 0);
-                }
-                finally
-                {
-                    if (!ReferenceEquals(flatArr, arr)) flatArr.Dispose();
-                    if (!ReferenceEquals(flatVals, values)) flatVals.Dispose();
-                }
-            }
-
-            // Axis given — concatenate handles the shape validation and dtype
-            // promotion (NEP50, mixed-dtype paths, etc.) directly.
-            return np.concatenate(new[] { arr, values }, axis: axis.Value);
+            // NumPy's statements (the ravels when axis is None, then concatenate) are the array object's.
+            return NDArray.append(arr, values, axis);
         }
 
         /// <summary>
         ///     Scalar / generic-value overload that wraps the value via
-        ///     <see cref="np.asanyarray"/> before delegating. Matches NumPy's
+        ///     <see cref="np.asanyarray(in object, DType, string)"/> before delegating. Matches NumPy's
         ///     <c>np.append([1,2,3], 4)</c> idiom — the scalar is auto-coerced
         ///     to a 0-D ndarray (whose ravel is shape (1,)).
         /// </summary>
+        /// <param name="arr">Input array.</param>
+        /// <param name="values">Values to append: a scalar, a C# array or collection, or an <see cref="NDArray"/>
+        ///     whose static type is <see cref="object"/>. Converted with <see cref="np.asanyarray(in object, DType, string)"/>.</param>
+        /// <param name="axis">Axis along which to append; <c>null</c> (default) flattens both operands first.</param>
+        /// <returns>A new array with <paramref name="values"/> appended to <paramref name="arr"/>.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="values"/> is null.</exception>
+        /// <remarks>
+        ///     Scoped by <c>[NDScoped]</c>: the conversion of a scalar or collection is released on return. An
+        ///     <see cref="NDArray"/> passed as <see cref="object"/> comes back from <see cref="np.asanyarray(in object, DType, string)"/>
+        ///     unchanged; it was built before the scope opened, so the scope never disposes it. (The hand-written
+        ///     version disposed that conversion unconditionally, which released the caller's own array.)
+        /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        [NDScoped]
         public static NDArray append(NDArray arr, object values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
+            // The C# value's conversion (NumPy's array_like), then the NDArray overload: its matrix rule still sees a
+            // numpy.matrix passed as object, which this overload's own rule (arr only) does not.
             var asArr = np.asanyarray(values);
-            try { return append(arr, asArr, axis); }
-            finally { asArr.Dispose(); }
+            return append(arr, asArr, axis);
         }
     }
 }

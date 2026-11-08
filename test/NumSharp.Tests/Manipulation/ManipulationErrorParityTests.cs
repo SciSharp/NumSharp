@@ -28,16 +28,16 @@ namespace NumSharp.Tests.Manipulation
             // np.expand_dims(np.arange(6), 2) -> AxisError: axis 2 is out of bounds for array of dimension 2
             // The bound is the OUTPUT ndim (input ndim + 1), which is why a 1-D input reports "2".
             new Action(() => np.expand_dims(a6, 2))
-                .Should().ThrowExactly<ArgumentException>()
-                .WithMessage("axis 2 is out of bounds for array of dimension 2");
+                .Should().ThrowExactly<AxisError>()
+                .WithMessage("axis 2 is out of bounds for array of dimension 2*");
 
             new Action(() => np.expand_dims(a6, 5))
-                .Should().ThrowExactly<ArgumentException>()
-                .WithMessage("axis 5 is out of bounds for array of dimension 2");
+                .Should().ThrowExactly<AxisError>()
+                .WithMessage("axis 5 is out of bounds for array of dimension 2*");
 
             new Action(() => np.expand_dims(a6, int.MaxValue))
-                .Should().ThrowExactly<ArgumentException>()
-                .WithMessage("axis 2147483647 is out of bounds for array of dimension 2");
+                .Should().ThrowExactly<AxisError>()
+                .WithMessage("axis 2147483647 is out of bounds for array of dimension 2*");
         }
 
         [TestMethod]
@@ -52,23 +52,31 @@ namespace NumSharp.Tests.Manipulation
             ex.Message.Should().NotContain("Specified argument was out of the range");
         }
 
+        /// <summary>
+        ///     np.expand_dims reports a negative out-of-range axis AS GIVEN, against the result's rank, as NumPy's AxisError
+        ///     (int.MinValue included); the old check reported the normalized value.
+        /// </summary>
         [TestMethod]
         public void ExpandDims_NegativeAxisOutOfBounds_ReportsTheAxisAsGiven()
         {
             // Was: "Effective axis -1 is less than 0" — the normalized value, not the caller's.
             new Action(() => np.expand_dims(np.arange(6), -3))
-                .Should().ThrowExactly<ArgumentException>()
-                .WithMessage("axis -3 is out of bounds for array of dimension 2");
+                .Should().ThrowExactly<AxisError>()
+                .WithMessage("axis -3 is out of bounds for array of dimension 2*");
 
             new Action(() => np.expand_dims(np.arange(6), -5))
-                .Should().ThrowExactly<ArgumentException>()
-                .WithMessage("axis -5 is out of bounds for array of dimension 2");
+                .Should().ThrowExactly<AxisError>()
+                .WithMessage("axis -5 is out of bounds for array of dimension 2*");
 
             new Action(() => np.expand_dims(np.arange(6), int.MinValue))
-                .Should().ThrowExactly<ArgumentException>()
-                .WithMessage("axis -2147483648 is out of bounds for array of dimension 2");
+                .Should().ThrowExactly<AxisError>()
+                .WithMessage("axis -2147483648 is out of bounds for array of dimension 2*");
         }
 
+        /// <summary>
+        ///     np.expand_dims of a 0-d input accepts only the axes of a 1-D result (0 and -1) and raises NumPy's AxisError for
+        ///     every other; it used to return shape (1,) for any axis.
+        /// </summary>
         [TestMethod]
         public void ExpandDims_ZeroDimensional_IsBoundChecked_NotSilentlyAccepted()
         {
@@ -80,12 +88,12 @@ namespace NumSharp.Tests.Manipulation
 
             // Previously these silently returned shape (1).
             new Action(() => np.expand_dims(s0, 1))
-                .Should().ThrowExactly<ArgumentException>()
-                .WithMessage("axis 1 is out of bounds for array of dimension 1");
+                .Should().ThrowExactly<AxisError>()
+                .WithMessage("axis 1 is out of bounds for array of dimension 1*");
 
             new Action(() => np.expand_dims(s0, -2))
-                .Should().ThrowExactly<ArgumentException>()
-                .WithMessage("axis -2 is out of bounds for array of dimension 1");
+                .Should().ThrowExactly<AxisError>()
+                .WithMessage("axis -2 is out of bounds for array of dimension 1*");
         }
 
         [TestMethod]
@@ -106,16 +114,20 @@ namespace NumSharp.Tests.Manipulation
             np.expand_dims(np.zeros(new Shape(0, 3)), 0).Shape.Dimensions.Should().Equal(1L, 0L, 3L);
         }
 
+        /// <summary>
+        ///     The integer and tuple forms of np.expand_dims raise the same NumPy errors: AxisError for an out-of-range axis,
+        ///     ValueError "repeated axis" for a repeat (the tuple form used to drop the repeat).
+        /// </summary>
         [TestMethod]
         public void ExpandDims_BothOverloads_AgreeOnTheText()
         {
             // The int[] overload validated correctly all along; the scalar one now matches it.
             new Action(() => np.expand_dims(np.arange(6), new[] { 0, 5 }))
-                .Should().ThrowExactly<ArgumentException>()
-                .WithMessage("axis 5 is out of bounds for array of dimension 3");
+                .Should().ThrowExactly<AxisError>()
+                .WithMessage("axis 5 is out of bounds for array of dimension 3*");
 
             new Action(() => np.expand_dims(np.arange(6), new[] { 0, 0 }))
-                .Should().ThrowExactly<ArgumentException>()
+                .Should().ThrowExactly<ValueError>()
                 .WithMessage("repeated axis");
         }
 

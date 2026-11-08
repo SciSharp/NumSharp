@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -24,7 +25,7 @@ namespace NumSharp
             public NDArray Grid => _grid;
 
             /// <summary>The number of per-axis grids stacked along the first axis (0 for a scalar/empty grid).</summary>
-            public int Length => _grid is null || _grid.ndim == 0 ? 0 : (int)_grid.shape[0];
+            public int Length => _grid is null || _grid.ndim == 0 ? 0 : (int)_grid.Shape.dimensions[0];
 
             /// <summary>The k-th per-axis grid — <c>grid[k]</c> along the first axis.</summary>
             public NDArray this[int index] => _grid[index];
@@ -64,7 +65,7 @@ namespace NumSharp
                 int have = Length;
                 if (have != n)
                     throw new InvalidOperationException(
-                        $"np.mgrid produced a grid of {have} axes; cannot deconstruct into {n}. A single-slice " +
+                        string.Create(CultureInfo.InvariantCulture, $"np.mgrid produced a grid of {have} axes; cannot deconstruct into {n}. A single-slice ") +
                         "mgrid is a bare 1-D array — use it as an NDArray, not a tuple.");
             }
 
@@ -76,17 +77,39 @@ namespace NumSharp
         ///     indexed, so that every returned axis-grid has the SAME shape. The number of stacked grids and
         ///     their dimensionality equal the number of indexing slices. If the step length is not a complex
         ///     number, the stop is NOT inclusive; a <b>complex</b> step (e.g. <c>"…:5j"</c>) instead specifies
-        ///     the number of points, with the stop INCLUSIVE (i.e. <see cref="linspace"/>).
+        ///     the number of points, with the stop INCLUSIVE: point <c>i</c> is <c>i * step + start</c> with
+        ///     <c>step = (stop - start) / (N - 1)</c>, as NumPy computes it (so the last point can miss the stop
+        ///     by a rounding: <c>np.mgrid["0.3:0.9:7j"]</c> ends at 0.9000000000000001, where
+        ///     <c>linspace</c> puts it on 0.9).
         /// </summary>
         /// <remarks>
         ///     Port of NumPy 2.x <c>numpy.mgrid</c> (the <c>sparse=False</c> instance of
         ///     <c>numpy.lib.index_tricks.nd_grid</c>). It is the DENSE twin of <see cref="ogrid"/> and shares
-        ///     its whole grammar and dtype/edge-case behaviour (see <see cref="OGridClass"/> and the shared
-        ///     <c>NdGridLines</c> builder): slices are written as strings (<c>np.mgrid["0:5", "0:3"]</c> ≙
-        ///     <c>np.mgrid[0:5, 0:3]</c>); one string may carry comma-separated slices; <see cref="Slice"/>
-        ///     objects work; there are NO directives. The mesh shares ONE dtype (int64 unless a float literal
-        ///     or imaginary step appears, then float64); a multi-slice mesh requires an explicit stop on every
-        ///     slice.
+        ///     its whole grammar and dtype/edge-case behaviour (see <see cref="OGridClass"/>; both run
+        ///     NumPy's <c>nd_grid.__getitem__</c> statements, <see cref="NDArray.mgrid"/> and
+        ///     <see cref="NDArray.ogrid"/>): slices are written as strings
+        ///     (<c>np.mgrid["0:5", "0:3"]</c> ≙ <c>np.mgrid[0:5, 0:3]</c>); one string may carry comma-separated
+        ///     slices; <see cref="Slice"/> objects work; there are NO directives. A field written as digits is a
+        ///     Python int (exact at any size), anything else a Python float. The mesh shares ONE dtype (int64
+        ///     unless a float or an imaginary step appears, then float64).
+        ///     <para>
+        ///     <b>Values.</b> A single slice is <c>arange(start, stop, step)</c>, or for an imaginary step
+        ///     <c>arange(0, N) * step + start</c> (a fresh array). In a mesh each axis is <c>i * step + start</c> in
+        ///     the mesh dtype — for a float step that is NOT arange's <c>start + i * delta</c>:
+        ///     <c>np.mgrid["0.5:1.5:0.1", "0:2"][0]</c> holds 0.8, where <c>arange(0.5, 1.5, 0.1)</c> holds
+        ///     0.7999999999999999.
+        ///     </para>
+        ///     <para>
+        ///     <b>Errors.</b> A zero step is NumPy's ZeroDivisionError, <see cref="DivideByZeroException"/> with
+        ///     Python's text (<c>division by zero</c> over ints, <c>float division by zero</c> once a float is
+        ///     involved). A slice of a multi-slice mesh needs its stop unless its step is imaginary with one point:
+        ///     NumPy then leaks <c>AttributeError: 'tuple' object has no attribute 'step'</c>, NumSharp raises a
+        ///     <see cref="ValueError"/> naming the slice, at the same point (a negative size of another axis can win
+        ///     over it, as in NumPy). A single imaginary slice without its stop is Python's <see cref="TypeError"/>
+        ///     (<c>unsupported operand type(s) for -: 'NoneType' and 'int'</c>). A NaN, infinite or past-int64 size
+        ///     raises NumPy's text (<c>cannot convert float NaN to integer</c>, <c>cannot convert float infinity to
+        ///     integer</c>, <c>Maximum allowed dimension exceeded</c>).
+        ///     </para>
         ///     <para>
         ///     <b>Shape.</b> A single slice returns a bare 1-D array; N slices return the stacked array of
         ///     shape <c>(N, size_0, …, size_{N-1})</c> — <c>result[k]</c> is the k-th coordinate broadcast
@@ -118,80 +141,7 @@ namespace NumSharp
             ///     Slice-expression strings (a colon-bearing <c>"start:stop[:step]"</c>, or several such
             ///     comma-separated), and/or <see cref="Slice"/> objects.
             /// </param>
-            public MGridResult this[params object[] key] => new MGridResult(Build(key));
-
-            [NDScoped] // reclaims each rescale pass's line/astype/reshape/broadcast temps and the grid[k] layer views
-            private static NDArray Build(object[] key)
-            {
-                // Shared nd_grid parsing (same grammar/errors as ogrid).
-                var specs = ParseGridSpecs(key, "mgrid");
-                int n = specs.Count;
-
-                // mgrid[()] -> shape (0,), matching NumPy's indices([]) tail.
-                if (n == 0)
-                    return new NDArray(NPTypeCode.Int64, new Shape(0), false);
-
-                // A single slice is a bare 1-D array (NumPy's except-branch), NOT a stacked grid.
-                if (n == 1)
-                    return specs[0].Materialize();
-
-                NPTypeCode typ = GridMeshDtype(specs, "mgrid");
-
-                // NumPy builds the dense grid as indices(sizes, typ) then rescales each layer. The sizes
-                // are ceil((stop-start)/step) (imaginary: the point count) and MAY be negative — indices
-                // then raises "negative dimensions are not allowed", exactly as NumPy's mgrid does (its
-                // ogrid twin instead clamps via arange). A zero real step is a divide-by-zero.
-                int[] sizes = new int[n];
-                for (int k = 0; k < n; k++)
-                    sizes[k] = checked((int)MeshAxisSize(specs[k]));
-
-                NDArray grid = indices(sizes, typ);   // (n, size_0, …, size_{n-1})
-
-                // Rescale each NON-trivial axis by overwriting its layer with the 1-D line broadcast
-                // across the whole grid. A "pure" axis (start 0, step 1, real) already equals indices'
-                // coordinates, so it is skipped — the common np.mgrid[0:a, 0:b] case is a single fused
-                // indices fill with no post-pass, and this reuses SliceSpec's exact arange/linspace
-                // values instead of a dtype-branching multiply-add.
-                long[] full = new long[n];
-                for (int k = 0; k < n; k++)
-                    full[k] = sizes[k];
-                var fullShape = new Shape(full);
-
-                for (int k = 0; k < n; k++)
-                {
-                    var spec = specs[k];
-                    if (spec.Start == 0d && spec.Step == 1d && !spec.ImaginaryStep)
-                        continue;
-
-                    NDArray line = spec.Materialize();
-                    if (line.typecode != typ)
-                        line = line.astype(typ);
-
-                    long[] lineShape = new long[n];
-                    for (int d = 0; d < n; d++)
-                        lineShape[d] = 1L;
-                    lineShape[k] = line.size;
-
-                    copyto(grid[k], broadcast_to(line.reshape(lineShape), fullShape));
-                }
-
-                return grid;
-            }
-
-            /// <summary>
-            ///     NumPy's per-axis size for a dense grid: <c>ceil((stop-start)/step)</c> for a real step
-            ///     (the result MAY be negative, which <see cref="indices"/> rejects), or the point count
-            ///     <c>int(abs(step))</c> for an imaginary one. A zero real step is a divide-by-zero,
-            ///     matching NumPy's <c>ZeroDivisionError</c>.
-            /// </summary>
-            private static long MeshAxisSize(AxisConcatenator.SliceSpec spec)
-            {
-                if (spec.ImaginaryStep)
-                    return (long)Math.Abs(spec.Step);
-                if (spec.Step == 0d)
-                    throw new DivideByZeroException("mgrid slice step cannot be zero.");
-                return (long)Math.Ceiling((spec.Stop - spec.Start) / spec.Step);
-            }
+            public MGridResult this[params object[] key] => new MGridResult(NDArray.mgrid(key));
         }
 
         /// <summary>

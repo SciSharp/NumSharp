@@ -267,6 +267,7 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         [TestMethod]
+        [DoNotParallelize] // counts the process-wide inner-loop kernel cache, which other tests' work grows
         public void Tier3B_CacheReuse_SameKeyReturnsIdenticalDelegate()
         {
             // Two distinct iters calling ExecuteElementWise with the same

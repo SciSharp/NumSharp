@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -352,20 +353,20 @@ namespace NumSharp.Backends
                 count *= batchDims[i];
             }
 
-            var batchShape = nb == 0 ? Shape.Scalar : new Shape(batchDims);
+            var batchShape = nb == 0 ? Shape.Scalar : new Shape(batchDims, copy: false);
 
             NDArray det = null, sign = null, logdet = null;
             T* pdet = null, psign = null;
             double* plog = null;
             if (wantDet)
             {
-                det = new NDArray(InfoOf<T>.NPTypeCode, batchShape, fillZeros: false);
+                det = a.TensorEngine.NewArray(InfoOf<T>.NPTypeCode, batchShape, fillZeros: false);
                 pdet = (T*)det.Address + det.Shape.offset;
             }
             else
             {
-                sign = new NDArray(InfoOf<T>.NPTypeCode, batchShape, fillZeros: false);
-                logdet = new NDArray(NPTypeCode.Double, batchShape, fillZeros: false);
+                sign = a.TensorEngine.NewArray(InfoOf<T>.NPTypeCode, batchShape, fillZeros: false);
+                logdet = a.TensorEngine.NewArray(NPTypeCode.Double, batchShape, fillZeros: false);
                 psign = (T*)sign.Address + sign.Shape.offset;
                 plog = (double*)logdet.Address + logdet.Shape.offset;
             }
@@ -412,7 +413,7 @@ namespace NumSharp.Backends
             int nd = shape.NDim;
             long m = shape.dimensions[nd - 1];
 
-            var result = new NDArray(InfoOf<T>.NPTypeCode, new Shape((long[])shape.dimensions.Clone()), fillZeros: false);
+            var result = a.TensorEngine.NewArray(InfoOf<T>.NPTypeCode, new Shape(shape.dimensions, copy: false), fillZeros: false);
             if (result.size == 0)
                 return result; // (…,0,0) → empty inverse, matching NumPy
 
@@ -513,7 +514,7 @@ namespace NumSharp.Backends
             for (int i = 0; i < trailing.Length; i++)
                 outDims[nb + i] = trailing[i];
 
-            var result = new NDArray(InfoOf<T>.NPTypeCode, new Shape(outDims), fillZeros: false);
+            var result = a.TensorEngine.NewArray(InfoOf<T>.NPTypeCode, new Shape(outDims, copy: false), fillZeros: false);
             if (result.size == 0)
                 return result;
 
@@ -1075,7 +1076,7 @@ namespace NumSharp.Backends
         }
 
         private static string DimsText(long[] dims, int nb)
-            => "(" + string.Join(",", new ArraySegment<long>(dims, 0, nb)) + ")";
+            => "(" + string.Join(",", Array.ConvertAll(dims[..nb], d => d.ToString(CultureInfo.InvariantCulture))) + ")";
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static T* Alloc<T>(long count) where T : unmanaged

@@ -12,9 +12,15 @@ remarks: |
   NumSharp targets NumPy 2.x API and behavioral compatibility. Arrays use unmanaged storage,
   slicing returns views that share storage, broadcasting follows NumPy shape rules, and the public
   NDArray dtype set covers Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char,
-  Half, Single, Double, Decimal, and Complex. `NPTypeCode.Empty`, `NPTypeCode.String`, and the
-  `NPTypeCode.Float` alias are enum/compatibility values, not additional public array dtypes;
-  `Float` resolves to `Single`.
+  Half, Single, Double, Decimal, Complex, and the text families `S`, `U` and `StringDType` (`T`).
+  Text uses `NPTypeCode.String` with a full <xref href="NumSharp.DType" data-throw-if-not-resolved="false"></xref>
+  descriptor for the width, encoding and missing-value policy. Preserve `array.dtype`, not just its type code.
+  `NPTypeCode.Empty` is a sentinel; `NPTypeCode.Float` is an alias of `Single`.
+
+  `np.strings.add` and `np.strings.multiply` concatenate and repeat text. `np.@char` is NumPy's
+  `numpy.char` module (C# escapes the keyword); <xref href="NumSharp.NDCharArray" data-throw-if-not-resolved="false"></xref>
+  supplies chararray behavior and <xref href="NumSharp.NDListArray" data-throw-if-not-resolved="false"></xref>
+  holds split results. None of these is the numeric UTF-16 `Char` dtype.
 
   ```csharp
   using NumSharp;

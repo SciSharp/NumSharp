@@ -154,7 +154,8 @@ namespace NumSharp.UnitTest.Math
         /// bool array ⊕ C# int scalar promotes to int64 — the C# `int` literal is the weak Python
         /// int literal, and NumPy 2.4.2 promotes bool + weak int to the DEFAULT integer (int is a
         /// different kind than bool). Probed: (np.array([True]) + 2).dtype == int64, same for
-        /// *, &, <<, >>. The narrower strong spellings keep their own dtype.
+        /// *, &, <<, >>. The narrower strong spellings keep their own dtype, and so does an explicit
+        /// 0-d array (np.asanyarray(2) is strong under NEP 50).
         /// </summary>
         [TestMethod]
         public void BoolArray_WeakIntScalar_PromotesToInt64()
@@ -164,8 +165,11 @@ namespace NumSharp.UnitTest.Math
             Assert.AreEqual(NPTypeCode.Int64, (a + 2).typecode);
             CollectionAssert.AreEqual(new long[] { 3, 2 }, (a + 2).ToArray<long>());
             Assert.AreEqual(NPTypeCode.Int64, (a * 2).typecode);
-            Assert.AreEqual(NPTypeCode.Int64, np.bitwise_and(a, np.asanyarray(2)).typecode);
-            CollectionAssert.AreEqual(new long[] { 0, 0 }, np.bitwise_and(a, np.asanyarray(2)).ToArray<long>());
+            Assert.AreEqual(NPTypeCode.Int64, np.bitwise_and(a, 2).typecode);
+            CollectionAssert.AreEqual(new long[] { 0, 0 }, np.bitwise_and(a, 2).ToArray<long>());
+            // np.asanyarray(2) is an explicit 0-d ARRAY, a strong operand under NEP 50 (NumPy: int64 from its Python int;
+            // NumSharp's C# int is int32), so it promotes as an array would, never as the weak literal.
+            Assert.AreEqual(NPTypeCode.Int32, np.bitwise_and(a, np.asanyarray(2)).typecode);
             Assert.AreEqual(NPTypeCode.Int64, (a + 2L).typecode);
 
             // Strong narrower scalar spellings are unchanged (np.int16(2) analog).

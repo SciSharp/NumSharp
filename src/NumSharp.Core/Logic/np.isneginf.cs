@@ -23,12 +23,9 @@ namespace NumSharp
         ///     matching NumPy 2.4.2.
         ///     </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray isneginf(NDArray x, NDArray @out = null)
         {
-            if (x.typecode == NPTypeCode.Complex)
-                throw new TypeError(
-                    "This operation is not supported for complex128 values because it would be ambiguous.");
-
             return x.TensorEngine.IsNegInf(x, typeof(bool), @out, null);
         }
     }

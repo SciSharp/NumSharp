@@ -1,0 +1,17 @@
+# The Python side of NumSharpPythonnetGhActionsCicd: six data science libraries, each pinned to an
+# exact version. A pinned file makes a run reproducible: a library release changes this file in a
+# reviewed commit, and not the result of an unrelated pull request. The workflow also uses this file
+# as the key of its pip cache. All six have binary wheels for Python 3.11, 3.12 and 3.13 on the
+# Windows, Ubuntu and macOS runners.
+#
+# The next line adds PyTorch's own index, which has CPU-only builds. Without it, pip on the Ubuntu
+# runner installs the CUDA build of torch together with 19 more packages (nvidia-*, cuda-*, triton)
+# that a runner without a GPU cannot use.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+numpy==2.4.2          # the NumPy release that NumSharp is tested against
+pandas==3.0.5
+scipy==1.16.3
+scikit-learn==1.9.1
+matplotlib==3.11.2
+torch==2.13.0         # installs as 2.13.0+cpu on the Windows and Ubuntu runners

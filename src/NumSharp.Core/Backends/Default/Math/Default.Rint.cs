@@ -26,7 +26,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Rint(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "rint", nd, null, @out, where);
             return ExecuteUnaryOp(nd, UnaryOp.Round, ResolveUnaryFloatReturnType(nd, typeCode, "rint"), @out, where);
         }
     }

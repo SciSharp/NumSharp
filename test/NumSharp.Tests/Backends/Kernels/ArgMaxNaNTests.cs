@@ -105,21 +105,21 @@ namespace NumSharp.Tests.Backends.Kernels
         #region Empty Array
 
         [TestMethod]
-        public void ArgMax_EmptyArray_ThrowsArgumentException()
+        public void ArgMax_EmptyArray_ThrowsValueError()
         {
             // NumPy: argmax([]) raises ValueError
             var a = np.array(Array.Empty<double>());
 
-            Assert.ThrowsException<ArgumentException>(() => np.argmax(a));
+            Assert.ThrowsException<ValueError>(() => np.argmax(a));
         }
 
         [TestMethod]
-        public void ArgMin_EmptyArray_ThrowsArgumentException()
+        public void ArgMin_EmptyArray_ThrowsValueError()
         {
             // NumPy: argmin([]) raises ValueError
             var a = np.array(Array.Empty<double>());
 
-            Assert.ThrowsException<ArgumentException>(() => np.argmin(a));
+            Assert.ThrowsException<ValueError>(() => np.argmin(a));
         }
 
         #endregion

@@ -4,6 +4,7 @@ using Microsoft.ML.Data;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Interop.MLNet;
+using NumSharp.Interop.OnnxRuntime;   // Postprocess: the ONNX Runtime bridge's, which the ML.NET bridge references (F16)
 
 namespace NumSharp.Tests.Interop.MLNet
 {

@@ -1,0 +1,4 @@
+# What `dotnet test --results-directory TestResults` writes: the .trx report and the attached figure.
+TestResults/
+# A virtual environment, when you make one beside the project to run the tests on your machine.
+.venv/

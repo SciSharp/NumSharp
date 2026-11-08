@@ -11,8 +11,11 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Ceil(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "ceil", nd, null, @out, where);
             ValidateWhereMask(where);
+            // ceil has no string loop: NumPy's legacy-resolver refusal (or the dtype= input-cast text), raised before the
+            // integer-identity shortcut below reads the input's type code.
+            Strings.NDStringUfuncs.ThrowIfUnary("ceil", nd, typeCode);
 
             // NumPy registers IDENTITY loops for ceil on every bool/
             // integer dtype ('?->?','b->b',...,'Q->Q'), so the loop dtype is
@@ -21,6 +24,17 @@ namespace NumSharp.Backends
             // raises the input cast error; dtype=i8/f4 on i4 are fine) --
             // all probed on 2.4.2.
             var inputType = nd.GetTypeCode;
+
+            // ceil has no complex loop (float + identity-int loops only). A complex input with no
+            // explicit dtype reaches no loop, so NumPy raises the generic ufunc TypeError (NOT a
+            // NotSupportedException from the kernel) and validates the LOOP, not the data — so a
+            // zero-size complex operand is rejected too (probed 2.4.2). Same guard shape as np.fabs;
+            // resolves the oracle K4 (wording/type) and K5 (zero-size skip) excuses at once.
+            if (!typeCode.HasValue && inputType == NPTypeCode.Complex)
+                throw new TypeError(
+                    "ufunc 'ceil' not supported for the input types, and the inputs " +
+                    "could not be safely coerced to any supported types according to the casting rule ''safe''");
+
             if (typeCode.HasValue)
                 ValidateUnaryInputCast(inputType, typeCode.Value, "ceil");
 

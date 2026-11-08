@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace NumSharp.Utilities
@@ -82,12 +83,33 @@ namespace NumSharp.Utilities
         /// <summary>
         ///     &lt;=int.MaxValue compatibility overload for the quantile IL kernels (their line length
         ///     and kth positions never exceed int range): widens <paramref name="sortedKs"/> onto the
-        ///     stack and forwards to the 64-bit core.
+        ///     stack and forwards to the 64-bit core. A line of at most <see cref="InsertionSortThreshold"/>
+        ///     elements is insertion-sorted whole instead, which places every kth at once.
         /// </summary>
+        /// <typeparam name="T">The element type (NaN-free: the kernels strip or skip NaN lines first).</typeparam>
+        /// <param name="buf">The line (scratch: its arrangement is not part of any result).</param>
+        /// <param name="n">The line's length.</param>
+        /// <param name="sortedKs">The positions to place, ascending.</param>
+        /// <param name="nKs">How many.</param>
+        /// <remarks>
+        ///     The whole-line sort is the first-kth work of the 64-bit core anyway (a window of up to
+        ///     <see cref="InsertionSortThreshold"/> elements is insertion-sorted there), without the widened copy, the
+        ///     pivot stack and one select call per kth: the quantile family's many-short-rows reductions (np.quantile over
+        ///     axis 1 of a (100000, 5) array) pay those per row. The callers read only the placed positions, so the
+        ///     sorted arrangement changes no result.
+        /// </remarks>
+        [SkipLocalsInit]   // the widened kth copy is written before it is read
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]   // tier-1 from the first call, so the whole-line
+                           // InsertionSort inlines into the per-row path (a tier-0 entry kept it a call and ran slower).
         public static unsafe void PartitionAtMany<T>(T* buf, int n, int* sortedKs, int nKs)
             where T : unmanaged, IComparable<T>
         {
             if (nKs == 0 || n <= 1) return;
+            if (n <= InsertionSortThreshold)
+            {
+                InsertionSort(buf, 0, n - 1);
+                return;
+            }
             long* ks = stackalloc long[nKs];
             for (int i = 0; i < nKs; i++) ks[i] = sortedKs[i];
             PartitionAtMany(buf, (long)n, ks, nKs);
@@ -220,11 +242,265 @@ namespace NumSharp.Utilities
             else if (pivot >= kth && npiv < PivotStackMax) { pivots[npiv] = pivot; npiv++; }
         }
 
+        // ── NumPy introselect_'s two linear shortcuts (selection.cpp) ──────────────────────
+        //
+        // Once the pivot stack has narrowed [low, high], NumPy's introselect_ tries two O(n) placements before its
+        // quickselect:
+        //   * kth - low < 3 → dumb_select_: kth - low + 1 passes, pass i moving the window's FIRST minimum (a strict less
+        //     never replaces an equal candidate) to position low + i, then store_pivot(kth);
+        //   * a float32 / float64 line (IsInexact) with kth == n - 1 → one pass moving the window's LAST maximum ("not
+        //     less" replaces an equal candidate) to kth; nothing is stored.
+        // The quantile family partitions at both ends constantly (q = 0 and 1, the neighbours of a virtual index near 0,
+        // every index clipped to -1), where a quickselect pays several partitioning passes with swaps for one order
+        // statistic (np.quantile(a, [0, 1], method='midpoint') over 100,000 doubles: 394 µs before, 83 µs now, NumPy
+        // 282 µs). Where these passes run, they keep NumPy's choice among equal values: the sign of the zero a ±0 tie
+        // leaves at kth, and the index np.argpartition reports for a tie (the quickselect and the short-window
+        // insertion sort below arrange ties their own way, as before). The callers compact NaNs out first, so a plain
+        // less is NumPy's NaN-aware Tag::less here.
+
+        /// <summary>Whether NumPy's introselect_ treats the element type as inexact (its kth == n - 1 maximum pass):
+        ///     float32 and float64. NumPy's test is <c>!std::is_integral&lt;type&gt;</c>, and its float16 element type
+        ///     <c>npy_half</c> is a <c>uint16_t</c>, so a float16 line takes the quickselect there; so it does here, which
+        ///     keeps NumPy's argpartition index for a float16 tie at the line's end. JIT-folded to a constant per
+        ///     instantiation.</summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>True for <see cref="float"/> and <see cref="double"/>.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsInexact<T>()
+            => typeof(T) == typeof(double) || typeof(T) == typeof(float);
+
+        /// <summary>Whether <see cref="Vector{T}"/> has lanes of the element type, so the extreme-value passes run vector
+        ///     minimum / maximum and equality scans (<see cref="Vector{T}"/> throws for char, Half, decimal and bool, which
+        ///     take NumPy's scalar loop). JIT-folded to a constant per instantiation.</summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>True for the eight integer types, float and double.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool HasVectorLanes<T>()
+            => typeof(T) == typeof(double) || typeof(T) == typeof(float) || typeof(T) == typeof(long)
+               || typeof(T) == typeof(ulong) || typeof(T) == typeof(int) || typeof(T) == typeof(uint)
+               || typeof(T) == typeof(short) || typeof(T) == typeof(ushort) || typeof(T) == typeof(sbyte)
+               || typeof(T) == typeof(byte);
+
+        /// <summary>
+        ///     NumPy's <c>dumb_select_</c> over the window <c>[low, high]</c>: for every position from <paramref name="low"/>
+        ///     to <paramref name="kth"/>, the first minimum of the rest of the window is swapped into it, so the window's
+        ///     <c>kth - low + 1</c> smallest values end in ascending order at its front. O(n·(kth − low + 1)), which is why
+        ///     NumPy (and this) takes it only for <c>kth - low &lt; 3</c>.
+        /// </summary>
+        /// <typeparam name="T">The element type (NaN-free).</typeparam>
+        /// <param name="v">The line.</param>
+        /// <param name="low">The window's first position.</param>
+        /// <param name="high">The window's last position (at least <paramref name="kth"/>).</param>
+        /// <param name="kth">The position to place, within 3 of <paramref name="low"/>.</param>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void DumbSelect<T>(T* v, long low, long high, long kth) where T : unmanaged, IComparable<T>
+        {
+            for (long i = low; i <= kth; i++)
+                Swap(v, i, FirstMinIndex(v, i, high));
+        }
+
+        /// <summary>
+        ///     The index of the first minimum of <c>v[from..to]</c>, the element NumPy's <c>dumb_select_</c> scan settles on
+        ///     (it replaces its candidate only on a strict less, so among equal values, every zero included, the first
+        ///     wins).
+        /// </summary>
+        /// <typeparam name="T">The element type (NaN-free).</typeparam>
+        /// <param name="v">The line.</param>
+        /// <param name="from">The first position scanned.</param>
+        /// <param name="to">The last position scanned (at least <paramref name="from"/>).</param>
+        /// <returns>The position of the first element no other element is below.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe long FirstMinIndex<T>(T* v, long from, long to) where T : unmanaged, IComparable<T>
+        {
+            long count = to - from + 1;
+            if (HasVectorLanes<T>() && Vector.IsHardwareAccelerated && count >= 2L * Vector<T>.Count)
+                return from + FirstMinIndexVector(v + from, count);
+            // NumPy's loop (comparing against v[minIdx] equals comparing against its copy: nothing moves during the scan).
+            long minIdx = from;
+            for (long k = from + 1; k <= to; k++)
+                if (LtPtr(v + k, v + minIdx)) minIdx = k;
+            return minIdx;
+        }
+
+        /// <summary>
+        ///     The index of the last maximum of <c>v[from..to]</c>, the element NumPy's float <c>kth == n - 1</c> pass settles
+        ///     on (it replaces its candidate whenever the element is not less, so among equal values the last wins).
+        /// </summary>
+        /// <typeparam name="T">The element type (NaN-free).</typeparam>
+        /// <param name="v">The line.</param>
+        /// <param name="from">The first position scanned.</param>
+        /// <param name="to">The last position scanned (at least <paramref name="from"/>).</param>
+        /// <returns>The position of the last element no other element is above.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe long LastMaxIndex<T>(T* v, long from, long to) where T : unmanaged, IComparable<T>
+        {
+            long count = to - from + 1;
+            if (HasVectorLanes<T>() && Vector.IsHardwareAccelerated && count >= 2L * Vector<T>.Count)
+                return from + LastMaxIndexVector(v + from, count);
+            long maxIdx = from;
+            for (long k = from + 1; k <= to; k++)
+                if (!LtPtr(v + k, v + maxIdx)) maxIdx = k;
+            return maxIdx;
+        }
+
+        /// <summary>
+        ///     The lane-wise minimum as the hardware computes it (<c>vminpd</c> / <c>vpminsd</c> ...): on .NET 9 and later
+        ///     <see cref="Vector.Min{T}"/> is the IEEE 754-2019 minimum, a compare-and-blend sequence whose latency, chained
+        ///     through an accumulator, ran 100K doubles in ~110 µs; the native instruction is one cycle of throughput. Its
+        ///     only difference, which zero of a ±0 pair (or which NaN) it keeps, is irrelevant here: the windows are NaN-free
+        ///     and the minimum's position is found by equality, under which every zero equals every other.
+        /// </summary>
+        /// <typeparam name="T">A type with <see cref="Vector{T}"/> lanes.</typeparam>
+        /// <param name="a">The first operand.</param>
+        /// <param name="b">The second operand.</param>
+        /// <returns>Per lane, a minimum of the two.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector<T> LaneMin<T>(Vector<T> a, Vector<T> b) where T : unmanaged
+#if NET9_0_OR_GREATER
+            => Vector.MinNative(a, b);
+#else
+            => Vector.Min(a, b);   // .NET 8's Vector.Min is already the hardware instruction
+#endif
+
+        /// <summary>The lane-wise maximum as the hardware computes it (see <see cref="LaneMin{T}"/>).</summary>
+        /// <typeparam name="T">A type with <see cref="Vector{T}"/> lanes.</typeparam>
+        /// <param name="a">The first operand.</param>
+        /// <param name="b">The second operand.</param>
+        /// <returns>Per lane, a maximum of the two.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector<T> LaneMax<T>(Vector<T> a, Vector<T> b) where T : unmanaged
+#if NET9_0_OR_GREATER
+            => Vector.MaxNative(a, b);
+#else
+            => Vector.Max(a, b);
+#endif
+
+        /// <summary>
+        ///     <see cref="FirstMinIndex{T}"/> in two vector passes: the minimum value (four independent lane-wise minimum
+        ///     accumulators, then the lanes), then the first position holding it. The second pass compares with "not above
+        ///     the minimum", which for the minimum is equality, every zero equal to every other: so the first zero of either
+        ///     sign is found whichever sign the lane reduction kept, as NumPy's strict-less scan finds it.
+        /// </summary>
+        /// <typeparam name="T">A type with <see cref="Vector{T}"/> lanes (<see cref="HasVectorLanes{T}"/>).</typeparam>
+        /// <param name="p">The window's first element.</param>
+        /// <param name="count">The window's length, at least two vectors.</param>
+        /// <returns>The offset of the first minimum from <paramref name="p"/>.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe long FirstMinIndexVector<T>(T* p, long count) where T : unmanaged, IComparable<T>
+        {
+            int w = Vector<T>.Count;
+            // Four accumulators break the dependency chain of one: four minimums in flight per step.
+            var a0 = Unsafe.ReadUnaligned<Vector<T>>(p);
+            Vector<T> a1 = a0, a2 = a0, a3 = a0;
+            long i = w;
+            for (; i <= count - 4L * w; i += 4L * w)
+            {
+                a0 = LaneMin(a0, Unsafe.ReadUnaligned<Vector<T>>(p + i));
+                a1 = LaneMin(a1, Unsafe.ReadUnaligned<Vector<T>>(p + i + w));
+                a2 = LaneMin(a2, Unsafe.ReadUnaligned<Vector<T>>(p + i + 2L * w));
+                a3 = LaneMin(a3, Unsafe.ReadUnaligned<Vector<T>>(p + i + 3L * w));
+            }
+            for (; i <= count - w; i += w)
+                a0 = LaneMin(a0, Unsafe.ReadUnaligned<Vector<T>>(p + i));
+            // The overlapping last vector re-reads a few elements, which cannot change a minimum.
+            if (i < count)
+                a0 = LaneMin(a0, Unsafe.ReadUnaligned<Vector<T>>(p + count - w));
+            a0 = LaneMin(LaneMin(a0, a1), LaneMin(a2, a3));
+            T e = a0[0];
+            for (int l = 1; l < w; l++)
+            {
+                T x = a0[l];
+                if (LtPtr(&x, &e)) e = x;
+            }
+
+            // The first group of four vectors holding the minimum, then the first such vector, then its lane; nothing
+            // before them held it.
+            var ve = new Vector<T>(e);
+            i = 0;
+            for (; i <= count - 4L * w; i += 4L * w)
+            {
+                var hit = Vector.Equals(Unsafe.ReadUnaligned<Vector<T>>(p + i), ve)
+                          | Vector.Equals(Unsafe.ReadUnaligned<Vector<T>>(p + i + w), ve)
+                          | Vector.Equals(Unsafe.ReadUnaligned<Vector<T>>(p + i + 2L * w), ve)
+                          | Vector.Equals(Unsafe.ReadUnaligned<Vector<T>>(p + i + 3L * w), ve);
+                if (hit != Vector<T>.Zero)
+                    break;
+            }
+            for (; i <= count - w; i += w)
+                if (Vector.EqualsAny(Unsafe.ReadUnaligned<Vector<T>>(p + i), ve))
+                    break;
+            for (; i < count - 1; i++)
+                if (!LtPtr(&e, p + i))
+                    return i;
+            // The minimum is an element of the window: when no earlier position holds it, the last one does.
+            return count - 1;
+        }
+
+        /// <summary>
+        ///     <see cref="LastMaxIndex{T}"/> in two vector passes: the maximum value (four independent accumulators), then
+        ///     the last position holding it, scanning backwards ("not below the maximum" is equality, every zero equal to
+        ///     every other).
+        /// </summary>
+        /// <typeparam name="T">A type with <see cref="Vector{T}"/> lanes (<see cref="HasVectorLanes{T}"/>).</typeparam>
+        /// <param name="p">The window's first element.</param>
+        /// <param name="count">The window's length, at least two vectors.</param>
+        /// <returns>The offset of the last maximum from <paramref name="p"/>.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe long LastMaxIndexVector<T>(T* p, long count) where T : unmanaged, IComparable<T>
+        {
+            int w = Vector<T>.Count;
+            var a0 = Unsafe.ReadUnaligned<Vector<T>>(p);
+            Vector<T> a1 = a0, a2 = a0, a3 = a0;
+            long i = w;
+            for (; i <= count - 4L * w; i += 4L * w)
+            {
+                a0 = LaneMax(a0, Unsafe.ReadUnaligned<Vector<T>>(p + i));
+                a1 = LaneMax(a1, Unsafe.ReadUnaligned<Vector<T>>(p + i + w));
+                a2 = LaneMax(a2, Unsafe.ReadUnaligned<Vector<T>>(p + i + 2L * w));
+                a3 = LaneMax(a3, Unsafe.ReadUnaligned<Vector<T>>(p + i + 3L * w));
+            }
+            for (; i <= count - w; i += w)
+                a0 = LaneMax(a0, Unsafe.ReadUnaligned<Vector<T>>(p + i));
+            if (i < count)
+                a0 = LaneMax(a0, Unsafe.ReadUnaligned<Vector<T>>(p + count - w));
+            a0 = LaneMax(LaneMax(a0, a1), LaneMax(a2, a3));
+            T e = a0[0];
+            for (int l = 1; l < w; l++)
+            {
+                T x = a0[l];
+                if (LtPtr(&e, &x)) e = x;
+            }
+
+            // The last group of four vectors holding the maximum (j is the end of the part not yet scanned), then the
+            // last such vector, then its lane; nothing after them held it.
+            var ve = new Vector<T>(e);
+            long j = count;
+            for (; j >= 4L * w; j -= 4L * w)
+            {
+                var hit = Vector.Equals(Unsafe.ReadUnaligned<Vector<T>>(p + j - w), ve)
+                          | Vector.Equals(Unsafe.ReadUnaligned<Vector<T>>(p + j - 2L * w), ve)
+                          | Vector.Equals(Unsafe.ReadUnaligned<Vector<T>>(p + j - 3L * w), ve)
+                          | Vector.Equals(Unsafe.ReadUnaligned<Vector<T>>(p + j - 4L * w), ve);
+                if (hit != Vector<T>.Zero)
+                    break;
+            }
+            for (; j >= w; j -= w)
+                if (Vector.EqualsAny(Unsafe.ReadUnaligned<Vector<T>>(p + j - w), ve))
+                    break;
+            for (j--; j > 0; j--)
+                if (!LtPtr(p + j, &e))
+                    return j;
+            // The maximum is an element of the window: when no later position holds it, the first one does.
+            return 0;
+        }
+
         /// <summary>
         ///     Single-kth introselect threading the shared pivot stack (NumPy <c>introselect_</c>).
-        ///     Pops the stack to narrow <c>[low, high]</c> before selecting, then median-of-3 +
-        ///     branchless block partition down to the insertion-sort / heap-sort thresholds,
-        ///     pushing every placed pivot back so the next kth reuses this work.
+        ///     Pops the stack to narrow <c>[low, high]</c> before selecting, takes NumPy's two linear
+        ///     shortcuts (<see cref="DumbSelect{T}"/> for a kth within 3 of low, <see cref="LastMaxIndex{T}"/>
+        ///     for a float kth at the line's end), then median-of-3 + branchless block partition down
+        ///     to the insertion-sort / heap-sort thresholds, pushing every placed pivot back so the
+        ///     next kth reuses this work.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void IntroSelectBlock<T>(T* v, long n, long kth, long* pivots, ref int npiv)
@@ -240,6 +516,31 @@ namespace NumSharp.Utilities
                 if (top == kth) return;
                 low = top + 1;
                 npiv--;
+            }
+
+            // A window the loop below would insertion-sort on its first step is sorted before NumPy's shortcuts, which
+            // NumPy takes for every window: on a few elements one insertion sort beat up to three minimum passes
+            // (100,000 rows of 5, np.quantile(m, 0.5, axis=1): 7.8 ms against 8.7 ms). The values placed are the same
+            // order statistics; only the arrangement of a short window differs.
+            if (high - low + 1 <= InsertionSortThreshold)
+            {
+                InsertionSort(v, low, high);
+                StorePivot(kth, kth, pivots, ref npiv);
+                return;
+            }
+
+            // NumPy's linear shortcuts, in NumPy's order (see the block above DumbSelect).
+            if (kth - low < 3)
+            {
+                DumbSelect(v, low, high, kth);
+                StorePivot(kth, kth, pivots, ref npiv);
+                return;
+            }
+            if (IsInexact<T>() && kth == n - 1)
+            {
+                // No pivot above kth can exist here, so the window ends at the line's end, which NumPy scans to.
+                Swap(v, kth, LastMaxIndex(v, low, n - 1));
+                return;
             }
 
             int depthLimit = 2 * Log2(n);
@@ -587,7 +888,8 @@ namespace NumSharp.Utilities
         ///     Index-tracking single-kth introselect threading the shared pivot stack (the
         ///     <c>arg = true</c> instantiation of NumPy <c>introselect_</c>). Mirrors the value-only
         ///     <see cref="IntroSelectBlock{T}(T*, long, long, long*, ref int)"/> exactly, moving
-        ///     <paramref name="idx"/> through every swap.
+        ///     <paramref name="idx"/> through every swap — NumPy's linear shortcuts included, so a tie at
+        ///     kth reports NumPy's index (the first minimum, or the last maximum of a float line's end).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void IntroSelectBlock<T>(T* v, long* idx, long n, long kth, long* pivots, ref int npiv)
@@ -603,6 +905,28 @@ namespace NumSharp.Utilities
                 if (top == kth) return;
                 low = top + 1;
                 npiv--;
+            }
+
+            // A short window is insertion-sorted first, as the value path does (see there).
+            if (high - low + 1 <= InsertionSortThreshold)
+            {
+                InsertionSort(v, idx, low, high);
+                StorePivot(kth, kth, pivots, ref npiv);
+                return;
+            }
+
+            // NumPy's linear shortcuts (see DumbSelect / LastMaxIndex): the values decide, the index column follows.
+            if (kth - low < 3)
+            {
+                for (long i = low; i <= kth; i++)
+                    Swap(v, idx, i, FirstMinIndex(v, i, high));
+                StorePivot(kth, kth, pivots, ref npiv);
+                return;
+            }
+            if (IsInexact<T>() && kth == n - 1)
+            {
+                Swap(v, idx, kth, LastMaxIndex(v, low, n - 1));
+                return;
             }
 
             int depthLimit = 2 * Log2(n);
@@ -961,6 +1285,26 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
+        ///     A float16's position in IEEE order as an int, from its bits: the magnitude for a positive value, minus the
+        ///     magnitude for a negative one, so -0.0 and +0.0 share the key 0 and the key order is exactly IEEE <c>&lt;</c>
+        ///     for every value that is not NaN (the only inputs QuickSelect sees: its callers compact NaNs out).
+        /// </summary>
+        /// <param name="bits">The float16's bit pattern.</param>
+        /// <returns>The order key.</returns>
+        /// <remarks>
+        ///     .NET's <see cref="Half"/> <c>&lt;</c> tests NaN and the signs with branches, which turned the branchless
+        ///     block partition's scan back into a branchy one: float16 lines partitioned at 1.05–1.3× NumPy's speed. This
+        ///     is four integer operations without a branch.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int HalfOrderKey(ushort bits)
+        {
+            int magnitude = bits & 0x7FFF;
+            int negative = -(bits >> 15);              // 0 for a positive value, -1 for a negative one
+            return (magnitude ^ negative) - negative;  // -magnitude when negative (two's complement), else magnitude
+        }
+
+        /// <summary>
         ///     Direct typed "a &lt; b" for the IComparable&lt;T&gt; partition path. The
         ///     <c>typeof(T) == typeof(X)</c> chain is JIT-folded per specialization, so each
         ///     instantiation compiles to a single native comparison — far cheaper than
@@ -983,7 +1327,7 @@ namespace NumSharp.Utilities
             if (typeof(T) == typeof(char))    return *(char*)&a    < *(char*)&b;
             if (typeof(T) == typeof(float))   return *(float*)&a   < *(float*)&b;
             if (typeof(T) == typeof(double))  return *(double*)&a  < *(double*)&b;
-            if (typeof(T) == typeof(Half))    return *(Half*)&a    < *(Half*)&b;
+            if (typeof(T) == typeof(Half))    return HalfOrderKey(*(ushort*)&a) < HalfOrderKey(*(ushort*)&b);
             if (typeof(T) == typeof(decimal)) return *(decimal*)&a < *(decimal*)&b;
             if (typeof(T) == typeof(bool))    return !*(bool*)&a && *(bool*)&b;  // false < true
             return a.CompareTo(b) < 0;   // fallback for any other IComparable type
@@ -1012,7 +1356,7 @@ namespace NumSharp.Utilities
             if (typeof(T) == typeof(char))    return *(char*)a    < *(char*)b;
             if (typeof(T) == typeof(float))   return *(float*)a   < *(float*)b;
             if (typeof(T) == typeof(double))  return *(double*)a  < *(double*)b;
-            if (typeof(T) == typeof(Half))    return *(Half*)a    < *(Half*)b;
+            if (typeof(T) == typeof(Half))    return HalfOrderKey(*(ushort*)a) < HalfOrderKey(*(ushort*)b);
             if (typeof(T) == typeof(decimal)) return *(decimal*)a < *(decimal*)b;
             if (typeof(T) == typeof(bool))    return !*(bool*)a && *(bool*)b;
             return (*a).CompareTo(*b) < 0;

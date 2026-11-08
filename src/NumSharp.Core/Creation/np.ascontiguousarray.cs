@@ -9,16 +9,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="dtype">By default, the data-type is inferred from the input.</param>
-        /// <returns>Contiguous array of same shape and content as a, with type dtype if specified.</returns>
+        /// <returns>Contiguous array of same shape and content as a, with type dtype if specified.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ascontiguousarray.html</remarks>
         public static NDArray ascontiguousarray(NDArray a, DType dtype = null)
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            var result = asarray(a, dtype, 'C');
-            // NumPy guarantees ndim >= 1: a 0-D input becomes a length-one VIEW sharing the
-            // scalar's storage (shape (1,), owndata=false), even when no dtype/layout copy is needed.
-            return result.ndim == 0 ? result.reshape(1) : result;
+            return NDArray.ascontiguousarray(a, dtype);
         }
 
         /// <summary>

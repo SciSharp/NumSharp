@@ -34,7 +34,11 @@ using System.Runtime.Intrinsics;
 //       loop that turns flat indices into (count, ndim) row-major coordinates.
 //       First row seeds coords via divmod; subsequent rows advance the
 //       innermost coord by (flat[i] - flat[i-1]) and propagate the carry
-//       chain — no per-element divmod on the hot path.
+//       chain — no per-element divmod on the hot path. Its caller is
+//       np.nonzero, whose (count, ndim) buffer is NumPy's PyArray_Nonzero
+//       multi-index array; np.argwhere is NumPy's TRANSPOSE of a stacked
+//       (ndim, count) array and fills it with the per-dim kernel
+//       (DirectILKernelGenerator.NonZero.cs) instead.
 //
 // CACHE:
 //   ConcurrentDictionary<Type, delegate> keyed on element type. GetOrAdd

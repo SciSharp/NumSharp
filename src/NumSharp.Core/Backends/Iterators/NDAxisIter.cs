@@ -26,8 +26,36 @@ namespace NumSharp.Backends.Iteration
     public readonly struct CumProdAxisKernel<T> : INDAxisSameTypeKernel<T>
         where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
     {
+        /// <summary>
+        /// Writes the running products of one line along the accumulated axis (np.cumprod's per-line step).
+        /// </summary>
+        /// <param name="src">The line's first input element.</param>
+        /// <param name="dst">The line's first output element.</param>
+        /// <param name="srcStride">The input stride along the axis, in elements.</param>
+        /// <param name="dstStride">The output stride along the axis, in elements.</param>
+        /// <param name="length">The axis length.</param>
+        /// <remarks>
+        /// complex128 multiplies with NumPy's accumulate form, the contracted <c>loop_scalar</c>
+        /// (<see cref="NumSharp.Backends.Kernels.ILKernelGenerator.PolyLoopScalarComplexMultiply"/>): NumPy's accumulate
+        /// hands each line to <c>CDOUBLE_multiply</c> with the output one element ahead of the running value it reads, an
+        /// overlap that rules out <c>simd_cmul</c> on every axis (parity QA-10).
+        /// </remarks>
         public static unsafe void Execute(T* src, T* dst, long srcStride, long dstStride, long length)
         {
+            // complex128: NumPy's accumulate multiply (see remarks). The JIT drops the branch for every other T.
+            if (typeof(T) == typeof(Complex))
+            {
+                Complex* cSrc = (Complex*)src;
+                Complex* cDst = (Complex*)dst;
+                Complex running = Complex.One;
+                for (long i = 0; i < length; i++)
+                {
+                    running = NumSharp.Backends.Kernels.ILKernelGenerator.PolyLoopScalarComplexMultiply(running, cSrc[i * srcStride]);
+                    cDst[i * dstStride] = running;
+                }
+                return;
+            }
+
             var product = T.MultiplicativeIdentity;
             for (long i = 0; i < length; i++)
             {
@@ -158,6 +186,18 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
+        /// <summary>
+        ///     The all / any reduction of <paramref name="src"/> along <paramref name="axis"/> into the bool array
+        ///     <paramref name="dst"/>: one output per position of the other axes, each the kernel's fold of that row.
+        /// </summary>
+        /// <typeparam name="T">The source element type.</typeparam>
+        /// <typeparam name="TKernel">The fold (<see cref="NDAllKernel{T}"/> or <see cref="NDAnyKernel{T}"/>).</typeparam>
+        /// <param name="src">The reduced array (any layout).</param>
+        /// <param name="dst">The result: the source's dims with <paramref name="axis"/> dropped (or kept with extent 1),
+        ///     any dense layout — each output is written through <paramref name="dst"/>'s own strides, so a result laid out
+        ///     in the input's memory order (NumPy's reduce allocation, plan api-parameter-parity X10) is filled in place.</param>
+        /// <param name="axis">The reduced axis, already normalized.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is not an axis of <paramref name="src"/>.</exception>
         public static void ReduceBool<T, TKernel>(UnmanagedStorage src, UnmanagedStorage dst, int axis)
             where T : unmanaged
             where TKernel : struct, INDBooleanReductionKernel<T>
@@ -165,9 +205,11 @@ namespace NumSharp.Backends.Iteration
             int axisNd = Math.Max(1, checked((int)src.Shape.NDim));
             long* osBuf = stackalloc long[axisNd];
             long* ssBuf = stackalloc long[axisNd];
+            long* dsBuf = stackalloc long[axisNd];
             var state = CreateReductionState(src, dst, axis, osBuf, ssBuf);
             if (state.OuterSize == 0)
                 return;
+            FillReductionDestinationStrides(src, dst, axis, dsBuf);
 
             var dstBase = (bool*)state.Data1;
 
@@ -199,6 +241,7 @@ namespace NumSharp.Backends.Iteration
             for (long outerIndex = 0; outerIndex < state.OuterSize; outerIndex++)
             {
                 long srcOffset = 0;
+                long dstOffset = 0;
                 long idx = outerIndex;
 
                 for (int axisIndex = state.OuterNDim - 1; axisIndex >= 0; axisIndex--)
@@ -207,12 +250,41 @@ namespace NumSharp.Backends.Iteration
                     long coord = idx % dim;
                     idx /= dim;
                     srcOffset += coord * srcOuterStrides[axisIndex];
+                    // The output position of the same coordinates (a C-contiguous result makes this outerIndex itself).
+                    dstOffset += coord * dsBuf[axisIndex];
                 }
 
                 T* rowSrc = srcBase + srcOffset;
-                dstBase[outerIndex] = useSimd
+                dstBase[dstOffset] = useSimd
                     ? ReduceBoolContigRow<T, TKernel>(rowSrc, state.AxisLength)
                     : ExecuteBoolKernel<T, TKernel>(rowSrc, state.SourceAxisStride, state.AxisLength);
+            }
+        }
+
+        /// <summary>
+        ///     The destination strides of a reduction's outer axes, in the order <see cref="CreateReductionState"/> lists
+        ///     them: every source axis but <paramref name="axis"/> whose extent is above 1, mapped to the same axis of
+        ///     <paramref name="dst"/> (the source's index, or one less past <paramref name="axis"/> when the result drops it).
+        /// </summary>
+        /// <param name="src">The reduced array.</param>
+        /// <param name="dst">The result: <paramref name="src"/>'s rank (the reduced axis kept with extent 1) or one less.</param>
+        /// <param name="axis">The reduced axis, already normalized.</param>
+        /// <param name="dstOuterStrides">Receives the strides (element units); room for the source's rank.</param>
+        /// <exception cref="NotSupportedException"><paramref name="dst"/>'s rank is neither the source's nor one less.</exception>
+        private static void FillReductionDestinationStrides(UnmanagedStorage src, UnmanagedStorage dst, int axis, long* dstOuterStrides)
+        {
+            int ndim = checked((int)src.Shape.NDim);
+            bool keptAxis = dst.Shape.NDim == ndim;
+            if (!keptAxis && dst.Shape.NDim != ndim - 1)
+                throw new NotSupportedException("A reduction result has the source's rank, or one less.");
+            int outerAxis = 0;
+            for (int i = 0; i < ndim; i++)
+            {
+                // The same skips as CreateReductionState: the reduced axis, and extent-1 axes (read at index 0 only). An
+                // extent-0 axis empties the reduction before any output is written, so its slot is never read.
+                if (i == axis || src.Shape.dimensions[i] <= 1)
+                    continue;
+                dstOuterStrides[outerAxis++] = dst.Shape.strides[keptAxis || i < axis ? i : i - 1];
             }
         }
 

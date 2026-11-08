@@ -29,17 +29,25 @@ namespace NumSharp.Backends
         /// <param name="typeCode">Optional output type (null = same as input or float for trig/sqrt)</param>
         /// <param name="@out">Optional provided output (NumPy ufunc out=).</param>
         /// <param name="where">Optional bool write mask (NumPy ufunc where=).</param>
-        /// <returns>Result array with specified or promoted type (or <paramref name="@out"/>)</returns>
+        /// <param name="kOrderResolved">True on the K-order step's own recursive call (the operand is already in NumPy's
+        /// output order): the step is not taken twice.</param>
+        /// <returns>Result array with specified or promoted type (or <paramref name="@out"/>); a fresh result is laid out in
+        /// NumPy's ufunc output order (the operand's K order: a permuted or flipped-F input keeps its memory order).</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal unsafe NDArray ExecuteUnaryOp(NDArray nd, UnaryOp op, NPTypeCode? typeCode = null,
-            NDArray @out = null, NDArray where = null)
+            NDArray @out = null, NDArray where = null, bool kOrderResolved = false)
         {
+            // No unary numeric ufunc has a string loop: NumPy refuses before it looks at the size, so an empty or 0-d
+            // string array raises too. The dtype= request is not known here (typeCode is the caller's resolved output
+            // dtype), so this is the generic text; members that take dtype= run the guard themselves first.
+            Strings.NDStringUfuncs.ThrowIfUnary(UfuncName(op), nd, null, @out, where);
+
             if (nd.size == 0 && @out is null && where is null)
             {
                 // For empty arrays, return empty array with correct output dtype
                 // typeCode specifies the output type (e.g., Boolean for predicate ops)
                 var emptyOutputType = typeCode ?? nd.GetTypeCode;
-                return new NDArray(emptyOutputType, nd.Shape.Clean(), false);
+                return NewArray(emptyOutputType, nd.Shape.Clean(), false);
             }
 
             var inputType = nd.GetTypeCode;
@@ -81,6 +89,23 @@ namespace NumSharp.Backends
                 return ExecuteScalarUnary(nd, op, outputType);
             }
 
+            // NumPy's ufunc output layout (parity QA-36): the result follows the operand's K order. A C or F-contiguous
+            // operand already gets it (the trivial bypass writes in the input's layout); any other layout NumPy keeps (a
+            // permuted view, a flipped F array) is computed over the operand transposed into that order and relabelled.
+            if (!kOrderResolved && !IsKOrderCVoter(nd.Shape) && !nd.Shape.IsFContiguous
+                && TryKOrderPlan(nd.Shape.dimensions, new[] { nd.Shape }, out var kLayout, out var kPerm))
+            {
+                NDArray t = IntoKOrder(nd, nd.ndim, kPerm);
+                try
+                {
+                    return NDArray.AdoptLayout(ExecuteUnaryOp(t, op, typeCode, null, null, kOrderResolved: true), kLayout);
+                }
+                finally
+                {
+                    t?.Dispose();
+                }
+            }
+
             // -------- O(1) trivial-loop bypass -----------------------------
             // Same rationale as the binary/comparison routes (NumPy
             // check_for_trivial_loop): a single contiguous operand (C or F, not
@@ -92,6 +117,17 @@ namespace NumSharp.Backends
             {
                 var trivial = TryTrivialContiguousUnaryOp(nd, op, inputType, outputType);
                 if (trivial is not null) return trivial;
+            }
+
+            // -------- Reversed 1-D input: one load and a lane reversal -----
+            // A 1-D input at element stride -1 (a[::-1], np.flip) of a same-width op
+            // with a vector body loads each vector with one contiguous load and a
+            // lane reversal (InnerLoop.Reversed.cs) — any SIMD dtype, where the
+            // strided kernel below assembles float vectors from scalar loads and the
+            // integers go through the buffered tile gather.
+            {
+                var reversed = TryReversedSimdUnaryOp(nd, op, inputType, outputType);
+                if (reversed is not null) return reversed;
             }
 
             // -------- Fused strided-SIMD path for 1-D strided inputs -------
@@ -153,7 +189,7 @@ namespace NumSharp.Backends
             bool isContiguous = nd.Shape.IsContiguous;
 
             // Allocate result (always contiguous)
-            var result = new NDArray(outputType, nd.Shape.Clean(), false);
+            var result = NewArray(outputType, nd.Shape.Clean(), false);
 
             // Get kernel key
             var key = new UnaryKernelKey(inputType, outputType, op, isContiguous);
@@ -236,11 +272,60 @@ namespace NumSharp.Backends
             // rather than cloning dims + recomputing strides/flags. isF implies a strictly
             // column-major input (ndim > 1).
             Shape resultShape = CanonicalResultShape(s, isF);
-            var result = new NDArray(outputType, resultShape, false);
+            var result = NewArray(outputType, resultShape, false);
             if (result.size == 0)
                 return result;
 
             ExecuteUnaryKernel(kernel, nd, result);
+            return result;
+        }
+
+        /// <summary>
+        ///     Reversed-run execution for a 1-D input at element stride −1 (<c>a[::-1]</c>, <c>np.flip(a)</c>) of a
+        ///     same-width op with a vector body: <see cref="DirectILKernelGenerator.GetReversedUnaryKernel"/> loads each
+        ///     vector with one contiguous load and a lane reversal and stores the result contiguously — for every SIMD
+        ///     dtype the host can reverse lanes for, where the float route assembled each vector from lane-count scalar
+        ///     loads (<see cref="TryStridedSimdUnaryOp"/>) and the integer route gathered tiles (<see cref="TryBufferedStridedUnaryOp"/>).
+        /// </summary>
+        /// <param name="nd">The input.</param>
+        /// <param name="op">The unary op.</param>
+        /// <param name="inputType">The input dtype.</param>
+        /// <param name="outputType">The output dtype (must equal <paramref name="inputType"/>).</param>
+        /// <returns>
+        ///     A fresh contiguous 1-D result — the layout the strided routes return — or null (→ the strided / buffered /
+        ///     iterator routes, unchanged) for any other input, a promoting op, an op without a vector body, or a host
+        ///     without the 256-bit AVX2 lane reversal.
+        /// </returns>
+        /// <remarks>
+        ///     The kernel's last <c>n mod V</c> elements take the op's scalar body, as in the routes it replaces, so every
+        ///     result byte is unchanged.
+        /// </remarks>
+        private unsafe NDArray? TryReversedSimdUnaryOp(
+            NDArray nd, UnaryOp op, NPTypeCode inputType, NPTypeCode outputType)
+        {
+            var s = nd.Shape;
+            if (s.NDim != 1 || s.IsBroadcasted || s.strides[0] != -1)
+                return null;
+            if (inputType != outputType || !DirectILKernelGenerator.CanReverseLanes(inputType))
+                return null;
+
+            var key = new UnaryKernelKey(inputType, outputType, op, IsContiguous: true);
+            if (!DirectILKernelGenerator.CanUseUnarySimd(key))
+                return null;
+
+            StridedUnaryKernel kernel;
+            try { kernel = DirectILKernelGenerator.GetReversedUnaryKernel(key); }
+            catch (NotSupportedException) { return null; }
+
+            long n = s.size;
+            var result = NewArray(outputType, new Shape(n), false);
+            if (n == 0)
+                return result;
+
+            // Logical element 0 — the view's highest address; the kernel walks down from it.
+            int elem = inputType.SizeOf();
+            byte* inBase = (byte*)nd.Address + s.offset * (long)elem;
+            kernel((void*)inBase, -elem, (void*)result.Address, n);
             return result;
         }
 
@@ -295,7 +380,7 @@ namespace NumSharp.Backends
                 return null;
 
             long n = s.size;
-            var result = new NDArray(outputType, new Shape(n), false);
+            var result = NewArray(outputType, new Shape(n), false);
             if (n == 0)
                 return result;
 
@@ -333,7 +418,7 @@ namespace NumSharp.Backends
                 return null;
 
             long n = s.size;
-            var result = new NDArray(outputType, new Shape(n), false);
+            var result = NewArray(outputType, new Shape(n), false);
             if (n == 0)
                 return result;
 
@@ -393,7 +478,7 @@ namespace NumSharp.Backends
             }
 
             long n = s.size;
-            var result = new NDArray(outputType, new Shape(n), false);
+            var result = NewArray(outputType, new Shape(n), false);
             if (n == 0)
                 return result;
 
@@ -462,7 +547,17 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool IsUnaryPredicateOp(UnaryOp op)
             => op == UnaryOp.IsFinite || op == UnaryOp.IsNan || op == UnaryOp.IsInf
-               || op == UnaryOp.IsPosInf || op == UnaryOp.IsNegInf;
+               || op == UnaryOp.IsPosInf || op == UnaryOp.IsNegInf || op == UnaryOp.SignBit;
+
+        /// <summary>
+        ///     Ops the NDIter routes must run ON THE INPUT dtype without a preceding input→output convert
+        ///     (mirror of <c>DirectILKernelGenerator.EmitsResultFromInputType</c>): the float classification
+        ///     predicates AND <see cref="UnaryOp.BitwiseCount"/> (uint8 out). Used to exclude them from the
+        ///     buffered-promoting cast route and to select the input-typed scalar body.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static bool UnaryOpReadsInputType(UnaryOp op)
+            => IsUnaryPredicateOp(op) || op == UnaryOp.BitwiseCount;
 
         /// <summary>
         ///     <see cref="NumSharp.Utilities.NDComplexMath.Abs"/> — resolved once and
@@ -515,9 +610,9 @@ namespace NumSharp.Backends
                                  && cleanShape.NDim > 1 && cleanShape.size > 1
                                  && !nd.Shape.IsScalar;
             Shape resultShape = inputStrictF
-                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
+                ? new Shape(cleanShape.dimensions, 'F', copy: false)
                 : cleanShape;
-            var result = new NDArray(outputType, resultShape, false);
+            var result = NewArray(outputType, resultShape, false);
 
             var order = inputStrictF
                 ? NPY_ORDER.NPY_FORTRANORDER
@@ -536,7 +631,7 @@ namespace NumSharp.Backends
             // body. Predicate ops (IsNan/IsInf/...) operate on the INPUT type
             // and Complex Abs has its own scalar special case — both excluded.
             bool bufferedPromoting = inputType != outputType
-                && !IsUnaryPredicateOp(op)
+                && !UnaryOpReadsInputType(op)
                 && !(op == UnaryOp.Abs && inputType == NPTypeCode.Complex)
                 && DirectILKernelGenerator.CanUseUnarySimd(
                        new UnaryKernelKey(outputType, outputType, op, IsContiguous: true))
@@ -571,7 +666,7 @@ namespace NumSharp.Backends
             {
                 scalarBody = il =>
                 {
-                    if (IsUnaryPredicateOp(capOp))
+                    if (UnaryOpReadsInputType(capOp))
                     {
                         DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capIn);
                     }
@@ -674,35 +769,43 @@ namespace NumSharp.Backends
         /// Invoke a unary scalar delegate and create the result NDArray.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static NDArray InvokeUnaryScalar<TInput>(Delegate func, TInput input, NPTypeCode outputType)
+        private NDArray InvokeUnaryScalar<TInput>(Delegate func, TInput input, NPTypeCode outputType)
         {
             // Dispatch based on output type to avoid boxing on result
             return outputType switch
             {
-                NPTypeCode.Boolean => NDArray.Scalar(((Func<TInput, bool>)func)(input)),
-                NPTypeCode.Byte => NDArray.Scalar(((Func<TInput, byte>)func)(input)),
-                NPTypeCode.SByte => NDArray.Scalar(((Func<TInput, sbyte>)func)(input)),
-                NPTypeCode.Int16 => NDArray.Scalar(((Func<TInput, short>)func)(input)),
-                NPTypeCode.UInt16 => NDArray.Scalar(((Func<TInput, ushort>)func)(input)),
-                NPTypeCode.Int32 => NDArray.Scalar(((Func<TInput, int>)func)(input)),
-                NPTypeCode.UInt32 => NDArray.Scalar(((Func<TInput, uint>)func)(input)),
-                NPTypeCode.Int64 => NDArray.Scalar(((Func<TInput, long>)func)(input)),
-                NPTypeCode.UInt64 => NDArray.Scalar(((Func<TInput, ulong>)func)(input)),
-                NPTypeCode.Char => NDArray.Scalar(((Func<TInput, char>)func)(input)),
-                NPTypeCode.Half => NDArray.Scalar(((Func<TInput, Half>)func)(input)),
-                NPTypeCode.Single => NDArray.Scalar(((Func<TInput, float>)func)(input)),
-                NPTypeCode.Double => NDArray.Scalar(((Func<TInput, double>)func)(input)),
-                NPTypeCode.Decimal => NDArray.Scalar(((Func<TInput, decimal>)func)(input)),
-                NPTypeCode.Complex => NDArray.Scalar(((Func<TInput, System.Numerics.Complex>)func)(input)),
+                NPTypeCode.Boolean => NewScalar(((Func<TInput, bool>)func)(input)),
+                NPTypeCode.Byte => NewScalar(((Func<TInput, byte>)func)(input)),
+                NPTypeCode.SByte => NewScalar(((Func<TInput, sbyte>)func)(input)),
+                NPTypeCode.Int16 => NewScalar(((Func<TInput, short>)func)(input)),
+                NPTypeCode.UInt16 => NewScalar(((Func<TInput, ushort>)func)(input)),
+                NPTypeCode.Int32 => NewScalar(((Func<TInput, int>)func)(input)),
+                NPTypeCode.UInt32 => NewScalar(((Func<TInput, uint>)func)(input)),
+                NPTypeCode.Int64 => NewScalar(((Func<TInput, long>)func)(input)),
+                NPTypeCode.UInt64 => NewScalar(((Func<TInput, ulong>)func)(input)),
+                NPTypeCode.Char => NewScalar(((Func<TInput, char>)func)(input)),
+                NPTypeCode.Half => NewScalar(((Func<TInput, Half>)func)(input)),
+                NPTypeCode.Single => NewScalar(((Func<TInput, float>)func)(input)),
+                NPTypeCode.Double => NewScalar(((Func<TInput, double>)func)(input)),
+                NPTypeCode.Decimal => NewScalar(((Func<TInput, decimal>)func)(input)),
+                NPTypeCode.Complex => NewScalar(((Func<TInput, System.Numerics.Complex>)func)(input)),
                 _ => throw new NotSupportedException($"Output type {outputType} not supported")
             };
         }
 
         /// <summary>
-        /// Execute the IL-generated unary kernel.
+        ///     Runs a whole-array unary kernel from <paramref name="input"/> (its first element, any layout, read through its
+        ///     own strides) into <paramref name="result"/>, written in C order.
         /// </summary>
+        /// <param name="kernel">The kernel for the input's layout: its <see cref="UnaryKernelKey.IsContiguous"/> must say
+        ///     whether <paramref name="input"/> is C-contiguous (the contiguous kernel reads linearly; the strided one walks
+        ///     the input's strides over <paramref name="result"/>'s dimensions, the engine's slow fallback).</param>
+        /// <param name="input">The operand.</param>
+        /// <param name="result">A fresh C-contiguous array of the input's dimensions and the kernel's output dtype.</param>
+        /// <remarks>Internal, not private: <c>LinAlgHelper.Conjugate</c> runs the conjugate kernel this way for a contiguous
+        ///     operand, without the ufunc's argument handling.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void ExecuteUnaryKernel(
+        internal static unsafe void ExecuteUnaryKernel(
             UnaryKernel kernel,
             NDArray input, NDArray result)
         {
@@ -713,7 +816,7 @@ namespace NumSharp.Backends
             byte* inputAddr = (byte*)input.Address + inputShape.offset * inputElemSize;
 
             fixed (long* strides = inputShape.strides)
-            fixed (long* shape = result.shape)
+            fixed (long* shape = result.Shape.dimensions)
             {
                 kernel(
                     (void*)inputAddr,

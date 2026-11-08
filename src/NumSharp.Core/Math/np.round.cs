@@ -14,7 +14,10 @@ namespace NumSharp
         /// <param name="dtype">The <see cref="DType"/> the returned ndarray should be of (a C# <see cref="System.Type"/>, an <see cref="NPTypeCode"/> or a NumPy dtype string all convert implicitly). <see langword="null"/> preserves NumPy's round dtype rules (integer inputs are an identity copy).</param>
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned. The real and imaginary parts of complex numbers are rounded separately. The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray round_(NDArray x, int decimals = 0, NDArray @out = null, DType dtype = null)
+            // ndarray.round is the engine's Round; a numpy.matrix operand's class follows decimals (the rint ufunc for 0,
+            // a plain result otherwise: the computation's rule).
             => x.TensorEngine.Round(x, decimals, dtype, @out);
 
         /// <summary>
@@ -26,7 +29,10 @@ namespace NumSharp
         /// <param name="dtype">The <see cref="DType"/> the returned ndarray should be of (implicit from <see cref="System.Type"/> / <see cref="NPTypeCode"/> / NumPy dtype string).</param>
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned. The real and imaginary parts of complex numbers are rounded separately. The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray around(NDArray x, int decimals = 0, NDArray @out = null, DType dtype = null)
+            // ndarray.round is the engine's Round; a numpy.matrix operand's class follows decimals (the rint ufunc for 0,
+            // a plain result otherwise: the computation's rule).
             => x.TensorEngine.Round(x, decimals, dtype, @out);
     }
 }

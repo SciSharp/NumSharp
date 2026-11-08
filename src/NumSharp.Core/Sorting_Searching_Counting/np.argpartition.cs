@@ -1,4 +1,4 @@
-using NumSharp.Backends.Sorting;
+using System;
 
 namespace NumSharp
 {
@@ -23,17 +23,33 @@ namespace NumSharp
         ///     raises AxisError on 0-d. NaN floats partition to the end (their indices keep encounter
         ///     order, the same policy as argsort's NaN tail).
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates
+        ///     the int64 index result as the subclass (<c>Can only create a chararray from string
+        ///     data.</c>), after the argument checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         public static NDArray argpartition(NDArray a, int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(a, new[] { kth }, axis, kind, order);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.ArgPartition(a, kth, axis, kind, order);
+        }
 
         /// <summary>
         ///     Indirect partition around EVERY index in <paramref name="kth"/> at once (NumPy
         ///     <c>np.argpartition</c> with a kth sequence). Returns int64 indices; the input is only read.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argpartition.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates
+        ///     the int64 index result as the subclass (<c>Can only create a chararray from string
+        ///     data.</c>), after the argument checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         [NDScoped]
         public static NDArray argpartition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(a, kth, axis, kind, order);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.ArgPartition(a, kth, axis, kind, order);
+        }
 
         /// <summary>
         ///     Indirect partition with the kth indices given as an ARRAY — NumPy's array-kth form
@@ -42,8 +58,16 @@ namespace NumSharp
         ///     values wrap modulo 2^64 exactly like NumPy's intp cast).
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argpartition.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates
+        ///     the int64 index result as the subclass (<c>Can only create a chararray from string
+        ///     data.</c>), after the argument checks.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         public static NDArray argpartition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(a, kth, axis, kind, order);
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.ArgPartition(a, kth, axis, kind, order);
+        }
     }
 
     public partial class NDArray
@@ -53,20 +77,20 @@ namespace NumSharp
         ///     (NumPy <c>ndarray.argpartition</c>). This array is only read.
         /// </summary>
         public NDArray argpartition(int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(this, new[] { kth }, axis, kind, order);
+            => TensorEngine.ArgPartition(this, kth, axis, kind, order);
 
         /// <summary>
         ///     Returns the int64 indices that would partition this array around every index in
         ///     <paramref name="kth"/> at once (NumPy <c>ndarray.argpartition</c>).
         /// </summary>
         public NDArray argpartition(int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(this, kth, axis, kind, order);
+            => TensorEngine.ArgPartition(this, kth, axis, kind, order);
 
         /// <summary>
         ///     Returns the int64 indices that would partition this array, with the kth indices given
         ///     as an ARRAY (NumPy's array-kth form — see the <c>np.argpartition</c> overload).
         /// </summary>
         public NDArray argpartition(NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(this, kth, axis, kind, order);
+            => TensorEngine.ArgPartition(this, kth, axis, kind, order);
     }
 }

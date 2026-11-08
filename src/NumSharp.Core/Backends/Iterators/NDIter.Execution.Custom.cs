@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Kernels;
@@ -89,7 +90,7 @@ namespace NumSharp.Backends.Iteration
 
             if (operandTypes.Length != kernelNOp)
                 throw new ArgumentException(
-                    $"operandTypes length ({operandTypes.Length}) must match iterator NOp ({_state->NOp}).",
+                    string.Create(CultureInfo.InvariantCulture, $"operandTypes length ({operandTypes.Length}) must match iterator NOp ({_state->NOp})."),
                     nameof(operandTypes));
 
             // A where= ufunc over narrow strided rows: the masked 2-D block kernel runs the whole
@@ -114,13 +115,41 @@ namespace NumSharp.Backends.Iteration
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
             in InnerLoopKernelKey key)
+            => ExecuteElementWise(operandTypes, scalarBody, vectorBody, key, auxdata: null);
+
+        /// <summary>
+        /// Packed-key <see cref="ExecuteElementWise(NPTypeCode[], Action{ILGenerator}, Action{ILGenerator}?, in InnerLoopKernelKey)"/>
+        /// that also hands the 1-D inner-loop kernel an <paramref name="auxdata"/> cookie — the binary ufunc routes pass a
+        /// <see cref="BroadcastNaNRule"/> there (see <see cref="DirectILKernelGenerator.EmitBroadcastNaNRegion"/>).
+        /// </summary>
+        /// <param name="operandTypes">Data-operand dtypes (inputs then output; a trailing ARRAYMASK operand excluded).</param>
+        /// <param name="scalarBody">Per-element IL body.</param>
+        /// <param name="vectorBody">Optional per-vector IL body.</param>
+        /// <param name="key">The kernel's packed cache key.</param>
+        /// <param name="auxdata">
+        /// Cookie passed to every inner-loop call, or null. It must stay valid for the whole call. The 2-D block kernels
+        /// (narrow strided rows, masked or not) do not receive it: they serve multi-axis iterations, which NumPy mostly
+        /// BUFFERS into one contiguous call (the second operand's NaN everywhere, which the kernel bodies already give).
+        /// The multi-axis broadcasts NumPy runs one region-rule call per row (unbuffered) or per buffer fill (a 0-d or
+        /// size-1 operand stays at stride 0 in its buffered loop) are open bugs, pinned with NumPy's bits in
+        /// <c>test/NumSharp.Tests/OpenBugs.NaNOperandOrder.cs</c>.
+        /// </param>
+        /// <exception cref="ArgumentNullException"><paramref name="operandTypes"/> is null.</exception>
+        /// <exception cref="ArgumentException">The operand-type count does not match the iterator.</exception>
+        public void ExecuteElementWise(
+            NPTypeCode[] operandTypes,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            in InnerLoopKernelKey key,
+            void* auxdata)
         {
             if (operandTypes is null) throw new ArgumentNullException(nameof(operandTypes));
 
             ValidateElementWiseOperandCount(operandTypes.Length);
 
-            if (Is2DElementwiseShape() &&
-                TryExecute2DElementwise(operandTypes, scalarBody, vectorBody, key))
+            if (Is2DElementwiseShape(out bool reversedRow) &&
+                (!reversedRow || DirectILKernelGenerator.ServesReversedRows(operandTypes, vectorBody)) &&
+                TryExecute2DElementwise(operandTypes, scalarBody, vectorBody, key, reversedRow))
                 return;
 
             // The where= routes arrive here with a packed key and the mask as the trailing
@@ -129,9 +158,46 @@ namespace NumSharp.Backends.Iteration
                 TryExecute2DMasked(operandTypes, scalarBody, vectorBody, key))
                 return;
 
-            if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
+            NDInnerLoopFunc kernel;
+            if (HasReversedInnerRun(operandTypes.Length) &&
+                DirectILKernelGenerator.ServesReversedRows(operandTypes, vectorBody))
+            {
+                // A reversed operand: the kernel's reversed-run variant (InnerLoop.Reversed.cs).
+                if (!DirectILKernelGenerator.TryGetReversedRunInnerLoop(key, out kernel))
+                    kernel = DirectILKernelGenerator.CompileReversedRunInnerLoop(operandTypes, scalarBody, vectorBody, key);
+            }
+            else if (!DirectILKernelGenerator.TryGetInnerLoop(key, out kernel))
+            {
                 kernel = DirectILKernelGenerator.CompileInnerLoop(operandTypes, scalarBody, vectorBody, key);
-            ForEach(kernel);
+            }
+            ForEach(kernel, auxdata);
+        }
+
+        /// <summary>
+        /// Whether some kernel operand walks the inner axis REVERSED (element stride −1, <c>a[::-1]</c>) in an
+        /// unbuffered external-loop iteration — the iterations that run a kernel's reversed-run variant
+        /// (<see cref="DirectILKernelGenerator.CompileReversedRunInnerLoop"/>). Unbuffered, the inner strides are the
+        /// operands' own and the same for every call, so the variant's reversed patterns cover every call; a buffered
+        /// iteration hands the kernel buffer strides and keeps the plain kernel.
+        /// </summary>
+        /// <param name="kernelOperandCount">The kernel's operand count (a trailing where= mask, driven by ForEach, excluded).</param>
+        /// <returns>True when an operand's inner element stride is −1.</returns>
+        /// <remarks>A few stride reads per call, on the routes that already built an iterator.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool HasReversedInnerRun(int kernelOperandCount)
+        {
+            uint f = _state->ItFlags;
+            if ((f & (uint)NDIterFlags.BUFFER) != 0) return false;
+            if ((f & (uint)NDIterFlags.EXLOOP) == 0) return false;
+            int ndim = _state->NDim;
+            if (ndim < 1) return false;
+            int inner = ndim - 1;
+            for (int op = 0; op < kernelOperandCount; op++)
+            {
+                if (_state->GetStride(inner, op) == -1)
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -148,7 +214,7 @@ namespace NumSharp.Backends.Iteration
 
             if (operandTypeCount != kernelNOp)
                 throw new ArgumentException(
-                    $"operandTypes length ({operandTypeCount}) must match iterator NOp ({_state->NOp}).",
+                    string.Create(CultureInfo.InvariantCulture, $"operandTypes length ({operandTypeCount}) must match iterator NOp ({_state->NOp})."),
                     "operandTypes");
         }
 
@@ -175,11 +241,20 @@ namespace NumSharp.Backends.Iteration
         /// and fails <c>NDim &gt;= 2</c> immediately; the callers only build an operand-type
         /// array when this returns true.
         /// </summary>
+        /// <param name="hasReversedRow">
+        /// Set when an input row is REVERSED (inner element stride −1, <c>m[:, ::-1]</c>). The gate admits such a row
+        /// only for the caller to confirm that its kernel runs it as a reversed-run stage
+        /// (<see cref="DirectILKernelGenerator.ServesReversedRows"/>): a kernel without one would reach its scalar block,
+        /// where the per-row route still had the gather. Checked only when it is set, so a call without a reversed
+        /// row pays nothing for it.
+        /// </param>
+        /// <returns>True when the iteration can run as 2-D blocks (subject to <paramref name="hasReversedRow"/>).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool Is2DElementwiseShape()
+        private bool Is2DElementwiseShape(out bool hasReversedRow)
         {
+            hasReversedRow = false;
             uint f = _state->ItFlags;
-            if ((f & (uint)NDIterFlags.BUFFER) != 0) return false;        // cast/promote → windowed path
+            if ((f & (uint)NDIterFlags.BUFFER) != 0) return false;        // cast/promote → buffered path
             if ((f & (uint)NDIterFlags.EXLOOP) == 0) return false;        // need the coalesced inner axis
             if ((f & (uint)NDIterFlags.ONEITERATION) != 0) return false;  // single chunk is already optimal
             int ndim = _state->NDim;
@@ -191,11 +266,17 @@ namespace NumSharp.Backends.Iteration
             // The output row must be element-contiguous — that is what lets the block kernel
             // SIMD-store each row in place.
             if (_state->GetStride(inner, nop - 1) != 1) return false;
-            // Each input row is contiguous (a vector load) or broadcast (one scalar per row). A
+            // Each input row is contiguous (a vector load), broadcast (one scalar per row) or
+            // reversed (a load and a lane reversal, if the caller's kernel has the stage). A
             // genuinely strided inner axis keeps the per-chunk route, whose gather path serves it.
             for (int op = 0; op < nop - 1; op++)
             {
                 long s = _state->GetStride(inner, op);
+                if (s == -1)
+                {
+                    hasReversedRow = true;
+                    continue;
+                }
                 if (s != 1 && s != 0) return false;
             }
             return true;
@@ -221,94 +302,131 @@ namespace NumSharp.Backends.Iteration
         /// so strides scale by SrcElementSizes exactly as NDIter.ExternalLoopNext does (identical
         /// to ElementSizes on this unbuffered path).
         /// </summary>
+        /// <param name="operandTypes">Inputs then the output.</param>
+        /// <param name="scalarBody">Per-element body.</param>
+        /// <param name="vectorBody">Optional per-vector body.</param>
+        /// <param name="key">The kernel's packed key.</param>
+        /// <param name="reversedRow">
+        /// True when an input row is reversed (<see cref="Is2DElementwiseShape"/>, confirmed by the caller): the block
+        /// kernel's reversed-run variant runs it; false keeps the plain kernel, its machine code unchanged.
+        /// </param>
+        /// <returns>True when the blocks ran (or there was nothing to run); false only when runtime IL is unavailable.</returns>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
         private bool TryExecute2DElementwise(
             NPTypeCode[] operandTypes,
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
-            in InnerLoopKernelKey key)
+            in InnerLoopKernelKey key,
+            bool reversedRow)
         {
-            if (!DirectILKernelGenerator.Enabled) return false;
-
-            int nop = _state->NOp;
-            if (operandTypes.Length != nop) return false;                 // defensive (mask already excluded)
-
-            int ndim = _state->NDim;
-            int inner = ndim - 1;
-            long* shape = _state->Shape;
-            int* srcSizes = _state->SrcElementSizes;
-
-            // The block starts at the innermost outer axis and grows outward while every operand
-            // walks the next axis out as a continuation of it.
-            int first = inner - 1;
-            while (first > 0)
+            try
             {
-                bool contiguous = true;
+                if (!DirectILKernelGenerator.Enabled) return false;
+
+                // An empty iteration runs no block (see ForEach): with an empty LEADING axis the block below would
+                // still be innerCount x outerCount elements of operands that hold none. Handled: there is nothing to
+                // compute.
+                if (_state->IterSize == 0) return true;
+
+                int nop = _state->NOp;
+                if (operandTypes.Length != nop) return false;                 // defensive (mask already excluded)
+
+                int ndim = _state->NDim;
+                int inner = ndim - 1;
+                long* shape = _state->Shape;
+                int* srcSizes = _state->SrcElementSizes;
+
+                // The block starts at the innermost outer axis and grows outward while every operand
+                // walks the next axis out as a continuation of it.
+                int first = inner - 1;
+                while (first > 0)
+                {
+                    bool contiguous = true;
+                    for (int op = 0; op < nop; op++)
+                    {
+                        if (_state->GetStride(first - 1, op) != _state->GetStride(first, op) * shape[first])
+                        {
+                            contiguous = false;
+                            break;
+                        }
+                    }
+                    if (!contiguous) break;
+                    first--;
+                }
+
+                long innerCount = shape[inner];
+                long outerCount = 1;
+                for (int d = first; d < inner; d++)
+                    outerCount *= shape[d];
+
+                long* innerStrides = stackalloc long[nop];
+                long* outerStrides = stackalloc long[nop];
                 for (int op = 0; op < nop; op++)
                 {
-                    if (_state->GetStride(first - 1, op) != _state->GetStride(first, op) * shape[first])
-                    {
-                        contiguous = false;
-                        break;
-                    }
+                    innerStrides[op] = _state->GetStride(inner, op) * srcSizes[op];
+                    outerStrides[op] = _state->GetStride(inner - 1, op) * srcSizes[op];
                 }
-                if (!contiguous) break;
-                first--;
-            }
 
-            long innerCount = shape[inner];
-            long outerCount = 1;
-            for (int d = first; d < inner; d++)
-                outerCount *= shape[d];
+                ND2DElementwiseKernel kernel;
+                if (reversedRow)
+                {
+                    // A reversed input row: the block kernel's reversed-run variant (InnerLoop.Reversed.cs).
+                    if (!DirectILKernelGenerator.TryGet2DReversedRunKernel(key, out kernel))
+                        kernel = DirectILKernelGenerator.Compile2DReversedRunKernel(operandTypes, scalarBody, vectorBody, key);
+                }
+                else if (!DirectILKernelGenerator.TryGet2DKernel(key, out kernel))
+                {
+                    kernel = DirectILKernelGenerator.Compile2DElementwiseKernel(
+                        operandTypes, scalarBody, vectorBody, key);
+                }
 
-            long* innerStrides = stackalloc long[nop];
-            long* outerStrides = stackalloc long[nop];
-            for (int op = 0; op < nop; op++)
-            {
-                innerStrides[op] = _state->GetStride(inner, op) * srcSizes[op];
-                outerStrides[op] = _state->GetStride(inner - 1, op) * srcSizes[op];
-            }
+                void** basePtrs = GetDataPtrArray();
+                if (first == 0)
+                {
+                    kernel(basePtrs, innerStrides, innerCount, outerStrides, outerCount);
+                    return true;
+                }
 
-            if (!DirectILKernelGenerator.TryGet2DKernel(key, out var kernel))
-                kernel = DirectILKernelGenerator.Compile2DElementwiseKernel(operandTypes, scalarBody, vectorBody, key);
+                // Leading axes 0..first-1: a per-block odometer over a private copy of the pointers
+                // (the iterator's own DataPtrs stay at the iteration start, as on the single-block
+                // path).
+                void** ptrs = stackalloc void*[nop];
+                for (int op = 0; op < nop; op++)
+                    ptrs[op] = basePtrs[op];
+                long* coords = stackalloc long[first];
+                for (int d = 0; d < first; d++)
+                    coords[d] = 0;
 
-            void** basePtrs = GetDataPtrArray();
-            if (first == 0)
-            {
-                kernel(basePtrs, innerStrides, innerCount, outerStrides, outerCount);
+                while (true)
+                {
+                    kernel(ptrs, innerStrides, innerCount, outerStrides, outerCount);
+
+                    int axis = first - 1;
+                    for (; axis >= 0; axis--)
+                    {
+                        if (++coords[axis] < shape[axis])
+                        {
+                            for (int op = 0; op < nop; op++)
+                                ptrs[op] = (byte*)ptrs[op] + _state->GetStride(axis, op) * srcSizes[op];
+                            break;
+                        }
+                        coords[axis] = 0;
+                        for (int op = 0; op < nop; op++)
+                            ptrs[op] = (byte*)ptrs[op] - _state->GetStride(axis, op) * (shape[axis] - 1) * srcSizes[op];
+                    }
+                    if (axis < 0)
+                        break;
+                }
                 return true;
             }
-
-            // Leading axes 0..first-1: a per-block odometer over a private copy of the pointers
-            // (the iterator's own DataPtrs stay at the iteration start, as on the single-block
-            // path).
-            void** ptrs = stackalloc void*[nop];
-            for (int op = 0; op < nop; op++)
-                ptrs[op] = basePtrs[op];
-            long* coords = stackalloc long[first];
-            for (int d = 0; d < first; d++)
-                coords[d] = 0;
-
-            while (true)
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
             {
-                kernel(ptrs, innerStrides, innerCount, outerStrides, outerCount);
-
-                int axis = first - 1;
-                for (; axis >= 0; axis--)
-                {
-                    if (++coords[axis] < shape[axis])
-                    {
-                        for (int op = 0; op < nop; op++)
-                            ptrs[op] = (byte*)ptrs[op] + _state->GetStride(axis, op) * srcSizes[op];
-                        break;
-                    }
-                    coords[axis] = 0;
-                    for (int op = 0; op < nop; op++)
-                        ptrs[op] = (byte*)ptrs[op] - _state->GetStride(axis, op) * (shape[axis] - 1) * srcSizes[op];
-                }
-                if (axis < 0)
-                    break;
+                throw;
             }
-            return true;
         }
 
         // =====================================================================
@@ -385,79 +503,94 @@ namespace NumSharp.Backends.Iteration
         /// operand (mask included) walks contiguously into one block and walk any leading axes
         /// per block — the <see cref="TryExecute2DElementwise"/> structure over all NOp operands.
         /// </summary>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
         private void Run2DMaskedBlocks(ND2DElementwiseKernel kernel)
         {
-            int nop = _state->NOp;                                        // data operands + the mask
-            int ndim = _state->NDim;
-            int inner = ndim - 1;
-            long* shape = _state->Shape;
-            int* srcSizes = _state->SrcElementSizes;
-
-            int first = inner - 1;
-            while (first > 0)
+            try
             {
-                bool contiguous = true;
+                // An empty iteration runs no block (see ForEach and TryExecute2DElementwise).
+                if (_state->IterSize == 0) return;
+
+                int nop = _state->NOp;                                        // data operands + the mask
+                int ndim = _state->NDim;
+                int inner = ndim - 1;
+                long* shape = _state->Shape;
+                int* srcSizes = _state->SrcElementSizes;
+
+                int first = inner - 1;
+                while (first > 0)
+                {
+                    bool contiguous = true;
+                    for (int op = 0; op < nop; op++)
+                    {
+                        if (_state->GetStride(first - 1, op) != _state->GetStride(first, op) * shape[first])
+                        {
+                            contiguous = false;
+                            break;
+                        }
+                    }
+                    if (!contiguous) break;
+                    first--;
+                }
+
+                long innerCount = shape[inner];
+                long outerCount = 1;
+                for (int d = first; d < inner; d++)
+                    outerCount *= shape[d];
+
+                long* innerStrides = stackalloc long[nop];
+                long* outerStrides = stackalloc long[nop];
                 for (int op = 0; op < nop; op++)
                 {
-                    if (_state->GetStride(first - 1, op) != _state->GetStride(first, op) * shape[first])
-                    {
-                        contiguous = false;
-                        break;
-                    }
+                    innerStrides[op] = _state->GetStride(inner, op) * srcSizes[op];
+                    outerStrides[op] = _state->GetStride(inner - 1, op) * srcSizes[op];
                 }
-                if (!contiguous) break;
-                first--;
-            }
-
-            long innerCount = shape[inner];
-            long outerCount = 1;
-            for (int d = first; d < inner; d++)
-                outerCount *= shape[d];
-
-            long* innerStrides = stackalloc long[nop];
-            long* outerStrides = stackalloc long[nop];
-            for (int op = 0; op < nop; op++)
-            {
-                innerStrides[op] = _state->GetStride(inner, op) * srcSizes[op];
-                outerStrides[op] = _state->GetStride(inner - 1, op) * srcSizes[op];
-            }
 
 
-            void** basePtrs = GetDataPtrArray();
-            if (first == 0)
-            {
-                kernel(basePtrs, innerStrides, innerCount, outerStrides, outerCount);
+                void** basePtrs = GetDataPtrArray();
+                if (first == 0)
+                {
+                    kernel(basePtrs, innerStrides, innerCount, outerStrides, outerCount);
+                    return;
+                }
+
+                void** ptrs = stackalloc void*[nop];
+                for (int op = 0; op < nop; op++)
+                    ptrs[op] = basePtrs[op];
+                long* coords = stackalloc long[first];
+                for (int d = 0; d < first; d++)
+                    coords[d] = 0;
+
+                while (true)
+                {
+                    kernel(ptrs, innerStrides, innerCount, outerStrides, outerCount);
+
+                    int axis = first - 1;
+                    for (; axis >= 0; axis--)
+                    {
+                        if (++coords[axis] < shape[axis])
+                        {
+                            for (int op = 0; op < nop; op++)
+                                ptrs[op] = (byte*)ptrs[op] + _state->GetStride(axis, op) * srcSizes[op];
+                            break;
+                        }
+                        coords[axis] = 0;
+                        for (int op = 0; op < nop; op++)
+                            ptrs[op] = (byte*)ptrs[op] - _state->GetStride(axis, op) * (shape[axis] - 1) * srcSizes[op];
+                    }
+                    if (axis < 0)
+                        break;
+                }
                 return;
             }
-
-            void** ptrs = stackalloc void*[nop];
-            for (int op = 0; op < nop; op++)
-                ptrs[op] = basePtrs[op];
-            long* coords = stackalloc long[first];
-            for (int d = 0; d < first; d++)
-                coords[d] = 0;
-
-            while (true)
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
             {
-                kernel(ptrs, innerStrides, innerCount, outerStrides, outerCount);
-
-                int axis = first - 1;
-                for (; axis >= 0; axis--)
-                {
-                    if (++coords[axis] < shape[axis])
-                    {
-                        for (int op = 0; op < nop; op++)
-                            ptrs[op] = (byte*)ptrs[op] + _state->GetStride(axis, op) * srcSizes[op];
-                        break;
-                    }
-                    coords[axis] = 0;
-                    for (int op = 0; op < nop; op++)
-                        ptrs[op] = (byte*)ptrs[op] - _state->GetStride(axis, op) * (shape[axis] - 1) * srcSizes[op];
-                }
-                if (axis < 0)
-                    break;
+                throw;
             }
-            return;
         }
 
         /// <summary>Convenience: 1-input + 1-output (unary).</summary>
@@ -477,11 +610,22 @@ namespace NumSharp.Backends.Iteration
             in InnerLoopKernelKey key)
         {
             ValidateElementWiseOperandCount(2);
-            if (Is2DElementwiseShape() &&
-                TryExecute2DElementwise(new[] { inType, outType }, scalarBody, vectorBody, key))
+            if (Is2DElementwiseShape(out bool reversedRow) &&
+                (!reversedRow || DirectILKernelGenerator.ServesReversedRows(inType, inType, outType, nIn: 1, vectorBody)) &&
+                TryExecute2DElementwise(new[] { inType, outType }, scalarBody, vectorBody, key, reversedRow))
                 return;
-            if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
+            NDInnerLoopFunc kernel;
+            if (HasReversedInnerRun(2) &&
+                DirectILKernelGenerator.ServesReversedRows(inType, inType, outType, nIn: 1, vectorBody))
+            {
+                // A reversed operand: the kernel's reversed-run variant (InnerLoop.Reversed.cs).
+                if (!DirectILKernelGenerator.TryGetReversedRunInnerLoop(key, out kernel))
+                    kernel = DirectILKernelGenerator.CompileReversedRunInnerLoop(new[] { inType, outType }, scalarBody, vectorBody, key);
+            }
+            else if (!DirectILKernelGenerator.TryGetInnerLoop(key, out kernel))
+            {
                 kernel = DirectILKernelGenerator.CompileInnerLoop(new[] { inType, outType }, scalarBody, vectorBody, key);
+            }
             ForEach(kernel);
         }
 
@@ -491,14 +635,50 @@ namespace NumSharp.Backends.Iteration
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
             in InnerLoopKernelKey key)
+            => ExecuteElementWiseBinary(lhs, rhs, outType, scalarBody, vectorBody, key, auxdata: null);
+
+        /// <summary>
+        /// Packed-key binary form that also hands the 1-D inner-loop kernel an <paramref name="auxdata"/> cookie (the
+        /// binary ufunc routes pass a <see cref="BroadcastNaNRule"/>); a cache hit allocates nothing.
+        /// </summary>
+        /// <param name="lhs">The first input's dtype.</param>
+        /// <param name="rhs">The second input's dtype.</param>
+        /// <param name="outType">The output's dtype.</param>
+        /// <param name="scalarBody">Per-element IL body.</param>
+        /// <param name="vectorBody">Optional per-vector IL body.</param>
+        /// <param name="key">The kernel's packed cache key.</param>
+        /// <param name="auxdata">
+        /// Cookie passed to every inner-loop call, or null; it must stay valid for the whole call. The 2-D block kernel
+        /// (narrow strided rows) does not receive it, because NumPy mostly buffers such multi-axis iterations into one
+        /// contiguous call; the ones it runs one region-rule call per row (unbuffered) or per buffer fill (a 0-d or
+        /// size-1 operand stays at stride 0) are open bugs, pinned in <c>test/NumSharp.Tests/OpenBugs.NaNOperandOrder.cs</c>.
+        /// </param>
+        /// <exception cref="ArgumentException">The iterator does not have three data operands.</exception>
+        public void ExecuteElementWiseBinary(
+            NPTypeCode lhs, NPTypeCode rhs, NPTypeCode outType,
+            Action<ILGenerator> scalarBody,
+            Action<ILGenerator>? vectorBody,
+            in InnerLoopKernelKey key,
+            void* auxdata)
         {
             ValidateElementWiseOperandCount(3);
-            if (Is2DElementwiseShape() &&
-                TryExecute2DElementwise(new[] { lhs, rhs, outType }, scalarBody, vectorBody, key))
+            if (Is2DElementwiseShape(out bool reversedRow) &&
+                (!reversedRow || DirectILKernelGenerator.ServesReversedRows(lhs, rhs, outType, nIn: 2, vectorBody)) &&
+                TryExecute2DElementwise(new[] { lhs, rhs, outType }, scalarBody, vectorBody, key, reversedRow))
                 return;
-            if (!DirectILKernelGenerator.TryGetInnerLoop(key, out var kernel))
+            NDInnerLoopFunc kernel;
+            if (HasReversedInnerRun(3) &&
+                DirectILKernelGenerator.ServesReversedRows(lhs, rhs, outType, nIn: 2, vectorBody))
+            {
+                // A reversed operand: the kernel's reversed-run variant (InnerLoop.Reversed.cs).
+                if (!DirectILKernelGenerator.TryGetReversedRunInnerLoop(key, out kernel))
+                    kernel = DirectILKernelGenerator.CompileReversedRunInnerLoop(new[] { lhs, rhs, outType }, scalarBody, vectorBody, key);
+            }
+            else if (!DirectILKernelGenerator.TryGetInnerLoop(key, out kernel))
+            {
                 kernel = DirectILKernelGenerator.CompileInnerLoop(new[] { lhs, rhs, outType }, scalarBody, vectorBody, key);
-            ForEach(kernel);
+            }
+            ForEach(kernel, auxdata);
         }
 
         /// <summary>Convenience: 2-input + 1-output (binary).</summary>
@@ -550,7 +730,7 @@ namespace NumSharp.Backends.Iteration
             if (inputTypes is null) throw new ArgumentNullException(nameof(inputTypes));
             if (inputTypes.Length + 1 != _state->NOp)
                 throw new ArgumentException(
-                    $"inputTypes length ({inputTypes.Length}) + 1 must equal iterator NOp ({_state->NOp}).",
+                    string.Create(CultureInfo.InvariantCulture, $"inputTypes length ({inputTypes.Length}) + 1 must equal iterator NOp ({_state->NOp})."),
                     nameof(inputTypes));
 
             // EXTERNAL_LOOP guard (the measured ~40× foot-gun): without EXLOOP

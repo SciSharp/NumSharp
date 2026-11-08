@@ -46,6 +46,7 @@ NumSharp focuses on:
 - N-dimensional arrays with shape, stride, offset, and view metadata.
 - Broadcasting without materializing repeated values.
 - Dtype-aware math, comparisons, reductions, random sampling, and formatting.
+- NumPy's text dtypes and string operations, `chararray` included.
 - Runtime IL generation and SIMD fast paths where layout and dtype allow it.
 
 <p align="left">
@@ -62,6 +63,9 @@ NumSharp focuses on:
 - **Dtype-aware operations** - 15 core dtypes with NumPy-oriented promotion and
   conversion behavior. See [Dtypes](https://scisharp.github.io/NumSharp/docs/dtypes.html) and
   [NumPy compliance](https://scisharp.github.io/NumSharp/docs/compliance.html).
+- **Strings and character arrays** - NumPy's fixed-width `S` / `U` and variable-width
+  `StringDType` arrays with missing values, all of `np.strings`, the `np.@char` module and
+  `chararray` (`NDCharArray`). See [Strings, bytes and chararrays](https://scisharp.github.io/NumSharp/docs/fundamentals/strings-and-bytes.html).
 - **Broad `np.*` API surface** - Creation, manipulation, math, reductions,
   comparisons, logic, random sampling, I/O, and formatting. Browse the
   [API reference](https://scisharp.github.io/NumSharp/api/index.html).

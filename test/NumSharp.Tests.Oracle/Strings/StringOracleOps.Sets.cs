@@ -1,0 +1,215 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+
+namespace NumSharp.Tests.Strings
+{
+    /// <summary>
+    ///     The string oracle's ops for section <c>strsets</c> (<c>gen_strsets</c>, strings phase 2, P2.2 milestone C):
+    ///     <c>np.quantile</c> / <c>np.percentile</c> with every q form, axis form, method, keepdims and <c>out=</c> (and
+    ///     section tsort's <c>np.nanquantile</c> / <c>np.nanpercentile</c>), plus section qprologue's <c>np.median</c> /
+    ///     <c>np.nanmedian</c> with a tuple axis, keepdims and <c>out=</c> (op <c>median_kw</c>). The
+    ///     section's <c>np.unique</c>, Array-API unique, <c>np.isin</c>, set-routine, <c>np.lexsort</c>,
+    ///     <c>np.sort_complex</c> and histogram cases replay through the ops of sections strshape and strsurface
+    ///     (<c>unique</c>, <c>unique_api</c>, <c>isin</c>, <c>setop</c>, <c>lexsort</c>, <c>sort_complex</c>, <c>hist</c>),
+    ///     which take the same parameters.
+    /// </summary>
+    internal static partial class StringOracleOps
+    {
+        /// <summary>Replays one section-strsets op, or reports that <paramref name="op"/> is not one of them.</summary>
+        /// <param name="op">The corpus op key.</param>
+        /// <param name="p">The case parameters: for <c>quant_kw</c> the function <c>name</c> (<c>quantile</c> /
+        ///     <c>percentile</c>), <c>qkind</c> (<c>f</c> a Python float, <c>fl</c> a list of floats, <c>i</c> a Python int,
+        ///     <c>arr</c> an ndarray operand named by <c>q_op</c>), <c>q</c>, <c>axis</c> (null, an int or a list of ints),
+        ///     <c>method</c>, <c>keepdims</c>, <c>out_op</c> (the out operand, when present) and <c>w_op</c> (the
+        ///     <c>weights=</c> operand, when present: section qfamily).</param>
+        /// <param name="ops">The reconstructed operands.</param>
+        /// <param name="result">The call's result (the out array itself for an <c>out=</c> call, whose view and base the
+        ///     replay compares).</param>
+        /// <returns>True when <paramref name="op"/> is a section-strsets op (its result is in <paramref name="result"/>).</returns>
+        /// <exception cref="InvalidOperationException">An unknown function name or q kind.</exception>
+        private static bool TryInvokeSets(string op, Dictionary<string, JsonElement> p, NDArray[] ops, out object result)
+        {
+            switch (op)
+            {
+                case "quant_kw":
+                    result = QuantileKeywords(p, ops);
+                    return true;
+                case "median_kw":
+                    result = MedianKeywords(p, ops);
+                    return true;
+            }
+            result = null;
+            return false;
+        }
+
+        /// <summary>
+        ///     One <c>np.median</c> / <c>np.nanmedian</c> call of section qprologue through the overload NumPy's call ports to:
+        ///     no axis or one axis the <see cref="int"/>? overload, a tuple (the empty one included) the <see cref="int"/>[]
+        ///     overload, with NumPy's <c>out=</c> and <c>keepdims=</c>.
+        /// </summary>
+        /// <param name="p">The case parameters: <c>name</c> (<c>median</c> or <c>nanmedian</c>), <c>axis</c> (null, an int
+        ///     or a list of ints), <c>keepdims</c>, and <c>out_op</c> (the out operand, when present).</param>
+        /// <param name="ops">The operands: the data, then the out where <c>out_op</c> names it.</param>
+        /// <returns>The call's result (the out array itself for an <c>out=</c> call).</returns>
+        /// <exception cref="InvalidOperationException">A function name the op does not know (a generator / table
+        ///     mismatch).</exception>
+        private static object MedianKeywords(Dictionary<string, JsonElement> p, NDArray[] ops)
+        {
+            NDArray a = ops[0];
+            bool keepdims = p["keepdims"].GetBoolean();
+            NDArray @out = NullableInt(p, "out_op") is int oi ? ops[oi] : null;
+            JsonElement axisElement = p["axis"];
+            int[] axes = axisElement.ValueKind == JsonValueKind.Array ? axisElement.EnumerateArray().Select(e => e.GetInt32()).ToArray() : null;
+            int? axis = axisElement.ValueKind == JsonValueKind.Number ? axisElement.GetInt32() : null;
+            switch (Str(p, "name"))
+            {
+                case "median":
+                    return axes is not null ? np.median(a, axes, @out, false, keepdims) : np.median(a, axis, @out, false, keepdims);
+                case "nanmedian":
+                    return axes is not null ? np.nanmedian(a, axes, @out, false, keepdims) : np.nanmedian(a, axis, @out, false, keepdims);
+                case var other:
+                    throw new InvalidOperationException($"the string oracle has no median '{other}'");
+            }
+        }
+
+        /// <summary>
+        ///     One <c>np.quantile</c> / <c>np.percentile</c> call through the overload NumPy's call ports to: a Python float is
+        ///     a <see cref="double"/>, a list a <see cref="double"/>[], a Python int a <see cref="long"/> (quantile; percentile
+        ///     has no integer overload and NumPy divides the q anyway), an array q an <see cref="NDArray"/>; one axis an
+        ///     <see cref="int"/>, a tuple an <see cref="int"/>[].
+        /// </summary>
+        /// <param name="p">The case parameters.</param>
+        /// <param name="ops">The operands: the data, then the array q and the out array where the parameters name them.</param>
+        /// <returns>The call's result.</returns>
+        /// <exception cref="InvalidOperationException">An unknown function name or q kind.</exception>
+        private static object QuantileKeywords(Dictionary<string, JsonElement> p, NDArray[] ops)
+        {
+            NDArray a = ops[0];
+            string name = Str(p, "name");
+            string method = Str(p, "method");
+            bool keepdims = p["keepdims"].GetBoolean();
+            NDArray @out = NullableInt(p, "out_op") is int oi ? ops[oi] : null;
+            // NumPy's weights= keyword (section qfamily), absent from the call when the case has none.
+            NDArray weights = NullableInt(p, "w_op") is int wi ? ops[wi] : null;
+            JsonElement axisElement = p["axis"];
+            int[] axes = axisElement.ValueKind == JsonValueKind.Array ? axisElement.EnumerateArray().Select(e => e.GetInt32()).ToArray() : null;
+            int? axis = axisElement.ValueKind == JsonValueKind.Number ? axisElement.GetInt32() : null;
+            bool percentile = name switch
+            {
+                "percentile" or "nanpercentile" => true,
+                "quantile" or "nanquantile" => false,
+                _ => throw new InvalidOperationException($"the string oracle has no quantile '{name}'"),
+            };
+            // Section tsort's nan forms (np.nanquantile / np.nanpercentile over StringDType): the same q and axis forms.
+            if (name is "nanquantile" or "nanpercentile")
+                return NanQuantileKeywords(p, ops, a, percentile, method, keepdims, @out, axes, axis, weights);
+            switch (Str(p, "qkind"))
+            {
+                case "f":
+                {
+                    double q = p["q"].GetDouble();
+                    if (axes is not null)
+                        return percentile ? np.percentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                          : np.quantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights);
+                    return percentile ? np.percentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights)
+                                      : np.quantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
+                }
+                case "fl":
+                {
+                    double[] q = p["q"].EnumerateArray().Select(e => e.GetDouble()).ToArray();
+                    if (axes is not null)
+                        return percentile ? np.percentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                          : np.quantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights);
+                    return percentile ? np.percentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights)
+                                      : np.quantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
+                }
+                case "i":
+                {
+                    long q = p["q"].GetInt64();
+                    // percentile has no integer overload: C# binds a Python int to its double one, the value NumPy's
+                    // true_divide(q, 100) reads.
+                    if (percentile)
+                        return axes is not null ? np.percentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                                : np.percentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
+                    return axes is not null ? np.quantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                            : np.quantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
+                }
+                case "arr":
+                {
+                    NDArray q = ops[Int(p, "q_op")];
+                    if (axes is not null)
+                        return percentile ? np.percentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                          : np.quantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights);
+                    return percentile ? np.percentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights)
+                                      : np.quantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
+                }
+            }
+            throw new InvalidOperationException($"the string oracle has no q kind '{Str(p, "qkind")}'");
+        }
+
+        /// <summary>
+        ///     One <c>np.nanquantile</c> / <c>np.nanpercentile</c> call (section tsort) through the overload NumPy's call ports
+        ///     to: a Python float a <see cref="double"/>, a list a <see cref="double"/>[], a Python int a <see cref="long"/>
+        ///     (np.nanpercentile has no integer overload: C# binds its double one, the value NumPy's true_divide reads), an
+        ///     array q an <see cref="NDArray"/>; one axis an <see cref="int"/>, a tuple an <see cref="int"/>[].
+        /// </summary>
+        /// <param name="p">The case parameters.</param>
+        /// <param name="ops">The operands.</param>
+        /// <param name="a">The data.</param>
+        /// <param name="percentile">np.nanpercentile instead of np.nanquantile.</param>
+        /// <param name="method">The method name.</param>
+        /// <param name="keepdims">keepdims.</param>
+        /// <param name="out">The out array, or null.</param>
+        /// <param name="axes">A tuple axis, or null.</param>
+        /// <param name="axis">One axis, or null.</param>
+        /// <param name="weights">NumPy's weights= keyword, or null when the case has none.</param>
+        /// <returns>The call's result.</returns>
+        /// <exception cref="InvalidOperationException">A q kind the oracle does not know.</exception>
+        private static object NanQuantileKeywords(Dictionary<string, JsonElement> p, NDArray[] ops, NDArray a, bool percentile,
+            string method, bool keepdims, NDArray @out, int[] axes, int? axis, NDArray weights)
+        {
+            switch (Str(p, "qkind"))
+            {
+                case "f":
+                {
+                    double q = p["q"].GetDouble();
+                    if (axes is not null)
+                        return percentile ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                          : np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights);
+                    return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights)
+                                      : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
+                }
+                case "fl":
+                {
+                    double[] q = p["q"].EnumerateArray().Select(e => e.GetDouble()).ToArray();
+                    if (axes is not null)
+                        return percentile ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                          : np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights);
+                    return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights)
+                                      : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
+                }
+                case "i":
+                {
+                    long q = p["q"].GetInt64();
+                    if (percentile)
+                        return axes is not null ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                                : np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
+                    return axes is not null ? np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                            : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
+                }
+                case "arr":
+                {
+                    NDArray q = ops[Int(p, "q_op")];
+                    if (axes is not null)
+                        return percentile ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                          : np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights);
+                    return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights)
+                                      : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
+                }
+            }
+            throw new InvalidOperationException($"the string oracle has no nan-quantile q kind '{Str(p, "qkind")}'");
+        }
+    }
+}

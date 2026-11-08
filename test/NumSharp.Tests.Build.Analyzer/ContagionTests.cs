@@ -67,7 +67,7 @@ namespace NumSharp.Tests.Build.Analyzer
             StringAssert.Contains(array.GetMessage(), "'Batch' array", "an array of holders is described as such");
 
             var temp = r.Ndw.Single(d => d.Id == "NDW012" && lines[AnalyzerTestHarness.LineOf(d) - 1].Contains("using var it = np.nditer(a + b);"));
-            StringAssert.Contains(temp.GetMessage(), "This NDArray is never", "the a+b temp is still described as an NDArray");
+            StringAssert.Contains(temp.GetMessage(), "scopes this NDArray.", "the a+b temp is still described as an NDArray");
         }
 
         [TestMethod]

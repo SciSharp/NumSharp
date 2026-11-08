@@ -25,8 +25,10 @@ internal enum ScopeKind
 ///     the explicit <c>.override</c> entries (MethodImpl table: explicit interface implementations,
 ///     C# 9 covariant returns), the implicit interface implementations of the declaring type (a
 ///     public virtual method matching an interface member's name and signature — the base interfaces
-///     of a listed interface included), and the class base chain (a reuse-slot virtual matched by name
-///     and signature, climbing past bases that do not declare the slot). Generic bases are matched
+///     of a listed interface included — unless the type implements that member explicitly, which then
+///     is what the interface runs), and the class base chain (a reuse-slot virtual matched by name
+///     and signature, climbing past bases that do not declare the slot, whose listed interfaces are
+///     searched the same way). Generic bases are matched
 ///     under their instantiation (<c>Derived : Base&lt;int&gt;</c> matches <c>Base&lt;T&gt;.M(T)</c>
 ///     against <c>M(int)</c>), the walk crosses assembly boundaries through the module's
 ///     <see cref="WeaverAssemblyResolver"/> (a consumer overriding a NumSharp — or any referenced
@@ -137,6 +139,8 @@ internal sealed class ScopeInheritance
         => declaration is { Inherited: true } d ? $" (inherited from {d.Source.DeclaringType.FullName}::{d.Source.Name})" : "";
 
     /// <summary>The scope-family attributes <paramref name="m"/> itself carries — on the method, or (for a getter) on its property.</summary>
+    /// <param name="m">The method asked about.</param>
+    /// <returns>The attributes' kinds, <see cref="ScopeKind.None"/> when it carries none.</returns>
     public static ScopeKind OwnScopeKinds(MethodDefinition m)
     {
         var kinds = KindsOf(m.CustomAttributes);
@@ -145,14 +149,64 @@ internal sealed class ScopeInheritance
 
         // A property-level attribute resolves to the GETTER (CollectTargets' rule; a setter carries
         // nothing from it — NDW006 covers the setter-only case at the declaration).
-        if (m.IsGetter)
-        {
-            foreach (var p in m.DeclaringType.Properties)
-                if (ReferenceEquals(p.GetMethod, m))
-                    return KindsOf(p.CustomAttributes);
-        }
+        if (PropertyOfGetter(m) is { } p)
+            return KindsOf(p.CustomAttributes);
 
         return ScopeKind.None;
+    }
+
+    /// <summary>
+    ///     Per declaring type, its getters mapped to their properties — or <see cref="NoScopedProperty"/>
+    ///     when no property of the type carries a scope-family attribute, the case of nearly every type.
+    ///     <para>
+    ///     Two costs this avoids, both quadratic in a type's property count and both paid for every type
+    ///     the weaver loads, scoped or not, because <see cref="OwnScopeKinds"/> is asked for every method:
+    ///     the scan of the type's properties once per getter it replaced, and Mono.Cecil's own first read
+    ///     of accessor semantics (<c>MethodDefinition.IsGetter</c>, <c>PropertyDefinition.GetMethod</c>),
+    ///     which finds each accessor's property by a linear search (<c>MetadataReader.GetMember</c>) —
+    ///     1.0 s for a class of 20,000 auto-properties, 10 s for 50,000 (a generated resource or DTO
+    ///     class). Property attributes are read without semantics, so a type with no scope-attributed
+    ///     property never pays either; a type that has one pays Cecil's read once. Keyed weakly by the
+    ///     type, so a map dies with the module it describes.
+    ///     </para>
+    /// </summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TypeDefinition, Dictionary<MethodDefinition, PropertyDefinition>> s_getterOwners = new();
+
+    /// <summary>The shared answer for a type none of whose properties carries a scope-family attribute: no getter inherits anything from its property.</summary>
+    private static readonly Dictionary<MethodDefinition, PropertyDefinition> NoScopedProperty = new();
+
+    /// <summary>
+    ///     The property whose getter <paramref name="method"/> is — the first such property, as the scan it
+    ///     replaces answered — when the method's declaring type has any scope-attributed property;
+    ///     otherwise null (no property-level attribute can reach the method, so whether it is a getter
+    ///     does not matter).
+    /// </summary>
+    /// <param name="method">Any method; a non-getter answers null.</param>
+    /// <returns>The owning property, or null.</returns>
+    private static PropertyDefinition PropertyOfGetter(MethodDefinition method)
+    {
+        var owners = s_getterOwners.GetValue(method.DeclaringType, static type =>
+        {
+            bool anyScoped = false;
+            foreach (var p in type.Properties)
+                if (KindsOf(p.CustomAttributes) != ScopeKind.None)
+                {
+                    anyScoped = true;
+                    break;
+                }
+            if (!anyScoped)
+                return NoScopedProperty;
+
+            // MethodDefinition keeps reference equality, so the map answers exactly the ReferenceEquals
+            // scan it replaces; on malformed metadata naming one getter twice the first property wins, as
+            // the scan's first match did.
+            var map = new Dictionary<MethodDefinition, PropertyDefinition>();
+            foreach (var p in type.Properties)
+                if (p.GetMethod != null && !map.ContainsKey(p.GetMethod))
+                    map.Add(p.GetMethod, p);
+            return map;
+        });
+        return owners.TryGetValue(method, out var property) ? property : null;
     }
 
     // ----------------------------------------------------------------- the walk
@@ -221,8 +275,14 @@ internal sealed class ScopeInheritance
 
     /// <summary>
     ///     The nearest method up <paramref name="m"/>'s override/implementation graph for which
-    ///     <paramref name="carries"/> holds — <paramref name="m"/> itself excluded — or null.
+    ///     <paramref name="carries"/> holds — <paramref name="m"/> itself excluded — or null. Runs for
+    ///     every virtual method of every type the weaver loads (twice: the scope and the exit walks),
+    ///     so its cost is linear in the hierarchy it climbs: each method is examined once per walk, and
+    ///     each interface instantiation once per level of it (see <see cref="Visit"/>).
     /// </summary>
+    /// <param name="m">The method whose declarations are searched.</param>
+    /// <param name="carries">The test that makes a declaration the answer.</param>
+    /// <returns>The nearest declaration passing <paramref name="carries"/>, or null.</returns>
     private static MethodDefinition FindNearest(MethodDefinition m, Func<MethodDefinition, bool> carries)
     {
         // Only a virtual instance method can override or implement anything; everything else is its
@@ -239,7 +299,26 @@ internal sealed class ScopeInheritance
     ///     implicit interface implementations at its level, its class base chain — recursing into each
     ///     base declaration found. <paramref name="signature"/> is the ORIGINAL method (an override
     ///     keeps its base's signature modulo generic instantiation, so it is the comparand at every level).
+    ///     <para>
+    ///     One call is one LEVEL of the walk: <paramref name="node"/>'s type and the bases between it and
+    ///     the next base declaring the slot. The interface instantiations searched at a level are
+    ///     remembered for that level only (<see cref="MatchInterface"/>'s deduplication): within a level
+    ///     the most derived type listing an instantiation decides — its interface map is the one the CLR
+    ///     uses for <paramref name="node"/> — while the next level asks ITS type's map afresh. A walk-wide
+    ///     memory let one level's decision leak upward: a type implementing <c>I.M</c> explicitly skips
+    ///     <c>I.M</c> for its public <c>M</c>, but its base <c>R : I</c> implements <c>I.M</c> with
+    ///     <c>R.M</c>, and the type's <c>M</c> overrides <c>R.M</c> — so it inherits <c>I.M</c> through
+    ///     <c>R.M</c>, which the walk-wide memory hid. Each level searches only the types it owns, so the
+    ///     walk stays linear in the hierarchy.
+    ///     </para>
     /// </summary>
+    /// <param name="node">The declaration examined at this step.</param>
+    /// <param name="nodeContext">The instantiation context of <paramref name="node"/>'s declaring type (null at the method's own level).</param>
+    /// <param name="signature">The original method, the comparand at every level.</param>
+    /// <param name="carries">The test that makes a declaration the answer.</param>
+    /// <param name="visited">The declarations already examined in this walk (each is tested once).</param>
+    /// <param name="depth">The walk's depth, bounded by <see cref="MaxDepth"/> (a guard against corrupt cyclic metadata).</param>
+    /// <returns>The first declaration passing <paramref name="carries"/>, or null.</returns>
     private static MethodDefinition Visit(MethodDefinition node, GenericContext nodeContext, MethodDefinition signature,
                                           Func<MethodDefinition, bool> carries, HashSet<MethodDefinition> visited, int depth)
     {
@@ -268,12 +347,18 @@ internal sealed class ScopeInheritance
         if (node.DeclaringType.IsInterface)
             return null;
 
+        // The interface instantiations searched at THIS level (see the summary), made on first use: most
+        // types list no interface, and most walks end at their first level.
+        Dictionary<string, int> levelSearched = null;
+
         // 2. Implicit interface implementations at this level: a PUBLIC virtual method whose name and
         //    signature match a member of an interface the declaring type lists (or inherits through
-        //    that interface's own bases) implements it.
-        if (node.IsPublic)
+        //    that interface's own bases) implements it — unless the type implements that member
+        //    explicitly (MatchInterface).
+        if (node.IsPublic && node.DeclaringType.HasInterfaces)
         {
-            var found = MatchInterfaces(node.DeclaringType, nodeContext, signature, carries, visited, depth + 1);
+            levelSearched = new Dictionary<string, int>(StringComparer.Ordinal);
+            var found = MatchInterfaces(node.DeclaringType, nodeContext, signature, carries, visited, levelSearched, depth + 1);
             if (found != null)
                 return found;
         }
@@ -305,10 +390,12 @@ internal sealed class ScopeInheritance
             }
 
             // This base does not declare the slot; it may still LIST an interface the slot implements
-            // (the CLR maps an interface listed on a base onto the most derived matching method).
-            if (node.IsPublic)
+            // (the CLR maps an interface listed on a base onto the most derived matching method). It is
+            // part of this level: an instantiation the type below already listed was decided there.
+            if (node.IsPublic && baseDef.HasInterfaces)
             {
-                var found = MatchInterfaces(baseDef, baseContext, signature, carries, visited, depth + 1);
+                levelSearched ??= new Dictionary<string, int>(StringComparer.Ordinal);
+                var found = MatchInterfaces(baseDef, baseContext, signature, carries, visited, levelSearched, depth + 1);
                 if (found != null)
                     return found;
             }
@@ -320,12 +407,27 @@ internal sealed class ScopeInheritance
         return null;
     }
 
+    /// <summary>
+    ///     The first declaration passing <paramref name="carries"/> among the interfaces <paramref name="type"/>
+    ///     lists (and their bases) — skipping a member <paramref name="type"/> implements explicitly, which the
+    ///     interface maps onto that explicit implementation, not onto the method being walked.
+    /// </summary>
+    /// <param name="type">The type whose listed interfaces are searched.</param>
+    /// <param name="typeContext">The instantiation context of <paramref name="type"/>.</param>
+    /// <param name="signature">The original method, the comparand.</param>
+    /// <param name="carries">The test that makes a declaration the answer.</param>
+    /// <param name="visited">The declarations already examined in this walk.</param>
+    /// <param name="searched">The interface instantiations already searched at this level of the walk (see <see cref="Visit"/>).</param>
+    /// <param name="depth">The walk's depth.</param>
+    /// <returns>The first match, or null.</returns>
     private static MethodDefinition MatchInterfaces(TypeDefinition type, GenericContext typeContext, MethodDefinition signature,
-                                                    Func<MethodDefinition, bool> carries, HashSet<MethodDefinition> visited, int depth)
+                                                    Func<MethodDefinition, bool> carries, HashSet<MethodDefinition> visited,
+                                                    Dictionary<string, int> searched, int depth)
     {
+        var listing = new Listing(ExplicitImplementationsOf(type), typeContext);
         foreach (var impl in type.Interfaces)
         {
-            var found = MatchInterface(impl.InterfaceType, typeContext, signature, carries, visited, depth);
+            var found = MatchInterface(impl.InterfaceType, typeContext, signature, carries, visited, searched, depth, listing);
             if (found != null)
                 return found;
         }
@@ -333,11 +435,144 @@ internal sealed class ScopeInheritance
         return null;
     }
 
+    /// <summary>
+    ///     The type whose listed interfaces <see cref="MatchInterface"/> is searching, as far as that search
+    ///     needs it: the interface members the type implements explicitly, and the instantiation context
+    ///     their declaring-type references are written in.
+    /// </summary>
+    private readonly struct Listing
+    {
+        /// <summary>Per interface member the type implements explicitly, the interface instantiations (as the type references them) whose member it implements.</summary>
+        public readonly Dictionary<MethodDefinition, List<TypeReference>> ExplicitImplementations;
+
+        /// <summary>The instantiation context of the listing type, in which <see cref="ExplicitImplementations"/>' references resolve.</summary>
+        public readonly GenericContext Context;
+
+        /// <summary>Binds a listing type's explicit implementations to its context.</summary>
+        /// <param name="explicitImplementations">The type's explicit implementations (<see cref="ExplicitImplementationsOf"/>).</param>
+        /// <param name="context">The type's instantiation context.</param>
+        public Listing(Dictionary<MethodDefinition, List<TypeReference>> explicitImplementations, GenericContext context)
+        {
+            ExplicitImplementations = explicitImplementations;
+            Context = context;
+        }
+
+        /// <summary>
+        ///     Whether the listing type implements <paramref name="member"/> explicitly under the interface
+        ///     instantiation <paramref name="key"/> — then the interface runs that explicit implementation,
+        ///     and a public method of the same name and signature implements nothing.
+        /// </summary>
+        /// <param name="member">An interface member matched by name and signature.</param>
+        /// <param name="key">The instantiation key of the interface it was found in, or null when the interface nests too deeply to key.</param>
+        /// <returns>
+        ///     True when an explicit implementation targets <paramref name="member"/> under the same
+        ///     instantiation. With no key, any explicit implementation of the member's definition answers
+        ///     true: weaving a method the interface does not run can dispose an array it keeps, while
+        ///     missing an inherited scope only leaves temporaries to the caller's scope.
+        /// </returns>
+        public bool ImplementsExplicitly(MethodDefinition member, string key)
+        {
+            if (ExplicitImplementations.Count == 0 || !ExplicitImplementations.TryGetValue(member, out var instantiations))
+                return false;
+            if (key == null)
+                return true;
+            foreach (var declaringType in instantiations)
+                if (InstantiationKey(declaringType, Context) == key)
+                    return true;
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Per type, the interface members it implements explicitly (the <c>.override</c> entries of its
+    ///     methods that name an interface member) with the instantiations they name — or
+    ///     <see cref="NoExplicitImplementations"/> for a type that has none, nearly every type. Keyed weakly
+    ///     by the type, so a map dies with its module.
+    ///     <para>
+    ///     Computed once per type, not once per search: <see cref="MatchInterfaces"/> runs for every virtual
+    ///     method of a type (and for every level of each walk), so scanning the type's methods there would
+    ///     be quadratic in its method count — the cost <see cref="PropertyOfGetter"/>'s map removed for
+    ///     properties.
+    ///     </para>
+    /// </summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TypeDefinition, Dictionary<MethodDefinition, List<TypeReference>>> s_explicitImplementations = new();
+
+    /// <summary>The shared answer for a type with no explicit interface implementation.</summary>
+    private static readonly Dictionary<MethodDefinition, List<TypeReference>> NoExplicitImplementations = new();
+
+    /// <summary>
+    ///     The interface members <paramref name="type"/> implements explicitly, each with the interface
+    ///     instantiations (as <paramref name="type"/> references them) whose member it implements.
+    /// </summary>
+    /// <param name="type">The listing type.</param>
+    /// <returns>The map, or the shared empty <see cref="NoExplicitImplementations"/>; an unresolvable <c>.override</c> target is left out.</returns>
+    private static Dictionary<MethodDefinition, List<TypeReference>> ExplicitImplementationsOf(TypeDefinition type)
+        => s_explicitImplementations.GetValue(type, static t =>
+        {
+            Dictionary<MethodDefinition, List<TypeReference>> map = null;
+            foreach (var method in t.Methods)
+            {
+                if (!method.HasOverrides)
+                    continue;
+                foreach (var target in method.Overrides)
+                {
+                    // A covariant-return override names a base CLASS method here; only interface members
+                    // can be the ones an implicit match would otherwise claim.
+                    var resolved = SafeResolve(target);
+                    if (resolved is null || !resolved.DeclaringType.IsInterface)
+                        continue;
+                    map ??= new Dictionary<MethodDefinition, List<TypeReference>>();
+                    if (!map.TryGetValue(resolved, out var instantiations))
+                        map.Add(resolved, instantiations = new List<TypeReference>());
+                    instantiations.Add(target.DeclaringType);
+                }
+            }
+
+            return map ?? NoExplicitImplementations;
+        });
+
+    /// <summary>
+    ///     The first declaration passing <paramref name="carries"/> in one listed interface — its member
+    ///     matching <paramref name="signature"/>'s slot, then its base interfaces, depth first. A member the
+    ///     listing type implements explicitly is not a match: the interface runs that explicit
+    ///     implementation, so a public method of the same name and signature implements nothing (the CLR's
+    ///     interface map; the analyzer's <c>FindImplementationForInterfaceMember</c>). Weaving it anyway put
+    ///     a scope on a method nobody declared scoped, which disposes any array the method keeps.
+    /// </summary>
+    /// <param name="interfaceRef">The interface as the listing type references it.</param>
+    /// <param name="outer">The instantiation context of the listing type.</param>
+    /// <param name="signature">The original method, the comparand.</param>
+    /// <param name="carries">The test that makes a declaration the answer.</param>
+    /// <param name="visited">The declarations already examined in this walk.</param>
+    /// <param name="searched">The interface instantiations already searched at this level of the walk, with the shallowest depth each was searched at; updated here.</param>
+    /// <param name="depth">The walk's depth.</param>
+    /// <param name="listing">The type that lists the interface (directly, or through the interface this one is a base of): its explicit implementations.</param>
+    /// <returns>The first match, or null.</returns>
     private static MethodDefinition MatchInterface(TypeReference interfaceRef, GenericContext outer, MethodDefinition signature,
-                                                   Func<MethodDefinition, bool> carries, HashSet<MethodDefinition> visited, int depth)
+                                                   Func<MethodDefinition, bool> carries, HashSet<MethodDefinition> visited,
+                                                   Dictionary<string, int> searched, int depth, Listing listing)
     {
         if (depth > MaxDepth || ScopeWeaver.IsFrameworkType(interfaceRef))
             return null;
+
+        // The C# compiler lists an interface's WHOLE base-interface closure on it (and on every type
+        // implementing it), so the recursion below reaches each base interface once per path through
+        // the hierarchy: 2^k searches for a chain of k interfaces, and a class implementing a 26-deep
+        // chain took a minute to weave. An interface searched before under the same instantiation,
+        // at the same or a shallower depth, found nothing then (the walk would have ended) and finds
+        // nothing now: every candidate it holds is already in `visited`, or was passed over because the
+        // listing type that reached it first implements it explicitly. The memory is per LEVEL of the
+        // walk (Visit), and within a level a type's listings are searched before its bases', so that type
+        // is the most derived one of the level listing this instantiation: its interface map is the one
+        // the CLR uses for the method, and a less derived base listing the same instantiation must not
+        // claim the member. Skipping it leaves the first match, and so the result, unchanged.
+        var key = InstantiationKey(interfaceRef, outer);
+        if (key != null)
+        {
+            if (searched.TryGetValue(key, out int searchedAt) && searchedAt <= depth)
+                return null;
+            searched[key] = depth;
+        }
 
         var def = SafeResolve(interfaceRef);
         if (def is null)
@@ -345,18 +580,96 @@ internal sealed class ScopeInheritance
 
         var context = ContextOf(interfaceRef, outer);
         var candidate = FindMatching(def, signature, context, requireVirtual: false);
-        if (candidate != null && visited.Add(candidate) && carries(candidate))
+        // The explicit test runs before `visited.Add`, so a member passed over here stays unvisited: it is
+        // not this method's declaration, whatever later finds it.
+        if (candidate != null && !listing.ImplementsExplicitly(candidate, key) && visited.Add(candidate) && carries(candidate))
             return candidate;
 
-        // Listing an interface implements its base interfaces' members too.
+        // Listing an interface implements its base interfaces' members too (the listing type's explicit
+        // implementations of them included).
         foreach (var sub in def.Interfaces)
         {
-            var found = MatchInterface(sub.InterfaceType, context, signature, carries, visited, depth + 1);
+            var found = MatchInterface(sub.InterfaceType, context, signature, carries, visited, searched, depth + 1, listing);
             if (found != null)
                 return found;
         }
 
         return null;
+    }
+
+    /// <summary>
+    ///     The identity <see cref="MatchInterface"/> deduplicates on: the interface's full name with every
+    ///     generic argument read through <paramref name="outer"/> down to the terms of the method's own
+    ///     declaring type. Two references reaching one interface DEFINITION under different
+    ///     instantiations (<c>IFoo&lt;int&gt;</c> and <c>IFoo&lt;string&gt;</c> through two generic bases)
+    ///     get different keys and are both searched — their members compare differently against the
+    ///     signature — while the same instantiation reached along two paths gets one key.
+    /// </summary>
+    /// <param name="interfaceRef">The interface as the type listing it references it.</param>
+    /// <param name="outer">The instantiation context of the listing type (null at the method's own level).</param>
+    /// <returns>The key, or null when the type is too deep to key (the caller then searches without deduplicating — never wrong, only slower).</returns>
+    private static string InstantiationKey(TypeReference interfaceRef, GenericContext outer)
+    {
+        var sb = new System.Text.StringBuilder();
+        return AppendInstantiation(sb, interfaceRef, outer, 0) ? sb.ToString() : null;
+    }
+
+    /// <summary>Appends <paramref name="t"/>'s instantiation key, resolving type-level generic parameters through <paramref name="context"/>.</summary>
+    /// <param name="sb">The key being built.</param>
+    /// <param name="t">The type to append.</param>
+    /// <param name="context">The context <paramref name="t"/>'s type-level generic parameters resolve in.</param>
+    /// <param name="depth">Recursion depth, bounded by <see cref="MaxDepth"/>.</param>
+    /// <returns>False when the type nests deeper than <see cref="MaxDepth"/> (no key).</returns>
+    private static bool AppendInstantiation(System.Text.StringBuilder sb, TypeReference t, GenericContext context, int depth)
+    {
+        if (depth > MaxDepth || t is null)
+            return false;
+
+        switch (t)
+        {
+            case GenericParameter gp when gp.Type == GenericParameterType.Type:
+                // A parameter of the level that wrote this reference: the argument the level below
+                // supplied for it, read in THAT level's context; at the method's own level it stays a
+                // parameter (by position — the declaring type's own parameters are one set).
+                if (context?.Args != null && gp.Position < context.Args.Count)
+                    return AppendInstantiation(sb, context.Args[gp.Position], context.Outer, depth + 1);
+                sb.Append('!').Append(gp.Position);
+                return true;
+            case GenericParameter gp:
+                sb.Append("!!").Append(gp.Position);
+                return true;
+            case GenericInstanceType git:
+                sb.Append(git.ElementType.FullName).Append('<');
+                for (int i = 0; i < git.GenericArguments.Count; i++)
+                {
+                    if (i > 0)
+                        sb.Append(',');
+                    if (!AppendInstantiation(sb, git.GenericArguments[i], context, depth + 1))
+                        return false;
+                }
+                sb.Append('>');
+                return true;
+            case ArrayType arr:
+                if (!AppendInstantiation(sb, arr.ElementType, context, depth + 1))
+                    return false;
+                sb.Append('[').Append(arr.Rank).Append(']');
+                return true;
+            case IModifierType mod when t is TypeSpecification modSpec:
+                // modreq/modopt: the modifier is part of the type's identity.
+                if (!AppendInstantiation(sb, modSpec.ElementType, context, depth + 1))
+                    return false;
+                sb.Append(t.MetadataType == MetadataType.RequiredModifier ? " modreq(" : " modopt(")
+                  .Append(mod.ModifierType.FullName).Append(')');
+                return true;
+            case TypeSpecification spec when spec is ByReferenceType || spec is PointerType || spec is PinnedType:
+                if (!AppendInstantiation(sb, spec.ElementType, context, depth + 1))
+                    return false;
+                sb.Append('|').Append(t.MetadataType);
+                return true;
+            default:
+                sb.Append(t.FullName);
+                return true;
+        }
     }
 
     /// <summary>

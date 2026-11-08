@@ -1,0 +1,356 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.Interop.OpenBLAS;
+using NumSharp.Tests.Fuzz.Ownership;
+
+namespace NumSharp.Tests.Fuzz
+{
+    /// <summary>
+    ///     The DIRECT half of the leak audit for members no corpus row reaches: every
+    ///     <see cref="LeakCatalogue"/> entry, measured with the corpus sweep's exact protocol (one warm
+    ///     invocation, then <see cref="ScopeAudit.MeasureConfirmedTraffic"/>) and judged by the same
+    ///     verdict (<see cref="AssertNoUnclassifiedEscapes"/>) — so a catalogue member that strands a
+    ///     buffer, or hands back a fresh result allocated outside the pool, fails exactly like a corpus op.
+    /// </summary>
+    public partial class UndisposedIntermediateTests
+    {
+        /// <summary>
+        ///     What one direct runner (the catalogue, or the property/field read gate) observed.
+        /// </summary>
+        /// <param name="Sweep">The verdict input: escape/bypass families keyed by surface id, and the per-id
+        /// measured counts the completeness gate credits.</param>
+        /// <param name="HarnessErrors">Entries that could not run at all (the warm invocation threw where
+        /// the catalogue expected success) — a HARNESS defect, never a leak verdict, and always a failure.</param>
+        /// <param name="BackendSkipReason">Why the backend-only measurements were skipped (no CBLAS/LAPACK
+        /// library loads on this host), or null when they ran.</param>
+        /// <param name="BackendSkipped">Surface ids whose backend-only measurements were skipped for
+        /// <paramref name="BackendSkipReason"/> — credited by the completeness gate only on such a host,
+        /// exactly as the host-pinned parity tiers go Inconclusive there instead of red.</param>
+        internal sealed record DirectRunResult(
+            SweepResult Sweep, IReadOnlyList<string> HarnessErrors, string BackendSkipReason, IReadOnlySet<string> BackendSkipped)
+        {
+            /// <summary>
+            ///     Whether this run actually EXERCISED <paramref name="id"/> under the measurement protocol — a
+            ///     confirmed success- or error-path measurement, or one a GC made inconclusive (the member ran;
+            ///     only the environment withheld the verdict, which is never red). A DECLARED entry that never ran
+            ///     (its warm invocation threw, so it is a harness error) is NOT attempted — that is exactly the
+            ///     declared-but-unmeasured case the completeness gate must not credit.
+            /// </summary>
+            /// <param name="id">The surface id (<c>&lt;owner&gt;.&lt;name&gt;</c>).</param>
+            /// <returns>True when at least one measurement of <paramref name="id"/> was attempted.</returns>
+            public bool Attempted(string id)
+                => Sweep.MeasuredByOp.GetValueOrDefault(id) > 0 ||
+                   Sweep.ErrorMeasuredByOp.GetValueOrDefault(id) > 0 ||
+                   Sweep.InconclusiveIds.Contains(id) ||
+                   Sweep.ErrorInconclusiveIds.Contains(id);
+
+            /// <summary>
+            ///     Whether <paramref name="id"/>'s backend-only measurements were skipped because no CBLAS/LAPACK
+            ///     library loads on this host — credited by the completeness gate only on such a host, as the
+            ///     host-pinned parity tiers go Inconclusive there rather than red.
+            /// </summary>
+            /// <param name="id">The surface id.</param>
+            /// <returns>True when the id was deferred to a backend pass that could not run.</returns>
+            public bool Skipped(string id) => BackendSkipped.Contains(id);
+        }
+
+        /// <summary>
+        ///     The one catalogue run of the process, shared by <see cref="Catalogue_EveryEntry_LeavesNoUndisposedIntermediates"/>
+        ///     and the <see cref="LeakSurfaceCoverageTests"/> completeness gate (which credits only the
+        ///     entries that were actually MEASURED, not merely declared).
+        /// </summary>
+        internal static readonly Lazy<DirectRunResult> SharedCatalogue =
+            new(RunCatalogue, System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+
+        /// <summary>
+        ///     The catalogue gate: every entry runs (a throwing entry is a harness defect and fails), and
+        ///     every measured entry balances pool takes and returns with no unclassified pool bypass.
+        /// </summary>
+        /// <exception cref="AssertFailedException">An entry could not run, or an escape/bypass family is unclassified.</exception>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [TestCategory("ScopeAudit")]
+        public void Catalogue_EveryEntry_LeavesNoUndisposedIntermediates()
+        {
+            var run = SharedCatalogue.Value;
+            var r = run.Sweep;
+
+            Console.WriteLine($"[scope-audit/catalogue] entries={LeakCatalogue.All.Count} measured={r.DirectMeasured} " +
+                              $"apis={r.MeasuredByOp.Count} gcInconclusive={r.GcInconclusive} harnessErrors={run.HarnessErrors.Count}");
+            if (run.BackendSkipReason != null)
+                Console.WriteLine($"[scope-audit/catalogue] {run.BackendSkipped.Count} backend-only ids skipped: {run.BackendSkipReason}");
+            PrintPerOpRollup(r.Groups);
+            PrintBypassRollup(r.Bypasses);
+
+            // A catalogue entry is a coverage CLAIM: one that cannot run leaves its member unaudited,
+            // so it fails here instead of silently shrinking the audited surface.
+            if (run.HarnessErrors.Count > 0)
+                Assert.Fail($"{run.HarnessErrors.Count} catalogue entries could not run (fix the entry — an unrunnable " +
+                            "entry audits nothing):\n  " + string.Join("\n  ", run.HarnessErrors));
+
+            // Non-vacuity: the catalogue measured (nearly) every entry it declares.
+            Assert.IsTrue(r.DirectMeasured + r.GcInconclusive + run.BackendSkipped.Count > 0,
+                          "the catalogue measured nothing — LeakCatalogue.All empty or the runner is broken");
+
+            AssertNoUnclassifiedEscapes(r, "scope-audit/catalogue");
+        }
+
+        /// <summary>
+        ///     Runs every catalogue entry: the managed ones first, then the backend-only ones with OpenBLAS
+        ///     installed (threads=1) when a library loads, skipped and reported otherwise.
+        /// </summary>
+        /// <returns>The run's observations.</returns>
+        private static DirectRunResult RunCatalogue()
+        {
+            var acc = new SweepAccumulator();
+            var errors = new List<string>();
+            var skipped = new HashSet<string>(StringComparer.Ordinal);
+            string backendSkip = null;
+
+            var fx = new LeakFixture();
+            try
+            {
+                ScopeAudit.Settle();   // drain the finalizer backlog earlier (undisposing) tests left behind
+
+                // An entry that damaged a fixture array (an over-disposal, recorded by the entry's ownership check) would
+                // hand every later entry a disposed or freed operand, so the fixture is rebuilt before the next entry runs.
+                void Measure(LeakCase entry)
+                {
+                    if (MeasureCatalogueEntry(entry, fx, acc, errors))
+                    {
+                        fx.Dispose();
+                        fx = new LeakFixture();
+                    }
+                }
+
+                foreach (var entry in LeakCatalogue.All.Where(e => !e.RequiresBackend))
+                    Measure(entry);
+
+                var backendEntries = LeakCatalogue.All.Where(e => e.RequiresBackend).ToList();
+                if (backendEntries.Count > 0)
+                {
+                    backendSkip = TryEnableLeakBackend();
+                    if (backendSkip == null)
+                    {
+                        try
+                        {
+                            foreach (var entry in backendEntries)
+                                Measure(entry);
+                        }
+                        finally
+                        {
+                            // Every other test in this assembly asserts the managed kernels — never leave the
+                            // backend installed past this block.
+                            OpenBlasEngine.Disable();
+                        }
+                    }
+                    else
+                    {
+                        foreach (var entry in backendEntries)
+                            skipped.Add(entry.Api);
+                    }
+                }
+
+                return new DirectRunResult(acc.ToResult(0), errors, backendSkip, skipped);
+            }
+            finally
+            {
+                fx.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     Measures one catalogue entry: warm (a throw is recorded as a harness error and the entry is
+        ///     skipped), then the confirmed measurement with the result's freshness computed against the
+        ///     fixture's buffers so a pool bypass is detected, then recorded under the entry's surface id.
+        /// </summary>
+        /// <param name="entry">The entry.</param>
+        /// <param name="fx">The shared fixture (never disposed by the region — see <see cref="LeakFixture.Keep"/>).</param>
+        /// <param name="acc">The run's tallies.</param>
+        /// <param name="errors">Where an unrunnable entry is reported.</param>
+        /// <returns>True when the entry damaged a fixture array (an over-disposal was recorded): the caller rebuilds the
+        ///     fixture before the next entry.</returns>
+        /// <exception cref="InvalidOperationException">The ARC probe cannot read a fixture's slice.</exception>
+        private static bool MeasureCatalogueEntry(LeakCase entry, LeakFixture fx, SweepAccumulator acc, List<string> errors)
+        {
+            // Earlier entries leave views of the fixture arrays to the finalizer (the retentions the ownership gate prints:
+            // f.V["0:4"] passed inline, a callback's view), each holding a counted reference on a fixture buffer. A
+            // collection inside THIS entry's measurement (MeasureExactTraffic's own hygiene) would finalize them and read
+            // as this entry dropping the references — a false over-disposal (fixture V once fell 11 -> 1 inside a
+            // chararray comparison entry). Finalizing that young garbage before the snapshot charges each entry with its own
+            // changes only (a gen-1 collection: cheap, independent of the heap size); older garbage the measurement's hygiene
+            // still finalizes is the ledger's DropMayBeFinalization case (OwnershipLedger.DrainAndRebase).
+            ScopeAudit.Quiesce();
+            // The fixture's arrays as they are before THIS entry: an earlier entry may legitimately have materialized a
+            // masked fixture's fill, so each entry is judged on its own changes.
+            var ledger = OwnershipLedger.Of(fx.Owned());
+            long freshBytes = 0;
+            void Region()
+            {
+                freshBytes = 0;   // re-executed on retry — recompute, don't accumulate
+                object res = entry.Run(fx);
+                // Freshness BEFORE disposal: a result that is neither a fixture view nor a scalar slot is
+                // a fresh allocation, and one with zero pool traffic is the full-bypass signature.
+                // KeepNow: the fixture's arrays plus the fills its masked arrays hold now (one an entry materialized is
+                // shared by every array later derived from that fixture).
+                var keep = fx.KeepNow();
+                freshBytes = FreshBytesAny(res, keep, fx.Ranges);
+                DisposeAny(res, keep);
+            }
+
+            if (entry.Throws)
+            {
+                // An always-throwing member: its error path is what exists to audit. The warm run must
+                // throw — an entry flagged Throws that returns is stale (the member was fixed or changed)
+                // and is reported, so the flag never silently hides a now-reachable success path.
+                bool threw = false;
+                try
+                {
+                    Region();
+                }
+                catch
+                {
+                    threw = true;
+                }
+                // A raising member must not have damaged a fixture array on the way out either.
+                if (acc.CheckOwnership(entry.Api, ledger, entry.Label, "catalogue", threw ? "error path" : "warm"))
+                    return true;
+                if (!threw)
+                {
+                    errors.Add($"{entry.Api} [{entry.Label}]: flagged Throws but returned — the member now succeeds; " +
+                               "turn the entry into an ordinary E(...) so its success path is measured");
+                    return false;
+                }
+
+                void ErrorRegion()
+                {
+                    try
+                    {
+                        Region();
+                    }
+                    catch
+                    {
+                        // expected: this member always raises
+                    }
+                }
+
+                var errTraffic = ScopeAudit.MeasureConfirmedTraffic(ErrorRegion);
+                bool damaged = acc.CheckOwnership(entry.Api, ledger, entry.Label, "catalogue", "error path, measured");
+                if (errTraffic == null)
+                {
+                    acc.Inconclusive(entry.Api, errorPath: true);
+                    return damaged;
+                }
+                acc.Record(entry.Api, null, entry.Label, errTraffic.Value, 0, errorPath: true, entry.Label, "catalogue");
+                return damaged;
+            }
+
+            try
+            {
+                Region();   // warm: one-time caches (emitted kernels, FFT plans, printing tables)
+            }
+            catch (Exception e)
+            {
+                errors.Add($"{entry.Api} [{entry.Label}]: {e.GetType().Name}: {FirstLine(e.Message)}");
+                return acc.CheckOwnership(entry.Api, ledger, entry.Label, "catalogue", "threw");
+            }
+
+            // The warm run is where an over-disposal shows (the pool balance cannot see it, see OwnershipLedger); a
+            // damaged fixture ends the entry before the measured runs replay over it.
+            if (acc.CheckOwnership(entry.Api, ledger, entry.Label, "catalogue", "warm"))
+                return true;
+
+            var traffic = ScopeAudit.MeasureConfirmedTraffic(Region);
+            bool damagedLater = acc.CheckOwnership(entry.Api, ledger, entry.Label, "catalogue", "measured");
+            if (traffic == null)
+            {
+                acc.Inconclusive(entry.Api, errorPath: false);   // a GC landed inside every attempt — indistinguishable, never red
+                return damagedLater;
+            }
+
+            acc.Direct++;
+            acc.Record(entry.Api, null, entry.Label, traffic.Value, freshBytes, errorPath: false, entry.Label, "catalogue");
+            return damagedLater;
+        }
+
+        /// <summary>
+        ///     Installs the OpenBLAS backend for a backend-only measurement block, single-threaded (the
+        ///     deterministic configuration; a threaded BLAS also allocates per-thread scratch outside the
+        ///     pool, which is irrelevant to the balance but slows the block down).
+        /// </summary>
+        /// <returns>Null when the backend is installed (the caller MUST <see cref="OpenBlasEngine.Disable"/>
+        /// it afterwards); otherwise why no library loaded.</returns>
+        internal static string TryEnableLeakBackend()
+        {
+            try
+            {
+                OpenBlasEngine.Enable(threads: 1);
+                return null;
+            }
+            catch (Exception e)
+            {
+                // Enable is a no-op on failure (it never half-installs), so there is nothing to undo.
+                return $"no CBLAS/LAPACK library loads here ({e.GetType().Name}: {FirstLine(e.Message)}); stage one " +
+                       "with tools/fetch_openblas.py or point NUMSHARP_OPENBLAS_LIBRARY at a build";
+            }
+        }
+
+        /// <summary>
+        ///     Total bytes of the result's arrays that are FRESH allocations: not a fixture array, not a
+        ///     view into any fixture's base buffer, and larger than a scalar-pool slot (the
+        ///     StackedMemoryPool, which these counters cannot see). The catalogue twin of
+        ///     <see cref="FreshResultBytes"/>, generalised to every result shape via
+        ///     <see cref="CollectDisposables"/>.
+        /// </summary>
+        /// <param name="result">The entry's result, any shape.</param>
+        /// <param name="keep">The fixture's never-dispose set (a fixture array is never fresh).</param>
+        /// <param name="ranges">The fixture arrays' base-buffer byte ranges (a pointer inside one is a view).</param>
+        /// <returns>Fresh bytes; 0 when the result holds no fresh array.</returns>
+        private static long FreshBytesAny(object result, HashSet<object> keep, List<(ulong lo, ulong hi)> ranges)
+        {
+            long total = 0;
+            foreach (var o in CollectDisposables(result))
+            {
+                if (o is not NDArray nd || keep.Contains(nd))
+                    continue;
+                // The element size from the array itself: a fixed-width string's width is its descriptor's (the
+                // String lane has no fixed size), and for every other dtype it equals the lane's size.
+                long bytes = nd.size * nd.dtypesize;
+                if (bytes <= ScalarSlotBytes)
+                    continue;
+                ulong a = Addr(nd);
+                bool view = false;
+                foreach (var (lo, hi) in ranges)
+                {
+                    if (a >= lo && a < hi)
+                    {
+                        view = true;
+                        break;
+                    }
+                }
+                if (!view)
+                    total += bytes;
+            }
+            return total;
+        }
+
+        /// <summary>The base-buffer byte range an array's storage aliases (its internal slice), the
+        /// span inside which any view of it must point.</summary>
+        /// <param name="nd">A non-empty, live array.</param>
+        /// <returns>The half-open range <c>[lo, hi)</c> as unsigned addresses.</returns>
+        internal static unsafe (ulong lo, ulong hi) BaseRange(NDArray nd)
+        {
+            var slice = nd.Storage.InternalArray;
+            ulong lo = (ulong)(byte*)slice.Address;
+            return (lo, lo + (ulong)slice.BytesLength);
+        }
+
+        /// <summary>The first line of an exception message (multi-line messages would flood a failure list).</summary>
+        /// <param name="message">The message (may be null).</param>
+        /// <returns>The first line, or an empty string.</returns>
+        private static string FirstLine(string message)
+            => message?.Split('\n')[0].TrimEnd('\r') ?? string.Empty;
+    }
+}

@@ -21,6 +21,12 @@ namespace NumSharp.Build.Analyzer
         ///     against a NumSharp that predates it.
         /// </summary>
         public INamedTypeSymbol ExitAttr;
+        /// <summary>
+        ///     <c>[NDAnchored]</c> — the method-level "root my operands" mark the weaver turns into shadow locals and
+        ///     <c>NDScope.Anchor</c> calls on an unscoped entry point. Weaver-dependent (inert without NumSharp.Build), so the
+        ///     NDW013 guard counts it as usage. Null against a NumSharp that predates it.
+        /// </summary>
+        public INamedTypeSymbol AnchoredAttr;
         /// <summary><c>[NDBorrowed]</c> — the ownership opt-out the holder analyzer honours (null against a NumSharp that predates it).</summary>
         public INamedTypeSymbol BorrowedAttr;
         public INamedTypeSymbol NDArray;
@@ -65,6 +71,7 @@ namespace NumSharp.Build.Analyzer
                 AsyncAttr = asyncAttr,
                 CoveredAttr = c.GetTypeByMetadataName("NumSharp.NDScopedCoveredAttribute"),
                 ExitAttr = c.GetTypeByMetadataName("NumSharp.NDScopedExitAttribute"),
+                AnchoredAttr = c.GetTypeByMetadataName("NumSharp.NDAnchoredAttribute"),
                 BorrowedAttr = c.GetTypeByMetadataName("NumSharp.NDBorrowedAttribute"),
                 NDArray = ndArray,
                 NDScope = c.GetTypeByMetadataName("NumSharp.NDScope"),

@@ -257,5 +257,64 @@ namespace NumSharp.Tests.Manipulation
             np.insert(np.array(new byte[] { 1, 2, 3 }), 1, (object)(byte)99)
                 .array_equal(np.array(new byte[] { 1, 99, 2, 3 })).Should().BeTrue();
         }
+
+        // ---------------- lifetime: an NDArray reaching the object-value overloads ----------------
+
+        /// <summary>
+        ///     Every object-value <c>insert</c> overload (int, long, Slice, int[], long[] and NDArray obj) used to
+        ///     dispose its value conversion unconditionally, but <c>ScalarValueAsArray</c> returns an
+        ///     <see cref="NDArray"/> value as-is, so the caller's array was released. The overloads are now
+        ///     <c>[NDScoped]</c>; the caller's array was built before the scope opened and survives. NumPy 2.4.2:
+        ///     <c>np.insert([1, 2, 3], obj, [9])</c> → <c>[1, 9, 2, 3]</c> for obj = <c>1</c>, <c>slice(1, 2)</c>,
+        ///     <c>[1]</c> and <c>np.array([1])</c>.
+        /// </summary>
+        [TestMethod]
+        public void ObjectValueOverloads_NDArrayValue_SurvivesTheCall()
+        {
+            var arr = np.array(new long[] { 1, 2, 3 });
+            var expected = np.array(new long[] { 1, 9, 2, 3 });
+            var calls = new (string name, Func<NDArray, NDArray> call)[]
+            {
+                ("int obj", v => np.insert(arr, 1, (object)v)),
+                ("long obj", v => np.insert(arr, 1L, (object)v)),
+                ("Slice obj", v => np.insert(arr, new Slice(1, 2), (object)v)),
+                ("int[] obj", v => np.insert(arr, new[] { 1 }, (object)v)),
+                ("long[] obj", v => np.insert(arr, new long[] { 1 }, (object)v)),
+                ("NDArray obj", v => np.insert(arr, np.array(new long[] { 1 }), (object)v)),
+            };
+
+            foreach (var (name, call) in calls)
+            {
+                var values = np.array(new long[] { 9 });
+                var r = call(values);
+
+                LeakGuards.StillUsable(values, $" — insert({name}, object) must not dispose the caller's NDArray");
+                r.array_equal(expected).Should().BeTrue(name);
+                // A second call reads the same live array, not a recycled buffer.
+                call(values).array_equal(expected).Should().BeTrue(name + " (second call)");
+            }
+            LeakGuards.StillUsable(arr);
+        }
+
+        /// <summary>
+        ///     The 2-D single-index path hands a dtype-matched, already slot-shaped value (here <c>(1, 2)</c>
+        ///     int64 into a <c>(2, 2)</c> int64 array) straight to the concatenation: the coercion helpers no longer
+        ///     wrap it in a second NDArray. The result must still be a copy. NumPy 2.4.2:
+        ///     <c>np.insert([[1, 2], [3, 4]], 1, [[9, 8]], axis=0)</c> → <c>[[1, 2], [9, 8], [3, 4]]</c>.
+        /// </summary>
+        [TestMethod]
+        public void SingleIndex_SlotShapedValues_AreCopiedNotAliased()
+        {
+            var arr = np.array(new long[] { 1, 2, 3, 4 }).reshape(2, 2);
+            var values = np.array(new long[] { 9, 8 }).reshape(1, 2);
+
+            var r = np.insert(arr, 1L, values, axis: 0);
+
+            r.array_equal(np.array(new long[] { 1, 2, 9, 8, 3, 4 }).reshape(3, 2)).Should().BeTrue();
+            LeakGuards.StillUsable(values);
+            // The result owns a copy: writing the input afterwards does not reach it.
+            values[0, 0] = 0L;
+            ((long)r[1, 0]).Should().Be(9L);
+        }
     }
 }

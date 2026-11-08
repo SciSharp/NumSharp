@@ -80,11 +80,18 @@ namespace NumSharp.Tests.LinearAlgebra
         [TestMethod]
         public void ZeroAgainstMoreThanOne_InAStackDim_StillRaises()
         {
-            // 0 is compatible with 0 and 1 only. NumPy raises ValueError; NumSharp's house type for
-            // a broadcast failure is IncorrectShapeException.
-            AssertMatmulRaises(new long[] { 0, 3, 4 }, new long[] { 2, 4, 5 });
-            AssertMatmulRaises(new long[] { 2, 3, 4 }, new long[] { 0, 4, 5 });
-            AssertMatmulRaises(new long[] { 3, 0, 3, 4 }, new long[] { 3, 2, 4, 5 });
+            // 0 is compatible with 0 and 1 only. NumPy's gufunc iterator raises ValueError with its remapped-shapes
+            // text, and so does np.matmul since its checks are NumPy's (the np-layer dtype plan, P2); it raised the
+            // product kernel's IncorrectShapeException "stacked (batch) dimensions are not broadcastable" before.
+            AssertMatmulRaises(new long[] { 0, 3, 4 }, new long[] { 2, 4, 5 },
+                "operands could not be broadcast together with remapped shapes [original->remapped]: " +
+                "(0,3,4)->(0,newaxis,newaxis) (2,4,5)->(2,newaxis,newaxis)  and requested shape (3,5)");
+            AssertMatmulRaises(new long[] { 2, 3, 4 }, new long[] { 0, 4, 5 },
+                "operands could not be broadcast together with remapped shapes [original->remapped]: " +
+                "(2,3,4)->(2,newaxis,newaxis) (0,4,5)->(0,newaxis,newaxis)  and requested shape (3,5)");
+            AssertMatmulRaises(new long[] { 3, 0, 3, 4 }, new long[] { 3, 2, 4, 5 },
+                "operands could not be broadcast together with remapped shapes [original->remapped]: " +
+                "(3,0,3,4)->(3,0,newaxis,newaxis) (3,2,4,5)->(3,2,newaxis,newaxis)  and requested shape (3,5)");
         }
 
         [TestMethod]
@@ -274,11 +281,16 @@ namespace NumSharp.Tests.LinearAlgebra
                 $"({string.Join(",", a)}) @ ({string.Join(",", b)}): size");
         }
 
-        private static void AssertMatmulRaises(long[] a, long[] b)
+        /// <summary>Asserts that np.matmul refuses two float32 ramps of the given shapes with NumPy's ValueError text.</summary>
+        /// <param name="a">The left operand's shape.</param>
+        /// <param name="b">The right operand's shape.</param>
+        /// <param name="message">NumPy's message, verbatim.</param>
+        private static void AssertMatmulRaises(long[] a, long[] b, string message)
         {
-            Assert.ThrowsExactly<IncorrectShapeException>(
+            var error = Assert.ThrowsExactly<ValueError>(
                 () => np.matmul(Ramp(NPTypeCode.Single, a), Ramp(NPTypeCode.Single, b)),
                 $"({string.Join(",", a)}) @ ({string.Join(",", b)}) should not be broadcastable");
+            Assert.AreEqual(message, error.Message);
         }
 
         private static void AssertPromotes(NPTypeCode lhs, NPTypeCode rhs, NPTypeCode expected)

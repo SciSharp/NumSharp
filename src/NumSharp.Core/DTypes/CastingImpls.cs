@@ -1,28 +1,41 @@
 using System;
+using System.Threading;
 using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
     /// <summary>
     ///     The cast between two storage-backed builtin classes (NumPy's <c>add_numeric_cast</c>, <c>convert_datatype.c</c>).
-    ///     Its <see cref="ArrayMethod.Casting"/> is computed the way NumPy computes <c>spec.casting</c>: the same class →
-    ///     <c>equiv</c> (a copy or byte swap); <c>safe</c> when the frozen promotion table says
-    ///     <c>promote(from, to) == to</c> (NumPy's <c>_npy_can_cast_safely_table</c>); otherwise <c>same_kind</c> when the
-    ///     source kind orders at or below the destination kind (<c>b &lt; u &lt; i &lt; f &lt; c</c>), else <c>unsafe</c>.
-    ///     These are exactly the rules <c>np.can_cast(NPTypeCode, NPTypeCode)</c> always applied, so the builtin answers
-    ///     are unchanged; the class pair now owns them.
+    ///     Its <see cref="ArrayMethod.casting"/> is computed the way NumPy computes <c>spec.casting</c>: the same class, or
+    ///     two NumPy classes of one kind and one size (<c>intc</c> ↔ <c>int32</c> on Windows, <c>longdouble</c> ↔
+    ///     <c>float64</c>) → <c>equiv</c> (NumPy's <c>numeric_copy_or_byteswap</c>, resolved to no cast at all when both byte
+    ///     orders are native); <c>safe</c> when the frozen promotion table says <c>promote(from, to) == to</c> (NumPy's
+    ///     <c>_npy_can_cast_safely_table</c>); otherwise <c>same_kind</c> when the source kind orders at or below the
+    ///     destination kind (<c>b &lt; u &lt; i &lt; f &lt; c</c>), else <c>unsafe</c>. These are exactly the rules
+    ///     <c>np.can_cast(NPTypeCode, NPTypeCode)</c> always applied, so the builtin answers are unchanged; the class pair
+    ///     now owns them.
     /// </summary>
     /// <remarks>
-    ///     One deliberate departure: NumPy also calls two DIFFERENT classes with the same kind and size equivalent
-    ///     (<c>intc</c> vs <c>long</c> on Windows), which would make NumSharp's <c>Char</c> and <c>UInt16</c> an
-    ///     <c>equiv</c> pair. They are distinct storage types with distinct kernels, so only the identical class is
-    ///     <c>equiv</c> here; <c>Char ↔ UInt16</c> is <c>safe</c> one way and <c>same_kind</c> the other, as before.
-    ///     The loop is not provided by this object — the engine drives its IL cast kernels directly (Stage A).
+    ///     <para>
+    ///     The equivalence holds between NumPy's own classes only (<see cref="LegacyBuiltinDTypeMeta.IsEquivalentNumeric"/>):
+    ///     NumSharp's <c>Char</c> and <c>UInt16</c> have one kind and one size too, but they are distinct storage types with
+    ///     distinct kernels, so <c>Char ↔ UInt16</c> stays <c>safe</c> one way and <c>same_kind</c> the other, as before.
+    ///     </para>
+    ///     <para>
+    ///     A lane-sharing class casts through its lane's tables: its storage code is the lane's, so the promotion-table
+    ///     test reads the lane pair (<c>longdouble → float32</c> is float64's <c>same_kind</c>). Its strided loop
+    ///     (<see cref="get_strided_loop"/>) is the engine's IL inner cast kernel of the lane pair, the per-element cast the
+    ///     bulk casts are measured against; the bulk routes (astype, the iterator's numeric buffers) keep their own vector
+    ///     kernels.
+    ///     </para>
     /// </remarks>
     public sealed class BuiltinCastingImpl : CastingImpl
     {
+        /// <summary>Builds the cast between two builtin classes (only <see cref="DTypeRegistry"/> calls this, once per ordered pair).</summary>
+        /// <param name="from">The source class.</param>
+        /// <param name="to">The destination class.</param>
         internal BuiltinCastingImpl(LegacyBuiltinDTypeMeta from, LegacyBuiltinDTypeMeta to)
-            : base(ReferenceEquals(from, to) ? "numeric_copy_or_byteswap" : "numeric_cast", NPY_CASTING.NPY_UNSAFE_CASTING /* see Casting */,
+            : base(from.IsEquivalentNumeric(to) ? "numeric_copy_or_byteswap" : "numeric_cast", NPY_CASTING.NPY_UNSAFE_CASTING /* see Casting */,
                 NDArrayMethodFlags.SUPPORTS_UNALIGNED | NDArrayMethodFlags.NO_FLOATINGPOINT_ERRORS, from, to)
         {
             _from = from;
@@ -31,7 +44,20 @@ namespace NumSharp
 
         private readonly LegacyBuiltinDTypeMeta _from;
         private readonly LegacyBuiltinDTypeMeta _to;
-        private NPY_CASTING? _casting;
+
+        /// <summary>The value <see cref="_casting"/> holds until the first read computes it (no <see cref="NPY_CASTING"/> is negative).</summary>
+        private const int CastingNotComputed = -1;
+
+        /// <summary>
+        ///     The cached <see cref="casting"/> as an <see cref="int"/>, <see cref="CastingNotComputed"/> until the first read.
+        ///     One 4-byte field on purpose: a read of it is a single atomic load, so a thread racing the first computation
+        ///     sees either the sentinel or the final value. A <c>Nullable&lt;NPY_CASTING&gt;</c> read with <c>??=</c> is
+        ///     two loads (the value, then <c>HasValue</c>), and a reader whose two loads straddle the other thread's
+        ///     8-byte store returned <c>default</c> — <see cref="NPY_CASTING.NPY_NO_CASTING"/> —, which made
+        ///     <see cref="DTypeCasting.CheckCastSafety"/>'s shortcut answer True for every rule
+        ///     (<c>np.can_cast(float64, int32, 'no')</c>; measured 32 of 2,000,000 racing first reads).
+        /// </summary>
+        private int _casting = CastingNotComputed;
 
         /// <summary>
         ///     The minimal safety of this numeric cast — NumPy's <c>add_numeric_cast</c> value (<c>equiv</c> within a class,
@@ -40,14 +66,32 @@ namespace NumSharp
         ///     the promotion table is <c>np._nptypemap_arr_arr</c>, built by <c>np</c>'s static constructor, and <c>np</c>'s
         ///     field initializers (<c>np.float64</c> is a <see cref="DType"/>) are what first construct
         ///     <see cref="DTypeRegistry"/> — so reading the table while the registry registers the 15×15 impls would observe
-        ///     it before it exists. The value is a constant, so the lazy evaluation is unobservable (a benign race at worst
-        ///     computes it twice).
+        ///     it before it exists. The value is a constant, so two threads racing the first read compute the same value
+        ///     and either store wins; each reads the cache with one volatile load (see <see cref="_casting"/>).
         /// </summary>
-        public override NPY_CASTING Casting => _casting ??= ComputeCasting(_from, _to);
+        public override NPY_CASTING casting
+        {
+            get
+            {
+                int cached = Volatile.Read(ref _casting);
+                if (cached != CastingNotComputed)
+                    return (NPY_CASTING)cached;
+                var computed = ComputeCasting(_from, _to);
+                // Publish after computing: a reader that sees the stored value sees a complete one (a single int store),
+                // and a reader that still sees the sentinel computes the same constant itself.
+                Volatile.Write(ref _casting, (int)computed);
+                return computed;
+            }
+        }
 
+        /// <summary>NumPy's <c>add_numeric_cast</c> safety level for one class pair (see <see cref="casting"/>).</summary>
+        /// <param name="from">The source class.</param>
+        /// <param name="to">The destination class.</param>
+        /// <returns>The cast's minimal safety.</returns>
         private static NPY_CASTING ComputeCasting(LegacyBuiltinDTypeMeta from, LegacyBuiltinDTypeMeta to)
         {
-            if (ReferenceEquals(from, to))
+            // "Find the correct casting level, and special case no-cast": one kind and one size is a copy or byte swap.
+            if (from.IsEquivalentNumeric(to))
                 return NPY_CASTING.NPY_EQUIV_CASTING;
             if (np._nptypemap_arr_arr.TryGetValue((from.TypeCode, to.TypeCode), out var promoted) && promoted == to.TypeCode)
                 return NPY_CASTING.NPY_SAFE_CASTING;
@@ -57,11 +101,44 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        /// <remarks>
+        ///     An equivalent pair resolves as NumPy's <c>legacy_same_dtype_resolve_descriptors</c> does, which NumPy installs
+        ///     for every <c>numeric_copy_or_byteswap</c> cast: no cast (a view) when both byte orders are native, an
+        ///     <c>equiv</c> byte swap otherwise — so <c>np.can_cast('g', 'd', 'no')</c> is True.
+        /// </remarks>
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
-            if (IsWithinDType)
+            if (IsWithinDType || _from.IsEquivalentNumeric(_to))
                 return LegacySameDTypeResolveDescriptors(this, givenDescrs, loopDescrs, out viewOffset);
             return SimpleCastResolveDescriptors(this, givenDescrs, loopDescrs, out viewOffset);
+        }
+
+        /// <summary>
+        ///     NumPy's numeric cast loop (<c>_strided_to_strided_cast_*</c> / <c>numeric_copy_or_byteswap</c>): the engine's IL
+        ///     inner cast kernel of the two storage lanes - the NumPy-exact per-element cast table (a lane-sharing class casts
+        ///     as its lane; within one lane it is a copy), or the scalar <see cref="NDIterCasting.ConvertValue"/> loop where
+        ///     dynamic code is unavailable (the same table).
+        /// </summary>
+        /// <param name="context">The resolved descriptors (both native: storage holds no other byte order).</param>
+        /// <param name="aligned">Unused: the kernels read and write unaligned elements.</param>
+        /// <param name="strides">Unused: the kernel takes the strides of each call.</param>
+        /// <param name="flags">Receives the method's flags (no Python API, no floating-point errors raised).</param>
+        /// <returns>The loop: [0] the source run, [1] the destination run, byte strides.</returns>
+        public override unsafe NDInnerLoopFunc get_strided_loop(ArrayMethodContext context, bool aligned, long[] strides, out NDArrayMethodFlags flags)
+        {
+            flags = this.flags;
+            NPTypeCode from = _from.TypeCode, to = _to.TypeCode;
+            var cast = Backends.Kernels.DirectILKernelGenerator.TryGetInnerCastKernel(from, to);
+            if (cast is not null)
+                return (ptrs, st, count, aux) => cast(ptrs[0], st[0], ptrs[1], st[1], count);
+            // No dynamic code: the scalar cast table, one element at a time.
+            return (ptrs, st, count, aux) =>
+            {
+                byte* sp = (byte*)ptrs[0], dp = (byte*)ptrs[1];
+                long ss = st[0], ds = st[1];
+                for (long i = 0; i < count; i++, sp += ss, dp += ds)
+                    NDIterCasting.ConvertValue(sp, dp, from, to);
+            };
         }
 
         /// <summary>
@@ -71,7 +148,7 @@ namespace NumSharp
         internal static NPY_CASTING LegacySameDTypeResolveDescriptors(CastingImpl impl, DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             loopDescrs[0] = givenDescrs[0];
-            loopDescrs[1] = givenDescrs[1] ?? impl.From.EnsureCanonical(givenDescrs[0]);
+            loopDescrs[1] = givenDescrs[1] ?? impl.From.ensure_canonical(givenDescrs[0]);
 
             /*
              * Legacy dtypes (except datetime) only have byte-order and elsize as
@@ -92,12 +169,12 @@ namespace NumSharp
         /// </summary>
         internal static NPY_CASTING SimpleCastResolveDescriptors(CastingImpl impl, DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
-            loopDescrs[0] = impl.From.EnsureCanonical(givenDescrs[0]);
-            loopDescrs[1] = givenDescrs[1] != null ? impl.To.EnsureCanonical(givenDescrs[1]) : impl.To.DefaultDescr();
+            loopDescrs[0] = impl.From.ensure_canonical(givenDescrs[0]);
+            loopDescrs[1] = givenDescrs[1] != null ? impl.To.ensure_canonical(givenDescrs[1]) : impl.To.default_descr();
 
             viewOffset = NoView;
-            if (impl.Casting != NPY_CASTING.NPY_NO_CASTING)
-                return impl.Casting;
+            if (impl.casting != NPY_CASTING.NPY_NO_CASTING)
+                return impl.casting;
             if (loopDescrs[0].isnative == loopDescrs[1].isnative)
             {
                 viewOffset = 0;
@@ -122,11 +199,11 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             /* This is a within-dtype cast, which currently must handle byteswapping */
             loopDescrs[0] = givenDescrs[0];
-            loopDescrs[1] = givenDescrs[1] ?? From.EnsureCanonical(givenDescrs[0]);
+            loopDescrs[1] = givenDescrs[1] ?? From.ensure_canonical(givenDescrs[0]);
             viewOffset = NoView;
 
             bool isTimedelta = ((DatetimeDTypeMeta)From).IsTimedelta;
@@ -142,17 +219,17 @@ namespace NumSharp
             var meta1 = loopDescrs[0].DatetimeMetadata.Value;
             var meta2 = loopDescrs[1].DatetimeMetadata.Value;
 
-            if ((meta1.Base == meta2.Base && meta1.Num == meta2.Num) ||
+            if ((meta1.@base == meta2.@base && meta1.num == meta2.num) ||
                 // handle some common metric prefix conversions
                 // 1000 fold conversions
-                (meta2.Base >= NPY_DATETIMEUNIT.NPY_FR_s && (int)meta1.Base - (int)meta2.Base == 1
-                                                          && meta2.Num != 0 && meta1.Num / meta2.Num == 1000) ||
+                (meta2.@base >= NPY_DATETIMEUNIT.NPY_FR_s && (int)meta1.@base - (int)meta2.@base == 1
+                                                          && meta2.num != 0 && meta1.num / meta2.num == 1000) ||
                 // 10^6 fold conversions
-                (meta2.Base >= NPY_DATETIMEUNIT.NPY_FR_s && (int)meta1.Base - (int)meta2.Base == 2
-                                                          && meta2.Num != 0 && meta1.Num / meta2.Num == 1000000) ||
+                (meta2.@base >= NPY_DATETIMEUNIT.NPY_FR_s && (int)meta1.@base - (int)meta2.@base == 2
+                                                          && meta2.num != 0 && meta1.num / meta2.num == 1000000) ||
                 // 10^9 fold conversions
-                (meta2.Base >= NPY_DATETIMEUNIT.NPY_FR_s && (int)meta1.Base - (int)meta2.Base == 3
-                                                          && meta2.Num != 0 && meta1.Num / meta2.Num == 1000000000))
+                (meta2.@base >= NPY_DATETIMEUNIT.NPY_FR_s && (int)meta1.@base - (int)meta2.@base == 3
+                                                          && meta2.num != 0 && meta1.num / meta2.num == 1000000000))
             {
                 if (byteorderMayAllowView)
                 {
@@ -161,25 +238,25 @@ namespace NumSharp
                 }
                 return NPY_CASTING.NPY_EQUIV_CASTING;
             }
-            if (meta1.Base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
+            if (meta1.@base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
             {
                 if (byteorderMayAllowView)
                     viewOffset = 0;
                 return NPY_CASTING.NPY_SAFE_CASTING;
             }
-            if (meta2.Base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
+            if (meta2.@base == NPY_DATETIMEUNIT.NPY_FR_GENERIC)
             {
                 /* TODO: This is actually an invalid cast (casting will error) */
                 return NPY_CASTING.NPY_UNSAFE_CASTING;
             }
             if (isTimedelta && (
                     /* jump between time units and date units is unsafe for timedelta */
-                    (meta1.Base <= NPY_DATETIMEUNIT.NPY_FR_M && meta2.Base > NPY_DATETIMEUNIT.NPY_FR_M) ||
-                    (meta1.Base > NPY_DATETIMEUNIT.NPY_FR_M && meta2.Base <= NPY_DATETIMEUNIT.NPY_FR_M)))
+                    (meta1.@base <= NPY_DATETIMEUNIT.NPY_FR_M && meta2.@base > NPY_DATETIMEUNIT.NPY_FR_M) ||
+                    (meta1.@base > NPY_DATETIMEUNIT.NPY_FR_M && meta2.@base <= NPY_DATETIMEUNIT.NPY_FR_M)))
             {
                 return NPY_CASTING.NPY_UNSAFE_CASTING;
             }
-            if (meta1.Base <= meta2.Base)
+            if (meta1.@base <= meta2.@base)
             {
                 /* Casting to a more precise unit is currently considered safe */
                 if (DatetimeMetaData.Divides(meta1, meta2, isTimedelta))
@@ -208,12 +285,12 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
-            loopDescrs[0] = From.EnsureCanonical(givenDescrs[0]);
+            loopDescrs[0] = From.ensure_canonical(givenDescrs[0]);
             loopDescrs[1] = givenDescrs[1] == null
                 ? ((DatetimeDTypeMeta)To).Descr(givenDescrs[0].DatetimeMetadata.Value)
-                : To.EnsureCanonical(givenDescrs[1]);
+                : To.ensure_canonical(givenDescrs[1]);
             viewOffset = NoView;
             /*
              * Mostly NPY_UNSAFE_CASTING is not true, the cast will fail.
@@ -226,9 +303,10 @@ namespace NumSharp
 
     /// <summary>
     ///     A cast whose safety is fixed per class pair with the plain descriptor resolution — NumPy's
-    ///     <c>PyArray_AddLegacyWrapping_CastingImpl</c>, used for the numeric ↔ datetime/timedelta casts: every cast
-    ///     to or from <c>datetime64</c> is <c>unsafe</c>; an integer or bool casts <c>safe</c>ly to <c>timedelta64</c>
-    ///     (a 64-bit unsigned one only <c>same_kind</c>), a float or complex only <c>unsafe</c>ly.
+    ///     <c>PyArray_AddLegacyWrapping_CastingImpl</c>, used for the numeric ↔ datetime/timedelta casts (every cast
+    ///     to or from <c>datetime64</c> is <c>unsafe</c>; an integer or bool casts <c>safe</c>ly to <c>timedelta64</c>,
+    ///     a 64-bit unsigned one only <c>same_kind</c>, a float or complex only <c>unsafe</c>ly) and for the casts OUT of
+    ///     a string class into a numeric class or <c>timedelta64</c> (always <c>unsafe</c>: text parses into a number).
     /// </summary>
     public sealed class LegacyWrappingCastingImpl : CastingImpl
     {
@@ -238,11 +316,42 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
-        public override NPY_CASTING ResolveDescriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
+        public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
             if (IsWithinDType)
                 return BuiltinCastingImpl.LegacySameDTypeResolveDescriptors(this, givenDescrs, loopDescrs, out viewOffset);
             return BuiltinCastingImpl.SimpleCastResolveDescriptors(this, givenDescrs, loopDescrs, out viewOffset);
+        }
+
+        /// <summary>
+        ///     The loop of the casts OUT of a fixed-width text class into a numeric storage class - NumPy's legacy
+        ///     <c>STRING_to_@TYPE@</c> / <c>UNICODE_to_@TYPE@</c> wrapped in <c>NPY_LOWLEVEL_BUFFER_BLOCKSIZE</c> blocks
+        ///     (<see cref="Backends.Strings.NDTextConversion.ParseRun"/>): each text parsed by CPython's <c>int()</c> /
+        ///     <c>float()</c> / <c>complex()</c> (a bool target takes the text's truth value), a block of 128 committed only when
+        ///     every element of it parsed, the error quoting the element's NumPy scalar (<c>np.str_('x')</c>). The
+        ///     numeric ↔ datetime casts this class also registers have no storage yet: they keep the base, which raises.
+        /// </summary>
+        /// <param name="context">The resolved descriptors: [0] the text (its class and width), [1] the number (its lane).</param>
+        /// <param name="aligned">Unused: the loop reads and writes unaligned elements.</param>
+        /// <param name="strides">Unused: the loop takes the strides of each call.</param>
+        /// <param name="flags">Receives the method's flags.</param>
+        /// <returns>The loop: [0] the text run, [1] the number run, byte strides.</returns>
+        /// <exception cref="NotSupportedException">A pair other than text into a numeric storage class (a datetime cast before
+        ///     Stage C).</exception>
+        public override unsafe NDInnerLoopFunc get_strided_loop(ArrayMethodContext context, bool aligned, long[] strides, out NDArrayMethodFlags flags)
+        {
+            if (From is not StringDTypeMeta text || To is not LegacyBuiltinDTypeMeta number)
+                return base.get_strided_loop(context, aligned, strides, out flags);
+            flags = this.flags;
+            var src = context.descriptors[0];
+            bool unicode = text.IsUnicode;
+            int chars = unicode ? src.itemsize / 4 : src.itemsize;
+            NPTypeCode target = number.TypeCode;
+            // The loop's work space (NumPy's auxdata): the ASCII rewrite of the widest element and its underscore-free copy,
+            // reused by every call of this loop (one walk at a time, see NDCastInfo).
+            byte[] scratch = new byte[Backends.Strings.NDTextParse.ScratchBytes(chars)];
+            return (ptrs, st, count, aux) => Backends.Strings.NDTextConversion.ParseRun((byte*)ptrs[0], st[0], unicode, chars,
+                (byte*)ptrs[1], st[1], target, count, scratch, Backends.Strings.TextReprStyle.ArrayElement);
         }
     }
 }

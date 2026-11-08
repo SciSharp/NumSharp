@@ -12,7 +12,7 @@ namespace NumSharp
     ///     matrix products, which always have a managed kernel to fall back to. The factorisations
     ///     (<c>inv</c>, <c>det</c>, <c>solve</c>, <c>svd</c>, <c>eig</c>, <c>qr</c>, …) are served by an
     ///     <see cref="NumSharp.Backends.IBlasBackend"/> assigned to
-    ///     <see cref="NumSharp.Backends.TensorEngine.Blas"/>, and the package that supplies one is
+    ///     <see cref="NumSharp.TensorEngine.Blas"/>, and the package that supplies one is
     ///     <see cref="PackageId"/>. <b>There is no separate seam to install</b>: the one
     ///     <c>NumSharp.Interop.OpenBLAS</c> reference fills the whole <c>Blas</c> property — products and
     ///     factorisations alike — from a <c>[ModuleInitializer]</c>, so adding the reference is the whole

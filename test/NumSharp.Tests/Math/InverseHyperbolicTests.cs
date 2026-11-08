@@ -58,8 +58,9 @@ namespace NumSharp.Tests.Math
             var x = np.array(new[] { 1.0, 2.0, 3.0 });
             var r = np.arccosh(x);
             r.GetAtIndex<double>(0).Should().Be(0.0);                 // arccosh(1) == 0
-            r.GetAtIndex<double>(1).Should().Be(1.3169578969248166);
-            r.GetAtIndex<double>(2).Should().Be(1.762747174039086);
+            // acosh(2) / acosh(3) are the CRT's bits: glibc gives ...168 for acosh(2) since ubuntu-latest image 20261021.
+            ShouldMatchCrt(r.GetAtIndex<double>(1), 1.3169578969248166);
+            ShouldMatchCrt(r.GetAtIndex<double>(2), 1.762747174039086);
 
             // x < 1 is out of domain -> NaN (matches NumPy)
             double.IsNaN(np.arccosh(np.array(new[] { 0.5 })).GetAtIndex<double>(0)).Should().BeTrue();

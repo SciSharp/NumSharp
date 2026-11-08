@@ -19,6 +19,13 @@ namespace NumSharp.Build;
 ///     declaration it overrides or implements (<see cref="ScopeInheritance"/>); every diagnostic and
 ///     log line names the inherited declaration so a rejection on an override reads back to its source.
 ///     </para>
+///     <para>
+///     A plain body — woven here or scoped by hand — also gets the operand roots
+///     (<see cref="ScopeWeaver.InjectParameterAnchors"/>): every parameter that can reach an NDArray, and
+///     <c>this</c>, stays reachable until the method returns. The scope roots what it tracks; a caller's
+///     operand is never tracked, so without the roots a kernel could read an operand the GC had already
+///     reclaimed. An iterator's parameters live in its state machine, which the caller holds, and need none.
+///     </para>
 /// </summary>
 internal sealed class SyncScopeWeaver : ScopeWeaver
 {
@@ -75,8 +82,17 @@ internal sealed class SyncScopeWeaver : ScopeWeaver
         switch (Validate(method, label, _stderr))
         {
             case ValidationOutcome.AlreadyScoped:
-                // A hand-scoped body is left untouched — including its [NDScopedExit] parameters, which
-                // the hand author detaches by hand (the same hands-off rule the scope idempotence keeps).
+                // A hand-scoped body keeps its scope and its [NDScopedExit] handling (the hand author detaches by
+                // hand — the same hands-off rule the scope idempotence keeps), but still gains the operand roots: a
+                // hand-written scope roots only the arrays it tracks, never the caller's operands. A body a previous
+                // pass already rooted calls NDScope.Anchor, which keeps this idempotent.
+                if (InjectParameterAnchors(method, _refs))
+                {
+                    if (_verbose)
+                        _stdout.WriteLine($"NumSharp.Build: woven (operand roots; already opens an NDScope): {method.FullName}");
+                    return WeaveOutcome.Woven;
+                }
+
                 if (_verbose)
                     _stdout.WriteLine($"NumSharp.Build: skip (already opens an NDScope): {method.FullName}");
                 return WeaveOutcome.Skipped;
@@ -89,6 +105,12 @@ internal sealed class SyncScopeWeaver : ScopeWeaver
         // this method's fresh scope, which never tracked an input).
         InjectParameterDetaches(method, _refs);
         WeaveMethod(method, _refs);
+
+        // Then the operand roots, AFTER the scope weave: the shadows land above the scope's Open (outside the
+        // protected region) and the anchors in front of the one epilogue ret every original return now leaves to.
+        // The scope roots what it tracks (everything constructed during the call); these root what it cannot — the
+        // caller's operands, which a kernel may still read after the body's last use of the parameter.
+        InjectParameterAnchors(method, _refs);
         if (_verbose)
             _stdout.WriteLine($"NumSharp.Build: woven{ScopeInheritance.Provenance(_refs.Inheritance.EffectiveScope(method))}: {method.FullName}");
         return WeaveOutcome.Woven;

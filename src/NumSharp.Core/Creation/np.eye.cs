@@ -28,49 +28,24 @@ namespace NumSharp
         /// <param name="order">Memory layout: 'C' (row-major, default) or 'F' (column-major).</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>An array where all elements are equal to zero, except for the k-th diagonal, whose values are equal to one.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.eye.html</remarks>
+        /// <exception cref="ValueError"><paramref name="order"/> is not one of C, F, A, K in either case (<c>order must be one
+        ///     of 'C', 'F', 'A', or 'K' (got 'Z')</c>), or it is A or K (<c>only 'C' or 'F' order is permitted</c>);
+        ///     <paramref name="N"/> or <paramref name="M"/> is negative (<c>negative dimensions are not allowed</c>); or the
+        ///     dtype's setitem refuses the Python int 1 (a <c>StringDType(coerce=False)</c>).</exception>
+        /// <exception cref="ValueError"><paramref name="device"/> is neither null nor <c>"cpu"</c> (NumPy's <c>Device not
+        ///     understood. Only "cpu" is allowed, but received: ...</c>).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.eye.html. NumPy's eye is
+        ///     <c>m = zeros((N, M), dtype=dtype, order=order, device=device)</c> and so raises in np.zeros' order, which this
+        ///     follows: the order's letter (an argument conversion), the device, the order's C-or-F rule, then the
+        ///     dimensions (the allocation).
+        /// </remarks>
         public static NDArray eye(int N, int? M = null, int k = 0, DType dtype = null, char order = 'C', string device = null)
         {
-            ValidateDevice(device);
-            int cols = M ?? N;
-            if (N < 0)
-                throw new ArgumentException($"negative dimensions are not allowed (N={N})", nameof(N));
-            if (cols < 0)
-                throw new ArgumentException($"negative dimensions are not allowed (M={cols})", nameof(M));
-
-            char physical = OrderResolver.Resolve(order);
-
-            var resolvedType = dtype ?? DType.Double;
-            var m = np.zeros(Shape.Matrix(N, cols), resolvedType);
-            if (N == 0 || cols == 0)
-                return physical == 'F' ? m.copy('F') : m;
-
-            // Diagonal element count: rows where 0 <= i < N and 0 <= i+k < cols
-            int rowStart = Math.Max(0, -k);
-            int rowEnd = Math.Min(N, cols - k);
-            if (rowEnd <= rowStart)
-                return physical == 'F' ? m.copy('F') : m;
-
-            var typeCode = resolvedType.GetTypeCode();
-            object one;
-            switch (typeCode)
-            {
-                case NPTypeCode.Complex: one = new System.Numerics.Complex(1d, 0d); break;
-                case NPTypeCode.Half:    one = (Half)1; break;
-                case NPTypeCode.SByte:   one = (sbyte)1; break;
-                case NPTypeCode.String:  one = "1"; break;
-                case NPTypeCode.Char:    one = (char)1; break;
-                default:                 one = Converts.ChangeType((byte)1, typeCode); break;
-            }
-
-            // Flat index of element (i, i+k) in row-major (N, cols) layout = i*cols + (i+k).
-            // `flat` is an owning view wrapper around `m`'s storage — used only to drive
-            // SetAtIndex over the diagonal, never returned.
-            using var flat = m.flat;
-            for (int i = rowStart; i < rowEnd; i++)
-                flat.SetAtIndex(one, (long)i * cols + (i + k));
-
-            return physical == 'F' ? m.copy('F') : m;
+            // np.zeros parses its order (PyArray_OrderConverter) before its device: an unknown letter is reported first.
+            OrderResolver.Convert(order);
+            DeviceArguments.ValidateDevice(device);
+            return NDArray.eye(N, M, k, dtype, order);
         }
     }
 }

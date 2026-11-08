@@ -64,20 +64,16 @@ namespace NumSharp.Tests.Fuzz
         {
             var counts = new Dictionary<string, int>(StringComparer.Ordinal);
             var randomCounts = new Dictionary<string, int>(StringComparer.Ordinal);
-            string directory = Path.GetDirectoryName(FuzzCorpus.CorpusPath("unused"));
-            foreach (string path in Directory.EnumerateFiles(directory, "*.jsonl"))
+            // The shared header survey (host pins excluded, as this scan always did) instead of a full parse; it
+            // rejects an rnd case whose params.dist is not a string, so Dist is non-null whenever dist is present.
+            foreach (var file in CorpusSurvey.Files)
             {
-                if (path.EndsWith(".host.jsonl", StringComparison.Ordinal))
-                    continue;
-                foreach (var c in FuzzCorpus.Load(Path.GetFileName(path)))
+                foreach (var c in file.Cases)
                 {
                     if (!string.IsNullOrEmpty(c.Op))
                         counts[c.Op] = counts.TryGetValue(c.Op, out int old) ? old + 1 : 1;
-                    if (c.Op == "rnd" && c.Params != null && c.Params.TryGetValue("dist", out var dist))
-                    {
-                        string name = dist.GetString();
-                        randomCounts[name] = randomCounts.TryGetValue(name, out int rold) ? rold + 1 : 1;
-                    }
+                    if (c.Op == "rnd" && c.Dist != null)
+                        randomCounts[c.Dist] = randomCounts.TryGetValue(c.Dist, out int rold) ? rold + 1 : 1;
                 }
             }
 

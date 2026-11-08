@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 
 namespace NumSharp
@@ -29,7 +30,7 @@ namespace NumSharp
         ///
         ///     <para>
         ///     Surface (probed against NumPy 2.4.2's <c>memoryview</c>): <see cref="obj"/>,
-        ///     <see cref="nbytes"/>, <see cref="itemsize"/>, <see cref="ndim"/>, <see cref="readonly"/>
+        ///     <see cref="nbytes"/>, <see cref="itemsize"/>, <see cref="ndim"/>, <see cref="@readonly"/>
         ///     (true for broadcast / non-writeable views), <see cref="shape"/>, <see cref="strides"/>
         ///     (in BYTES like NumPy's — NumSharp's own strides are in elements), <see cref="format"/>
         ///     (the struct-module type code), <see cref="c_contiguous"/> / <see cref="f_contiguous"/> /
@@ -55,9 +56,20 @@ namespace NumSharp
         {
             private readonly NDArray _arr;
 
+            /// <summary>
+            ///     Creates the buffer handle of <paramref name="a"/> (NumPy's <c>memoryview(a)</c>, through
+            ///     <see cref="NDArray.data"/>).
+            /// </summary>
+            /// <param name="a">The exporting array.</param>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+            /// <exception cref="ValueError"><paramref name="a"/> is a NEP 55 <c>StringDType</c> array: NumPy's buffer export
+            ///     refuses a reference dtype (<c>cannot include dtype 'numpy.dtypes.StringDType' in a buffer</c>) — its cells
+            ///     hold arena offsets and heap pointers that only the array's own allocator can read.</exception>
             internal MemoryView(NDArray a)
             {
                 _arr = a ?? throw new ArgumentNullException(nameof(a));
+                if (a.Storage.IsVString)
+                    throw new ValueError("cannot include dtype 'numpy.dtypes.StringDType' in a buffer");
             }
 
             /// <summary>
@@ -93,7 +105,7 @@ namespace NumSharp
             {
                 get
                 {
-                    var dims = _arr.Shape.Dimensions;
+                    var dims = _arr.Shape.dimensions;
                     var ret = new long[dims.Length];
                     Array.Copy(dims, ret, dims.Length);
                     return ret;
@@ -109,7 +121,7 @@ namespace NumSharp
             {
                 get
                 {
-                    var st = _arr.Shape.Strides;
+                    var st = _arr.Shape.strides;
                     long isz = _arr.dtypesize;
                     var ret = new long[st.Length];
                     for (int i = 0; i < st.Length; i++)
@@ -120,15 +132,18 @@ namespace NumSharp
 
             /// <summary>
             ///     The struct-module type code describing one element (NumPy's <c>memoryview.format</c>),
-            ///     e.g. <c>"d"</c> for float64, <c>"?"</c> for bool, <c>"Zd"</c> for complex128. The 32-bit
-            ///     integer codes are platform-dependent exactly as NumPy's are (its C <c>long</c> maps to
-            ///     <c>'l'</c>/<c>'L'</c> on Windows LLP64 but <c>'i'</c>/<c>'I'</c> on LP64), because
-            ///     NumPy's int32 dtype is <c>NPY_LONG</c> on Windows and <c>NPY_INT</c> elsewhere. The two
-            ///     NumSharp-only dtypes that have NO NumPy analog carry a documented NumSharp-specific
-            ///     code: <see cref="NPTypeCode.Char"/> (2-byte UTF-16) → <c>"u"</c>,
-            ///     <see cref="NPTypeCode.Decimal"/> (opaque 16-byte item) → <c>"16s"</c>.
+            ///     e.g. <c>"d"</c> for float64, <c>"?"</c> for bool, <c>"Zd"</c> for complex128. The integer codes are
+            ///     platform-dependent exactly as NumPy's are, because they are the C type each dtype is on the host:
+            ///     int32 is <c>'l'</c> (the C <c>long</c>) on Windows and <c>'i'</c> on LP64, int64 is <c>'q'</c> on
+            ///     Windows and <c>'l'</c> on LP64; NumPy's C-type classes keep their own codes (<c>np.intc</c>
+            ///     <c>'i'</c>, <c>np.longlong</c> <c>'q'</c>, <c>np.longdouble</c> <c>'g'</c>, <c>np.clongdouble</c>
+            ///     <c>"Zg"</c>). The two NumSharp-only dtypes that have NO NumPy analog carry a documented
+            ///     NumSharp-specific code: <see cref="NPTypeCode.Char"/> (2-byte UTF-16) → <c>"u"</c>,
+            ///     <see cref="NPTypeCode.Decimal"/> (opaque 16-byte item) → <c>"16s"</c>. A fixed-width string array
+            ///     reports NumPy's character-count codes: <c>"3w"</c> for <c>&lt;U3</c> (three UCS-4 code points) and
+            ///     <c>"2s"</c> for <c>|S2</c> (two bytes) — the struct codes NumPy's <c>buffer.c</c> emits.
             /// </summary>
-            public string format => FormatCode(_arr.typecode);
+            public string format => _arr.typecode == NPTypeCode.String ? StringFormatCode(_arr.dtype) : FormatCode(_arr.dtype);
 
             /// <summary><c>true</c> if the array is C-contiguous (NumPy's <c>memoryview.c_contiguous</c>).</summary>
             public bool c_contiguous => _arr.Shape.IsContiguous;
@@ -146,7 +161,7 @@ namespace NumSharp
             ///     Raw pointer to the LOGICAL first byte of the array's data
             ///     (<c>Storage.Address + offset·itemsize</c>) — the C-level analog of NumPy's
             ///     <c>a.data</c> pointer / <c>PyArray_DATA(self)</c>. Reads and writes through it hit the
-            ///     underlying buffer directly (subject to <see cref="readonly"/>).
+            ///     underlying buffer directly (subject to <see cref="@readonly"/>).
             /// </summary>
             public void* Pointer => (byte*)_arr.Storage.Address + _arr.Shape.Offset * _arr.dtypesize;
 
@@ -163,7 +178,7 @@ namespace NumSharp
             /// </summary>
             public long Length => ndim == 0
                 ? throw new InvalidOperationException("len() of unsized object")
-                : _arr.Shape.Dimensions[0];
+                : _arr.Shape.dimensions[0];
 
             /// <summary>
             ///     Write-through scalar element access (NumPy's <c>memoryview</c> full-index element get/set).
@@ -177,7 +192,7 @@ namespace NumSharp
             /// <param name="indices">One index per dimension (length must equal <see cref="ndim"/>).</param>
             /// <exception cref="ArgumentException">If <paramref name="indices"/>'s length does not equal <see cref="ndim"/>.</exception>
             /// <exception cref="IndexOutOfRangeException">If any (normalized) index is out of bounds.</exception>
-            /// <exception cref="InvalidOperationException">On set, if this view is <see cref="readonly"/>.</exception>
+            /// <exception cref="InvalidOperationException">On set, if this view is <see cref="@readonly"/>.</exception>
             public object this[params long[] indices]
             {
                 get => _arr.GetValue(ResolveCoords(indices));
@@ -212,9 +227,9 @@ namespace NumSharp
                 indices ??= Array.Empty<long>();
                 int nd = ndim;
                 if (indices.Length != nd)
-                    throw new ArgumentException($"cannot index {nd}-dimensional memory with {indices.Length} indices");
+                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"cannot index {nd}-dimensional memory with {indices.Length} indices"));
 
-                var dims = _arr.Shape.Dimensions;
+                var dims = _arr.Shape.dimensions;
                 var coords = new long[nd];
                 for (int i = 0; i < nd; i++)
                 {
@@ -223,7 +238,7 @@ namespace NumSharp
                     if (ix < 0)
                         ix += dim;
                     if (ix < 0 || ix >= dim)
-                        throw new IndexOutOfRangeException($"index out of bounds on dimension {i + 1}");
+                        throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"index out of bounds on dimension {i + 1}"));
                     coords[i] = ix;
                 }
                 return coords;
@@ -237,15 +252,17 @@ namespace NumSharp
             ///     strided / reversed / transposed view is materialized in logical order — matching
             ///     <c>bytes(a.data)</c>.
             /// </summary>
-            /// <param name="order"><c>"C"</c> (default), <c>"F"</c>, or <c>"A"</c>.</param>
-            /// <exception cref="ArgumentException">If <paramref name="order"/> is not one of C/F/A.</exception>
+            /// <param name="order"><c>"C"</c> (default), <c>"F"</c>, or <c>"A"</c>, upper case only; <c>null</c> is Python's
+            ///     <c>None</c>, which means <c>"C"</c>.</param>
+            /// <exception cref="ValueError">If <paramref name="order"/> is anything else (CPython's
+            ///     <c>memory_tobytes</c> text: <c>order must be 'C', 'F' or 'A'</c>).</exception>
             /// <exception cref="NotSupportedException">If the byte count exceeds <see cref="int.MaxValue"/> (a <c>byte[]</c> limit, not a format one).</exception>
             public byte[] tobytes(string order = "C")
             {
                 char o = ResolveOrder(order);
                 long total = nbytes;
                 if (total > int.MaxValue)
-                    throw new NotSupportedException($"tobytes(): result of {total} bytes exceeds the maximum byte[] length ({int.MaxValue}).");
+                    throw new NotSupportedException(string.Create(CultureInfo.InvariantCulture, $"tobytes(): result of {total} bytes exceeds the maximum byte[] length ({int.MaxValue})."));
 
                 var ret = new byte[total];
                 if (total == 0)
@@ -270,52 +287,79 @@ namespace NumSharp
 
             /// <summary>
             ///     The array's bytes as a lower-case hex string (NumPy's <c>memoryview.hex()</c>), in
-            ///     logical C-order. Equivalent to hex-encoding <see cref="tobytes()"/>.
+            ///     logical C-order. Equivalent to hex-encoding <see cref="tobytes(string)"/>.
             /// </summary>
             public string hex() => Convert.ToHexString(tobytes("C")).ToLowerInvariant();
 
+            /// <summary>
+            ///     CPython's <c>memory_tobytes</c> order argument (<c>Objects/memoryobject.c</c>): <c>None</c> is C order,
+            ///     and only the upper-case strings <c>"C"</c>, <c>"F"</c> and <c>"A"</c> are accepted — the memoryview is
+            ///     Python's, not NumPy's, so the lowercase letters NumPy's order converter takes are refused here.
+            /// </summary>
+            /// <param name="order">The order string, or null.</param>
+            /// <returns>The order letter.</returns>
+            /// <exception cref="ValueError">Any other string (CPython's text, verbatim: <c>order must be 'C', 'F' or
+            ///     'A'</c>).</exception>
             private static char ResolveOrder(string order)
             {
-                if (order is null || order.Length != 1)
-                    throw new ArgumentException("order must be one of 'C', 'F', or 'A'");
-                char o = order[0];
-                if (o != 'C' && o != 'F' && o != 'A')
-                    throw new ArgumentException("order must be one of 'C', 'F', or 'A'");
-                return o;
+                if (order is null)
+                    return 'C';
+                if (order != "C" && order != "F" && order != "A")
+                    throw new ValueError("order must be 'C', 'F' or 'A'");
+                return order[0];
             }
 
-            // NumPy's dtype -> struct format code (numpy/_core/src/multiarray/buffer.c). NPY_LONG emits
-            // 'q' on LP64 (sizeof(long)==sizeof(longlong)) but 'l' on Windows LLP64 — and NumPy's int32
-            // dtype is NPY_LONG on Windows / NPY_INT elsewhere — so int32/uint32 are the only
-            // platform-dependent codes. Char and Decimal have no NumPy dtype (documented house codes).
-            private static bool CLongIs32Bit => OperatingSystem.IsWindows();
-
-            private static string FormatCode(NPTypeCode tc)
+            /// <summary>
+            ///     NumPy's dtype -> struct format code (<c>_buffer_format_string</c>, numpy/_core/src/multiarray/buffer.c)
+            ///     for a native, aligned array — the only kind NumSharp has, so NumPy's "prefer native types" branch always
+            ///     applies: each integer is the C type its descriptor is on this host (NPY_LONG emits <c>'l'</c>, the
+            ///     standard-size <c>'q'</c> only for a swapped or unaligned array), which is exactly the descriptor's type
+            ///     character.
+            /// </summary>
+            /// <param name="descr">The array's (native) numeric descriptor.</param>
+            /// <returns>The format code.</returns>
+            /// <exception cref="NotSupportedException">A descriptor with no buffer code (the datetime classes before Stage C).</exception>
+            private static string FormatCode(DType descr)
             {
-                switch (tc)
+                switch (descr.typecode)
                 {
                     case NPTypeCode.Boolean: return "?";
                     case NPTypeCode.SByte: return "b";
                     case NPTypeCode.Byte: return "B";
                     case NPTypeCode.Int16: return "h";
                     case NPTypeCode.UInt16: return "H";
-                    case NPTypeCode.Int32: return CLongIs32Bit ? "l" : "i";
-                    case NPTypeCode.UInt32: return CLongIs32Bit ? "L" : "I";
-                    case NPTypeCode.Int64: return "q";
-                    case NPTypeCode.UInt64: return "Q";
+                    // The 4- and 8-byte integers: int32 is 'l' on Windows and 'i' on LP64, int64 'q' on Windows and 'l' on
+                    // LP64, and the C-type classes keep theirs (np.intc 'i', np.longlong 'q') — the type character each time.
+                    case NPTypeCode.Int32:
+                    case NPTypeCode.UInt32:
+                    case NPTypeCode.Int64:
+                    case NPTypeCode.UInt64: return descr.@char.ToString();
                     case NPTypeCode.Half: return "e";
                     case NPTypeCode.Single: return "f";
-                    case NPTypeCode.Double: return "d";
-                    case NPTypeCode.Complex: return "Zd";
+                    case NPTypeCode.Double: return descr.@char == 'g' ? "g" : "d";     // np.longdouble is NPY_LONGDOUBLE's 'g'
+                    case NPTypeCode.Complex: return descr.@char == 'G' ? "Zg" : "Zd"; // np.clongdouble is NPY_CLONGDOUBLE's 'Zg'
                     case NPTypeCode.Char: return "u";    // NumSharp-only: 2-byte UTF-16 code unit (no NumPy dtype)
                     case NPTypeCode.Decimal: return "16s"; // NumSharp-only: opaque 16-byte item (no NumPy dtype)
-                    default: throw new NotSupportedException($"No memoryview format code for {tc}.");
+                    default: throw new NotSupportedException($"No memoryview format code for {descr.typecode}.");
                 }
+            }
+
+            /// <summary>
+            ///     NumPy's buffer format of a fixed-width string descriptor (<c>_buffer_format_string</c>): the character count
+            ///     followed by <c>w</c> for <c>U</c> (4-byte code points) or <c>s</c> for <c>S</c> (bytes). The width is part of
+            ///     the code because a struct format names one whole item.
+            /// </summary>
+            /// <param name="descr">A string descriptor.</param>
+            /// <returns>The format code, e.g. <c>"3w"</c>.</returns>
+            private static string StringFormatCode(DType descr)
+            {
+                var meta = (StringDTypeMeta)descr.Meta;
+                return (descr.itemsize / meta.UnitSize).ToString(System.Globalization.CultureInfo.InvariantCulture) + (meta.IsUnicode ? "w" : "s");
             }
 
             /// <summary>An informative debug string (NumPy's <c>memoryview</c> repr is the opaque <c>&lt;memory at 0x…&gt;</c>).</summary>
             public override string ToString()
-                => $"<NumSharp.MemoryView shape=[{string.Join(",", _arr.Shape.Dimensions)}] format='{format}' readonly={@readonly}>";
+                => $"<NumSharp.MemoryView shape=[{string.Join(",", _arr.Shape.dimensions)}] format='{format}' readonly={@readonly}>";
         }
     }
 
@@ -334,6 +378,7 @@ namespace NumSharp
         ///     <see cref="Data{T}"/> / <see cref="GetData()"/> for the typed / raw-slice accessors.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.data.html</remarks>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array (NumPy's buffer export refuses reference dtypes).</exception>
         public np.MemoryView data => new np.MemoryView(this);
     }
 }

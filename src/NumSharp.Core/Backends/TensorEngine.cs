@@ -1,3 +1,12 @@
+// TensorEngine's core file: the Blas seam, the Linalg and Fft sub-engines (numpy.linalg, LinalgEngine; numpy.fft,
+// FftEngine) and NumSharp's own np.evaluate entry points. The members NumPy names live in partial files named after
+// NumPy's sources:
+// TensorEngine.Umath.cs (the ufuncs), TensorEngine.Methods.cs (the ndarray methods that compute),
+// TensorEngine.Multiarray.cs (the C functions that compute), TensorEngine.Numeric.cs, TensorEngine.NanFunctions.cs,
+// TensorEngine.UfuncLike.cs, TensorEngine.LinearAlgebra.cs, and TensorEngine.ArrayObject.cs (the array-object members
+// shipped in 0.70.0). The rule that places a function is docs/plans/np-layer-dtype-logic.md, section 1 "Which O" and
+// Appendix D.
+
 using System;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
@@ -9,6 +18,137 @@ namespace NumSharp
     public abstract partial class TensorEngine
     {
         /// <summary>
+        ///     The engine an array binds when nothing else decides, and the engine of the np.* functions that take no array
+        ///     (np.zeros, np.arange, np.linspace, np.fft.fftfreq, the window functions): every array created without an
+        ///     engine of its own binds the engine this property returns at that moment. Assign an engine (a
+        ///     <see cref="DefaultEngine"/> subclass that overrides some members, typically) to have every array created
+        ///     from then on compute on it.
+        /// </summary>
+        /// <value>The assigned engine, or the built-in <see cref="DefaultEngine"/> (the instance
+        ///     <c>BackendFactory.GetEngine&lt;DefaultEngine&gt;()</c> returns); never null. Assigning null restores the
+        ///     built-in engine. <see cref="BackendFactory.GetEngine(BackendType)"/> returns this property.</value>
+        /// <remarks>
+        ///     <para>
+        ///     An array binds its engine once, when it is created, so an assignment reaches the arrays created afterwards
+        ///     and every array that already exists keeps the engine it bound (assign <see cref="NDArray.TensorEngine"/> to
+        ///     move one). An engine binds the results it computes to itself and a view binds its source's engine, so the
+        ///     arrays derived from an existing array stay on that array's engine after the default changes.
+        ///     </para>
+        ///     <para>
+        ///     Footgun: <see cref="Blas"/>, <see cref="Linalg"/> and <see cref="Fft"/> belong to each engine instance, and a
+        ///     new engine starts with none of what was assigned to the previous default. <c>NumSharp.Interop.OpenBLAS</c>
+        ///     installs its backend on the engine that is the default when the package loads, so an engine assigned later
+        ///     computes its matrix products with the managed kernels until its own <see cref="Blas"/> is set: copy it over
+        ///     (<c>engine.Blas = TensorEngine.Default.Blas;</c>) before the assignment.
+        ///     </para>
+        ///     <para>
+        ///     Process-wide and not synchronized: an array created on another thread while the property changes binds
+        ///     either engine. Assign it at startup, or around single-threaded work (tests that assign it must not run in
+        ///     parallel with tests that create arrays).
+        ///     </para>
+        /// </remarks>
+        public static TensorEngine Default
+        {
+            get => _default ?? BackendFactory.BuiltIn;
+            set => _default = value;
+        }
+
+        /// <summary>The engine assigned to <see cref="Default"/>, or null for the built-in <see cref="DefaultEngine"/>.</summary>
+        private static TensorEngine _default;
+
+        /// <summary>
+        ///     A new array of <paramref name="dtype"/> and <paramref name="shape"/> bound to this engine: the one allocation
+        ///     an engine makes its results with, so the result of a computation stays on the engine that computed it (and
+        ///     the next operation on that result computes there too).
+        /// </summary>
+        /// <param name="dtype">The dtype descriptor of the elements (a <see cref="Type"/>, an <see cref="NPTypeCode"/> or a
+        ///     NumPy dtype string converts implicitly).</param>
+        /// <param name="shape">The dimensions. A view's layout (strides, offset, broadcast) is laid out again in C order and a
+        ///     fresh dense or KEEPORDER layout is kept, as for every allocation (<see cref="Shape.ForFreshAllocation"/>).</param>
+        /// <param name="fillZeros">True to zero the buffer; false leaves pool noise the caller must overwrite completely
+        ///     before anyone reads it (a fixed-width <c>U</c> array is zeroed either way, NumPy's <c>NPY_NEEDS_INIT</c>).</param>
+        /// <returns>The new array, owning its buffer, bound to this engine (<see cref="NDArray.TensorEngine"/> is
+        ///     <c>this</c>).</returns>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows.</exception>
+        /// <remarks>
+        ///     The storage comes from this engine's <see cref="GetStorage(DType)"/>, so an engine that overrides it
+        ///     allocates its results through its own override. A result built any other way (<c>new NDArray(dtype,
+        ///     shape)</c>, <c>NDArray.Scalar</c>, <c>np.zeros</c>) binds <see cref="Default"/> instead: an engine member that
+        ///     builds its result so moves it off the engine that computed it whenever that engine is not the default (a
+        ///     wrap of a buffer the engine filled names the engine in its initializer: <c>{ TensorEngine = this }</c>).
+        /// </remarks>
+        protected internal NDArray NewArray(DType dtype, Shape shape, bool fillZeros)
+            => new NDArray(dtype, shape, fillZeros, this);
+
+        /// <summary>
+        ///     The typed form of <see cref="NewArray(DType, Shape, bool)"/>: a new <see cref="NDArray{T}"/> of
+        ///     <paramref name="shape"/> bound to this engine.
+        /// </summary>
+        /// <typeparam name="T">The element type; its <see cref="NPTypeCode"/> is the dtype.</typeparam>
+        /// <param name="shape">The dimensions (a view's layout is laid out again in C order, as for every allocation).</param>
+        /// <param name="fillZeros">True to zero the buffer; false leaves pool noise the caller must overwrite completely.</param>
+        /// <returns>The new typed array, owning its buffer, bound to this engine.</returns>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows.</exception>
+        protected internal NDArray<T> NewArray<T>(Shape shape, bool fillZeros) where T : unmanaged
+            => new NDArray<T>(shape, fillZeros, this);
+
+        /// <summary>
+        ///     <see cref="NDArray.Scalar{T}(T)"/> bound to this engine: the 0-d value an engine member returns (a flat
+        ///     reduction, a 0-d operation) or computes with stays on the engine that made it.
+        /// </summary>
+        /// <typeparam name="T">The element type; its <see cref="NPTypeCode"/> is the dtype.</typeparam>
+        /// <param name="value">The value.</param>
+        /// <returns>A new writeable 0-d array holding <paramref name="value"/>, bound to this engine.</returns>
+        protected internal NDArray NewScalar<T>(T value) where T : unmanaged
+            => Bind(NDArray.Scalar(value));
+
+        /// <summary>
+        ///     <see cref="NDArray.Scalar{T}(object)"/> bound to this engine: <paramref name="value"/> converted to
+        ///     <typeparamref name="T"/> first.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="value">The value, converted with <c>Converts.ChangeType</c> unless it already is a
+        ///     <typeparamref name="T"/>.</param>
+        /// <returns>A new writeable 0-d array, bound to this engine.</returns>
+        /// <exception cref="InvalidCastException"><paramref name="value"/> does not convert to <typeparamref name="T"/>.</exception>
+        protected internal NDArray NewScalar<T>(object value) where T : unmanaged
+            => Bind(NDArray.Scalar<T>(value));
+
+        /// <summary>
+        ///     <see cref="NDArray.Scalar(object)"/> bound to this engine: the dtype is the value's own (its C# type).
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>A new writeable 0-d array, bound to this engine.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="value"/>'s type is no NumSharp dtype.</exception>
+        protected internal NDArray NewScalar(object value)
+            => Bind(NDArray.Scalar(value));
+
+        /// <summary>
+        ///     <see cref="NDArray.Scalar(object, DType)"/> bound to this engine: <paramref name="value"/> stored as
+        ///     <paramref name="dtype"/>.
+        /// </summary>
+        /// <param name="value">The value (converted when it is not of <paramref name="dtype"/>).</param>
+        /// <param name="dtype">The dtype descriptor.</param>
+        /// <returns>A new writeable 0-d array, bound to this engine.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="ValueError">A non-text value into a <c>coerce=False</c> <c>StringDType</c>.</exception>
+        protected internal NDArray NewScalar(object value, DType dtype)
+            => Bind(NDArray.Scalar(value, dtype));
+
+        /// <summary>
+        ///     Moves a fresh array the engine made by another route (a scalar, a conversion) onto this engine, and returns it.
+        /// </summary>
+        /// <param name="fresh">An array no one else holds yet (its storage object moves with it).</param>
+        /// <returns><paramref name="fresh"/>, now bound to this engine.</returns>
+        private NDArray Bind(NDArray fresh)
+        {
+            // the property's setter writes both the array's and its storage's engine, as a construction with the engine
+            // would have
+            fresh.TensorEngine = this;
+            return fresh;
+        }
+
+        /// <summary>
         ///     An external BLAS this engine delegates its matrix products to, or null (the default)
         ///     to compute them with NumSharp's own managed SIMD kernels.
         /// </summary>
@@ -19,263 +159,126 @@ namespace NumSharp
         ///     null. A backend only answers for what it implements (see
         ///     <see cref="IBlasBackend"/>); everything else falls back to the managed kernels.
         ///     <para>
-        ///     Engines are cached singletons (<see cref="BackendFactory"/>), so assigning this
-        ///     affects every array that resolves to the engine — including ones already created.
+        ///     The property belongs to this engine instance, which every array bound to it shares, so assigning it
+        ///     reaches those arrays, existing ones included. An engine assigned to <see cref="Default"/> later starts
+        ///     with its own value (null unless set): copy this one over to keep an installed backend.
         ///     </para>
         /// </remarks>
         public IBlasBackend Blas { get; set; }
 
-        #region Allocation
-
         /// <summary>
-        ///     Get storage for given <paramref name="dtype"/>.
+        ///     numpy.linalg's functions for the arrays bound to this engine: every <c>np.linalg</c> function calls one member
+        ///     of this sub-engine (a subclass operand handed in as its plain view). <see cref="DefaultLinalgEngine"/>
+        ///     (NumPy's
+        ///     <c>_linalg.py</c> statements over kernels that ask <see cref="Blas"/> first) until something else is
+        ///     assigned.
         /// </summary>
-        public abstract UnmanagedStorage GetStorage(Type dtype);
-
-        /// <summary>
-        ///     Get storage described by the dtype DESCRIPTOR <paramref name="descr"/> (NumPy's <c>PyArray_NewFromDescr</c>
-        ///     entry — the descriptor becomes the array's <c>dtype</c>, its class supplies the storage lane). The default
-        ///     routes through <see cref="GetStorage(Type)"/>, which is exact for every builtin (one canonical descriptor
-        ///     per lane); an engine that carries parametric descriptors overrides it.
-        /// </summary>
-        public virtual UnmanagedStorage GetStorage(DType descr)
+        /// <value>The assigned engine, or the shared <see cref="DefaultLinalgEngine"/>; never null. Assigning null
+        ///     restores the default.</value>
+        /// <remarks>
+        ///     <para>
+        ///     <b>You rarely need this.</b> A LAPACK backend reaches the factorisations through <see cref="Blas"/> already
+        ///     (the <c>Try*</c> members of <see cref="IBlasBackend"/>), which is how <c>NumSharp.Interop.OpenBLAS</c> serves
+        ///     them. Assign a <see cref="DefaultLinalgEngine"/> subclass to compute a factorisation another way while NumPy's
+        ///     argument checks, dtype rules and result layouts stay (override its <c>protected virtual</c> kernels), or a
+        ///     <see cref="LinalgEngine"/> of your own to replace whole functions.
+        ///     </para>
+        ///     <para>
+        ///     The property belongs to this engine instance, which every array bound to it shares, so an assignment reaches
+        ///     every array bound to the engine, existing ones included, from the next <c>np.linalg</c> call on: each call
+        ///     reads the property once, so one already running finishes with the engine it read. Do not assign it while
+        ///     another thread runs np.linalg functions whose results you compare: they may straddle the change. An engine
+        ///     assigned to <see cref="Default"/> later starts with the shared default here.
+        ///     </para>
+        /// </remarks>
+        public LinalgEngine Linalg
         {
-            if (descr is null)
-                throw new ArgumentNullException(nameof(descr));
-            return GetStorage((Type)descr);
+            get => _linalg ?? DefaultLinalgEngine.Shared;
+            set => _linalg = value;
         }
 
-        #endregion
-
-        #region Math
-
-        #region Reduction
-
-        public abstract NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null);
-        public abstract NDArray ReduceCumAdd(NDArray arr, int? axis_, DType dtype = null);
-        public abstract NDArray ReduceCumMul(NDArray arr, int? axis_, DType dtype = null);
-        public abstract NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null);
-
-        // NaN-aware reductions
-        public abstract NDArray NanSum(NDArray a, int? axis = null, bool keepdims = false);
-        public abstract NDArray NanProd(NDArray a, int? axis = null, bool keepdims = false);
-        public abstract NDArray NanMin(NDArray a, int? axis = null, bool keepdims = false);
-        public abstract NDArray NanMax(NDArray a, int? axis = null, bool keepdims = false);
-
-        #endregion
-
-        // Binary arithmetic ufuncs — house parameter order (inputs, dtype,
-        // out, where). dtype is NumPy's ufunc dtype=: it selects the LOOP
-        // (computation runs in that dtype; inputs must be same_kind-castable
-        // to it; out is validated against it). Divide is float-only — an
-        // integer/bool dtype= raises NumPy's no-loop TypeError.
-        public abstract NDArray Add(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Subtract(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Multiply(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Divide(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Mod(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-
-        // Element-wise min/max ufuncs (np.maximum / np.minimum / np.fmax / np.fmin).
-        // Maximum/Minimum PROPAGATE NaN (a NaN operand wins); FMax/FMin IGNORE NaN
-        // (the non-NaN operand wins). Same (inputs, dtype, out, where) house order.
-        public abstract NDArray Maximum(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Minimum(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray FMax(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray FMin(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-
-        public abstract NDArray Mean(NDArray nd, int? axis = null, DType dtype = null, bool keepdims = false);
-        public abstract NDArray Power(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray FloorDivide(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Sum(NDArray nd, int? axis = null, DType dtype = null, bool keepdims = false);
-        public abstract NDArray Negate(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
+        /// <summary>The engine assigned to <see cref="Linalg"/>, or null for the shared default.</summary>
+        private LinalgEngine _linalg;
 
         /// <summary>
-        ///     NumPy 'positive' — identity at every numeric dtype (no bool loop).
-        ///     dtype selects the loop (positive(i32, dtype=f64) widens; a bool
-        ///     loop request raises NumPy's did-not-contain-a-loop TypeError).
+        ///     numpy.fft's functions for the arrays bound to this engine: every <c>np.fft</c> transform and frequency helper
+        ///     calls one member of this sub-engine (<c>fftfreq</c> / <c>rfftfreq</c>, which take no array, through the
+        ///     default engine). <see cref="DefaultFftEngine"/> (NumPy's <c>_pocketfft.py</c> statements over kernels that run
+        ///     NumSharp's managed pocketfft port) until something else is assigned.
         /// </summary>
-        public abstract NDArray Positive(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
+        /// <value>The assigned engine, or the shared <see cref="DefaultFftEngine"/>; never null. Assigning null restores the
+        ///     default.</value>
+        /// <remarks>
+        ///     <para>
+        ///     Assign a <see cref="DefaultFftEngine"/> subclass to compute the transforms another way (MKL, FFTW, cuFFT)
+        ///     while NumPy's length, norm, axis and <c>out=</c> checks and the N-D, real and Hermitian compositions stay
+        ///     (override its <c>protected virtual</c> kernels), or an <see cref="FftEngine"/> of your own to replace whole
+        ///     functions. <c>fftshift</c> and <c>ifftshift</c> are not members: they roll the array object.
+        ///     </para>
+        ///     <para>
+        ///     The property belongs to this engine instance, which every array bound to it shares, so an assignment reaches
+        ///     every array bound to the engine, existing ones included, from the next <c>np.fft</c> call on: each call reads
+        ///     the property once, so one already running finishes with the engine it read. Do not assign it while another
+        ///     thread runs np.fft functions whose results you compare: they may straddle the change. An engine assigned to
+        ///     <see cref="Default"/> later starts with the shared default here.
+        ///     </para>
+        /// </remarks>
+        public FftEngine Fft
+        {
+            get => _fft ?? DefaultFftEngine.Shared;
+            set => _fft = value;
+        }
+
+        /// <summary>The engine assigned to <see cref="Fft"/>, or null for the shared default.</summary>
+        private FftEngine _fft;
 
         /// <summary>
-        ///     NumPy 'conjugate' / 'conj' — the complex conjugate, element-wise. Identity at every
-        ///     real dtype (values unchanged, dtype preserved); for Complex it flips the sign of the
-        ///     imaginary part. dtype selects the loop; out=/where= follow the ufunc contract.
+        ///     Fused evaluation of an <see cref="NDExpr"/> tree in one iterator pass: <c>np.evaluate</c>'s whole call, its
+        ///     keywords as the caller passed them (the np-layer dtype plan's D11). Virtual with a
+        ///     <see cref="NotSupportedException"/> default, so an alternative engine opts in explicitly.
         /// </summary>
-        public abstract NDArray Conjugate(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-
-        public abstract NDArray Dot(NDArray x, NDArray y);
-        public abstract NDArray Matmul(NDArray lhs, NDArray rhs);
-
-        public abstract NDArray Abs(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Sqrt(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Log(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Log2(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Log10(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Log1p(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Exp(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Exp2(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Expm1(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Tan(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Sin(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Cos(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Sign(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Floor(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Ceil(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Round(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Round(NDArray nd, int decimals, DType dtype = null, NDArray @out = null);
-        public abstract NDArray Truncate(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Rint(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Reciprocal(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Square(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Deg2Rad(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Rad2Deg(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Invert(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Cbrt(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract (NDArray Fractional, NDArray Intergral) ModF(NDArray nd, DType dtype = null);
-
-        public abstract NDArray Tanh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Cosh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Sinh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-
-        public abstract NDArray ATan(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray ATan2(NDArray y, NDArray x, DType dtype = null, NDArray @out = null, NDArray where = null);
-        // np.logaddexp / np.logaddexp2 / np.nextafter — float-tier binary ufuncs (same promotion as ATan2).
-        public abstract NDArray LogAddExp(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray LogAddExp2(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray NextAfter(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray CopySign(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray ACos(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray ASin(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-
-        public abstract NDArray ASinh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray ACosh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray ATanh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
-
-        public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, DType dtype = null, NDArray @out = null);
-
-        /// <summary>
-        ///     Fused evaluation of an <see cref="NDExpr"/> tree in one iterator
-        ///     pass (np.evaluate, roadmap Wave 6.1). Virtual with a
-        ///     NotSupported default so alternative engines opt in explicitly.
-        /// </summary>
-        public virtual NDArray Evaluate(NDExpr expr, NDArray @out = null)
+        /// <param name="expr">The tree; its array leaves are embedded NDArrays, or <see cref="NDExpr.Input"/> leaves
+        ///     naming <paramref name="operands"/> by position.</param>
+        /// <param name="operands">The positional operands for a tree of <see cref="NDExpr.Input"/> leaves, or null for a
+        ///     tree whose leaves embed their arrays.</param>
+        /// <param name="out">A pre-allocated result (ufunc <c>out=</c> rules), or null.</param>
+        /// <param name="where">A boolean write mask (ufunc <c>where=</c>), or null.</param>
+        /// <param name="dtype">The result dtype (a root cast), or null for the tree's own.</param>
+        /// <param name="casting">The <c>out=</c> cast rule name, or null for <c>same_kind</c>.</param>
+        /// <param name="order">The layout of a fresh result: <c>'K'</c>, <c>'C'</c>, <c>'F'</c> or <c>'A'</c> (either
+        ///     case).</param>
+        /// <returns>The evaluated array, or <paramref name="out"/> holding it.</returns>
+        /// <exception cref="NotSupportedException">This engine has no fused evaluation (the default).</exception>
+        /// <remarks>
+        ///     An implementation checks the arguments in <c>np.evaluate</c>'s order: a read-only <paramref name="out"/>,
+        ///     then the keywords (<paramref name="dtype"/> with <paramref name="out"/>, the order letter, the casting name),
+        ///     then the tree when its program is built (a node over a text operand that it does not compute among them) -
+        ///     <see cref="Backends.DefaultEngine"/>'s does.
+        /// </remarks>
+        public virtual NDArray Evaluate(NDExpr expr, NDArray[] operands = null, NDArray @out = null, NDArray where = null,
+            DType dtype = null, string casting = null, char order = 'K')
             => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
 
         /// <summary>
-        ///     Fused evaluation against an explicit operand list
-        ///     (<see cref="NDExpr.Input"/> leaves reference operands by position).
+        ///     Fused evaluation of an already-compiled program (<see cref="CompiledExpression"/>):
+        ///     the per-call work only — iteration shape, result allocation, iterator. The public
+        ///     <c>Evaluate(NDExpr, …)</c> member above resolves the program from the tree's cache and
+        ///     lands here.
         /// </summary>
-        public virtual NDArray Evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null)
+        /// <param name="program">The compiled program: the bound tree, its input signature and kernel(s).</param>
+        /// <param name="operands">The arrays bound to the program's inputs, in the program's order.</param>
+        /// <param name="out">NumPy's <c>out=</c>: the array that receives the result, or <c>null</c> for a fresh one.</param>
+        /// <param name="options">Resolved <c>dtype=</c>/<c>casting=</c>/<c>order=</c> keywords (plan P4.5); <c>default</c> = no override.</param>
+        /// <returns>The result: <paramref name="out"/> when given, else a fresh array bound to this engine.</returns>
+        /// <exception cref="NotSupportedException">This engine does not evaluate expressions (the base behaviour; an engine
+        ///     derived from <see cref="Backends.DefaultEngine"/> inherits its implementation).</exception>
+        /// <remarks>
+        ///     Public so an engine can intercept every compiled evaluation (profiling, routing to another engine) and hand it on
+        ///     to <c>base</c>. Footgun: <see cref="NDExprProgram"/> and <see cref="NDEvaluateOptions"/> are opaque outside
+        ///     NumSharp.dll - an engine NOT derived from <see cref="Backends.DefaultEngine"/> can forward them but cannot run
+        ///     them itself, so it keeps this base behaviour (the throw).
+        /// </remarks>
+        public virtual NDArray Evaluate(NDExprProgram program, NDArray[] operands, NDArray @out, in NDEvaluateOptions options = default)
             => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
-
-        #endregion
-
-        #region Logic
-
-        // Comparison ufuncs — ONE NumPy-shaped member each (no bare/out split),
-        // house parameter order (dtype, out, where) like the unary family.
-        // The loop output is bool: dtype may only request Boolean (NumPy
-        // raises the no-loop TypeError for anything else — dtype= is a
-        // validate-only parameter on comparisons); with out= the provided
-        // array is returned as-is (any numeric dtype — bool casts same_kind
-        // to all of them), so the static return type is plain NDArray.
-        // CONTRACT: a plain call (out == null && where == null) must return an
-        // NDArray<bool> instance — the C# comparison operators rely on it for
-        // their zero-alloc AsGeneric<bool>() typed sugar.
-        public abstract NDArray Compare(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);  // Equal
-        public abstract NDArray NotEqual(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Less(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray LessEqual(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Greater(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray GreaterEqual(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-
-        // Bitwise operations — dtype (ufunc dtype=) selects the loop among
-        // the bool/integer loops; float/complex/decimal requests raise NumPy's
-        // no-loop TypeError (the bitwise family has no such loops).
-        public abstract NDArray BitwiseAnd(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray BitwiseOr(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray BitwiseXor(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
-
-        // Bit shift operations (integer types only)
-        public abstract NDArray LeftShift(NDArray lhs, NDArray rhs);
-        public abstract NDArray RightShift(NDArray lhs, NDArray rhs);
-
-        public abstract bool All(NDArray nd);
-        public abstract NDArray<bool> All(NDArray nd, int axis);
-        public abstract bool Any(NDArray nd);
-        public abstract NDArray<bool> Any(NDArray nd, int axis);
-        public abstract bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
-        public abstract NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
-        // Predicate ufuncs — same single-member rule as the comparisons above
-        // (bool loop, validate-only dtype, plain-NDArray return, plain
-        // calls must return an NDArray<bool> instance).
-        public abstract NDArray IsFinite(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray IsNan(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray IsInf(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null);
-        // np.isposinf / np.isneginf (numpy/lib/_ufunclike_impl.py). Not ufuncs — no
-        // where/dtype; the single settable side is out (positional in NumPy). Complex
-        // input is rejected at the np.* layer (NumPy's signbit raises), so the engine
-        // predicate never sees Complex.
-        public abstract NDArray IsPosInf(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null);
-        public abstract NDArray IsNegInf(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null);
-
-        #endregion
-
-        #region Array Manipulation
-
-        public abstract NDArray CreateNDArray(Shape shape, DType dtype = null, Array buffer = null, char order = 'C');
-        public abstract NDArray CreateNDArray(Shape shape, DType dtype = null, IArraySlice buffer = null, char order = 'C');
-        public abstract NDArray Transpose(NDArray nd, int[] premute = null);
-        public abstract NDArray SwapAxes(NDArray nd, int axis1, int axis2);
-        public abstract NDArray MoveAxis(NDArray nd, int[] source, int[] destinition);
-        public abstract NDArray RollAxis(NDArray nd, int axis, int start = 0);
-        public abstract NDArray Cast(NDArray x, Type dtype, bool copy);
-
-        #endregion
-
-        #region Sorting, searching, counting
-
-        #region Reduction
-
-        public abstract NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null);
-        public abstract NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null);
-        public abstract NDArray ReduceArgMax(NDArray arr, int? axis_, bool keepdims = false);
-        public abstract NDArray ReduceArgMin(NDArray arr, int? axis_, bool keepdims = false);
-        public abstract NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null);
-        public abstract NDArray ReduceStd(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null);
-        public abstract NDArray ReduceVar(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null);
-
-        #endregion
-
-        public abstract NDArray ArgMax(NDArray a);
-        public abstract NDArray ArgMax(NDArray a, int axis, bool keepdims = false);
-
-        public abstract NDArray ArgMin(NDArray a);
-        public abstract NDArray ArgMin(NDArray a, int axis, bool keepdims = false);
-
-        public abstract NDArray AMax(NDArray nd, int? axis = null, DType dtype = null, bool keepdims = false);
-
-        public abstract NDArray AMin(NDArray nd, int? axis = null, DType dtype = null, bool keepdims = false);
-
-        #endregion
-
-        #region Indexing
-
-        public abstract NDArray<long>[] NonZero(NDArray a);
-
-        public abstract NDArray<long> FlatNonZero(NDArray a);
-
-        public abstract NDArray Argwhere(NDArray a);
-
-        public abstract long CountNonZero(NDArray a);
-
-        public abstract NDArray CountNonZero(NDArray a, int axis, bool keepdims = false);
-
-        // Boolean masking
-        public abstract NDArray BooleanMask(NDArray arr, NDArray mask);
-
-        public abstract void BooleanMaskSet(NDArray arr, NDArray mask, NDArray value);
-
-        #endregion
     }
 }

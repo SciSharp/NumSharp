@@ -26,6 +26,20 @@ reference - wherever that reference lives. Everything the bridge pages document 
 leases, locks - reduces to these three, plus one declaration a bridge must get right: who owns the
 wrapped memory.
 
+### Text crossing is dtype-specific
+
+Fixed-width `S` / `U` arrays have ordinary strided buffers and can share memory with NumPy through
+pythonnet. **`StringDType` cannot use a raw shared-buffer route**: its cells refer to an allocator.
+The Python bridge copies `T` values through NumPy's C API, preserving `na_object` and `coerce`; it
+also copies an object array containing only Python `str` values into `StringDType()`.
+
+A PyTorch tensor has no text dtype. The System.Numerics.Tensors bridge shares unmanaged CLR elements
+only, so text crosses it as a copy both ways: `ToStringTensor()` into a `Tensor<string>`, `ToNDArray()` back
+into `StringDType`. File exchange supports all three text
+families, with `allow_pickle: true` required to load `T`. See [Text in the Python bridge](pythonnet-numpy.md#how-does-text-cross)
+and [Strings, bytes and chararrays](../fundamentals/strings-and-bytes.md). The raw-pointer contract
+below is not permission to copy `T` cells between unrelated allocators.
+
 ### Raw layout access
 
 **A layout is four numbers, and NumSharp exposes all four.** Any strided window - a slice, a
@@ -145,12 +159,14 @@ own gates.
 
 | Bridge | Ships in | Zero-copy | Page |
 |---|---|---|---|
-| **numpy, in process** - `NDArray` ⇄ `numpy.ndarray`, every layout, both directions | `NumSharp.Interop.pythonnet` | ✅ views both ways | [Python & numpy (pythonnet)](pythonnet-numpy.md) |
+| **numpy, in process** - `NDArray` ⇄ `numpy.ndarray`, every layout, both directions | `NumSharp.Interop.pythonnet` | ✅ numeric and S/U views; StringDType copies | [Python & numpy (pythonnet)](pythonnet-numpy.md) |
 | **PyTorch CPU tensors** - NumSharp ⇄ Torch through PyTorch's official NumPy adapters | `NumSharp.Interop.pythonnet` | ✅ compatible views both ways | [PyTorch](pytorch.md) |
 | **Pandas containers** - `DataFrame` / `Series` / `Index` / extension arrays through verified `to_numpy` projections | `NumSharp.Interop.pythonnet` | ✅ when Pandas exposes stable storage; Auto copies otherwise | [Pandas](pandas.md) |
 | **Python buffer consumers** - `torch.frombuffer`, Pillow, Arrow, OpenCV, stdlib | `NumSharp.Interop.pythonnet` | ✅ `memoryview` / PEP 3118 | [Any library via np.frombuffer](np-frombuffer.md) |
 | **Numpy.NET coexistence** - drive real numpy's C# API over NumSharp buffers | + `Numpy.Bare` | ✅ `PyObject` handoff | [Numpy.NET](numpy-net.md) |
-| **System.Numerics.Tensors** - `NDArray` ⇄ `Tensor<T>` / `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` | `NumSharp.Interop.System.Numerics.Tensors` | ✅ `AsTensorSpan` shares **any** non-negative-stride layout (strided/transposed/broadcast); `AsNDArray` views a tensor's buffer; all 15 dtypes cross as themselves; no Python, no native code | [System.Numerics.Tensors](system-numerics-tensors.md) |
+| **ONNX Runtime inference** - `NDArray` ⇄ `OrtValue` / `DenseTensor<T>`, `session.Run(NDArray)` / `RunInto` / `RunAsync`, fixed-width text ⇄ string tensors, softmax / argmax / top-k on the outputs | `NumSharp.Interop.OnnxRuntime` | ✅ `OnnxCodecMode.Auto` feeds a C-contiguous input in place (else a copy the handle owns), outputs as owning copies or owning views; text always copies; no Python, no GIL | [ONNX Runtime](onnxruntime.md) |
+| **ML.NET pipelines** - `NDArray` ⇄ `IDataView` / `VBuffer<T>`, `transformer.Transform(nd.AsDataView(...)).ToNDArray("Score")`, softmax / argmax / top-k on the outputs | `NumSharp.Interop.MLNet` | ✅ `AsDataView` reads the buffer lazily through its strides (any layout); `vbuffer.AsNDArray<T>()` views a dense `VBuffer`; `ToVBuffer` and output columns are copies; text columns are not mapped; no Python | [ML.NET](mlnet.md) |
+| **System.Numerics.Tensors** - `NDArray` ⇄ `Tensor<T>` / `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` | `NumSharp.Interop.System.Numerics.Tensors` | ✅ `AsTensorSpan` shares **any** non-negative-stride layout (strided/transposed/broadcast); `AsNDArray` views a tensor's buffer; supported dtypes cross as their CLR element type; text crosses as a `Tensor<string>` copy (`ToStringTensor` / `ToNDArray`); no Python or native code | [System.Numerics.Tensors](system-numerics-tensors.md) |
 | **`.npy` / `.npz` files** - `np.save` / `np.load`, byte-for-byte identical to NumPy's own writer | `NumSharp` (core) | - files, not memory | [NumPy compliance](../compliance.md#npy-and-npz-interoperability) |
 
 Start with the page whose *consumer* matches yours: numpy code → the pythonnet page; a library
@@ -187,13 +203,17 @@ above applies to it; it has [its own page](openblas.md).
 
 - [Python & numpy (pythonnet)](pythonnet-numpy.md) - the reference bridge: four verbs, layouts,
   lifetime, codec, GIL, dtypes, versions
-- [PyTorch](pytorch.md) - shared CPU tensors, autograd, all 15 dtypes, layout/device copy boundaries
+- [PyTorch](pytorch.md) - shared CPU tensors, autograd, dtype mappings and layout/device copy boundaries
 - [Pandas](pandas.md) - frames/series/indexes, Copy-on-Write, mixed blocks and extension dtypes
 - [Any library via np.frombuffer](np-frombuffer.md) - the buffer protocol route to libraries that
   never touch numpy
 - [Numpy.NET](numpy-net.md) - running SciSharp's numpy binding over NumSharp memory
 - [OpenBLAS](openblas.md) - the compute-side sibling: a native BLAS binary behind
   `np.dot` / `np.matmul`, faster float32/float64 matrix products
+- [ONNX Runtime](onnxruntime.md) - feed an `NDArray` to `InferenceSession.Run` without copying, read
+  outputs back, post-process with `np.*`
+- [ML.NET](mlnet.md) - expose an `NDArray` to a `Microsoft.ML` pipeline as an `IDataView`, read a
+  transformer's output column back into an `NDArray`
 - [System.Numerics.Tensors](system-numerics-tensors.md) - view an `NDArray` as a `TensorSpan<T>` over the
   same buffer (any non-negative-stride layout), read a `Tensor<T>` back into an `NDArray`
 - [Buffering & Memory](../buffering.md) - how NumSharp's own storage, slices and reference

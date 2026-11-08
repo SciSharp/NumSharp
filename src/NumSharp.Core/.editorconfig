@@ -22,3 +22,8 @@ dotnet_diagnostic.NDW011.severity = none
 dotnet_diagnostic.NDW012.severity = warning
 dotnet_diagnostic.NDW016.severity = warning
 dotnet_diagnostic.NDW017.severity = warning
+
+# NDW020 (off by default, so the package's consumers never see it): an exception message formats a number with
+# the current culture. NumPy's texts are culture-independent ASCII (parity QA-41), so on Core it is a build ERROR:
+# a new `throw new X($"... {n}")` must be written string.Create(CultureInfo.InvariantCulture, $"... {n}").
+dotnet_diagnostic.NDW020.severity = error

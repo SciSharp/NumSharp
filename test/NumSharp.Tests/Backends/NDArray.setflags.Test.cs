@@ -30,7 +30,7 @@ namespace NumSharp.Tests.Backends
             var a = np.arange(6);
             a.setflags(write: false);
             a.flags.writeable.Should().BeFalse();
-            ((Action)(() => a[0] = (NDArray)9L)).Should().Throw<NumSharpException>().WithMessage("*read-only*");
+            ((Action)(() => a[0] = (NDArray)9L)).Should().Throw<ValueError>().WithMessage("*read-only*");
             a.setflags(write: true);
             a.flags.writeable.Should().BeTrue();
             a[0] = (NDArray)9L;
@@ -144,6 +144,7 @@ namespace NumSharp.Tests.Backends
         }
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void Write_True_OnMemmapR_Refused_OwnerAndView()
         {
             string dir = Path.Combine(Path.GetTempPath(), "ns_setflags_" + Guid.NewGuid().ToString("N"));
@@ -167,12 +168,13 @@ namespace NumSharp.Tests.Backends
             }
             finally
             {
-                FullGc();
-                try { Directory.Delete(dir, recursive: true); } catch { /* best-effort */ }
+                // Young collection first, full only if the mapping still holds the directory (MappedFileCleanup).
+                MappedFileCleanup.DeleteDirectory(dir);
             }
         }
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void Write_True_OnMemmapR_FortranOrder_Refused()
         {
             // The F-order memmap is a transpose VIEW over the wrap storage — the read-only protection
@@ -193,12 +195,13 @@ namespace NumSharp.Tests.Backends
             }
             finally
             {
-                FullGc();
-                try { Directory.Delete(dir, recursive: true); } catch { /* best-effort */ }
+                // Young collection first, full only if the mapping still holds the directory (MappedFileCleanup).
+                MappedFileCleanup.DeleteDirectory(dir);
             }
         }
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void Write_True_OnMemmapRPlus_RoundTrips()
         {
             // NumPy: an 'r+' memmap's buffer is writable, so write=False → write=True round-trips.
@@ -217,16 +220,9 @@ namespace NumSharp.Tests.Backends
             }
             finally
             {
-                FullGc();
-                try { Directory.Delete(dir, recursive: true); } catch { /* best-effort */ }
+                // Young collection first, full only if the mapping still holds the directory (MappedFileCleanup).
+                MappedFileCleanup.DeleteDirectory(dir);
             }
-        }
-
-        private static void FullGc()
-        {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
         }
 
         // ---- align ------------------------------------------------------------------------

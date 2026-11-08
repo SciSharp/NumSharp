@@ -231,7 +231,7 @@ namespace NumSharp.Tests.RandomSampling
             var mean = new double[] { 0, 0, 0 };
             var cov = new double[,] { { 1, 0 }, { 0, 1 } };
 
-            Assert.ThrowsException<ArgumentException>(() =>
+            Assert.ThrowsException<ValueError>(() =>
                 np.random.multivariate_normal(mean, cov));
         }
 
@@ -241,7 +241,7 @@ namespace NumSharp.Tests.RandomSampling
             var mean = new double[] { 0, 0 };
             var cov = new double[,] { { 1, 0, 0 }, { 0, 1, 0 } };
 
-            Assert.ThrowsException<ArgumentException>(() =>
+            Assert.ThrowsException<ValueError>(() =>
                 np.random.multivariate_normal(mean, cov));
         }
 
@@ -251,8 +251,11 @@ namespace NumSharp.Tests.RandomSampling
             var mean = new double[0];
             var cov = new double[0, 0];
 
-            Assert.ThrowsException<ArgumentException>(() =>
+            // NumPy: standard_normal((0,)).reshape(-1, 0) -> ValueError "cannot reshape array of size 0 into shape (0)".
+            // The sampler raises NumPy's type itself (a bare reshape would raise NumSharp's house IncorrectShapeException).
+            var e = Assert.ThrowsException<ValueError>(() =>
                 np.random.multivariate_normal(mean, cov));
+            e.Message.Should().Be("cannot reshape array of size 0 into shape (0)");
         }
 
         [TestMethod]
@@ -261,7 +264,7 @@ namespace NumSharp.Tests.RandomSampling
             double[] mean = null!;
             var cov = new double[,] { { 1, 0 }, { 0, 1 } };
 
-            Assert.ThrowsException<ArgumentException>(() =>
+            Assert.ThrowsException<ValueError>(() =>
                 np.random.multivariate_normal(mean, cov));
         }
 
@@ -271,7 +274,7 @@ namespace NumSharp.Tests.RandomSampling
             var mean = new double[] { 0, 0 };
             double[,] cov = null!;
 
-            Assert.ThrowsException<ArgumentException>(() =>
+            Assert.ThrowsException<ValueError>(() =>
                 np.random.multivariate_normal(mean, cov));
         }
 
@@ -281,7 +284,7 @@ namespace NumSharp.Tests.RandomSampling
             var mean = new double[] { 0, 0 };
             var cov = new double[,] { { 1, 0 }, { 0, 1 } };
 
-            Assert.ThrowsException<ArgumentException>(() =>
+            Assert.ThrowsException<ValueError>(() =>
                 np.random.multivariate_normal(mean, cov, default(Shape), "invalid"));
         }
 
@@ -292,7 +295,7 @@ namespace NumSharp.Tests.RandomSampling
             // Not positive definite: off-diagonal > sqrt(diag1*diag2)
             var cov = new double[,] { { 1, 2 }, { 2, 1 } };
 
-            Assert.ThrowsException<ArgumentException>(() =>
+            Assert.ThrowsException<ValueError>(() =>
                 np.random.multivariate_normal(mean, cov, null, "raise"));
         }
 

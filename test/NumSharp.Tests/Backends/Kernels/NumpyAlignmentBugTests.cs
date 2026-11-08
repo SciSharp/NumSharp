@@ -18,7 +18,7 @@ namespace NumSharp.Tests.Backends.Kernels;
 /// - BUG-8: np.dot(vector, matrix) not supported (LOW)
 /// - BUG-9: np.unique returns unsorted (MEDIUM)
 /// - BUG-10: np.repeat with array repeats fails (MEDIUM)
-/// - BUG-11: np.repeat missing axis parameter (LOW)
+/// - BUG-11: np.repeat missing axis parameter (LOW) - FIXED (61b92dfc)
 /// - BUG-12: np.searchsorted scalar input throws + array input returns wrong results (MEDIUM)
 /// - BUG-13: np.linspace returns float32 instead of float64 (LOW) - FIXED
 /// - BUG-14: np.abs changes int dtype to Double (MEDIUM) - FIXED
@@ -31,7 +31,7 @@ namespace NumSharp.Tests.Backends.Kernels;
 /// - BUG-21: np.amax empty array returns -Inf instead of raising ValueError (MEDIUM)
 /// - BUG-22: np.amin empty array returns +Inf instead of raising ValueError (MEDIUM)
 /// - BUG-25: np.power(int, float) returns int instead of float64 (MEDIUM) - FIXED
-/// - BUG-32: np.random.choice replace=False parameter ignored (HIGH)
+/// - BUG-32: np.random.choice replace=False parameter ignored (HIGH) - FIXED (c1e0feb5)
 /// </summary>
 [TestClass]
 public class NumpyAlignmentBugTests
@@ -422,11 +422,16 @@ public class NumpyAlignmentBugTests
     #endregion
 
     #region BUG-11: np.repeat Missing axis Parameter (LOW)
-    // Note: These tests will fail to compile if axis parameter is missing
-    // Commenting out until the parameter is added
+    // FIXED by 61b92dfc (np.repeat gained `int? axis` with an IL-emitted 3-loop kernel).
+    // The three tests below were commented out until the parameter existed, then sat
+    // uncompiled; the 2026-10-05 run of the whole OpenBugs category restored them and
+    // found them passing, so they guard the axis forms now.
 
-    /*
-    [TestMethod, OpenBugs]
+    /// <summary>
+    ///     <c>np.repeat(a, 2, axis=0)</c> repeats whole ROWS of a 2-D array: <c>[[1, 2], [1, 2], [3, 4], [3, 4]]</c> in
+    ///     NumPy 2.4.2, not the flattened element repeat that <c>axis=None</c> gives.
+    /// </summary>
+    [TestMethod]
     public void Bug11_Repeat_2D_Axis0()
     {
         // NUMPY 2.4.2:
@@ -448,7 +453,11 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(3, result.GetInt32(3, 0));  // repeated
     }
 
-    [TestMethod, OpenBugs]
+    /// <summary>
+    ///     <c>np.repeat(a, 2, axis=1)</c> repeats each element along its row: <c>[[1, 1, 2, 2], [3, 3, 4, 4]]</c> in
+    ///     NumPy 2.4.2.
+    /// </summary>
+    [TestMethod]
     public void Bug11_Repeat_2D_Axis1()
     {
         // NUMPY 2.4.2:
@@ -468,7 +477,11 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(2, result.GetInt32(0, 3));  // repeated
     }
 
-    [TestMethod, OpenBugs]
+    /// <summary>
+    ///     A negative axis counts from the end: <c>np.repeat(a, 3, axis=-1)</c> on a 2-D array is the <c>axis=1</c>
+    ///     repeat, shape <c>(2, 6)</c>.
+    /// </summary>
+    [TestMethod]
     public void Bug11_Repeat_2D_Axis_NegativeAxis()
     {
         // NUMPY: np.repeat(arr, 3, axis=-1) same as axis=1 for 2D
@@ -480,7 +493,6 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(2, result.shape[0]);
         Assert.AreEqual(6, result.shape[1]);
     }
-    */
 
     #endregion
 
@@ -933,9 +945,15 @@ public class NumpyAlignmentBugTests
     #endregion
 
     #region BUG-32: np.random.choice replace=False Parameter Ignored (HIGH)
+    // FIXED by c1e0feb5 (legacy RandomState parity: np.random.choice became a full port of
+    // mtrand.pyx RandomState.choice). Both tests were [OpenBugs] until the 2026-10-05 run of
+    // the whole OpenBugs category found them passing.
 
+    /// <summary>
+    ///     <c>choice(10, 5, replace: false)</c> draws five DISTINCT values. Sampling with replacement here would hand a
+    ///     caller duplicate indices from a call that promises a subset.
+    /// </summary>
     [TestMethod]
-    [OpenBugs]
     public void Bug32_Choice_ReplaceFalse_NoDuplicates()
     {
         // NUMPY 2.4.2:
@@ -943,8 +961,8 @@ public class NumpyAlignmentBugTests
         // >>> np.random.choice(10, 5, replace=False)
         // array([8, 1, 5, 0, 7])  # All unique values
         //
-        // NumSharp BUG: replace parameter is declared but never used.
-        // Code always uses randint which samples WITH replacement.
+        // Audit-time NumSharp bug: the replace parameter was declared but never used, and the
+        // code always used randint, which samples WITH replacement.
         var rng = np.random.RandomState(42);
         var result = rng.choice(10, new Shape(5), replace: false);
 
@@ -957,15 +975,19 @@ public class NumpyAlignmentBugTests
             "NumSharp ignores the replace parameter.");
     }
 
+    /// <summary>
+    ///     <c>choice(5, 10, replace: false)</c> must refuse: a sample larger than the population cannot be drawn
+    ///     without replacement, and NumPy raises <c>ValueError</c> ("Cannot take a larger sample than population when
+    ///     'replace=False'") instead of returning duplicates.
+    /// </summary>
     [TestMethod]
-    [OpenBugs]
     public void Bug32_Choice_ReplaceFalse_SizeExceedsPopulation_ShouldThrow()
     {
         // NUMPY 2.4.2:
         // >>> np.random.choice(5, 10, replace=False)
         // ValueError: Cannot take a larger sample than population when 'replace=False'
         //
-        // NumSharp BUG: No validation, will produce duplicates instead
+        // Audit-time NumSharp bug: no validation, so the call produced duplicates instead.
         var rng = np.random.RandomState(42);
 
         try
@@ -1512,25 +1534,29 @@ public class TypePromotionDifferenceTests
     [TestMethod]
     public void Max_EmptyArray_ThrowsException()
     {
-        // NumPy: np.max([]) raises ValueError
-        // NumSharp: Now throws ArgumentException (FIXED in Task #84)
+        // NumPy: np.max([]) raises ValueError; NumSharp raises the same type (ValueError, an
+        // ArgumentException) since 2026-10-08 (it was a plain ArgumentException).
         var empty = np.array(Array.Empty<double>());
 
-        Assert.ThrowsException<ArgumentException>(() => np.amax(empty),
-            "NumSharp now raises ArgumentException matching NumPy's ValueError.");
+        Assert.ThrowsException<ValueError>(() => np.amax(empty),
+            "NumSharp raises NumPy's ValueError.");
     }
 
     [TestMethod]
     public void Min_EmptyArray_ThrowsException()
     {
-        // NumPy: np.min([]) raises ValueError
-        // NumSharp: Now throws ArgumentException (FIXED in Task #84)
+        // NumPy: np.min([]) raises ValueError; NumSharp raises the same type (ValueError, an
+        // ArgumentException) since 2026-10-08 (it was a plain ArgumentException).
         var empty = np.array(Array.Empty<double>());
 
-        Assert.ThrowsException<ArgumentException>(() => np.amin(empty),
-            "NumSharp now raises ArgumentException matching NumPy's ValueError.");
+        Assert.ThrowsException<ValueError>(() => np.amin(empty),
+            "NumSharp raises NumPy's ValueError.");
     }
 
+    /// <summary>
+    ///     np.cumprod of an empty array follows np.cumsum's rules (axis=None ravels, NEP 50 widens the accumulator), and
+    ///     an out-of-range axis raises NumPy's AxisError even when there is nothing to accumulate.
+    /// </summary>
     [TestMethod]
     public void CumProd_EmptyArray_FlattensAndWidensLikeCumSum()
     {
@@ -1552,6 +1578,6 @@ public class TypePromotionDifferenceTests
         Assert.AreEqual(NPTypeCode.UInt64, np.cumprod(np.zeros(new[] { 0, 3 }).astype(NPTypeCode.Byte)).typecode);
 
         // out-of-range axis on an empty array raises (NumPy AxisError), not a silent no-op
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.cumprod(e, 5));
+        Assert.ThrowsException<AxisError>(() => np.cumprod(e, 5));
     }
 }

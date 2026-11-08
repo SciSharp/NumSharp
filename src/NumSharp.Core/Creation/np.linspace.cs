@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Threading.Tasks;
 using NumSharp.Backends;
-using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -22,12 +20,19 @@ namespace NumSharp
         ///     If not given (null), the output is float64 (NumPy infers float from the other input arguments).
         /// </param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
+        /// <returns>A new 1-D array of <paramref name="num"/> samples (<see cref="TensorEngine.Linspace"/> describes its
+        ///     dtype and which results are views).</returns>
+        /// <exception cref="ValueError">A negative <paramref name="num"/> (<c>Number of samples, -1, must be
+        ///     non-negative.</c>), checked first, as NumPy checks it.</exception>
+        /// <exception cref="ValueError">A <paramref name="device"/> other than <c>"cpu"</c> (NumPy's <c>Device not understood.
+        ///     Only "cpu" is allowed, but received: ...</c>), checked after the count.</exception>
+        /// <exception cref="NotSupportedException">A <paramref name="dtype"/> without a storage lane (a datetime
+        ///     descriptor); a text dtype formats the float64 samples, as NumPy's astype does.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+        ///     <para>Computed by the default engine's <see cref="TensorEngine.Linspace"/>: there is no operand to choose
+        ///     another.</para></remarks>
         public static NDArray linspace(double start, double stop, long num, bool endpoint = true, DType dtype = null, string device = null)
-        {
-            ValidateDevice(device);
-            return LinspaceCore(start, stop, num, endpoint, dtype?.GetTypeCode() ?? NPTypeCode.Double);
-        }
+            => TensorEngine.Default.Linspace(start, stop, num, endpoint, dtype, device);
 
         /// <summary>
         ///     Return evenly spaced numbers over a specified interval.<br></br>
@@ -40,7 +45,15 @@ namespace NumSharp
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
+        /// <returns>A new 1-D array of <paramref name="num"/> samples, exactly as the
+        ///     <see cref="linspace(double, double, long, bool, DType, string)"/> overload returns it.</returns>
+        /// <exception cref="ValueError">A negative <paramref name="num"/>, or a <paramref name="device"/> other than
+        ///     <c>"cpu"</c>.</exception>
+        /// <exception cref="NotSupportedException">A <paramref name="dtype"/> without a storage lane (a datetime
+        ///     descriptor).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+        ///     <para>The <see cref="int"/> count only widens to <see cref="long"/>; it exists so an <c>int</c> literal binds
+        ///     without a cast.</para></remarks>
         public static NDArray linspace(double start, double stop, int num, bool endpoint = true, DType dtype = null, string device = null)
             => linspace(start, stop, (long)num, endpoint, dtype, device);
 
@@ -54,7 +67,14 @@ namespace NumSharp
         /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
+        /// <returns>A new 1-D array of <paramref name="num"/> samples: float64 unless <paramref name="dtype"/> names another,
+        ///     even though the bounds are float32 (NumPy's default).</returns>
+        /// <exception cref="ValueError">A negative <paramref name="num"/>.</exception>
+        /// <exception cref="NotSupportedException">A <paramref name="dtype"/> without a storage lane (a datetime
+        ///     descriptor).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+        ///     <para>The float32 bounds widen to float64 before the samples are computed, so pass
+        ///     <c>dtype: np.float32</c> for a float32 result.</para></remarks>
         public static NDArray linspace(float start, float stop, long num, bool endpoint = true, DType dtype = null)
         {
             // NumPy: linspace always returns float64 by default, regardless of input types
@@ -71,251 +91,15 @@ namespace NumSharp
         /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
+        /// <returns>A new 1-D array of <paramref name="num"/> samples: float64 unless <paramref name="dtype"/> names another,
+        ///     even though the bounds are float32 (NumPy's default).</returns>
+        /// <exception cref="ValueError">A negative <paramref name="num"/>.</exception>
+        /// <exception cref="NotSupportedException">A <paramref name="dtype"/> without a storage lane (a datetime
+        ///     descriptor).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+        ///     <para>The float32 bounds widen to float64 and the <see cref="int"/> count to <see cref="long"/>, so pass
+        ///     <c>dtype: np.float32</c> for a float32 result.</para></remarks>
         public static NDArray linspace(float start, float stop, int num, bool endpoint = true, DType dtype = null)
             => linspace(start, stop, (long)num, endpoint, dtype);
-
-        /// <summary>
-        ///     The storage-lane core behind every public <c>linspace(..., dtype)</c> overload (which all take the single
-        ///     <see cref="DType"/> descriptor parameter, like NumPy's <c>dtype=</c>).
-        /// </summary>
-        /// <param name="start">The starting value of the sequence.</param>
-        /// <param name="stop">The end value of the sequence, unless endpoint is set to False. In that case, the sequence consists of all but the last of num + 1 evenly spaced samples, so that stop is excluded. Note that the step size changes when endpoint is False.</param>
-        /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
-        /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
-        /// <param name="typeCode">The type of the output array.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
-        private static NDArray LinspaceCore(double start, double stop, long num, bool endpoint, NPTypeCode typeCode)
-        {
-            if (typeCode == NPTypeCode.Empty)
-                throw new ArgumentException("Invalid typeCode", nameof(typeCode));
-
-            // NumPy 1.20+ floors the inexact linspace values before casting to an explicitly
-            // requested integer dtype (rather than truncating toward zero). Char follows UInt16.
-            bool floorInteger = typeCode == NPTypeCode.SByte || typeCode == NPTypeCode.Byte
-                                || typeCode == NPTypeCode.Int16 || typeCode == NPTypeCode.UInt16
-                                || typeCode == NPTypeCode.Int32 || typeCode == NPTypeCode.UInt32
-                                || typeCode == NPTypeCode.Int64 || typeCode == NPTypeCode.UInt64
-                                || typeCode == NPTypeCode.Char;
-
-            NDArray ret = new NDArray(typeCode, new Shape(num), false);
-
-            // Handle num <= 1 edge cases to avoid division by zero
-            if (num == 0)
-                return ret;
-
-            if (num == 1)
-            {
-                ret.SetAtIndex(Converts.ChangeType(floorInteger ? Math.Floor(start) : start, typeCode), 0);
-                // NumPy's div = endpoint ? num-1 : num. endpoint=false makes div = 1 > 0, so its
-                // scalar in-place branch runs (y *= step on the arange-reshape view) and the float64
-                // result is that VIEW (owndata=False, probed 2.4.2); endpoint=true (div=0) takes the
-                // rebinding `y = y * delta` branch and owns. Other dtypes rebind via astype and own.
-                if (!endpoint && typeCode == NPTypeCode.Double)
-                {
-                    var view = new NDArray(ret.Storage.Alias()) { TensorEngine = ret.TensorEngine };
-                    ret.Dispose();
-                    return view;
-                }
-                return ret;
-            }
-
-            double step = (stop - start) / (endpoint ? num - 1.0 : num);
-
-            double Sample(long i)
-            {
-                // NumPy overwrites y[-1] with stop before the optional integer floor/cast, avoiding
-                // accumulated endpoint drift.
-                double value = endpoint && i == num - 1 ? stop : start + i * step;
-                return floorInteger ? Math.Floor(value) : value;
-            }
-
-            switch (ret.GetTypeCode)
-            {
-	            // case NPTypeCode.Boolean:
-	            // {
-                    // unsafe
-                    // {
-                        // var addr = (bool*)ret.Address;
-                        // for (long i = 0; i < num; i++) addr[i] = (start + i * step) != 0;
-                    // }
-
-                    // return ret;
-	            // }
-	            // %foreach except(supported_dtypes, "Boolean"),except(supported_dtypes_lowercase, "bool")%
-	            // case NPTypeCode.#1:
-	            // {
-                    // unsafe
-                    // {
-                        // var addr = (#2*)ret.Address;
-                         // for (long i = 0; i < num; i++) addr[i] = Converts.To#1(start + i * step);
-                    // }
-
-                    // return ret;
-	            // }
-	            // %
-	            // default:
-		            // throw new NotSupportedException();
-	            case NPTypeCode.Boolean:
-	            {
-                    unsafe
-                    {
-                        var addr = (bool*)ret.Address;
-                        for (long i = 0; i < num; i++) addr[i] = Sample(i) != 0;
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.Byte:
-	            {
-                    unsafe
-                    {
-                        var addr = (byte*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToByte(Sample(i));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.SByte:
-	            {
-                    unsafe
-                    {
-                        var addr = (sbyte*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToSByte(Sample(i));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.Int16:
-	            {
-                    unsafe
-                    {
-                        var addr = (short*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToInt16(Sample(i));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.UInt16:
-	            {
-                    unsafe
-                    {
-                        var addr = (ushort*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToUInt16(Sample(i));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.Int32:
-	            {
-                    unsafe
-                    {
-                        var addr = (int*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToInt32(Sample(i));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.UInt32:
-	            {
-                    unsafe
-                    {
-                        var addr = (uint*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToUInt32(Sample(i));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.Int64:
-	            {
-                    unsafe
-                    {
-                        var addr = (long*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToInt64(Sample(i));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.UInt64:
-	            {
-                    unsafe
-                    {
-                        var addr = (ulong*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToUInt64(Sample(i));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.Char:
-	            {
-                    unsafe
-                    {
-                        var addr = (char*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToChar(Sample(i));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.Half:
-	            {
-                    unsafe
-                    {
-                        var addr = (Half*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = (Half)Sample(i);
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.Double:
-	            {
-                    unsafe
-                    {
-                        var addr = (double*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToDouble(Sample(i));
-                    }
-
-                    // NumPy's float64 linspace is a reshape-VIEW of its internal arange buffer
-                    // mutated in place (y *= step; y += start), and astype(float64, copy=False)
-                    // returns that view verbatim — so the result reports OWNDATA=False (probed
-                    // 2.4.2; num >= 2 here, so div > 0 and the in-place branch is always the one
-                    // NumPy took). Every other dtype rebinds through a real astype copy and owns.
-                    var view = new NDArray(ret.Storage.Alias()) { TensorEngine = ret.TensorEngine };
-                    ret.Dispose();
-                    return view;
-	            }
-	            case NPTypeCode.Single:
-	            {
-                    unsafe
-                    {
-                        var addr = (float*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToSingle(Sample(i));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.Decimal:
-	            {
-                    unsafe
-                    {
-                        var addr = (decimal*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.ToDecimal(Sample(i));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.Complex:
-	            {
-                    unsafe
-                    {
-                        var addr = (System.Numerics.Complex*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = new System.Numerics.Complex(Sample(i), 0);
-                    }
-
-                    return ret;
-	            }
-	            default:
-		            throw new NotSupportedException();
-            }
-        }
     }
 }

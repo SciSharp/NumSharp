@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -15,6 +16,7 @@ namespace NumSharp
         {
             private readonly NDArray[] _grids;
 
+            [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Meshgrid))]
             internal MeshgridResult(NDArray[] grids) => _grids = grids ?? Array.Empty<NDArray>();
 
             /// <summary>Number of coordinate grids (one per input vector).</summary>
@@ -61,7 +63,7 @@ namespace NumSharp
                 int have = Length;
                 if (have != n)
                     throw new InvalidOperationException(
-                        $"np.meshgrid produced {have} grids; cannot deconstruct into {n}. Use indexing or the " +
+                        string.Create(CultureInfo.InvariantCulture, $"np.meshgrid produced {have} grids; cannot deconstruct into {n}. Use indexing or the ") +
                         "NDArray[] conversion.");
             }
 
@@ -74,7 +76,9 @@ namespace NumSharp
         /// </summary>
         public static MeshgridResult meshgrid(NDArray x1, NDArray x2,
             string indexing = "xy", bool sparse = false, bool copy = true)
-            => meshgrid(new[] { x1, x2 }, indexing, sparse, copy);
+        {
+            return meshgrid(new[] { x1, x2 }, indexing, sparse, copy);
+        }
 
         /// <summary>
         ///     Return coordinate matrices from three coordinate vectors — see
@@ -82,7 +86,9 @@ namespace NumSharp
         /// </summary>
         public static MeshgridResult meshgrid(NDArray x1, NDArray x2, NDArray x3,
             string indexing = "xy", bool sparse = false, bool copy = true)
-            => meshgrid(new[] { x1, x2, x3 }, indexing, sparse, copy);
+        {
+            return meshgrid(new[] { x1, x2, x3 }, indexing, sparse, copy);
+        }
 
         /// <summary>
         ///     Return a tuple of coordinate matrices from N coordinate vectors — make N-D coordinate arrays
@@ -109,7 +115,10 @@ namespace NumSharp
         /// </param>
         /// <returns>
         ///     N grids as a <see cref="MeshgridResult"/> (NumPy's tuple): implicit to <see cref="NDArray"/>
-        ///     <c>[]</c>, deconstructable, and indexable.
+        ///     <c>[]</c>, deconstructable, and indexable. Each grid keeps its input's class, as NumPy's does: a
+        ///     <c>numpy.matrix</c> input's grid is a matrix (the matrix finalize rule folding every reshape onto two axes, so
+        ///     three matrix rows give three 1 x N matrices), a <c>numpy.char.chararray</c> input's a chararray, a plain
+        ///     input's a plain array.
         /// </returns>
         /// <remarks>
         ///     Port of NumPy 2.x <c>numpy.meshgrid</c> (<c>numpy/lib/_function_base_impl.py</c>). Each input
@@ -127,52 +136,23 @@ namespace NumSharp
         /// NDArray[] g  = np.meshgrid(a, b, sparse: true);          // (1,M) and (N,1)
         /// </code>
         /// </example>
+        /// <exception cref="ArgumentNullException"><paramref name="xi"/> is null, or one of its vectors is (the parameter is
+        ///     then named <c>xi[i]</c>, after the indexing check).</exception>
+        /// <exception cref="ValueError"><paramref name="indexing"/> is neither <c>"xy"</c> nor <c>"ij"</c> (<c>Valid values
+        ///     for `indexing` are 'xy' and 'ij'.</c>); a matrix grid of more than two axes longer than 1 (<c>shape too large
+        ///     to be a matrix.</c>).</exception>
+        /// <exception cref="IncorrectShapeException">A matrix input's 1 x N open mesh does not broadcast against the higher-rank
+        ///     open meshes of plain inputs (broadcast_arrays' <c>shape mismatch: objects cannot be broadcast to a single
+        ///     shape.  Mismatch is between arg 0 with shape (1, 3) and arg 2 with shape (1, 1, 4).</c>, as in NumPy).</exception>
         public static MeshgridResult meshgrid(NDArray[] xi,
             string indexing = "xy", bool sparse = false, bool copy = true)
         {
             if (xi is null)
                 throw new ArgumentNullException(nameof(xi));
-            if (indexing != "xy" && indexing != "ij")
-                throw new ValueError("Valid values for `indexing` are 'xy' and 'ij'.");
 
-            int ndim = xi.Length;
-            if (ndim == 0)
-                return new MeshgridResult(Array.Empty<NDArray>());
-
-            var output = new NDArray[ndim];
-
-            // Reshape each input to its open-mesh axis (size at that axis, 1 elsewhere) in ONE pass.
-            // 'ij' (matrix) puts input i at axis i; 'xy' (Cartesian) swaps the first two — input 0 → axis 1,
-            // input 1 → axis 0 — for ndim > 1.
-            bool swapXY = indexing == "xy" && ndim > 1;
-            for (int i = 0; i < ndim; i++)
-            {
-                NDArray a = xi[i] ?? throw new ArgumentNullException($"xi[{i}]",
-                    "meshgrid coordinate vectors must not be null.");
-                int axis = swapXY ? (i == 0 ? 1 : i == 1 ? 0 : i) : i;
-                output[i] = a.reshape(OpenMeshShape(ndim, axis, a.size));
-            }
-
-            // Dense grids: broadcast each open-mesh axis across the full shape.
-            if (!sparse)
-                output = broadcast_arrays(output);
-
-            // Materialize to independent C-contiguous arrays unless views were requested.
-            if (copy)
-                for (int i = 0; i < ndim; i++)
-                    output[i] = output[i].copy();
-
-            return new MeshgridResult(output);
-        }
-
-        /// <summary>Shape that is 1 in every axis but <paramref name="axis"/>, which holds <paramref name="size"/>.</summary>
-        private static long[] OpenMeshShape(int ndim, int axis, long size)
-        {
-            var shape = new long[ndim];
-            for (int d = 0; d < ndim; d++)
-                shape[d] = 1L;
-            shape[axis] = size;
-            return shape;
+            // NumPy's statements (the indexing check, the open-mesh reshapes, the broadcast, the copies) are the array
+            // object's; the tuple NumPy returns is this result struct.
+            return new MeshgridResult(NDArray.meshgrid(xi, indexing, sparse, copy));
         }
     }
 }

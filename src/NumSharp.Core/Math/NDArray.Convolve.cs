@@ -1,5 +1,4 @@
 using System;
-using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -18,49 +17,29 @@ namespace NumSharp
         /// <remarks>
         /// NumPy Reference: https://numpy.org/doc/stable/reference/generated/numpy.convolve.html
         ///
-        /// convolve is <c>correlate(a, v[::-1], mode)</c> (numpy/_core/numeric.py): it reverses the
-        /// kernel and runs the shared sliding multiply-accumulate engine (<see cref="SlidingCorrelate"/>).
+        /// convolve is <c>correlate(a, v[::-1], mode)</c> (numpy/_core/numeric.py): NumPy's Python statements run in this
+        /// array's <see cref="TensorEngine.Convolve"/>, which reverses the kernel and calls the engine's correlation
+        /// (<see cref="TensorEngine.Correlate"/>, the shared sliding multiply-accumulate kernels).
         /// Unlike correlate it does NOT conjugate a complex kernel and is commutative, so the
-        /// "swap if v longer" below needs no output reversal. See <c>np.correlate.cs</c> for the
+        /// "swap if v longer" needs no output reversal. See <c>np.correlate.cs</c> for the
         /// float bit-parity notes (both share the same kernel).
         /// </remarks>
+        /// <exception cref="ValueError"><c>a cannot be empty</c> / <c>v cannot be empty</c> (on the operands as given, before
+        ///     the length swap), then an unknown <paramref name="mode"/> (NumPy's two texts, the bad argument in Python's
+        ///     <c>repr</c>), <c>object too deep for desired array</c> for an operand of two or more dimensions, or — for a
+        ///     fixed-width string operand, after every check above — <c>data type must provide an itemsize</c> (NumPy's
+        ///     result allocation for the string type number).</exception>
+        /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate.</exception>
+        /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>): <c>convolve/correlate mode not
+        ///     understood</c>. A <c>StringDType</c> operand (after the emptiness checks and the swap): NumPy's legacy-only
+        ///     descriptor refusal, or Python's error from the first product of the OBJECT fallback.</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes (an
+        ///     object array, which NumSharp does not have).</exception>
+        // Scope: the facade keeps its scope over the call, so the weaver roots this array and v at the public entry (the
+        // lifetime oracle's gap LT22: an unrooted operand could be finalized while the kernels read its buffer);
+        // the engine member (DefaultEngine's Convolve, [NDScoped]) reclaims its own temporaries.
         [NDScoped]
         public NDArray convolve(NDArray v, string mode = "full")
-        {
-            NDArray a = this;
-
-            // Validate inputs are 1D
-            if (a.ndim != 1)
-                throw new IncorrectShapeException("First argument must be a 1-dimensional array.");
-            if (v.ndim != 1)
-                throw new IncorrectShapeException("Second argument must be a 1-dimensional array.");
-
-            // Validate non-empty (NumPy convolve's own messages, distinct from correlate's).
-            if (a.size == 0)
-                throw new ArgumentException("a cannot be empty", nameof(a));
-            if (v.size == 0)
-                throw new ArgumentException("v cannot be empty", nameof(v));
-
-            var m = ParseSlidingMode(mode);
-
-            // NumPy swaps if v is longer than a (convolve is commutative, so no output reversal).
-            if (v.size > a.size)
-            {
-                var temp = a;
-                a = v;
-                v = temp;
-            }
-
-            // Determine output type using NumPy's type promotion rules.
-            var retType = np._FindCommonType(a, v);
-
-            // convolve(a, v) == correlate(a, v[::-1]): reverse the kernel, then the shared engine
-            // reads it forward. The reversed view is materialized to a contiguous, retType buffer;
-            // the view and both materializations are scope-tracked and die with the call.
-            NDArray data = MaterializeForSliding(a, retType);
-            NDArray kernel = MaterializeForSliding(v["::-1"], retType);
-
-            return SlidingCorrelate(data, kernel, retType, m);
-        }
+            => TensorEngine.Convolve(this, v, mode);
     }
 }

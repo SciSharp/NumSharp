@@ -68,6 +68,31 @@ namespace NumSharp.Tests.Creation
         }
 
         /// <summary>
+        ///     A one-element 1-d shape broadcast with a 0-d one keeps its axis, in either order: NumPy 2.4.2's
+        ///     <c>np.broadcast_shapes((1,), ())</c> and <c>np.broadcast_shapes((), (1,))</c> are both <c>(1,)</c>. The
+        ///     two-shape shortcut returned the 0-d shape for <c>((1,), ())</c>, which made a ufunc with a one-element
+        ///     <c>out=</c> and the literal <c>where=False</c> refuse its own out.
+        /// </summary>
+        [TestMethod]
+        public void ResolveReturnShape_OneElementAxis_AgainstZeroD_KeepsTheAxis()
+        {
+            DefaultEngine.ResolveReturnShape(new Shape(1), Shape.Scalar).dimensions.Should().Equal(1L);
+            DefaultEngine.ResolveReturnShape(Shape.Scalar, new Shape(1)).dimensions.Should().Equal(1L);
+            DefaultEngine.ResolveReturnShape(new Shape(1), new Shape(1)).dimensions.Should().Equal(1L);
+            DefaultEngine.ResolveReturnShape(new Shape(1), new Shape(3)).dimensions.Should().Equal(3L);
+            DefaultEngine.ResolveReturnShape(new Shape(1), new Shape(2, 3)).dimensions.Should().Equal(2L, 3L);
+            DefaultEngine.ResolveReturnShape(Shape.Scalar, Shape.Scalar).NDim.Should().Be(0);
+
+            // np.add(np.array([1.]), np.array([2.]), out=np.full(1, 7.), where=False) -> array([7.]): nothing selected.
+            var @out = np.full(new Shape(1), 7.0);
+            var r = np.add(np.array(new[] { 1.0 }), np.array(new[] { 2.0 }), @out, false);
+            ReferenceEquals(r, @out).Should().BeTrue();
+            r.GetDouble(0).Should().Be(7.0);
+            // np.logical_and(np.array([True]), np.array([True]), where=False).shape -> (1,)
+            np.logical_and(np.array(new[] { true }), np.array(new[] { true }), null, false).shape.Should().Equal(1L);
+        }
+
+        /// <summary>
         ///     Taken from https://numpy.org/doc/stable/user/basics.broadcasting.html
         /// </summary>
         [TestMethod]

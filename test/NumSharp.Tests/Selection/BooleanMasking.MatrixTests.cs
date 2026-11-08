@@ -233,14 +233,16 @@ namespace NumSharp.Tests.Selection
         {
             // np.arange(5)[[T,F,T]] -> IndexError
             Action act = () => { var _ = Iota(5)[M(true, false, true)]; };
-            act.Should().Throw<IndexOutOfRangeException>();
+            act.Should().Throw<IndexError>().WithMessage(
+                "boolean index did not match indexed array along axis 0; size of axis is 5 but size of corresponding boolean axis is 3");
         }
 
         [TestMethod]
         public void Get_MaskLongerThanAxis_Throws()
         {
             Action act = () => { var _ = Iota(5)[M(true, false, true, false, true, true)]; };
-            act.Should().Throw<IndexOutOfRangeException>();
+            act.Should().Throw<IndexError>().WithMessage(
+                "boolean index did not match indexed array along axis 0; size of axis is 5 but size of corresponding boolean axis is 6");
         }
 
         [TestMethod]
@@ -249,7 +251,8 @@ namespace NumSharp.Tests.Selection
             // np.arange(3)[[[T,F,T]]] (mask 2-D on 1-D arr) -> IndexError
             var mask = np.array(new bool[,] { { true, false, true } }).MakeGeneric<bool>();
             Action act = () => { var _ = Iota(3)[mask]; };
-            act.Should().Throw<IndexOutOfRangeException>();
+            // A mask with more dimensions than the array is NumPy's too-many-indices error (each mask axis consumes one).
+            act.Should().Throw<IndexError>().WithMessage("too many indices for array: array is 1-dimensional, but 2 were indexed");
         }
 
         // =================================================================
@@ -310,21 +313,31 @@ namespace NumSharp.Tests.Selection
             a.Should().BeOfValues(3, 1, 3, 3, 3, 5, 3, 7, 3, 9, 3, 11);
         }
 
+        /// <summary>
+        ///     Guards NumPy's <c>array_assign_boolean_subscript</c> count check: a 1-D value whose length is neither 1
+        ///     nor the number of True mask elements raises NumPy's ValueError, verbatim.
+        /// </summary>
         [TestMethod]
         public void Set_Full_IncompatibleValue_Throws()
         {
-            // np: a(3,4)[a%2==0] (6 trues) = [1,2,3] -> ValueError
+            // np: a(3,4)[a%2==0] (6 trues) = [1,2,3] -> ValueError (NumPy 2.4.2 text, probed 2026-10-07)
             var a = Iota2(3, 4);
             Action act = () => a[(a % 2) == 0] = np.array(new long[] { 1, 2, 3 });
-            act.Should().Throw<IncorrectShapeException>();
+            // A mask of the array's own shape is NumPy's array_assign_boolean_subscript, with its own text.
+            act.Should().Throw<ValueError>().WithMessage(
+                "NumPy boolean array indexing assignment cannot assign 3 input values to the 6 output values where the mask is true");
         }
 
+        /// <summary>
+        ///     Guards the same count check for a value LONGER than the selection: NumPy refuses rather than truncating.
+        /// </summary>
         [TestMethod]
         public void Set_Full_ValueTooLong_Throws()
         {
             var a = Iota2(3, 4);
             Action act = () => a[(a % 3) == 0] = np.array(new long[] { 1, 2, 3, 4, 5 }); // 4 trues, 5 vals
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<ValueError>().WithMessage(
+                "NumPy boolean array indexing assignment cannot assign 5 input values to the 4 output values where the mask is true");
         }
 
         // =================================================================
@@ -363,7 +376,9 @@ namespace NumSharp.Tests.Selection
             // np: a(3,4)[rowmask picks 2] = [10,20]  -> ValueError ((2,) !-> (2,4))
             var a = Iota2(3, 4);
             Action act = () => a[M(true, false, true)] = np.array(new long[] { 10, 20 });
-            act.Should().Throw<IncorrectShapeException>();
+            // A prefix mask is a fancy index: NumPy's MapIter text.
+            act.Should().Throw<ValueError>().WithMessage(
+                "shape mismatch: value array of shape (2,) could not be broadcast to indexing result of shape (2,4)");
         }
 
         [TestMethod]
@@ -428,7 +443,7 @@ namespace NumSharp.Tests.Selection
             // assigning into a broadcast (read-only) view -> NumPy ValueError
             var a = np.broadcast_to(Iota(4), new Shape(3, 4));
             Action act = () => a[(a % 2) == 0] = (NDArray)(-1L);
-            act.Should().Throw<NumSharpException>();
+            act.Should().Throw<ValueError>();
         }
 
         [TestMethod]

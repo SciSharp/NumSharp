@@ -143,31 +143,64 @@ namespace NumSharp.Tests.Interop.Examples
             }
         }
 
+        /// <summary>
+        ///     The script's text section: numpy's <c>'&lt;U1'</c> / <c>S</c> arrays view zero-copy as NumSharp's own string
+        ///     dtypes (an astral code point is one unit; writes cross), big-endian text copies byte-swapped, a
+        ///     <c>StringDType</c> array copies exactly (NA stays NA) both ways, an object array of <c>str</c> copies as
+        ///     <c>StringDType()</c> while one holding anything else is refused, and a 2-byte wchar buffer views as Char.
+        /// </summary>
         [TestMethod]
-        public void Ucs4Text_NarrowedToCharOnCopy_TwoByteWcharViews()
+        public void Text_FixedWidthViews_StringDTypeCopies_TwoByteWcharViews()
         {
             using var scope = NDScope.Open();
             using (Gil())
             {
-                using PyObject u1 = py.Eval("np.array(['a', 'Z', '\\u00e9'], dtype='U1')");
-                Throws(() => u1.AsNDArray()).Should().BeOfType<NotSupportedException>().Which.Message.Should().Contain("UCS-4");
-                NDArray narrowed = u1.ToNDArray();
-                narrowed.typecode.Should().Be(NPTypeCode.Char);
-                ((char)narrowed.GetValue(0)).Should().Be('a');
-                ((char)narrowed.GetValue(1)).Should().Be('Z');
-                ((char)narrowed.GetValue(2)).Should().Be('é');
-                using PyObject astral = py.Eval("np.array(['\\U0001F600'], dtype='U1')");
-                Throws(() => astral.ToNDArray()).Should().BeOfType<NotSupportedException>().Which.Message.Should().Contain("non-BMP");
+                using PyObject u1 = py.Eval("np.array(['a', 'Z', '\\u00e9', '\\U0001F600'], dtype='U1')");
+                NDArray letters = u1.AsNDArray();
+                letters.dtype.Should().Be(np.dtype("U1"));
+                string grinning = (string)letters.GetValue(3);
+                grinning.Should().Be(char.ConvertFromUtf32(0x1F600));
+                letters[1] = "q";
+                using (PyObject second = u1.InvokeMethod("__getitem__", new PyInt(1)))
+                    second.ToString().Should().Be("q", "the view shares numpy's memory");
+                using PyObject s2 = py.Eval("np.array([b'ab', b'\\x80'], dtype='S2')");
+                NDArray raw = s2.AsNDArray();
+                raw.dtype.Should().Be(np.dtype("S2"));
+                ((byte[])raw.GetValue(1)).Should().Equal(new byte[] { 0x80 });
+
+                using PyObject beText = py.Eval("np.array(['ab'], dtype='>U2')");
+                Throws(() => beText.AsNDArray()).Should().BeOfType<NotSupportedException>().Which.Message.Should().Contain("byte-swaps it into a native U2 copy");
+                NDArray swappedText = beText.ToNDArray();
+                swappedText.dtype.Should().Be(np.dtype("U2"));
+                swappedText.GetValue(0).Should().Be("ab");
+
+                using PyObject t = py.Eval("np.array(['short', 'a text longer than fifteen bytes', None], dtype=np.dtypes.StringDType(na_object=None))");
+                Throws(() => t.AsNDArray()).Should().BeOfType<NotSupportedException>().Which.Message.Should().Contain("has no buffer form");
+                NDArray texts = t.ToNDArray();
+                texts.dtype.Should().Be(np.dtypes.StringDType((object)null));
+                texts.GetValue(1).Should().Be("a text longer than fifteen bytes");
+                texts.GetValue(2).Should().BeNull("NA stays NA");
+                py.texts = texts;
+                PyStr("repr(texts.dtype)").Should().Be("StringDType(na_object=None)");
+                PyStr("texts.tolist() == ['short', 'a text longer than fifteen bytes', None]").Should().Be("True");
+
+                using PyObject strs = py.Eval("np.array(['x', 'y'], dtype=object)");
+                NDArray fromObjects = strs.ToNDArray();
+                fromObjects.dtype.Should().Be(np.dtypes.StringDType());
+                fromObjects.GetValue(1).Should().Be("y");
+                using PyObject notStrs = py.Eval("np.array(['x', None], dtype=object)");
+                Throws(() => notStrs.ToNDArray()).Should().BeOfType<NotSupportedException>().Which.Message.Should().Contain("NoneType at flat index 1");
 
                 long wcharSize = py.Eval("__import__('array').array('u').itemsize");
                 if (wcharSize != 2)
-                    Assert.Inconclusive("array.array('u') is 4-byte on this platform — it takes the UCS-4 copy route");
+                    Assert.Inconclusive("array.array('u') is 4-byte on this platform — it views as U1 (NumpyU1 / wchar tests cover it)");
                 py.Exec("import array\nwide = array.array('u', 'hi!')");
                 NDArray chars = py.wide;
                 chars.typecode.Should().Be(NPTypeCode.Char);
                 ((char)chars.GetValue(1)).Should().Be('i');
                 chars[0] = 'H';
                 PyStr("wide.tounicode()").Should().Be("Hi!");
+                py.Exec("del texts");
             }
         }
 

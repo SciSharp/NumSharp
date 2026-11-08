@@ -1,0 +1,384 @@
+using System;
+using System.Globalization;
+using System.Numerics;
+using NumSharp.Backends.Iteration;
+
+namespace NumSharp.Backends
+{
+    /// <summary>
+    ///     NumSharp's <see cref="LinalgEngine"/>, the default of <see cref="TensorEngine.Linalg"/>: NumPy's
+    ///     <c>numpy/linalg/_linalg.py</c> statements in NumPy's order - the argument checks (<c>_assert_stacked_2d</c>,
+    ///     <c>_assert_stacked_square</c>, <c>_assert_finite</c>), the dtype rule (<c>_commonType</c>), the text refusals of
+    ///     the <c>_umath_linalg</c> gufuncs' input casts and each function's tail - over ten <c>protected virtual</c>
+    ///     kernels that stand for those gufuncs (<see cref="CholeskyKernel"/>, <see cref="DetKernel"/>,
+    ///     <see cref="SlogdetKernel"/>, <see cref="EigKernel"/>, <see cref="EighKernel"/>, <see cref="InvKernel"/>,
+    ///     <see cref="SolveKernel"/>, <see cref="LstsqKernel"/>, <see cref="QrKernel"/>, <see cref="SvdKernel"/>).
+    /// </summary>
+    /// <remarks>
+    ///     <para><b>The kernels.</b> Each answers an empty operand (an empty matrix or a zero-size batch) itself, without
+    ///     LAPACK (<see cref="LinAlgEmpty"/>), then asks the operand engine's <see cref="TensorEngine.Blas"/>, then falls
+    ///     back: the LU four (det, slogdet, inv, solve) to the managed LU (<see cref="ManagedLu"/>, allclose to NumPy), the
+    ///     other six to <see cref="OpenBlasMissingBackendException"/>. So the bundled OpenBLAS of
+    ///     <c>NumSharp.Interop.OpenBLAS</c> reaches them through <see cref="TensorEngine.Blas"/>, and no subclass is needed
+    ///     for it.</para>
+    ///     <para><b>Deriving.</b> Override a kernel to compute a factorisation another way (MKL, a GPU, a solver of
+    ///     your own): the public members keep running NumPy's statements around it, so the override receives validated
+    ///     operands already cast to the loop dtype (float32, float64 or complex128) and its result goes through NumPy's
+    ///     collapse, casts and result layouts. Call the base kernel for the operands it does not serve (an empty one,
+    ///     another dtype). Assign the instance to <see cref="TensorEngine.Linalg"/> of the cached engine.</para>
+    ///     <para><b>Nested calls.</b> A member never calls back up into a public np.* facade: where NumPy's statement calls
+    ///     another numpy.linalg function (<c>inv</c>, <c>svdvals</c>, <c>norm</c>, <c>solve</c>, ...) or a sibling (pinv's
+    ///     and matrix_rank's <c>svd</c>, the hermitian svd's <c>eigh</c>), it calls this engine's own virtual member, so a
+    ///     subclass that overrides one computes it for every caller; where it calls a main-namespace function
+    ///     (<c>sum</c>, <c>matmul</c>, <c>abs</c>, ...), it calls the member that function's facade dispatches to - the
+    ///     operand engine's <see cref="TensorEngine"/> member, or the array object's (<c>NDArray</c> /
+    ///     <c>UnmanagedStorage</c>) for the allocations, copies and views. The operands are plain arrays: every
+    ///     <c>np.linalg</c> facade is woven and hands a subclass operand in as its plain view, so a facade's subclass path
+    ///     would never run on these calls. The exceptions are <c>np.outer</c> and <c>np.tensordot</c>, whose statements
+    ///     are still
+    ///     their facades' own (no engine member until the np-layer dtype plan's phase P8): their three calls are pinned
+    ///     in ratchet R2's allowlist (np-layer dtype plan, P6b).</para>
+    ///     <para>The statements were the internal operation class <c>LinalgEngine</c> (the np-layer dtype plan's P2) and
+    ///     the kernels the ten <see cref="TensorEngine"/> members of the same names (0.70.0); phase PE's E2 made the class
+    ///     this public sub-engine, and P6b made its statements call members instead of np.* facades. The kernels are
+    ///     <c>Backends/Default/LinearAlgebra/DefaultLinalgEngine.Kernels.cs</c>.</para>
+    /// </remarks>
+    public partial class DefaultLinalgEngine : LinalgEngine
+    {
+        /// <summary>
+        ///     The instance <see cref="TensorEngine.Linalg"/> returns while nothing else is assigned: shared by every engine,
+        ///     because the class holds no state (each kernel reads the Blas of its operand's engine).
+        /// </summary>
+        internal static readonly DefaultLinalgEngine Shared = new();
+
+        /// <summary>
+        ///     Port of <c>_assert_stacked_2d</c> — a stack of matrices needs at least two axes.
+        /// </summary>
+        /// <param name="arrays">The operands, checked in order; the first failing one is reported.</param>
+        /// <exception cref="LinAlgError">An operand of fewer than two axes: <c>{ndim}-dimensional array given. Array must
+        ///     be at least two-dimensional</c>.</exception>
+        internal static void AssertStacked2d(params NDArray[] arrays)
+        {
+            foreach (var a in arrays)
+            {
+                if (a.ndim < 2)
+                    throw new LinAlgError(
+                        string.Create(CultureInfo.InvariantCulture, $"{a.ndim}-dimensional array given. Array must be at least two-dimensional"));
+            }
+        }
+
+        /// <summary>
+        ///     Port of <c>_assert_2d</c> — exactly two axes, no stacking (<c>lstsq</c> and <c>multi_dot</c>).
+        /// </summary>
+        /// <param name="arrays">The operands, checked in order; the first failing one is reported.</param>
+        /// <exception cref="LinAlgError">An operand that is not two-dimensional: <c>{ndim}-dimensional array given. Array
+        ///     must be two-dimensional</c>.</exception>
+        internal static void Assert2d(params NDArray[] arrays)
+        {
+            foreach (var a in arrays)
+            {
+                if (a.ndim != 2)
+                    throw new LinAlgError(string.Create(CultureInfo.InvariantCulture, $"{a.ndim}-dimensional array given. Array must be two-dimensional"));
+            }
+        }
+
+        /// <summary>
+        ///     Port of <c>_assert_stacked_square</c>. NumPy unpacks <c>a.shape[-2:]</c> into two
+        ///     names, so a rank below 2 fails the UNPACK and reports the at-least-2-D message —
+        ///     which is why this repeats that check rather than assuming a caller ran it first.
+        /// </summary>
+        /// <param name="arrays">The operands, checked in order; the first failing one is reported.</param>
+        /// <exception cref="LinAlgError">An operand of fewer than two axes (the at-least-two-dimensional text), or one
+        ///     whose last two axes differ (<c>Last 2 dimensions of the array must be square</c>).</exception>
+        internal static void AssertStackedSquare(params NDArray[] arrays)
+        {
+            foreach (var a in arrays)
+            {
+                if (a.ndim < 2)
+                    throw new LinAlgError(
+                        string.Create(CultureInfo.InvariantCulture, $"{a.ndim}-dimensional array given. Array must be at least two-dimensional"));
+
+                if (a.Shape.dimensions[a.ndim - 2] != a.Shape.dimensions[a.ndim - 1])
+                    throw new LinAlgError("Last 2 dimensions of the array must be square");
+            }
+        }
+
+        /// <summary>
+        ///     Port of <c>_assert_finite</c> — <c>eig</c>/<c>eigvals</c> reject an operand holding
+        ///     inf or NaN (the general eigensolver has no defined answer for them), where
+        ///     <c>eigh</c>/<c>eigvalsh</c> do NOT check.
+        /// </summary>
+        /// <remarks>
+        ///     Only the float family can be non-finite; every integer/bool width — and NumSharp's
+        ///     <c>Decimal</c>/<c>Char</c>, which have no inf/NaN representation — is finite by
+        ///     construction, exactly as NumPy's <c>isfinite</c> is all-True for them. Skipping them
+        ///     is equivalent to NumPy's check and avoids running <c>isfinite</c> on a dtype NumPy has
+        ///     no loop for. Runs BEFORE <see cref="CommonType"/>, so a float16 NaN reports this
+        ///     message rather than the "unsupported in linalg" one — matching NumPy's order.
+        ///     <para>
+        ///     NumPy's <c>isfinite(a).all()</c> is answered by the fused single-pass
+        ///     <see cref="Backends.Kernels.FiniteScan.IsAllFinite"/> (the <c>asarray_chkfinite</c> kernel: the
+        ///     same predicate per dtype, every layout) instead of a bool temp plus a reduction — on the small
+        ///     matrices numpy.polynomial's <c>{p}roots</c> hands eigvals that temp was ~0.4 µs of a ~10 µs call.
+        ///     </para>
+        /// </remarks>
+        /// <param name="arrays">The operands to check (any dtype, any layout).</param>
+        /// <exception cref="LinAlgError"><c>Array must not contain infs or NaNs</c> — an operand holds ±inf or a NaN
+        ///     (a complex one in either component).</exception>
+        /// <exception cref="TypeError">An operand holds text: NumPy's <c>isfinite</c> has no string loop, raised whatever
+        ///     the operand's size — for fixed-width strings the legacy resolver's <c>ufunc 'isfinite' not supported for the
+        ///     input types, ...</c>, for <c>StringDType</c> the dispatcher's <c>ufunc 'isfinite' did not contain a loop with
+        ///     signature matching types &lt;class 'numpy.dtypes.StringDType'&gt; -&gt; None</c>.</exception>
+        internal static void AssertFinite(params NDArray[] arrays)
+        {
+            foreach (var a in arrays)
+            {
+                // NumPy's isfinite(a) resolves its loop before it reads an element: a string operand (even an empty
+                // one) is refused by the legacy type resolver.
+                // A StringDType operand puts a new-style DType into the dispatch key: the dispatcher names its class.
+                if (Backends.Strings.NDStringUfuncs.IsVString(a))
+                    throw Backends.Strings.NDStringUfuncs.VStringNoLoop("isfinite", new[] { Backends.Strings.NDStringUfuncs.UnaryDispatchClass(a) });
+                if (Backends.Strings.NDStringUfuncs.IsString(a))
+                    throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("isfinite");
+                bool floaty = a.typecode is NPTypeCode.Half or NPTypeCode.Single
+                    or NPTypeCode.Double or NPTypeCode.Complex;
+                if (floaty && !Backends.Kernels.FiniteScan.IsAllFinite(a))
+                    throw new LinAlgError("Array must not contain infs or NaNs");
+            }
+        }
+
+        /// <summary>
+        ///     The refusal NumPy's <c>_umath_linalg</c> gufunc raises when one of its operands holds fixed-width
+        ///     strings: <c>_commonType</c> puts a string operand in its <c>rt = double</c> branch, so the gufunc runs
+        ///     with a <c>d-&gt;d</c> (or, beside a complex operand, <c>D-&gt;D</c>) signature, and its input-cast check
+        ///     refuses the text before LAPACK sees anything — an EMPTY string operand included.
+        /// </summary>
+        /// <param name="gufunc">The <c>_umath_linalg</c> gufunc NumPy calls (<c>"inv"</c>, <c>"cholesky_lo"</c>,
+        ///     <c>"svd_f"</c>, <c>"solve1"</c>, ...).</param>
+        /// <param name="operands">The gufunc's inputs, in its order; nothing happens when none holds strings.</param>
+        /// <exception cref="TypeError">The first string operand: <c>Cannot cast ufunc 'inv' input from
+        ///     dtype('&lt;U2') to dtype('float64') with casting rule 'same_kind'</c> (a multi-input gufunc names the
+        ///     input: <c>input 1</c>). NumPy's UFuncTypeError, a TypeError.</exception>
+        /// <remarks>
+        ///     Call it right after <see cref="CommonType"/> (whose "unsupported in linalg" refusal of float16 / decimal /
+        ///     char comes first, as NumPy's <c>_commonType</c> runs before the gufunc) and before any core-dimension
+        ///     check, which NumPy's gufunc makes after it resolves the loop.
+        /// </remarks>
+        internal static void ThrowIfTextGufunc(string gufunc, params NDArray[] operands)
+        {
+            int first = -1;
+            bool complex = false;
+            for (int i = 0; i < operands.Length; i++)
+            {
+                var op = operands[i];
+                if (op is null)
+                    continue;
+                if (first < 0 && Backends.Strings.NDStringUfuncs.IsText(op))
+                    first = i;
+                if (op.typecode == NPTypeCode.Complex)
+                    complex = true;
+            }
+            if (first < 0)
+                return;
+            // _commonType: any complex operand makes the loop complex128, a string or any other operand float64.
+            string target = complex ? "complex128" : "float64";
+            string input = operands.Length > 1 ? string.Create(CultureInfo.InvariantCulture, $"input {first}") : "input";
+            throw new TypeError(
+                $"Cannot cast ufunc '{gufunc}' {input} from {operands[first].dtype.ToString(true)} to dtype('{target}') " +
+                "with casting rule 'same_kind'");
+        }
+
+        /// <summary>
+        ///     Port of <c>_commonType</c> — the dtype a LAPACK route produces.
+        /// </summary>
+        /// <param name="arrays">The operands whose dtypes decide the loop.</param>
+        /// <returns><see cref="NPTypeCode.Complex"/> when any operand is complex, else <see cref="NPTypeCode.Double"/>
+        ///     when any operand is float64, bool, an integer or text, else <see cref="NPTypeCode.Single"/> (every operand
+        ///     float32).</returns>
+        /// <exception cref="TypeError">An operand of float16, decimal or char: <c>array type float16 is unsupported in
+        ///     linalg</c> (the dtype's name in place of float16).</exception>
+        /// <remarks>
+        ///     NumPy's rule, probed against 2.4.2: bool and every integer widen to
+        ///     <c>float64</c>; <c>float32</c> and <c>float64</c> keep their width; complex stays
+        ///     complex. <c>float16</c> is REJECTED rather than widened
+        ///     ("array type float16 is unsupported in linalg"), and NumSharp's two dtypes with no
+        ///     NumPy counterpart — <c>Decimal</c> and <c>Char</c> — take the same exit, since a
+        ///     LAPACK routine has no loop for them either.
+        /// </remarks>
+        internal static NPTypeCode CommonType(params NDArray[] arrays)
+        {
+            bool isComplex = false;
+            bool wideningToDouble = false;
+
+            foreach (var a in arrays)
+            {
+                switch (a.typecode)
+                {
+                    case NPTypeCode.Complex:
+                        isComplex = true;
+                        break;
+                    case NPTypeCode.Single:
+                        break;
+                    case NPTypeCode.Double:
+                        wideningToDouble = true;
+                        break;
+                    case NPTypeCode.Half:
+                    case NPTypeCode.Decimal:
+                    case NPTypeCode.Char:
+                        throw new TypeError($"array type {NumpyName(a.typecode)} is unsupported in linalg");
+                    default:
+                        // bool, every integer width and the string classes: NumPy's `rt = double` branch for any
+                        // non-inexact type (a string operand is then refused by the gufunc's input cast,
+                        // ThrowIfTextGufunc).
+                        wideningToDouble = true;
+                        break;
+                }
+            }
+
+            if (isComplex)
+                return NPTypeCode.Complex;
+
+            return wideningToDouble ? NPTypeCode.Double : NPTypeCode.Single;
+        }
+
+        /// <summary>The name NumPy prints for a dtype in the "unsupported in linalg" rejection.</summary>
+        /// <param name="typeCode">The refused dtype (float16, decimal or char).</param>
+        /// <returns><c>float16</c>, <c>decimal</c>, <c>char</c>, or the lower-cased type code for any other.</returns>
+        private static string NumpyName(NPTypeCode typeCode)
+            => typeCode switch
+            {
+                NPTypeCode.Half => "float16",
+                NPTypeCode.Decimal => "decimal",
+                NPTypeCode.Char => "char",
+                _ => typeCode.ToString().ToLowerInvariant()
+            };
+
+        /// <summary>
+        ///     Casts an operand to the dtype the factorisation runs at. Validation happens before
+        ///     this, so a rejected dtype never reaches a cast.
+        /// </summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="common">The loop dtype (<see cref="CommonType"/>'s answer).</param>
+        /// <returns><paramref name="a"/> itself when it already has the dtype, else a cast copy (a temporary the calling
+        ///     <c>[NDScoped]</c> body reclaims).</returns>
+        internal static NDArray ToCommon(NDArray a, NPTypeCode common)
+            => a.typecode == common ? a : a.TensorEngine.Cast(a, common.AsType(), copy: false);
+
+        /// <summary>
+        ///     NumPy's main-namespace <c>matmul(x1, x2)</c> as numpy.linalg's statements call it (matrix_power's products,
+        ///     pinv's recombination): the member <see cref="np.matmul"/> dispatches to,
+        ///     <see cref="TensorEngine.Matmul(NDArray, NDArray, NDArray, int[][], int?, bool?, DType, string, char)"/> of
+        ///     <paramref name="x1"/>'s engine, with every keyword at np.matmul's default.
+        /// </summary>
+        /// <param name="x1">The left operand (its engine computes the product).</param>
+        /// <param name="x2">The right operand.</param>
+        /// <returns>The matrix product, a fresh array (a 1-D operand's inserted axis dropped, as np.matmul's).</returns>
+        /// <exception cref="ValueError">The core dimensions do not match, or the stacked axes do not broadcast (NumPy's
+        ///     gufunc texts).</exception>
+        /// <remarks>
+        ///     Not this engine's <see cref="Matmul(NDArray, NDArray)"/>: that is <c>np.linalg.matmul</c>, a public virtual
+        ///     member a subclass may override, and NumPy's numpy.linalg statements call the core matmul, not the Array-API
+        ///     wrapper. The operands are plain arrays, so np.matmul's class rule would not fire on this call.
+        /// </remarks>
+        internal static NDArray CoreMatmul(NDArray x1, NDArray x2)
+            => x1.TensorEngine.Matmul(x1, x2, null, null, null, null, null, "same_kind", 'K');
+
+        /// <summary>
+        ///     NumPy's main-namespace <c>dot(a, b, out)</c> as numpy.linalg's statements call it (multi_dot's chain, norm's
+        ///     <c>x.dot(x)</c>): the member <see cref="np.dot"/> dispatches to,
+        ///     <see cref="TensorEngine.Dot(NDArray, NDArray, NDArray)"/> of <paramref name="a"/>'s engine.
+        /// </summary>
+        /// <param name="a">The left operand (its engine computes the product).</param>
+        /// <param name="b">The right operand.</param>
+        /// <param name="out">np.dot's out array (no cast, no broadcast: <c>new_array_for_sum</c>'s check), or null.</param>
+        /// <returns>The product: <paramref name="out"/> itself when given, else a fresh array (a 0-d one for two
+        ///     vectors).</returns>
+        /// <exception cref="IncorrectShapeException">Misaligned operands (np.dot's <c>shapes (2,3) and (2,3) not
+        ///     aligned</c> text).</exception>
+        /// <exception cref="ValueError">An out array np.dot refuses (shape, dtype or contiguity).</exception>
+        /// <remarks>The operands are plain arrays, so np.dot's matrix rule would not fire on this call.</remarks>
+        internal static NDArray CoreDot(NDArray a, NDArray b, NDArray @out)
+            => a.TensorEngine.Dot(a, b, @out);
+
+        /// <summary>
+        ///     Element-wise <c>|x|²</c> as a REAL array — NumPy's <c>(x.conj() * x).real</c>, rounded as NumPy rounds it.
+        /// </summary>
+        /// <param name="x">The operand (a float or complex dtype, or decimal: norm converts the others first).</param>
+        /// <returns>A fresh array: for a complex operand the float64 real part of NumPy's complex product
+        ///     <c>conj(x) * x</c>, <c>fma(re, re, round(im * im))</c>; otherwise <c>x * x</c> in the operand's dtype.</returns>
+        /// <remarks>
+        ///     <para>
+        ///     Spelled out rather than composed from <c>abs</c> because for a complex operand
+        ///     <c>abs(z)² = hypot(re, im)²</c> is NOT <c>re² + im²</c>: the intermediate square
+        ///     root rounds, so a Frobenius norm built that way drifts from NumPy's.
+        ///     </para>
+        ///     <para>
+        ///     NumPy's complex multiply is <c>simd_cmul</c>: the real part is <c>muladdsub(a_re, b_re, a_im * b_im)</c>,
+        ///     one fused multiply-subtract over a rounded product. With <c>a = conj(x)</c> and <c>b = x</c> that is
+        ///     <c>re * re - (-im * im)</c>: the square of the real part fused with the rounded square of the imaginary part,
+        ///     one rounding of the sum where <c>re * re + im * im</c> rounds twice (probed on 20,000 random values: the
+        ///     two-rounding sum differs on 16 % of them, the fused one on none, contiguous or strided). A real operand's
+        ///     <c>x.conj()</c> is a copy of it, so the product is <c>x * x</c>, which keeps a NaN's sign where
+        ///     <c>|x| * |x|</c> cleared it.
+        ///     </para>
+        ///     <para>
+        ///     Not modelled: which NaN the complex product returns when its operands hold several (the MSVC-compiled
+        ///     <c>simd_cmul</c>'s operand order decides it), so a complex NaN's sign or payload can differ.
+        ///     </para>
+        ///     <para>
+        ///     The complex walk is one two-operand <see cref="NDIterRef"/> in C order (the engine's own iterator, no
+        ///     np.nditer facade), disposed by its <c>using</c>: the iterator owns a native state block.
+        ///     </para>
+        /// </remarks>
+        [NDScopedCovered /* only callers: the norm helpers, themselves covered under the [NDScoped] norm entries */]
+        internal static unsafe NDArray AbsSquared(NDArray x)
+        {
+            // np.multiply(x, x)'s member: a real operand's x.conj() is a copy of it, so NumPy's product is x * x.
+            if (x.typecode != NPTypeCode.Complex)
+                return x.TensorEngine.Multiply(x, x);
+
+            // np.zeros(x.shape, float64)'s own allocation (a zero-filled, C-ordered owner), without the call up into np.*.
+            // bound to x's engine, the engine whose np.linalg call this is (the shared sub-engine has none of its own)
+            var magnitudes = x.TensorEngine.NewArray(NPTypeCode.Double, new Shape(x.Shape.dimensions, copy: false), true);
+
+            // ONE iterator over the operand and the result, pinned to 'C': a multi-operand iterator pairs the elements of
+            // the same index, so each z lands in its own slot whatever x's layout (strided, transposed, reversed,
+            // broadcast), the pairing the two lockstep C-order walks this replaced made. No op_dtypes and no BUFFERED flag:
+            // the chunks are complex128 and float64 in place, never a cast copy. An empty x runs no chunk; a 0-d x one
+            // chunk of one element.
+            using var it = NDIterRef.MultiNew(2, new[] {x, magnitudes}, NDIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING,
+                new[] {NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY});
+            it.ForEach(s_absSquaredLoop);
+            return magnitudes;
+        }
+
+        /// <summary>
+        ///     <see cref="AbsSquared"/>'s complex inner loop as an iterator kernel (<see cref="NDIterRef.ForEach"/>'s
+        ///     contract). One delegate for the process, so a call allocates nothing for it.
+        /// </summary>
+        private static readonly unsafe NDInnerLoopFunc s_absSquaredLoop = AbsSquaredChunk;
+
+        /// <summary>
+        ///     One inner-loop chunk of <see cref="AbsSquared"/>'s complex branch: <paramref name="count"/> complex128
+        ///     elements from <c>dataptrs[0]</c> and as many float64 slots from <c>dataptrs[1]</c>, each walked with its own
+        ///     byte stride (any sign; a chunk of one element may report 0).
+        /// </summary>
+        /// <param name="dataptrs">The chunk starts: the operand's, then the result's.</param>
+        /// <param name="strides">The two byte strides, in the same order.</param>
+        /// <param name="count">The chunk's element count.</param>
+        /// <param name="auxdata">Unused.</param>
+        private static unsafe void AbsSquaredChunk(void** dataptrs, long* strides, long count, void* auxdata)
+        {
+            byte* src = (byte*)dataptrs[0];
+            byte* dst = (byte*)dataptrs[1];
+            long srcStride = strides[0], dstStride = strides[1];
+            for (long i = 0; i < count; i++, src += srcStride, dst += dstStride)
+            {
+                Complex z = *(Complex*)src;
+                // simd_cmul's real lane for conj(x) * x: re * re fused with the rounded im * im (remarks).
+                *(double*)dst = Math.FusedMultiplyAdd(z.Real, z.Real, z.Imaginary * z.Imaginary);
+            }
+        }
+    }
+}

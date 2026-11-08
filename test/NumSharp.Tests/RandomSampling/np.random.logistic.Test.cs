@@ -101,13 +101,13 @@ public class RandomLogisticTests : TestClass
     [TestMethod]
     public void Logistic_NegativeScale_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.logistic(0, -1, 5));
+        Assert.ThrowsException<ValueError>(() => np.random.logistic(0, -1, 5));
     }
 
     [TestMethod]
     public void Logistic_DefaultScalar_NegativeScale_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.logistic(0, -1));
+        Assert.ThrowsException<ValueError>(() => np.random.logistic(0, -1));
     }
 
     [TestMethod]

@@ -4,26 +4,41 @@ namespace NumSharp
 {
     public static partial class np
     {
-        public static NDArray asarray(string data)
-        {
-            var nd = new NDArray(typeof(string), Array.Empty<long>());
-            nd.ReplaceData(new string[] {data});
-            return nd;
-        }
+        /// <summary>
+        ///     NumPy's <c>np.asarray('abc')</c>: a 0-d fixed-width Unicode array holding <paramref name="data"/> (see
+        ///     <see cref="array(string)"/>).
+        /// </summary>
+        /// <param name="data">The text.</param>
+        /// <returns>A 0-d <c>U</c> array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="data"/> is null.</exception>
+        public static NDArray asarray(string data) => array(data);
 
+        /// <summary>
+        ///     NumPy's <c>np.asarray(2)</c>: a new 0-d array holding one C# value. Like <c>np.array(2)</c>, the
+        ///     result is an explicit 0-d ARRAY (<see cref="NDArray.IsExplicitZeroDimArray"/>): a matrix multiplied by
+        ///     it takes NumPy's 1 x 1 matrix route instead of scaling.
+        /// </summary>
+        /// <typeparam name="T">The value's type; it must map to a NumSharp dtype.</typeparam>
+        /// <param name="data">The value.</param>
+        /// <returns>A new writeable 0-d array that owns its one element.</returns>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> has no NumSharp dtype.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
         public static NDArray asarray<T>(T data) where T : struct
         {
-            var nd = new NDArray(typeof(T), Array.Empty<long>());
+            var nd = new NDArray(typeof(T), new Shape(Array.Empty<long>(), copy: false));
             nd.ReplaceData(new T[] {data});
-            return nd;
+            return nd.MarkExplicitZeroDimArray();
         }
 
-        public static NDArray asarray(string[] data, int ndim = 1)
-        {
-            var nd = new NDArray(typeof(string), new Shape(data.Length));
-            nd.ReplaceData(data);
-            return nd;
-        }
+        /// <summary>
+        ///     NumPy's <c>np.asarray(['a', 'bb'])</c>: a 1-D fixed-width Unicode array (see <see cref="array(string[])"/>).
+        /// </summary>
+        /// <param name="data">The values.</param>
+        /// <param name="ndim">Kept for source compatibility; a string vector is always 1-D.</param>
+        /// <returns>The <c>U</c> array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="data"/> is null.</exception>
+        /// <exception cref="NotSupportedException">An entry is null (an <c>object</c> array in NumPy).</exception>
+        public static NDArray asarray(string[] data, int ndim = 1) => array(data);
 
         public static NDArray asarray<T>(T[] data, int ndim = 1) where T : struct
         {
@@ -36,13 +51,30 @@ namespace NumSharp
         ///     Convert the input to an ndarray, matching NumPy 2.x semantics.
         ///     If <paramref name="a"/> already satisfies the requested dtype/layout, it is returned as-is — no copy.
         /// </summary>
-        /// <param name="a">Input ndarray.</param>
+        /// <param name="a">Input ndarray. A C# literal (<c>np.asarray(1000, np.int8)</c>, whose 0-d array is marked
+        ///     <see cref="NDArray.WasPythonLiteral"/>) is NumPy's Python scalar: with a <paramref name="dtype"/> it is packed
+        ///     with NumPy's range checks into a new array, not cast.</param>
         /// <param name="dtype">Requested dtype. <c>null</c> keeps the input dtype.</param>
         /// <param name="order">'C' (row-major), 'F' (column-major), 'A' (any contiguous), 'K' (keep — default). 'A'/'K' never force a copy on layout grounds.</param>
         /// <param name="copy">Tri-state: <c>null</c> = copy only if needed (default), <c>true</c> = always copy, <c>false</c> = never copy (raises if a copy would be required).</param>
         /// <param name="like">Reference array for array-function dispatch — accepted for NumPy parity but has no observable effect in NumSharp.</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted.</param>
-        /// <returns>NDArray with the requested dtype and memory layout. Returns <paramref name="a"/> when no copy is needed.</returns>
+        /// <returns>NDArray with the requested dtype and memory layout. Returns <paramref name="a"/> when no copy is needed.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="a"/> is null (Python's <c>None</c>) and
+        ///     <paramref name="dtype"/> is null: NumPy builds an object array, a dtype NumSharp does not have. With a dtype,
+        ///     <c>None</c> is the 0-d array of its setitem value (NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c>, a
+        ///     <c>StringDType</c> NA object).</exception>
+        /// <exception cref="ValueError">An unsupported <paramref name="device"/> (NumPy's <c>Device not understood. Only "cpu"
+        ///     is allowed, but received: ...</c>).</exception>
+        /// <exception cref="ArgumentException"><paramref name="copy"/> is <c>false</c> and a copy (or a C# literal's or
+        ///     <c>None</c>'s conversion) is required.</exception>
+        /// <exception cref="OverflowException">A C# literal out of <paramref name="dtype"/>'s integer range (NumPy's
+        ///     OverflowError texts).</exception>
+        /// <exception cref="ValueError">A float NaN literal into an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="TypeError">A complex literal into a real <paramref name="dtype"/>, or <c>None</c> into an integer
+        ///     (or <c>decimal</c>) <paramref name="dtype"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
         public static NDArray asarray(
             NDArray a,
@@ -52,48 +84,17 @@ namespace NumSharp
             NDArray like = null,
             string device = null)
         {
-            if (a is null)
-                throw new ArgumentNullException(nameof(a));
 
-            // Only "cpu" is supported (matches NumPy 2.x). null is treated as "default".
-            if (device != null && !string.Equals(device, "cpu", StringComparison.Ordinal))
-                throw new ArgumentException(
-                    $"Device not understood. Only \"cpu\" is allowed, but received: {device}",
-                    nameof(device));
+
+            // Only "cpu" is supported (matches NumPy 2.x). null is treated as "default". The creation functions' one check
+            // (PyArray_DeviceConverterOptional), with NumPy's ValueError text.
+            DeviceArguments.ValidateDevice(device);
 
             // `like` exists for NumPy's __array_function__ dispatch protocol. NumSharp has
             // no array-subclass dispatch, so the value is accepted but never read.
             _ = like;
 
-            bool typeMatches = dtype == null || a.typecode == dtype.GetTypeCode();
-            bool layoutMatches = LayoutAlreadyOK(a.Shape, order);
-            bool noCopyNeeded = typeMatches && layoutMatches;
-
-            if (copy == true)
-            {
-                char physical = OrderResolver.Resolve(order, a.Shape);
-                if (!typeMatches)
-                    return a.astype(dtype, copy: true, order: physical);
-                return a.copy(physical);
-            }
-
-            if (copy == false && !noCopyNeeded)
-                throw new ArgumentException(
-                    "Unable to avoid copy while creating an array as requested.\n" +
-                    "If using `np.array(obj, copy=False)` replace it with `np.asarray(obj)` " +
-                    "to allow a copy when needed (no behavior change in NumPy 1.x).\n" +
-                    "For more details, see " +
-                    "https://numpy.org/devdocs/numpy_2_0_migration_guide.html#adapting-to-changes-in-the-copy-keyword.",
-                    nameof(copy));
-
-            if (noCopyNeeded)
-                return a;
-
-            // copy == null && !noCopyNeeded: copy / cast as required.
-            char physical2 = OrderResolver.Resolve(order, a.Shape);
-            if (!typeMatches)
-                return a.astype(dtype, copy: true, order: physical2);
-            return a.copy(physical2);
+            return NDArray.asarray(a, dtype, order, copy);
         }
 
         /// <summary>
@@ -126,7 +127,7 @@ namespace NumSharp
         /// <summary>
         ///     Convert a <see cref="MemoryView"/> to an ndarray, taking a NumPy-style dtype string
         ///     (e.g. <c>"float32"</c>, <c>"&lt;i4"</c>). See
-        ///     <see cref="asarray(MemoryView, Type, char, bool?, NDArray, string)"/>.
+        ///     <see cref="asarray(MemoryView, DType, char, bool?, NDArray, string)"/>.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
         public static NDArray asarray(
@@ -140,33 +141,6 @@ namespace NumSharp
             if (buffer is null)
                 throw new ArgumentNullException(nameof(buffer));
             return asarray(buffer.obj, dtype, order, copy, like, device);
-        }
-
-        /// <summary>
-        ///     Returns true when <paramref name="shape"/>'s memory layout already satisfies the requested
-        ///     order ('C', 'F', 'A', 'K'). Mirrors NumPy's <c>STRIDING_OK</c> macro:
-        ///     'A' and 'K' impose no layout constraint, so a copy is never forced for layout reasons.
-        /// </summary>
-        private static bool LayoutAlreadyOK(Shape shape, char order)
-        {
-            switch (order)
-            {
-                case 'C':
-                case 'c':
-                    return shape.IsContiguous;
-                case 'F':
-                case 'f':
-                    return shape.IsFContiguous;
-                case 'A':
-                case 'a':
-                case 'K':
-                case 'k':
-                    return true;
-                default:
-                    throw new ArgumentException(
-                        $"order must be one of 'C', 'F', 'A', 'K' (got '{order}')",
-                        nameof(order));
-            }
         }
     }
 }

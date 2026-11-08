@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -33,7 +34,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Gets the shape based on given <see cref="indicies"/> and the index offset (C-Contiguous) inside the current storage.
+        ///     Gets the shape based on given <paramref name="indicies"/> and the index offset (C-Contiguous) inside the current storage.
         /// </summary>
         /// <param name="indicies">The selection of indexes 0 based.</param>
         /// <returns></returns>
@@ -88,7 +89,7 @@ namespace NumSharp
             // fire — see the remarks on Shape.AddressesAnElement.
             long boundSize = bufferSize > 0 ? bufferSize : size;
             if (offset >= boundSize && AddressesAnElement(dim))
-                throw new IndexOutOfRangeException($"The offset {offset} is out of range in Shape {boundSize}");
+                throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"The offset {offset} is out of range in Shape {boundSize}"));
 
             if (ndims == dimensions.Length)
                 return (Scalar, offset);
@@ -100,7 +101,7 @@ namespace NumSharp
 
             //TODO! This is not full support of sliced,
             //TODO! when sliced it usually diverts from this function but it would be better if we add support for sliced arrays too.
-            return (new Shape(innerShape), offset);
+            return (new Shape(innerShape, copy: false), offset);
         }
 
 
@@ -116,13 +117,13 @@ namespace NumSharp
         public static unsafe void InferNegativeCoordinates(long[] dimensions, long* coords, int coordsCount)
         {
             if (coordsCount > dimensions.Length)
-                throw new IndexError($"too many indices for array: array is {dimensions.Length}-dimensional, but {coordsCount} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {dimensions.Length}-dimensional, but {coordsCount} were indexed"));
             for (int i = 0; i < coordsCount; i++)
             {
                 var curr = coords[i];
                 var dim = dimensions[i];
                 if (curr < -dim || curr >= dim)
-                    throw new IndexError($"index {curr} is out of bounds for axis {i} with size {dim}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {curr} is out of bounds for axis {i} with size {dim}"));
                 if (curr < 0)
                     coords[i] = dim + curr;
             }

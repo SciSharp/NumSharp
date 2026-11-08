@@ -13,11 +13,15 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Invert(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "invert", nd, null, @out, where);
             // NumPy validation order (probed 2.4.2): where parse -> loop
             // resolution -> input cast -> out cast -> shape.
             ValidateWhereMask(where);
 
+            // StringDType has no invert loop: the dispatcher names its class ("... matching types <class
+            // 'numpy.dtypes.StringDType'> -> None"), where a fixed-width operand meets the legacy resolver's text below.
+            if (Strings.NDStringUfuncs.IsVString(nd))
+                Strings.NDStringUfuncs.ThrowIfUnary("invert", nd, typeCode, @out, where);
             var inputType = nd.typecode;
             var loopType = typeCode ?? inputType;
             bool inputIntLike = inputType == NPTypeCode.Boolean || NDExprTypeRules.IsIntegerKind(inputType);

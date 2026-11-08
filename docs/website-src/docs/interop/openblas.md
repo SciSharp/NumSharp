@@ -102,8 +102,8 @@ scipy's LP64 build (`scipy_cblas_*`), stock LP64 (`cblas_*`) - so MKL, Accelerat
 symbols are required (`gemm`, `gemv`, `syrk`, `dot`, `axpy`, each in s/d); OpenBLAS' thread,
 core-name and build-info entry points are used when present, and a provider without them works fine.
 
-Two maintainer details worth knowing: the binaries are **not in git** - `tools/openblas-manifest.json`
-is the checked-in pin and `fetch_openblas.py` stages them, verifying **two** SHA-256 hashes per RID
+Two maintainer details worth knowing: the binaries are **not in git** - `src/NumSharp.Interop.OpenBLAS/tools/openblas-manifest.json`
+is the checked-in pin and `fetch_openblas.py` beside it stages them, verifying **two** SHA-256 hashes per RID
 (the wheel's from PyPI, then the extracted library's own) so a re-pointed URL or mutated artifact
 fails loudly. And the license expression is compound (`Apache-2.0 AND BSD-3-Clause-Attribution AND
 BSD-2-Clause AND (GPL-3.0-or-later WITH GCC-exception-3.1)`, full text in
@@ -179,6 +179,11 @@ but non-binding**:
 ```csharp
 OpenBlasEngine.Enable(@"C:\opt\openblas\libopenblas.dll");   // binding - exactly this file, or throw
 ```
+
+Switch libraries only while no other thread computes. `Enable(path)` with another file than the one
+loaded frees the library it replaces, and a BLAS call that another thread is still executing in it is an
+access violation that ends the process (4 of 4 processes in a race probe). `Disable()` never frees a
+library, so it is safe at any time, and re-enabling the library that is already loaded frees nothing.
 
 ```bash
 NUMSHARP_OPENBLAS_LIBRARY=/opt/blas/libopenblas.so ./app   # binding - the env spelling of the same
@@ -474,7 +479,9 @@ The package implements NumSharp's `IBlasBackend` and assigns it to the engine's 
 `TensorEngine.Blas` property from its module initializer. The engine is **not** replaced or
 subclassed - deliberately: an `NDArray` binds its engine at construction and `np.dot(a, b)`
 dispatches on `a.TensorEngine`, so swapping the engine would only reach arrays created afterwards,
-while a property on the cached singleton takes effect for arrays that already exist.
+while a property on the engine takes effect for arrays that already exist. The package installs on
+`TensorEngine.Default` as it is when the package loads; an engine you assign to `TensorEngine.Default`
+later has its own `Blas`, so copy it over (`engine.Blas = TensorEngine.Default.Blas;`) first.
 
 ```csharp
 // The entire Core-side surface:
@@ -574,7 +581,8 @@ by a test. The fifteen cover the rest of what NumPy routes through this same bin
 | Group | Members | When no backend answers |
 |---|---|---|
 | Products (CBLAS) | `TryInner`, `TryVdot`, `TryVecdot`, `TryMatvec`, `TryVecmat` | **managed kernels compute it** - the invariant holds |
-| Factorisations (LAPACK) | `TryCholesky`, `TryDet`, `TrySlogdet`, `TryEig`, `TryEigh`, `TryInv`, `TryLstsq`, `TryQr`, `TrySolve`, `TrySvd` | **`NotSupportedException`** - Core ships no managed LU/QR/SVD/eigensolver, so there is nothing to fall back to; the message names the NumPy API, the LAPACK routine and the `Try*` member to implement |
+| Factorisations, LU family | `TryDet`, `TrySlogdet`, `TrySolve`, `TryInv` | **Core's managed LU computes it** - `np.linalg.det` / `slogdet` / `solve` / `inv` answer without a backend |
+| Factorisations (LAPACK) | `TryCholesky`, `TryEig`, `TryEigh`, `TryLstsq`, `TryQr`, `TrySvd` | **`OpenBlasMissingBackendException`** (a `NotSupportedException`) - Core ships no managed QR/SVD/eigensolver, so there is nothing to fall back to; the message names the NumPy API, the package to reference and the `Try*` member that serves it |
 
 LAPACK sits on the *same* property because it lives inside the very binary already bundled:
 scipy-openblas ships `gesv` / `getrf` / `potrf` / `geev` / `syevd` / `heevd` / `gesdd` / `geqrf` /

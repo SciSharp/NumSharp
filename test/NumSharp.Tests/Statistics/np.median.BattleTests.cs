@@ -214,6 +214,68 @@ public class np_median_BattleTests
         At(m, 1).Should().Be(4.0);
     }
 
+    // ── complex with a NaN: NumPy's _median_nancheck ──────────────────────
+
+    /// <summary>Python's <c>float('nan')</c>: the POSITIVE quiet NaN (.NET's <see cref="double.NaN"/> is the negative one).</summary>
+    private static readonly double PyNaN = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
+
+    /// <summary>A complex result's two parts as raw bits, so a NaN's sign and payload are compared too.</summary>
+    /// <param name="z">The value.</param>
+    /// <returns>(real bits, imaginary bits).</returns>
+    private static (long, long) Bits(Complex z) => (BitConverter.DoubleToInt64Bits(z.Real), BitConverter.DoubleToInt64Bits(z.Imaginary));
+
+    /// <summary>
+    ///     np.median of complex data holding a NaN in either part returns the ELEMENT NumPy's complex order puts last
+    ///     (<c>_median</c> partitions with kth -1, <c>_median_nancheck</c> returns that element when it is NaN): the order is
+    ///     <c>[R + Rj, R + nanj, nan + Rj, nan + nanj]</c>, <c>R + nanj</c> by its real part, <c>nan + Rj</c> by its imaginary
+    ///     part. NumPy 2.4.2's answers (probed); NumSharp gave the mean of the middle values with .NET's NaN-first sort
+    ///     (the np-layer plan's NL2).
+    /// </summary>
+    [TestMethod]
+    public void Median_Complex_WithANaN_IsTheElementNumPysOrderPutsLast()
+    {
+        Complex C(double re, double im) => new(re, im);
+        (string Name, Complex[] Data, Complex Expected)[] cases =
+        {
+            ("[1+2j, nan+1j, 3, 4+1j]", new[] { C(1, 2), C(PyNaN, 1), C(3, 0), C(4, 1) }, C(PyNaN, 1)),
+            ("[1+nanj, 2, 3]", new[] { C(1, PyNaN), C(2, 0), C(3, 0) }, C(1, PyNaN)),
+            ("[1+nanj, nan+1j, 2+3j]", new[] { C(1, PyNaN), C(PyNaN, 1), C(2, 3) }, C(PyNaN, 1)),
+            ("[nan+5j, nan+1j, 2]", new[] { C(PyNaN, 5), C(PyNaN, 1), C(2, 0) }, C(PyNaN, 5)),
+            ("[1+nanj, 3+nanj, 2]", new[] { C(1, PyNaN), C(3, PyNaN), C(2, 0) }, C(3, PyNaN)),
+            ("[nan+nanj, nan+1j, 2]", new[] { C(PyNaN, PyNaN), C(PyNaN, 1), C(2, 0) }, C(PyNaN, PyNaN)),
+            ("[3+nanj, 1+nanj, 2, 5]", new[] { C(3, PyNaN), C(1, PyNaN), C(2, 0), C(5, 0) }, C(3, PyNaN)),
+            ("[nan+1j]", new[] { C(PyNaN, 1) }, C(PyNaN, 1)),
+            ("[1+1j, 2, 3, 4] (no NaN: the mean of the middle)", new[] { C(1, 1), C(2, 0), C(3, 0), C(4, 0) }, C(2.5, 0)),
+        };
+        foreach (var (name, data, expected) in cases)
+        {
+            using var a = np.array(data);
+            using var m = np.median(a);
+            Bits((Complex)m.GetValue()).Should().Be(Bits(expected), name);
+        }
+    }
+
+    /// <summary>
+    ///     Along an axis the NaN check runs per slice: <c>np.median([[1+2j, nan+1j, 3], [4+1j, 5, 6]], axis=1)</c> is
+    ///     <c>[nan+1j, 5+0j]</c> and <c>np.median([[1, nan+1j], [3, 4]], axis=0)</c> is <c>[2+0j, nan+1j]</c> (NumPy 2.4.2).
+    /// </summary>
+    [TestMethod]
+    public void Median_Complex_WithANaN_AlongAnAxis_ChecksEverySlice()
+    {
+        using (var a = np.array(new[,] { { new Complex(1, 2), new Complex(PyNaN, 1), new Complex(3, 0) }, { new Complex(4, 1), new Complex(5, 0), new Complex(6, 0) } }))
+        using (var m = np.median(a, axis: 1))
+        {
+            Bits((Complex)m.GetValue(0)).Should().Be(Bits(new Complex(PyNaN, 1)));
+            Bits((Complex)m.GetValue(1)).Should().Be(Bits(new Complex(5, 0)));
+        }
+        using (var a = np.array(new[,] { { new Complex(1, 0), new Complex(PyNaN, 1) }, { new Complex(3, 0), new Complex(4, 0) } }))
+        using (var m = np.median(a, axis: 0))
+        {
+            Bits((Complex)m.GetValue(0)).Should().Be(Bits(new Complex(2, 0)));
+            Bits((Complex)m.GetValue(1)).Should().Be(Bits(new Complex(PyNaN, 1)));
+        }
+    }
+
     // ── error paths ──────────────────────────────────────────────────────
 
     [TestMethod]

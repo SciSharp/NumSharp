@@ -68,7 +68,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Get the common type to use for comparison (both operands promoted to this type).
         /// </summary>
-        public NPTypeCode ComparisonType => np._FindCommonScalarType(LhsType, RhsType);
+        public NPTypeCode ComparisonType => ComparisonKernelKey.GetComparisonType(LhsType, RhsType);
 
         public override string ToString() => $"ScalarCmp_{Op}_{LhsType}_{RhsType}";
     }

@@ -1,9 +1,14 @@
+using System;
+
 namespace NumSharp
 {
     public partial class FourierModule
     {
-        // Hermitian transforms — pure compositions of irfft/rfft + np.conjugate + the norm swap,
-        // exactly as numpy/fft/_pocketfft.py defines them. No new engine seam of their own.
+        // Hermitian transforms — compositions of irfft/rfft + conjugate + the norm swap, exactly as
+        // numpy/fft/_pocketfft.py defines them: each is one call into the TensorEngine.Fft sub-engine
+        // (Backends/FftEngine.cs; the default's statements are Backends/Default/Fourier/DefaultFftEngine.Hermitian.cs,
+        // which call the conjugate ufunc's engine member, not np.conjugate), hfft behind NumPy's asarray class
+        // boundary (a numpy.matrix or numpy.char.chararray operand gives a plain array).
 
         /// <summary>
         ///     Compute the FFT of a signal that has Hermitian symmetry (a real spectrum). Defined as
@@ -15,14 +20,26 @@ namespace NumSharp
         /// <param name="axis">Axis over which to compute the FFT (default the last axis).</param>
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Accepted for signature parity; NumPy passes <c>out=None</c> into irfft.</param>
+        /// <returns>The real result, float64; a plain array for a <c>numpy.matrix</c> or <c>numpy.char.chararray</c>
+        ///     operand too.</returns>
+        /// <exception cref="ValueError">A length below 1, or an unknown <paramref name="norm"/> (the inverse
+        ///     transforms' text).</exception>
+        /// <exception cref="IndexError"><paramref name="axis"/> out of range with <paramref name="n"/> omitted.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> out of range with <paramref name="n"/> given.</exception>
+        /// <exception cref="TypeError">A text input (np.conjugate has no string loop).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.hfft.html</remarks>
-        [NDScoped]
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Hfft"/>),
+        ///     on the plain view of a subclass operand: the member's <c>np.conjugate</c> would keep a matrix.</para>
+        /// </remarks>
+        [NDScoped] // what the call leaves (the Fft member and the woven subclass path scope their own)
         public NDArray hfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
-            int nn = n ?? (ShapeAt(a, axis) - 1) * 2;
-            string newNorm = SwapDirection(norm);
-            // NumPy calls irfft with out=None here (the hfft `out` argument is not used).
-            return irfft(np.conjugate(a), nn, axis, newNorm, @out: null);
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Hfft(a, n, axis, norm, @out);
         }
 
         /// <summary>
@@ -35,14 +52,22 @@ namespace NumSharp
         /// <param name="axis">Axis over which to compute the inverse FFT (default the last axis).</param>
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Optional pre-allocated complex output (threaded into rfft and the conjugate).</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ihfft.html</remarks>
-        [NDScoped]
+        /// <returns>The conjugated half spectrum, complex128 (<paramref name="out"/> itself when given).</returns>
+        /// <exception cref="ValueError">A length below 1, an unknown <paramref name="norm"/>, or an
+        ///     <paramref name="out"/> of the wrong shape or read-only.</exception>
+        /// <exception cref="IndexError"><paramref name="axis"/> out of range with <paramref name="n"/> omitted.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> out of range with <paramref name="n"/> given.</exception>
+        /// <exception cref="TypeError">A complex input (rfft's refusal).</exception>
+        /// <exception cref="DTypePromotionError">A text input.</exception>
+        /// <exception cref="TypeError">An <paramref name="out"/> dtype complex128 cannot be cast to under
+        ///     same_kind.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ihfft.html
+        ///     <para>Computed by <see cref="TensorEngine.Fft"/> of the operand's engine (<see cref="FftEngine.Ihfft"/>).</para></remarks>
         public NDArray ihfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
-            int nn = n ?? ShapeAt(a, axis);
-            string newNorm = SwapDirection(norm);
-            var outp = rfft(a, nn, axis, newNorm, @out);
-            return np.conjugate(outp, @out);
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            return a.TensorEngine.Fft.Ihfft(a, n, axis, norm, @out);
         }
     }
 }

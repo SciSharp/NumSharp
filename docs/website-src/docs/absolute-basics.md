@@ -56,11 +56,35 @@ a.shape;    // (2, 3) → long[] { 2, 3 }
 
 Run them in a `dotnet run` file-based app, LINQPad, a console project, or a C# notebook. The `// →`/`//` text is the output, not code.
 
+<a id="ndw020"></a>
+A file-based app (`dotnet run app.cs`) starts with two lines, `#:package NumSharp@<version>` and
+`#:property PublishAot=false`. Without the second, the app runs as Native AOT would, where .NET cannot run code
+generated at run time, and NumSharp's first array arithmetic (`x * 2`, `x > 0.5`, `np.sqrt(x)`) throws
+`PlatformNotSupportedException: Dynamic code generation is not supported on this platform`. The build says so
+first: any project that references NumSharp with `PublishAot=true` gets warning NDW021, which names the line to
+add (`<PublishAot>false</PublishAot>` in a project file). NumSharp does not support Native AOT; a project that
+only uses NumSharp's types can silence the warning with `-p:NumSharpDisableAotWarning=true`.
+
 ---
 
 ## Why use NumSharp?
 
 .NET arrays (`int[]`, `double[,]`) and `List<T>` are excellent general-purpose containers. But for **large quantities of same-type numeric data** processed with whole-array math, an `NDArray` is faster and far more convenient: one type holds any rank, operations vectorize (SIMD) with no explicit loops, and slicing shares memory instead of copying. NumSharp shines exactly where NumPy does - bulk homogeneous numeric work on the CPU.
+
+---
+
+NumSharp also holds **text** arrays: labels, categories, fixed-width byte fields and variable-width strings. Their shapes, views and indexing work like numeric arrays, with string operations for comparing, searching and transforming the values.
+
+## Arrays of text
+
+```csharp
+var labels = np.array(new[] { "pear", "fig", "apple", "fig" }); // U5
+var sorted = np.sort(labels);                                  // ['apple' 'fig' 'fig' 'pear']
+var (values, counts) = np.unique(labels, return_counts: true);   // ['apple' 'fig' 'pear'], [1 2 1]
+var first = labels.item(0);                                    // "pear", a C# string
+```
+
+The default string array is **fixed-width Unicode**: here each element has room for five code points, so a longer write would be cut. Use `np.array(texts, np.dtypes.StringDType())` for text that can grow, or `np.dtypes.StringDType(na_object: null)` for missing values. Byte strings use `S`, and C# `char` values remain a separate UTF-16 code-unit dtype. The [strings and chararrays guide](fundamentals/strings-and-bytes.md) explains all four and `np.@char` (NumPy's `numpy.char`).
 
 ---
 
@@ -689,7 +713,7 @@ np.savetxt("np.csv", a, fmt: "%.2f", delimiter: ",", header: "1,2,3,4");
 
 `np.loadtxt` reads columns with `usecols`, skips headers with `skiprows`, and takes a `delimiter` - see [I/O with NumSharp](fundamentals/io.md).
 
-> **Mixed / labeled CSVs** (string *and* numeric columns, like a `music.csv` with an `Artist` name column) don't fit a single homogeneous `NDArray`, and NumSharp has no structured/string dtype. For those, use a .NET CSV/dataframe library or pandas through the [pythonnet bridge](interop/pandas.md), then hand the numeric columns to NumSharp. See [Structured arrays](fundamentals/structured-arrays.md) for why and the alternatives.
+> **Mixed / labeled CSVs** still need one dtype per `NDArray`, not one dtype per column. Read text columns with `np.loadtxt(..., dtype: np.dtypes.StringDType(), usecols: ...)` and numeric columns into separate numeric arrays, or load every field as text and cast selected columns. This does not create a structured dtype. A .NET dataframe library or [pandas](interop/pandas.md) is another option for heterogeneous tables; see [Structured arrays](fundamentals/structured-arrays.md).
 
 ---
 

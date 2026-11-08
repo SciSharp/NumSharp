@@ -14,6 +14,20 @@ namespace NumSharp.Backends.Kernels
         //   irrelevant — the bits are copied verbatim), so ONE size-parameterised
         //   kernel covers every sub-word dtype: 1B {bool,u8,i8}, 2B {i16,u16,char,f16}.
         //
+        //   DEINTERLEAVE NEVER READS PAST THE VIEW (fixed 2026-10-10; shared by the SubwordNarrow,
+        //   SubwordWiden and half-to-bool kernels, which use the same two loads):
+        //     A group of N results needs the elements s[2i], s[2i+2], ..., s[2i+2N-2]. Two loads of
+        //     N elements each starting at s[2i] and s[2i+N] cover s[2i .. 2i+2N-1]: ONE element past
+        //     the last one they need. When the view's last element is its buffer's last element (the
+        //     form a[1::2] of an even-length buffer, or a[::2] of an odd-length one), that element is
+        //     outside the buffer, and a buffer that ends at the end of a mapped region made the copy
+        //     an access violation: np.zeros(163840, np.uint8)[1::2].copy() ended the process (a zeroed
+        //     array of 128 KB or more is its own VirtualAlloc region).
+        //     So the SECOND load starts one element EARLY, at s[2i+N-1]. Its lanes then hold the
+        //     wanted elements in their HIGH half (lane k = unwanted s[2i+N-1+2k] below, wanted
+        //     s[2i+N+2k] above), and a logical right shift by one element width replaces the mask:
+        //     the same number of instructions, and the load ends exactly on s[2i+2N-2].
+        //
         //   For a strided view the generic MemoryCopy-strategy strided kernel detects
         //   a unit-stride inner axis (Buffer.MemoryCopy per row) but falls to a SCALAR
         //   per-element inner loop for any non-unit inner stride — the documented
@@ -119,13 +133,15 @@ namespace NumSharp.Backends.Kernels
                     if (ss == 1) { Buffer.MemoryCopy(s, d, innerN, innerN); i = innerN; }
                     else if (ss == 2)
                     {
-                        // d[i] = s[2i]: read contiguous shorts (oddByte<<8|evenByte), mask odd to 0,
+                        // d[i] = s[2i]: read contiguous shorts (oddByte<<8|evenByte), mask odd to 0 (first
+                        // load) or shift the wanted byte down (second load, one byte early),
                         // VPACKUSWB the low bytes, VPERMQ to undo the pack's lane interleave.
                         for (; i + 32 <= innerN; i += 32)
                         {
                             var v0 = Vector256.Load((short*)(s + 2 * i));
-                            var v1 = Vector256.Load((short*)(s + 2 * i + 32));
-                            var p = Avx2.PackUnsignedSaturate(Avx2.And(v0, mask), Avx2.And(v1, mask));
+                            // One byte early, so the load ends ON the group's last element (2i+62): see the header.
+                            var v1 = Vector256.Load((ushort*)(s + 2 * i + 31));
+                            var p = Avx2.PackUnsignedSaturate(Avx2.And(v0, mask), Avx2.ShiftRightLogical(v1, 8).AsInt16());
                             Vector256.Store(Avx2.Permute4x64(p.AsInt64(), 0xD8).AsByte(), d + i);
                         }
                     }
@@ -183,13 +199,15 @@ namespace NumSharp.Backends.Kernels
                     if (ss == 1) { Buffer.MemoryCopy(s, d, innerN * 2, innerN * 2); i = innerN; }
                     else if (ss == 2)
                     {
-                        // d[i] = s[2i]: read contiguous ints (oddShort<<16|evenShort), mask odd to 0,
+                        // d[i] = s[2i]: read contiguous ints (oddShort<<16|evenShort), mask odd to 0 (first
+                        // load) or shift the wanted short down (second load, one element early),
                         // VPACKUSDW the low shorts, VPERMQ to undo the pack's lane interleave.
                         for (; i + 16 <= innerN; i += 16)
                         {
                             var v0 = Vector256.Load((int*)(s + 2 * i));
-                            var v1 = Vector256.Load((int*)(s + 2 * i + 16));
-                            var p = Avx2.PackUnsignedSaturate(Avx2.And(v0, mask), Avx2.And(v1, mask));
+                            // One element early, so the load ends ON the group's last element (2i+30): see the header.
+                            var v1 = Vector256.Load((uint*)(s + 2 * i + 15));
+                            var p = Avx2.PackUnsignedSaturate(Avx2.And(v0, mask), Avx2.ShiftRightLogical(v1, 16).AsInt32());
                             Vector256.Store(Avx2.Permute4x64(p.AsInt64(), 0xD8).AsInt16(), d + i);
                         }
                     }

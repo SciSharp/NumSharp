@@ -5,13 +5,6 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     The gufunc signature <c>np.matmul</c> matches its core dimensions against. The <c>?</c>
-        ///     marks OPTIONAL core dimensions: a 1-D operand drops its <c>n?</c>/<c>m?</c>, which is
-        ///     how <c>matmul</c> promotes a vector operand.
-        /// </summary>
-        internal const string MatmulSignature = "(n?,k),(k,m?)->(n?,m?)";
-
-        /// <summary>
         ///     Matrix product of two arrays — the gufunc <c>(n?,k),(k,m?)-&gt;(n?,m?)</c>, with NumPy's
         ///     full keyword surface.
         /// </summary>
@@ -42,7 +35,8 @@ namespace NumSharp
         ///     Casting rule (default <c>"same_kind"</c>, the ufunc default) gating BOTH the input→loop
         ///     cast a <paramref name="dtype"/> forces and the product→<paramref name="out"/> cast.
         /// </param>
-        /// <param name="order">Memory layout of the result — <c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
+        /// <param name="order">Memory layout of the result — <c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>, in either
+        ///     case (NumPy's order converter).</param>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.matmul.html
         ///     <para>
@@ -58,206 +52,39 @@ namespace NumSharp
         ///     does; <c>subok</c> concerns ndarray subclasses NumSharp does not have). A
         ///     <paramref name="out"/> with a wrong CORE dim reports NumPy's verbatim core-dimension
         ///     message; extra leading LOOP dims broadcast (replicating the product, as NumPy does), and
-        ///     the rarer genuine loop-dimension mismatch raises <c>copyto</c>'s broadcast
-        ///     <c>ValueError</c> whose wording differs from NumPy's leaked iterator text (the same
-        ///     latitude the siblings take).
+        ///     a loop-dimension mismatch raises the ValueError texts of NumPy's gufunc iterator, before the
+        ///     product runs (<c>GufuncGuard.CheckLoopBroadcast</c>).
+        ///     </para>
+        ///     <para>
+        ///     The result is NumPy's output object: a fresh array that owns its data, its loop axes in the
+        ///     inputs' K order and its core axes innermost (with <paramref name="order"/> 'K'), the C or F
+        ///     order of the iterator's axes otherwise, remapped by <paramref name="axes"/>; two vectors give
+        ///     the 0-d stand-in of NumPy's scalar (an owner, read-only).
+        ///     </para>
+        ///     <para>
+        ///     The whole call is the engine member
+        ///     <c>TensorEngine.Matmul(x1, x2, out, axes, axis, keepdims, dtype, casting, order)</c> since the np-layer
+        ///     dtype plan's P2; this function's woven subclass path answers for a numpy.matrix operand.
         ///     </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <returns>The matrix product, or <paramref name="out"/> when one is given (a text <paramref name="out"/> receives
+        ///     each product as its scalar's <c>str()</c>).</returns>
+        /// <exception cref="TypeError">Text operands or a string <paramref name="dtype"/> (no matmul loop), <c>keepdims</c>
+        ///     or <c>axis</c> (NumPy's matmul refusals); a null <paramref name="casting"/> (<c>casting must be str, not
+        ///     NoneType</c>).</exception>
+        /// <exception cref="ValueError">An <paramref name="order"/> letter or a <paramref name="casting"/> name NumPy
+        ///     refuses, with its texts.</exception>
+        /// <exception cref="INumSharpException">A read-only <paramref name="out"/> (NumPy's ValueError "output array is
+        ///     read-only").</exception>
+        /// <exception cref="TypeError">A cast <paramref name="casting"/> refuses (NumPy's UFuncTypeError text).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="x1"/> or <paramref name="x2"/> is null.</exception>
         [NDScoped]
         public static NDArray matmul(NDArray x1, NDArray x2, NDArray @out = null, int[][] axes = null,
             int? axis = null, bool? keepdims = null, DType dtype = null, string casting = "same_kind",
             char order = 'K')
         {
-            RequireOrder(order);
-            RequireCasting(casting);
-            GufuncGuard.RejectAxisWithAxes(axes, axis);
-
-            if (keepdims.HasValue)
-                throw new TypeError(
-                    $"matmul does not support keepdims: its signature {MatmulSignature} requires " +
-                    "output 0 to have 2 core dimensions, but keepdims can only be used when all inputs " +
-                    "have the same number of core dimensions and all outputs have no core dimensions.");
-
-            if (axis.HasValue)
-                throw new TypeError(
-                    "matmul: axis can only be used with a single shared core dimension, not with the " +
-                    $"3 distinct ones implied by signature {MatmulSignature}.");
-
-            // A read-only out refuses FIRST — probed 2.4.2: NumPy's gufunc machinery reports
-            // "output array is read-only" ahead of the core-dimension mismatch error, so the guard
-            // sits before any out-shape validation below.
-            if (@out is not null)
-                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
-
-            var a = x1;
-            var b = x2;
-            int[] outputAxes = Array.Empty<int>();
-
-            // matmul's core RANKS depend on each operand's ndim (the n?/m? optional dims): a 1-D
-            // operand carries a single core dim, a >=2-D operand two; the output carries one per
-            // input that kept its optional dim (so 0 for the 1-D·1-D dot). Computed unconditionally
-            // because the out= shape validator needs it to tell a core dim from a loop dim.
-            int outputCore = (x1.ndim == 1 ? 0 : 1) + (x2.ndim == 1 ? 0 : 1);
-            if (axes is not null)
-            {
-                int op0Core = x1.ndim == 1 ? 1 : 2;
-                int op1Core = x2.ndim == 1 ? 1 : 2;
-
-                // matmul's output entry is NEVER omittable — its signature output (n?,m?) is treated
-                // as having core axes even when both optionals vanish (the 1-D·1-D dot), so all THREE
-                // entries are required. NumPy's shared NormalizeAxes would wrongly allow a 2-entry
-                // list when the effective output core rank is 0; guard that here (the output entry's
-                // LENGTH is still validated against the effective rank, so `[(-1,),(-1,),()]` passes
-                // for the dot while `[(-1,),(-1,)]` does not).
-                if (axes.Length != 3)
-                    throw new ValueError(
-                        "axes should be a list with an entry for all 3 inputs and outputs; entries " +
-                        "for outputs can only be omitted if none of them has core axes.");
-
-                var resolved = GufuncGuard.NormalizeAxes("matmul", axes, new[] {op0Core, op1Core, outputCore}, x1, x2);
-                RequireNoRepeatedAxes(resolved);
-                outputAxes = resolved[2];
-
-                // Bring each operand's core axes to the trailing positions the kernel expects; the
-                // result's own core axes are relocated to `outputAxes` after the product runs.
-                a = BringCoreToEnd(a, resolved[0]);
-                b = BringCoreToEnd(b, resolved[1]);
-            }
-
-            // A dtype= request selects the loop: validate each input reaches it under `casting`, then
-            // cast so the product (and the backend route) run at that dtype.
-            if (dtype is not null)
-            {
-                var loopType = dtype.GetTypeCode(); // a descriptor-only class raises its own descriptive "no storage yet"
-                ValidateMatmulCast(a.typecode, loopType, casting, "input 0");
-                ValidateMatmulCast(b.typecode, loopType, casting, "input 1");
-                a = a.astype(dtype, copy: false);
-                b = b.astype(dtype, copy: false);
-            }
-
-            var result = a.TensorEngine.Matmul(a, b);
-
-            if (outputAxes.Length > 0)
-                result = PlaceOutputCore(result, outputAxes);
-
-            result = ApplyMatmulOrder(result, order, x1, x2);
-
-            if (@out is null)
-                return result;
-
-            // out cast is validated BEFORE the shape (probed order), then the shape, then the copy.
-            ValidateMatmulCast(result.typecode, @out.typecode, casting, "output");
-            ValidateMatmulOutputShape(result, @out, outputCore);
-            np.copyto(@out, result, "unsafe");   // cast already validated
-            return @out;
-        }
-
-        /// <summary>Moves an operand's core axes to its trailing positions (the kernel's canonical layout).</summary>
-        private static NDArray BringCoreToEnd(NDArray operand, int[] coreAxes)
-        {
-            var dest = new int[coreAxes.Length];
-            for (int i = 0; i < coreAxes.Length; i++)
-                dest[i] = operand.ndim - coreAxes.Length + i;
-            return moveaxis(operand, coreAxes, dest);
-        }
-
-        /// <summary>
-        ///     Relocates the product's core axes (currently trailing) to the positions <c>axes[2]</c>
-        ///     named, validated against the OUTPUT rank (unknown until the product ran).
-        /// </summary>
-        private static NDArray PlaceOutputCore(NDArray result, int[] outputAxes)
-        {
-            var dest = new int[outputAxes.Length];
-            for (int i = 0; i < outputAxes.Length; i++)
-            {
-                int ax = outputAxes[i] < 0 ? outputAxes[i] + result.ndim : outputAxes[i];
-                if (ax < 0 || ax >= result.ndim)
-                    throw new AxisError(outputAxes[i], result.ndim);
-                dest[i] = ax;
-            }
-
-            var src = new int[outputAxes.Length];
-            for (int i = 0; i < outputAxes.Length; i++)
-                src[i] = result.ndim - outputAxes.Length + i;
-            return moveaxis(result, src, dest);
-        }
-
-        /// <summary>
-        ///     NumPy's per-entry "axes item {i} has value {v} repeated" (a <c>ValueError</c> with NO
-        ///     name prefix), checked on the NORMALIZED input axes and the raw output axes, in order.
-        /// </summary>
-        private static void RequireNoRepeatedAxes(int[][] entries)
-        {
-            for (int i = 0; i < entries.Length; i++)
-            {
-                var entry = entries[i];
-                for (int k = 0; k < entry.Length; k++)
-                    for (int j = k + 1; j < entry.Length; j++)
-                        if (entry[k] == entry[j])
-                            throw new ValueError($"axes item {i} has value {entry[k]} repeated");
-            }
-        }
-
-        /// <summary>
-        ///     matmul's <c>order=</c> layout: <c>'F'</c> → column-major, <c>'A'</c> → column-major only
-        ///     when BOTH inputs are, else C, and <c>'C'</c>/<c>'K'</c> → the product's natural
-        ///     C-contiguous output (so the default <c>'K'</c> is a no-op — the pre-keyword fast path).
-        /// </summary>
-        private static NDArray ApplyMatmulOrder(NDArray result, char order, NDArray x1, NDArray x2)
-        {
-            switch (order)
-            {
-                case 'C':
-                    return ascontiguousarray(result);
-                case 'F':
-                    return asfortranarray(result);
-                case 'A':
-                    return (x1.Shape.IsFContiguous && x2.Shape.IsFContiguous)
-                        ? asfortranarray(result)
-                        : ascontiguousarray(result);
-                default:   // 'K'
-                    return result;
-            }
-        }
-
-        /// <summary>A ufunc cast gate: reports NumPy's verbatim "Cannot cast ufunc 'matmul' {role} …".</summary>
-        private static void ValidateMatmulCast(NPTypeCode from, NPTypeCode to, string casting, string role)
-        {
-            if (from == to || np.can_cast(from, to, casting))
-                return;
-            throw new ArgumentException(
-                $"Cannot cast ufunc 'matmul' {role} from dtype('{from.AsNumpyDtypeName()}') to " +
-                $"dtype('{to.AsNumpyDtypeName()}') with casting rule '{casting}'");
-        }
-
-        /// <summary>
-        ///     Validates <paramref name="out"/>'s CORE dims (the trailing <paramref name="outputCore"/>)
-        ///     against the product's — they must match exactly, reporting NumPy's verbatim
-        ///     core-dimension message on mismatch. The leading LOOP dims are left to <c>copyto</c>,
-        ///     which broadcasts the product into <paramref name="out"/> (so an out with extra leading
-        ///     dims replicates the product, exactly as NumPy does) and raises on a real loop mismatch.
-        /// </summary>
-        private static void ValidateMatmulOutputShape(NDArray result, NDArray @out, int outputCore)
-        {
-            int rn = result.ndim, on = @out.ndim;
-            // Only the TRAILING `outputCore` dims are the product's CORE dims — out must match them
-            // EXACTLY (NumPy's verbatim core-dimension message on mismatch). The remaining leading
-            // dims are LOOP dims the product BROADCASTS into, so out may carry any broadcast-compatible
-            // loop shape — INCLUDING extra leading dims of any size, which NumPy fills by replicating
-            // the product (probed: out=(5,2,2) for a (2,2) product is 5 copies). Those are left to
-            // copyto (called next), which broadcasts the product into out and raises on a genuine
-            // loop-dim mismatch. `on < outputCore` (out missing a core dim) also falls to copyto.
-            if (on < outputCore)
-                return;
-            for (int c = 0; c < outputCore; c++)
-            {
-                long resDim = result.shape[rn - outputCore + c];
-                long outDim = @out.shape[on - outputCore + c];
-                if (outDim != resDim)
-                    throw new ValueError(
-                        $"matmul: Output operand 0 has a mismatch in its core dimension {c}, " +
-                        $"with gufunc signature {MatmulSignature} (size {outDim} is different from {resDim})");
-            }
+            return x1.TensorEngine.Matmul(x1, x2, @out, axes, axis, keepdims, dtype, casting, order);
         }
     }
 }

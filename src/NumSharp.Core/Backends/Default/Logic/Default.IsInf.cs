@@ -21,10 +21,12 @@ namespace NumSharp.Backends
         /// </remarks>
         public override NDArray IsInf(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "isinf", a, null, @out, where);
             // typeCode is validate-only: isinf has bool-output loops only
             // (NumPy: dtype=bool is a no-op, anything else raises no-loop).
-            ValidateBoolLoopDtype(typeCode, "isinf");
+            ValidateBoolLoopDtype(typeCode, "isinf", a);
+            // isinf has no string loop; under dtype=bool the input cast to the bool loop is what fails (probed).
+            Strings.NDStringUfuncs.ThrowIfUnary("isinf", a, UfuncLoopCode(dtype));
 
             // Plain call: keep the typed NDArray<bool> instance (TensorEngine
             // contract — operators/casts rely on it).
@@ -41,7 +43,7 @@ namespace NumSharp.Backends
 
             // ufunc out=/where=: rides the shared unary Into-path with a
             // Boolean loop dtype (the predicate body emits bool at the INPUT
-            // dtype); a non-bool out engages the windowed bool→X flush. Returns
+            // dtype); a non-bool out engages the buffered bool→X write-back. Returns
             // the provided out (no MakeGeneric — out may be any numeric dtype).
             return ExecuteUnaryOp(a, UnaryOp.IsInf, NPTypeCode.Boolean, @out, where);
         }

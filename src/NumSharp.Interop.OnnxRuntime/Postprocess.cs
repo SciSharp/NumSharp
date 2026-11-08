@@ -1,76 +1,179 @@
 using System;
 
+// Post-processing lives in the ONNX Runtime bridge alone, where raw logits come from. The ML.NET bridge references this
+// package and so exposes the very same type: there is ONE public Postprocess (NumSharp.Interop.OnnxRuntime.Postprocess).
+// It used to be one source file compiled into both bridges under each bridge's namespace, which gave an app that
+// imports both namespaces two types of one name (CS0104), and an F# script the silent "last namespace opened wins".
+// The owner's decision of 2026-11-03 (the 0.80.0-beta1 QA's F16 / P6).
 namespace NumSharp.Interop.OnnxRuntime
 {
     /// <summary>
-    ///     The output side of inference, as NumSharp compositions instead of hand-written loops: the
-    ///     softmax / argmax / top-k every classification tutorial re-implements with <c>Math.Exp</c>,
-    ///     <c>OrderByDescending().Take(k)</c> and a <c>GetMaxValueIndex</c> loop. Nothing here is a new kernel —
-    ///     each method is a few <c>np.*</c> calls over the NDArray a model output became
-    ///     (<see cref="NDArrayOnnxInterop.ToNDArray(Microsoft.ML.OnnxRuntime.OrtValue)"/> /
-    ///     <see cref="NDArrayOnnxInterop.AsNDArray(Microsoft.ML.OnnxRuntime.OrtValue, bool)"/>), kept in a
-    ///     separate type so the conversion verbs stay conversion-only.
-    ///
-    ///     <para>Dtypes follow NumPy's ufunc rules: float inputs keep their precision (a float32 logit vector
-    ///     gives a float32 softmax), integer inputs land on NumPy's float tier for <c>exp</c>
-    ///     (int8 → float16, int16 → float32, int32+ → float64); feed float32/float64 logits for predictable
-    ///     results. Values agree with ORT's own <c>Softmax</c> / <c>ArgMax</c> / <c>TopK</c> operators to floating
-    ///     point tolerance (the tests run both on the same data).</para>
+    ///     The output side of inference as NumSharp compositions instead of hand-written loops: the softmax, argmax
+    ///     and top-k that every classification post-step re-implements with <c>Math.Exp</c>,
+    ///     <c>OrderByDescending().Take(k)</c> and a max-index loop. Nothing here is a new kernel: each method is a few
+    ///     <c>np.*</c> calls over the <see cref="NDArray"/> that a model output became. The type is separate from the
+    ///     conversion verbs so that those stay conversion-only.
     /// </summary>
+    /// <remarks>
+    ///     <para><b>Result dtypes follow NumPy's <c>exp</c>.</b> A float input keeps its precision (float32 logits give
+    ///     a float32 softmax). A bool or integer input is computed in the float dtype NumPy's <c>exp</c> loop selects
+    ///     for it: bool, int8 and uint8 in float16; int16, uint16 and char in float32; wider integers in float64.
+    ///     float16 holds about three decimal digits, so cast narrow integers to float32 yourself when you need
+    ///     more.</para>
+    ///     <para><b>The integer input is converted BEFORE the arithmetic.</b> The subtraction of the maximum and the
+    ///     negation would otherwise run in the integer dtype and wrap: <c>Softmax</c> of the uint8 values
+    ///     <c>[1, 3]</c> computed <c>1 - 3 = 254</c> and returned <c>[NaN, 0]</c>, which is also what
+    ///     <c>scipy.special.softmax</c> returns for that input. These methods return the mathematically correct
+    ///     values instead.</para>
+    /// </remarks>
     public static class Postprocess
     {
         /// <summary>
-        ///     Numerically stable softmax along <paramref name="axis"/>: <c>exp(x - max) / sum(exp(x - max))</c>,
-        ///     the standard <c>scipy.special.softmax</c> formulation (subtracting the row max cannot change the
-        ///     result and prevents overflow). Rows sum to 1.
+        ///     Numerically stable softmax along <paramref name="axis"/>: <c>exp(x - max) / sum(exp(x - max))</c>.
+        ///     Subtracting the maximum cannot change the result and keeps <c>exp</c> from overflowing, so each slice
+        ///     along the axis sums to 1 even for very large logits.
         /// </summary>
+        /// <param name="logits">The scores; any layout. A bool or integer array is computed in its float dtype (see the remarks on the class).</param>
+        /// <param name="axis">The axis the probabilities are normalized over; a negative value counts from the end.</param>
+        /// <returns>A new array of the input's shape, in the input's float dtype (or its float tier for a bool or integer input); the caller disposes it.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="logits"/> is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is out of range for the array (NumSharp's <c>AxisError</c>).</exception>
+        /// <exception cref="ArgumentException">The array has length 0 along <paramref name="axis"/>: a maximum of nothing has no value.</exception>
+        /// <remarks>
+        ///     A slice that holds <c>+inf</c> or NaN comes back as NaN, as <c>scipy.special.softmax</c> returns it:
+        ///     <c>inf - inf</c> is NaN and it reaches the sum.
+        /// </remarks>
         public static NDArray Softmax(NDArray logits, int axis = -1)
         {
             if (logits is null)
                 throw new ArgumentNullException(nameof(logits));
-            using NDArray max = np.max(logits, axis, keepdims: true);
-            using NDArray shifted = logits - max;
-            using NDArray exp = np.exp(shifted);
-            using NDArray sum = np.sum(exp, axis, keepdims: true);
-            return exp / sum;
+            NDArray x = PromoteForExp(logits, out bool owned);
+            try
+            {
+                using NDArray max = np.max(x, axis, keepdims: true);
+                using NDArray shifted = x - max;
+                using NDArray exp = np.exp(shifted);
+                using NDArray sum = np.sum(exp, axis, keepdims: true);
+                return exp / sum;
+            }
+            finally
+            {
+                // The float copy of an integer input is this method's own temporary; a float input is the caller's array.
+                if (owned)
+                    x.Dispose();
+            }
         }
 
         /// <summary>
-        ///     Log-softmax along <paramref name="axis"/>: <c>x - max - log(sum(exp(x - max)))</c> — what
-        ///     cross-entropy / NLL post-processing wants, without the underflow of <c>log(softmax(x))</c>.
+        ///     Log-softmax along <paramref name="axis"/>: <c>x - max - log(sum(exp(x - max)))</c>. Use it where a
+        ///     cross-entropy or negative-log-likelihood step needs log-probabilities: <c>log(softmax(x))</c>
+        ///     underflows to <c>-inf</c> for a small probability, and this form does not.
         /// </summary>
+        /// <param name="logits">The scores; any layout. A bool or integer array is computed in its float dtype (see the remarks on the class).</param>
+        /// <param name="axis">The axis the probabilities are normalized over; a negative value counts from the end.</param>
+        /// <returns>A new array of the input's shape, in the input's float dtype (or its float tier for a bool or integer input); the caller disposes it.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="logits"/> is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is out of range for the array (NumSharp's <c>AxisError</c>).</exception>
+        /// <exception cref="ArgumentException">The array has length 0 along <paramref name="axis"/>.</exception>
+        /// <remarks>
+        ///     A slice whose maximum is not finite follows <c>scipy.special.log_softmax</c>: the maximum is replaced
+        ///     by 0 before the shift. So <c>[inf, 1]</c> gives <c>[NaN, -inf]</c> (the finite element is infinitely
+        ///     less likely than the infinite one) where the plain formula would give NaN for both, and a slice that
+        ///     holds NaN stays all NaN.
+        /// </remarks>
         public static NDArray LogSoftmax(NDArray logits, int axis = -1)
         {
             if (logits is null)
                 throw new ArgumentNullException(nameof(logits));
-            using NDArray max = np.max(logits, axis, keepdims: true);
-            using NDArray shifted = logits - max;
-            using NDArray exp = np.exp(shifted);
-            using NDArray sum = np.sum(exp, axis, keepdims: true);
-            using NDArray logSum = np.log(sum);
-            return shifted - logSum;
+            NDArray x = PromoteForExp(logits, out bool owned);
+            NDArray finiteMax = null;
+            try
+            {
+                using NDArray rawMax = np.max(x, axis, keepdims: true);
+                NDArray max = rawMax;
+                if (HasNonFiniteValues(x.typecode))
+                {
+                    // SciPy's x_max[~isfinite(x_max)] = 0. A maximum of +inf would make the shift inf - inf = NaN for
+                    // the infinite element AND -inf - ... for none: with 0 the finite elements keep their own value
+                    // and end at -inf, the correct limit. The replacement array is built only when a slice needs it
+                    // (the maximum has one element per slice, so the test is cheap).
+                    using NDArray finite = np.isfinite(rawMax);
+                    if (!np.all(finite))
+                    {
+                        using NDArray zeros = np.zeros_like(rawMax);
+                        max = finiteMax = np.where(finite, rawMax, zeros);
+                    }
+                }
+
+                using NDArray shifted = x - max;
+                using NDArray exp = np.exp(shifted);
+                using NDArray sum = np.sum(exp, axis, keepdims: true);
+                using NDArray logSum = np.log(sum);
+                return shifted - logSum;
+            }
+            finally
+            {
+                finiteMax?.Dispose();
+                if (owned)
+                    x.Dispose();
+            }
         }
 
-        /// <summary>Element-wise logistic sigmoid <c>1 / (1 + exp(-x))</c> — multi-label heads and detection confidences.</summary>
+        /// <summary>
+        ///     Element-wise logistic sigmoid <c>1 / (1 + exp(-x))</c>: the probability of a multi-label head, a
+        ///     binary-classifier score or a detection confidence.
+        /// </summary>
+        /// <param name="x">The scores; any layout. A bool or integer array is computed in its float dtype (see the remarks on the class).</param>
+        /// <returns>A new array of the input's shape, in the input's float dtype (or its float tier for a bool or integer input); the caller disposes it.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <remarks>
+        ///     A large negative input makes <c>exp(-x)</c> overflow to <c>+inf</c>, and <c>1 / inf</c> is 0: the
+        ///     correct limit, with no exception. An unsigned or bool input used to be negated in its own dtype, where
+        ///     <c>-1</c> wraps to the largest value, so every non-zero element came back as 0.
+        /// </remarks>
         public static NDArray Sigmoid(NDArray x)
         {
             if (x is null)
                 throw new ArgumentNullException(nameof(x));
-            using NDArray negated = -x;
-            using NDArray exp = np.exp(negated);
-            using NDArray denominator = exp + 1;
-            return 1 / denominator;
+            NDArray v = PromoteForExp(x, out bool owned);
+            try
+            {
+                using NDArray negated = -v;
+                using NDArray exp = np.exp(negated);
+                using NDArray denominator = exp + 1;
+                return 1 / denominator;
+            }
+            finally
+            {
+                if (owned)
+                    v.Dispose();
+            }
         }
 
         /// <summary>
-        ///     Index of the maximum along <paramref name="axis"/> (int64), first occurrence on ties — the same
-        ///     contract as ONNX <c>ArgMax</c> with <c>select_last_index=0</c>: the class id of a classifier, the
-        ///     answer span ends of a BERT QA head.
+        ///     Index of the maximum along <paramref name="axis"/> (int64), the first one on ties: the class id of a
+        ///     classifier, the answer span ends of a question-answering head. The contract is that of ONNX
+        ///     <c>ArgMax</c> with <c>select_last_index = 0</c>.
         /// </summary>
+        /// <param name="scores">The scores; any layout and any dtype <c>np.argmax</c> takes.</param>
+        /// <param name="axis">The axis to search along; a negative value counts from the end.</param>
+        /// <param name="keepdims"><c>true</c> to keep <paramref name="axis"/> in the result with length 1.</param>
+        /// <returns>A new int64 array of indices; the caller disposes it.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="scores"/> is null.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside <c>[-ndim, ndim)</c> for an array of one or more dimensions.</exception>
+        /// <remarks>
+        ///     The axis is checked here and not left to <c>np.argmax</c>: an engine that wraps a too-negative axis
+        ///     (<c>-3</c> on a 2-D array read as axis 1) returns indices along the wrong axis with no error, which a
+        ///     caller cannot tell from a correct answer.
+        /// </remarks>
         public static NDArray Argmax(NDArray scores, int axis = -1, bool keepdims = false)
         {
             if (scores is null)
                 throw new ArgumentNullException(nameof(scores));
+            int ndim = scores.ndim;
+            // A 0-d array is left to np.argmax, which has NumPy's own rule for it (axis 0 and -1 are accepted).
+            if (ndim > 0 && (axis < -ndim || axis >= ndim))
+                throw new AxisError(axis, ndim);
             return np.argmax(scores, axis, keepdims);
         }
 
@@ -85,6 +188,10 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="axis">Axis to rank along (negative counts from the end).</param>
         /// <param name="largest"><c>true</c> for the k largest, <c>false</c> for the k smallest.</param>
         /// <param name="sorted">Accepted for parity with ONNX <c>TopK</c>; the result is always sorted (an unsorted result is a valid sorted one).</param>
+        /// <returns>The values (in the input's dtype) and their int64 indices, each a new array the caller disposes.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="scores"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="scores"/> is 0-d.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is out of range, or <paramref name="k"/> is not in <c>[1, scores.shape[axis]]</c>.</exception>
         public static (NDArray values, NDArray indices) TopK(NDArray scores, int k, int axis = -1, bool largest = true, bool sorted = true)
         {
             if (scores is null)
@@ -127,5 +234,58 @@ namespace NumSharp.Interop.OnnxRuntime
                 return (values, indices);
             }
         }
+
+        /// <summary>
+        ///     The array the exponential-based methods compute on: the input itself for a float, decimal or complex
+        ///     dtype, and a float copy for a bool or integer dtype, in the float dtype NumPy's <c>exp</c> loop selects
+        ///     for it. Converting first is what keeps <c>x - max</c> and <c>-x</c> from wrapping in the integer dtype.
+        /// </summary>
+        /// <param name="x">The caller's array.</param>
+        /// <param name="owned"><c>true</c> when the result is a new array that the caller of this helper must dispose; <c>false</c> when it is <paramref name="x"/> itself.</param>
+        /// <returns><paramref name="x"/>, or its float copy.</returns>
+        /// <remarks>
+        ///     The tiers are NumPy's (<c>np.exp(np.int8(1)).dtype</c> is float16): every value of the narrow integer
+        ///     dtypes is exact in its tier (float16 holds integers up to 2048, float32 up to 2^24). Only int64 and
+        ///     uint64 values past 2^53 round, as they do in <c>np.exp</c> itself.
+        /// </remarks>
+        private static NDArray PromoteForExp(NDArray x, out bool owned)
+        {
+            NPTypeCode tier;
+            switch (x.typecode)
+            {
+                case NPTypeCode.Boolean:
+                case NPTypeCode.SByte:
+                case NPTypeCode.Byte:
+                    tier = NPTypeCode.Half;
+                    break;
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:
+                    tier = NPTypeCode.Single;
+                    break;
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Int64:
+                case NPTypeCode.UInt64:
+                    tier = NPTypeCode.Double;
+                    break;
+                default:
+                    // float16 / float32 / float64, decimal and complex compute in their own dtype: nothing wraps there.
+                    owned = false;
+                    return x;
+            }
+
+            owned = true;
+            return x.astype(tier);
+        }
+
+        /// <summary>
+        ///     Does the dtype have infinities and NaN that <c>np.isfinite</c> tests element by element? Only the three
+        ///     IEEE float dtypes are asked: decimal has neither value, and a complex maximum is left as NumPy orders it.
+        /// </summary>
+        /// <param name="code">The dtype the computation runs in.</param>
+        /// <returns><c>true</c> for float16, float32 and float64.</returns>
+        private static bool HasNonFiniteValues(NPTypeCode code) =>
+            code == NPTypeCode.Half || code == NPTypeCode.Single || code == NPTypeCode.Double;
     }
 }

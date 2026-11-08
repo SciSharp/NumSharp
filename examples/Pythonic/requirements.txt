@@ -1,0 +1,11 @@
+# The Python side of the Pythonic examples. Each library is pinned to the version that the examples were
+# validated with. All of them have binary wheels for Python 3.11, 3.12 and 3.13 on Windows x64, Linux x64
+# and macOS arm64.
+#
+#   python -m venv .venv
+#   .venv\Scripts\python -m pip install -r requirements.txt      (Windows)
+#   .venv/bin/python -m pip install -r requirements.txt          (Linux, macOS)
+
+numpy==2.4.2          # the NumPy release that NumSharp is tested against
+scipy==1.16.3         # scikit-learn computes with it
+scikit-learn==1.9.1

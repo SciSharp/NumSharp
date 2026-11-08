@@ -15,10 +15,19 @@
 #
 # Needs: network (PyPI; the happy path caches after the first run — the tamper
 # steps re-download one ~20 MB wheel per run by design), the .NET SDK.
+# It packs under a pre-release version unique to the run (<VersionPrefix>-gate.<epoch>.<pid>), so the
+# global NuGet packages folder (NUGET_PACKAGES when set) is never written under a PUBLISHED version, and
+# it removes that run-only version's entries from the folder at exit.
 #
 #   bash src/NumSharp.Interop.OpenBLAS/tools/verify_build_override.sh
 # =============================================================================
 set -euo pipefail
+# Checks read captured output through a here-string, `grep -q PAT <<< "$OUT"`, never
+# `echo "$OUT" | grep -q PAT`. Under pipefail, grep -q exits on its first match while echo is still
+# writing; once the capture outgrows the pipe buffer, echo dies of SIGPIPE and the pipeline FAILS
+# for a pattern it FOUND. Measured: 20/20 false "not found" for a match near the top of a large
+# capture. CI run 35856837911 (package-consumer-smoke, macOS) failed verify_build_override.sh
+# step 10 exactly so, on the verbose rebuild log.
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_DIR="$(dirname "$HERE")"
@@ -28,13 +37,30 @@ WORK="$(mktemp -d)"
 # cannot resolve (it would silently break the restore of the scratch consumer) —
 # normalize to a mixed C:/... form both worlds accept.
 command -v cygpath > /dev/null 2>&1 && WORK="$(cygpath -m "$WORK")"
-trap 'rm -rf "$WORK"' EXIT
+# Exit cleanup: the scratch tree, and this run's OWN entries in the global packages folder - the gate version
+# is unique to the run, so nothing else can be restoring it. Both variables are checked first: an unset one
+# must not widen the target (an empty VERSION would name every cached NumSharp version).
+cleanup() {
+    rm -rf "$WORK"
+    if [ -n "${NUGET_ROOT:-}" ] && [ -n "${VERSION:-}" ]; then
+        rm -rf "${NUGET_ROOT:?}/numsharp/${VERSION:?}" "${NUGET_ROOT:?}/numsharp.interop.openblas/${VERSION:?}"
+        # An id folder this run created holds nothing now; rmdir removes only an EMPTY one.
+        rmdir "${NUGET_ROOT:?}/numsharp.interop.openblas" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
 LOG="$WORK/build.log"
 run() { "$@" > "$LOG" 2>&1 || { cat "$LOG" >&2; fail "command failed: $*"; }; }
 
 # The version is the repo-root Directory.Build.props VersionPrefix (the csproj carries no
-# <Version> of its own any more) — ask MSBuild rather than grep a file that no longer has it.
-VERSION="$(cd "$REPO" && dotnet msbuild src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj -getProperty:Version | tr -d '\r')"
+# <Version> of its own any more) — ask MSBuild rather than grep a file that no longer has it —
+# with a pre-release suffix unique to this run (F86). The plain <VersionPrefix> may be PUBLISHED
+# (0.70.0 on strings): evicting it from the shared cache and restoring the local pack there left
+# every other project on the machine that restores NumSharp <VersionPrefix> with THIS build,
+# silently. Numeric identifiers - the run's epoch and PID - never collide; the suffix flows through
+# every build and pack below, and every consumer reference names $VERSION.
+GATE_SUFFIX="gate.$(date +%s).$$"
+VERSION="$(cd "$REPO" && dotnet msbuild src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj -getProperty:Version "-p:VersionSuffix=$GATE_SUFFIX" | tr -d '\r')"
 [ -n "$VERSION" ] || fail "could not read the package version"
 PINNED="$(sed -n 's/.*"distribution_version": "\([^"]*\)".*/\1/p' "$HERE/openblas-manifest.json" | head -1)"
 FEED="$WORK/feed"; mkdir -p "$FEED"
@@ -75,19 +101,19 @@ step "pack NumSharp $VERSION + NumSharp.Interop.OpenBLAS $VERSION into a local f
 # up-to-date after source changes, and dotnet pack defaults to Release on .NET 8+ —
 # a stale Release DLL would get packed silently.
 run dotnet build "$REPO/src/NumSharp.Core/NumSharp.Core.csproj" -t:Rebuild -c Release \
-    -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
+    -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0 "-p:VersionSuffix=$GATE_SUFFIX"
 run dotnet build "$REPO/src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj" -t:Rebuild -c Release \
-    -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
+    -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0 "-p:VersionSuffix=$GATE_SUFFIX"
 run dotnet pack "$REPO/src/NumSharp.Core/NumSharp.Core.csproj" --no-build -c Release -o "$FEED" \
-    -v q --nologo "-clp:ErrorsOnly"
+    -v q --nologo "-clp:ErrorsOnly" "-p:VersionSuffix=$GATE_SUFFIX"
 run dotnet pack "$REPO/src/NumSharp.Interop.OpenBLAS/NumSharp.Interop.OpenBLAS.csproj" --no-build -c Release -o "$FEED" \
-    -v q --nologo "-clp:ErrorsOnly"
+    -v q --nologo "-clp:ErrorsOnly" "-p:VersionSuffix=$GATE_SUFFIX"
 ls "$FEED"/NumSharp.Interop.OpenBLAS."$VERSION".nupkg > /dev/null || fail "interop nupkg missing"
 
-# The scratch consumer must restore THIS pack, not a same-versioned cache entry.
+# The scratch consumer restores THIS pack: the run-unique version has no other cache entry to shadow it, so
+# nothing is evicted first. NUGET_ROOT is read here for the exit cleanup, which removes the run's own entries.
 NUGET_ROOT="$(dotnet nuget locals global-packages --list | sed 's/.*: //' | tr -d '\r')"
 command -v cygpath > /dev/null 2>&1 && NUGET_ROOT="$(cygpath -m "$NUGET_ROOT")"
-rm -rf "$NUGET_ROOT/numsharp/$VERSION" "$NUGET_ROOT/numsharp.interop.openblas/$VERSION"
 
 step "scaffold the consumer"
 cat > "$CONS/nuget.config" <<EOF
@@ -143,9 +169,9 @@ write_csproj "$REF_VERSION"
 grep -q '"mode": "version"' "$RID_MARKER" || fail "version marker missing/wrong at $RID_MARKER"
 grep -q '"required": true' "$RID_MARKER" || fail "version marker must be required"
 RUN="$(cd "$CONS" && dotnet run --no-build 2>/dev/null)"
-echo "$RUN" | grep -q "enabled=True" || fail "backend not enabled at runtime: $RUN"
-echo "$RUN" | grep -q "bundled=False" || fail "a marker-declared override must NOT report IsBundledLibrary: $RUN"
-echo "$RUN" | grep -q "dot00=10" || fail "wrong product: $RUN"
+grep -q "enabled=True" <<< "$RUN" || fail "backend not enabled at runtime: $RUN"
+grep -q "bundled=False" <<< "$RUN" || fail "a marker-declared override must NOT report IsBundledLibrary: $RUN"
+grep -q "dot00=10" <<< "$RUN" || fail "wrong product: $RUN"
 echo "ok"
 
 step "3. rebuild is a cache hit (no download)"
@@ -211,11 +237,12 @@ CACHED="$(find "$CACHE/scipy-openblas64/$PINNED/$RID" -type f ! -name '*.tmp' -p
 echo "    poisoning $CACHED"
 printf 'garbage' > "$CACHED"
 # The rebuild's output is what carries the diagnosis; a failed build must show it, not vanish
-# behind a captured substitution.
+# behind a captured substitution. `|| true`: an excerpt with no matching line must not let
+# pipefail + set -e end the script before `fail` says what went wrong.
 POISON="$(cd "$CONS" && dotnet build -t:Rebuild -v n --nologo 2>&1)" \
-    || { echo "$POISON" | grep -i "error\|NumSharp.Interop.OpenBLAS:" | tail -30; fail "the rebuild after poisoning the cache failed (output above)"; }
-echo "$POISON" | grep -q "DISCARDING poisoned cache entry" || fail "the tampered entry must be detected and discarded"
-echo "$POISON" | grep -q "NumSharp.Interop.OpenBLAS: downloading" || fail "the discarded entry must be re-downloaded"
+    || { grep -i "error\|NumSharp.Interop.OpenBLAS:" <<< "$POISON" | tail -30 || true; fail "the rebuild after poisoning the cache failed (output above)"; }
+grep -q "DISCARDING poisoned cache entry" <<< "$POISON" || fail "the tampered entry must be detected and discarded"
+grep -q "NumSharp.Interop.OpenBLAS: downloading" <<< "$POISON" || fail "the discarded entry must be re-downloaded"
 grep -q '"mode": "version"' "$RID_MARKER" || fail "staging must complete after the self-heal"
 echo "ok"
 
@@ -227,8 +254,8 @@ grep -q '"mode": "version"' "$ROOT_MARKER" || fail "root marker must record the 
 grep -q '"path"' "$ROOT_MARKER" || fail "root marker must point at the custom directory"
 [ ! -f "$RID_MARKER" ] || fail "the stale default-staged marker must be cleared when staging moves to OpenBlasPath"
 COMBRUN="$(cd "$CONS" && NUMSHARP_OPENBLAS_SEARCH_PATH="$PATH_DIR" dotnet run --no-build 2>/dev/null)"
-echo "$COMBRUN" | grep -qi "library=.*pathdir" || fail "runtime must bind from the custom directory: $COMBRUN"
-echo "$COMBRUN" | grep -q "bundled=False" || fail "a custom-dir override is not the bundle: $COMBRUN"
+grep -qi "library=.*pathdir" <<< "$COMBRUN" || fail "runtime must bind from the custom directory: $COMBRUN"
+grep -q "bundled=False" <<< "$COMBRUN" || fail "a custom-dir override is not the bundle: $COMBRUN"
 echo "ok"
 
 step "12. override removed: all markers cleared"
@@ -242,7 +269,7 @@ EMPTY_DIR="$WORK/emptydir"; mkdir -p "$EMPTY_DIR"
 ( cd "$CONS" && NUMSHARP_OPENBLAS_SEARCH_PATH="$EMPTY_DIR" run dotnet build -v q --nologo "-clp:ErrorsOnly" )
 grep -q '"mode": "path"' "$ROOT_MARKER" || fail "path marker missing at $ROOT_MARKER"
 PATHRUN="$(cd "$CONS" && dotnet run --no-build 2>/dev/null)"
-echo "$PATHRUN" | grep -q "bundled=True" || fail "an empty path override must fall through to the bundle: $PATHRUN"
+grep -q "bundled=True" <<< "$PATHRUN" || fail "an empty path override must fall through to the bundle: $PATHRUN"
 ( cd "$CONS" && run dotnet build -v q --nologo "-clp:ErrorsOnly" )
 [ ! -f "$ROOT_MARKER" ] || fail "the path marker must clear once the env override is gone"
 echo "ok"
@@ -255,7 +282,7 @@ grep -q '"mode": "version"' "$WORK/pub-portable/runtimes/$RID/native/openblas.so
 grep -q '"mode": "version"' "$WORK/pub-rid/openblas.source.json" \
     || fail "flattened publish must carry the root marker"
 PUBRUN="$(dotnet "$WORK/pub-rid/consumer.dll" 2>/dev/null)"
-echo "$PUBRUN" | grep -q "bundled=False" || fail "published app must bind the override: $PUBRUN"
+grep -q "bundled=False" <<< "$PUBRUN" || fail "published app must bind the override: $PUBRUN"
 echo "ok"
 
 step "15. the cache holds extracted libraries only (Goal 7: no wheels survive)"

@@ -18,20 +18,15 @@ namespace NumSharp
         ///     resolves to the <c>int8</c> loop (values 0/1); for Complex the imaginary sign is flipped.
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.conjugate.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
         public static NDArray conjugate(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
-            // NumPy's `conjugate` ufunc has NO bool loop: a plain bool input resolves to the smallest
-            // matching loop — int8 — so the result is int8 (values 0/1), NOT bool (probed against
-            // NumPy 2.4.2). Promote here to match. An explicit dtype= selects the loop instead, exactly
-            // as NumPy does (e.g. conjugate(bool, dtype: Double) -> float64).
-            if (dtype is null && x.typecode == NPTypeCode.Boolean)
-                x = x.astype(NPTypeCode.SByte);
             return x.TensorEngine.Conjugate(x, dtype, @out, where);
         }
 
         /// <summary>
-        ///     Alias of <see cref="conjugate(NDArray, NDArray, NDArray, NPTypeCode?)"/> — return the
+        ///     Alias of <see cref="conjugate(NDArray, NDArray, NDArray, DType)"/> — return the
         ///     complex conjugate, element-wise (NumPy: <c>np.conj is np.conjugate</c>).
         /// </summary>
         /// <param name="x">Input array.</param>
@@ -39,6 +34,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): selects the loop and its output dtype.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.conj.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray conj(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => conjugate(x, @out, where, dtype);
     }

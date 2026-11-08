@@ -596,27 +596,22 @@ public class NEP50_TypePromotion
     }
 
     /// <summary>
-    /// Scalar array (0-d) operations use SCALAR-SCALAR promotion, not ARR-SCALAR.
-    ///
-    /// When both operands are scalars, NumSharp uses _FindCommonScalarType,
-    /// which follows different rules than _FindCommonArrayScalarType.
+    /// A NumPy scalar (a strong 0-d array) with a C# literal: the weak literal adopts the scalar's dtype, as it would an
+    /// array's (NEP 50, parity QA-05). Only two strong 0-d operands, or two literals, promote strongly.
     ///
     /// NumPy: python3 -c "import numpy as np; print((np.uint8(10) + 5).dtype)"
     /// Output: uint8 (NEP 50: weak scalar adopts stronger scalar dtype)
-    ///
-    /// NumSharp uses scalar-scalar table which may differ.
     /// </summary>
     [TestMethod]
-    [Misaligned]
-    public void ScalarArray_Operations_UsesScalarScalarPromotion()
+    public void ScalarArray_Operations_WeakLiteralAdoptsTheScalarDtype()
     {
         var arr = NDArray.Scalar((byte)10);
         var result = arr + 5;
 
-        // Note: Scalar + scalar uses _FindCommonScalarType, not _FindCommonArrayScalarType
-        // Current behavior returns int32 (matches C# semantics)
-        result.dtype.Should().Be(np.int32,
-            "Scalar-scalar promotion follows different rules than arr-scalar");
+        result.dtype.Should().Be(np.uint8, "a weak Python int adopts the NumPy scalar's dtype");
+        result.GetByte().Should().Be(15);
+        // Two strong 0-d operands promote strongly: np.uint8(10) + np.int32(5) is int32.
+        (arr + NDArray.Scalar(5)).dtype.Should().Be(np.int32);
     }
 
     #endregion

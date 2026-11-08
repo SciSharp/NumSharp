@@ -1,7 +1,5 @@
 using System;
 using NumSharp.Backends;
-using NumSharp.Backends.Kernels;
-using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -15,28 +13,46 @@ namespace NumSharp
         /// <param name="side">If "left" (default), index of the first suitable location is returned. If "right", the last such index.</param>
         /// <param name="sorter">Optional indices that sort <paramref name="a"/> into ascending order (typically <c>argsort(a)</c>).</param>
         /// <returns>Scalar index for insertion point.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
+        /// <exception cref="ArgumentException"><paramref name="side"/> is not <c>"left"</c> / <c>"right"</c> (NumPy's two
+        ///     ValueError texts).</exception>
+        /// <exception cref="ValueError"><paramref name="a"/> is not 1-D, a sorter of uint64, a sorter whose size differs
+        ///     from <paramref name="a"/>'s, or a sorter index outside <paramref name="a"/> that the search reaches.</exception>
+        /// <exception cref="TypeError">A sorter that is not 1-D (<c>could not parse sorter argument</c>) or not integer
+        ///     (<c>sorter must only contain integers</c>), or a StringDType <paramref name="a"/> whose first comparison with
+        ///     the key Python refuses (<c>'&lt;' not supported between instances of 'str' and 'int'</c>).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html
+        ///     <para>A text <paramref name="a"/> is searched as text: the key is formatted into the common string dtype, as
+        ///     NumPy converts it.</para>
+        ///     <para>The whole call is the engine's (<see cref="TensorEngine.SearchSorted(NDArray, int, string, NDArray)"/>);
+        ///     this function's woven subclass path hands a subclass operand in as its plain view.</para>
+        /// </remarks>
         public static long searchsorted(NDArray a, int v, string side = "left", NDArray sorter = null)
         {
-            ValidateSearchSorted(a, side, sorter);
-            // NumPy searches in result_type(a, v), NEVER casts the key down to a's dtype
-            // (see the NDArray overload below). A C# int literal is a strong int32 scalar.
-            NPTypeCode common = promote_types(a.typecode, NPTypeCode.Int32);
-            NDArray aP = a.typecode == common ? a : a.astype(common);
-            return SearchSortedScalar(aP, Converts.ChangeType(v, common), side == "left", sorter);
+            // NumPy's searchsorted IS PyArray_SearchSorted (the descriptor resolution, the checks, the binary search), and
+            // the whole call is the engine's: DefaultEngine.SearchSorted.
+            return a.TensorEngine.SearchSorted(a, v, side, sorter);
         }
 
         /// <summary>
         /// Find index where a scalar should be inserted to maintain order.
         /// </summary>
+        /// <param name="a">Input 1-D array. Must be sorted ascending unless <paramref name="sorter"/> is provided.</param>
+        /// <param name="v">Value to insert into <paramref name="a"/>.</param>
+        /// <param name="side">If "left" (default), index of the first suitable location is returned. If "right", the last such index.</param>
+        /// <param name="sorter">Optional indices that sort <paramref name="a"/> into ascending order (typically <c>argsort(a)</c>).</param>
+        /// <returns>Scalar index for insertion point.</returns>
+        /// <exception cref="ArgumentException">See <see cref="searchsorted(NDArray, int, string, NDArray)"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="searchsorted(NDArray, int, string, NDArray)"/>.</exception>
+        /// <exception cref="TypeError">See <see cref="searchsorted(NDArray, int, string, NDArray)"/> (the object path's text
+        ///     names <c>'float'</c>).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
+        /// <remarks>The whole call is the engine's (<see cref="TensorEngine.SearchSorted(NDArray, double, string, NDArray)"/>);
+        ///     this function's woven subclass path hands a subclass operand in as its plain view.</remarks>
         public static long searchsorted(NDArray a, double v, string side = "left", NDArray sorter = null)
         {
-            ValidateSearchSorted(a, side, sorter);
-            // A C# double is a strong float64 scalar; NumPy searches a float32 array for a
-            // Python float in float64 too (probed 2.4.2), so promote_types(a, Double) matches.
-            NPTypeCode common = promote_types(a.typecode, NPTypeCode.Double);
-            NDArray aP = a.typecode == common ? a : a.astype(common);
-            return SearchSortedScalar(aP, Converts.ChangeType(v, common), side == "left", sorter);
+            return a.TensorEngine.SearchSorted(a, v, side, sorter);
         }
 
         /// <summary>
@@ -50,130 +66,27 @@ namespace NumSharp
         /// <param name="side">If "left" (default), the index of the first suitable location is returned. If "right", the last such index.</param>
         /// <param name="sorter">Optional indices that sort <paramref name="a"/> into ascending order (typically <c>argsort(a)</c>).</param>
         /// <returns>Array of insertion points with the same shape as <paramref name="v"/>, or a scalar if <paramref name="v"/> is a scalar.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
-        [NDScoped]
+        /// <exception cref="ArgumentException">See <see cref="searchsorted(NDArray, int, string, NDArray)"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="searchsorted(NDArray, int, string, NDArray)"/>; or a StringDType
+        ///     comparison that touched a None-like NA.</exception>
+        /// <exception cref="TypeError">See <see cref="searchsorted(NDArray, int, string, NDArray)"/>; or a U array converted to
+        ///     StringDType (NumPy's 'safe' cast refusal).</exception>
+        /// <exception cref="UnicodeDecodeError">A text search converts bytes that are not ASCII to the common <c>U</c> dtype.</exception>
+        /// <exception cref="DTypePromotionError">Text with an operand that has no common dtype with it.</exception>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> or <paramref name="v"/> is null.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html
+        ///     <para>Text in <paramref name="a"/> or <paramref name="v"/> is searched as NumPy searches it: both converted to
+        ///     their common string dtype (a number formatted, bytes decoded), then NumPy's generic binary search step for step
+        ///     — its monotonic carry and its sorter checks included, so an unsorted haystack gives NumPy's answer too
+        ///     (<see cref="Backends.Sorting.TextSearch"/>).</para>
+        ///     <para>The whole call is the engine's (<see cref="TensorEngine.SearchSorted(NDArray, NDArray, string, NDArray)"/>);
+        ///     this function's woven subclass path hands a subclass operand in as its plain view.</para>
+        /// </remarks>
+        [NDScoped] // what the engine call leaves (the engine reclaims its own temporaries)
         public static NDArray searchsorted(NDArray a, NDArray v, string side = "left", NDArray sorter = null)
         {
-            ValidateSearchSorted(a, side, sorter);
-            bool leftSide = side == "left";
-
-            // NumPy (PyArray_SearchSorted) promotes BOTH the sorted array `a` and the keys `v`
-            // to their common dtype (result_type) and searches there. It must never cast the
-            // keys DOWN to a's dtype — that would truncate/wrap them, e.g.
-            //   searchsorted([1,2,3,4] int, 2.5) == 2, not floor(2.5) giving index 1;
-            //   searchsorted([1,2,3,4] int8, 300) == 4, not (int8)300 giving a wrapped key.
-            NPTypeCode common = promote_types(a.typecode, v.typecode);
-            NDArray aP = a.typecode == common ? a : a.astype(common);
-
-            if (v.Shape.IsScalar)
-            {
-                object scalar = Converts.ChangeType(v.Storage.GetAtIndex(0), common);
-                long idx = SearchSortedScalar(aP, scalar, leftSide, sorter);
-                return NDArray.Scalar(idx);
-            }
-
-            Shape outShape = new Shape(v.shape);
-
-            if (v.size == 0)
-                return new NDArray(NPTypeCode.Int64, outShape, false);
-
-            // Promote v to the common dtype and force contiguous (NumPy: PyArray_CARRAY_RO).
-            NDArray vTyped = EnsureContiguousOfType(v, common);
-            NDArray sorterTyped = (sorter is null) ? null : EnsureContiguousInt64(sorter);
-            NDArray output = new NDArray(NPTypeCode.Int64, outShape, false);
-
-            int elemSize = DirectILKernelGenerator.GetTypeSize(common);
-            unsafe
-            {
-                bool contigA = aP.Shape.IsContiguous;
-                var kernel = DirectILKernelGenerator.GetSearchSortedKernel(common, leftSide, sorter is not null, contigA);
-                long arrStride = contigA ? elemSize : aP.Shape.strides[0] * elemSize;
-                void* arrPtr = (void*)((byte*)aP.Storage.Address + aP.Shape.offset * elemSize);
-                void* keyPtr = (void*)vTyped.Address;
-                void* sorterPtr = sorterTyped is null ? null : (void*)sorterTyped.Address;
-                long* retPtr = (long*)output.Address;
-                kernel(arrPtr, aP.size, arrStride, keyPtr, vTyped.size, sorterPtr, retPtr);
-            }
-
-            return output;
-        }
-
-        private static long SearchSortedScalar(NDArray a, object scalarValue, bool leftSide, NDArray sorter)
-        {
-            NDArray sorterTyped = (sorter is null) ? null : EnsureContiguousInt64(sorter);
-            int elemSize = DirectILKernelGenerator.GetTypeSize(a.typecode);
-            long result;
-            unsafe
-            {
-                // 16-byte buffer fits all 15 dtypes (largest = decimal/complex at 16 bytes).
-                byte* keyBuf = stackalloc byte[16];
-                WriteScalar(keyBuf, scalarValue, a.typecode);
-                long* retBuf = stackalloc long[1];
-                bool contigA = a.Shape.IsContiguous;
-                var kernel = DirectILKernelGenerator.GetSearchSortedKernel(a.typecode, leftSide, sorter is not null, contigA);
-                long arrStride = contigA ? elemSize : a.Shape.strides[0] * elemSize;
-                void* arrPtr = (void*)((byte*)a.Storage.Address + a.Shape.offset * elemSize);
-                void* sorterPtr = sorterTyped is null ? null : (void*)sorterTyped.Address;
-                kernel(arrPtr, a.size, arrStride, keyBuf, 1, sorterPtr, retBuf);
-                result = retBuf[0];
-            }
-            return result;
-        }
-
-        private static unsafe void WriteScalar(byte* dest, object value, NPTypeCode typeCode)
-        {
-            switch (typeCode)
-            {
-                case NPTypeCode.Boolean: *(bool*)dest = (bool)value; break;
-                case NPTypeCode.SByte:   *(sbyte*)dest = (sbyte)value; break;
-                case NPTypeCode.Byte:    *(byte*)dest = (byte)value; break;
-                case NPTypeCode.Int16:   *(short*)dest = (short)value; break;
-                case NPTypeCode.UInt16:  *(ushort*)dest = (ushort)value; break;
-                case NPTypeCode.Int32:   *(int*)dest = (int)value; break;
-                case NPTypeCode.UInt32:  *(uint*)dest = (uint)value; break;
-                case NPTypeCode.Int64:   *(long*)dest = (long)value; break;
-                case NPTypeCode.UInt64:  *(ulong*)dest = (ulong)value; break;
-                case NPTypeCode.Char:    *(char*)dest = (char)value; break;
-                case NPTypeCode.Half:    *(Half*)dest = (Half)value; break;
-                case NPTypeCode.Single:  *(float*)dest = (float)value; break;
-                case NPTypeCode.Double:  *(double*)dest = (double)value; break;
-                case NPTypeCode.Decimal: *(decimal*)dest = (decimal)value; break;
-                case NPTypeCode.Complex: *(System.Numerics.Complex*)dest = (System.Numerics.Complex)value; break;
-                default: throw new NotSupportedException($"WriteScalar: type {typeCode} not supported");
-            }
-        }
-
-        private static NDArray EnsureContiguousOfType(NDArray src, NPTypeCode target)
-        {
-            if (src.typecode == target && src.Shape.IsContiguous)
-                return src;
-            var typed = src.typecode == target ? src : src.astype(target, copy: true);
-            return typed.Shape.IsContiguous ? typed : typed.copy();
-        }
-
-        private static NDArray EnsureContiguousInt64(NDArray sorter)
-        {
-            if (sorter.typecode == NPTypeCode.Int64 && sorter.Shape.IsContiguous)
-                return sorter;
-            var typed = sorter.typecode == NPTypeCode.Int64 ? sorter : sorter.astype(NPTypeCode.Int64, copy: true);
-            return typed.Shape.IsContiguous ? typed : typed.copy();
-        }
-
-        private static void ValidateSearchSorted(NDArray a, string side, NDArray sorter)
-        {
-            if (side != "left" && side != "right")
-                throw new ArgumentException($"search side must be 'left' or 'right' (got '{side}')", nameof(side));
-
-            if (a.ndim > 1)
-                throw new ArgumentException("object too deep for desired array", nameof(a));
-
-            if (sorter is not null)
-            {
-                if (sorter.ndim != 1)
-                    throw new ArgumentException("sorter must be 1-D array", nameof(sorter));
-                if (sorter.size != a.size)
-                    throw new ArgumentException("sorter.size must equal a.size", nameof(sorter));
-            }
+            return a.TensorEngine.SearchSorted(a, v, side, sorter);
         }
     }
 }

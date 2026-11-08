@@ -102,6 +102,22 @@ namespace NumSharp.Tests
                 }).ToArray(),
             };
 
+        /// <summary>
+        ///     A float64 <c>sum</c> over AXIS 0 of a (4, 8) operand — the vehicle for the summation-order excuse and the
+        ///     truthful-vs-precise branches. A FLAT float sum no longer reaches them: it is NumPy's add.reduce bit for bit
+        ///     (<c>NumPyAddReduce</c>), so the registry excuses nothing there (<see cref="B1_FlatFloatSumValueDiff_NotExcused"/>).
+        /// </summary>
+        /// <returns>The synthetic case.</returns>
+        private static FuzzCorpus.Case AxisSumCase()
+        {
+            var c = Case("sum", ("float64", new long[] { 4, 8 }));
+            c.Params = new System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>
+            {
+                ["axis"] = System.Text.Json.JsonDocument.Parse("0").RootElement,
+            };
+            return c;
+        }
+
         private static byte[] C128(double re, double im)
             => BitConverter.GetBytes(re).Concat(BitConverter.GetBytes(im)).ToArray();
 
@@ -126,10 +142,27 @@ namespace NumSharp.Tests
         [TestMethod]
         public void B1_FloatSumValueDiff_StillExcused()
         {
-            var c = Case("sum", ("float64", new long[] { 8 }));
+            var c = AxisSumCase();
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(0.3), BitConverter.GetBytes(UlpUp(0.3)), NPTypeCode.Double, OneDiff)
                 .Should().NotBeNull("float summation-order drift is the documented divergence");
+        }
+
+        [TestMethod]
+        public void B1_FlatFloatSumValueDiff_NotExcused()
+        {
+            // The flat float sum / mean is NumPy's exact add.reduce (identity start, NpyIter's call schedule, a pairwise
+            // sum per call), so a one-ULP drift there is a real bug — no summation-order excuse, with or without truth.
+            foreach (var op in new[] { "sum", "mean" })
+            {
+                var c = Case(op, ("float64", new long[] { 8 }));
+                MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                    BitConverter.GetBytes(0.3), BitConverter.GetBytes(UlpUp(0.3)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"a flat float {op} must be bit-exact");
+                MisalignedRegistry.Classify(c, DivergenceKind.Value,
+                    BitConverter.GetBytes(UlpUp(0.3, 2)), BitConverter.GetBytes(0.3), NPTypeCode.Double, OneDiff,
+                    BitConverter.GetBytes(0.3)).Should().BeNull($"not even toward truth: a flat float {op} has NumPy's order");
+            }
         }
 
         // ---- B2: complex binary per-op scopes ----
@@ -160,14 +193,23 @@ namespace NumSharp.Tests
                 "a 2x-magnitude error is not the cancellation regime");
         }
 
+        /// <summary>
+        /// The cancellation residue that complex multiply USED to leave (expected exactly 0, actual a tiny
+        /// residue at the rounding scale of the dominant component 1e10) is no longer excused.
+        /// </summary>
+        /// <remarks>
+        /// Complex multiply became bit-exact (NDComplexMath ports NumPy's fused <c>simd_cmul</c>,
+        /// dbc0b3b3), and 074d4d08 deliberately removed its excuse so a residue fails the FuzzMatrix
+        /// gate. This test used to assert the excuse still existed; it went red when the excuse was
+        /// removed and was only noticed once CI reached the Oracle step. It now pins the tight contract.
+        /// </remarks>
         [TestMethod]
-        public void B2_ComplexMultiply_CancellationResidue_StillExcused()
+        public void B2_ComplexMultiply_CancellationResidue_NoLongerExcused()
         {
-            // expected exactly 0 (NumPy's rounding), actual a tiny residue at rounding scale of
-            // the dominant component 1e10 (ulp(1e10) ~ 1.9e-6) — the documented regime.
             var c = Case("multiply", ("complex128", new long[] { 1 }), ("complex128", new long[] { 1 }));
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
-                C128(0.0, 1e10), C128(1e-6, 1e10), NPTypeCode.Complex, OneDiff).Should().NotBeNull();
+                C128(0.0, 1e10), C128(1e-6, 1e10), NPTypeCode.Complex, OneDiff).Should().BeNull(
+                "complex multiply is bit-exact (dbc0b3b3); its excuse was retired in 074d4d08, so even a rounding-scale residue is a real regression");
         }
 
         [TestMethod]
@@ -217,12 +259,256 @@ namespace NumSharp.Tests
                 .Should().BeNull("a full-size cumprod NEP50 widening miss is a real bug");
         }
 
+        /// <summary>
+        /// The size-1 cumprod NEP50 widening miss is no longer excused; like the full-size case, a dtype
+        /// divergence there is a real bug.
+        /// </summary>
+        /// <remarks>
+        /// ReduceCumMul's size-≤1 and empty branches cast to the accumulating type (int16/int32 → int64,
+        /// uint8/uint16 → uint64), so cumprod is bit-exact on dtype at n ≤ 1. 7fd70a3b removed the excuse so
+        /// a regression turns the gate red. This test used to assert the excuse still existed; it now
+        /// pins the removal.
+        /// </remarks>
         [TestMethod]
-        public void B3_CumprodDtype_SizeOne_StillExcused()
+        public void B3_CumprodDtype_SizeOne_NoLongerExcused()
         {
             MisalignedRegistry.Classify(Case("cumprod", ("int16", new long[] { 1 })),
                 DivergenceKind.Dtype, null, null, NPTypeCode.Int64, System.Array.Empty<BitDiff.Diff>())
-                .Should().NotBeNull("the documented ReduceCumMul bug is the size-1 fast path");
+                .Should().BeNull("the size-<=1 fast path now widens (7fd70a3b), so a dtype miss there is a real regression");
+        }
+
+        // ---- V1 (removed 2026-10-05): np.var / np.std are NumPy's _var / _std, so nothing excuses them ----
+
+        /// <summary>
+        /// <paramref name="c"/> with <c>params.axis</c> set, the way a corpus axis-reduction case carries it.
+        /// </summary>
+        /// <param name="c">A case built by this class's <c>Case</c> helper.</param>
+        /// <param name="axis">The reduced axis.</param>
+        /// <returns>The same case, now reducing along <paramref name="axis"/>.</returns>
+        private static FuzzCorpus.Case WithAxis(FuzzCorpus.Case c, int axis)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(axis.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            // Clone: the JsonElement must outlive the document this method disposes.
+            c.Params = new System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement> { ["axis"] = doc.RootElement.Clone() };
+            return c;
+        }
+
+        /// <summary>
+        /// Every var/std divergence of the np.* and ndarray.* spellings is a real bug since the (V1) branch and the
+        /// var/std share of the reduction blankets were removed: the degenerate-size NaN-vs-zero cell V1 excused, a
+        /// float16/float32 result that comes back float64 (the dtype blanket), and a few-ULP value difference over an
+        /// axis (the unbounded summation blanket, which hid the degenerate-size bug for months).
+        /// </summary>
+        [TestMethod]
+        public void VarStd_NoDivergenceIsExcused()
+        {
+            var nanVsZero = new[] { new BitDiff.Diff(0, "NaN", "0000000000000000") };
+            byte[] nan = BitConverter.GetBytes(double.NaN), zero = BitConverter.GetBytes(0.0);
+            var none = System.Array.Empty<BitDiff.Diff>();
+            foreach (var op in new[] { "var", "std", "ndarray.var", "ndarray.std" })
+            {
+                MisalignedRegistry.Classify(Case(op, ("float64", new long[] { 1 })), DivergenceKind.Value,
+                    nan, zero, NPTypeCode.Double, nanVsZero).Should().BeNull($"{op} of a one-element array (the old V1 cell)");
+                MisalignedRegistry.Classify(WithAxis(Case(op, ("float64", new long[] { 4, 1 })), -1), DivergenceKind.Value,
+                    nan, zero, NPTypeCode.Double, nanVsZero).Should().BeNull($"{op} over a length-1 axis (the old V1 cell)");
+                MisalignedRegistry.Classify(Case(op, ("float32", new long[] { 1 })), DivergenceKind.Dtype, null, null,
+                    NPTypeCode.Single, none).Should().BeNull($"{op} of a one-element float32 array returning another dtype");
+                MisalignedRegistry.Classify(Case(op, ("float32", new long[] { 8 })), DivergenceKind.Dtype, null, null,
+                    NPTypeCode.Single, none).Should().BeNull($"{op} of eight float32 elements returning another dtype");
+                double v = 1.2345;
+                MisalignedRegistry.Classify(WithAxis(Case(op, ("float64", new long[] { 4, 8 })), 0), DivergenceKind.Value,
+                    BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"{op} one ULP off over an axis is not summation order any more: it is NumPy's _var");
+            }
+        }
+
+        /// <summary>
+        /// Every nanvar/nanstd divergence is a real bug since they left the nan-family blankets (2026-10-05, plan
+        /// api-parameter-parity A3): the (W4-A) shape cell of a 1-D axis reduction, the (W4-B) value cell (NaN masking /
+        /// count / summation order), the nan-family dtype cell, and a one-ULP value difference that the single-operand
+        /// unary-ULP branch would otherwise take.
+        /// </summary>
+        [TestMethod]
+        public void NanVarStd_NoDivergenceIsExcused()
+        {
+            var none = System.Array.Empty<BitDiff.Diff>();
+            double v = 1.2345;
+            byte[] nan = BitConverter.GetBytes(double.NaN), zero = BitConverter.GetBytes(0.0);
+            var nanVsZero = new[] { new BitDiff.Diff(0, "NaN", "0000000000000000") };
+            foreach (var op in new[] { "nanvar", "nanstd" })
+            {
+                MisalignedRegistry.Classify(WithAxis(Case(op, ("float64", new long[] { 3 })), 0), DivergenceKind.Shape,
+                    null, null, NPTypeCode.Double, none).Should().BeNull($"{op} of a 1-D array along axis 0 (the old W4-A cell)");
+                MisalignedRegistry.Classify(Case(op, ("float32", new long[] { 8 })), DivergenceKind.Dtype, null, null,
+                    NPTypeCode.Single, none).Should().BeNull($"{op} of float32 returning another dtype");
+                MisalignedRegistry.Classify(Case(op, ("float64", new long[] { 4 })), DivergenceKind.Value,
+                    nan, zero, NPTypeCode.Double, nanVsZero).Should().BeNull($"{op} giving 0 where NumPy has NaN (ddof past the count)");
+                MisalignedRegistry.Classify(WithAxis(Case(op, ("float64", new long[] { 4, 8 })), 0), DivergenceKind.Value,
+                    BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"{op} one ULP off over an axis is not NaN masking or summation order: it is NumPy's nanvar");
+                MisalignedRegistry.Classify(Case(op, ("float64", new long[] { 8 })), DivergenceKind.Value,
+                    BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"{op} one ULP off flat (the unary-ULP branch must not take it)");
+            }
+        }
+
+        /// <summary>
+        /// Every nanmean divergence is a real bug since it left the nan-family blankets (2026-10-05, plan
+        /// api-parameter-parity A7): the (W4-A) shape cell of an integer input's dropped keepdims (the branch is gone), the
+        /// (W4-B) value cell (NaN masking / count / summation order), the nan-family dtype cell, and a one-ULP value
+        /// difference that the single-operand unary-ULP or complex 3-ULP branches would otherwise take.
+        /// </summary>
+        [TestMethod]
+        public void NanMean_NoDivergenceIsExcused()
+        {
+            var none = System.Array.Empty<BitDiff.Diff>();
+            double v = 1.2345;
+            byte[] nan = BitConverter.GetBytes(double.NaN), one = BitConverter.GetBytes(1.0);
+            var nanVsOne = new[] { new BitDiff.Diff(0, "NaN", "000000000000f03f") };
+            MisalignedRegistry.Classify(Case("nanmean", ("int32", new long[] { 3, 4 })), DivergenceKind.Shape,
+                null, null, NPTypeCode.Double, none).Should().BeNull("nanmean of an integer input dropping keepdims (the old W4-A cell)");
+            MisalignedRegistry.Classify(Case("nanmean", ("float32", new long[] { 8 })), DivergenceKind.Dtype, null, null,
+                NPTypeCode.Single, none).Should().BeNull("nanmean of float32 returning another dtype");
+            MisalignedRegistry.Classify(WithAxis(Case("nanmean", ("float64", new long[] { 4, 8 })), 0), DivergenceKind.Value,
+                nan, one, NPTypeCode.Double, nanVsOne).Should().BeNull("nanmean missing NumPy's NaN (an all-NaN slice)");
+            MisalignedRegistry.Classify(WithAxis(Case("nanmean", ("float64", new long[] { 4, 8 })), 0), DivergenceKind.Value,
+                BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("nanmean one ULP off over an axis is not NaN masking or summation order: it is NumPy's nanmean");
+            MisalignedRegistry.Classify(Case("nanmean", ("float64", new long[] { 8 })), DivergenceKind.Value,
+                BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("nanmean one ULP off flat (the unary-ULP branch must not take it)");
+            MisalignedRegistry.Classify(Case("nanmean", ("complex128", new long[] { 8 })), DivergenceKind.Value,
+                new byte[16], new byte[16], NPTypeCode.Complex, OneDiff)
+                .Should().BeNull("nanmean of complex off flat (the complex unary 3-ULP branch must not take it)");
+        }
+
+        /// <summary>
+        /// Every np.mean / ndarray.mean divergence is a real bug since np.mean became NumPy's <c>_mean</c> statement for
+        /// statement (2026-10-05, plan api-parameter-parity X9) and left the reduction blankets: a result dtype that is
+        /// not NumPy's (the dtype blanket hid the flat decimal mean's float64), a few-ULP value difference flat or over an
+        /// axis (the unbounded summation blanket hid a broadcast uint64 read as int64), a NaN NumPy has and NumSharp
+        /// lacks over an axis (the axis-NaN branch), and the single-operand ULP branches.
+        /// </summary>
+        [TestMethod]
+        public void Mean_NoDivergenceIsExcused()
+        {
+            var none = System.Array.Empty<BitDiff.Diff>();
+            double v = 1.2345;
+            byte[] nan = BitConverter.GetBytes(double.NaN), one = BitConverter.GetBytes(1.0);
+            var nanVsOne = new[] { new BitDiff.Diff(0, "NaN", "000000000000f03f") };
+            foreach (var op in new[] { "mean", "ndarray.mean" })
+            {
+                MisalignedRegistry.Classify(Case(op, ("float32", new long[] { 8 })), DivergenceKind.Dtype, null, null,
+                    NPTypeCode.Single, none).Should().BeNull($"{op} of float32 returning another dtype");
+                MisalignedRegistry.Classify(WithAxis(Case(op, ("float64", new long[] { 4, 8 })), 0), DivergenceKind.Value,
+                    BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"{op} one ULP off over an axis is not summation order: it is NumPy's _mean");
+                MisalignedRegistry.Classify(WithAxis(Case(op, ("float64", new long[] { 4, 8 })), 1), DivergenceKind.Value,
+                    nan, one, NPTypeCode.Double, nanVsOne).Should().BeNull($"{op} missing NumPy's NaN over an axis");
+                MisalignedRegistry.Classify(Case(op, ("uint64", new long[] { 4, 5 })), DivergenceKind.Value,
+                    BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v, 1000)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"{op} of an integer input off flat (the summation blanket hid a uint64 read as int64)");
+                MisalignedRegistry.Classify(Case(op, ("complex128", new long[] { 8 })), DivergenceKind.Value,
+                    new byte[16], new byte[16], NPTypeCode.Complex, OneDiff)
+                    .Should().BeNull($"{op} of complex off flat (the complex unary 3-ULP branch must not take it)");
+            }
+        }
+
+        /// <summary>
+        /// Every np.average divergence is a real bug since step 2 of the np.average family (2026-10-27): without weights it is
+        /// np.mean's <c>_mean</c>, with weights NumPy's composition through np.sum. The W6-C summation-order branch that
+        /// excused EVERY value difference of average is gone, and no other branch may take one: a few-ULP value difference
+        /// flat (one operand) or over an axis (two operands, the weighted form), a NaN NumPy has and NumSharp lacks over an
+        /// axis, and a complex difference (the complex unary 3-ULP branch keys on one operand).
+        /// </summary>
+        [TestMethod]
+        public void Average_NoDivergenceIsExcused()
+        {
+            double v = 1.2345;
+            byte[] nan = BitConverter.GetBytes(double.NaN), one = BitConverter.GetBytes(1.0);
+            var nanVsOne = new[] { new BitDiff.Diff(0, "NaN", "000000000000f03f") };
+            MisalignedRegistry.Classify(Case("average", ("float64", new long[] { 8 })), DivergenceKind.Value,
+                BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("average one ULP off flat, without weights, is np.mean's _mean");
+            MisalignedRegistry.Classify(WithAxis(Case("average", ("float64", new long[] { 4, 8 }), ("float64", new long[] { 4, 8 })), 0),
+                DivergenceKind.Value, BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("the weighted average one ULP off over an axis is NumPy's composition through np.sum");
+            MisalignedRegistry.Classify(WithAxis(Case("average", ("float64", new long[] { 4, 8 })), 1), DivergenceKind.Value,
+                nan, one, NPTypeCode.Double, nanVsOne).Should().BeNull("average missing NumPy's NaN over an axis");
+            MisalignedRegistry.Classify(Case("average", ("complex128", new long[] { 8 })), DivergenceKind.Value,
+                new byte[16], new byte[16], NPTypeCode.Complex, OneDiff)
+                .Should().BeNull("average of complex off flat (the complex unary 3-ULP branch must not take it)");
+        }
+
+        /// <summary>
+        /// No mean layout is excused any more. The last one, an axis reduction over a view with a REVERSED axis (plan
+        /// api-parameter-parity finding 5), left with np.sum's reversed-axis route, the port of NumPy's reduction iterator
+        /// since 2026-10-27 (pinned by <c>np_sum_ReversedBroadcast_Tests.Sum_ReversedViewAxis_WalksTheLogicalOrder</c>);
+        /// <c>ma.mean</c> and <c>ma.anom</c>, which sum the data view itself with nomask or an all-False mask, are held to
+        /// NumPy's bits on that layout too. The FLAT sum and mean of an operand with a broadcast axis (finding 10) take the
+        /// same iterator and are no longer left out of the exact flat classifier.
+        /// </summary>
+        [TestMethod]
+        public void Mean_ReversedAndBroadcastLayouts_AreNotExcused()
+        {
+            double v = 1.2345;
+            foreach (var (op, id) in new[] { ("mean", "selftest/mean"), ("mean", "ma.mean/selftest"), ("anom", "ma.anom/selftest") })
+            {
+                var reversed = WithAxis(Case(op, ("float32", new long[] { 4, 5 })), 0);
+                reversed.Id = id;
+                reversed.Operands[0].Strides = new long[] { -5, -1 };
+                reversed.Operands[0].Offset = 19;
+                MisalignedRegistry.Classify(reversed, DivergenceKind.Value, BitConverter.GetBytes(v),
+                    BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"{id} along an axis of a reversed view adds in NumPy's order");
+            }
+            foreach (var op in new[] { "mean", "sum" })
+            {
+                var broadcast = Case(op, ("float64", new long[] { 4, 5 }));
+                broadcast.Operands[0].Strides = new long[] { 0, 1 };
+                MisalignedRegistry.Classify(broadcast, DivergenceKind.Value, BitConverter.GetBytes(v),
+                    BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"the flat {op} of a broadcast operand is NumPy's add.reduce through its reduction iterator");
+            }
+        }
+
+        /// <summary>
+        /// <c>ma.mean</c> / <c>ma.var</c> / <c>ma.std</c> / <c>ma.anom</c> left the reduction blankets and the harness's
+        /// own excuses on 2026-10-05 (plan api-parameter-parity A6): <c>NDMaskedArray</c>'s mean / var / std / anom are
+        /// numpy.ma's <c>MaskedArray.mean</c> / <c>var</c> / <c>std</c> / <c>anom</c> statement for statement, so a value off
+        /// by one ULP over an axis or flat, a NaN missed over an axis, and a result dtype that is not NumPy's are real bugs
+        /// (anom's one operand made the unary ULP branch take it). The ma harness strips the <c>ma.</c> prefix before it asks the ledger,
+        /// so these are the cases the ledger sees (the id keeps the prefix). Before A6 the unbounded summation blanket and
+        /// the dtype blanket hid gross gaps there: a slice with an unmasked inf came back NaN where NumPy has 0.0.
+        /// </summary>
+        [TestMethod]
+        public void MaMeanVarStd_NoDivergenceIsExcused()
+        {
+            var none = System.Array.Empty<BitDiff.Diff>();
+            double v = 1.2345;
+            byte[] nan = BitConverter.GetBytes(double.NaN), one = BitConverter.GetBytes(1.0);
+            var nanVsOne = new[] { new BitDiff.Diff(0, "NaN", "000000000000f03f") };
+            foreach (var op in new[] { "mean", "var", "std", "anom" })
+            {
+                var axisCase = WithAxis(Case(op, ("float64", new long[] { 4, 8 })), 0);
+                axisCase.Id = $"ma.{op}/selftest";
+                MisalignedRegistry.Classify(axisCase, DivergenceKind.Value, BitConverter.GetBytes(v),
+                    BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"ma.{op} one ULP off over an axis is numpy.ma's statements, not summation order");
+                var flat = Case(op, ("float64", new long[] { 8 }));
+                flat.Id = $"ma.{op}/selftest";
+                MisalignedRegistry.Classify(flat, DivergenceKind.Value, BitConverter.GetBytes(v),
+                    BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"ma.{op} one ULP off flat (neither the summation blanket nor the unary-ULP branch)");
+                var nanCase = WithAxis(Case(op, ("float64", new long[] { 4, 8 })), 1);
+                nanCase.Id = $"ma.{op}/selftest";
+                MisalignedRegistry.Classify(nanCase, DivergenceKind.Value, nan, one, NPTypeCode.Double, nanVsOne)
+                    .Should().BeNull($"ma.{op} missing NumPy's NaN over an axis");
+                var dtypeCase = Case(op, ("float32", new long[] { 8 }));
+                dtypeCase.Id = $"ma.{op}/selftest";
+                MisalignedRegistry.Classify(dtypeCase, DivergenceKind.Dtype, null, null, NPTypeCode.Single, none)
+                    .Should().BeNull($"ma.{op} of float32 returning another dtype (the dtype blanket hid ma.std's)");
+            }
         }
 
         // ---- B4: modf threw excuse excludes f32/f64 ----
@@ -304,18 +590,23 @@ namespace NumSharp.Tests
                 new[] { new BitDiff.Diff(0, "NaN:aa", "NaN:NaN") }).Should().NotBeNull();
         }
 
-        // ---- K1: the public nditer trace uses the same narrow layout carve as nditer_* ----
+        // ---- K1 (closed): order='A' is NumPy's forced order, so no nditer layout is carved any more ----
 
+        /// <summary>
+        ///     The K1 carve (order='A' over a transposed 3-D operand) is gone: NumPy's 'A' is a forced C / F order and
+        ///     NDIterRef resolves it that way, so a divergence on that layout is a regression, not an excuse.
+        /// </summary>
         [TestMethod]
-        public void K1_NditerDirect_Transposed3d_StillExcused()
+        public void K1_NditerDirect_Transposed3d_NoLongerExcused()
         {
             var c = Case("nditer", ("int32", new long[] { 2, 3, 4 }));
             c.Layout = "transposed_3d";
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(1), BitConverter.GetBytes(2), NPTypeCode.Int32, OneDiff)
-                .Should().NotBeNull("the renamed public trace must retain the measured K1 carve");
+                .Should().BeNull("order='A' resolves to NumPy's forced C / F order, so the K1 carve was removed");
         }
 
+        /// <summary>The neighbouring contiguous layout was never carved, and stays gated exactly.</summary>
         [TestMethod]
         public void K1_NditerDirect_ContiguousNeighbour_NotExcused()
         {
@@ -323,7 +614,7 @@ namespace NumSharp.Tests
             c.Layout = "c_contiguous_3d";
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(1), BitConverter.GetBytes(2), NPTypeCode.Int32, OneDiff)
-                .Should().BeNull("K1 is limited to the three measured layouts");
+                .Should().BeNull("no nditer layout is carved");
         }
 
         // ---- decimal std last-digit scope (surfaced by B1) ----
@@ -410,8 +701,9 @@ namespace NumSharp.Tests
         public void B8_UnportedUnaryFloat64_OneUlp_StillExcused()
         {
             // At float64 the platform libm already agrees with NumPy for these, so there is no port
-            // and the ~ULP envelope still applies. tanh is deliberately absent — see above.
-            foreach (var op in new[] { "exp", "log", "sin", "cos", "expm1", "log1p", "exp2" })
+            // and the ~ULP envelope still applies. tanh is deliberately absent — see above — and so is log1p
+            // since parity QA-22 (the UCRT model, B8_UcrtModelLog1p_OneUlp_NotExcused).
+            foreach (var op in new[] { "exp", "log", "sin", "cos", "expm1", "exp2" })
             {
                 var c = Case(op, ("float64", new long[] { 4 }));
                 MisalignedRegistry.Classify(c, DivergenceKind.Value,
@@ -423,16 +715,74 @@ namespace NumSharp.Tests
         [TestMethod]
         public void B8_UnportedUnaryFloat32_OneUlp_StillExcused()
         {
-            // expm1/log1p/exp2 are still the platform libm at float32, so they keep the documented
+            // expm1/exp2 are still not NumPy's bits at float32, so they keep the documented
             // envelope. If one of them is ported later, it moves into the carve-out set and this
-            // test must move with it — which is exactly what tanh just did.
-            foreach (var op in new[] { "expm1", "log1p", "exp2", "arctan" })
+            // test must move with it — which is exactly what tanh did, and log1p (parity QA-22).
+            foreach (var op in new[] { "expm1", "exp2", "arctan" })
             {
                 var c = Case(op, ("float32", new long[] { 4 }));
                 MisalignedRegistry.Classify(c, DivergenceKind.Value,
                     F32(0.84147096f), F32(UlpUpF(0.84147096f)), NPTypeCode.Single, OneDiff)
                     .Should().NotBeNull($"{op} is not ported — it keeps the ~ULP envelope");
             }
+        }
+
+        /// <summary>
+        ///     log1p's float32 and float64 loops are models of the UCRT's log1p / log1pf that equal NumPy on every probed
+        ///     input (parity QA-22, <c>NDLog1pExpm1Math</c>), so the blanket unary excuse skips them at both widths: a
+        ///     one-ULP drift is a regression.
+        /// </summary>
+        /// <param name="dtype">The operand dtype (float32 or float64).</param>
+        [TestMethod]
+        [DataRow("float32")]
+        [DataRow("float64")]
+        public void B8_UcrtModelLog1p_OneUlp_NotExcused(string dtype)
+        {
+            var c = Case("log1p", (dtype, new long[] { 4 }));
+            var verdict = dtype == "float32"
+                ? MisalignedRegistry.Classify(c, DivergenceKind.Value, F32(0.6931472f), F32(UlpUpF(0.6931472f)), NPTypeCode.Single, OneDiff)
+                : MisalignedRegistry.Classify(c, DivergenceKind.Value, BitConverter.GetBytes(0.6931471805599453),
+                    BitConverter.GetBytes(UlpUp(0.6931471805599453)), NPTypeCode.Double, OneDiff);
+            verdict.Should().BeNull($"{dtype} log1p is the UCRT model, bit-exact with NumPy — 1 ULP is a regression");
+        }
+
+        /// <summary>
+        ///     expm1's in-band excuse (S1) is bounded: Sun's s_expm1 against the UCRT's undocumented polynomial is within 3
+        ///     ULP at float32 (excused) and no further (4 ULP fails); at float64 the bound is 2 ULP. The absolute
+        ///     envelope the old Exp(x)-1 composition needed is gone.
+        /// </summary>
+        [TestMethod]
+        public void S1_Expm1_InBandBound_IsThreeUlpFloat32_TwoUlpFloat64()
+        {
+            var c32 = Case("expm1", ("float32", new long[] { 4 }));
+            MisalignedRegistry.Classify(c32, DivergenceKind.Value, F32(0.10517092f), F32(UlpUpF(0.10517092f, 3)), NPTypeCode.Single, OneDiff)
+                .Should().NotBeNull("3 ULP is the documented float32 in-band bound");
+            MisalignedRegistry.Classify(c32, DivergenceKind.Value, F32(0.10517092f), F32(UlpUpF(0.10517092f, 4)), NPTypeCode.Single, OneDiff)
+                .Should().BeNull("4 ULP is past the float32 in-band bound");
+            var c64 = Case("expm1", ("float64", new long[] { 4 }));
+            MisalignedRegistry.Classify(c64, DivergenceKind.Value, BitConverter.GetBytes(0.10517091807564763),
+                    BitConverter.GetBytes(UlpUp(0.10517091807564763, 2)), NPTypeCode.Double, OneDiff)
+                .Should().NotBeNull("2 ULP is the float64 bound");
+            MisalignedRegistry.Classify(c64, DivergenceKind.Value, BitConverter.GetBytes(0.10517091807564763),
+                    BitConverter.GetBytes(UlpUp(0.10517091807564763, 3)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("3 ULP is past the float64 bound");
+        }
+
+        /// <summary>
+        ///     logaddexp is bit-exact since parity QA-32 (its log1p is the UCRT model), so it has no excuse; logaddexp2 keeps a
+        ///     2-ULP one for .NET's exp2 (Math.Pow(2, x)), which differs from the UCRT's exp2 on ~0.02% of inputs.
+        /// </summary>
+        [TestMethod]
+        public void LogAddExp_NotExcused_LogAddExp2_TwoUlpExcused()
+        {
+            var lae = Case("logaddexp", ("float64", new long[] { 4 }), ("float64", new long[] { 4 }));
+            MisalignedRegistry.Classify(lae, DivergenceKind.Value, BitConverter.GetBytes(0.5), BitConverter.GetBytes(UlpUp(0.5)),
+                    NPTypeCode.Double, OneDiff)
+                .Should().BeNull("logaddexp is NumPy's bits — 1 ULP is a regression");
+            var lae2 = Case("logaddexp2", ("float64", new long[] { 4 }), ("float64", new long[] { 4 }));
+            MisalignedRegistry.Classify(lae2, DivergenceKind.Value, BitConverter.GetBytes(0.5), BitConverter.GetBytes(UlpUp(0.5, 2)),
+                    NPTypeCode.Double, OneDiff)
+                .Should().NotBeNull("logaddexp2's exp2 is the documented 2-ULP excuse");
         }
 
         // ---- P: truthful-vs-precise (the precision tier's truth-bearing adjudication) ----
@@ -444,7 +794,7 @@ namespace NumSharp.Tests
         public void P_TowardTruth_Excused()
         {
             // NumSharp lands ON truth, NumPy 2 ULP off -> excused as parity debt (toward truth).
-            var c = Case("sum", ("float64", new long[] { 8 }));
+            var c = AxisSumCase();
             var truth = BitConverter.GetBytes(0.3);
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(UlpUp(0.3, 2)), BitConverter.GetBytes(0.3), NPTypeCode.Double,
@@ -456,7 +806,7 @@ namespace NumSharp.Tests
         public void P_EquallyTruthful_Excused()
         {
             // Both sides 2 ULP from truth, opposite directions -> within truth-equivalence slack.
-            var c = Case("sum", ("float64", new long[] { 8 }));
+            var c = AxisSumCase();
             var truth = BitConverter.GetBytes(0.3);
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(UlpUp(0.3, 2)), BitConverter.GetBytes(UlpUp(0.3, -2)), NPTypeCode.Double,
@@ -469,7 +819,7 @@ namespace NumSharp.Tests
             // NumPy exact, NumSharp 100000 ULP off truth, outside every known-loss scope ->
             // a genuine precision loss must be RED (the truth==null gate on the unbounded
             // reduction blanket is what keeps it from hiding there).
-            var c = Case("sum", ("float64", new long[] { 8 }));
+            var c = AxisSumCase();
             var truth = BitConverter.GetBytes(0.3);
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(0.3), BitConverter.GetBytes(UlpUp(0.3, 100000)), NPTypeCode.Double,
@@ -481,7 +831,7 @@ namespace NumSharp.Tests
         public void P_KnownLoss_NegstrideSum_Excused_ButBounded()
         {
             // The documented negstride accumulation loss (measured 32 ULP) is excused ≤256...
-            var c = Case("sum", ("float64", new long[] { 8 }));
+            var c = AxisSumCase();
             c.Layout = "negstride_1d";
             var truth = BitConverter.GetBytes(0.3);
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
@@ -499,10 +849,209 @@ namespace NumSharp.Tests
         {
             // Without truth (every pre-existing tier) the float summation blanket still applies —
             // the truth==null gate narrows it only where adjudication is possible.
-            var c = Case("sum", ("float64", new long[] { 8 }));
+            var c = AxisSumCase();
             MisalignedRegistry.Classify(c, DivergenceKind.Value,
                 BitConverter.GetBytes(0.3), BitConverter.GetBytes(UlpUp(0.3)), NPTypeCode.Double,
                 OneDiff).Should().NotBeNull("truthless tiers keep the documented summation excuse");
+        }
+
+        // ---- H1: float32 sin/cos past NumPy's Cody-Waite limit is the HOST libm ----
+
+        /// <summary>2^32: past both limits; macos-latest's Apple libm rounds its float32 sine 1 ULP from ucrtbase.</summary>
+        private const float PastLimit = 4294967296f;
+
+        /// <summary>
+        /// A float32 sin/cos case in the given tier shape, carrying <paramref name="inputs"/> as its input
+        /// buffer. With <paramref name="outTier"/> it is shaped like an out_where cell: op <c>out_unary</c>,
+        /// the ufunc in <c>params.ufunc</c>, input + out operands.
+        /// </summary>
+        /// <param name="ufunc">The unary ufunc name the case exercises.</param>
+        /// <param name="outTier">True for the out=/where= tier's <c>out_unary</c> shape, false for a plain unary op.</param>
+        /// <param name="inputs">The float32 input values, written as the operand's little-endian hex buffer.</param>
+        /// <returns>The synthetic case.</returns>
+        private static FuzzCorpus.Case SinCosCase(string ufunc, bool outTier, params float[] inputs)
+        {
+            var bytes = inputs.SelectMany(BitConverter.GetBytes).ToArray();
+            var input = new FuzzCorpus.Operand
+            {
+                Dtype = "float32", Shape = new long[] { inputs.Length }, Strides = new long[] { 1 },
+                Offset = 0, BufferSize = inputs.Length, Buffer = Convert.ToHexString(bytes),
+            };
+            if (!outTier)
+                return new FuzzCorpus.Case { Id = "selftest/" + ufunc, Op = ufunc, Layout = "selftest", Operands = new[] { input } };
+            using var doc = System.Text.Json.JsonDocument.Parse($"{{\"ufunc\":\"{ufunc}\"}}");
+            return new FuzzCorpus.Case
+            {
+                Id = "selftest/out_unary/" + ufunc, Op = "out_unary", Layout = "out_c",
+                Params = new System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>
+                    { ["ufunc"] = doc.RootElement.GetProperty("ufunc").Clone() },
+                Operands = new[] { input, input },
+            };
+        }
+
+        /// <summary>The float32 bits <paramref name="ulps"/> representable steps away from <paramref name="v"/>.</summary>
+        /// <param name="v">The starting value.</param>
+        /// <param name="ulps">How many ULPs to move (may be negative).</param>
+        /// <returns>The little-endian bytes of the moved value.</returns>
+        private static byte[] F32(float v, int ulps = 0)
+            => BitConverter.GetBytes(BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(v) + ulps));
+
+        /// <summary>
+        /// The macOS shape of the divergence: NumSharp's element is exactly this host's libm answer for a
+        /// past-limit input, and the reference is 1 ULP away. It is excused off the reference host and
+        /// NEVER on it, for both the plain op and the out_unary tier and for sin and cos alike.
+        /// <see cref="MisalignedRegistry.Classify"/> is pinned to follow whichever host this is.
+        /// </summary>
+        [TestMethod]
+        public void H1_PastLimitHostLibmAnswer_OneUlp_ExcusedOnlyOffTheReferenceHost()
+        {
+            foreach (var ufunc in new[] { "sin", "cos" })
+            foreach (var outTier in new[] { false, true })
+            {
+                var c = SinCosCase(ufunc, outTier, PastLimit, .5f);
+                float host = ufunc == "sin" ? MathF.Sin(PastLimit) : MathF.Cos(PastLimit);
+                var actual = F32(host).Concat(F32(.5f)).ToArray();
+                var expected = F32(host, -1).Concat(F32(.5f)).ToArray();
+                var diffs = new[] { new BitDiff.Diff(0, "ref", "host") };
+
+                MisalignedRegistry.IsHostLibmSinCosHandoff(c, DivergenceKind.Value, expected, actual,
+                    NPTypeCode.Single, diffs, libmReferenceHost: false).Should().BeTrue(
+                    $"{ufunc} (out tier {outTier}): a past-limit lane is the host libm on both sides");
+                MisalignedRegistry.IsHostLibmSinCosHandoff(c, DivergenceKind.Value, expected, actual,
+                    NPTypeCode.Single, diffs, libmReferenceHost: true).Should().BeFalse(
+                    "the reference host reproduces ucrtbase exactly, so it must stay strict");
+                (MisalignedRegistry.Classify(c, DivergenceKind.Value, expected, actual, NPTypeCode.Single, diffs) != null)
+                    .Should().Be(!MisalignedRegistry.IsLibmReferenceHost,
+                    "Classify applies H1 exactly when this is not the libm reference host");
+            }
+        }
+
+        /// <summary>
+        /// The negative space. An in-range lane (the bit-exact port) is not excused off the reference host
+        /// either, even when a past-limit input sits in the same case. Neither is a gross miss on a
+        /// past-limit lane, a value that is not this host's libm answer, another op, or a non-float32 slot.
+        /// </summary>
+        [TestMethod]
+        public void H1_InRangeLane_GrossMiss_OtherOpOrDtype_NotExcused()
+        {
+            var c = SinCosCase("sin", true, PastLimit, .5f);
+            float host = MathF.Sin(PastLimit);
+            float port = NumSharp.Utilities.NDFloatMath.Sin(.5f);
+
+            // An in-range lane 1 ULP off: the port regressed. Its value is no libm answer for 2^32.
+            MisalignedRegistry.IsHostLibmSinCosHandoff(c, DivergenceKind.Value,
+                F32(host).Concat(F32(port)).ToArray(), F32(host).Concat(F32(port, 1)).ToArray(), NPTypeCode.Single,
+                new[] { new BitDiff.Diff(1, "port", "port+1") }, libmReferenceHost: false)
+                .Should().BeFalse("the in-range sin port is bit-exact on every host");
+
+            // The same 1-ULP in-range miss with NO past-limit input in the case at all.
+            MisalignedRegistry.IsHostLibmSinCosHandoff(SinCosCase("sin", true, .5f), DivergenceKind.Value,
+                F32(port), F32(port, 1), NPTypeCode.Single, new[] { new BitDiff.Diff(0, "port", "port+1") },
+                libmReferenceHost: false).Should().BeFalse("no lane of this case reaches the libm handoff");
+
+            // A past-limit lane whose reference is 64 ULP away: beyond any libm rounding difference.
+            MisalignedRegistry.IsHostLibmSinCosHandoff(c, DivergenceKind.Value,
+                F32(host, -64).Concat(F32(port)).ToArray(), F32(host).Concat(F32(port)).ToArray(), NPTypeCode.Single,
+                new[] { new BitDiff.Diff(0, "ref", "host") }, libmReferenceHost: false)
+                .Should().BeFalse("a gross miss is not a libm rounding difference");
+
+            // NumSharp's element is NOT this host's libm answer, even though it is within 1 ULP of the reference.
+            MisalignedRegistry.IsHostLibmSinCosHandoff(c, DivergenceKind.Value,
+                F32(host, 2).Concat(F32(port)).ToArray(), F32(host, 1).Concat(F32(port)).ToArray(), NPTypeCode.Single,
+                new[] { new BitDiff.Diff(0, "ref", "other") }, libmReferenceHost: false)
+                .Should().BeFalse("the kernel returns exactly MathF.Sin past the limit; anything else is a bug");
+
+            // Other ops and dtypes: tan is libm everywhere and has its own excuse, float64 sin is not the port.
+            MisalignedRegistry.IsHostLibmSinCosHandoff(SinCosCase("tan", true, PastLimit), DivergenceKind.Value,
+                F32(MathF.Tan(PastLimit), -1), F32(MathF.Tan(PastLimit)), NPTypeCode.Single,
+                new[] { new BitDiff.Diff(0, "ref", "host") }, libmReferenceHost: false).Should().BeFalse();
+            MisalignedRegistry.IsHostLibmSinCosHandoff(c, DivergenceKind.Value,
+                BitConverter.GetBytes(0.25), BitConverter.GetBytes(UlpUp(0.25)), NPTypeCode.Double,
+                OneDiff, libmReferenceHost: false).Should().BeFalse();
+        }
+
+        /// <summary>
+        /// An arctan2 case for the (H2) predicate, in the three shapes the corpus spells it: the plain op (the logic,
+        /// relayout, specials and matrix-operand tiers), the <c>out_binary</c> ufunc (<c>params.ufunc</c>) and the
+        /// <c>weak_scalar</c> function (<c>params.fn</c>).
+        /// </summary>
+        /// <param name="shape"><c>op</c>, <c>out_binary</c> or <c>weak_scalar</c>.</param>
+        /// <param name="ufunc">The ufunc the case names (arctan2 for the positive cases).</param>
+        /// <returns>The case, with the operands its shape carries in the corpus (two inputs; plus the out for
+        ///     <c>out_binary</c>; one array beside the Python scalar for <c>weak_scalar</c>), each a two-element float32
+        ///     buffer: (H2) reads none of them, but <see cref="MisalignedRegistry.Classify"/>'s later branches do.</returns>
+        private static FuzzCorpus.Case Atan2Case(string shape, string ufunc)
+        {
+            FuzzCorpus.Operand Operand() => new FuzzCorpus.Operand
+            {
+                Dtype = "float32", Shape = new long[] { 2 }, Strides = new long[] { 1 }, Offset = 0, BufferSize = 2,
+                Buffer = Convert.ToHexString(F32(1f).Concat(F32(.5f)).ToArray()),
+            };
+            if (shape == "op")
+                return new FuzzCorpus.Case
+                    { Id = "selftest/" + ufunc, Op = ufunc, Layout = "selftest", Operands = new[] { Operand(), Operand() } };
+            string key = shape == "out_binary" ? "ufunc" : "fn";
+            using var doc = System.Text.Json.JsonDocument.Parse($"{{\"{key}\":\"{ufunc}\"}}");
+            return new FuzzCorpus.Case
+            {
+                Id = $"selftest/{shape}/{ufunc}", Op = shape, Layout = "selftest",
+                Params = new System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>
+                    { [key] = doc.RootElement.GetProperty(key).Clone() },
+                Operands = shape == "out_binary" ? new[] { Operand(), Operand(), Operand() } : new[] { Operand() },
+            };
+        }
+
+        /// <summary>
+        /// The macOS shape of the divergence: float32 arctan2 returns +pi one ULP below ucrtbase's (Apple's atan2f), and so
+        /// does float64 on a libm that rounds the other way. Excused off the reference host and NEVER on it, in all three
+        /// case shapes; <see cref="MisalignedRegistry.Classify"/> follows whichever host this is, the zero-excuse
+        /// weak_scalar tier included (H2 runs before it).
+        /// </summary>
+        [TestMethod]
+        public void H2_Atan2WithinTwoUlp_ExcusedOnlyOffTheReferenceHost()
+        {
+            foreach (var shape in new[] { "op", "out_binary", "weak_scalar" })
+            {
+                var c = Atan2Case(shape, "arctan2");
+                var expected32 = F32(MathF.PI).Concat(F32(.5f)).ToArray();
+                var actual32 = F32(MathF.PI, -1).Concat(F32(.5f)).ToArray();
+                var diffs = new[] { new BitDiff.Diff(0, "ref", "host") };
+
+                MisalignedRegistry.IsHostLibmAtan2(c, DivergenceKind.Value, expected32, actual32, NPTypeCode.Single, diffs,
+                    libmReferenceHost: false).Should().BeTrue($"{shape}: atan2f is the host libm on both sides");
+                MisalignedRegistry.IsHostLibmAtan2(c, DivergenceKind.Value, expected32, actual32, NPTypeCode.Single, diffs,
+                    libmReferenceHost: true).Should().BeFalse("the reference host reproduces ucrtbase exactly, so it stays strict");
+                MisalignedRegistry.IsHostLibmAtan2(c, DivergenceKind.Value, BitConverter.GetBytes(Math.PI),
+                    BitConverter.GetBytes(UlpUp(Math.PI)), NPTypeCode.Double, OneDiff, libmReferenceHost: false)
+                    .Should().BeTrue($"{shape}: float64 atan2 is the host libm on both sides too");
+                (MisalignedRegistry.Classify(c, DivergenceKind.Value, expected32, actual32, NPTypeCode.Single, diffs) != null)
+                    .Should().Be(!MisalignedRegistry.IsLibmReferenceHost,
+                    $"{shape}: Classify applies H2 exactly when this is not the libm reference host");
+            }
+        }
+
+        /// <summary>
+        /// The negative space of (H2): a miss past 2 ULP (a wrong quadrant or constant), another op, another dtype and a
+        /// non-value divergence are never excused, on any host.
+        /// </summary>
+        [TestMethod]
+        public void H2_GrossMiss_OtherOp_OtherDtype_OtherKind_NotExcused()
+        {
+            var c = Atan2Case("op", "arctan2");
+            var diffs = new[] { new BitDiff.Diff(0, "ref", "host") };
+
+            MisalignedRegistry.IsHostLibmAtan2(c, DivergenceKind.Value, F32(MathF.PI), F32(MathF.PI, -3), NPTypeCode.Single,
+                diffs, libmReferenceHost: false).Should().BeFalse("3 ULP is no libm rounding of the same call");
+            MisalignedRegistry.IsHostLibmAtan2(Atan2Case("op", "hypot"), DivergenceKind.Value, F32(1.5f), F32(1.5f, 1),
+                NPTypeCode.Single, diffs, libmReferenceHost: false).Should().BeFalse("only arctan2 is covered");
+            MisalignedRegistry.IsHostLibmAtan2(Atan2Case("out_binary", "add"), DivergenceKind.Value, F32(1.5f), F32(1.5f, 1),
+                NPTypeCode.Single, diffs, libmReferenceHost: false).Should().BeFalse("the out tier's ufunc decides");
+            MisalignedRegistry.IsHostLibmAtan2(Atan2Case("weak_scalar", "multiply"), DivergenceKind.Value, F32(1.5f),
+                F32(1.5f, 1), NPTypeCode.Single, diffs, libmReferenceHost: false).Should().BeFalse("the weak-scalar fn decides");
+            MisalignedRegistry.IsHostLibmAtan2(c, DivergenceKind.Value, new byte[] { 0, 0x3c }, new byte[] { 1, 0x3c },
+                NPTypeCode.Half, diffs, libmReferenceHost: false).Should().BeFalse("float16 arctan2 narrows NumPy's own bits");
+            MisalignedRegistry.IsHostLibmAtan2(c, DivergenceKind.Dtype, F32(MathF.PI), F32(MathF.PI, -1), NPTypeCode.Single,
+                diffs, libmReferenceHost: false).Should().BeFalse("a dtype divergence is never a rounding");
         }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Reflection;
@@ -42,6 +43,7 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.Positive:                                      return;
                 case UnaryOp.Square:     EmitVectorSquare(il, clrType);     return;
                 case UnaryOp.Reciprocal: EmitVectorReciprocal(il, clrType); return;
+                case UnaryOp.Spacing:    EmitVectorSpacing(il, clrType);    return;
                 // The float32 factor is the QUOTIENT OF FLOAT CONSTANTS, matching NumPy's
                 // RAD2DEG/DEG2RAD macros (evaluated at the operand's precision) — not the double
                 // quotient rounded to float, which is 1 ULP low for rad2deg. Must stay in step with
@@ -102,10 +104,13 @@ namespace NumSharp.Backends.Kernels
             {
                 UnaryOp.Negate => "op_UnaryNegation",
                 UnaryOp.Abs => "Abs",
+                UnaryOp.Fabs => "Abs",   // np.fabs — Vector.Abs, same as Abs on the float loops
+
                 UnaryOp.Sqrt => "Sqrt",
                 UnaryOp.Floor => "Floor",
                 UnaryOp.Ceil => "Ceiling",  // Vector uses "Ceiling" not "Ceil"
                 UnaryOp.Round => "Round",
+                UnaryOp.Rint => "Round",   // np.rint — Vector.Round, same kernel as Round
                 UnaryOp.Truncate => "Truncate",
                 _ => throw new NotSupportedException($"SIMD operation {op} not supported")
             };
@@ -117,9 +122,9 @@ namespace NumSharp.Backends.Kernels
                 method = VectorMethodCache.V(VectorBits, clrType).GetMethod(methodName,
                     BindingFlags.Public | BindingFlags.Static,
                     null, new[] { VectorMethodCache.V(VectorBits, clrType) }, null)
-                    ?? throw new InvalidOperationException($"Could not find {methodName} for Vector{VectorBits}<{clrType.Name}>");
+                    ?? throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Could not find {methodName} for Vector{VectorBits}<{clrType.Name}>"));
             }
-            else if (op == UnaryOp.Floor || op == UnaryOp.Ceil || op == UnaryOp.Round || op == UnaryOp.Truncate)
+            else if (op == UnaryOp.Floor || op == UnaryOp.Ceil || op == UnaryOp.Round || op == UnaryOp.Rint || op == UnaryOp.Truncate)
             {
                 // Floor/Ceiling/Round/Truncate are NOT generic — overloaded per-type, and only
                 // exist for some (runtime, width) combinations (Floor/Ceiling .NET 7+, Round/
@@ -127,7 +132,7 @@ namespace NumSharp.Backends.Kernels
                 // only routes here when it is non-null, so the throw is a defensive assert — it can
                 // fire only if the emitter is reached without going through the eligibility gate.
                 method = VectorMethodCache.ContainerUnaryOrNull(VectorBits, methodName, clrType)
-                    ?? throw new InvalidOperationException($"Could not find {methodName} for Vector{VectorBits}<{clrType.Name}>");
+                    ?? throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Could not find {methodName} for Vector{VectorBits}<{clrType.Name}>"));
             }
             else
             {
@@ -155,6 +160,57 @@ namespace NumSharp.Backends.Kernels
             var xor = VectorMethodCache.BinaryX86(VectorBits, "Xor", clrType)
                       ?? VectorMethodCache.Generic(VectorBits, "Xor", clrType, paramCount: 2);
             il.EmitCall(OpCodes.Call, xor, null); // [result]
+        }
+
+        /// <summary>
+        /// Emit the <c>np.spacing</c> SIMD body for float32/float64: the distance to the adjacent
+        /// representable value away from zero (one ULP), a whole vector at a time. It is NumPy's
+        /// <c>_next(x,1) - x</c> expressed as a pure bit-increment — <c>reinterpret(bits(x) + 1) - x</c>
+        /// — plus a single <c>x == 0 → +Epsilon</c> select. The signedness is automatic: adding 1 to the
+        /// raw integer pattern steps toward +inf for x&gt;0 and toward -inf for x&lt;0 (away from zero),
+        /// so the subtracted result carries x's sign. <c>±inf</c> and <c>NaN</c> need no special lane —
+        /// <c>bits+1</c> of an infinity is a NaN pattern and <c>NaN - x</c> is NaN (the exact NaN bits are
+        /// tokenized by the oracle) — and the ONLY input the bare increment gets wrong is <c>-0.0</c>
+        /// (it would yield <c>-minsubnormal</c>), which the <c>x == 0</c> mask corrects to <c>+Epsilon</c>
+        /// (leaving <c>+0.0</c> at the same value). Lane-identical to the scalar
+        /// <see cref="NumSharp.Utilities.NDSpacingMath.Spacing(double)"/> for every finite input, which is
+        /// what backs the loop's remainder/tail. Reached only for float/double (gated by
+        /// <see cref="CanUseUnarySimd"/>).
+        /// </summary>
+        private static void EmitVectorSpacing(ILGenerator il, Type clrType)
+        {
+            // Integer lane type matching the float width (double↔long, float↔int) for the raw increment.
+            Type intType = clrType == typeof(double) ? typeof(long) : typeof(int);
+            var vType = VectorMethodCache.V(VectorBits, clrType);
+
+            var locX = il.DeclareLocal(vType);   // x, needed twice (subtract and ==0 compare)
+            var locR = il.DeclareLocal(vType);   // r = nx - x, held while the mask/eps are built
+
+            // Stack in: [xv]. Save x.
+            il.Emit(OpCodes.Stloc, locX);
+
+            // nx = reinterpret<clr>( reinterpret<int>(x) + 1 )
+            il.Emit(OpCodes.Ldloc, locX);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.As(VectorBits, clrType, intType), null);   // [xBitsV]
+            if (intType == typeof(long)) il.Emit(OpCodes.Ldc_I8, 1L); else il.Emit(OpCodes.Ldc_I4_1);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, intType), null); // [xBitsV, onesV]
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Operator(VectorBits, intType, "op_Addition"), null); // [bits+1]
+            il.EmitCall(OpCodes.Call, VectorMethodCache.As(VectorBits, intType, clrType), null);    // [nxV]
+
+            // r = nx - x
+            il.Emit(OpCodes.Ldloc, locX);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Operator(VectorBits, clrType, "op_Subtraction"), null); // [rV]
+            il.Emit(OpCodes.Stloc, locR);
+
+            // result = ConditionalSelect(x == 0, +Epsilon, r)  — fixes -0.0 (and keeps +0.0 identical).
+            il.Emit(OpCodes.Ldloc, locX);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Zero(VectorBits, clrType), null);           // [xv, 0v]
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(VectorBits, clrType), null);         // [maskV]
+            if (clrType == typeof(float)) il.Emit(OpCodes.Ldc_R4, float.Epsilon);
+            else il.Emit(OpCodes.Ldc_R8, double.Epsilon);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, clrType), null); // [maskV, epsV]
+            il.Emit(OpCodes.Ldloc, locR);                                                            // [maskV, epsV, rV]
+            il.EmitCall(OpCodes.Call, VectorMethodCache.ConditionalSelect(VectorBits, clrType), null); // [resultV]
         }
 
         /// <summary>

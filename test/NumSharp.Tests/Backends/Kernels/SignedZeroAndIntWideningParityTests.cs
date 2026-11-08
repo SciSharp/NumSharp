@@ -15,6 +15,7 @@ namespace NumSharp.Tests.Backends.Kernels
     ///           on ARM (x86 JIT folds to a sign-bit xor).                   [ARM-only]
     ///       B3  max/min REDUCTION signed-zero — fold uses Math.Max (+0 on tie) instead of
     ///           NumPy's last-tied-operand-wins.                             [all platforms]
+    ///           Fixed by 1d79ce61 (NumPy's own reduction schedules).
     ///       B4  prod/sum of narrow ints → int64 — exact-int widening kernel is AVX2-gated,
     ///           so non-AVX2 (ARM) falls back to a double accumulator that SATURATES
     ///           (e.g. (long)2^70 → Int64.MaxValue) instead of wrapping.     [ARM-only]
@@ -165,15 +166,19 @@ namespace NumSharp.Tests.Backends.Kernels
 
         // ---------------------------------------------------------------- B3: max/min reduction ±0 (all platforms)
         //
-        // KNOWN BUG (all platforms, including x86). NumPy's max/min reduction is a sequential fold
-        // whose ±0 tie resolves to the LAST tied operand: np.max([+0,-0])=-0, np.max([-0,+0])=+0.
-        // NumSharp's reduction folds with Math.Max/Math.Min, which return +0 / -0 on a ±0 tie
-        // regardless of order. Matching NumPy exactly requires preserving original-element order
-        // through the (vectorized, horizontally-combined) reduction — perf-prohibitive for a pure
-        // signed-zero edge — so this stays deferred and excluded from CI via [OpenBugs] rather than
-        // documented as intended. Remove [OpenBugs] when the reduction tie-break is fixed.
+        // FIXED (was a KNOWN BUG on all platforms, including x86). NumPy's max/min reduction is a
+        // sequential fold whose ±0 tie resolves to the LAST tied operand: np.max([+0,-0])=-0,
+        // np.max([-0,+0])=+0. NumSharp's reduction used to fold with Math.Max/Math.Min, which return
+        // +0 / -0 on a ±0 tie regardless of order. 1d79ce61 made np.max / np.min run NumPy's own
+        // reduction schedules bit for bit (the ±0 sign and the NaN payload included), so both tests
+        // below pass; they were [OpenBugs] until the 2026-10-05 run of the whole OpenBugs category
+        // found them passing.
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.max</c> of a ±0 tie returns the LATER zero, bit for bit: <c>max([+0, -0])</c> is <c>-0</c> and
+        ///     <c>max([-0, +0])</c> is <c>+0</c> in NumPy 2.4.2. The sign matters downstream (<c>1 / x</c> is ±inf).
+        /// </summary>
+        [TestMethod]
         public void Max_Reduction_SignedZero_LastTiedOperandWins()
         {
             // NumPy: np.max([+0,-0]) = -0, np.max([-0,+0]) = +0 (last tied wins).
@@ -181,7 +186,11 @@ namespace NumSharp.Tests.Backends.Kernels
             AssertBits(0.0, np.max(np.array(new[] { -0.0, 0.0 })).GetDouble(0), "max([-0,+0])");
         }
 
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.min</c> of a ±0 tie returns the LATER zero, bit for bit: <c>min([+0, -0])</c> is <c>-0</c> and
+        ///     <c>min([-0, +0])</c> is <c>+0</c> in NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
         public void Min_Reduction_SignedZero_LastTiedOperandWins()
         {
             // NumPy: np.min([+0,-0]) = -0, np.min([-0,+0]) = +0.

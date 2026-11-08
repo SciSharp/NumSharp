@@ -1,7 +1,7 @@
-# Backend profiles and the five complementary subsystems
+# Backend profiles and the six complementary subsystems
 
 `run_benchmark.py` first merges targeted Managed/OpenBLAS profile rows into the op matrix, then appends
-five subsystems whose result models cannot fit that matrix. Backend exceptions are availability states.
+six subsystems whose result models cannot fit that matrix. Backend exceptions are availability states.
 
 | Subsystem | Dir | What it adds the op matrix lacks | Result model |
 |-----------|-----|----------------------------------|--------------|
@@ -10,9 +10,10 @@ five subsystems whose result models cannot fit that matrix. Backend exceptions a
 | **operand** | `benchmark/operand/` | 1-D (contig/strided/reversed), scalar operand, mixed operand layouts (C+F, C+T), binary broadcast | case × dtype |
 | **cast** | `benchmark/cast/` | full `astype` src→dst × 8 layouts at 1M — no op-matrix coverage at all | 15×15 per-layout matrices |
 | **fusion** | `benchmark/fusion/` | `np.evaluate` fused vs unfused np.* chains (+ NumPy context) | fixed-expression report |
+| **strings** | `benchmark/strings/` | text computation over S / U / StringDType (comparisons, concatenation, reductions, sort / search / sets, the np.strings functions, text → number) on data kinds that separate the kernels' cases; the NumPy twin writes the arrays, the C# side loads them | op × data kind × size |
 | **backend profiles** | `benchmark/backends/` → `benchmark/openblas/` | every backend-sensitive API (the OpenBLAS-route set in `coverage/generated/summary.md`) under Managed C# and OpenBLAS; catches MissingBackendException and NotSupportedException | op × dtype × N × scenario, merged |
 
-## The shared shape (the five appended subsystems)
+## The shared shape (the six appended subsystems)
 
 1. **`<name>_bench.cs`** — a NumSharp file-based app fed on stdin via `dotnet run -c Release -`. Emits rows with the
    subsystem's keys. Its author-absolute `#:project` path is rewritten to the running checkout by the driver.
@@ -36,7 +37,8 @@ sheet script). Keep the two sides' keys byte-identical or they won't merge.
 Rare. Mirror an existing one (the `cast` subsystem is the cleanest template):
 1. Create `benchmark/<name>/<name>_bench.cs`, `<name>_bench.py`, `<name>_sheet.py` following the `bench_common.py`
    contract (same row keys both sides; NPY/NS in the sheet).
-2. Wire it into `run_benchmark.py` (add the append step + a `--skip-<name>` flag) next to the other four.
+2. Wire it into `run_benchmark.py` (add the append step + a `--skip-<name>` flag) next to the others, and list its
+   `*_results.{md,tsv}` in `scripts/snapshot_history.py`'s `SUBSYSTEM_FILES`.
 3. Ensure the sheet writes `benchmark/<name>/<name>_results.md` (+ `.tsv`) — those are what the history snapshot
    collects.
 

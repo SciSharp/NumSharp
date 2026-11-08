@@ -12,7 +12,9 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Abs(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "absolute", nd, null, @out, where);
+            // absolute has no string loop (NumPy's class-named UFuncTypeError); checked before the dtype-specific rules.
+            Strings.NDStringUfuncs.ThrowIfUnary("absolute", nd, typeCode);
             var inputType = nd.GetTypeCode;
 
             // np.abs(complex) returns the float64 magnitude. NumPy registers exactly the

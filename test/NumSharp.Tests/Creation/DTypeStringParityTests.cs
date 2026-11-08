@@ -4,13 +4,14 @@ using System.Numerics;
 namespace NumSharp.Tests.Creation
 {
     /// <summary>
-    ///     Exhaustive NumPy 2.x parity tests for <see cref="np.dtype(string)"/> string parsing.
+    ///     Exhaustive NumPy 2.x parity tests for <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/> string parsing.
     ///
     ///     Every expectation here is verified against NumPy's actual output via
-    ///     <c>python -c "import numpy as np; np.dtype(...)"</c>. NumPy types NumSharp doesn't
-    ///     implement (bytestring, unicode, datetime, timedelta, object, void) throw
-    ///     <see cref="NotSupportedException"/>; NumPy's complex64 widens to
-    ///     NumSharp's complex128 (System.Numerics.Complex) since the 64-bit form isn't supported.
+    ///     <c>python -c "import numpy as np; np.dtype(...)"</c>. The text codes parse to NumPy's descriptors
+    ///     (<c>S</c> / <c>S10</c> / <c>a</c> / <c>a5</c> to bytestrings, <c>U</c> / <c>U32</c> to unicode), and the
+    ///     datetime / timedelta codes to descriptors that have no storage yet; the NumPy types NumSharp doesn't
+    ///     implement (complex64, object, void) throw <see cref="NotSupportedException"/>, and a string NumPy rejects
+    ///     raises NumPy's <see cref="TypeError"/> with NumPy's text.
     ///
     ///     Platform note: 'l'/'L' and 'int'/'uint' follow the <b>Windows</b> NumPy convention
     ///     (C long = 32-bit). On 64-bit Linux NumPy these would be 64-bit; NumSharp is fixed
@@ -22,11 +23,36 @@ namespace NumSharp.Tests.Creation
         private static void Expect(string input, NPTypeCode expected) =>
             np.dtype(input).typecode.Should().Be(expected, $"input='{input}'");
 
-        private static void ExpectThrow(string input)
+        /// <summary>
+        ///     A string NumPy rejects: NumPy's <c>TypeError: data type '…' not understood</c>. None of the strings here
+        ///     needs Python's repr escaping, so the quoted text is the input between single quotes.
+        /// </summary>
+        /// <param name="input">The dtype string.</param>
+        private static void ExpectNotUnderstood(string input)
         {
             Action act = () => np.dtype(input);
-            act.Should().Throw<Exception>($"input='{input}' should throw")
-                .Which.Should().Match(ex => ex is NotSupportedException || ex is ArgumentNullException);
+            act.Should().Throw<TypeError>($"input='{input}'").Which.Message.Should().Be($"data type '{input}' not understood");
+        }
+
+        /// <summary>A valid NumPy dtype NumSharp has no class for (complex64, object, void): NumSharp's limit, not NumPy's error.</summary>
+        /// <param name="input">The dtype string.</param>
+        private static void ExpectUnsupported(string input)
+        {
+            Action act = () => np.dtype(input);
+            act.Should().Throw<NotSupportedException>($"input='{input}'").Which.Message.Should().Be($"NumPy dtype '{input}' is not supported by NumSharp");
+        }
+
+        /// <summary>
+        ///     <c>'f16'</c> / <c>'c32'</c> name the host's C long double in NumPy where it is 16 bytes (float128 /
+        ///     complex256 on 64-bit Linux): unsupported there, NumPy's "not understood" where NumPy has no such width.
+        /// </summary>
+        /// <param name="input">The dtype string.</param>
+        private static void ExpectLongDoubleWidth(string input)
+        {
+            if (DTypeRegistry.CLongDoubleSize == 16)
+                ExpectUnsupported(input);
+            else
+                ExpectNotUnderstood(input);
         }
 
         // ---------------------------------------------------------------------
@@ -61,7 +87,7 @@ namespace NumSharp.Tests.Creation
         [TestMethod] public void SingleChar_f_Float32()            => Expect("f", NPTypeCode.Single);
         [TestMethod] public void SingleChar_d_Float64()            => Expect("d", NPTypeCode.Double);
         [TestMethod] public void SingleChar_g_LongDouble_AsFloat64() => Expect("g", NPTypeCode.Double);
-        [TestMethod] public void SingleChar_F_Complex64_Throws()   => ExpectThrow("F");
+        [TestMethod] public void SingleChar_F_Complex64_Throws()   => ExpectUnsupported("F");
         [TestMethod] public void SingleChar_D_Complex128()         => Expect("D", NPTypeCode.Complex);
         [TestMethod] public void SingleChar_G_LongDoubleComplex()  => Expect("G", NPTypeCode.Complex);
         [TestMethod] public void SingleChar_p_IntPtr_Int64()       => Expect("p", NPTypeCode.Int64);
@@ -80,7 +106,7 @@ namespace NumSharp.Tests.Creation
         [TestMethod] public void Sized_i4_Int32()       => Expect("i4", NPTypeCode.Int32);
         [TestMethod] public void Sized_u4_UInt32()      => Expect("u4", NPTypeCode.UInt32);
         [TestMethod] public void Sized_f4_Single()      => Expect("f4", NPTypeCode.Single);
-        [TestMethod] public void Sized_c8_Complex64_Throws() => ExpectThrow("c8");
+        [TestMethod] public void Sized_c8_Complex64_Throws() => ExpectUnsupported("c8");
         [TestMethod] public void Sized_i8_Int64()       => Expect("i8", NPTypeCode.Int64);
         [TestMethod] public void Sized_u8_UInt64()      => Expect("u8", NPTypeCode.UInt64);
         [TestMethod] public void Sized_f8_Double()      => Expect("f8", NPTypeCode.Double);
@@ -105,7 +131,7 @@ namespace NumSharp.Tests.Creation
         [TestMethod] public void Named_float_AsDouble()  => Expect("float", NPTypeCode.Double);
         [TestMethod] public void Named_double()          => Expect("double", NPTypeCode.Double);
         [TestMethod] public void Named_single()          => Expect("single", NPTypeCode.Single);
-        [TestMethod] public void Named_complex64_Throws() => ExpectThrow("complex64");
+        [TestMethod] public void Named_complex64_Throws() => ExpectUnsupported("complex64");
         [TestMethod] public void Named_complex128()      => Expect("complex128", NPTypeCode.Complex);
         [TestMethod] public void Named_complex()         => Expect("complex", NPTypeCode.Complex);
         [TestMethod] public void Named_bool()            => Expect("bool", NPTypeCode.Boolean);
@@ -191,36 +217,38 @@ namespace NumSharp.Tests.Creation
         // Invalid size suffixes (NumPy TypeError)
         // ---------------------------------------------------------------------
 
-        [TestMethod] public void Invalid_b4()  => ExpectThrow("b4");
-        [TestMethod] public void Invalid_qm1() => ExpectThrow("?1");  // ? is not sized
-        [TestMethod] public void Invalid_i3()  => ExpectThrow("i3");
-        [TestMethod] public void Invalid_i5()  => ExpectThrow("i5");
-        [TestMethod] public void Invalid_i16() => ExpectThrow("i16");
-        [TestMethod] public void Invalid_i32() => ExpectThrow("i32");
-        [TestMethod] public void Invalid_u3()  => ExpectThrow("u3");
-        [TestMethod] public void Invalid_u16() => ExpectThrow("u16");
-        [TestMethod] public void Invalid_f1()  => ExpectThrow("f1");
-        [TestMethod] public void Invalid_f3()  => ExpectThrow("f3");
-        [TestMethod] public void Invalid_f5()  => ExpectThrow("f5");
-        [TestMethod] public void Invalid_f16() => ExpectThrow("f16");
-        [TestMethod] public void Invalid_c1()  => ExpectThrow("c1");
-        [TestMethod] public void Invalid_c2()  => ExpectThrow("c2");
-        [TestMethod] public void Invalid_c4()  => ExpectThrow("c4");
-        [TestMethod] public void Invalid_c32() => ExpectThrow("c32");
+        [TestMethod] public void Invalid_b4()  => ExpectNotUnderstood("b4");
+        [TestMethod] public void Invalid_qm1() => ExpectNotUnderstood("?1");  // ? is not sized
+        [TestMethod] public void Invalid_i3()  => ExpectNotUnderstood("i3");
+        [TestMethod] public void Invalid_i5()  => ExpectNotUnderstood("i5");
+        [TestMethod] public void Invalid_i16() => ExpectNotUnderstood("i16");
+        [TestMethod] public void Invalid_i32() => ExpectNotUnderstood("i32");
+        [TestMethod] public void Invalid_u3()  => ExpectNotUnderstood("u3");
+        [TestMethod] public void Invalid_u16() => ExpectNotUnderstood("u16");
+        [TestMethod] public void Invalid_f1()  => ExpectNotUnderstood("f1");
+        [TestMethod] public void Invalid_f3()  => ExpectNotUnderstood("f3");
+        [TestMethod] public void Invalid_f5()  => ExpectNotUnderstood("f5");
+        [TestMethod] public void Invalid_f16() => ExpectLongDoubleWidth("f16");
+        [TestMethod] public void Invalid_c1()  => ExpectNotUnderstood("c1");
+        [TestMethod] public void Invalid_c2()  => ExpectNotUnderstood("c2");
+        [TestMethod] public void Invalid_c4()  => ExpectNotUnderstood("c4");
+        [TestMethod] public void Invalid_c32() => ExpectLongDoubleWidth("c32");
 
         // ---------------------------------------------------------------------
         // NumPy types NumSharp doesn't implement → NotSupportedException
         // ---------------------------------------------------------------------
 
-        [TestMethod] public void Unsupported_S()    => ExpectThrow("S");
-        [TestMethod] public void Unsupported_S10()  => ExpectThrow("S10");
-        [TestMethod] public void Unsupported_S1000() => ExpectThrow("S1000");
-        [TestMethod] public void Unsupported_U()    => ExpectThrow("U");
-        [TestMethod] public void Unsupported_U32()  => ExpectThrow("U32");
-        [TestMethod] public void Unsupported_V()    => ExpectThrow("V");
-        [TestMethod] public void Unsupported_V16()  => ExpectThrow("V16");
-        [TestMethod] public void Unsupported_O()    => ExpectThrow("O");
-        [TestMethod] public void Unsupported_a()    => ExpectThrow("a");
+        // The fixed-width string dtypes parse (probed 2.4.2: np.dtype(spelling).str); the unsized forms are the class
+        // singletons S0 / U0, which an allocation turns into one character.
+        [TestMethod] public void String_S()     => np.dtype("S").str.Should().Be("|S0");
+        [TestMethod] public void String_S10()   => np.dtype("S10").str.Should().Be("|S10");
+        [TestMethod] public void String_S1000() => np.dtype("S1000").str.Should().Be("|S1000");
+        [TestMethod] public void String_U()     => np.dtype("U").str.Should().Be("<U0");
+        [TestMethod] public void String_U32()   => np.dtype("U32").str.Should().Be("<U32");
+        [TestMethod] public void Unsupported_V()    => ExpectUnsupported("V");
+        [TestMethod] public void Unsupported_V16()  => ExpectUnsupported("V16");
+        [TestMethod] public void Unsupported_O()    => ExpectUnsupported("O");
+        [TestMethod] public void String_a_IsDeprecatedBytesAlias() => np.dtype("a").str.Should().Be("|S0");
         // NumPy's PyArray_DescrFromType maps the bare datetime LETTERS to the generic descriptors: np.dtype('M') is
         // dtype('<M8') and np.dtype('m') is dtype('<m8') (probed 2.4.2).
         [TestMethod] public void SingleChar_M_GenericDatetime()  => np.dtype("M").Should().Be(np.dtype("M8"));
@@ -266,13 +294,13 @@ namespace NumSharp.Tests.Creation
             np.dtype("datetime64[ns]").Should().Be(np.dtype("M8[ns]"));
             np.dtype("timedelta64[ms]").str.Should().Be("<m8[ms]");
         }
-        [TestMethod] public void Unsupported_a5()   => ExpectThrow("a5");
-        [TestMethod] public void Unsupported_c_IsS1_NotComplex() => ExpectThrow("c");
-        [TestMethod] public void Unsupported_str()  => ExpectThrow("str");
-        [TestMethod] public void Unsupported_str_() => ExpectThrow("str_");
-        [TestMethod] public void Unsupported_bytes_() => ExpectThrow("bytes_");
-        [TestMethod] public void Unsupported_object() => ExpectThrow("object");
-        [TestMethod] public void Unsupported_object_() => ExpectThrow("object_");
+        [TestMethod] public void String_a5()       => np.dtype("a5").str.Should().Be("|S5");
+        [TestMethod] public void String_c_IsS1_NotComplex() => np.dtype("c").str.Should().Be("|S1");
+        [TestMethod] public void String_str()      => np.dtype("str").str.Should().Be("<U0");
+        [TestMethod] public void String_str_()     => np.dtype("str_").str.Should().Be("<U0");
+        [TestMethod] public void String_bytes_()   => np.dtype("bytes_").str.Should().Be("|S0");
+        [TestMethod] public void Unsupported_object() => ExpectUnsupported("object");
+        [TestMethod] public void Unsupported_object_() => ExpectUnsupported("object_");
         // datetime64 / timedelta64 parse into generic-unit descriptors since dtype-system Stage A (see Datetime_* below).
         [TestMethod] public void Named_datetime64_IsGenericDatetime()  => np.dtype("datetime64").str.Should().Be("<M8");
         [TestMethod] public void Named_timedelta64_IsGenericTimedelta() => np.dtype("timedelta64").str.Should().Be("<m8");
@@ -281,30 +309,33 @@ namespace NumSharp.Tests.Creation
         // Case-sensitive: NumPy is case-sensitive for single chars — 'I4' throws
         // ---------------------------------------------------------------------
 
-        [TestMethod] public void CaseSensitive_I4_Throws() => ExpectThrow("I4");
-        [TestMethod] public void CaseSensitive_F4_Throws() => ExpectThrow("F4");
-        [TestMethod] public void CaseSensitive_D8_Throws() => ExpectThrow("D8");
+        [TestMethod] public void CaseSensitive_I4_Throws() => ExpectNotUnderstood("I4");
+        [TestMethod] public void CaseSensitive_F4_Throws() => ExpectNotUnderstood("F4");
+        [TestMethod] public void CaseSensitive_D8_Throws() => ExpectNotUnderstood("D8");
 
         // ---------------------------------------------------------------------
         // Nonsense / whitespace
         // ---------------------------------------------------------------------
 
-        [TestMethod] public void Whitespace_Leading() => ExpectThrow("   i4");
-        [TestMethod] public void Whitespace_Trailing() => ExpectThrow("i4   ");
-        [TestMethod] public void Whitespace_Empty()   => ExpectThrow("");
-        [TestMethod] public void Whitespace_SpaceOnly() => ExpectThrow(" ");
-        [TestMethod] public void Invalid_xyz()        => ExpectThrow("xyz");
-        [TestMethod] public void Invalid_True()       => ExpectThrow("True");
-        [TestMethod] public void Invalid_None()       => ExpectThrow("None");
-        [TestMethod] public void Invalid_Random()     => ExpectThrow("not_a_dtype");
+        [TestMethod] public void Whitespace_Leading() => ExpectNotUnderstood("   i4");
+        [TestMethod] public void Whitespace_Trailing() => ExpectNotUnderstood("i4   ");
+        [TestMethod] public void Whitespace_Empty()   => ExpectNotUnderstood("");
+        [TestMethod] public void Whitespace_SpaceOnly() => ExpectNotUnderstood(" ");
+        [TestMethod] public void Invalid_xyz()        => ExpectNotUnderstood("xyz");
+        [TestMethod] public void Invalid_True()       => ExpectNotUnderstood("True");
+        [TestMethod] public void Invalid_None()       => ExpectNotUnderstood("None");
+        [TestMethod] public void Invalid_Random()     => ExpectNotUnderstood("not_a_dtype");
 
+        /// <summary>
+        ///     A null string is NumPy's <c>None</c>: <c>np.dtype(None) is np.dtype('f8')</c> (NumPy 2.4.2,
+        ///     <c>_convert_from_any</c>'s first test). np.dtype has string / Type / NPTypeCode / DType / NDScalarType
+        ///     overloads, so a bare <c>null</c> literal is ambiguous at compile time; the string spelling is the one this
+        ///     suite exercises.
+        /// </summary>
         [TestMethod]
-        public void NullInput_Throws()
+        public void NullInput_IsNumPysNone_Float64()
         {
-            // np.dtype now has string / Type / NPTypeCode / DType overloads, so a bare `null` literal is ambiguous at
-            // compile time; the string spelling is the one this suite exercises.
-            Action act = () => np.dtype((string)null);
-            act.Should().Throw<ArgumentNullException>();
+            np.dtype((string)null).Should().BeSameAs(DType.Double);
         }
 
         // ---------------------------------------------------------------------

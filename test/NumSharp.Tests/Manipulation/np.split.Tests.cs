@@ -25,13 +25,17 @@ namespace NumSharp.Tests.Manipulation
             result[2].ToArray<long>().Should().ContainInOrder(6, 7, 8);
         }
 
+        /// <summary>
+        ///     np.split into sections that do not divide the axis raises NumPy's ValueError ("array split does not result in
+        ///     an equal division").
+        /// </summary>
         [TestMethod]
-        public void Split_1D_UnequalDivision_ThrowsArgumentException()
+        public void Split_1D_UnequalDivision_ThrowsValueError()
         {
             // NumPy: np.split(np.arange(9), 4) raises ValueError
             var a = np.arange(9);
 
-            Assert.ThrowsException<ArgumentException>(() => np.split(a, 4));
+            Assert.ThrowsException<ValueError>(() => np.split(a, 4));
         }
 
         [TestMethod]
@@ -219,22 +223,28 @@ namespace NumSharp.Tests.Manipulation
             result[4].size.Should().Be(0);
         }
 
+        /// <summary>
+        ///     np.array_split into zero sections raises NumPy's ValueError ("number sections must be larger than 0.").
+        /// </summary>
         [TestMethod]
-        public void ArraySplit_ZeroSections_ThrowsArgumentException()
+        public void ArraySplit_ZeroSections_ThrowsValueError()
         {
             // NumPy: np.array_split(a, 0) raises ValueError
             var a = np.arange(9);
 
-            Assert.ThrowsException<ArgumentException>(() => np.array_split(a, 0));
+            Assert.ThrowsException<ValueError>(() => np.array_split(a, 0));
         }
 
+        /// <summary>
+        ///     np.array_split into a negative number of sections raises NumPy's ValueError.
+        /// </summary>
         [TestMethod]
-        public void ArraySplit_NegativeSections_ThrowsArgumentException()
+        public void ArraySplit_NegativeSections_ThrowsValueError()
         {
             // NumPy: np.array_split(a, -1) raises ValueError
             var a = np.arange(9);
 
-            Assert.ThrowsException<ArgumentException>(() => np.array_split(a, -1));
+            Assert.ThrowsException<ValueError>(() => np.array_split(a, -1));
         }
 
         #endregion
@@ -409,38 +419,52 @@ namespace NumSharp.Tests.Manipulation
 
         #region Argument Validation
 
+        /// <summary>
+        ///     np.split into zero sections raises the ValueError np.array_split raises (NumSharp's deliberate text: NumPy's
+        ///     own split leaks a ZeroDivisionError there); it once threw DivideByZeroException.
+        /// </summary>
         [TestMethod]
-        public void Split_ZeroSections_ThrowsArgumentException()
+        public void Split_ZeroSections_ThrowsValueError()
         {
             // Pre-fix: this threw DivideByZeroException because we did N % 0 before
             // validating sections > 0. Now both split() and array_split() throw
-            // ArgumentException consistently.
+            // NumPy's array_split ValueError consistently.
             var a = np.arange(9);
-            Assert.ThrowsException<ArgumentException>(() => np.split(a, 0));
+            Assert.ThrowsException<ValueError>(() => np.split(a, 0));
         }
 
+        /// <summary>
+        ///     np.split into a negative number of sections raises NumPy's ValueError.
+        /// </summary>
         [TestMethod]
-        public void Split_NegativeSections_ThrowsArgumentException()
+        public void Split_NegativeSections_ThrowsValueError()
         {
             var a = np.arange(9);
-            Assert.ThrowsException<ArgumentException>(() => np.split(a, -1));
+            Assert.ThrowsException<ValueError>(() => np.split(a, -1));
         }
 
+        /// <summary>
+        ///     np.split of a 0-d input raises Python's IndexError "tuple index out of range": NumPy reads
+        ///     <c>ary.shape[axis]</c> before it normalizes anything, so no AxisError is ever raised there.
+        /// </summary>
         [TestMethod]
-        public void Split_ZeroDimensional_ThrowsArgumentOutOfRange()
+        public void Split_ZeroDimensional_ThrowsIndexError()
         {
-            // NumPy: np.split(np.array(5.0), 1) raises IndexError because there is
-            // no axis 0 on a 0-d array. We surface this as ArgumentOutOfRangeException
-            // via NormalizeSplitAxis.
+            // NumPy: np.split(np.array(5.0), 1) raises IndexError ("tuple index out of range")
+            // because ary.shape[axis] indexes an empty shape; NormalizeSplitAxis raises the same.
             var scalar = np.array(5.0);
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.split(scalar, 1));
+            var ex = Assert.ThrowsException<IndexError>(() => np.split(scalar, 1));
+            Assert.AreEqual("tuple index out of range", ex.Message);
         }
 
+        /// <summary>
+        ///     np.split with an out-of-range axis raises the IndexError of NumPy's <c>ary.shape[axis]</c>, not an AxisError.
+        /// </summary>
         [TestMethod]
-        public void Split_AxisOutOfBounds_ThrowsArgumentOutOfRange()
+        public void Split_AxisOutOfBounds_ThrowsIndexError()
         {
             var a = np.arange(12).reshape(3, 4);
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.split(a, 2, axis: 5));
+            Assert.ThrowsException<IndexError>(() => np.split(a, 2, axis: 5));
         }
 
         [TestMethod]

@@ -7,13 +7,13 @@ namespace NumSharp
     {
 
         /// <summary>
-        ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
+        ///     Copies the entire contents of this storage to given address (<see cref="size"/> elements).
         /// </summary>
         /// <param name="slice">The slice to copy to.</param>
         public void CopyTo(IMemoryBlock slice) => Storage.CopyTo(slice);
 
         /// <summary>
-        ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
+        ///     Copies the entire contents of this storage to given address (<see cref="size"/> elements).
         /// </summary>
         /// <param name="address">The address to copy to.</param>
         public unsafe void CopyTo(void* address) => Storage.CopyTo(address);
@@ -30,7 +30,7 @@ namespace NumSharp
         public void CopyTo(IntPtr ptr) => Storage.CopyTo(ptr);
 
         /// <summary>
-        ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
+        ///     Copies the entire contents of this storage to given address (<see cref="size"/> elements).
         /// </summary>
         /// <param name="block">The slice to copy to.</param>
         public unsafe void CopyTo<T>(IMemoryBlock<T> block) where T : unmanaged => Storage.CopyTo<T>(block);

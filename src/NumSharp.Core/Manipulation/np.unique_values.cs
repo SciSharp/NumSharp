@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -26,7 +27,7 @@ namespace NumSharp
         //   * values dtype is preserved; indices/inverse_indices/counts are int64 (NumPy intp).
         //   * inverse_indices is reshaped to the ORIGINAL input shape (NumPy 2.0 change), so the
         //     input can be reconstructed with np.take(values, inverse_indices). A 0-d input's
-        //     inverse is a 0-d () scalar — see ReshapeInverseToInput.
+        //     inverse is a 0-d () scalar — see DefaultEngine.ReshapeInverseToInput (Default.Unique.cs).
         //
         //  ONE deliberate divergence, unique_values only ([Misaligned]): for INTEGER and COMPLEX
         //  dtypes NumPy's sorted=False path dedups through a std::unordered_set (unique.cpp) and
@@ -58,6 +59,7 @@ namespace NumSharp
             /// <summary>The number of times each unique value appears in the input.</summary>
             public NDArray counts { get; }
 
+            [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.UniqueAll))]
             internal UniqueAllResult(NDArray values, NDArray indices, NDArray inverseIndices, NDArray counts)
             {
                 this.values = values;
@@ -76,7 +78,7 @@ namespace NumSharp
                 1 => indices,
                 2 => inverse_indices,
                 3 => counts,
-                _ => throw new IndexOutOfRangeException($"UniqueAllResult has 4 outputs; index {index} is out of range.")
+                _ => throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"UniqueAllResult has 4 outputs; index {index} is out of range."))
             };
 
             /// <summary>Returns the outputs as an <see cref="NDArray"/><c>[]</c> in NumPy field order.</summary>
@@ -116,6 +118,7 @@ namespace NumSharp
             /// <summary>The number of times each unique value appears in the input.</summary>
             public NDArray counts { get; }
 
+            [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.UniqueCounts))]
             internal UniqueCountsResult(NDArray values, NDArray counts)
             {
                 this.values = values;
@@ -130,7 +133,7 @@ namespace NumSharp
             {
                 0 => values,
                 1 => counts,
-                _ => throw new IndexOutOfRangeException($"UniqueCountsResult has 2 outputs; index {index} is out of range.")
+                _ => throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"UniqueCountsResult has 2 outputs; index {index} is out of range."))
             };
 
             /// <summary>Returns the outputs as an <see cref="NDArray"/><c>[]</c> in NumPy field order.</summary>
@@ -166,6 +169,7 @@ namespace NumSharp
             /// <summary>The indices into <see cref="values"/> that reconstruct the input, shaped like the input.</summary>
             public NDArray inverse_indices { get; }
 
+            [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.UniqueInverse))]
             internal UniqueInverseResult(NDArray values, NDArray inverseIndices)
             {
                 this.values = values;
@@ -180,7 +184,7 @@ namespace NumSharp
             {
                 0 => values,
                 1 => inverse_indices,
-                _ => throw new IndexOutOfRangeException($"UniqueInverseResult has 2 outputs; index {index} is out of range.")
+                _ => throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"UniqueInverseResult has 2 outputs; index {index} is out of range."))
             };
 
             /// <summary>Returns the outputs as an <see cref="NDArray"/><c>[]</c> in NumPy field order.</summary>
@@ -210,7 +214,9 @@ namespace NumSharp
         ///     The input is flattened. Each NaN is treated as a distinct value.
         /// </summary>
         /// <param name="x">Input array. Flattened if it is not already 1-D.</param>
-        /// <returns>The unique elements of <paramref name="x"/> (dtype preserved).</returns>
+        /// <returns>The unique elements of <paramref name="x"/> (dtype preserved).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.unique_values.html<br></br>
         ///     NumSharp returns the values SORTED (like <c>np.unique(x, equal_nan=False)</c>). For integer and
@@ -218,11 +224,16 @@ namespace NumSharp
         ///     order that is not portable (both contain the same set); float dtypes are sorted on both sides.
         ///     The Array API leaves the order unspecified.
         /// </remarks>
+        /// <exception cref="OutOfMemoryException">A corrupt NEP 55 <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
+        ///     text). A <c>StringDType</c> array otherwise computes without raising: NumPy's values-only <c>sorted=False</c>
+        ///     pass hashes the texts and compares no NA (the values come back sorted here, NumPy's hash set keeps its own
+        ///     order — the same set).</exception>
         // NDScoped: the hash/sort internals' temps are reclaimed; the values are yielded.
         [NDScoped]
         public static NDArray unique_values(NDArray x)
         {
-            return x.uniqueValuesFast();
+            // NumPy's statements on the plain views (the text checks, the hash and sort routes).
+            return x.TensorEngine.UniqueValues(x);
         }
 
         /// <summary>
@@ -232,14 +243,21 @@ namespace NumSharp
         ///     The input is flattened. Each NaN is treated as a distinct value.
         /// </summary>
         /// <param name="x">Input array. Flattened if it is not already 1-D.</param>
-        /// <returns>A <see cref="UniqueCountsResult"/>: (values, counts).</returns>
+        /// <returns>A <see cref="UniqueCountsResult"/>: (values, counts).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of the unique values (NumPy's
+        ///     <c>_array_converter.wrap</c>); the index arrays stay plain.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_counts.html</remarks>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         // NDScoped: the hash/sort internals are reclaimed; the weaver yields both result-struct
         // members (values, counts) by decomposing the returned UniqueCountsResult's fields.
         [NDScoped]
         public static UniqueCountsResult unique_counts(NDArray x)
         {
-            var r = x.uniqueCountsFast();
+            // NumPy's statements on the plain views (the text checks, the hash and sort routes).
+            var r = x.TensorEngine.UniqueCounts(x);
             return new UniqueCountsResult(r[0], r[1]);
         }
 
@@ -252,18 +270,24 @@ namespace NumSharp
         /// <param name="x">Input array. Flattened if it is not already 1-D.</param>
         /// <returns>A <see cref="UniqueInverseResult"/>: (values, inverse_indices). <c>inverse_indices</c>
         ///     has the same shape as <paramref name="x"/>, so <c>np.take(values, inverse_indices)</c>
-        ///     reconstructs the input.</returns>
+        ///     reconstructs the input.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of the unique values (NumPy's
+        ///     <c>_array_converter.wrap</c>); the index arrays stay plain.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_inverse.html</remarks>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         // NDScoped: internals reclaimed; the weaver yields the values and the (possibly reshaped)
-        // inverse — the two UniqueInverseResult fields. ReshapeInverseToInput returns a view of r[1]
-        // (or r[1] itself for 0-d); the un-yielded r[1] base is reclaimed, its buffer kept alive by
-        // the yielded view's ARC reference.
+        // inverse — the two UniqueInverseResult fields. The engine member owns a scope too: its
+        // DefaultEngine.ReshapeInverseToInput returns a view of the flat inverse, which that scope
+        // reclaims, the buffer kept alive by the returned view's ARC reference.
         [NDScoped]
         public static UniqueInverseResult unique_inverse(NDArray x)
         {
-            var r = x.unique(return_index: false, return_inverse: true, return_counts: false,
-                             axis: null, equal_nan: false);
-            return new UniqueInverseResult(r[0], ReshapeInverseToInput(r[1], x));
+            // NumPy's statements on the plain views (the text checks, the computation, the inverse's reshape).
+            var r = x.TensorEngine.UniqueInverse(x);
+            return new UniqueInverseResult(r[0], r[1]);
         }
 
         /// <summary>
@@ -275,27 +299,22 @@ namespace NumSharp
         ///     a distinct value.
         /// </summary>
         /// <param name="x">Input array. Flattened if it is not already 1-D.</param>
-        /// <returns>A <see cref="UniqueAllResult"/>: (values, indices, inverse_indices, counts).</returns>
+        /// <returns>A <see cref="UniqueAllResult"/>: (values, indices, inverse_indices, counts).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of the unique values (NumPy's
+        ///     <c>_array_converter.wrap</c>); the index arrays stay plain.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_all.html</remarks>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         // NDScoped: internals reclaimed; the weaver yields all four UniqueAllResult members (values,
         // indices, inverse_indices, counts) by decomposing the struct's fields.
         [NDScoped]
         public static UniqueAllResult unique_all(NDArray x)
         {
-            var r = x.unique(return_index: true, return_inverse: true, return_counts: true,
-                             axis: null, equal_nan: false);
-            return new UniqueAllResult(r[0], r[1], ReshapeInverseToInput(r[2], x), r[3]);
+            // NumPy's statements on the plain views (the text checks, the computation, the inverse's reshape).
+            var r = x.TensorEngine.UniqueAll(x);
+            return new UniqueAllResult(r[0], r[1], r[2], r[3]);
         }
-
-        /// <summary>
-        ///     Reshapes the flat inverse-index array to the ORIGINAL input shape, matching NumPy's
-        ///     <c>inv_idx.reshape(ar.shape)</c> so the input can be reconstructed with
-        ///     <c>np.take(values, inverse_indices)</c>. The underlying kwargs path already yields the
-        ///     input shape for ndim ≥ 1; a 0-d input needs its <c>()</c> scalar shape restored (the flat
-        ///     path returns it as <c>(1,)</c>). Reshape is a zero-copy view over the freshly-allocated
-        ///     inverse array.
-        /// </summary>
-        private static NDArray ReshapeInverseToInput(NDArray inverse, NDArray x)
-            => inverse.reshape(x.shape);
     }
 }

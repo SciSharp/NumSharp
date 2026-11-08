@@ -9,9 +9,21 @@ namespace NumSharp
             /// <summary>
             ///     Raises a square matrix to the (integer) power <paramref name="n"/>.
             /// </summary>
+            /// <param name="a">The square matrix, or a stack of them (the last two axes).</param>
             /// <param name="n">
             ///     Any integer. <c>0</c> gives the identity, a NEGATIVE power inverts first.
             /// </param>
+            /// <returns>
+            ///     The power. <b>Footgun (NumPy's own):</b> <c>n == 1</c> returns <paramref name="a"/> ITSELF, not a copy
+            ///     (<c>np.linalg.matrix_power(a, 1) is a</c>), so writing to the result writes to <paramref name="a"/>;
+            ///     <c>n == -1</c> returns the fresh inverse.
+            /// </returns>
+            /// <exception cref="LinAlgError"><paramref name="a"/> is not at least 2-D, or its last two axes are not square;
+            ///     a negative power of a singular matrix.</exception>
+            /// <exception cref="TypeError">A text matrix with <c>n</c> of 2 or more (matmul has no string loop) or a negative
+            ///     <c>n</c> (inv's input cast).</exception>
+            /// <exception cref="OpenBlasMissingBackendException">A negative power of a matrix the managed LU cannot take
+            ///     with no backend installed.</exception>
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_power.html
             ///     <para>
@@ -26,61 +38,13 @@ namespace NumSharp
             ///     work.
             ///     </para>
             /// </remarks>
-            [NDScoped]
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static NDArray matrix_power(NDArray a, int n)
             {
-                AssertStackedSquare(a);
-
-                var work = a;
-                if (n < 0)
-                {
-                    // Raises without a backend — deliberately BEFORE the identity/short-power cases,
-                    // exactly as NumPy inverts first and then exponentiates the inverse.
-                    work = inv(a);
-                    n = -n;
-                }
-
-                if (n == 0)
-                    return Identity(work);
-                if (n == 1)
-                    return work.copy();
-                if (n == 2)
-                    return np.matmul(work, work);
-                if (n == 3)
-                    return np.matmul(np.matmul(work, work), work);
-
-                // Binary exponentiation. `result` stays null until the first set bit so the identity
-                // multiply is skipped, which is what NumPy's `if result is None` does.
-                NDArray result = null;
-                var z = work;
-                while (n > 0)
-                {
-                    if ((n & 1) == 1)
-                        result = result is null ? z : np.matmul(result, z);
-
-                    n >>= 1;
-                    if (n > 0)
-                        z = np.matmul(z, z);
-                }
-
-                return result;
-            }
-
-            /// <summary>
-            ///     The identity matching a stack's trailing two axes, broadcast across the batch —
-            ///     what <c>matrix_power(a, 0)</c> returns.
-            /// </summary>
-            private static NDArray Identity(NDArray a)
-            {
-                long side = a.Shape.dimensions[a.ndim - 1];
-                if (side > int.MaxValue)
-                    throw new OverflowException($"Matrix dimension {side} exceeds int.MaxValue for np.eye");
-
-                var eye = np.eye((int)side).astype(a.dtype);
-                if (a.ndim == 2)
-                    return eye;
-
-                return np.broadcast_to(eye, new Shape(a.shape)).copy();
+                if (a is null) throw new ArgumentNullException(nameof(a));
+                return a.TensorEngine.Linalg.MatrixPower(a, n);
             }
         }
     }

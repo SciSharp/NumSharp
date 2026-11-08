@@ -125,7 +125,7 @@ namespace NumSharp.Tests.Math
         public void RealSet_ReadOnly_Raises()
         {
             var b = np.broadcast_to(np.array(new[] { 1.0 }), new Shape(3));
-            ((Action)(() => b.real = (NDArray)5)).Should().Throw<NumSharpException>().WithMessage("*read-only*");
+            ((Action)(() => b.real = (NDArray)5)).Should().Throw<ValueError>().WithMessage("*read-only*");
         }
 
         // ---- imag setter -----------------------------------------------------------------

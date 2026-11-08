@@ -228,7 +228,10 @@ namespace NumSharp.Tests.Selection
         {
             var a = np.zeros(new Shape(10), np.float64);
             Action act = () => a[np.array(new long[] { 1, 2, 3 })] = np.array(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
-            act.Should().Throw<ValueError>().WithMessage("could not broadcast input array from shape (5,) into shape (3,)");
+            // NumPy 2.4.2 (probed): every index-array assignment reports a value that does not fit through
+            // MapIter's broadcast_error, also for a 1-D destination.
+            act.Should().Throw<ValueError>().WithMessage(
+                "shape mismatch: value array of shape (5,) could not be broadcast to indexing result of shape (3,)");
         }
 
         [TestMethod]
@@ -331,7 +334,10 @@ namespace NumSharp.Tests.Selection
             Assert.IsTrue(np.array_equal(np.take(a, i32, mode: "clip"), np.take(a, i64, mode: "clip")));
             Doubles(np.take(a, np.array(new[] { 5, -1 }))).Should().Equal(5, 99);
             Action raise = () => np.take(a, i32);
-            raise.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*index 150 is out of bounds for axis with size 100*");
+            // NumPy's FLAT (axis=None) take runs on the raveled array and names axis 0 (probed 2.4.2:
+            // "index 150 is out of bounds for axis 0 with size 100"); the axis-less "for size" text is
+            // a.flat[i]'s, not take's.
+            raise.Should().Throw<IndexError>().WithMessage("index 150 is out of bounds for axis 0 with size 100");
 
             var m = np.arange(24, dtype: np.int64).reshape(6, 4);
             Assert.IsTrue(np.array_equal(np.take(m, np.array(new[] { 5, 0 }), axis: 0), np.take(m, np.array(new long[] { 5, 0 }), axis: 0)));
@@ -349,7 +355,7 @@ namespace NumSharp.Tests.Selection
             np.put(a, np.array(new[] { 99 }), np.array(new long[] { 8 }), mode: "clip");
             Longs(a)[9].Should().Be(8);
             Action raise = () => np.put(a, np.array(new[] { 0, 10 }), np.array(new long[] { 1 }));
-            raise.Should().Throw<IndexOutOfRangeException>().WithMessage("index 10 is out of bounds for axis 0 with size 10");
+            raise.Should().Throw<IndexError>().WithMessage("index 10 is out of bounds for axis 0 with size 10");
         }
 
         [TestMethod]

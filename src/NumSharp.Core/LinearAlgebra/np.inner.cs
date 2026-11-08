@@ -27,6 +27,7 @@ namespace NumSharp
         ///     for the conjugating form).
         ///     </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray inner(NDArray a, NDArray b)
             => a.TensorEngine.Inner(a, b);
     }

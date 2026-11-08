@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- OpenBlasVersion pins the OpenBLAS build. The build downloads that scipy-openblas release
+         from PyPI for the platform that it builds for, verifies it, and puts its library in the
+         output in place of the one that the package bundles. The program then loads that library
+         or fails: it never falls back to another one.
+         0.3.31.188.0 is the OpenBLAS of NumPy 2.4.4. The package itself bundles 0.3.31.22.0, the
+         OpenBLAS of NumPy 2.4.2.
+
+         More settings go on the same reference. README.md explains each one:
+           OpenBlasSha256="..."                        the SHA-256 that the library must have
+           OpenBlasPath="native/openblas"              download to, and load from, this directory
+           OpenBlasDistribution="scipy-openblas32"     the build with 32-bit integers
+           OpenBlasFeed="https://pypi.example.com"     a PyPI mirror (it requires OpenBlasSha256)
+           OpenBlasDelivery="package"                  put the library in your own NuGet package -->
+    <PackageReference Include="NumSharp.Interop.OpenBLAS" Version="0.70.0" OpenBlasVersion="0.3.31.188.0" />
+  </ItemGroup>
+
+</Project>

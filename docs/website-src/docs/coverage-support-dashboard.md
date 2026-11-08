@@ -16,6 +16,8 @@
   --cov-ext-soft: #eee8ff;
   --cov-oracle: #0f7c86;
   --cov-oracle-soft: #dcf4f5;
+  --cov-signature: #8a4b0f;
+  --cov-signature-soft: #fbeedd;
   --cov-quiet: var(--bs-secondary-color, #66737e);
   --cov-line: var(--bs-border-color);
   --cov-panel: var(--bs-body-bg);
@@ -86,13 +88,14 @@
 .ns-coverage-dashboard .is-exact { --status-color: var(--cov-good); --status-soft: var(--cov-good-soft); }
 .ns-coverage-dashboard .is-alias { --status-color: var(--cov-alias); --status-soft: var(--cov-alias-soft); }
 .ns-coverage-dashboard .is-oracle { --status-color: var(--cov-oracle); --status-soft: var(--cov-oracle-soft); }
+.ns-coverage-dashboard .is-signature { --status-color: var(--cov-signature); --status-soft: var(--cov-signature-soft); }
 .ns-coverage-dashboard .cov-badge { background: var(--status-soft); border-color: color-mix(in srgb, var(--status-color), transparent 62%); color: var(--status-color); }
 .ns-coverage-dashboard .cov-badge .cov-dot { background: var(--status-color); }
 
 .ns-coverage-dashboard .cov-metrics {
   display: grid;
   gap: .75rem;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
   margin: 1.25rem 0;
 }
 
@@ -301,6 +304,12 @@
 .ns-coverage-dashboard .cov-oracle-block p:last-child { margin-bottom: 0; }
 .ns-coverage-dashboard .cov-oracle-block code { font-size: .74rem; }
 .ns-coverage-dashboard .cov-oracle-block.is-gap { background: var(--cov-muted); border-left-color: var(--cov-quiet); color: var(--cov-quiet); }
+.ns-coverage-dashboard .cov-result-signature { background: var(--cov-signature-soft); border-radius: 999px; color: var(--cov-signature); font-family: var(--bs-font-monospace); font-size: .64rem; font-weight: 750; padding: .2rem .4rem; }
+.ns-coverage-dashboard .cov-signature-block { background: color-mix(in srgb, var(--cov-signature), transparent 93%); border-left: 3px solid var(--cov-signature); border-radius: .2rem .5rem .5rem .2rem; font-size: .82rem; margin: .4rem 0 .9rem; padding: .6rem .75rem; }
+.ns-coverage-dashboard .cov-signature-block p { margin: 0 0 .35rem; }
+.ns-coverage-dashboard .cov-signature-block p:last-child { margin-bottom: 0; }
+.ns-coverage-dashboard .cov-signature-block code { font-size: .74rem; }
+.ns-coverage-dashboard .cov-signature-block.is-match { background: color-mix(in srgb, var(--cov-good), transparent 93%); border-left-color: var(--cov-good); }
 .ns-coverage-dashboard .cov-more { background: var(--cov-muted); border: 0; color: var(--cov-alias); cursor: pointer; font-weight: 700; padding: .7rem; width: 100%; }
 .ns-coverage-dashboard .cov-empty { color: var(--cov-quiet); padding: 2rem 1rem; text-align: center; }
 
@@ -378,7 +387,7 @@
   <section class="cov-intro" aria-labelledby="cov-dashboard-title">
     <div class="cov-kicker">NumPy 2.x parity · compiled API inventory</div>
     <h2 class="cov-title" id="cov-dashboard-title">See the supported surface. Find the next gap.</h2>
-    <p class="cov-lede">Explore the NumPy catalog across functions, modules, and object members, with NumSharp equivalents, known limitations, C# overloads<span id="cov-lede-oracle">, and the committed NumPy-oracle contracts that prove each API's parity</span>. The page is generated from the same artifact published by CI.</p>
+    <p class="cov-lede">Explore the NumPy catalog across functions, modules, and object members, with NumSharp equivalents, known limitations, C# overloads<span id="cov-lede-signature"> checked against NumPy's signatures</span><span id="cov-lede-oracle">, and the committed NumPy-oracle contracts that prove each API's parity</span>. The page is generated from the same artifact published by CI.</p>
     <div class="cov-meta" id="cov-meta" aria-label="Artifact metadata"></div>
   </section>
 
@@ -393,7 +402,7 @@
     <section class="cov-metrics" id="cov-metrics" aria-label="Coverage summary"></section>
     <div class="cov-definition">
       <strong>Coverage math</strong>
-      <p><span id="cov-headline-reference"></span> Summaries, cards, and the explorer follow the selected scope. Availability is <code>available ÷ NumPy APIs in that scope</code>; supporting types, constants, modules, and NumSharp-only APIs do not enter this percentage. “Available” means an exact public member or a reviewed alias exists and is not marked partial/unsupported. The headline comparison also excludes extended APIs. API presence is not a blanket edge-case, dtype, layout, or signature parity claim. <span id="cov-oracle-explainer"><strong>Oracle-verified</strong> is that claim's evidence: committed NumPy 2.4.2 output (the differential-fuzz corpus plus the .npy, flags and layout oracles) that CI replays against NumSharp, bit-exact or a documented divergence, resolved to the API directly or through an identity or reviewed delegation alias.</span> <span id="cov-oracle-reference"></span> <span id="cov-applicability-note"></span></p>
+      <p><span id="cov-headline-reference"></span> Summaries, cards, and the explorer follow the selected scope. Availability is <code>available ÷ NumPy APIs in that scope</code>; supporting types, constants, modules, and NumSharp-only APIs do not enter this percentage. “Available” means an exact public member or a reviewed alias exists and is not marked partial/unsupported. The headline comparison also excludes extended APIs. API presence is not a blanket edge-case, dtype, layout, or signature parity claim. <span id="cov-oracle-explainer"><strong>Oracle-verified</strong> is that claim's evidence: committed NumPy 2.4.2 output (the differential-fuzz corpus plus the .npy, flags and layout oracles) that CI replays against NumSharp, bit-exact or a documented divergence, resolved to the API directly or through an identity or reviewed delegation alias.</span> <span id="cov-oracle-reference"></span> <span id="cov-signature-explainer"><strong>NumPy-identical signature</strong> is a separate check: one C# overload with exactly NumPy's parameters (names, positions, defaults) under NumPy's name, and NumPy-style calls of it compile. It comes from the API diff gap map (<code>tools/api-parameter-parity</code>), which compares every C# spelling (functions, members, constructors, extension methods, <code>NDArray&lt;T&gt;</code>) and compiles NumPy-style calls at C# 12 and C# 14. Marks of a differing call: M a NumPy parameter no overload offers, X a parameter NumPy does not have, O more than one overload, T a dtype taken as NPTypeCode / Type or picked by a generic type argument, B a NumPy-style call that does not compile, L <code>null</code> refused where NumPy's default is None, Q an integer sequence refused where NumPy allows one, N credited through another name.</span> <span id="cov-signature-reference"></span> <span id="cov-applicability-note"></span></p>
     </div>
     <section class="cov-section" aria-labelledby="cov-status-heading">
       <div class="cov-section-head">
@@ -429,6 +438,7 @@
           <div class="cov-control"><label for="cov-kind">Kind</label><select id="cov-kind"><option value="all">All kinds</option></select></div>
           <div class="cov-control"><label for="cov-mapping">Mapping</label><select id="cov-mapping"><option value="all">All mappings</option></select></div>
           <div class="cov-control"><label for="cov-oracle">NumPy oracle</label><select id="cov-oracle"><option value="all">All evidence</option></select></div>
+          <div class="cov-control"><label for="cov-signature">NumPy signature</label><select id="cov-signature"><option value="all">All signatures</option></select></div>
           <div class="cov-control"><label for="cov-sort">Sort</label><select id="cov-sort"><option value="gap">Gaps first</option><option value="name">API name</option><option value="surface">Surface</option><option value="coverage">Available first</option></select></div>
           <button class="cov-reset" id="cov-reset" type="button">Clear filters</button>
         </div>
@@ -461,6 +471,13 @@
   const dispositionLabels = { object: "Object members", type: "Type", constant: "Constant", module: "Module", extension: "NumSharp-only API", extended: "Extended catalog" };
   const oracleLabels = { verified: "Oracle-verified (any)", "verified-direct": "Direct oracle contracts", "verified-alias": "Verified via alias", uncredited: "Oracle-gated, not credited", unverified: "Available, no oracle contracts", none: "No oracle evidence" };
   const parityOrder = ["verified-direct", "verified-alias", "uncredited", "unverified", "none"];
+  // Filter values: the four signature classes, plus one entry per mark ("mark:M" ...) over the compared rows.
+  const signatureLabels = { identical: "NumPy-identical signature", differs: "Signature differs (any)", "mark:M": "M · missing a NumPy parameter", "mark:X": "X · parameter NumPy lacks", "mark:O": "O · more than one overload", "mark:T": "T · dtype as NPTypeCode / Type / generic", "mark:B": "B · NumPy-style call does not compile", "mark:L": "L · null refused for None", "mark:Q": "Q · integer sequence refused", "mark:N": "N · credited through another name", "not-compared": "Credited, not compared", none: "No signature record" };
+  const signatureOrder = ["identical", "differs", "mark:M", "mark:X", "mark:O", "mark:T", "mark:B", "mark:L", "mark:Q", "mark:N", "not-compared", "none"];
+  const markMeanings = { M: "missing a NumPy parameter", X: "a parameter NumPy lacks", O: "more than one overload", T: "a dtype as NPTypeCode / Type or a generic type argument", B: "a NumPy-style call does not compile", L: "null refused where NumPy's default is None", Q: "an integer sequence refused", N: "credited through another name" };
+  // The gap map's probe marks and the symbols that count as a difference (generator 1.16+): ◐ is a call
+  // that fails at C# 12 only, ◦ (L) a `Shape` that refuses null while `default` binds.
+  const probeMarks = { B: ["●", "◐"], L: ["●", "◐", "◦"], Q: ["●", "◐"] };
   const creditedStatuses = new Set(["available", "partial", "extension"]);
   const pinLabels = { "host-libm": "the win-amd64 CRT libm", "pinned-blas": "the content-hash-pinned OpenBLAS" };
   const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -475,7 +492,10 @@
   // no such record on ANY row, so reading it the same way would show 0.0% oracle-verified and
   // "no contracts" for every API; initializeMetadata clears the flag and every oracle element hides.
   // It defaults to true so a caller that renders without metadata keeps the evidence view.
-  const state = { rows: [], filtered: [], selectedId: null, visible: 120, tooltipInstances: [], activeTooltip: null, hasOracle: true };
+  // hasSignature: whether the artifact records signature parity (generator 1.15+ publishes
+  // default_scope.signature_identical). Like hasOracle it defaults to true and initializeMetadata
+  // clears it for an older artifact, whose rows carry no `signature` record at all.
+  const state = { rows: [], filtered: [], selectedId: null, visible: 120, tooltipInstances: [], activeTooltip: null, hasOracle: true, hasSignature: true };
 
   function surfaceLabel(surface) {
     if (surfaceLabels[surface]) return surfaceLabels[surface];
@@ -514,8 +534,39 @@
     return parityClass(row).startsWith("verified");
   }
 
+  // Mirrors coverage/signature_parity.py classify(): "identical", "differs", "not-compared", or "none"
+  // (no record: not credited, not a call, or a Python protocol). initializeMetadata recounts the
+  // headline with it, so a drift from the generator refuses the artifact instead of misreporting.
+  function signatureClass(row) {
+    if (!state.hasSignature) return "none";
+    return row.signature?.status || "none";
+  }
+
+  // Mirrors coverage/signature_parity.py marks(): M X O T B L Q N in that order, read from the record's
+  // `marks` symbols (generator 1.16+; M ◦, only plan-excluded parameters missing, is no mark). A
+  // not-compared row can still carry the O / T of a NumSharp-only member and N (its credit is another
+  // name even when nothing could be compared). A generator-1.15 record has no `marks`: its lists decide.
+  function signatureMarks(row) {
+    const record = state.hasSignature ? row.signature : null;
+    if (!record) return "";
+    const symbols = record.marks;
+    const alias = record.spelling === "alias" ? "N" : "";
+    if (record.status === "not-compared") return `${symbols?.O ? "O" : ""}${symbols?.T ? "T" : ""}${alias}`;
+    if (!symbols) {
+      return `${record.missing?.length ? "M" : ""}${record.foreign?.length ? "X" : ""}${number(record.overloads) > 1 ? "O" : ""}${record.typecode?.length ? "T" : ""}${alias}`;
+    }
+    const probe = Object.entries(probeMarks).map(([mark, counted]) => counted.includes(symbols[mark]) ? mark : "").join("");
+    return `${symbols.M === "●" ? "M" : ""}${symbols.X === "●" ? "X" : ""}${symbols.O ? "O" : ""}${symbols.T ? "T" : ""}${probe}${alias}`;
+  }
+
+  function matchesSignatureFilter(row, value) {
+    if (value === "all") return true;
+    if (value.startsWith("mark:")) return signatureMarks(row).includes(value.slice(5));
+    return signatureClass(row) === value;
+  }
+
   function summarize(rows) {
-    const counts = { total: rows.length, numpy: rows.filter(isComparableApi).length, availableApis: 0, available: 0, partial: 0, unsupported: 0, missing: 0, extension: 0, exact: 0, alias: 0, oracle: 0, oracleApis: 0, oracleDirect: 0, oracleAlias: 0, oracleUnverified: 0, oracleUncredited: 0 };
+    const counts = { total: rows.length, numpy: rows.filter(isComparableApi).length, availableApis: 0, available: 0, partial: 0, unsupported: 0, missing: 0, extension: 0, exact: 0, alias: 0, oracle: 0, oracleApis: 0, oracleDirect: 0, oracleAlias: 0, oracleUnverified: 0, oracleUncredited: 0, signature: 0, signatureApis: 0, signatureDiffers: 0, signatureNotCompared: 0, signatureMissing: 0, signatureForeign: 0, signatureOverloaded: 0, signatureTypecode: 0, signatureBinding: 0, signatureNull: 0, signatureSequence: 0, signatureOtherName: 0 };
     rows.forEach((row) => {
       if (counts[row.status] !== undefined) counts[row.status] += 1;
       if (isComparableApi(row) && row.status === "available") counts.availableApis += 1;
@@ -528,9 +579,29 @@
       }
       if (parity === "unverified") counts.oracleUnverified += 1;
       if (parity === "uncredited") counts.oracleUncredited += 1;
+      const signature = signatureClass(row);
+      if (signature === "identical") {
+        counts.signature += 1;
+        if (isComparableApi(row)) counts.signatureApis += 1;
+      }
+      if (signature === "differs") counts.signatureDiffers += 1;
+      if (signature === "not-compared") counts.signatureNotCompared += 1;
+      // signatureMarks gives a not-compared row at most O, T and N, so the other marks count compared
+      // rows only, as the generator's counts() does (O and T only on compared rows too).
+      const marks = signatureMarks(row);
+      if (marks.includes("N")) counts.signatureOtherName += 1;
+      if (signature === "not-compared") return;
+      if (marks.includes("M")) counts.signatureMissing += 1;
+      if (marks.includes("X")) counts.signatureForeign += 1;
+      if (marks.includes("O")) counts.signatureOverloaded += 1;
+      if (marks.includes("T")) counts.signatureTypecode += 1;
+      if (marks.includes("B")) counts.signatureBinding += 1;
+      if (marks.includes("L")) counts.signatureNull += 1;
+      if (marks.includes("Q")) counts.signatureSequence += 1;
     });
     counts.coverage = percent(counts.availableApis, counts.numpy);
     counts.oracleCoverage = percent(counts.oracleApis, counts.numpy);
+    counts.signatureCoverage = percent(counts.signatureApis, counts.numpy);
     return counts;
   }
 
@@ -587,6 +658,76 @@
     return `<h4>NumPy oracle evidence</h4><div class="cov-oracle-block">${parts.join("")}</div>`;
   }
 
+  function signatureSummary(row) {
+    const signature = signatureClass(row);
+    const record = row.signature;
+    if (signature === "identical") return "Identical to NumPy";
+    if (signature === "differs") {
+      const marks = signatureMarks(row);
+      return marks ? `Differs · ${marks.split("").join(" ")}` : "Differs (closest overload)";
+    }
+    if (signature === "not-compared") return `Not compared${record.spelling === "alias" ? " · N" : ""}`;
+    return "No signature record";
+  }
+
+  function signatureTitle(row) {
+    const marks = signatureMarks(row);
+    const parts = marks.split("").map((mark) => markMeanings[mark]);
+    return parts.length ? `Signature differs: ${parts.join("; ")}` : "Signature differs in its closest overload";
+  }
+
+  function codeList(values) {
+    return values.map((value) => `<code>${escapeHtml(value)}</code>`).join(" ");
+  }
+
+  // A spelling's marks as compact text ("M● O7 L◦"), the gap map's symbols; "—" (not probed) is left out.
+  function spellingMarks(marks) {
+    return Object.entries(marks || {}).filter(([, symbol]) => symbol && symbol !== "—" && symbol !== "?").map(([mark, symbol]) => `${mark}${symbol}`).join(" ");
+  }
+
+  function signatureSection(row) {
+    const signature = signatureClass(row);
+    const record = row.signature;
+    if (signature === "none") return "";
+    const symbols = record.marks || {};
+    // Every C# spelling of the API (a function, a member, a constructor, NDArray<T>), each with its marks; an
+    // adopted spelling names the row whose identical C# member and NumPy object it was taken from.
+    const spellings = (record.spellings || []).length > 1 || (record.spellings || []).some((spelling) => spelling.via)
+      ? `<p>C# spellings: ${record.spellings.map((spelling) => `<code>${escapeHtml(spelling.csharp)}</code>${spellingMarks(spelling.marks) ? ` ${escapeHtml(spellingMarks(spelling.marks))}` : " no mark"}${spelling.via ? ` (as <code>${escapeHtml(idLabel(spelling.via))}</code>: same C# member, same NumPy object)` : ""}`).join(" · ")}</p>`
+      : "";
+    if (signature === "not-compared") {
+      const counted = [symbols.O ? `<strong>O</strong> · ${escapeHtml(symbols.O)} C# overloads.` : "", symbols.T ? `<strong>T</strong> · ${escapeHtml(markMeanings.T)}.` : ""].filter(Boolean).join(" ");
+      return `<h4>NumPy signature parity</h4><div class="cov-signature-block is-gap"><p>Not compared: ${escapeHtml(record.reason || "")}.${record.spelling === "alias" ? " Credited through another name (N): NumPy's spelling does not compile." : ""}${counted ? ` ${counted}` : ""}</p>${spellings}</div>`;
+    }
+    const parts = [];
+    if (signature === "identical") {
+      parts.push(`<p>No mark: one C# overload has exactly NumPy's parameters under NumPy's name${record.source === "gap-map" ? ", and NumPy-style calls compile" : ""}.</p>`);
+    }
+    if (record.spelling === "alias") parts.push(`<p><strong>N</strong> · credited through another name: NumPy's spelling does not compile.</p>`);
+    if (record.missing?.length && symbols.M !== "◦") parts.push(`<p><strong>M</strong> · no overload offers ${codeList(record.missing)}</p>`);
+    if (record.foreign?.length) parts.push(`<p><strong>X</strong> · NumPy has no ${codeList(record.foreign)}</p>`);
+    if (symbols.O || number(record.overloads) > 1) parts.push(`<p><strong>O</strong> · ${escapeHtml(symbols.O || record.overloads)} C# overloads; NumPy has one signature.</p>`);
+    if (record.typecode?.length) parts.push(`<p><strong>T</strong> · dtype taken as ${codeList(record.typecode)} instead of <code>DType</code></p>`);
+    if (record.generic?.length) parts.push(`<p><strong>T ◇</strong> · a generic type argument picks the dtype: ${codeList(record.generic)}</p>`);
+    // The compile probe's findings: the call written as a port writes it, and why the compiler refused it.
+    if (record.binding?.length) parts.push(`<p><strong>B${symbols.B === "◐" ? " ◐" : ""}</strong> · a NumPy-style call does not compile${symbols.B === "◐" ? " at C# 12 (it relies on [OverloadResolutionPriority])" : ""}: ${codeList(record.binding)}</p>`);
+    if (record.null?.length) parts.push(`<p><strong>L${symbols.L && symbols.L !== "●" ? ` ${escapeHtml(symbols.L)}` : ""}</strong> · <code>null</code> refused where NumPy's default is None${symbols.L === "◦" ? " (only a <code>Shape</code>; <code>default</code> binds)" : symbols.L === "◐" ? " at C# 12" : ""}: ${codeList(record.null)}</p>`);
+    if (record.sequence?.length) parts.push(`<p><strong>Q</strong> · an integer sequence refused where NumPy's stubs allow one: ${codeList(record.sequence)}</p>`);
+    const closest = [
+      ...(record.order || []).map((item) => `at another position: ${item}`),
+      ...(record.required || []).map((item) => `C# requires ${item}`),
+      ...(record.default || []).map((item) => `another default: ${item}`),
+      ...(record.varargs || []),
+    ];
+    if (closest.length) parts.push(`<p>Closest overload: ${codeList(closest)}</p>`);
+    if (record.null_default?.length) parts.push(`<p>Informational, a null default where NumPy has a value: ${codeList(record.null_default)}</p>`);
+    if (record.excluded?.length) parts.push(`<p>Not modelled by design (docs/plans/api-parameter-parity.md section 3), not counted: ${codeList(record.excluded)}</p>`);
+    if (spellings) parts.push(spellings);
+    if (record.closest) parts.push(`<p>Compared overload: <code>${escapeHtml(record.closest)}</code></p>`);
+    if (record.source === "inventory") parts.push(`<p>Compared by the inventory's own reflection only: the API diff gap map does not reach this member, so no NumPy-style call of it was compiled.</p>`);
+    return `<h4>NumPy signature parity</h4><div class="cov-signature-block${signature === "identical" ? " is-match" : ""}">${parts.join("")}</div>`;
+  }
+
   function defaultRows() {
     return state.rows.filter((row) => row.origin === "numpy" && row.in_default_scope);
   }
@@ -623,7 +764,7 @@
       <div class="cov-card-stat is-available"><strong>${counts.available}</strong><span>available</span></div>
       <div class="cov-card-stat is-partial"><strong>${counts.partial}</strong><span>partial</span></div>
       <div class="cov-card-stat is-missing"><strong>${gaps}</strong><span>gaps</span></div>
-    </div><div class="cov-small cov-card-foot">${state.hasOracle ? `${counts.oracle} oracle-verified · ` : ""}${counts.exact} direct names · ${counts.alias} aliases · ${counts.total} total${counts.extension ? ` · ${counts.extension} NumSharp-only` : ""}</div>`;
+    </div><div class="cov-small cov-card-foot">${state.hasOracle ? `${counts.oracle} oracle-verified · ` : ""}${state.hasSignature ? `${counts.signature} identical signatures · ` : ""}${counts.exact} direct names · ${counts.alias} aliases · ${counts.total} total${counts.extension ? ` · ${counts.extension} NumSharp-only` : ""}</div>`;
   }
 
   function compactCardBreakdown(counts) {
@@ -633,6 +774,7 @@
       <span class="is-partial">${counts.partial} partial</span>
       <span class="is-missing">${gaps} gaps</span>
       ${counts.oracle ? `<span class="is-oracle">${counts.oracle} oracle-verified</span>` : ""}
+      ${counts.signature ? `<span class="is-signature">${counts.signature} identical signatures</span>` : ""}
       ${counts.extension ? `<span class="is-extension">${counts.extension} NumSharp-only</span>` : ""}
     </div>`;
   }
@@ -644,6 +786,9 @@
     // The flag is set before the recount because parityClass reads it.
     state.hasOracle = published.oracle_verified !== undefined;
     const hasOracle = state.hasOracle;
+    // Generator 1.15+ publishes signature parity; set before the recount, which reads signatureClass.
+    state.hasSignature = published.signature_identical !== undefined;
+    const hasSignature = state.hasSignature;
     const stats = summarize(defaultRows());
     if (stats.total !== number(published.total) || stats.available !== number(published.available)) {
       throw new Error("Coverage summary does not match its row inventory.");
@@ -651,12 +796,18 @@
     if (hasOracle && stats.oracle !== number(published.oracle_verified)) {
       throw new Error("Coverage oracle summary does not match its row evidence.");
     }
+    if (hasSignature && (stats.signature !== number(published.signature_identical)
+        || stats.signatureDiffers !== number(published.signature_differs))) {
+      throw new Error("Coverage signature summary does not match its row records.");
+    }
 
     byId("cov-meta").innerHTML = [
       `NumPy ${data.numpy_version}`,
       `NumSharp assembly ${data.numsharp_assembly_version}`,
       `${data.summary.catalog_rows.toLocaleString()} searchable rows`,
       ...(data.oracle ? [`${number(data.oracle.contracts).toLocaleString()} NumPy oracle contracts`] : []),
+      // Generator 1.16+: the API diff gap map the signature records come from (C# spellings compared).
+      ...(data.signature_gap?.reconciliation ? [`${number(data.signature_gap.reconciliation.tool?.numpy).toLocaleString()} C# spellings signature-checked`] : []),
       `schema v${data.schema_version}`
     ].map((item) => `<span class="cov-pill">${escapeHtml(item)}</span>`).join("");
 
@@ -664,9 +815,14 @@
     byId("cov-oracle-reference").textContent = hasOracle
       ? `Headline oracle-verified: ${percent(stats.oracle, stats.total).toFixed(1)}% (${stats.oracle}/${stats.total} APIs; ${stats.oracleUnverified} available APIs without contracts).`
       : "";
+    byId("cov-signature-reference").textContent = hasSignature
+      ? `Headline NumPy-identical signatures: ${percent(stats.signature, stats.total).toFixed(1)}% (${stats.signature}/${stats.total} APIs; ${stats.signatureDiffers} differ: ${stats.signatureMissing} M, ${stats.signatureForeign} X, ${stats.signatureOverloaded} O, ${stats.signatureTypecode} T, ${stats.signatureBinding} B, ${stats.signatureNull} L, ${stats.signatureSequence} Q, ${stats.signatureOtherName} N).`
+      : "";
     // The lede and the reading guide describe the oracle evidence; an artifact without it shows none.
     byId("cov-lede-oracle").hidden = !hasOracle;
     byId("cov-oracle-explainer").hidden = !hasOracle;
+    byId("cov-lede-signature").hidden = !hasSignature;
+    byId("cov-signature-explainer").hidden = !hasSignature;
   }
 
   function renderSummary() {
@@ -677,12 +833,14 @@
     const categories = [...new Set(rows.map((row) => row.category))].sort((a, b) => a.localeCompare(b));
     const rejectedContracts = rows.filter((row) => row.applicability === "not_applicable").length;
     byId("cov-scope-note").textContent = `${scopeLabels[scope]}: ${stats.total.toLocaleString()} entries across ${surfaces.length} surfaces and ${categories.length} capability areas. This selection updates every summary and the explorer.`;
-    byId("cov-applicability-note").textContent = rejectedContracts ? `This scope includes ${rejectedContracts.toLocaleString()} declared ufunc contract${rejectedContracts === 1 ? "" : "s"} whose calls NumPy rejects; gaps describe public API presence, not a count of computable operations.` : "";
+    byId("cov-applicability-note").textContent = rejectedContracts ? `This scope includes ${rejectedContracts.toLocaleString()} declared contract${rejectedContracts === 1 ? "" : "s"} whose calls NumPy rejects (ufunc methods the ufunc's shape rules out, and Python protocol slots NumPy fills only to refuse); gaps describe public API presence, not a count of computable operations.` : "";
 
     byId("cov-metrics").innerHTML = [
       metricCard("Scoped API availability", coverageLabel(stats), stats.numpy ? `${stats.availableApis} of ${stats.numpy} comparable NumPy APIs` : "No comparable NumPy APIs in this scope"),
       // Without oracle evidence in the artifact the card would read 0.0% for every scope: omit it.
       ...(state.hasOracle ? [metricCard("Oracle-verified parity", stats.numpy ? `${stats.oracleCoverage.toFixed(1)}%` : "-", stats.numpy ? `${stats.oracleApis} of ${stats.numpy} replay committed NumPy oracle contracts · ${stats.oracleUnverified} available without` : `${stats.oracle} oracle-verified entries in this scope`, stats.oracle ? "oracle" : "")] : []),
+      // The card filters the explorer to the differing calls: the next signature to fix.
+      ...(state.hasSignature ? [metricCard("NumPy-identical signatures", stats.numpy ? `${stats.signatureCoverage.toFixed(1)}%` : "-", stats.numpy ? `${stats.signatureApis} of ${stats.numpy} take NumPy's exact parameters · ${stats.signatureDiffers} differ` : `${stats.signature} identical signatures in this scope`, stats.signatureDiffers ? "signature" : "")] : []),
       metricCard("Exact names", stats.exact.toLocaleString(), `${stats.alias} reviewed aliases bridge C#/NumPy naming`, stats.exact ? "exact" : ""),
       metricCard("Open gaps", (stats.missing + stats.unsupported).toLocaleString(), `${stats.partial} additional API${stats.partial === 1 ? " is" : "s are"} partial`, "gaps"),
       metricCard("Entries in scope", stats.total.toLocaleString(), `${surfaces.length} public surfaces · ${categories.length} capability areas`)
@@ -757,6 +915,11 @@
     // `closest` is optional because the test harness's element stubs do not implement it.
     const oracleControl = byId("cov-oracle").closest?.(".cov-control");
     if (oracleControl) oracleControl.hidden = !state.hasOracle;
+    const signatureValues = new Set(rows.map(signatureClass));
+    rows.forEach((row) => signatureMarks(row).split("").forEach((mark) => signatureValues.add(`mark:${mark}`)));
+    populateSelect("cov-signature", signatureOrder.filter((value) => signatureValues.has(value)), signatureLabels);
+    const signatureControl = byId("cov-signature").closest?.(".cov-control");
+    if (signatureControl) signatureControl.hidden = !state.hasSignature;
   }
 
   function currentFilters() {
@@ -769,6 +932,7 @@
       kind: byId("cov-kind").value,
       mapping: byId("cov-mapping").value,
       oracle: byId("cov-oracle").value,
+      signature: byId("cov-signature").value,
       sort: byId("cov-sort").value,
     };
   }
@@ -795,9 +959,12 @@
       if (filters.mapping !== "all" && row.availability !== filters.mapping) return false;
       if (filters.oracle === "verified" && !isOracleVerified(row)) return false;
       if (filters.oracle !== "all" && filters.oracle !== "verified" && parityClass(row) !== filters.oracle) return false;
+      if (!matchesSignatureFilter(row, filters.signature)) return false;
       if (!terms.length) return true;
-      // Oracle keys/files are searchable so "polyeval.jsonl" or "rnd:normal" finds the APIs they prove.
-      const haystack = [row.id, apiLabel(row), row.name, row.surface, surfaceLabel(row.surface), row.category, row.kind, row.disposition, row.status, row.availability, row.numsharp_target, row.numpy_signature, row.notes, ...(row.numsharp_signatures || []), ...(row.oracle?.keys || []), ...(row.oracle?.files || []), row.oracle?.via?.id].join(" ").toLowerCase();
+      // Oracle keys/files are searchable so "polyeval.jsonl" or "rnd:normal" finds the APIs they prove;
+      // so are the signature's missing and foreign parameter names ("premute", "initial") and its C#
+      // spellings ("new NDArray", "NDArray<T>.reshape").
+      const haystack = [row.id, apiLabel(row), row.name, row.surface, surfaceLabel(row.surface), row.category, row.kind, row.disposition, row.status, row.availability, row.numsharp_target, row.numpy_signature, row.notes, ...(row.numsharp_signatures || []), ...(row.oracle?.keys || []), ...(row.oracle?.files || []), row.oracle?.via?.id, ...(row.signature?.missing || []), ...(row.signature?.foreign || []), ...(row.signature?.spellings || []).map((spelling) => spelling.csharp)].join(" ").toLowerCase();
       return terms.every((term) => haystack.includes(term));
     });
     results.sort((a, b) => {
@@ -829,8 +996,9 @@
         ? `<a class="cov-result-name" data-api-link href="${escapeHtml(primaryUrl)}" target="_blank" rel="noopener" title="${linkTitle}">${name}</a>`
         : `<span class="cov-result-name">${name}</span>`;
       const oracleBadge = isOracleVerified(row) ? `<span class="cov-result-oracle" title="${escapeHtml(oracleTitle(row))}">oracle</span>` : "";
+      const signatureBadge = signatureClass(row) === "differs" ? `<span class="cov-result-signature" title="${escapeHtml(signatureTitle(row))}">${escapeHtml(signatureMarks(row) || "sig")}</span>` : "";
       return `<div class="cov-result" role="listitem" tabindex="0" data-row-id="${escapeHtml(row.id)}" aria-current="${row.id === state.selectedId}">
-      <div class="cov-result-main">${nameMarkup}<span class="cov-result-badges">${oracleBadge}<span class="cov-result-status is-${escapeHtml(row.status)}">${escapeHtml(statusLabels[row.status] || row.status)}</span></span></div>
+      <div class="cov-result-main">${nameMarkup}<span class="cov-result-badges">${signatureBadge}${oracleBadge}<span class="cov-result-status is-${escapeHtml(row.status)}">${escapeHtml(statusLabels[row.status] || row.status)}</span></span></div>
       <div class="cov-result-sub"><span>${escapeHtml(surfaceLabel(row.surface))}</span><span>·</span><span>${escapeHtml(row.category)}</span><span>·</span><span>${escapeHtml(row.kind)}</span></div>
     </div>`;
     }).join("") + (state.filtered.length > visible.length ? `<button class="cov-more" id="cov-more" type="button">Show ${Math.min(120, state.filtered.length - visible.length)} more</button>` : "");
@@ -865,10 +1033,12 @@
         <div class="cov-detail-fact"><div class="cov-detail-label">Category</div><div class="cov-detail-value">${escapeHtml(row.category)}</div></div>
         <div class="cov-detail-fact"><div class="cov-detail-label">Availability</div><div class="cov-detail-value">${escapeHtml(mapping)}</div></div>
         <div class="cov-detail-fact"><div class="cov-detail-label">Inventory group</div><div class="cov-detail-value">${row.in_default_scope ? "Headline comparison" : isComparableApi(row) ? "Extended NumPy API" : row.origin === "numsharp" ? "NumSharp-only API" : "Supporting NumPy export"}${row.disposition ? ` · ${escapeHtml(dispositionLabels[row.disposition] || row.disposition)}` : ""}</div></div>
-        ${row.applicability ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy applicability</div><div class="cov-detail-value">${escapeHtml(row.applicability === "not_applicable" ? "NumPy rejects this ufunc method" : row.applicability === "conditional" ? "Depends on operands and dtype" : row.applicability)}</div></div>` : ""}
+        ${row.applicability ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy applicability</div><div class="cov-detail-value">${escapeHtml(row.applicability === "not_applicable" ? (row.python_protocol ? "NumPy rejects every call of this protocol" : "NumPy rejects this ufunc method") : row.applicability === "conditional" ? "Depends on operands and dtype" : row.applicability)}</div></div>` : ""}
         ${state.hasOracle ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy oracle</div><div class="cov-detail-value">${escapeHtml(oracleSummary(row))}</div></div>` : ""}
+        ${state.hasSignature && row.origin === "numpy" ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy signature</div><div class="cov-detail-value">${escapeHtml(signatureSummary(row))}</div></div>` : ""}
       </div>
       ${oracleSection(row)}
+      ${signatureSection(row)}
       ${row.origin === "numpy" ? `<h4>NumPy signature</h4><div class="cov-code-block">${escapeHtml(row.numpy_signature)}</div>` : ""}
       <h4>NumSharp target</h4><div class="cov-code-block">${escapeHtml(row.numsharp_target || "Not available")}</div>
       <h4>Compiled C# overload${row.numsharp_signatures?.length === 1 ? "" : "s"}</h4>${signatures}
@@ -886,13 +1056,14 @@
     if (preset === "gaps") byId("cov-status").value = "gaps";
     if (preset === "exact") byId("cov-mapping").value = "exact";
     if (preset === "oracle") byId("cov-oracle").value = "verified";
+    if (preset === "signature") byId("cov-signature").value = "differs";
     filterRows();
     byId("cov-explorer-heading").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function clearExplorerFilters() {
     byId("cov-search").value = "";
-    ["cov-surface", "cov-category", "cov-status", "cov-kind", "cov-mapping", "cov-oracle"].forEach((id) => byId(id).value = "all");
+    ["cov-surface", "cov-category", "cov-status", "cov-kind", "cov-mapping", "cov-oracle", "cov-signature"].forEach((id) => byId(id).value = "all");
     byId("cov-sort").value = "gap";
   }
 
@@ -936,7 +1107,7 @@
     const tabs = [["available", "Available", available], ["gaps", "Gaps", gaps]];
     if (other.length) tabs.push(["other", "Partial / NumSharp-only", other]);
     const initialTab = tabs.find(([, , items]) => items.length)?.[0] || "available";
-    return `<div class="ns-cov-tip"><div class="ns-cov-tip-head"><strong>${escapeHtml(title)}</strong><span>${counts.total} entries · ${counts.numpy ? `${counts.availableApis}/${counts.numpy} NumPy APIs available · ${coverageLabel(counts)}${state.hasOracle ? ` · ${counts.oracleApis} oracle-verified` : ""}` : "No comparable NumPy APIs"}</span></div>
+    return `<div class="ns-cov-tip"><div class="ns-cov-tip-head"><strong>${escapeHtml(title)}</strong><span>${counts.total} entries · ${counts.numpy ? `${counts.availableApis}/${counts.numpy} NumPy APIs available · ${coverageLabel(counts)}${state.hasOracle ? ` · ${counts.oracleApis} oracle-verified` : ""}${state.hasSignature ? ` · ${counts.signatureApis} identical signatures` : ""}` : "No comparable NumPy APIs"}</span></div>
       <div class="ns-cov-tip-tabs" role="tablist">${tabs.map(([key, label, items]) => `<button class="ns-cov-tip-tab" role="tab" aria-selected="${key === initialTab}" data-tip-tab="${key}">${label} (${items.length})</button>`).join("")}</div>
       ${tabs.map(([key, , items]) => `<div class="ns-cov-tip-panel" data-tip-panel="${key}"${key === initialTab ? "" : " hidden"}>${tooltipRowsHtml(items)}</div>`).join("")}</div>`;
   }
@@ -989,7 +1160,7 @@
   }
 
   function bindEvents() {
-    ["cov-search", "cov-surface", "cov-category", "cov-status", "cov-kind", "cov-mapping", "cov-oracle", "cov-sort"].forEach((id) => {
+    ["cov-search", "cov-surface", "cov-category", "cov-status", "cov-kind", "cov-mapping", "cov-oracle", "cov-signature", "cov-sort"].forEach((id) => {
       byId(id).addEventListener(id === "cov-search" ? "input" : "change", filterRows);
     });
     byId("cov-scope").addEventListener("change", changeScope);

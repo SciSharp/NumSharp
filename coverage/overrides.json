@@ -35,35 +35,23 @@
     },
     "numpy.cumulative_prod": {
       "target": "NumSharp.np.cumprod",
-      "notes": "NumSharp exposes the established cumprod spelling."
+      "notes": "NumSharp has no cumulative_prod; np.cumprod computes the shared subset (surface.jsonl gates it)."
     },
     "numpy.cumulative_sum": {
       "target": "NumSharp.np.cumsum",
-      "notes": "NumSharp exposes the established cumsum spelling."
+      "notes": "NumSharp has no cumulative_sum; np.cumsum computes the shared subset (surface.jsonl gates it)."
     },
     "numpy.pow": {
       "target": "NumSharp.np.power",
       "notes": "NumSharp exposes the ufunc name power."
     },
-    "numpy.remainder": {
-      "target": "NumSharp.np.mod",
-      "notes": "NumSharp exposes the equivalent ufunc name mod."
-    },
     "numpy.round": {
       "target": "NumSharp.np.round_",
-      "notes": "C# uses round_ to avoid a naming collision while preserving NumPy round semantics."
+      "notes": "NumSharp names it round_, NumPy 1.x's spelling (NumPy 2.0 removed np.round_); nothing named round exists on np to collide with, so np.round(x) simply does not compile yet (signature mark N)."
     },
     "numpy.row_stack": {
       "target": "NumSharp.np.vstack",
       "notes": "NumPy documents row_stack as an alias of vstack."
-    },
-    "numpy.random.ranf": {
-      "target": "NumSharp.NumPyRandom.random_sample",
-      "notes": "NumPy documents ranf as an alias of random_sample."
-    },
-    "numpy.random.sample": {
-      "target": "NumSharp.NumPyRandom.random_sample",
-      "notes": "NumPy documents sample as an alias of random_sample."
     },
     "numpy.shape": {
       "target": "NumSharp.NDArray.Shape",
@@ -73,15 +61,35 @@
   "support": {
     "numpy.ndarray.data": {
       "status": "partial",
-      "notes": "Data<T>() returns a typed NumSharp ArraySlice and is not NumPy's Python buffer object."
+      "notes": "Returns np.MemoryView, NumSharp's analog of the memoryview (tobytes, hex, shape, strides, format, readonly and the contiguity flags are gated by surface.jsonl); the Python buffer protocol itself (cast, release, slicing) has no C# counterpart."
+    },
+    "numpy.cumulative_sum": {
+      "status": "partial",
+      "notes": "Aliased to np.cumsum: no include_initial, and an N-D input without axis is flattened where cumulative_sum raises ValueError (surface gaps SU36 / SU37)."
+    },
+    "numpy.cumulative_prod": {
+      "status": "partial",
+      "notes": "Aliased to np.cumprod: no include_initial, and an N-D input without axis is flattened where cumulative_prod raises ValueError (surface gaps SU36 / SU37)."
     },
     "numpy.shape": {
       "status": "partial",
       "notes": "NDArray.Shape is a NumSharp Shape value, not the tuple returned by numpy.shape."
     },
     "numpy.complex64": {
-      "status": "unsupported",
-      "notes": "The public compatibility symbol exists, but NumSharp does not implement a Complex64 storage dtype."
+      "status": "partial",
+      "notes": "A scalar class (NDScalarType, also np.csingle): the hierarchy, np.issubdtype / np.isdtype / np.finfo / isinstance / issubclass work, but NumSharp has no complex64 storage dtype, so np.dtype(np.complex64) raises NotSupportedException."
+    },
+    "numpy.csingle": {
+      "status": "partial",
+      "notes": "NumPy's other name for numpy.complex64, the same NDScalarType: the type tests work, but NumSharp has no complex64 storage dtype, so np.dtype(np.csingle) raises NotSupportedException."
+    },
+    "numpy.object_": {
+      "status": "partial",
+      "notes": "A scalar class (NDScalarType): the hierarchy and the type tests work, but NumSharp has no object dtype, so np.dtype(np.object_) raises NotSupportedException."
+    },
+    "numpy.void": {
+      "status": "partial",
+      "notes": "A scalar class (NDScalarType): the hierarchy and the type tests work, but NumSharp has no void or structured dtype, so np.dtype(np.void) raises NotSupportedException."
     }
   },
   "stray_allowlist": {

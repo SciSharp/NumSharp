@@ -15,7 +15,8 @@ namespace NumSharp.Tests.RandomSampling
             var result = rng.multinomial(20, DicePvals);
 
             result.shape.Should().ContainInOrder(6);
-            result.dtype.Should().Be(typeof(int));
+            // NumPy's np.zeros(..., np.long): int64 under the LP64 C long NumSharp models (int32 on Windows NumPy).
+            result.dtype.Should().Be(typeof(long));
         }
 
         [TestMethod]
@@ -141,10 +142,10 @@ namespace NumSharp.Tests.RandomSampling
         public void Multinomial_Reproducibility_WithSeed()
         {
             var rng1 = np.random.RandomState(42);
-            var first = rng1.multinomial(20, DicePvals, 5).ToArray<int>();
+            var first = rng1.multinomial(20, DicePvals, 5).ToArray<long>();
 
             var rng2 = np.random.RandomState(42);
-            var second = rng2.multinomial(20, DicePvals, 5).ToArray<int>();
+            var second = rng2.multinomial(20, DicePvals, 5).ToArray<long>();
 
             first.Should().BeEquivalentTo(second);
         }

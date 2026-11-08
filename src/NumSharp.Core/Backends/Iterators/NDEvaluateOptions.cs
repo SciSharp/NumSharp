@@ -1,0 +1,131 @@
+namespace NumSharp.Backends.Iteration
+{
+    /// <summary>
+    ///     The resolved <c>np.evaluate</c> keyword bundle (<c>where=</c> / <c>dtype=</c> / <c>casting=</c> /
+    ///     <c>order=</c>) that <see cref="Backends.DefaultEngine"/>'s <c>Evaluate</c> builds from the raw keywords
+    ///     (<see cref="TensorEngine.Evaluate(NDExpr, NDArray[], NDArray, NDArray, DType, string, char)"/>, the np-layer
+    ///     dtype plan's D11) and threads down its internal paths, so they gain ONE parameter instead of four and every
+    ///     future keyword rides the same struct. Public as the parameter type of
+    ///     <see cref="TensorEngine.Evaluate(NDExprProgram, NDArray[], NDArray, in NDEvaluateOptions)"/> only: its members stay
+    ///     internal, so outside NumSharp.dll it is an opaque bundle to pass on (<c>default</c> = no keyword override).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The struct is deliberately built so that <c>default(NDEvaluateOptions)</c> reproduces
+    ///         np.evaluate's pre-4.5 behaviour EXACTLY — no result cast, a <c>same_kind</c> out= rule, and
+    ///         today's <c>'K'</c> layout heuristic. That is why the private fields are a NULLABLE casting
+    ///         (raw <c>default(NPY_CASTING)</c> is <c>NPY_NO_CASTING</c>, the wrong default) and a NUL order
+    ///         char rather than the enum/char values directly: every internal <c>EvaluateCore</c> call that
+    ///         materialises a sub-tree passes <c>default</c> and MUST see the natural dtype/layout, never a
+    ///         user override.
+    ///     </para>
+    ///     <para>
+    ///         The engine member validates and RESOLVES each keyword before constructing this (a bad casting
+    ///         string or order char raises first), so the internal paths only ever see a legal, resolved bundle.
+    ///     </para>
+    /// </remarks>
+    public readonly struct NDEvaluateOptions
+    {
+        /// <summary>
+        ///     The requested result dtype (an implicit root cast of the whole expression), or <c>null</c>
+        ///     for the tree's natural NEP50 result type. Mutually exclusive with a caller <c>out=</c>
+        ///     (which already fixes the result dtype) — the API rejects both together.
+        /// </summary>
+        internal readonly NPTypeCode? Dtype;
+
+        /// <summary>
+        ///     The requested result dtype as a whole descriptor, or <c>null</c> for none. It names what the type code in
+        ///     <see cref="Dtype"/> cannot: a TEXT dtype's class, width and NA object (<c>dtype: "U5"</c>,
+        ///     <c>np.dtypes.StringDType()</c>), which np.evaluate's text results and its number-to-text root cast need
+        ///     (<see cref="HasTextDtype"/>). For a numeric request it is that dtype's descriptor and adds nothing to
+        ///     <see cref="Dtype"/>.
+        /// </summary>
+        internal readonly DType DtypeDescr;
+
+        /// <summary>
+        ///     The optional <c>where=</c> boolean mask (plan P4.5): the fused kernel writes the result only
+        ///     where the mask is True, leaving masked-off destination slots untouched — NumPy's ufunc
+        ///     <c>where=</c> convention (the mask rides the iterator as a trailing ARRAYMASK operand and the
+        ///     output is WRITEMASKED, so <see cref="Backends.Iteration.NDIterRef.ForEach"/>'s masked driver
+        ///     runs the kernel per mask-true run). <c>null</c> means no mask (write every element). It must be
+        ///     a boolean array (the engine validates it) and it broadcasts with the inputs and any <c>out=</c>;
+        ///     it is REJECTED on a reduction tree (a masked reduction is a different operation — mask the
+        ///     inputs before reducing instead). Being an OPERAND (not a scalar config value) it is carried
+        ///     here rather than as a fifth seam parameter, keeping every <c>np.evaluate</c> keyword on the one
+        ///     struct; <c>default(NDEvaluateOptions).Where</c> is <c>null</c>, so an internal sub-tree
+        ///     materialisation (which passes <c>default</c>) is never masked.
+        /// </summary>
+        internal readonly NDArray Where;
+
+        /// <summary>The out= cast rule, or <c>null</c> to mean <see cref="NPY_CASTING.NPY_SAME_KIND_CASTING"/> (NumPy's ufunc default). Read through <see cref="Casting"/>.</summary>
+        private readonly NPY_CASTING? _casting;
+
+        /// <summary>The requested fresh-result memory order ('C'/'F'/'A'/'K'), or <c>'\0'</c> to mean <c>'K'</c> (today's layout heuristic). Read through <see cref="Order"/>.</summary>
+        private readonly char _order;
+
+        /// <summary>
+        ///     Build a resolved keyword bundle. All arguments are already validated by the API — an
+        ///     unset value is expressed as <c>null</c> / <c>'\0'</c> so <c>default</c> stays the no-override
+        ///     behaviour.
+        /// </summary>
+        /// <param name="dtype">The requested result dtype, or <c>null</c> for the natural result type.</param>
+        /// <param name="casting">The out= cast rule, or <c>null</c> for <c>same_kind</c>.</param>
+        /// <param name="order">The fresh-result order char, or <c>'\0'</c> for <c>'K'</c>.</param>
+        /// <param name="where">The boolean write mask, or <c>null</c> for an unmasked (write-every-element) pass.</param>
+        /// <param name="dtypeDescr">The requested result dtype's whole descriptor (see <see cref="DtypeDescr"/>), or
+        ///     <c>null</c>; given with <paramref name="dtype"/> = its type code.</param>
+        internal NDEvaluateOptions(NPTypeCode? dtype, NPY_CASTING? casting, char order, NDArray where = null, DType dtypeDescr = null)
+        {
+            Dtype = dtype;
+            _casting = casting;
+            _order = order;
+            Where = where;
+            DtypeDescr = dtypeDescr;
+        }
+
+        /// <summary>True when a result dtype was requested (the implicit root cast is active).</summary>
+        internal bool HasDtype => Dtype.HasValue;
+
+        /// <summary>
+        ///     True when the requested result dtype is TEXT (<c>S</c>, <c>U</c> or StringDType): the result is computed at its
+        ///     natural dtype and then cast by NumPy's <c>astype</c> to the descriptor (<see cref="DtypeDescr"/>), which the
+        ///     fused kernels cannot write.
+        /// </summary>
+        internal bool HasTextDtype => Dtype == NPTypeCode.String;
+
+        /// <summary>
+        ///     The keywords of the NATURAL result a text-shaped call computes first: only the layout request survives (a
+        ///     fresh result's order), while <c>dtype=</c>, <c>where=</c> and the out= cast rule are applied after, when that
+        ///     result is cast into the requested dtype or copied into <c>out=</c> under the mask
+        ///     (DefaultEngine.Evaluate.Text.cs).
+        /// </summary>
+        /// <returns>The options of the natural evaluation.</returns>
+        internal NDEvaluateOptions ForNaturalResult() => new NDEvaluateOptions(null, null, _order);
+
+        /// <summary>True when a <c>where=</c> write mask was supplied (the fused pass runs masked).</summary>
+        internal bool HasWhere => Where is not null;
+
+        /// <summary>The effective out= cast rule — the request, or <see cref="NPY_CASTING.NPY_SAME_KIND_CASTING"/> when unset.</summary>
+        internal NPY_CASTING Casting => _casting ?? NPY_CASTING.NPY_SAME_KIND_CASTING;
+
+        /// <summary>The effective fresh-result order char — the request, or <c>'K'</c> when unset.</summary>
+        internal char Order => _order == '\0' ? 'K' : _order;
+
+        /// <summary>
+        ///     True when the user asked for a NON-default layout (anything but <c>'K'</c>). Used to reject
+        ///     <c>order=</c> on a reduction tree, whose result layout the reduction fixes (NumPy's
+        ///     reductions carry no <c>order=</c> parameter). A bare or explicit <c>'K'</c> is not "explicit"
+        ///     — it is the no-op default, so it never trips the reduction guard.
+        /// </summary>
+        internal bool HasExplicitOrder => _order != '\0' && _order != 'K' && _order != 'k';
+
+        /// <summary>
+        /// True when the CALLER asked for <c>order='K'</c> (the public <c>np.evaluate</c> passes its default <c>'K'</c>), as
+        /// opposed to options left unset by an internal materialization. A fresh elementwise result of the former takes
+        /// NumPy's K-order layout (a permuted operand set gives a permuted result); the latter keeps the C / strict-F
+        /// layout the reduction and stage paths read their materialized children in — a K-ordered child would be read
+        /// as a C buffer there.
+        /// </summary>
+        internal bool IsCallerKeepOrder => _order is 'K' or 'k';
+    }
+}

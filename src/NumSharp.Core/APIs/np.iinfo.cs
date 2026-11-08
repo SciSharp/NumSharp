@@ -38,9 +38,12 @@ namespace NumSharp
         public ulong maxUnsigned { get; }
 
         /// <summary>
-        /// The NPTypeCode of this integer type.
+        /// The dtype of this integer type — NumPy's <c>iinfo.dtype</c> (a <see cref="DType"/> descriptor, like
+        /// <c>np.iinfo(np.int32).dtype</c>). Being a <see cref="DType"/> it exposes <see cref="DType.kind"/> /
+        /// <see cref="DType.name"/> / <see cref="DType.itemsize"/> and compares structurally
+        /// (<c>info.dtype == np.int32</c>); an <see cref="NPTypeCode"/> also converts back implicitly.
         /// </summary>
-        public NPTypeCode dtype { get; }
+        public DType dtype { get; }
 
         /// <summary>
         /// Character code for this type.
@@ -58,18 +61,38 @@ namespace NumSharp
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
 
+            // Text is not an integer type: NumPy names the kind character (Invalid integer data type 'U'.).
+            if (dtype.Meta is StringDTypeMeta)
+                throw new ArgumentException($"Invalid integer data type '{dtype.kind}'.", nameof(dtype));
+
             NPTypeCode typeCode = dtype.GetTypeCode();
             if (!IsIntegerType(typeCode))
                 throw new ArgumentException($"Invalid integer data type '{typeCode.AsNumpyDtypeName()}'", nameof(dtype));
 
-            this.dtype = typeCode;
+            // The class, not the lane: np.iinfo(np.intc).dtype is the intc descriptor ('i') on Windows, although its limits
+            // are int32's lane's (a lane-sharing class has no storage code of its own to rebuild it from).
+            this.dtype = dtype.Meta is LegacyBuiltinDTypeMeta builtin ? builtin.singleton : typeCode;
             (bits, min, max, maxUnsigned, kind) = GetTypeInfo(typeCode);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     NumPy's <c>repr(np.iinfo(dtype))</c>, the same text under every culture:
+        ///     <c>iinfo(min=-128, max=127, dtype=int8)</c>, <c>iinfo(min=0, max=18446744073709551615, dtype=uint64)</c>.
+        /// </summary>
+        /// <returns>The repr text.</returns>
+        /// <remarks>
+        ///     NumPy's <c>"%s(min=%s, max=%s, dtype=%s)"</c> of Python ints, which have no culture (parity QA-41: under
+        ///     ar-SA this text was <c>iinfo(min=؜-128, ...)</c>, U+061C before the minus, and U+2212 under sv-SE). An
+        ///     unsigned type prints its true maximum (<see cref="maxUnsigned"/>), so uint64 shows
+        ///     18446744073709551615 where the <see cref="max"/> property is clamped to <c>long.MaxValue</c>.
+        /// </remarks>
         public override string ToString()
         {
-            return $"iinfo(min={min}, max={max}, dtype={dtype.AsNumpyDtypeName()})";
+            string maxText = kind == 'u'
+                ? maxUnsigned.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : max.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return "iinfo(min=" + min.ToString(System.Globalization.CultureInfo.InvariantCulture) + ", max=" + maxText
+                   + ", dtype=" + dtype.name + ")";
         }
 
         private static bool IsIntegerType(NPTypeCode typeCode)
@@ -140,6 +163,38 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Machine limits of an integer scalar CLASS — NumPy's <c>np.iinfo(cls)</c>: a concrete class gives its dtype's
+        ///     limits (<c>np.iinfo((NDScalarType)np.int16)</c> is <c>np.iinfo(np.int16)</c>), and a Python built-in class
+        ///     the limits of the NumPy class NumPy reads it as (<c>np.iinfo(NDScalarType.PyInt)</c> is int64's on a 64-bit
+        ///     host).
+        /// </summary>
+        /// <param name="dtype">The scalar class.</param>
+        /// <returns>The limits.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="ValueError">
+        ///     The class's kind is not <c>'i'</c> or <c>'u'</c> — NumPy's text, which names the kind of <c>np.dtype(cls)</c>:
+        ///     <c>Invalid integer data type 'f'.</c>, <c>'b'</c> for bool, <c>'m'</c> for timedelta64, <c>'c'</c> for
+        ///     complex64, <c>'O'</c> for object_. An abstract class is <c>'O'</c>: NumPy's <c>iinfo</c> retries a value that
+        ///     converts to no dtype with the dtype of its TYPE, and the type of a class is Python's <c>type</c>, an object
+        ///     dtype.
+        /// </exception>
+        public static iinfo iinfo(NDScalarType dtype)
+        {
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
+            if (dtype.IsAbstract)
+                throw new ValueError("Invalid integer data type 'O'.");
+
+            // A Python built-in class is read as NumPy's dtype(cls).type (int -> int64); NumPy then checks the descriptor's
+            // kind, so a dtype-less class (complex64, object_, void) is refused by its recorded kind without a descriptor.
+            var cls = dtype.NumPyClass;
+            char kind = cls.NumPyKind;
+            if (kind != 'i' && kind != 'u')
+                throw new ValueError($"Invalid integer data type '{kind}'.");
+            return new iinfo(cls.ToDescriptor());
+        }
+
+        /// <summary>
         /// Machine limits for integer types.
         /// </summary>
         /// <typeparam name="T">An integer type (bool, byte, short, ushort, int, uint, long, ulong, char).</typeparam>
@@ -169,7 +224,8 @@ namespace NumSharp
         {
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
-            return new iinfo(arr.GetTypeCode);
+            // The descriptor, so a string array reports its text kind rather than failing on the storage lane.
+            return new iinfo(arr.dtype);
         }
 
         /// <summary>

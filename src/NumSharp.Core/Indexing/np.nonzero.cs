@@ -21,6 +21,8 @@ namespace NumSharp
         /// <returns>Indices of elements that are non-zero.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nonzero.html</remarks>
         public static NDArray<long>[] nonzero(NDArray a)
-            => a.TensorEngine.NonZero(a);
+        {
+            return a.TensorEngine.NonZero(a);
+        }
     }
 }

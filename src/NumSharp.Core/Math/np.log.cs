@@ -14,6 +14,7 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>The natural logarithm of x, element-wise. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray log(NDArray x) => x.TensorEngine.Log(x);
 
         /// <summary>
@@ -25,6 +26,7 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the computation runs at this precision; integer/bool requests raise NumPy's "No loop matching" error.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray log(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => x.TensorEngine.Log(x, dtype, @out, where);
 
@@ -34,6 +36,7 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>Base-2 logarithm of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log2.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray log2(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null) => x.TensorEngine.Log2(x, dtype, @out, where);
 
         /// <summary>
@@ -42,6 +45,7 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>Base-2 logarithm of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log2.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray log2(NDArray x) => x.TensorEngine.Log2(x);
 
         /// <summary>
@@ -50,6 +54,7 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>The logarithm to the base 10 of x, element-wise. NaNs are returned where x is negative. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log10.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray log10(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null) => x.TensorEngine.Log10(x, dtype, @out, where);
 
         /// <summary>
@@ -58,6 +63,7 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>The logarithm to the base 10 of x, element-wise. NaNs are returned where x is negative. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log10.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray log10(NDArray x) => x.TensorEngine.Log10(x);
 
         /// <summary>
@@ -67,6 +73,7 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>Natural logarithm of 1 + x, element-wise. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log1p.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray log1p(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null) => x.TensorEngine.Log1p(x, dtype, @out, where);
 
         /// <summary>
@@ -76,6 +83,7 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>Natural logarithm of 1 + x, element-wise. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log1p.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray log1p(NDArray x) => x.TensorEngine.Log1p(x);
     }
 }

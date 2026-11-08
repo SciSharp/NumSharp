@@ -30,7 +30,8 @@ public class DTypeUtilityBenchmarks : OfficialBenchmarkBase
         ? np.common_type(_a, _b)
         : VerifyUnsupportedDtype(() => np.common_type(_a, _b));
     [Benchmark(Description = "np.isdtype(dtype, kind)")] public bool IsDType() => np.isdtype(DType, "real floating");
-    [Benchmark(Description = "np.issubdtype(dtype, kind)")] public bool IsSubDType() => np.issubdtype(DType, "floating");
+    // The family is NumPy's scalar CLASS np.floating, as in the NumPy twin; a string is a dtype string ("floating" raises).
+    [Benchmark(Description = "np.issubdtype(dtype, kind)")] public bool IsSubDType() => np.issubdtype(DType, np.floating);
     [Benchmark(Description = "np.min_scalar_type(value)")] public NPTypeCode MinScalarType() => np.min_scalar_type(GetScalar(DType));
     [Benchmark(Description = "np.mintypecode(typechars)")] public char MinTypeCode() => np.mintypecode("fd");
     [Benchmark(Description = "np.promote_types(a, b)")] public NPTypeCode PromoteTypes() => np.promote_types(DType, NPTypeCode.Double);

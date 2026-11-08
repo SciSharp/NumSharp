@@ -9,6 +9,9 @@ same offline-corpus philosophy as test/oracle/gen_oracle.py). Re-run this script
 changes; it self-checks every file by executing it through onnxruntime.
 
     python test/oracle/gen_onnx_models.py            # writes test/NumSharp.Tests.Interop.OnnxRuntime/Models/*.onnx
+    python test/oracle/gen_onnx_models.py NAME ...   # writes only the named models (a new model is added
+                                                     # without rewriting the committed ones, whose bytes
+                                                     # depend on the installed onnx version)
 
 Requires: onnx, onnxruntime, numpy (pip install onnx onnxruntime numpy).
 
@@ -31,7 +34,79 @@ postprocess_f32.onnx    X ['N','C'] float32 -> Softmax(axis=-1) -> probs ; ArgMa
 topk_f32.onnx           X ['N','C'] float32, K [1] int64 -> TopK(axis=-1) -> Values, Indices.
                         The oracle for Postprocess.TopK.
 sequence_out.onnx       X float32 -> SequenceConstruct -> seq (a sequence<tensor(float)>). Proves
-                        the NDArray verbs decline a non-tensor OrtValue with a clear message.
+                        the NDArray verbs decline a non-tensor OrtValue with a clear message, and
+                        the ToNDArrays reader (sequence of tensors).
+zipmap_int64.onnx       X [N,3] float32 -> ZipMap(ai.onnx.ml, classlabels_int64s) -> Z, a
+                        sequence(map(int64, float)) -- the scikit-learn classifier output. Oracle for
+                        the ToMap / ToMaps map readers.
+string_io.onnx          X string -> Identity -> Y string. Text both ways: a text array feeds the string
+                        INPUT, the string OUTPUT reads back as a text array or through ReadStringTensor,
+                        and a numeric array for the string input is refused.
+sequence_input.onnx     seq sequence<tensor(float)> -> SequenceLength -> len int64. A NON-tensor model
+                        INPUT: Tier-2 Run must refuse feeding it an NDArray.
+optional_input.onnx     X optional(tensor(float)) -> OptionalGetElement -> Y float32. An input declared
+                        OPTIONAL: Tier-2 Run unwraps the declaration and feeds a plain tensor.
+overridable_init.onnx   x [3] float32, w [3] float32 (an initializer that is ALSO a graph input, value
+                        [10, 20, 30]) -> Add -> y. An OVERRIDABLE INITIALIZER: ORT lists w in
+                        OverridableInitializerMetadata, not in InputMetadata; Tier-2 Run accepts a value
+                        for it and runs with the default when none is fed.
+zipmap_string.onnx      X [N,3] float32 -> ZipMap(classlabels_strings=[cat, dog, bird]) -> Z, a
+                        sequence(map(string, float)): a classifier with STRING class labels. The map
+                        readers return the keys as a text array.
+classifier_str.onnx     X [N,3] float32 -> ArgMax -> LabelEncoder(int64 -> string) -> label (a STRING
+                        tensor [N]) ; ZipMap(strings) -> probabilities. The usual skl2onnx classifier
+                        outputs with string labels: a text output next to a non-tensor output.
+mixed_string_float.onnx text ['N'] string, x ['N'] float32 -> Identity each -> echo, y. A TEXT input next
+                        to a numeric one in one run, and a text output next to a numeric one.
+passthrough.onnx        X ['N'] float32 is a graph input AND a graph output (no node produces it) ;
+                        X -> Neg -> Y. An OUTPUT THAT IS A FED INPUT: ONNX Runtime returns the fed tensor
+                        itself for it and never writes a pre-allocated buffer, so the bridge must.
+overridable_out.onnx    x [3] float32, w [3] float32 (an overridable initializer, value [10, 20, 30]) ->
+                        Add -> y ; w is ALSO a graph output. Not fed, the output w is the default value
+                        (ORT copies it); fed, it is the fed value and a pre-allocated buffer receives the
+                        DEFAULT instead.
+passthrough_text.onnx   text ['N'] string is a graph input AND a graph output ; x ['N'] float32 -> Neg -> y.
+                        A TEXT input passed through: the value ORT returns for it is the string tensor
+                        the bridge built, which is ORT's own memory, not NumSharp's.
+cast_fanout.onnx        X [2,3] float32 -> Cast -> as_<dtype> [2,3], one output per element type. Every
+                        dtype with a FIXED declared output shape: what RunAsync can allocate before the
+                        run (an asynchronous run writes into memory that exists before it starts).
+tensor_then_seq.onnx    X float32 -> Identity -> Y ; X -> SequenceConstruct -> S. A TENSOR output followed
+                        by a SEQUENCE output: the Run tier converts Y, then refuses S, and must release
+                        what it made for Y.
+anon_dim.onnx           X [?, 3] float32 -> Identity -> Y. A dimension with neither a value nor a name: a
+                        shape error must still print the declaration.
+bf16_out.onnx           X ['N'] float32 -> Cast -> Y bfloat16. An OUTPUT of an element type NumSharp lacks.
+bf16_in.onnx            X ['N'] bfloat16 -> Cast -> Y float32. An INPUT of an element type NumSharp lacks.
+seq_two.onnx            A, B float32 (any rank) -> SequenceConstruct -> S. A sequence of TWO tensors of
+                        different shapes: the reader's order and per-element shapes.
+two_dtypes.onnx         X ['N'] float32 -> Identity -> Yf ; X -> Cast -> Yi int32. Two outputs of two dtypes:
+                        the pre-allocated output checks name the right output.
+string_concat.onnx      A, B string (any rank) -> Concat(axis=0) -> C. ORT's own string kernels END TO END: the
+                        text a NumSharp array feeds is moved by a real kernel and must read back as NumPy's
+                        np.concatenate gives it (every model below is held to its NumPy twin the same way).
+string_transpose.onnx   X string (any rank) -> Transpose (reversed axes) -> Y. Twin: np.transpose.
+string_gather.onnx      X string, I int64 -> Gather(axis=1) -> Y. Twin: np.take(X, I, axis=1), negative I too.
+                        (Axis 1: onnxruntime 1.29's string Gather on axis 0 of a 2-D tensor copies only the
+                        first string of each gathered row and leaves the rest empty.)
+string_reshape.onnx     X string, S int64 -> Reshape -> Y. Twin: np.reshape (a -1 in S included).
+string_slice.onnx       X string, starts/ends/axes/steps int64 -> Slice -> Y. Twin: basic slicing, negative steps.
+string_unique.onnx      X string (any rank) -> Unique(sorted=1) -> Y, indices, inverse_indices, counts. Twin:
+                        np.unique(X, return_index, return_inverse, return_counts) over the flattened X (ORT sorts
+                        UTF-8 bytes, which is NumPy's code-point order).
+string_where.onnx       cond bool, X, Y string (broadcasting) -> Where -> Z. Twin: np.where.
+string_expand.onnx      X string, S int64 -> Expand -> Y. Twin: np.broadcast_to (a materialized copy).
+string_tile.onnx        X string, R int64 -> Tile -> Y. Twin: np.tile.
+string_normalizer.onnx  X ['N'] string -> StringNormalizer(case_change_action="UPPER") -> Y. Twin:
+                        np.strings.upper over ASCII text (ORT maps case through the C locale's wide characters,
+                        which on Windows mangles non-ASCII text, so the twin holds ASCII only).
+string_normalizer_stop.onnx X ['N'] string -> StringNormalizer(LOWER, case-insensitive stopwords 'the' / 'A') -> Y.
+                        Stopword removal: the output has FEWER elements than the input, all removed is [''] (1,).
+string_label_encoder.onnx X string (any rank) -> LabelEncoder(ai.onnx.ml; cat/dog/bird -> 0/1/2, default -1) -> Y
+                        int64. A text CATEGORY input decoded by a real ML operator: the strings must arrive
+                        exactly (an embedded NUL or a stray byte would miss the key).
+string_label_encoder_fixed.onnx X [2, 3] string -> LabelEncoder (the same mapping) -> Y [2, 3] int64. A FIXED declared
+                        output shape: the text-input model RunAsync can allocate an output for before the run.
 """
 from __future__ import annotations
 
@@ -65,10 +140,10 @@ DTYPES = {
 }
 
 
-def _model(name, nodes, inputs, outputs, value_info=(), check=True):
-    graph = helper.make_graph(nodes, name, inputs, outputs, value_info=list(value_info))
+def _model(name, nodes, inputs, outputs, value_info=(), check=True, opset_imports=None, initializer=()):
+    graph = helper.make_graph(nodes, name, inputs, outputs, value_info=list(value_info), initializer=list(initializer))
     model = helper.make_model(graph, producer_name="NumSharp.Interop.OnnxRuntime tests",
-                              opset_imports=[helper.make_opsetid("", OPSET)])
+                              opset_imports=opset_imports or [helper.make_opsetid("", OPSET)])
     model.ir_version = IR_VERSION
     # onnx.checker insists on a `shape` field for graph inputs/outputs, so the RANK-AGNOSTIC models
     # (tensor type with no shape at all -- legal ONNX, "unknown rank", and accepted by ORT) skip the
@@ -142,6 +217,205 @@ def build_all():
         [helper.make_node("SequenceConstruct", ["X"], ["seq"])],
         [_tensor("X", TensorProto.FLOAT)], [seq_out], check=False)
 
+    # ZipMap (ai.onnx.ml) -> sequence(map(int64, float)): the scikit-learn classifier output shape
+    # (probabilities keyed by class label). Exercises BOTH the sequence walk and the map reader.
+    map_type = helper.make_map_type_proto(TensorProto.INT64, helper.make_tensor_type_proto(TensorProto.FLOAT, None))
+    zipmap_out = helper.make_value_info("Z", helper.make_sequence_type_proto(map_type))
+    models["zipmap_int64"] = _model(
+        "zipmap_int64",
+        [helper.make_node("ZipMap", ["X"], ["Z"], domain="ai.onnx.ml", classlabels_int64s=[10, 20, 30])],
+        [_tensor("X", TensorProto.FLOAT, ["N", 3])], [zipmap_out], check=False,
+        opset_imports=[helper.make_opsetid("", OPSET), helper.make_opsetid("ai.onnx.ml", 1)])
+
+    # String Identity: a string tensor in AND out. The interop feeds the string INPUT from a NumSharp text
+    # array, reads the string OUTPUT back as a text array (or exactly, through ReadStringTensor), and refuses
+    # a numeric array for the string input with a clear message.
+    models["string_io"] = _model(
+        "string_io",
+        [helper.make_node("Identity", ["X"], ["Y"])],
+        [_tensor("X", TensorProto.STRING)], [_tensor("Y", TensorProto.STRING)], check=False)
+
+    # A NON-tensor (sequence) model INPUT: SequenceLength(sequence<tensor(float)>) -> int64 scalar.
+    # Tier-2 Run must refuse feeding an NDArray to it with a "not a tensor" message.
+    seq_in = helper.make_tensor_sequence_value_info("seq", TensorProto.FLOAT, None)
+    models["sequence_input"] = _model(
+        "sequence_input",
+        [helper.make_node("SequenceLength", ["seq"], ["len"])],
+        [seq_in], [_tensor("len", TensorProto.INT64, [])], check=False)
+
+    # An OPTIONAL model input: optional(tensor(float)) -> OptionalGetElement -> the tensor. ONNX Runtime
+    # takes a plain tensor where an optional is declared; Tier-2 Run must unwrap the declaration.
+    optional_float = onnx.TypeProto()
+    optional_float.optional_type.elem_type.tensor_type.elem_type = TensorProto.FLOAT
+    models["optional_input"] = _model(
+        "optional_input",
+        [helper.make_node("OptionalGetElement", ["X"], ["Y"])],
+        [helper.make_value_info("X", optional_float)], [_tensor("Y", TensorProto.FLOAT)], check=False)
+
+    # An OVERRIDABLE INITIALIZER: w is an initializer that is also listed as a graph input (legal from IR 4
+    # on), so a caller may replace its value for one run. ORT reports it in OverridableInitializerMetadata.
+    weight = helper.make_tensor("w", TensorProto.FLOAT, [3], [10.0, 20.0, 30.0])
+    models["overridable_init"] = _model(
+        "overridable_init",
+        [helper.make_node("Add", ["x", "w"], ["y"])],
+        [_tensor("x", TensorProto.FLOAT, [3]), _tensor("w", TensorProto.FLOAT, [3])],
+        [_tensor("y", TensorProto.FLOAT, [3])], initializer=[weight])
+
+    # String class labels. sequence(map(string, float)) has no helper: build the TypeProto by hand.
+    def seq_of_string_map(name):
+        t = onnx.TypeProto()
+        t.sequence_type.elem_type.map_type.key_type = TensorProto.STRING
+        t.sequence_type.elem_type.map_type.value_type.tensor_type.elem_type = TensorProto.FLOAT
+        return helper.make_value_info(name, t)
+
+    ml_opsets = [helper.make_opsetid("", OPSET), helper.make_opsetid("ai.onnx.ml", 2)]
+    labels = ["cat", "dog", "bird"]
+    models["zipmap_string"] = _model(
+        "zipmap_string",
+        [helper.make_node("ZipMap", ["X"], ["Z"], domain="ai.onnx.ml", classlabels_strings=labels)],
+        [_tensor("X", TensorProto.FLOAT, ["N", 3])], [seq_of_string_map("Z")], check=False, opset_imports=ml_opsets)
+
+    models["classifier_str"] = _model(
+        "classifier_str",
+        [helper.make_node("ArgMax", ["X"], ["idx"], axis=1, keepdims=0),
+         helper.make_node("LabelEncoder", ["idx"], ["label"], domain="ai.onnx.ml",
+                          keys_int64s=[0, 1, 2], values_strings=labels, default_string="?"),
+         helper.make_node("ZipMap", ["X"], ["probabilities"], domain="ai.onnx.ml", classlabels_strings=labels)],
+        [_tensor("X", TensorProto.FLOAT, ["N", 3])],
+        [_tensor("label", TensorProto.STRING, ["N"]), seq_of_string_map("probabilities")],
+        check=False, opset_imports=ml_opsets)
+
+    models["mixed_string_float"] = _model(
+        "mixed_string_float",
+        [helper.make_node("Identity", ["x"], ["y"]), helper.make_node("Identity", ["text"], ["echo"])],
+        [_tensor("text", TensorProto.STRING, ["N"]), _tensor("x", TensorProto.FLOAT, ["N"])],
+        [_tensor("y", TensorProto.FLOAT, ["N"]), _tensor("echo", TensorProto.STRING, ["N"])])
+
+    # An OUTPUT that no node produces: X is a graph input and a graph output (legal ONNX). ONNX Runtime puts the
+    # fed tensor into the output slot, so the value it returns for X lies in the CALLER's memory, and a buffer the
+    # caller pre-allocates for X is never written. Y = Neg(X) is an ordinary output next to it.
+    models["passthrough"] = _model(
+        "passthrough",
+        [helper.make_node("Neg", ["X"], ["Y"])],
+        [_tensor("X", TensorProto.FLOAT, ["N"])],
+        [_tensor("X", TensorProto.FLOAT, ["N"]), _tensor("Y", TensorProto.FLOAT, ["N"])])
+
+    # An output that is an OVERRIDABLE INITIALIZER: w is an initializer, a graph input and a graph output.
+    weight_out = helper.make_tensor("w", TensorProto.FLOAT, [3], [10.0, 20.0, 30.0])
+    models["overridable_out"] = _model(
+        "overridable_out",
+        [helper.make_node("Add", ["x", "w"], ["y"])],
+        [_tensor("x", TensorProto.FLOAT, [3]), _tensor("w", TensorProto.FLOAT, [3])],
+        [_tensor("w", TensorProto.FLOAT, [3]), _tensor("y", TensorProto.FLOAT, [3])], initializer=[weight_out])
+
+    # A TEXT input passed through to an output. The fed string tensor is ONNX Runtime's own object (text never
+    # shares NumSharp memory), so this output must take the ordinary text copy, not the fed-memory route.
+    models["passthrough_text"] = _model(
+        "passthrough_text",
+        [helper.make_node("Neg", ["x"], ["y"])],
+        [_tensor("text", TensorProto.STRING, ["N"]), _tensor("x", TensorProto.FLOAT, ["N"])],
+        [_tensor("text", TensorProto.STRING, ["N"]), _tensor("y", TensorProto.FLOAT, ["N"])])
+
+    # One output per element type, each with a FIXED shape: the outputs RunAsync can allocate before the run.
+    models["cast_fanout"] = _model(
+        "cast_fanout",
+        [helper.make_node("Cast", ["X"], [f"as_{dt_name}"], to=dt) for dt_name, dt in DTYPES.items()],
+        [_tensor("X", TensorProto.FLOAT, [2, 3])],
+        [_tensor(f"as_{dt_name}", dt, [2, 3]) for dt_name, dt in DTYPES.items()])
+
+    # A tensor output FOLLOWED by a sequence output: the cleanup path of the Run tier (the tensor is converted
+    # before the sequence is refused).
+    float_seq = onnx.TypeProto()
+    float_seq.sequence_type.elem_type.tensor_type.elem_type = TensorProto.FLOAT
+    models["tensor_then_seq"] = _model(
+        "tensor_then_seq",
+        [helper.make_node("Identity", ["X"], ["Y"]), helper.make_node("SequenceConstruct", ["X"], ["S"])],
+        [_tensor("X", TensorProto.FLOAT)], [_tensor("Y", TensorProto.FLOAT), helper.make_value_info("S", float_seq)],
+        check=False)
+
+    # An ANONYMOUS dynamic dimension: neither dim_value nor dim_param.
+    models["anon_dim"] = _model(
+        "anon_dim",
+        [helper.make_node("Identity", ["X"], ["Y"])],
+        [_tensor("X", TensorProto.FLOAT, [None, 3])], [_tensor("Y", TensorProto.FLOAT, [None, 3])])
+
+    # BFloat16, the one tensor element type of ONNX Runtime's C# API that NumSharp has no dtype for: as an output
+    # and as an input. numpy has no bfloat16 either, so the self-check only loads these two.
+    models["bf16_out"] = _model(
+        "bf16_out",
+        [helper.make_node("Cast", ["X"], ["Y"], to=TensorProto.BFLOAT16)],
+        [_tensor("X", TensorProto.FLOAT, ["N"])], [_tensor("Y", TensorProto.BFLOAT16, ["N"])])
+    models["bf16_in"] = _model(
+        "bf16_in",
+        [helper.make_node("Cast", ["X"], ["Y"], to=TensorProto.FLOAT)],
+        [_tensor("X", TensorProto.BFLOAT16, ["N"])], [_tensor("Y", TensorProto.FLOAT, ["N"])])
+
+    # A sequence of TWO tensors, which may have different shapes: the order and the shapes ToNDArrays returns.
+    models["seq_two"] = _model(
+        "seq_two",
+        [helper.make_node("SequenceConstruct", ["A", "B"], ["S"])],
+        [_tensor("A", TensorProto.FLOAT), _tensor("B", TensorProto.FLOAT)], [helper.make_value_info("S", float_seq)],
+        check=False)
+
+    # Two outputs of two dtypes from one input.
+    models["two_dtypes"] = _model(
+        "two_dtypes",
+        [helper.make_node("Identity", ["X"], ["Yf"]), helper.make_node("Cast", ["X"], ["Yi"], to=TensorProto.INT32)],
+        [_tensor("X", TensorProto.FLOAT, ["N"])],
+        [_tensor("Yf", TensorProto.FLOAT, ["N"]), _tensor("Yi", TensorProto.INT32, ["N"])])
+
+    # Text through ORT's own string kernels. Rank-agnostic string tensors (no declared shape) skip the static checker
+    # like string_io; self_check() runs each one against numpy's answer for the same operation.
+    S, I64 = TensorProto.STRING, TensorProto.INT64
+    models["string_concat"] = _model(
+        "string_concat", [helper.make_node("Concat", ["A", "B"], ["C"], axis=0)],
+        [_tensor("A", S), _tensor("B", S)], [_tensor("C", S)], check=False)
+    models["string_transpose"] = _model(
+        "string_transpose", [helper.make_node("Transpose", ["X"], ["Y"])], [_tensor("X", S)], [_tensor("Y", S)], check=False)
+    models["string_gather"] = _model(
+        "string_gather", [helper.make_node("Gather", ["X", "I"], ["Y"], axis=1)],
+        [_tensor("X", S), _tensor("I", I64)], [_tensor("Y", S)], check=False)
+    models["string_reshape"] = _model(
+        "string_reshape", [helper.make_node("Reshape", ["X", "S"], ["Y"])],
+        [_tensor("X", S), _tensor("S", I64)], [_tensor("Y", S)], check=False)
+    models["string_slice"] = _model(
+        "string_slice", [helper.make_node("Slice", ["X", "starts", "ends", "axes", "steps"], ["Y"])],
+        [_tensor("X", S), _tensor("starts", I64), _tensor("ends", I64), _tensor("axes", I64), _tensor("steps", I64)],
+        [_tensor("Y", S)], check=False)
+    models["string_unique"] = _model(
+        "string_unique", [helper.make_node("Unique", ["X"], ["Y", "indices", "inverse_indices", "counts"], sorted=1)],
+        [_tensor("X", S)], [_tensor("Y", S), _tensor("indices", I64), _tensor("inverse_indices", I64), _tensor("counts", I64)],
+        check=False)
+    models["string_where"] = _model(
+        "string_where", [helper.make_node("Where", ["cond", "X", "Y"], ["Z"])],
+        [_tensor("cond", TensorProto.BOOL), _tensor("X", S), _tensor("Y", S)], [_tensor("Z", S)], check=False)
+    models["string_expand"] = _model(
+        "string_expand", [helper.make_node("Expand", ["X", "S"], ["Y"])],
+        [_tensor("X", S), _tensor("S", I64)], [_tensor("Y", S)], check=False)
+    models["string_tile"] = _model(
+        "string_tile", [helper.make_node("Tile", ["X", "R"], ["Y"])],
+        [_tensor("X", S), _tensor("R", I64)], [_tensor("Y", S)], check=False)
+    models["string_normalizer"] = _model(
+        "string_normalizer", [helper.make_node("StringNormalizer", ["X"], ["Y"], case_change_action="UPPER")],
+        [_tensor("X", S, ["N"])], [_tensor("Y", S, ["M"])])
+    models["string_normalizer_stop"] = _model(
+        "string_normalizer_stop",
+        [helper.make_node("StringNormalizer", ["X"], ["Y"], case_change_action="LOWER", is_case_sensitive=0,
+                          stopwords=["the", "A"])],
+        [_tensor("X", S, ["N"])], [_tensor("Y", S, ["M"])])
+    models["string_label_encoder"] = _model(
+        "string_label_encoder",
+        [helper.make_node("LabelEncoder", ["X"], ["Y"], domain="ai.onnx.ml", keys_strings=["cat", "dog", "bird"],
+                          values_int64s=[0, 1, 2], default_int64=-1)],
+        [_tensor("X", S)], [_tensor("Y", I64)], check=False,
+        opset_imports=[helper.make_opsetid("", OPSET), helper.make_opsetid("ai.onnx.ml", 2)])
+    models["string_label_encoder_fixed"] = _model(
+        "string_label_encoder_fixed",
+        [helper.make_node("LabelEncoder", ["X"], ["Y"], domain="ai.onnx.ml", keys_strings=["cat", "dog", "bird"],
+                          values_int64s=[0, 1, 2], default_int64=-1)],
+        [_tensor("X", S, [2, 3])], [_tensor("Y", I64, [2, 3])],
+        opset_imports=[helper.make_opsetid("", OPSET), helper.make_opsetid("ai.onnx.ml", 2)])
+
     return models
 
 
@@ -188,6 +462,139 @@ def self_check(path: str, name: str) -> None:
     elif name == "sequence_out":
         seq, = sess.run(None, {"X": np.arange(3, dtype=np.float32)})
         assert isinstance(seq, list) and len(seq) == 1, name
+    elif name == "zipmap_int64":
+        z, = sess.run(None, {"X": np.array([[0.1, 0.7, 0.2], [0.5, 0.3, 0.2]], np.float32)})
+        assert isinstance(z, list) and len(z) == 2, name           # sequence of 2 maps
+        assert isinstance(z[0], dict) and set(z[0]) == {10, 20, 30}, name
+        assert abs(z[0][20] - 0.7) < 1e-6, name
+    elif name == "string_io":
+        y, = sess.run(None, {"X": np.array(["héllo", "world"], dtype=object)})
+        assert list(y) == ["héllo", "world"], name
+    elif name == "sequence_input":
+        n, = sess.run(None, {"seq": [np.arange(3, dtype=np.float32), np.arange(2, dtype=np.float32)]})
+        assert int(n) == 2, name
+    elif name == "optional_input":
+        y, = sess.run(None, {"X": np.arange(4, dtype=np.float32)})   # a plain tensor for the optional
+        assert np.array_equal(y, np.arange(4, dtype=np.float32)), name
+    elif name == "overridable_init":
+        assert [i.name for i in sess.get_inputs()] == ["x"], name
+        assert [i.name for i in sess.get_overridable_initializers()] == ["w"], name
+        x = np.array([1, 2, 3], np.float32)
+        y, = sess.run(None, {"x": x})                                # the default weight
+        assert np.array_equal(y, np.array([11, 22, 33], np.float32)), name
+        y, = sess.run(None, {"x": x, "w": np.array([1, 1, 1], np.float32)})   # the weight replaced
+        assert np.array_equal(y, np.array([2, 3, 4], np.float32)), name
+    elif name == "zipmap_string":
+        z, = sess.run(None, {"X": np.array([[0.1, 0.7, 0.2]], np.float32)})
+        assert isinstance(z, list) and set(z[0]) == {"cat", "dog", "bird"} and abs(z[0]["dog"] - 0.7) < 1e-6, name
+    elif name == "classifier_str":
+        label, probs = sess.run(None, {"X": np.array([[0.1, 0.7, 0.2], [0.5, 0.3, 0.2]], np.float32)})
+        assert list(label) == ["dog", "cat"], name
+        assert set(probs[1]) == {"cat", "dog", "bird"}, name
+    elif name == "mixed_string_float":
+        y, echo = sess.run(None, {"text": np.array(["a", "bb"], dtype=object), "x": np.array([1, 2], np.float32)})
+        assert list(echo) == ["a", "bb"] and np.array_equal(y, np.array([1, 2], np.float32)), name
+    elif name == "passthrough":
+        assert [o.name for o in sess.get_outputs()] == ["X", "Y"], name
+        x = np.array([1, 2, 3], np.float32)
+        x_out, y = sess.run(None, {"X": x})
+        assert np.array_equal(x_out, x) and np.array_equal(y, -x), name
+    elif name == "overridable_out":
+        assert [i.name for i in sess.get_overridable_initializers()] == ["w"], name
+        x = np.array([1, 2, 3], np.float32)
+        w, y = sess.run(None, {"x": x})                              # the default weight comes out
+        assert np.array_equal(w, np.array([10, 20, 30], np.float32)) and np.array_equal(y, x + w), name
+        fed = np.array([100, 200, 300], np.float32)
+        w, y = sess.run(None, {"x": x, "w": fed})                    # the fed weight comes out
+        assert np.array_equal(w, fed) and np.array_equal(y, x + fed), name
+    elif name == "passthrough_text":
+        echo, y = sess.run(None, {"text": np.array(["a", "bb"], dtype=object), "x": np.array([1, 2], np.float32)})
+        assert list(echo) == ["a", "bb"] and np.array_equal(y, np.array([-1, -2], np.float32)), name
+    elif name == "cast_fanout":
+        x = np.arange(6, dtype=np.float32).reshape(2, 3)
+        outs = sess.run(None, {"X": x})
+        assert len(outs) == len(DTYPES), name
+        for (dt_name, _), out in zip(DTYPES.items(), outs):
+            np_dt = {"float16": np.float16, "bool": np.bool_}.get(dt_name, getattr(np, dt_name, None))
+            assert out.dtype == np_dt and out.shape == (2, 3) and np.array_equal(out, x.astype(np_dt)), (name, dt_name)
+    elif name == "tensor_then_seq":
+        x = np.arange(3, dtype=np.float32)
+        y, s = sess.run(None, {"X": x})
+        assert np.array_equal(y, x) and isinstance(s, list) and len(s) == 1 and np.array_equal(s[0], x), name
+    elif name == "anon_dim":
+        assert sess.get_inputs()[0].shape[1] == 3 and not isinstance(sess.get_inputs()[0].shape[0], int), name
+        x = np.arange(6, dtype=np.float32).reshape(2, 3)
+        y, = sess.run(None, {"X": x})
+        assert np.array_equal(y, x), name
+    elif name == "bf16_out":
+        assert sess.get_outputs()[0].type == "tensor(bfloat16)", name   # not run: numpy has no bfloat16
+    elif name == "bf16_in":
+        assert sess.get_inputs()[0].type == "tensor(bfloat16)", name
+    elif name == "seq_two":
+        a = np.arange(6, dtype=np.float32).reshape(2, 3)
+        b = np.arange(4, dtype=np.float32)
+        s, = sess.run(None, {"A": a, "B": b})
+        assert [e.shape for e in s] == [(2, 3), (4,)] and np.array_equal(s[0], a) and np.array_equal(s[1], b), name
+    elif name == "two_dtypes":
+        x = np.array([1.5, -2.5, 3.0], np.float32)
+        yf, yi = sess.run(None, {"X": x})
+        assert yf.dtype == np.float32 and np.array_equal(yf, x), name
+        assert yi.dtype == np.int32 and np.array_equal(yi, x.astype(np.int32)), name
+    elif name.startswith("string_"):
+        _self_check_text(sess, name)
+    else:
+        raise AssertionError(f"no self-check for {name}")
+
+
+def _self_check_text(sess, name: str) -> None:
+    """Run a text model on a representative feed and hold its output to numpy's answer for the same operation."""
+    x = np.array([["b", "a", "c", "a"], ["dd", "", "e" + chr(0x301), chr(0x1F600) + "x"], ["Title", "zz", "a", "q"]],
+                 dtype=object)
+    if name == "string_concat":
+        c, = sess.run(None, {"A": x, "B": x[::-1]})
+        assert c.tolist() == np.concatenate((x, x[::-1]), axis=0).tolist(), name
+    elif name == "string_transpose":
+        y, = sess.run(None, {"X": x})
+        assert y.tolist() == x.T.tolist(), name
+    elif name == "string_gather":
+        y, = sess.run(None, {"X": x, "I": np.array([2, 0, -1], np.int64)})
+        assert y.tolist() == np.take(x, [2, 0, -1], axis=1).tolist(), name
+    elif name == "string_reshape":
+        y, = sess.run(None, {"X": x, "S": np.array([4, -1], np.int64)})
+        assert y.tolist() == x.reshape(4, -1).tolist(), name
+    elif name == "string_slice":
+        y, = sess.run(None, {"X": x, "starts": np.array([-1, 1], np.int64), "ends": np.array([-10, 4], np.int64),
+                             "axes": np.array([0, 1], np.int64), "steps": np.array([-1, 2], np.int64)})
+        assert y.tolist() == x[::-1, 1:4:2].tolist(), name
+    elif name == "string_unique":
+        y, idx, inv, cnt = sess.run(None, {"X": x})
+        u, ui, uv, uc = np.unique(x.astype(str), return_index=True, return_inverse=True, return_counts=True)
+        assert y.tolist() == u.tolist() and idx.tolist() == ui.tolist(), name
+        assert inv.tolist() == uv.ravel().tolist() and cnt.tolist() == uc.tolist(), name
+    elif name == "string_where":
+        cond = np.array([[True, False, True, False]])
+        z, = sess.run(None, {"cond": cond, "X": x, "Y": np.array(["y"], dtype=object)})
+        assert z.tolist() == np.where(cond, x, np.array(["y"], dtype=object)).tolist(), name
+    elif name == "string_expand":
+        y, = sess.run(None, {"X": x[0], "S": np.array([2, 4], np.int64)})
+        assert y.tolist() == np.broadcast_to(x[0], (2, 4)).tolist(), name
+    elif name == "string_tile":
+        y, = sess.run(None, {"X": x, "R": np.array([1, 2], np.int64)})
+        assert y.tolist() == np.tile(x, (1, 2)).tolist(), name
+    elif name == "string_normalizer":
+        y, = sess.run(None, {"X": np.array(["ab", "Cd", "", "x1 z"], dtype=object)})
+        assert y.tolist() == np.strings.upper(np.array(["ab", "Cd", "", "x1 z"])).tolist(), name
+    elif name == "string_normalizer_stop":
+        y, = sess.run(None, {"X": np.array(["The", "Cat", "a", "MAT"], dtype=object)})
+        assert y.tolist() == ["cat", "mat"], name
+        y, = sess.run(None, {"X": np.array(["the", "A"], dtype=object)})
+        assert y.tolist() == [""], name                     # everything removed: one empty string
+    elif name == "string_label_encoder_fixed":
+        y, = sess.run(None, {"X": np.array([["cat", "bird", "x"], ["dog", "", "cat"]], dtype=object)})
+        assert y.tolist() == [[0, 2, -1], [1, -1, 0]], name
+    elif name == "string_label_encoder":
+        y, = sess.run(None, {"X": np.array([["cat", "bird"], ["fish", "dog"]], dtype=object)})
+        assert y.tolist() == [[0, 2], [-1, 1]], name
     else:
         raise AssertionError(f"no self-check for {name}")
 
@@ -195,6 +602,13 @@ def self_check(path: str, name: str) -> None:
 def main() -> int:
     os.makedirs(OUT_DIR, exist_ok=True)
     models = build_all()
+    wanted = sys.argv[1:]
+    unknown = [name for name in wanted if name not in models]
+    if unknown:
+        print(f"unknown model name(s): {', '.join(unknown)}; known: {', '.join(models)}")
+        return 2
+    if wanted:
+        models = {name: models[name] for name in wanted}
     for name, model in models.items():
         path = os.path.join(OUT_DIR, f"{name}.onnx")
         onnx.save(model, path)

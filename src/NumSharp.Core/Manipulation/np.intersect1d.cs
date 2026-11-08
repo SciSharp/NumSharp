@@ -10,8 +10,17 @@ namespace NumSharp
         /// <param name="ar2">Input array (flattened if not already 1-D).</param>
         /// <returns>Sorted 1-D array of common, unique elements.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.intersect1d.html</remarks>
+        /// <exception cref="UnicodeDecodeError">The concatenation decodes <c>S</c> text beside <c>U</c> text, and a byte is not
+        ///     ASCII (in the order of the unique values).</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class the concatenation finds no common
+        ///     DType with (a number, bool, <c>S</c> bytes): NumPy's verbatim promotion text.</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
         public static NDArray intersect1d(NDArray ar1, NDArray ar2)
-            => IntersectCore(ar1, ar2, false, false)[0];
+        {
+            return IntersectCore(ar1, ar2, false, false)[0];
+        }
 
         /// <summary>
         ///     Find the intersection of two arrays (bare-return, with the <c>assume_unique</c> speed hint).<br></br>
@@ -23,8 +32,17 @@ namespace NumSharp
         ///     the calculation. Default is False.</param>
         /// <returns>Sorted 1-D array of common, unique elements.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.intersect1d.html</remarks>
+        /// <exception cref="UnicodeDecodeError">The concatenation decodes <c>S</c> text beside <c>U</c> text, and a byte is not
+        ///     ASCII (in the order of the unique values).</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class the concatenation finds no common
+        ///     DType with (a number, bool, <c>S</c> bytes): NumPy's verbatim promotion text.</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
         public static NDArray intersect1d(NDArray ar1, NDArray ar2, bool assume_unique)
-            => IntersectCore(ar1, ar2, assume_unique, false)[0];
+        {
+            return IntersectCore(ar1, ar2, assume_unique, false)[0];
+        }
 
         /// <summary>
         ///     Find the intersection of two arrays, returning the indices of the common values.<br></br>
@@ -41,12 +59,24 @@ namespace NumSharp
         /// <returns><c>[values]</c> when <paramref name="return_indices"/> is False, otherwise
         ///     <c>[values, comm1, comm2]</c>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.intersect1d.html</remarks>
+        /// <exception cref="UnicodeDecodeError">The concatenation decodes <c>S</c> text beside <c>U</c> text, and a byte is not
+        ///     ASCII (in the order of the unique values).</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class the concatenation finds no common
+        ///     DType with (a number, bool, <c>S</c> bytes): NumPy's verbatim promotion text.</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
         public static NDArray[] intersect1d(NDArray ar1, NDArray ar2, bool assume_unique = false, bool return_indices = false)
-            => IntersectCore(ar1, ar2, assume_unique, return_indices);
+        {
+            return IntersectCore(ar1, ar2, assume_unique, return_indices);
+        }
 
         [NDScoped]
         private static NDArray[] IntersectCore(NDArray ar1, NDArray ar2, bool assume_unique, bool return_indices)
         {
+            // Text runs the statements below unchanged: np.unique and the sorts order the text (the index form with
+            // NumPy's stable 'mergesort', whose order of equal strings is not the default kind's), and the concatenation
+            // formats numbers into text and decodes bytes beside str as NumPy's does.
             // Boundary scope: the unique/ravel/concatenate/argsort/take temps and the adjacency
             // mask are reclaimed at exit; the returned tuple's arrays are yielded.
 
@@ -76,7 +106,7 @@ namespace NumSharp
             NDArray aux, auxSortIndices = null;
             if (return_indices)
             {
-                auxSortIndices = np.argsort(cat);          // stable (NumPy uses mergesort)
+                auxSortIndices = np.argsort(cat, -1, kind: "mergesort");   // NumPy: argsort(aux, kind='mergesort')
                 aux = np.take(cat, auxSortIndices);
             }
             else

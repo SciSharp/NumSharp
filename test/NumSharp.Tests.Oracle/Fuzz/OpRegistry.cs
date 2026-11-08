@@ -16,23 +16,75 @@ namespace NumSharp.Tests.Fuzz
     {
         public static NDArray Apply(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
+            // Namespaced surfaces route to their own dispatchers (OpRegistry.Instance.cs): the
+            // ndarray.* keys call INSTANCE methods on ops[0] (coverage plan §D — different code
+            // paths from the np.* twins), the emath.* keys the np.emath scimath module (§A2/E5).
+            if (op.StartsWith("ndarray.", StringComparison.Ordinal))
+                return ApplyInstance(op.Substring("ndarray.".Length), p, ops);
+            if (op.StartsWith("emath.", StringComparison.Ordinal))
+                return ApplyEmath(op.Substring("emath.".Length), p, ops);
+            // Every axis-taking function under one key, params.fn naming the NumPy spelling (OpRegistry.AxisArgs.cs).
+            if (op == "axis_arg")
+                return AxisArgFromCorpus(p, ops);
+            // numpy.polynomial's series classes (OpRegistry.PolyClass.cs): "<module>.<Class>[.<member>]" keys, before the
+            // module functions, whose keys share the module prefix.
+            if (IsPolyClassOp(op))
+                return PolyClassArray(op, p, ops);
+            // numpy.polynomial submodules (OpRegistry.Polynomial.cs): module-qualified keys, plan D5.
+            if (IsPolynomialOp(op))
+                return ApplyPolynomial(op, p, ops);
+            // numpy.matrix (OpRegistry.Matrix.cs): the constructor key "matrix" and the member keys "matrix.<name>".
+            if (IsMatrixOp(op))
+                return ApplyMatrix(op, p, ops);
+            // A numpy.matrix operand of an ordinary key (the matrix-operand tiers): the keys whose entry below is
+            // a C# operator go through the np.* function, which is what follows the run-time class.
+            if (HasMatrixOperand(ops) && TryApplyFunctionForm(op, p, ops, out NDArray viaFunction))
+                return viaFunction;
+
             switch (op)
             {
                 case "astype":
                     return ops[0].astype(FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
 
+                // np.evaluate over the prefix-grammar tree in params.expr (OpRegistry.Evaluate.cs);
+                // NumPy's unfused node-by-node chain is the oracle.
+                case "evaluate":
+                    return EvaluateFromCorpus(p, ops);
+
+                // The array-OBJECT oracle (gen_viewflags_oracle.py, OpRegistry.ViewFlags.cs): the API params.fn names,
+                // its result returned untouched so its memory facet (flags, strides, view / copy / identity) is NumSharp's.
+                case "viewflags":
+                    return ApplyViewFlags(p, ops);
+                case "shapearg":
+                    return ApplyShapeArg(p, ops);
+
                 // Binary arithmetic (NEP50 promotion). NumPy is the oracle for the result dtype.
-                case "add": return ops[0] + ops[1];
+                // add / multiply also honour params.dtype, NumPy's dtype= keyword: it selects the LOOP,
+                // so both inputs are cast into it. The nan_order tier uses it to gate which NaN that
+                // cast loop returns (the two ops whose NaN choice depends on the loop); without the
+                // key the operator path runs, unchanged.
+                case "add":
+                    return p.TryGetValue("dtype", out var addLoop)
+                        ? np.add(ops[0], ops[1], dtype: FuzzCorpus.DtypeToTC(addLoop.GetString()))
+                        : ops[0] + ops[1];
                 case "subtract": return ops[0] - ops[1];
-                case "multiply": return ops[0] * ops[1];
+                case "multiply":
+                    return p.TryGetValue("dtype", out var multiplyLoop)
+                        ? np.multiply(ops[0], ops[1], dtype: FuzzCorpus.DtypeToTC(multiplyLoop.GetString()))
+                        : ops[0] * ops[1];
                 case "divide": return ops[0] / ops[1];
                 case "floor_divide": return np.floor_divide(ops[0], ops[1]);
                 case "mod": return np.mod(ops[0], ops[1]);
+                case "fmod": return np.fmod(ops[0], ops[1]);
+                case "gcd": return np.gcd(ops[0], ops[1]);
+                case "lcm": return np.lcm(ops[0], ops[1]);
                 case "power": return np.power(ops[0], ops[1]);
+                case "float_power": return np.float_power(ops[0], ops[1]);
 
                 // Unary.
                 case "negative": return np.negative(ops[0]);
                 case "abs": return np.abs(ops[0]);
+                case "fabs": return np.fabs(ops[0]);
                 case "sign": return np.sign(ops[0]);
                 case "sqrt": return np.sqrt(ops[0]);
                 case "cbrt": return np.cbrt(ops[0]);
@@ -69,12 +121,18 @@ namespace NumSharp.Tests.Fuzz
                 case "deg2rad": return np.deg2rad(ops[0]);
                 case "rad2deg": return np.rad2deg(ops[0]);
                 case "positive": return np.positive(ops[0]);
+                case "spacing": return np.spacing(ops[0]);
+
+                // sinc — sin(pi*x)/(pi*x); its own tier (real dtypes only, complex excluded). NumPy is the oracle.
+                case "sinc": return np.sinc(ops[0]);
+                case "i0": return np.i0(ops[0]);
 
                 // Bitwise & shift (T9). Integer + bool dtypes; NumPy is the oracle.
                 case "bitwise_and": return ops[0] & ops[1];
                 case "bitwise_or": return ops[0] | ops[1];
                 case "bitwise_xor": return ops[0] ^ ops[1];
                 case "invert": return np.invert(ops[0]);
+                case "bitwise_count": return np.bitwise_count(ops[0]);
                 case "left_shift": return np.left_shift(ops[0], ops[1]);
                 case "right_shift": return np.right_shift(ops[0], ops[1]);
 
@@ -117,6 +175,15 @@ namespace NumSharp.Tests.Fuzz
                     return p.ContainsKey("axis")
                         ? np.trim_zeros(ops[0], p["trim"].GetString(), p["axis"].GetInt32())
                         : np.trim_zeros(ops[0], p["trim"].GetString());
+                // packbits/unpackbits: dtype-agnostic bit transforms -> uint8. "axis" absent => axis=None
+                // (flatten). unpackbits "count" is a nullable long. Bitorder defaults to "big".
+                case "packbits":
+                    return np.packbits(ops[0], ParseAxis(p),
+                        p.ContainsKey("bitorder") ? p["bitorder"].GetString() : "big");
+                case "unpackbits":
+                    return np.unpackbits(ops[0], ParseAxis(p),
+                        p.ContainsKey("count") ? p["count"].GetInt64() : (long?)null,
+                        p.ContainsKey("bitorder") ? p["bitorder"].GetString() : "big");
                 case "delete": return np.delete(ops[0], p["obj"].GetInt32(), p["axis"].GetInt32());
                 case "atleast_1d": return np.atleast_1d(ops[0]);
                 case "atleast_2d": return np.atleast_2d(ops[0]);
@@ -139,30 +206,76 @@ namespace NumSharp.Tests.Fuzz
                 case "imag": return np.imag(ops[0]);
                 case "angle": return np.angle(ops[0]);
                 case "angle_deg": return np.angle(ops[0], deg: true);
+                // real_if_close: collapse a near-real complex array to its float64 real lane (or the
+                // array unchanged). tol is the ONLY parameter; the collapse decision is whole-array.
+                case "real_if_close": return np.real_if_close(ops[0], p["tol"].GetDouble());
 
-                // Cumulative scans + finite differences (T11).
-                case "cumsum": return np.cumsum(ops[0], ParseAxis(p));
-                case "cumprod": return np.cumprod(ops[0], ParseAxis(p));
+                // Cumulative scans + finite differences (T11). An optional "dtype" param is the loop dtype (gen_scan_dtype:
+                // NumPy casts the input to it and accumulates there).
+                case "cumsum":
+                    return np.cumsum(ops[0], ParseAxis(p),
+                        p.TryGetValue("dtype", out var cumsumLoop) ? (DType)FuzzCorpus.DtypeToTC(cumsumLoop.GetString()) : null);
+                case "cumprod":
+                    return np.cumprod(ops[0], ParseAxis(p),
+                        p.TryGetValue("dtype", out var cumprodLoop) ? (DType)FuzzCorpus.DtypeToTC(cumprodLoop.GetString()) : null);
                 // NaN-aware cumulative scans (T11b, nanscan.jsonl): NaN treated as 0 (sum) / 1 (prod).
                 case "nancumsum": return np.nancumsum(ops[0], ParseAxis(p));
                 case "nancumprod": return np.nancumprod(ops[0], ParseAxis(p));
                 case "diff": return np.diff(ops[0], p["n"].GetInt32(), p["axis"].GetInt32());
+                // np.unwrap: period_is_int selects the integer-preserving overload (long period);
+                // otherwise the float-period overload (with or without an explicit period). discont
+                // is optional (null => period/2). axis is always present.
+                case "unwrap":
+                {
+                    double? unwDiscont = p.TryGetValue("discont", out var pud) && pud.ValueKind != JsonValueKind.Null
+                        ? pud.GetDouble() : (double?)null;
+                    int unwAxis = p.TryGetValue("axis", out var pua) ? pua.GetInt32() : -1;
+                    bool unwPeriodIsInt = p.TryGetValue("period_is_int", out var pupi) && pupi.GetBoolean();
+                    if (unwPeriodIsInt)
+                        return np.unwrap(ops[0], p["period"].GetInt64(), unwDiscont, unwAxis);
+                    if (p.TryGetValue("period", out var pup))
+                        return np.unwrap(ops[0], unwDiscont, unwAxis, pup.GetDouble());
+                    return np.unwrap(ops[0], unwDiscont, unwAxis);
+                }
+                // Composite trapezoidal integration (array/scalar result). A second operand is the
+                // coordinate x (1-D or N-D, any layout); without one, dx/axis vary. A 1-D product
+                // reduces to a 0-d scalar.
+                case "trapezoid":
+                    return np.trapezoid(ops[0], ops.Length > 1 ? ops[1] : null,
+                                        p.ContainsKey("dx") ? p["dx"].GetDouble() : 1.0,
+                                        p.ContainsKey("axis") ? p["axis"].GetInt32() : -1);
 
                 // In-place out= aliasing (W11): the output buffer IS an input operand.
                 case "maximum_out": np.maximum(ops[0], ops[1], ops[0]); return ops[0];
                 case "minimum_out": np.minimum(ops[0], ops[1], ops[0]); return ops[0];
                 case "clip_out": np.clip(ops[0], ops[1], ops[2], ops[0]); return ops[0];
 
+                // np.put whose values (put_selfvals) or indices (put_selfidx) are a VIEW of the target: NumPy copies the
+                // target first when either may share memory with it, so every value and index is the original's. Two
+                // corpus operands cannot share a base, so the view is rebuilt here over the target's flat C view.
+                case "put_selfvals": return PutIntoSelf(ops[0], p["vslice"].GetString(), p["mode"].GetString(),
+                                                        (t, view, mode) => np.put(t, ops[1], view, mode));
+                case "put_selfidx": return PutIntoSelf(ops[0], p["islice"].GetString(), p["mode"].GetString(),
+                                                       (t, view, mode) => np.put(t, view, ops[1], mode));
+
                 // Parameter sweep (W12): ddof=1 std/var, order='F' ravel.
                 case "std_ddof": { var ax = ParseAxis(p); int dd = p["ddof"].GetInt32();
-                    return ax.HasValue ? np.std(ops[0], ax.Value, false, dd) : np.std(ops[0], false, dd); }
+                    return ax.HasValue ? np.std(ops[0], ax.Value, keepdims: false, ddof: dd) : np.std(ops[0], keepdims: false, ddof: dd); }
                 case "var_ddof": { var ax = ParseAxis(p); int dd = p["ddof"].GetInt32();
-                    return ax.HasValue ? np.var(ops[0], ax.Value, false, dd) : np.var(ops[0], false, dd); }
+                    return ax.HasValue ? np.var(ops[0], ax.Value, keepdims: false, ddof: dd) : np.var(ops[0], keepdims: false, ddof: dd); }
                 case "ravel_f": return np.ravel(ops[0], 'F');
 
                 // Statistics (T12).
-                case "median": return np.median(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
-                case "average": return np.average(ops[0], ParseAxis(p), null, ParseKeepdims(p));
+                // median/average/nanmedian carry a scalar "axis" OR — the multi-axis §C1 cells —
+                // an "axes" int[] that binds NumSharp's tuple-axis (int[]) overloads.
+                case "median":
+                    return p.ContainsKey("axes")
+                        ? np.median(ops[0], ParseIntArray(p["axes"]), keepdims: ParseKeepdims(p))
+                        : np.median(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
+                case "average":
+                    return p.ContainsKey("axes")
+                        ? np.average(ops[0], ParseIntArray(p["axes"]), null, ParseKeepdims(p))
+                        : np.average(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "ptp": return np.ptp(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "count_nonzero": return np.count_nonzero(ops[0], ParseAxis(p).Value, ParseKeepdims(p));
                 case "percentile": return np.percentile(ops[0], p["q"].GetDouble(), ParseAxis(p),
@@ -170,6 +283,14 @@ namespace NumSharp.Tests.Fuzz
                 case "quantile": return np.quantile(ops[0], p["q"].GetDouble(), ParseAxis(p),
                     keepdims: ParseKeepdims(p));
                 case "clip": return np.clip(ops[0], ops[1], ops[2]);
+                // np.clip with Python-int bounds (gen_oracle.py gen_clip_pyint): _methods._clip's drop rule and
+                // NEP 50 packing. The bounds ride as PARAMS and are passed as C# integer literals (PyIntLiteral),
+                // which is how a caller writes np.clip(a, -1, 256). An optional 2nd operand is the out= buffer,
+                // returned as-is like NumPy's out.
+                case "clip_pyint":
+                    return np.clip(ops[0], PyIntLiteral(p["lo"]), PyIntLiteral(p["hi"]),
+                                   ops.Length > 1 ? ops[1] : null,
+                                   p.TryGetValue("dtype", out var cpd) ? (DType)FuzzCorpus.DtypeToTC(cpd.GetString()) : null);
                 case "interp":
                 {
                     double? left = p.TryGetValue("left", out var pil) ? pil.GetDouble() : (double?)null;
@@ -182,6 +303,7 @@ namespace NumSharp.Tests.Fuzz
                 case "isnan": return np.isnan(ops[0]);
                 case "isinf": return np.isinf(ops[0]);
                 case "isfinite": return np.isfinite(ops[0]);
+                case "signbit": return np.signbit(ops[0]);
                 case "maximum": return np.maximum(ops[0], ops[1]);
                 case "minimum": return np.minimum(ops[0], ops[1]);
                 case "fmax": return np.fmax(ops[0], ops[1]);
@@ -198,6 +320,10 @@ namespace NumSharp.Tests.Fuzz
                 case "logaddexp2": return np.logaddexp2(ops[0], ops[1]);
                 case "nextafter": return np.nextafter(ops[0], ops[1]);
                 case "copysign": return np.copysign(ops[0], ops[1]);
+                case "hypot": return np.hypot(ops[0], ops[1]);
+                case "heaviside": return np.heaviside(ops[0], ops[1]);
+                // np.ldexp(x1, x2) = x1 * 2^x2 (single-array, 2-operand; result is x1's float tier).
+                case "ldexp": return np.ldexp(ops[0], ops[1]);
 
                 // Group A Batch 3: predicates + whole-array bool reductions (wrapped to 0-D bool).
                 case "iscomplex": return np.iscomplex(ops[0]);
@@ -208,6 +334,7 @@ namespace NumSharp.Tests.Fuzz
                 // Selection.
                 case "where": return np.where(ops[0], ops[1], ops[2]);
                 case "place": np.place(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr
+                case "putmask": np.putmask(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr
 
                 // select — operands are [cond0..cond_{nc-1}, choice0..choice_{nc-1}, default];
                 // params "nc" gives the condition count. Choices are strong NDArrays here
@@ -219,6 +346,22 @@ namespace NumSharp.Tests.Fuzz
                     var choices = new object[nc];
                     for (int i = 0; i < nc; i++) { conds[i] = ops[i]; choices[i] = ops[nc + i]; }
                     return np.select(conds, choices, ops[2 * nc]);
+                }
+
+                // piecewise — operands are [x, cond0..cond_{nc-1}]; "nc" gives the condition count and
+                // "funcs" the SCALAR funclist (length nc or nc+1). Only constant (scalar) funcs ride the
+                // corpus (callables & weak-scalar edges are unit-tested); the ints stay in [0,255] so
+                // they are in-range for every dtype, cast into x's dtype by piecewise.
+                case "piecewise":
+                {
+                    int nc = p["nc"].GetInt32();
+                    var conds = new NDArray[nc];
+                    for (int i = 0; i < nc; i++) conds[i] = ops[1 + i];
+                    var fjson = p["funcs"];
+                    var funcs = new object[fjson.GetArrayLength()];
+                    int fi = 0;
+                    foreach (var fv in fjson.EnumerateArray()) funcs[fi++] = fv.GetInt32();
+                    return np.piecewise(ops[0], conds, funcs);
                 }
 
                 // choose — operands are [index, choice0..choice_{nc-1}]; params "nc" gives the choice
@@ -250,6 +393,21 @@ namespace NumSharp.Tests.Fuzz
                     np.copyto(dst, src);
                     return dst;
                 }
+
+                // np.copyto as NumPy's array_copyto (copyto_full.jsonl): where= masks, layouts, overlap, C# literal
+                // sources and errors; the result is the destination's whole buffer (OpRegistry.Copyto.cs).
+                case "copyto_full":
+                    return ApplyCopytoFull(p, ops);
+
+                // NEP 50 weak Python scalars (weak_scalar.jsonl): comparisons and binary ufuncs with one operand given as
+                // the C# literal NumPy's Python scalar maps to, and empty-operand broadcasts (OpRegistry.WeakScalar.cs).
+                case "weak_scalar":
+                    return ApplyWeakScalar(p, ops);
+
+                // np.power / np.float_power and NumPy's zero-exponent-step fast path (power_fast.jsonl): exponent kinds,
+                // out= / where= / dtype=, buffer sizes; an out case returns the out's whole buffer (OpRegistry.PowerFast.cs).
+                case "power_fast":
+                    return ApplyPowerFast(p, ops);
 
                 // Sorting / searching (T14).
                 case "argsort": return ApplyArgsort(ops[0], p["axis"].GetInt32());
@@ -316,6 +474,13 @@ namespace NumSharp.Tests.Fuzz
                     var axEl = p["axis"];
                     int? tlaAx = axEl.ValueKind == JsonValueKind.Null ? (int?)null : axEl.GetInt32();
                     return np.take_along_axis(ops[0], ops[1], tlaAx);
+                }
+                case "put_along_axis":
+                {
+                    var axEl = p["axis"];
+                    int? plaAx = axEl.ValueKind == JsonValueKind.Null ? (int?)null : axEl.GetInt32();
+                    np.put_along_axis(ops[0], ops[1], ops[2], plaAx);
+                    return ops[0]; // mutates ops[0] (arr) in place, IS the result
                 }
                 case "compress": return np.compress(ops[0], ops[1], p["axis"].GetInt32());
                 case "extract": return np.extract(ops[0], ops[1]);
@@ -428,8 +593,8 @@ namespace NumSharp.Tests.Fuzz
                     if (p.ContainsKey("tol")) return np.linalg.matrix_rank(ops[0], tol: p["tol"].GetDouble());
                     if (p.ContainsKey("rtol")) return np.linalg.matrix_rank(ops[0], rtol: p["rtol"].GetDouble());
                     return np.linalg.matrix_rank(ops[0]);
-                case "cond":                                                        // SVD orders only (None/2/-2)
-                    return p.ContainsKey("p") ? np.linalg.cond(ops[0], p["p"].GetInt32()) : np.linalg.cond(ops[0]);
+                case "cond":                                                        // None / an int order / 'fro'
+                    return p.ContainsKey("p") ? np.linalg.cond(ops[0], ParseOrd(p["p"])) : np.linalg.cond(ops[0]);
                 case "norm":                                                        // matrix orders 2/-2/'nuc'
                     return p.ContainsKey("axis")
                         ? np.linalg.norm(ops[0], ParseOrd(p["ord"]), ParseIntArray(p["axis"]),
@@ -437,8 +602,12 @@ namespace NumSharp.Tests.Fuzz
                         : np.linalg.norm(ops[0], ParseOrd(p["ord"]));
                 // svd(compute_uv=false) -> just S; the (U,S,Vh) tuple form is in ApplyTuple.
                 case "svd": return np.linalg.svd(ops[0], full_matrices: p["full_matrices"].GetBoolean(), compute_uv: false).S;
-                // qr(mode='r') -> just R; reduced/complete/raw tuples are in ApplyTuple.
-                case "qr": return np.linalg.qr(ops[0], "r").R;
+                // qr(mode='r') -> just R, and the deprecated mode='economic' -> the packed matrix alone (NumPy returns
+                // one array; NumSharp's tuple carries it in the Q slot); reduced/complete/raw tuples are in ApplyTuple.
+                case "qr":
+                    return p.TryGetValue("mode", out var qrm) && qrm.GetString() == "economic"
+                        ? np.linalg.qr(ops[0], "economic").Q
+                        : np.linalg.qr(ops[0], "r").R;
 
                 // ---- LU-factorisation family (linalg_parity tier; ARRAY results) --------
                 // solve/inv/det/tensorinv/tensorsolve reach getrf/gesv (deterministic partial
@@ -504,7 +673,15 @@ namespace NumSharp.Tests.Fuzz
                 // ---- deterministic creation --------------------------------------------
                 case "arange": return np.arange(p["start"].GetDouble(), p["stop"].GetDouble(),
                     p["step"].GetDouble(), FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                // np.arange as NumPy's PyArray_ArangeObj (arange_full.jsonl): float / int ramps, the length's edges, errors.
+                case "arange_full": return ApplyArangeFull(p);
                 case "linspace": return np.linspace(p["start"].GetDouble(), p["stop"].GetDouble(),
+                    p["num"].GetInt32(), p["endpoint"].GetBoolean(),
+                    FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                case "logspace": return np.logspace(p["start"].GetDouble(), p["stop"].GetDouble(),
+                    p["num"].GetInt32(), p["endpoint"].GetBoolean(), p["base"].GetDouble(),
+                    FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                case "geomspace": return np.geomspace(p["start"].GetDouble(), p["stop"].GetDouble(),
                     p["num"].GetInt32(), p["endpoint"].GetBoolean(),
                     FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
                 case "zeros": return np.zeros(new Shape(ParseLongArray(p["shape"])),
@@ -535,6 +712,8 @@ namespace NumSharp.Tests.Fuzz
                 }
                 case "indices": return np.indices(ParseIntArray(p["dimensions"]),
                     FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                // np.ndarray(shape, dtype, buffer, offset, strides, order): OpRegistry.Ndarray.cs.
+                case "ndarray": return NdarrayCtor(p, ops);
 
                 // ---- array conversion -------------------------------------------------
                 case "array": return np.array(ops[0]);
@@ -543,7 +722,14 @@ namespace NumSharp.Tests.Fuzz
                 case "ascontiguousarray": return np.ascontiguousarray(ops[0]);
                 case "asfortranarray": return np.asfortranarray(ops[0]);
                 case "asarray_chkfinite": return np.asarray_chkfinite(ops[0]);
-                case "asmatrix": return np.asmatrix(ops[0]);
+                // np.asmatrix(data, dtype): an operand, or (matrix tier) a literal in params.text.
+                case "asmatrix":
+                {
+                    DType asDtype = p.TryGetValue("dtype", out var asDt) ? FuzzCorpus.DtypeToTC(asDt.GetString()) : null;
+                    return p.TryGetValue("text", out var asText)
+                        ? np.asmatrix(asText.GetString(), asDtype)
+                        : np.asmatrix(ops[0], asDtype);
+                }
                 case "require": return np.require(ops[0], requirements:
                     p["requirements"].EnumerateArray().Select(x => x.GetString()).ToArray());
                 case "frombuffer": return np.frombuffer(FuzzCorpus.ResultBytes(ops[0]),
@@ -577,6 +763,17 @@ namespace NumSharp.Tests.Fuzz
                 case "diagflat": return np.diagflat(ops[0], ParseK(p));
                 case "tril": return np.tril(ops[0], ParseK(p));
                 case "triu": return np.triu(ops[0], ParseK(p));
+
+                // ---- window functions -----------------------------------------------------
+                // Pure generators (always float64): ops[0] is an ignored carrier; M (and beta
+                // for kaiser) come from params, like the tri generator above. M is read as a
+                // DOUBLE (NumPy's `_FloatLike_co`): integer cases carry an int JSON value that
+                // GetDouble reads losslessly, and the float-M cases carry a fractional value.
+                case "bartlett": return np.bartlett(p["M"].GetDouble());
+                case "blackman": return np.blackman(p["M"].GetDouble());
+                case "hamming": return np.hamming(p["M"].GetDouble());
+                case "hanning": return np.hanning(p["M"].GetDouble());
+                case "kaiser": return np.kaiser(p["M"].GetDouble(), p["beta"].GetDouble());
 
                 // Mutating: fill_diagonal writes into ops[0] and the mutated operand IS the result.
                 // The value is handed over as a RAW long[] rather than an NDArray on purpose —
@@ -700,7 +897,27 @@ namespace NumSharp.Tests.Fuzz
                 case "nansum": case "nanprod": case "nanmax": case "nanmin": case "nanmean":
                 case "nanstd": case "nanvar": case "nanmedian":
                 case "nanargmax": case "nanargmin":
-                    return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), ops[0]);
+                    // The §C1 multi-axis cells ("axes" int[]) exist only for the reductions with a
+                    // tuple-axis overload — today nanmedian (median/average are handled above);
+                    // the rest of the family has no int[] overload and never receives "axes".
+                    if (op == "nanmedian" && p.ContainsKey("axes"))
+                        return np.nanmedian(ops[0], ParseIntArray(p["axes"]), keepdims: ParseKeepdims(p));
+                    // sum_identity.jsonl section "s": NumPy computed the case under np.setbufsize(bufsize), which
+                    // decides the flat add.reduce's buffer fills — run it under the same size, then restore the
+                    // thread's previous one (np.setbufsize is thread-local, so no other test sees it).
+                    if (p.TryGetValue("bufsize", out var bufsizeEl))
+                    {
+                        long previousBufsize = np.setbufsize(bufsizeEl.GetInt64());
+                        try
+                        {
+                            return SumIdentityReduce(op, p, ops[0]);
+                        }
+                        finally
+                        {
+                            np.setbufsize(previousBufsize);
+                        }
+                    }
+                    return SumIdentityReduce(op, p, ops[0]);
 
                 // np.random byte-parity (random_parity tiers): seed -> draw -> compare the raw
                 // stream bytes against NumPy's recorded sequence. "draws" > 1 pins stream
@@ -719,7 +936,8 @@ namespace NumSharp.Tests.Fuzz
                         // Dispose each superseded draw so the harness's own multi-draw scaffolding is
                         // not counted as a library escape (the modf/partition dispose-intermediate pattern).
                         r?.Dispose();
-                        r = RndDraw(random, p);
+                        // Array-valued parameters (params["bargs"]) call the NDArray overloads with the operands.
+                        r = p.ContainsKey("bargs") ? LegacyBroadcastDraw(random, p, ops) : RndDraw(random, p);
                     }
                     return r;
                 }
@@ -781,12 +999,70 @@ namespace NumSharp.Tests.Fuzz
             return keep;
         }
 
+        /// <summary>
+        ///     Runs an <c>np.put</c> whose values or indices are a view of the target itself — the aliasing tier's
+        ///     <c>put_selfvals</c> / <c>put_selfidx</c> — over a fresh copy of the reconstructed target, and returns that
+        ///     copy (the result the case compares).
+        /// </summary>
+        /// <param name="target">The reconstructed target operand; read only, never written.</param>
+        /// <param name="slice">The NumSharp slice string (Python's slice syntax) that selects the view of the target's
+        ///     flat C view: the values for put_selfvals, the indices for put_selfidx.</param>
+        /// <param name="mode">NumPy's clip mode, passed through.</param>
+        /// <param name="put">The put call; receives the target copy, the view of it and the mode.</param>
+        /// <returns>The target copy after the put, owned by the caller (the harness disposes the result).</returns>
+        /// <exception cref="Exception">Whatever <paramref name="put"/> raises; the copy is disposed first.</exception>
+        /// <remarks>
+        ///     A COPY is the target because the leak gates replay every case twice over the same operands: a second put
+        ///     into the first one's result reads other values, and for put_selfidx other indices — out of bounds under
+        ///     <c>raise</c> (the values 100..105 the first run wrote become indices). The copy is C-contiguous and owns
+        ///     its data, so <c>reshape(-1)</c> is a view of it and the view really shares the target's memory: the case
+        ///     still runs NumPy's overlap route. The flat and slice views are disposed before returning; the copy is
+        ///     disposed when the put throws, since no caller receives it then.
+        /// </remarks>
+        private static NDArray PutIntoSelf(NDArray target, string slice, string mode, Action<NDArray, NDArray, string> put)
+        {
+            var copy = target.copy();
+            try
+            {
+                using var flat = copy.reshape(-1);
+                using var view = flat[slice];
+                put(copy, view, mode);
+                return copy;
+            }
+            catch
+            {
+                copy.Dispose();
+                throw;
+            }
+        }
+
         private static int[] ParseIntArray(JsonElement arr)
         {
             var list = new List<int>();
             foreach (var e in arr.EnumerateArray())
                 list.Add(e.GetInt32());
             return list.ToArray();
+        }
+
+        /// <summary>
+        ///     A Python-int param as the C# integer literal of that value: int when it fits, then uint, long and
+        ///     ulong — the type C# gives an unsuffixed literal. np.clip then sees the 0-d array that literal converts
+        ///     to, exactly as a caller's <c>np.clip(a, -1, 256)</c> does, so the corpus exercises every 0-d integer
+        ///     width NumSharp reads as NumPy's Python int.
+        /// </summary>
+        /// <param name="e">A JSON integer (any size Python wrote, up to 2^64-1) or null.</param>
+        /// <returns>The 0-d bound, or null for a JSON null (NumPy's None).</returns>
+        /// <exception cref="OverflowException">The value is outside [-2^63, 2^64-1], which no C# literal holds
+        ///     (the generator never emits one).</exception>
+        private static NDArray PyIntLiteral(JsonElement e)
+        {
+            if (e.ValueKind == JsonValueKind.Null)
+                return null;
+            var v = Int128.Parse(e.GetRawText(), System.Globalization.CultureInfo.InvariantCulture);
+            if (v >= int.MinValue && v <= int.MaxValue) return (int)v;
+            if (v >= 0 && v <= uint.MaxValue) return (uint)v;
+            if (v >= long.MinValue && v <= long.MaxValue) return (long)v;
+            return checked((ulong)v);
         }
 
         /// <summary>UPLO for the symmetric/Hermitian eigensolvers — 'L' (default) or 'U'.</summary>
@@ -835,8 +1111,15 @@ namespace NumSharp.Tests.Fuzz
                     return arr;
                 }
                 case "choice":
-                    return random.choice((int)A(0), S(), true,
-                        p.TryGetValue("p", out var pw) ? ParseDoubleArray(pw) : null);
+                {
+                    // choice takes p as an NDArray: build it here and dispose it after the draw (choice reads it,
+                    // never retains it) — passing the double[] directly would let the implicit conversion's array
+                    // escape to the finalizer, which the leak gates attribute to this op.
+                    NDArray pv = p.TryGetValue("p", out var pw) ? np.array(ParseDoubleArray(pw)) : null;
+                    var result = random.choice((int)A(0), S(), true, pv);
+                    pv?.Dispose();
+                    return result;
+                }
 
                 // ---- host-libm: transform / rejection samplers ----
                 case "normal": return random.normal(A(0), A(1), S());
@@ -925,17 +1208,79 @@ namespace NumSharp.Tests.Fuzz
         private static bool ParseKeepdims(IReadOnlyDictionary<string, JsonElement> p)
             => p.TryGetValue("keepdims", out var kd) && kd.GetBoolean();
 
+        /// <summary>
+        ///     The reduce family's call for one case: <see cref="ApplyReduce"/>, except np.sum's <c>dtype=</c> loop
+        ///     (sum_identity.jsonl) — the one reduction here whose cases carry a loop dtype, where the input is cast to
+        ///     the named dtype and reduced in it.
+        /// </summary>
+        /// <param name="op">The reduce op key.</param>
+        /// <param name="p">The case params (<c>axis</c>, <c>keepdims</c>, optional <c>dtype</c>; for var / std and
+        /// nanvar / nanstd also <c>ddof</c>).</param>
+        /// <param name="a">The operand.</param>
+        /// <returns>NumSharp's result.</returns>
+        private static NDArray SumIdentityReduce(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray a)
+        {
+            // varstd.jsonl: np.var / np.std with ddof= and dtype= (a NumPy dtype name or null).
+            if ((op == "var" || op == "std") && (p.ContainsKey("ddof") || p.ContainsKey("dtype")))
+            {
+                int ddof = p.TryGetValue("ddof", out var dd) ? dd.GetInt32() : 0;
+                DType loop = p.TryGetValue("dtype", out var vd) && vd.ValueKind != JsonValueKind.Null
+                    ? (DType)FuzzCorpus.DtypeToTC(vd.GetString())
+                    : null;
+                int? axis = ParseAxis(p);
+                bool keepdims = ParseKeepdims(p);
+                if (op == "var")
+                    return axis.HasValue ? np.var(a, axis.Value, keepdims: keepdims, ddof: ddof, dtype: loop) : np.var(a, keepdims: keepdims, ddof: ddof, dtype: loop);
+                return axis.HasValue ? np.std(a, axis.Value, keepdims: keepdims, ddof: ddof, dtype: loop) : np.std(a, keepdims: keepdims, ddof: ddof, dtype: loop);
+            }
+            // nanvarstd.jsonl: np.nanvar / np.nanstd with ddof= and dtype= (a NumPy dtype name or null).
+            if ((op == "nanvar" || op == "nanstd") && (p.ContainsKey("ddof") || p.ContainsKey("dtype")))
+            {
+                int ddof = p.TryGetValue("ddof", out var dd) ? dd.GetInt32() : 0;
+                DType loop = p.TryGetValue("dtype", out var vd) && vd.ValueKind != JsonValueKind.Null
+                    ? (DType)FuzzCorpus.DtypeToTC(vd.GetString())
+                    : null;
+                return op == "nanvar"
+                    ? np.nanvar(a, ParseAxis(p), ParseKeepdims(p), ddof, loop)
+                    : np.nanstd(a, ParseAxis(p), ParseKeepdims(p), ddof, loop);
+            }
+            // mean_loops.jsonl: np.mean with dtype= (a NumPy dtype name or null) — NumPy's _mean (plan
+            // api-parameter-parity X9). No np.mean overload carries dtype= without an axis yet (plan item B3), so the flat
+            // form calls the engine's np.mean (TensorEngine.Mean), which every np.mean overload reaches.
+            if (op == "mean" && p.ContainsKey("dtype"))
+            {
+                DType loop = p["dtype"].ValueKind != JsonValueKind.Null
+                    ? (DType)FuzzCorpus.DtypeToTC(p["dtype"].GetString())
+                    : null;
+                int? axis = ParseAxis(p);
+                bool keepdims = ParseKeepdims(p);
+                return axis.HasValue ? np.mean(a, axis.Value, loop, keepdims: keepdims) : a.TensorEngine.Mean(a, null, loop, keepdims);
+            }
+            // nanmean.jsonl: np.nanmean with dtype= (a NumPy dtype name or null) — NumPy's nanmean (plan
+            // api-parameter-parity A7).
+            if (op == "nanmean" && p.ContainsKey("dtype"))
+            {
+                DType loop = p["dtype"].ValueKind != JsonValueKind.Null
+                    ? (DType)FuzzCorpus.DtypeToTC(p["dtype"].GetString())
+                    : null;
+                return np.nanmean(a, ParseAxis(p), ParseKeepdims(p), loop);
+            }
+            if (op == "sum" && p.TryGetValue("dtype", out var sumDtype))
+                return np.sum(a, ParseAxis(p), keepdims: ParseKeepdims(p), dtype: (DType)FuzzCorpus.DtypeToTC(sumDtype.GetString()));
+            return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), a);
+        }
+
         private static NDArray ApplyReduce(string op, int? axis, bool keepdims, NDArray a)
         {
             switch (op)
             {
-                case "sum": return np.sum(a, axis, keepdims);
-                case "prod": return np.prod(a, axis, (Type)null, keepdims);
-                case "min": return np.min(a, axis, keepdims);
-                case "max": return np.max(a, axis, keepdims);
-                case "mean": return axis.HasValue ? np.mean(a, axis.Value, keepdims) : np.mean(a, keepdims);
-                case "std": return axis.HasValue ? np.std(a, axis.Value, keepdims) : np.std(a, keepdims);
-                case "var": return axis.HasValue ? np.var(a, axis.Value, keepdims) : np.var(a, keepdims);
+                case "sum": return np.sum(a, axis, keepdims: keepdims);
+                case "prod": return np.prod(a, axis, (Type)null, keepdims: keepdims);
+                case "min": return np.min(a, axis, keepdims: keepdims);
+                case "max": return np.max(a, axis, keepdims: keepdims);
+                case "mean": return axis.HasValue ? np.mean(a, axis.Value, keepdims: keepdims) : np.mean(a, keepdims: keepdims);
+                case "std": return axis.HasValue ? np.std(a, axis.Value, keepdims: keepdims) : np.std(a, keepdims: keepdims);
+                case "var": return axis.HasValue ? np.var(a, axis.Value, keepdims: keepdims) : np.var(a, keepdims: keepdims);
                 // axis=None (keepdims=False only — the flat long form has no keepdims): wraps the
                 // scalar back to the 0-d int64 NumPy returns. G13: this is the path whose Decimal
                 // IL compare was silently wrong and whose Char case threw — now oracle-gated.
@@ -945,8 +1290,8 @@ namespace NumSharp.Tests.Fuzz
                 case "any": return np.any(a, axis, null, keepdims);
                 case "nansum": return np.nansum(a, axis, keepdims);
                 case "nanprod": return np.nanprod(a, axis, keepdims);
-                case "nanmax": return np.nanmax(a, axis, keepdims);
-                case "nanmin": return np.nanmin(a, axis, keepdims);
+                case "nanmax": return np.nanmax(a, axis, keepdims: keepdims);
+                case "nanmin": return np.nanmin(a, axis, keepdims: keepdims);
                 // keepdims by NAME: positional slot 3 is now `out=` (an implicit bool->NDArray
                 // conversion exists, so a positional bool would silently bind the out parameter).
                 case "nanargmax": return np.nanargmax(a, axis, keepdims: keepdims);

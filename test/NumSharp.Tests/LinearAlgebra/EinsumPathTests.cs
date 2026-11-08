@@ -296,6 +296,37 @@ namespace NumSharp.Tests.LinearAlgebra
                 .WithMessage("Invalid einsum_path is specified: 1 more operands has to be contracted.");
         }
 
+        /// <summary>
+        ///     NumPy's <c>_parse_einsum_input</c> expands an ellipsis by reading <c>operands[num].shape</c> for each term that
+        ///     holds one, before einsum_path compares the number of terms with the number of operands, so a term with no
+        ///     operand behind it is Python's <c>IndexError: list index out of range</c> (probed: <c>np.einsum_path("...-&gt;...")</c>
+        ///     and <c>np.einsum_path("...a,...-&gt;...", np.ones(3))</c>). NumSharp's planner let .NET's
+        ///     <see cref="IndexOutOfRangeException"/> escape (the np-layer plan's NL10).
+        /// </summary>
+        [TestMethod]
+        public void EllipsisWithoutItsOperand_RaisesIndexError()
+        {
+            new Action(() => np.einsum_path("...->...", new NDArray[0]))
+                .Should().Throw<IndexError>().WithMessage("list index out of range");
+            new Action(() => np.einsum_path("...a,...->...", new[] { Z(3) }))
+                .Should().Throw<IndexError>().WithMessage("list index out of range");
+        }
+
+        /// <summary>
+        ///     An explicit path naming an operand that is not there: NumPy's <c>_find_contraction</c> skips the position and
+        ///     <c>input_list.pop(x)</c> raises <c>IndexError: pop index out of range</c> (probed:
+        ///     <c>np.einsum_path('ij-&gt;ij', np.ones((1, 4)), optimize=['einsum_path', (0, 1)])</c>). The planner's
+        ///     <c>List.RemoveAt</c> used to leak <see cref="ArgumentOutOfRangeException"/>.
+        /// </summary>
+        [TestMethod]
+        public void ExplicitPathPastTheOperands_RaisesIndexError()
+        {
+            new Action(() => np.einsum_path("ij->ij", new[] { Z(1, 4) }, new EinsumPath(new[] { new[] { 0, 1 } })))
+                .Should().Throw<IndexError>().WithMessage("pop index out of range");
+            new Action(() => np.einsum_path("ij,jk->ik", new[] { Z(2, 3), Z(3, 4) }, new EinsumPath(new[] { new[] { 0, 2 } })))
+                .Should().Throw<IndexError>().WithMessage("pop index out of range");
+        }
+
         [TestMethod]
         public void UnknownPathName_RaisesKeyError()
         {
@@ -361,6 +392,59 @@ namespace NumSharp.Tests.LinearAlgebra
             np.array_equal(np.einsum("ij,jk,kl->il", new[] { a, b, c }, optimize: path), baseline).Should().BeTrue();
             np.array_equal(np.einsum("ij,jk,kl->il", new[] { a, b, c }, optimize: ("greedy", 8)), baseline).Should().BeTrue();
             np.array_equal(np.einsum("ij,jk,kl->il", new[] { a, b, c }, optimize: path.ToList()), baseline).Should().BeTrue();
+        }
+
+        /// <summary>
+        ///     np.einsum with an explicit path runs <c>einsum_path</c> FIRST, as NumPy's einsum does for any optimize= but
+        ///     False: a path that leaves operands uncontracted is its <c>RuntimeError: Invalid einsum_path is specified: 1 more
+        ///     operands has to be contracted.</c> (three operands with one step, two operands with none), and the planner's
+        ///     own texts come before c_einsum's (too many operands, an output label missing from the inputs, an ellipsis
+        ///     without its operand, a path past the operands). NumPy 2.4.2 probed; NumSharp used to contract left to right
+        ///     without asking the planner (the np-layer plan's NL5).
+        /// </summary>
+        [TestMethod]
+        public void Einsum_ExplicitPath_IsPlannedFirst()
+        {
+            var a = Z(2, 3);
+            var b = Z(3, 4);
+            var c = Z(4, 5);
+            object oneStep = new object[] { "einsum_path", new[] { 0, 1 } };
+
+            new Action(() => np.einsum("ij,jk,kl->il", new[] { a, b, c }, optimize: oneStep))
+                .Should().Throw<RuntimeError>().WithMessage("Invalid einsum_path is specified: 1 more operands has to be contracted.");
+            new Action(() => np.einsum("ij,jk->ik", new[] { a, b }, optimize: new object[] { "einsum_path" }))
+                .Should().Throw<RuntimeError>().WithMessage("Invalid einsum_path is specified: 1 more operands has to be contracted.");
+            new Action(() => np.einsum("ij->i", new[] { a, Z(4, 5) }, optimize: oneStep))
+                .Should().Throw<ValueError>().WithMessage("Number of einsum subscripts must be equal to the number of operands.");
+            new Action(() => np.einsum("ij->iz", new[] { a }, optimize: oneStep))
+                .Should().Throw<ValueError>().WithMessage("Output character z did not appear in the input");
+            new Action(() => np.einsum("...a,...->...", new[] { Z(3) }, optimize: oneStep))
+                .Should().Throw<IndexError>().WithMessage("list index out of range");
+            new Action(() => np.einsum("ij->ij", new[] { Z(1, 4) }, @out: np.empty(new Shape(3, 4)), optimize: oneStep))
+                .Should().Throw<IndexError>().WithMessage("pop index out of range");
+
+            // A complete path contracts as before.
+            var full = np.einsum("ij,jk,kl->il", new[] { a, b, c }, optimize: new object[] { "einsum_path", new[] { 0, 1 }, new[] { 0, 1 } });
+            full.shape.Should().Equal(new long[] { 2, 5 });
+        }
+
+        /// <summary>
+        ///     NumPy's c_einsum iterator broadcasts the out with the operands (<c>npyiter_fill_axisdata</c>) before it resolves
+        ///     the common dtype or checks a cast, so an out that has both a wrong extent and a dtype the result may not be cast
+        ///     to raises the broadcast's ValueError, not the cast's TypeError (probed: <c>np.einsum('ij-&gt;i', ones((3, 4)),
+        ///     out=empty(5, int32))</c>). NumSharp words the extent error about the contraction on purpose (linalg-einsum.md);
+        ///     its TYPE and its order are NumPy's. It used to run after the cast check (NL5).
+        /// </summary>
+        [TestMethod]
+        public void Einsum_OutExtentError_PrecedesTheCastError()
+        {
+            new Action(() => np.einsum("ij->i", new[] { Z(3, 4) }, @out: np.empty(new Shape(5), np.int32)))
+                .Should().Throw<ValueError>().WithMessage("einsum() output parameter has shape (5) but the contraction produces (3)");
+            new Action(() => np.einsum("ij,jk->ik", new[] { Z(2, 3), Z(3, 4) }, @out: np.empty(new Shape(2, 5), np.int32)))
+                .Should().Throw<ValueError>().WithMessage("einsum() output parameter has shape (2,5) but the contraction produces (2,4)");
+            // The right extents leave the cast check to refuse the int32 out.
+            new Action(() => np.einsum("ij,jk->ik", new[] { Z(2, 3), Z(3, 4) }, @out: np.empty(new Shape(2, 4), np.int32)))
+                .Should().Throw<TypeError>().WithMessage("Iterator requested dtype could not be cast from dtype('float64') to dtype('int32'), the operand 2 dtype, according to the rule 'safe'");
         }
     }
 }

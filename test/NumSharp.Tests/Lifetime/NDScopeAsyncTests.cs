@@ -423,20 +423,22 @@ namespace NumSharp.Tests.Lifetime
         [TestMethod]
         public void GcPressure_WhileSuspended_TrackedArraysSurvive()
         {
+            // Built after this epoch, so CollectSince decides these objects' fate as a full collection would, with
+            // a young one whenever no collection ran in between (GcQuiescence.CollectSince).
+            var since = GcQuiescence.Epoch.Capture();
             NDScope slot = null;
             var scope = NDScope.OpenOrResume(ref slot);
             var hoisted = np.arange(5) * 3.0;
             NDScope.Suspend(scope);
 
-            for (int i = 0; i < 3; i++)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
-            }
+            // One exact collection decides it: if the suspended scope did NOT root `hoisted`, the collection finds
+            // the scope's tracked arrays unreachable and the finalizer drain inside it disposes them. (The three
+            // full collect/drain/collect rounds this replaced reached the same verdict at the first round — each
+            // later round re-examined the same, now older, objects — and each marked the whole test run's heap.)
+            GcQuiescence.CollectSince(since);
 
             Assert.IsFalse(hoisted.IsDisposed, "a suspended scope strongly roots its tracked arrays");
-            Assert.AreEqual(6.0, hoisted.GetDouble(2), "buffer must be intact after full GCs");
+            Assert.AreEqual(6.0, hoisted.GetDouble(2), "buffer must be intact after the collection");
 
             var resumed = NDScope.OpenOrResume(ref slot);
             var result = resumed.Returns(hoisted + 1.0);

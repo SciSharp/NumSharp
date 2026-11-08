@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Unmanaged;
@@ -38,13 +39,33 @@ namespace NumSharp.Backends
             // slices were silently dropped by Shape.Slice (it iterates only over NDim).
             int consuming = slices.Length - newaxis_count - ellipsis_count;
             if (consuming > Shape.NDim)
-                throw new IndexError($"too many indices for array: array is {Shape.NDim}-dimensional, but {consuming} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {Shape.NDim}-dimensional, but {consuming} were indexed"));
 
             // deal with ellipsis
             if (ellipsis_count > 1)
                 throw new ArgumentException("IndexError: an index can only have a single ellipsis ('...')");
             else if (ellipsis_count == 1)
                 slices = ExpandEllipsis(slices).ToArray();
+
+            // NumPy's prepare_index checks every integer index against the axis it consumes before any view exists:
+            // outside [-dim, dim) is "index 5 is out of bounds for axis 0 with size 3", the axis counted in THIS array
+            // (a new axis consumes none, so the check runs before the newaxis expansion below renumbers the axes).
+            // Shape.Slice's own check knows no axis number (its ArgumentException reached a strided view's notation
+            // index) and let index 0 of an empty axis through (a[..., 0] of a (2, 0) array returned shape (2,)).
+            int sourceAxis = 0;
+            foreach (var slice in slices)
+            {
+                if (slice.IsNewAxis)
+                    continue;
+                if (slice.IsIndex)
+                {
+                    long index = slice.Start ?? 0;
+                    long dim = Shape.dimensions[sourceAxis];
+                    if (index < -dim || index >= dim)
+                        throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {index} is out of bounds for axis {sourceAxis} with size {dim}"));
+                }
+                sourceAxis++;
+            }
 
             // deal with newaxis
             if (newaxis_count > 0)
@@ -77,34 +98,25 @@ namespace NumSharp.Backends
             // must go through the full slice path to create a proper view.
             if (_shape.IsContiguous)
             {
-                var indices = new long[slices.Length];
-                for (var i = 0; i < slices.Length; i++)
+                // Every slice an integer — or all but a trailing ':' (incase it is a trailing :, e.g. [2,2, :] in a shape
+                // (3,3,5,5) -> (5,5)) — is a direct memory slice. The integers are counted first, so the index array is
+                // allocated only when this case is taken (a slice view used to allocate it too, then jump past it).
+                int leadingIndices = 0;
+                while (leadingIndices < slices.Length && slices[leadingIndices].IsIndex)
+                    leadingIndices++;
+                if (leadingIndices == slices.Length || (leadingIndices == slices.Length - 1 && slices[leadingIndices] == Slice.All))
                 {
-                    var inputSlice = slices[i];
-                    if (!inputSlice.IsIndex)
-                    {
-                        //incase it is a trailing :, e.g. [2,2, :] in a shape (3,3,5,5) -> (5,5)
-                        if (i == slices.Length - 1 && inputSlice == Slice.All)
-                        {
-                            Array.Resize(ref indices, indices.Length - 1);
-                            goto _getdata;
-                        }
-
-                        goto _perform_slice;
-                    }
-
-                    indices[i] = inputSlice.Start.Value;
+                    var indices = new long[leadingIndices];
+                    for (var i = 0; i < leadingIndices; i++)
+                        indices[i] = slices[i].Start.Value;
+                    return GetData(indices);
                 }
-
-                _getdata:
-                return GetData(indices);
             }
 
             //perform a regular slicing
-            _perform_slice:
 
             // In case the slices selected are all ":" - just return an alias
-            if (slices.All(s => Equals(Slice.All, s)))
+            if (AllFullSlices(slices))
                 return Alias();
 
             // Broadcast arrays: DO NOT materialize! Shape.Slice correctly handles stride=0.
@@ -126,10 +138,16 @@ namespace NumSharp.Backends
                 // (NumPy: owndata=False, base set — there are no elements, so the fresh zero-length
                 // buffer shares nothing, but the base chain carries owndata and the setflags(write=True)
                 // base-writeability answer).
-                var emptySlice = ArraySlice.Allocate(_typecode, 0, false);
+                // A string lane has no width of its own (the descriptor carries it), so its empty view keeps the
+                // parent's descriptor through a zero-length slice of the same layout (fixed-width or StringDType).
+                var emptySlice = AllocateLike(0, false);
                 var emptyStorage = new UnmanagedStorage();
                 emptyStorage._Allocate(slicedShape, emptySlice);
                 emptyStorage._baseStorage = _baseStorage ?? this;
+                // a view keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                emptyStorage.Engine = Engine;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the empty view carries it.
+                emptyStorage.AdoptLaneSharingDescr(_descr);
                 emptyStorage.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return emptyStorage;
             }
@@ -140,7 +158,7 @@ namespace NumSharp.Backends
             if (slicedShape.IsContiguous && slicedShape.offset > 0)
             {
                 // Create a fresh contiguous shape (no offset)
-                var freshShape = new Shape(slicedShape.dimensions);
+                var freshShape = new Shape(slicedShape.dimensions, copy: false);
                 // A view of a non-writeable array (broadcast, or a read-only 'r' memmap) must stay
                 // non-writeable — the fresh shape above defaults WRITEABLE back to true, which would let
                 // a write reach read-only memory (a hard segfault on memory-mapped read-only pages, and
@@ -150,6 +168,10 @@ namespace NumSharp.Backends
                     freshShape = freshShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(InternalArray.Slice(slicedShape.offset, slicedShape.size), freshShape);
                 view._baseStorage = _baseStorage ?? this;
+                // a view keeps its source's engine (Alias does too): the operations on it compute where the source's do
+                view.Engine = Engine;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -158,6 +180,20 @@ namespace NumSharp.Backends
             // The slicedShape contains the correct offset and strides computed by Shape.Slice().
             // Views with non-zero offset or non-standard strides use coordinate-based access.
             return Alias(slicedShape);
+        }
+
+        /// <summary>
+        ///     Whether every slice equals <see cref="Slice.All"/> (<c>Equals(Slice.All, s)</c>: a <see cref="Slice"/> with no
+        ///     start, no stop and step 1) — the index that selects the whole array, whose view is a plain alias.
+        /// </summary>
+        /// <param name="slices">The slices (no ellipsis or new axis left).</param>
+        /// <returns>True when each one is a full slice; true for no slices.</returns>
+        private static bool AllFullSlices(Slice[] slices)
+        {
+            foreach (var s in slices)
+                if (!Equals(Slice.All, s))
+                    return false;
+            return true;
         }
 
         private IEnumerable<Slice> ExpandEllipsis(Slice[] slices)

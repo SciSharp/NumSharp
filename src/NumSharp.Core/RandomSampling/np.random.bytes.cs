@@ -31,9 +31,15 @@ namespace NumSharp
         ///     than a managed <c>byte[]</c> can hold (<see cref="Array.MaxLength"/> ≈ 2 GiB) still
         ///     succeeds. To recover a managed array from a small result use
         ///     <c>bytes(n).ToArray&lt;byte&gt;()</c> (itself capped at <see cref="Array.MaxLength"/>).
+        ///     <br/>
+        ///     Holds the bit generator's lock for the draws (NumPy's <c>randint(..., dtype=np.uint32)</c> fill does).
         /// </remarks>
+        /// <exception cref="ValueError">The word count is negative (<c>negative dimensions are not allowed</c>, a length below -3).</exception>
         public NDArray<byte> bytes(long length)
-            => BytesCore(length, static self => self.randomizer.NextUInt32(), this);
+        {
+            lock (randomizer.@lock)
+                return BytesCore(length, static self => self.randomizer.NextUInt32(), this);
+        }
 
         // Shared byte-string builder for RandomState.bytes and Generator.bytes. Draws exactly
         // ceil(length/4) uint32 words (matching NumPy's stream consumption regardless of the final

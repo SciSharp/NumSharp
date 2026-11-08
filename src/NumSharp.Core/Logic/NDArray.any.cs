@@ -13,7 +13,10 @@ namespace NumSharp
         /// <param name="keepdims">If true, the reduced axes are left in the result as dimensions with size one.</param>
         /// <param name="where">Elements to include in the reduction (null means include all).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.any.html</remarks>
+        [PlainReceiver]
         public NDArray any(int? axis = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
-            => np.any(this, axis, @out, keepdims, @where);
+        {
+            return np.any(this, axis, @out, keepdims, @where);
+        }
     }
 }

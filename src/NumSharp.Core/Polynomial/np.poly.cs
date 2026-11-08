@@ -11,71 +11,31 @@ namespace NumSharp
         /// </summary>
         /// <param name="seq_of_zeros">A 1-D sequence of roots, or a square 2-D array.</param>
         /// <returns>1-D coefficients highest degree first, <c>c[0] == 1</c>.</returns>
+        /// <exception cref="ValueError">An input that is neither 1-D nor a non-empty square 2-D array (<c>input must be 1d or
+        ///     non-empty square 2d array.</c>).</exception>
+        /// <exception cref="TypeError">A square text matrix: its eigenvalues' finiteness check (<c>isfinite</c> has no text
+        ///     loop).</exception>
+        /// <exception cref="ValueError">A 1-D text root that does not parse as a float (NumPy casts the roots to their
+        ///     mintypecode, 'd' for text: <c>could not convert string to float: np.str_('x')</c>).</exception>
+        /// <exception cref="NotSupportedException">A square matrix and no LAPACK backend installed (the eigenvalues).</exception>
+        /// <exception cref="TypeError">A 0-d <paramref name="seq_of_zeros"/>, or null (NumPy's None): NumPy's
+        ///     <c>array_function_dispatch</c> iterates what poly's dispatcher returns, the argument itself, and neither is
+        ///     iterable (<c>dispatcher for __array_function__ did not return an iterable</c>), before poly's body
+        ///     runs.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.poly.html
         ///     <para>An empty input returns the 0-d scalar <c>1.0</c> (NumPy's Python float <c>1.0</c>).</para>
+        ///     <para>The engine member <see cref="TensorEngine.Poly"/> is poly's body alone (NumPy's implementation under the
+        ///     dispatcher): it takes a 0-d input as one root.</para>
         /// </remarks>
         [NDScoped]
         public static NDArray poly(NDArray seq_of_zeros)
         {
-            seq_of_zeros = np.atleast_1d(seq_of_zeros);
-            int nd = seq_of_zeros.ndim;
-
-            NDArray seq;
-            if (nd == 2 && seq_of_zeros.shape[0] == seq_of_zeros.shape[1] && seq_of_zeros.shape[0] != 0)
-            {
-                // Characteristic polynomial: build from the matrix's eigenvalues.
-                seq = np.linalg.eigvals(seq_of_zeros);
-            }
-            else if (nd == 1)
-            {
-                // A real (non-object) sequence is cast to its mintypecode float — float32 stays float32,
-                // everything else (int/bool/float16/float64) becomes float64; complex stays complex.
-                seq = seq_of_zeros.astype(PolyMinType(seq_of_zeros.typecode));
-            }
-            else
-            {
-                throw new ValueError("input must be 1d or non-empty square 2d array.");
-            }
-
-            if (seq.size == 0)
-                return NDArray.Scalar(1.0);
-
-            NPTypeCode dt = seq.typecode;
-            NDArray onesScalar = np.ones(new Shape(1), dt);
-            NDArray negSeq = np.negative(seq);
-
-            // a = ones(1); for each root: a = convolve(a, [1, -root])  (accumulates (x - root) factors).
-            NDArray a = onesScalar;
-            for (long i = 0; i < seq.size; i++)
-            {
-                NDArray factor = np.concatenate(new[] { onesScalar, negSeq[$"{i}:{i + 1}"] }, 0);
-                a = np.convolve(a, factor, "full");
-            }
-
-            // If the roots come as complex conjugate pairs, the coefficients are real — take the real part.
-            if (dt == NPTypeCode.Complex)
-            {
-                NDArray rootsC = seq.astype(NPTypeCode.Complex);
-                if (np.all(np.equal(np.sort(rootsC), np.sort(np.conjugate(rootsC)))))
-                    a = np.real(a).copy();
-            }
-
-            return a;
-        }
-
-        /// <summary>
-        ///     NumPy's <c>mintypecode(dtype.char)</c> as applied by <c>poly</c>: the smallest floating type
-        ///     that holds the roots. float32 preserves; complex preserves; every other type widens to float64.
-        /// </summary>
-        internal static NPTypeCode PolyMinType(NPTypeCode t)
-        {
-            switch (t)
-            {
-                case NPTypeCode.Single: return NPTypeCode.Single;
-                case NPTypeCode.Complex: return NPTypeCode.Complex;
-                default: return NPTypeCode.Double;
-            }
+            // NumPy's dispatch comes first: poly's dispatcher returns the argument, which array_function_dispatch iterates to
+            // find overriding classes; a 0-d array (or None) is not iterable.
+            if (seq_of_zeros is null || seq_of_zeros.ndim == 0)
+                throw new TypeError("dispatcher for __array_function__ did not return an iterable");
+            return seq_of_zeros.TensorEngine.Poly(seq_of_zeros);
         }
     }
 }

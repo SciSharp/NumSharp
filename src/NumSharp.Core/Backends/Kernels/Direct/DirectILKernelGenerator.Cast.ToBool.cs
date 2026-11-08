@@ -466,8 +466,10 @@ namespace NumSharp.Backends.Kernels
                         for (; i + 16 <= innerN; i += 16)
                         {
                             var v0 = Vector256.Load((int*)(s + 2 * i));
-                            var v1 = Vector256.Load((int*)(s + 2 * i + 16));
-                            var evens = Avx2.Permute4x64(Avx2.PackUnsignedSaturate(Avx2.And(v0, _evenWordMask), Avx2.And(v1, _evenWordMask)).AsInt64(), 0xD8).AsInt16();
+                            // One element early, so the load ends ON the group's last element (2i+30): see
+                            // the DEINTERLEAVE note in DirectILKernelGenerator.Cast.SubwordCopy.cs.
+                            var v1 = Vector256.Load((uint*)(s + 2 * i + 15));
+                            var evens = Avx2.Permute4x64(Avx2.PackUnsignedSaturate(Avx2.And(v0, _evenWordMask), Avx2.ShiftRightLogical(v1, 16).AsInt32()).AsInt64(), 0xD8).AsInt16();
                             var nz = Avx2.AndNot(Avx2.CompareEqual(Avx2.And(evens, mag), zero), one);
                             Vector128.Store(Avx2.Permute4x64(Avx2.PackUnsignedSaturate(nz, nz).AsInt64(), 0xD8).GetLower().AsByte(), d + i);
                         }

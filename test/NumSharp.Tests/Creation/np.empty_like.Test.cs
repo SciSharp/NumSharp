@@ -491,14 +491,26 @@ namespace NumSharp.Tests.Creation
             a.GetAtIndex<int>(0).Should().Be(1, "writing to result must not affect prototype");
         }
 
+        /// <summary>
+        ///     <c>np.empty_like</c> of a SLICED prototype allocates its own buffer: a write to the result reaches neither
+        ///     the slice nor the array the slice views (NumPy: <c>np.shares_memory(s, np.empty_like(s))</c> is False).
+        /// </summary>
+        /// <remarks>
+        ///     Was <c>[OpenBugs]</c> ("SetAtIndex&lt;int&gt; fails on Int64 array (NEP50 type change)"): the failure
+        ///     was in the TEST, not in <c>np.empty_like</c>. <c>np.arange</c> returns int64 since the NEP 50 change, and
+        ///     the test wrote an <c>int</c> through <c>SetAtIndex&lt;int&gt;</c>, which a Debug build of NumSharp.Core
+        ///     rejects with <c>Debug.Fail</c> and a Release build turns into a 4-byte write into an 8-byte element. The
+        ///     2026-10-05 run of the whole OpenBugs category found it passing in Release only; the write now matches the
+        ///     int64 dtype, so it passes in both.
+        /// </remarks>
         [TestMethod]
-        [OpenBugs] // BUG: SetAtIndex<int> fails on Int64 array (NEP50 type change)
         public void MemoryIndependence_SlicedPrototype()
         {
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:3"];
             var r = np.empty_like(s);
-            r.SetAtIndex(999, 0);
+            // np.arange is int64 (NEP 50), so the write must be an int64: SetAtIndex<T> requires T == dtype.
+            r.SetAtIndex(999L, 0);
             s.GetInt64(0, 0).Should().Be(4L, "writing to result must not affect sliced prototype");
             a.GetInt64(1, 0).Should().Be(4L, "writing to result must not affect original array");
         }
@@ -532,14 +544,22 @@ namespace NumSharp.Tests.Creation
             r.GetAtIndex<int>(0).Should().Be(42);
         }
 
+        /// <summary>
+        ///     <c>np.empty_like</c> of a STEPPED slice returns a writeable array: the result is a fresh allocation, so the
+        ///     prototype's view-ness must not leak into it.
+        /// </summary>
+        /// <remarks>
+        ///     Was <c>[OpenBugs]</c> for the same test-side int-vs-int64 write as
+        ///     <see cref="MemoryIndependence_SlicedPrototype"/>; the write now matches the int64 dtype.
+        /// </remarks>
         [TestMethod]
-        [OpenBugs] // BUG: SetAtIndex<int> fails on Int64 array (NEP50 type change)
         public void Writeable_FromSlicedPrototype()
         {
             var a = np.arange(10);
             var s = a["::2"]; // stepped slice
             var r = np.empty_like(s);
-            var writeAction = () => r.SetAtIndex(42, 0);
+            // np.arange is int64 (NEP 50), so the write must be an int64: SetAtIndex<T> requires T == dtype.
+            var writeAction = () => r.SetAtIndex(42L, 0);
             writeAction.Should().NotThrow();
         }
 

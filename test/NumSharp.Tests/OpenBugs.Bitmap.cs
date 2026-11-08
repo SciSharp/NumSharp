@@ -50,6 +50,13 @@ namespace NumSharp.Tests
     ///
     ///     Total: 8 distinct bugs, 10 test methods.
     /// </summary>
+    /// <remarks>
+    ///     The class had no <c>[TestClass]</c> from the TUnit → MSTest migration (ac020336, 2026-04-15) until 2026-10-05,
+    ///     so MSTest never discovered these pins (MSTest's <c>TestClassAttribute</c> is not inherited from
+    ///     <see cref="TestClass"/>). The 2026-10-05 run of the whole OpenBugs category added the attribute: all 11 tests
+    ///     run under <c>TestCategory=OpenBugs</c> now, and all 11 still fail, so every <c>[OpenBugs]</c> tag stays.
+    /// </remarks>
+    [TestClass]
     [WindowsOnly]
     public class OpenBugsBitmap : TestClass
     {

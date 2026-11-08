@@ -204,12 +204,36 @@ namespace NumSharp.Tests.Casting
             act.Should().Throw<ValueError>().WithMessage("new type plus offset is larger than original type");
         }
 
+        /// <summary>
+        ///     A null dtype is Python's <c>None</c>, which NumPy's dtype converter reads as float64 (NumSharp raised
+        ///     ArgumentNullException). NumPy 2.4.2: <c>np.zeros(3, np.int32).getfield(None)</c> raises <c>ValueError: new type
+        ///     is larger than original type</c>; <c>np.arange(3, dtype=np.int64).getfield(None)</c> is a float64 view (owndata
+        ///     False, writeable) holding the bits 0, 1, 2; <c>np.array([1+2j, 3+4j]).getfield(None, 8)</c> is
+        ///     <c>[2., 4.]</c>; <c>a.setfield(1.5, None)</c> stores 1.5's float64 bits into an int64 array and raises the
+        ///     size ValueError for an int32 one.
+        /// </summary>
         [TestMethod]
-        public void GetField_NullType_Raises()
+        public void GetField_NullType_IsNoneFloat64()
         {
             var d = np.array(new int[] { 1, 2, 3 });
             Action act = () => d.getfield((Type)null);
-            act.Should().Throw<ArgumentNullException>();
+            act.Should().Throw<ValueError>().WithMessage("new type is larger than original type");
+
+            var i8 = np.arange(3).astype(NPTypeCode.Int64);
+            var f = i8.getfield(null);
+            f.dtype.Should().Be(np.float64);
+            f.flags.owndata.Should().BeFalse();
+            f.flags.writeable.Should().BeTrue();
+            f.view(np.uint64).ToArray<ulong>().Should().Equal(0UL, 1UL, 2UL);
+
+            var imag = np.array(new Complex[] { new(1, 2), new(3, 4) }).getfield(null, 8);
+            imag.ToArray<double>().Should().Equal(2.0, 4.0);
+
+            var target = np.zeros(new Shape(3), NPTypeCode.Int64);
+            target.setfield(1.5, null);
+            target.ToArray<long>().Should().Equal(4609434218613702656L, 4609434218613702656L, 4609434218613702656L);
+            Action narrow = () => np.zeros(new Shape(3), NPTypeCode.Int32).setfield(1.5, null);
+            narrow.Should().Throw<ValueError>().WithMessage("new type is larger than original type");
         }
 
         // ---- setfield ----------------------------------------------------------------------------
@@ -297,12 +321,72 @@ namespace NumSharp.Tests.Casting
             act.Should().Throw<ValueError>().WithMessage("new type is larger than original type");
         }
 
+        /// <summary>
+        ///     A null value is Python's <c>None</c> (P1.7b): packed into the FIELD's dtype — an int16 field raises
+        ///     <c>int(None)</c>'s TypeError (NumPy 2.4.2: <c>w.setfield(None, np.int16, 0)</c>), a float32 field of a float64
+        ///     array stores float32 NaN's bits (0x7fc00000) in the low four bytes of each element.
+        /// </summary>
         [TestMethod]
         public void SetField_NullValue_Raises()
         {
             var w = np.array(new int[] { 1, 2, 3 });
             Action act = () => w.setfield(null, NPTypeCode.Int16, 0);
-            act.Should().Throw<ArgumentNullException>();
+            act.Should().Throw<TypeError>()
+                .WithMessage("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
+
+            var d = np.zeros(new Shape(2), NPTypeCode.Double);
+            d.setfield(null, NPTypeCode.Single, 0);
+            BitConverter.DoubleToInt64Bits(d.GetDouble(0)).Should().Be(0x7FC00000L);
+            BitConverter.DoubleToInt64Bits(d.GetDouble(1)).Should().Be(0x7FC00000L);
+        }
+
+        // ---- non-native field descriptors (parity QA-38) -----------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2: <c>np.array([258, 5], np.int64).getfield('&gt;i4', 0)</c> is <c>[33619968, 83886080]</c> (each
+        ///     low word read big-endian). NumSharp has no non-native storage, so the field view is refused with
+        ///     <see cref="NotSupportedException"/>; the int32 lane route used to read it native (258, 5).
+        /// </summary>
+        [TestMethod]
+        public void GetField_NonNativeDescriptor_IsRefused()
+        {
+            using var a = np.array(new long[] { 258, 5 });
+            Action act = () => a.getfield(np.dtype(">i4"), 0).Dispose();
+            act.Should().Throw<NotSupportedException>().WithMessage("*non-native dtype*");
+        }
+
+        /// <summary>
+        ///     NumPy validates a field's size and offset whatever its byte order, so a non-native field NumPy itself refuses
+        ///     keeps NumPy's <see cref="ValueError"/> and text (<c>int32.getfield('&gt;i8')</c>: "new type is larger than
+        ///     original type"; <c>int32.getfield('&gt;i2', 3)</c>: "new type plus offset is larger than original type"); and a
+        ///     one-byte descriptor is native, so <c>int16([0x0102]).getfield('&gt;i1', 1)</c> reads <c>[1]</c>, as in NumPy.
+        /// </summary>
+        [TestMethod]
+        public void GetField_NonNative_NumPysSizeChecksFirst_OneByteFieldStillReads()
+        {
+            using var a = np.array(new int[] { 1, 2 });
+            Action wider = () => a.getfield(np.dtype(">i8"), 0).Dispose();
+            wider.Should().Throw<ValueError>().WithMessage("new type is larger than original type");
+            Action past = () => a.getfield(np.dtype(">i2"), 3).Dispose();
+            past.Should().Throw<ValueError>().WithMessage("new type plus offset is larger than original type");
+
+            using var h = np.array(new short[] { 0x0102 });
+            using var hi = h.getfield(np.dtype(">i1"), 1);
+            hi.ToArray<sbyte>().Should().Equal((sbyte)1);
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2: <c>d = np.zeros(2, np.int64); d.setfield(1, '&gt;i4', 0)</c> stores the value's bytes big-endian
+        ///     (<c>d == [16777216, 16777216]</c>). setfield builds its field through getfield, so the refusal comes before
+        ///     anything is written: <c>d</c> stays zero (it used to store a native 1 into each low word).
+        /// </summary>
+        [TestMethod]
+        public void SetField_NonNativeDescriptor_IsRefused_AndWritesNothing()
+        {
+            using var d = np.zeros(new Shape(2), NPTypeCode.Int64);
+            Action act = () => d.setfield(1, np.dtype(">i4"), 0);
+            act.Should().Throw<NotSupportedException>();
+            d.ToArray<long>().Should().Equal(0L, 0L);
         }
 
         // ---- dtype overloads ---------------------------------------------------------------------
@@ -321,6 +405,32 @@ namespace NumSharp.Tests.Casting
             NumSharp.Generic.NDArray<short> g = a.getfield<short>(0);
             g[0].Should().Be((short)772);
             g[1].Should().Be((short)1800);
+        }
+
+        /// <summary>
+        ///     A field of an EMPTY array is still a view (NumPy's <c>PyArray_GetField</c> builds a view whatever the size:
+        ///     <c>np.zeros((0, 3), np.int64).getfield(np.int32, 0)</c> has OWNDATA false, probed 2.4.2), read-only when the
+        ///     array is, for a numeric and a string field alike. It owned a fresh zero-length buffer until the view-flags tier's
+        ///     replay (VF26) found it matching after the 2026-10-15 fix.
+        /// </summary>
+        [TestMethod]
+        public void GetField_OfAnEmptyArray_IsAView()
+        {
+            var a = np.zeros(new Shape(0, 3), np.int64);
+            var field = a.getfield(np.int32, 0);
+            field.shape.Should().Equal(0L, 3L);
+            field.dtype.Should().Be(np.int32);
+            field.flags.owndata.Should().BeFalse();
+            field.flags.writeable.Should().BeTrue();
+
+            var text = np.zeros(new Shape(2, 0), np.dtype("<U4"));
+            var chars = text.getfield(np.dtype("<U1"), 4);
+            chars.shape.Should().Equal(2L, 0L);
+            chars.flags.owndata.Should().BeFalse();
+
+            var readOnly = np.zeros(new Shape(0), np.int64);
+            readOnly.setflags(write: false);
+            readOnly.getfield(np.int16, 2).flags.writeable.Should().BeFalse();
         }
 
         // ---- all-dtype dispatch smoke ------------------------------------------------------------

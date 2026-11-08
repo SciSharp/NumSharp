@@ -411,7 +411,8 @@ namespace NumSharp.Tests.Selection
             // np: a[[T,F,T], 1:3] (selection (2,2)) = [1,2,3,4,5] -> ValueError
             var a = A;
             Action act = () => a[M(true, false, true), "1:3"] = np.array(new long[] { 1, 2, 3, 4, 5 });
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<ValueError>().WithMessage(
+                "shape mismatch: value array of shape (5,) could not be broadcast to indexing result of shape (2,2)");
         }
 
         [TestMethod]
@@ -420,7 +421,8 @@ namespace NumSharp.Tests.Selection
             // np: a[:, [T,F,T,F]] (selection (3,2)) = [100,200,300] ((3,) !-> (3,2)) -> ValueError
             var a = A;
             Action act = () => a[":", M(true, false, true, false)] = np.array(new long[] { 100, 200, 300 });
-            act.Should().Throw<IncorrectShapeException>();
+            act.Should().Throw<ValueError>().WithMessage(
+                "shape mismatch: value array of shape (3,) could not be broadcast to indexing result of shape (3,2)");
         }
 
         // ------------- two-or-more advanced indices mixed with slices (axis placement) -------------

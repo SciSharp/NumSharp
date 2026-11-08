@@ -12,6 +12,11 @@ namespace NumSharp.Tests.Interop.MLNet
     [TestClass]
     public class CursorContractTests : MLNetTestBase
     {
+        /// <summary>
+        ///     <c>Position</c> counts the rows and is -1 off a row — before the first and again once <c>MoveNext</c> has
+        ///     returned false — which is what ML.NET's own cursors report (this test used to pin <c>rowCount</c> after the
+        ///     end, a value no ML.NET cursor produces; see <see cref="CursorStateTests.Position_MatchesMLNetsOwnSequence"/>).
+        /// </summary>
         [TestMethod]
         public void Position_Batch_And_MoveNext()
         {
@@ -24,7 +29,7 @@ namespace NumSharp.Tests.Interop.MLNet
             long expected = 0;
             while (cur.MoveNext())
                 Assert.AreEqual(expected++, cur.Position);
-            Assert.AreEqual(3L, cur.Position, "parked at rowCount past the end");
+            Assert.AreEqual(-1L, cur.Position, "back at -1 once MoveNext returned false, as ML.NET's own cursors report");
             Assert.IsFalse(cur.MoveNext(), "MoveNext stays false");
             Assert.IsFalse(cur.MoveNext());
         }

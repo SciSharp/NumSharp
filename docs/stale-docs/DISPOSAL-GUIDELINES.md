@@ -560,8 +560,8 @@ strands.)
 **A) The scope default — original body + two lines** — `np.ptp` overload 1:
 ```csharp
 using var scope = NDScope.Open();
-var maxRes = np.amax(a, axis, keepdims);   // tracked; reclaimed at exit
-var minRes = np.amin(a, axis, keepdims);
+var maxRes = np.amax(a, axis, keepdims: keepdims);   // tracked; reclaimed at exit
+var minRes = np.amin(a, axis, keepdims: keepdims);
 var diff = maxRes - minRes;
 return scope.Returns(@out is null ? diff.MarkReductionScalar() : WriteOrReturn(diff, @out));
 // ^ diff is yielded on the no-out path; a caller-supplied @out is untracked -> Returns is a no-op

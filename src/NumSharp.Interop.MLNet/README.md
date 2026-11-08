@@ -31,11 +31,12 @@ trainers, transforms) you already reference — NuGet unifies the DataView depen
 | Verb | Direction | What it does |
 |------|-----------|--------------|
 | `nd.AsDataView("Features")` | NumSharp → ML.NET | An `IDataView` with **one vector column**: a 2-D `(R, C)` array becomes `R` rows of a length-`C` `VBuffer`; a 1-D `(C,)` array becomes one row (a single sample). Read lazily through the array's strides (any layout), ARC-pinned. |
-| `nd.AsDataView(new[]{"a","b",...})` | NumSharp → ML.NET | An `IDataView` with **one scalar column per feature** (the tabular / training-data shape). |
-| `nd.ToDataView(...)` | NumSharp → ML.NET | Same, over an independent snapshot (no lifetime coupling to the source). |
+| `nd.AsDataView(new[]{"a","b",...})` | NumSharp → ML.NET | An `IDataView` with **one scalar column per feature** (the tabular / training-data shape); every name distinct (a repeat would hide the earlier column, so it throws). |
+| `columns.AsDataView()` | NumSharp → ML.NET | An `IDataView` with **one column per array** of an `IReadOnlyDictionary<string, NDArray>`: a 2-D array is a vector column, a 1-D array a scalar column, each in its own dtype and layout, all with the same rows (a `Features` matrix and a `Label` vector in one view). |
+| `nd.ToDataView(...)`, `columns.ToDataView()` | NumSharp → ML.NET | Same, over an independent snapshot (no lifetime coupling to the source). |
 | `nd.ToVBuffer<T>()` | NumSharp → ML.NET | A dense `VBuffer<T>` (a copy — see [zero-copy note](#zero-copy-and-vbuffer)). |
 | `view.ToNDArray("col")` | ML.NET → NumSharp | Materialize a column across all rows: a scalar column → 1-D `(R,)`; a fixed-size vector column → 2-D `(R, C)`. |
-| `vbuffer.AsNDArray<T>()` | ML.NET → NumSharp | A **zero-copy** 1-D view over a dense `VBuffer<T>`'s own backing array (write-through), pinned for the view's lifetime; sparse/empty fall back to a copy. |
+| `vbuffer.AsNDArray<T>()` | ML.NET → NumSharp | A **zero-copy** 1-D view over a dense `VBuffer<T>`'s own backing array (write-through), pinned for the view's lifetime and booked with NumSharp's memory accounting meanwhile (so a forgotten view is collected like a forgotten NumSharp array); sparse/empty fall back to a copy. |
 | `vbuffer.ToNDArray()` | ML.NET → NumSharp | A dense 1-D `NDArray` copy (sparse buffers are densified). |
 
 ### Zero-copy and VBuffer
@@ -47,13 +48,15 @@ valid only while that array is not refilled — a VBuffer from a cursor getter r
 so use `ToNDArray()` (a copy) there; zero-copy is safe for a standalone VBuffer you own.
 
 The **reverse** direction (`NDArray → VBuffer`) cannot be zero-copy: `VBuffer<T>` is backed by a managed
-`T[]` at every ML.NET version (verified 2.0.0 / 3.0.0 / 4.0.2 — no `ReadOnlyMemory<T>`, no non-public
+`T[]` at every ML.NET version (verified 2.0.0 / 3.0.0 / 4.0.2 / 5.0.1 and the 6.0 previews — no `ReadOnlyMemory<T>`, no non-public
 constructor), and a managed array cannot alias NumSharp's unmanaged buffer. `ToVBuffer<T>` copies. (The bulk
 NumSharp→ML.NET path — `AsDataView` — is already zero-copy on its source; the VBuffer is a per-vector
 convenience.)
 
 `Postprocess.{Softmax, LogSoftmax, Sigmoid, Argmax, TopK}` turn a score column into a prediction with
-`np.*` compositions instead of hand-written loops.
+`np.*` compositions instead of hand-written loops. The class is `NumSharp.Interop.OnnxRuntime.Postprocess`: this
+package references the ONNX Runtime bridge for it (`using NumSharp.Interop.OnnxRuntime;`), so an app that uses both
+bridges has one `Postprocess`, and calling it never loads ONNX Runtime.
 
 ## Dtypes
 
@@ -62,7 +65,16 @@ integers, `float` and `double` → the matching `NumberDataViewType`. `Char` cro
 `NumberDataViewType.UInt16` (UTF-16 code units), one-way. ML.NET has no half / decimal / complex
 column type: **`Half` is converted to Single** (lossless) and **`Decimal` to Double** by the
 view-producing verbs (in a temporary the view owns); **`Complex` is refused** (split into real /
-imaginary planes with `np.real` / `np.imag`).
+imaginary planes with `np.real` / `np.imag`), and so are **text arrays** (`U`, `S`, `StringDType`: the
+bridge maps no ML.NET text column). `ToNDArray` refuses a text column too (string labels after
+`MapKeyToValue("PredictedLabel")`): ML.NET's own reader does it in a line,
+`np.array(view.GetColumn<string>("PredictedLabel").ToArray())` (a `U` array; `GetColumn<string[]>` for a
+vector-of-text column).
+
+ML.NET's trainers and most transforms read `Single` features, while NumSharp's default float dtype is
+float64, as NumPy's: convert with `x.astype(np.float32)` before `AsDataView`, or a pipeline stops with
+ML.NET's `Schema mismatch ... expected Vector<Single>, got Vector<Double>`. A key column
+(`PredictedLabel` of a multiclass model or k-means) reads back as its `uint32` keys, 1-based.
 
 ## Lifetime
 
@@ -70,6 +82,37 @@ imaginary planes with `np.real` / `np.imag`).
 dispose it — a `using`, or wire it into your `MLContext` lifetime — to release the buffer pin. The pin
 takes its own ARC reference, so it is even safe to dispose the source array while the view (or its
 cursors) still read it. Not disposing leaks the pin until finalization.
+
+**Reachable means valid.** Whatever can reach the view — you, a transform's output, a cursor, a getter delegate —
+keeps the pins and the buffer alive, and a getter keeps its cursor reachable until its read is done, so a collection
+landing mid-copy cannot release the row under it. The finalizers of the view and its cursors only give their reference
+back (never free eagerly), so an alias of the buffer you still hold stays valid after they run, in any order.
+
+A source whose buffer has already been released is refused (`ObjectDisposedException`) by every export
+verb: each takes its reference before its first read (the Half / Decimal conversion, `ToDataView`'s
+snapshot, `ToVBuffer`'s copy), so it never reads memory the pool may have handed to another array.
+
+**Cursors keep ML.NET's own contract** (checked against ML.NET's `Cache`, `FilterRowsByColumn`, `TakeRows` and
+`LoadFromEnumerable` cursors): `Position` is `-1` before the first row, after the last and after `Dispose`; a
+getter called off a row throws ML.NET's own `InvalidOperationException` ("Values cannot be fetched at this
+time…") and reads nothing; `MoveNext` stays `false` once it returned `false` or the cursor was disposed; and
+`Schema` still answers after the view is disposed. Off-row getters used to read the element before the first row
+or past the last one — after `Dispose`, from a buffer the cursor no longer kept alive.
+
+**Each cursor holds its own pin** and releases it on `Dispose` — or, for a cursor nobody disposes, from a
+finalizer. ML.NET abandons cursors itself (`ShuffleRows`, used by training pipelines, never disposes the cursor
+it opens on its input; the time-series package's `DetectEntireAnomalyBySrCnn` leaves two per call), and before
+that net a single shuffle kept the NumSharp buffer referenced for the life of the process. Until a collection
+finalizes such a cursor its pin still holds the buffer, so the memory comes back only then.
+
+**Imports have no managed-array cap.** `view.ToNDArray(column)` stages rows straight into NumSharp memory: one
+exact allocation when the view reports its row count, growing chunks (copied together once) when it does not, so
+a column of more than `Array.MaxLength` elements in total imports (it used to stage through a managed `T[]` and
+fail there). A sparse `VBuffer` densifies at any size (the clear counted bytes in an `int` and threw at 2 GB).
+
+ML.NET's buffers hold at most 2,146,435,071 elements (its internal `ArrayUtils.ArrayMaxSize`, a little
+below `Array.MaxLength`): a vector column wider than that, or a `ToVBuffer` longer than that, is refused at
+export, before anything is allocated — ML.NET could not read such a row or copy such a buffer.
 
 `NDArrayMLNetInterop.LiveExports` counts live views, for leak detection in tests.
 

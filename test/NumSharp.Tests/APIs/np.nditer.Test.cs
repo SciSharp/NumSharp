@@ -444,6 +444,30 @@ namespace NumSharp.Tests.APIs
                 .Should().Throw<ArgumentException>()
                 .WithMessage("Must provide at least one operand");
 
+        /// <summary>
+        ///     NumPy converts <c>flags</c>, <c>order</c> and <c>casting</c> while it parses the arguments, before it looks
+        ///     at the operand list (<c>npyiter_init</c>: <c>PyArg_ParseTupleAndKeywords</c>' converters, then
+        ///     <c>npyiter_prepare_ops</c>), so with no operand a bad one of them is the error. <c>op_flags</c> and
+        ///     <c>op_dtypes</c> are converted after the operand count and are not. Probed against NumPy 2.4.2; NumSharp
+        ///     reported the operand count first.
+        /// </summary>
+        [TestMethod]
+        public void NdIter_NoOperands_ArgumentConvertersComeFirst()
+        {
+            var none = Array.Empty<NDArray>();
+            new Action(() => np.nditer(none, flags: new[] {"bogus"}))
+                .Should().Throw<ValueError>().WithMessage("Unexpected iterator global flag \"bogus\"");
+            new Action(() => np.nditer(none, order: 'Z'))
+                .Should().Throw<ValueError>().WithMessage("order must be one of 'C', 'F', 'A', or 'K' (got 'Z')");
+            new Action(() => np.nditer(none, casting: "bogus"))
+                .Should().Throw<ValueError>()
+                .WithMessage("casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got 'bogus')");
+            new Action(() => np.nditer(none, op_flags: new[] {new[] {"bogus"}}))
+                .Should().Throw<ValueError>().WithMessage("Must provide at least one operand");
+            new Action(() => np.nditer(none, op_dtypes: new DType[] {np.float64}))
+                .Should().Throw<ValueError>().WithMessage("Must provide at least one operand");
+        }
+
         [TestMethod]
         public void NdIter_GrowInnerAlias_IsAccepted()
         {
@@ -453,12 +477,18 @@ namespace NumSharp.Tests.APIs
             Values(a).Should().Be(Values(b));
         }
 
+        /// <summary>
+        ///     A closed iterator raises NumPy's texts (nditer_pywrap.c): "Iterator is invalid" from the members that need the
+        ///     iterator, "Iterator is past the end" from the position getters and the views — never a .NET-specific error.
+        /// </summary>
         [TestMethod]
         public void NdIter_UseAfterClose_Throws()
         {
             var it = np.nditer(A());
             it.close();
-            new Action(() => _ = it.nop).Should().Throw<InvalidOperationException>();
+            new Action(() => _ = it.nop).Should().Throw<ValueError>().WithMessage("Iterator is invalid");
+            new Action(() => _ = it[0]).Should().Throw<ValueError>().WithMessage("Iterator is past the end");
+            it.finished.Should().BeFalse("NumPy's finished getter reads False on a closed iterator");
         }
 
         [TestMethod]

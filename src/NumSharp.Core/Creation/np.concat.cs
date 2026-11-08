@@ -10,7 +10,7 @@ namespace NumSharp
 
         /// <summary>
         ///     Join a sequence of arrays along an existing axis.
-        ///     Alias of <see cref="concatenate(NDArray[], int?, NDArray, NPTypeCode?, string)"/>
+        ///     Alias of <see cref="concatenate(NDArray[], int?, NDArray, DType, string)"/>
         ///     introduced in NumPy 2.0 for Array API compatibility.
         /// </summary>
         /// <param name="arrays">
@@ -36,6 +36,7 @@ namespace NumSharp
         /// </param>
         /// <returns>The concatenated array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.concat.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray concat(
             NDArray[] arrays,
             int? axis = 0,

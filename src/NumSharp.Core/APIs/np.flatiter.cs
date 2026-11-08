@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
+using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 
 namespace NumSharp
@@ -127,7 +129,7 @@ namespace NumSharp
                 _ndim = a.ndim;
                 _size = a.size;
                 _dims = new long[_ndim];
-                var shp = a.shape;
+                var shp = a.Shape.dimensions;
                 for (int i = 0; i < _ndim; i++)
                     _dims[i] = shp[i];
             }
@@ -170,7 +172,7 @@ namespace NumSharp
                 if (i < 0)
                     i += _size;
                 if (i < 0 || i >= _size)
-                    throw new IndexError($"index {orig} is out of bounds for size {_size}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {orig} is out of bounds for size {_size}"));
                 return i;
             }
 
@@ -178,107 +180,71 @@ namespace NumSharp
             // strides (Shape.TransformOffset), so it is correct AND allocation-free for every layout.
             private object GetScalar(long flat) => _base.GetAtIndex(flat);
 
-            // Write a scalar at a logical C-order index. Exact-dtype values go straight to the stride-aware
-            // SetAtIndex (no allocation, the hot path); a mismatched scalar is routed through NumSharp's
-            // cast machinery once (numpy-exact narrowing/wrap/truncation) — SetAtIndex itself never casts.
-            private void SetScalar(long flat, object value)
+            /// <summary>
+            ///     Writes one value at a logical C-order index — NumPy's <c>iter_ass_subscript</c> for an integer index:
+            ///     the read-only check, then <c>PyArray_Pack</c> of the value into the element, any packing failure
+            ///     reported as <c>ValueError: Error setting single item of array.</c>
+            /// </summary>
+            /// <param name="flat">A normalized flat C-order position.</param>
+            /// <param name="value">The value: a C# number (a Python or NumPy scalar in the boundary map), a 0-d array, a
+            ///     C# literal's 0-d array, or <c>null</c> — Python's <c>None</c> (NaN, <c>nan+nanj</c>, <c>False</c>,
+            ///     <c>'None'</c>, a <c>StringDType</c> NA object; an integer dtype's <c>int(None)</c> failure is the same
+            ///     "Error setting single item of array." as any other).</param>
+            /// <exception cref="ValueError">The base is read-only ("underlying array is read-only"), or the value cannot be
+            ///     packed into the base's dtype — a Python int out of range, a float NaN / infinity into an integer, a
+            ///     complex into a real dtype, a sequence — all "Error setting single item of array." as in NumPy, the
+            ///     specific error kept as the inner exception.</exception>
+            /// <remarks>An exact-dtype value goes straight to the stride-aware <c>SetAtIndex</c> (no packing, no
+            ///     allocation — the hot path); <c>SetAtIndex</c> itself never converts.</remarks>
+            private unsafe void SetScalar(long flat, object value)
             {
                 // NumPy's flatiter assignment names the target "underlying array"
                 // (iter_ass_subscript: ValueError "underlying array is read-only") — a DIFFERENT
                 // message from the generic setters' "assignment destination is read-only".
                 NumSharpException.ThrowIfNotWriteable(_base.Shape, "underlying array");
-                if (value != null && value.GetType() == _base.dtype)
+                // Only a NUMBER of the exact dtype is already the element: an NDArray or a list is not, whatever its
+                // element type (comparing its CLR type with the dtype would not even be a dtype question).
+                if (NDArray.IsStoreScalar(value) && value.GetType().GetTypeCode() == _base.typecode)
+                {
                     _base.SetAtIndex(value, flat);
-                else
-                    _base.SetAtIndex(ConvertToBase(value), flat);
-            }
-
-            private object ConvertToBase(object value)
-            {
-                if (value is null)
-                    throw new ArgumentNullException(nameof(value));
+                    return;
+                }
 
                 var tc = _base.typecode;
-
-                // Casting TO an integer/bool/char dtype can truncate toward zero or wrap on overflow —
-                // NumPy semantics a plain Convert does not share — so route those through NumSharp's cast
-                // machinery (correctness over speed; a rarer path). Casts to a float/complex/decimal target
-                // are exact under Convert, so they take the fast, allocation-free path.
-                if (IsIntegerLike(tc))
+                if (tc == NPTypeCode.String)
                 {
-                    // NumPy bounds-checks a WEAK scalar assigned to an integer element: `a.flat[i] = 300`
-                    // on an int8 base RAISES, it does NOT wrap to 44. Every value reaching ConvertToBase
-                    // is a C# primitive — NumSharp's NEP50 analog of a Python int/float, i.e. a weak
-                    // scalar (a strong scalar is an NDArray, and the fancy/slice setters that take one
-                    // never route here) — so the check applies unconditionally, except to a bool target,
-                    // which NumPy truthiness-tests and can never overflow. The astype below still WRAPS,
-                    // as a strong `a.astype(...)` cast must; only this weak scalar-assignment path checks.
-                    if (tc != NPTypeCode.Boolean)
-                        CheckWeakScalarFitsInteger(value, tc);
-
-                    var src = new NDArray(value.GetType(), 1);
-                    src.SetAtIndex(value, 0);
-                    return src.astype(_base.dtype).GetAtIndex(0);
-                }
-
-                if (tc == NPTypeCode.Complex)
-                    return value is System.Numerics.Complex c ? c : new System.Numerics.Complex(Convert.ToDouble(value), 0);
-                if (tc == NPTypeCode.Half)
-                    return (Half)Convert.ToDouble(value);
-                return Convert.ChangeType(value, _base.dtype.type);
-            }
-
-            private static bool IsIntegerLike(NPTypeCode tc)
-                => tc is NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.SByte
-                    or NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Int32 or NPTypeCode.UInt32
-                    or NPTypeCode.Int64 or NPTypeCode.UInt64 or NPTypeCode.Char;
-
-            // NumPy scalar-assignment bounds check for a WEAK scalar (a C# primitive) written into a
-            // NON-bool integer dtype. An integer source must fit the target's inclusive range; a float
-            // source is truncated toward zero and the TRUNCATED value must fit (NumPy 2.4.2, probed:
-            // 127.9 -> 127 stores, 128.0 -> 128 raises, -128.9 -> -128 stores, -129.0 raises, NaN/inf
-            // raise). Out of range throws OverflowException with NumPy's regular-assignment wording
-            // ("Python integer 300 out of bounds for int8"), reusing the same NEP50 machinery
-            // (NDExprTypeRules.CheckIntLiteralFits) NumSharp uses for weak-scalar overflow elsewhere;
-            // NumPy's flat path itself raises a terser ValueError("Error setting single item of array.").
-            private void CheckWeakScalarFitsInteger(object value, NPTypeCode target)
-            {
-                switch (value)
-                {
-                    case bool:
-                        return; // a bool source is 0/1 — always in range for an integer dtype
-                    case sbyte or byte or short or ushort or int or uint or long or char:
-                        NDExprTypeRules.CheckIntLiteralFits(Convert.ToInt64(value), target);
-                        return;
-                    case ulong u:
-                        if (target == NPTypeCode.UInt64) return;                 // any ulong fits uint64
-                        if (u <= long.MaxValue) { NDExprTypeRules.CheckIntLiteralFits((long)u, target); return; }
-                        throw ScalarOutOfBounds(u.ToString(), target);           // >= 2^63 fits only uint64
-                    case Half or float or double:
+                    // A text element: its own setitem packs the value (S / U: a str encoded and truncated, a number's or
+                    // None's str(); StringDType: stringdtype_setitem — the NA object, a str, or a value's str() under
+                    // coercion), and any failure is the pack failure NumPy rewords (a non-ASCII str into S, coerce=False's
+                    // refusal, a sequence). PyArray_Pack is the same element setter, so no numeric packing applies here.
+                    try
                     {
-                        double d = value is Half h ? (double)h : Convert.ToDouble(value);
-                        if (double.IsNaN(d) || double.IsInfinity(d))
-                            throw new OverflowException(
-                                $"cannot assign non-finite float {d} to integer dtype {target.AsNumpyDtypeName()}");
-                        double t = Math.Truncate(d);
-                        // Only [-2^63, 2^63) casts safely to long; hand those to CheckIntLiteralFits so
-                        // the message names the truncated integer exactly as NumPy's regular path does.
-                        if (t >= -9223372036854775808.0 && t < 9223372036854775808.0)
-                        {
-                            NDExprTypeRules.CheckIntLiteralFits((long)t, target);
-                            return;
-                        }
-                        if (target == NPTypeCode.UInt64 && t >= 0.0 && t <= 18446744073709551615.0)
-                            return;                                              // a large positive still fits uint64
-                        throw ScalarOutOfBounds(t.ToString("F0"), target);
+                        _base.SetAtIndex(value, flat);
                     }
-                    default:
-                        return; // Decimal/Complex source into an integer target: governed by astype/Convert
+                    catch (Exception e) when (e is OverflowException || e is ValueError || e is TypeError)
+                    {
+                        throw new ValueError("Error setting single item of array.", e);
+                    }
+                    return;
                 }
-            }
 
-            private static OverflowException ScalarOutOfBounds(string shown, NPTypeCode target)
-                => new OverflowException($"Python integer {shown} out of bounds for {target.AsNumpyDtypeName()}");
+                byte* slot = stackalloc byte[ReductionInitial.SlotBytes];
+                try
+                {
+                    // PyArray_Pack (ReductionInitial.PackStore): a Python int range-checked, a float truncated then
+                    // range-checked, a NumPy scalar (Half, char) int()-converted into a SIGNED integer and cast into the
+                    // rest, a bool dtype takes the value's truth, a 0-d array cast, None its setitem value (NaN,
+                    // nan+nanj, False — or int(None)'s TypeError, which the catch below rewords like every pack error).
+                    ReductionInitial.PackStore(value, tc, new Span<byte>(slot, ReductionInitial.SlotBytes));
+                }
+                catch (Exception e) when (e is OverflowException || e is ValueError || e is TypeError)
+                {
+                    // iter_ass_subscript replaces PyArray_Pack's error with this one text for an integer index.
+                    throw new ValueError("Error setting single item of array.", e);
+                }
+
+                _base.SetAtIndex(ReductionInitial.Box(new ReadOnlySpan<byte>(slot, ReductionInitial.SlotBytes), tc), flat);
+            }
 
             /// <summary>
             ///     Single-element access at flat C-order index <paramref name="i"/> (NumPy's <c>f[i]</c>).
@@ -289,41 +255,60 @@ namespace NumSharp
             public object this[long i]
             {
                 get => GetScalar(Normalize(i));
-                set => SetScalar(Normalize(i), value);
+                set
+                {
+                    // iter_ass_subscript checks the base's writeability FIRST, then the index's bounds, then packs.
+                    NumSharpException.ThrowIfNotWriteable(_base.Shape, "underlying array");
+                    SetScalar(Normalize(i), value);
+                }
             }
 
-            /// <summary>Fancy get/set by a slice string (NumPy's <c>f["1:4"]</c> / <c>f["::2"]</c>). Set writes through.</summary>
+            /// <summary>Fancy get/set by a slice string (NumPy's <c>f["1:4"]</c> / <c>f["::2"]</c>). Set writes through;
+            ///     the value is converted BEFORE the slice is resolved, as NumPy's <c>iter_ass_subscript</c> does.</summary>
             public NDArray this[string range]
             {
                 get => Gather(ResolveSlice(range));
-                set => Scatter(ResolveSlice(range), value);
+                set => Scatter(() => ResolveSlice(range), value);
             }
 
-            /// <summary>Fancy get/set by integer indices (NumPy's <c>f[[1,3,5]]</c>). Negatives wrap; set writes through.</summary>
+            /// <summary>Fancy get/set by integer indices (NumPy's <c>f[[1,3,5]]</c>). Negatives wrap; set writes through;
+            ///     the value is converted BEFORE the indices are bounds-checked (<c>a.flat[[9]] = None</c> on an integer array
+            ///     is the TypeError, as in NumPy).</summary>
             public NDArray this[int[] indices]
             {
                 get => Gather(NormalizeMany(indices));
-                set => Scatter(NormalizeMany(indices), value);
+                set => Scatter(() => NormalizeMany(indices), value);
             }
 
             /// <inheritdoc cref="this[int[]]"/>
             public NDArray this[long[] indices]
             {
                 get => Gather(NormalizeMany(indices));
-                set => Scatter(NormalizeMany(indices), value);
+                set => Scatter(() => NormalizeMany(indices), value);
             }
 
             /// <inheritdoc cref="this[int[]]"/>
             public NDArray this[NDArray indices]
             {
                 get => Gather(NormalizeMany(indices));
-                set => Scatter(NormalizeMany(indices), value);
+                set => Scatter(() => NormalizeMany(indices), value);
             }
 
+            /// <summary>
+            ///     The flat C-order positions a slice string selects, resolved through NumSharp's own slice
+            ///     engine (<c>arange(size)[range]</c>) so every Python slice spelling means exactly what it
+            ///     means on an array.
+            /// </summary>
+            /// <param name="range">A Python slice expression such as <c>"1:4"</c> or <c>"::2"</c>.</param>
+            /// <returns>The selected positions, in slice order (managed — no array outlives the call).</returns>
+            /// <exception cref="ArgumentException">The slice string cannot be parsed.</exception>
             private long[] ResolveSlice(string range)
             {
-                // arange(size)[range] yields the flat positions the slice selects — reuses the slice engine.
-                var positions = arange(_size)[range];
+                // Both the arange and the slice view are this method's temps — the positions are copied out
+                // into a managed long[] — so both are released here. Left undisposed they stranded one pooled
+                // buffer per slice get/set until a GC (measured by the leak-audit catalogue).
+                using var all = arange(_size);
+                using var positions = all[range];
                 long n = positions.size;
                 var pos = new long[n];
                 for (long k = 0; k < n; k++)
@@ -347,9 +332,15 @@ namespace NumSharp
                 return pos;
             }
 
+            /// <summary>Normalizes an index ARRAY (any shape, read in C-order) to validated flat positions.</summary>
+            /// <param name="indices">The integer index array; the caller's, never modified or released here.</param>
+            /// <returns>The normalized positions (negatives wrapped).</returns>
+            /// <exception cref="IndexError">An index is out of bounds for <see cref="size"/>.</exception>
             private long[] NormalizeMany(NDArray indices)
             {
-                var flat = indices.flatten();
+                // flatten ALWAYS copies (never returns `indices` itself), so the copy is this method's temp
+                // and is released here — the caller's index array is untouched.
+                using var flat = indices.flatten();
                 long n = flat.size;
                 var pos = new long[n];
                 for (long k = 0; k < n; k++)
@@ -357,32 +348,92 @@ namespace NumSharp
                 return pos;
             }
 
+            /// <summary>
+            ///     The elements at <paramref name="positions"/> as a new 1-D array (NumPy's <c>iter_subscript</c> result for a
+            ///     slice or an index array), of the base's class: a <see cref="NDCharArray"/> base gives a chararray, as NumPy
+            ///     allocates the result with <c>Py_TYPE(self-&gt;ao)</c>.
+            /// </summary>
+            /// <param name="positions">The validated flat C-order positions.</param>
+            /// <returns>A new array that owns its data.</returns>
+            /// <exception cref="ValueError">A chararray base holds data that is not string data (the subclass's finalize rule,
+            ///     checked before anything is allocated).</exception>
             private NDArray Gather(long[] positions)
             {
+                // The class of the iterator's ARRAY decides, at run time, as Py_TYPE does: a chararray's finalize rule runs
+                // where NumPy allocates the result, before any element is read.
+                var chars = _base as NDCharArray;
+                if (chars is not null)
+                    NDCharArray.Finalize(_base.dtype);
                 var result = new NDArray(_base.dtype, positions.Length);
                 for (int k = 0; k < positions.Length; k++)
                     result.SetAtIndex(GetScalar(positions[k]), k);   // both base-dtype: exact, no conversion
-                return result;
+                if (chars is null)
+                    return result;
+                // The chararray takes over the fresh storage; the plain wrapper's counted reference goes back.
+                var wrapped = NDCharArray.TakeOver(result, chars);
+                result.Dispose();
+                return wrapped;
             }
 
-            private void Scatter(long[] positions, NDArray values)
+            /// <summary>
+            ///     Writes <paramref name="values"/> (cast once to the base dtype, STRONG-scalar semantics — it wraps
+            ///     rather than range-checks) into the given flat positions, through the base's strides; a
+            ///     single value is broadcast to every position.
+            /// </summary>
+            /// <param name="resolvePositions">Resolves the validated flat C-order positions (<see cref="ResolveSlice"/> /
+            /// <see cref="NormalizeMany(long[])"/>) — called AFTER the value's conversion, NumPy's order: its
+            /// <c>iter_ass_subscript</c> converts the value at <c>skip:</c> before it reads the slice or the index array, so a
+            /// value's error wins over an out-of-bounds index (<c>a.flat[[9]] = None</c> on an integer array is the
+            /// TypeError).</param>
+            /// <param name="values">The caller's values — one, or exactly one per position; never released here.
+            /// <c>null</c> is Python's <c>None</c> (one value, <see cref="NDArray.NoneForStore"/>).</param>
+            /// <exception cref="ValueError">The base is read-only ("underlying array is read-only", raised even
+            /// for zero positions, like NumPy's <c>iter_ass_subscript</c>), or the value count is neither 1 nor
+            /// the position count.</exception>
+            /// <exception cref="TypeError"><paramref name="values"/> is null and the base is an integer (or
+            /// <c>decimal</c>) array: <c>int(None)</c>'s own text, raised even for zero positions.</exception>
+            /// <exception cref="IndexError">A position is out of bounds (raised by <paramref name="resolvePositions"/>).</exception>
+            private void Scatter(Func<long[]> resolvePositions, NDArray values)
             {
                 // Raised at ENTRY like NumPy's iter_ass_subscript — even a zero-length fancy set on a
-                // read-only base refuses (SetScalar's own guard would never run for n == 0).
+                // read-only base refuses.
                 NumSharpException.ThrowIfNotWriteable(_base.Shape, "underlying array");
-                long n = positions.Length;
-                bool broadcast = values.size == 1;
-                if (!broadcast && values.size != n)
-                    throw new ValueError(
-                        $"cannot assign {values.size} input values to the {n} output values where the mask is true");
-                // Cast to the base dtype once (numpy casts on flat assignment); SetValue does not convert.
-                var casted = values.astype(_base.dtype);
-                for (long k = 0; k < n; k++)
-                    SetScalar(positions[k], broadcast ? casted.GetAtIndex(0) : casted.GetAtIndex(k));
+
+                // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: iter_ass_subscript converts the value
+                // with PyArray_FromAny(val, dtype, FORCECAST), which packs a Python scalar with PyArray_Pack's range checks
+                // (a.flat[1:3] = 1000 on int8 raises "Python integer 1000 out of bounds for int8", even for zero
+                // positions). An ndarray value is cast below. A null is Python's None, converted the same way into the
+                // base's descriptor (its own errors, NOT reworded: only the integer index rewords them).
+                var packed = NDArray.PackForStore(values, _base.dtype, pyArrayPackRoute: false);
+                try
+                {
+                    long[] positions = resolvePositions();
+                    long n = positions.Length;
+                    bool broadcast = packed.size == 1;
+                    if (!broadcast && packed.size != n)
+                        throw new ValueError(
+                            string.Create(CultureInfo.InvariantCulture, $"cannot assign {packed.size} input values to the {n} output values where the mask is true"));
+                    // Cast to the base dtype once (numpy casts on flat assignment); SetAtIndex does not convert.
+                    // astype(dtype) always COPIES, so the cast is this method's temp: every element is boxed
+                    // out of it below, and it is released on exit instead of stranding a buffer per set.
+                    using var casted = packed.astype(_base.dtype);
+                    // Each element is already the base's dtype (a text element the base's own class and width, or a
+                    // StringDType element / NA object), so it is stored as it is — no packing, and no rewording of errors.
+                    for (long k = 0; k < n; k++)
+                        _base.SetAtIndex(broadcast ? casted.GetAtIndex(0) : casted.GetAtIndex(k), positions[k]);
+                }
+                finally
+                {
+                    if (!ReferenceEquals(packed, values))
+                        packed.Dispose();
+                }
             }
 
-            /// <summary>A fresh 1-D C-order COPY of the base (NumPy's <c>f.copy()</c>, which returns an ndarray).</summary>
-            public NDArray copy() => _base.flatten();
+            /// <summary>A fresh 1-D C-order COPY of the base (NumPy's <c>f.copy()</c>): an array of the base's class, so a
+            ///     chararray base gives a chararray (NumPy's <c>PyArray_Flatten</c> allocates with the base's type).</summary>
+            /// <returns>A new 1-D array that owns its data.</returns>
+            /// <exception cref="ValueError">A chararray base holds data that is not string data.</exception>
+            public NDArray copy() => _base is NDCharArray chars ? chars.flatten() : _base.flatten();
 
             /// <summary>
             ///     A typed, allocation-free, by-reference view of this same flat iteration — the

@@ -339,6 +339,10 @@ public class NonContiguousTests
     // NumPy 2.4.2: np.negative([True]) -> TypeError "The numpy boolean negative, the `-` operator,
     // is not supported, use the `~` operator or the logical_not function instead.")
 
+    /// <summary>
+    ///     np.negative of a stepped bool view raises NumPy's TypeError (NumPy 2.x has no bool negative loop), and the flip
+    ///     NumPy points to, <c>~</c>, reads the view through its stride.
+    /// </summary>
     [TestMethod]
     public void NegateBoolean_SlicedArray()
     {
@@ -346,7 +350,7 @@ public class NonContiguousTests
         var sliced = arr["::2"]; // [True, True, True]
 
         // np.negative(bool) is rejected in NumPy 2.4.2 — the loop no longer exists.
-        var ex = Assert.ThrowsException<System.NotSupportedException>(() => np.negative(sliced));
+        var ex = Assert.ThrowsException<TypeError>(() => np.negative(sliced));
         StringAssert.Contains(ex.Message, "boolean negative");
 
         // `~` (invert) is the boolean flip NumPy points to: ~[T,T,T] = [F,F,F].
@@ -357,13 +361,17 @@ public class NonContiguousTests
         Assert.AreEqual(false, inverted.GetBoolean(2));
     }
 
+    /// <summary>
+    ///     np.negative of a reversed bool view raises NumPy's TypeError; <c>~</c> over the same negative-stride view returns
+    ///     the flipped values in logical order.
+    /// </summary>
     [TestMethod]
     public void NegateBoolean_ReversedArray()
     {
         var arr = np.array(new[] { true, false, false, true });
         var reversed = arr["::-1"]; // [True, False, False, True]
 
-        var ex = Assert.ThrowsException<System.NotSupportedException>(() => np.negative(reversed));
+        var ex = Assert.ThrowsException<TypeError>(() => np.negative(reversed));
         StringAssert.Contains(ex.Message, "boolean negative");
 
         // ~[T,F,F,T] = [F,T,T,F], read through the negative-stride view in C-order.
@@ -428,15 +436,19 @@ public class NonContiguousTests
             Assert.AreEqual(expect[i], r.GetBoolean(i / 3, i % 3), $"[{i}]");
     }
 
+    /// <summary>
+    ///     The unary <c>-</c> operator and np.negative refuse a bool operand with NumPy's TypeError at every layout,
+    ///     a transposed view and a read-only broadcast view included.
+    /// </summary>
     [TestMethod]
     public void NegativeBoolean_UnaryMinusOperator_AlsoRejected()
     {
         // NumPy 2.4.2 rejects BOTH np.negative(bool) AND the unary `-` operator with the same
         // TypeError, at every layout including a read-only broadcast view. `~` remains the flip.
         var a = np.array(new[] { true, false, false, true, true, false }).reshape(2, 3).T;
-        Assert.ThrowsException<System.NotSupportedException>(() => -a);
+        Assert.ThrowsException<TypeError>(() => -a);
         var bc = np.broadcast_to(np.array(new[] { true }), new Shape(3));
-        var ex = Assert.ThrowsException<System.NotSupportedException>(() => np.negative(bc));
+        var ex = Assert.ThrowsException<TypeError>(() => np.negative(bc));
         StringAssert.Contains(ex.Message, "boolean negative");
     }
 

@@ -173,7 +173,7 @@ namespace NumSharp
         ///     but the message is NumPy's, character for character.
         /// </remarks>
         private static IncorrectShapeException ReshapeSizeMismatch(long size, long[] requested)
-            => new IncorrectShapeException($"cannot reshape array of size {size} into shape {ConvertShapeToString(requested)}");
+            => new IncorrectShapeException(string.Create(CultureInfo.InvariantCulture, $"cannot reshape array of size {size} into shape {ConvertShapeToString(requested)}"));
 
         /// <summary>
         ///     Resolves an unknown (negative) dimension and validates the requested shape's size.
@@ -231,11 +231,9 @@ namespace NumSharp
             if (indexOfUnknown == -1)
                 return shape; // Nothing to infer; the caller's size check handles the rest.
 
-            if (this.IsBroadcasted)
-            {
-                throw new NotSupportedException("Reshaping a broadcasted array with a -1 (unknown) dimension is not supported.");
-            }
-
+            // A broadcast view infers like any other array: the unknown extent comes from the LOGICAL element count
+            // (np.broadcast_to(row, (3, 4)).reshape(-1) is (12,)), and the caller copies a layout no view can express,
+            // exactly as it does for an explicit (12,) — NumPy's view of a temporary copy (probed 2.4.2).
             if (product == 0 || size % product != 0)
                 throw ReshapeSizeMismatch(size, dims);
 
@@ -365,13 +363,13 @@ namespace NumSharp
         /// </summary>
         /// <remarks>
         ///     Each axis is normalized against the FINAL output ndim
-        ///     (<c>inputNdim + axes.Length</c>). Duplicate normalized positions
-        ///     raise <see cref="ArgumentException"/> ("repeated axis"), matching
-        ///     NumPy's <c>ValueError</c>. Out-of-range axes throw
-        ///     <see cref="ArgumentException"/>.
+        ///     (<c>inputNdim + axes.Length</c>) by NumPy's <c>normalize_axis_tuple</c>
+        ///     (<see cref="normalize_axis_tuple(int[], int, object, bool)"/>).
         /// </remarks>
         /// <param name="axes">Positions in the expanded output where size-1 axes are placed.</param>
         /// <returns>A new <see cref="Shape"/> aliasing the same storage with size-1 dims inserted.</returns>
+        /// <exception cref="AxisError">An axis is out of range for the output's rank (the axis as given).</exception>
+        /// <exception cref="ValueError">Two axes name the same output position ("repeated axis").</exception>
         public readonly Shape ExpandDimensions(int[] axes)
         {
             if (axes == null || axes.Length == 0)
@@ -380,24 +378,9 @@ namespace NumSharp
             int inputNdim = dimensions?.Length ?? 0;
             int outNdim = inputNdim + axes.Length;
 
-            // Normalize each axis against the OUTPUT ndim, mirroring NumPy.
-            var normalized = new int[axes.Length];
-            for (int i = 0; i < axes.Length; i++)
-            {
-                int ax = axes[i];
-                int adjusted = ax >= 0 ? ax : outNdim + ax;
-                if (adjusted < 0 || adjusted >= outNdim)
-                    throw new ArgumentException($"axis {ax} is out of bounds for array of dimension {outNdim}");
-                normalized[i] = adjusted;
-            }
-
-            // Detect duplicates against normalized positions (NumPy: ValueError "repeated axis").
-            var seen = new HashSet<int>();
-            for (int i = 0; i < normalized.Length; i++)
-            {
-                if (!seen.Add(normalized[i]))
-                    throw new ArgumentException("repeated axis");
-            }
+            // normalize_axis_tuple(axis, out_ndim): every axis normalized against the OUTPUT ndim (NumPy's AxisError for one
+            // out of range, the axis as given), then the "repeated axis" ValueError.
+            var normalized = normalize_axis_tuple(axes, outNdim);
 
             // Apply axes in ascending order so each ExpandDimension call sees a
             // stable "earlier dim has already been inserted" view.
@@ -437,7 +420,7 @@ namespace NumSharp
                 {
                     axis = dimensions.Length + 1 + axis;
                     if (axis < 0)
-                        throw new ArgumentException($"Effective axis {axis} is less than 0");
+                        throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Effective axis {axis} is less than 0"));
                 }
 
                 Arrays.Insert(ref newDims, axis, 1L);

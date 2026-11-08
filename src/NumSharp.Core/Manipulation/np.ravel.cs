@@ -1,3 +1,4 @@
+using System;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -13,41 +14,28 @@ namespace NumSharp
         public static NDArray ravel(NDArray a) => ravel(a, 'C');
 
         /// <summary>
-        ///     Return a contiguous flattened array. A 1-D array, containing the elements of the input, is returned
+        ///     Return a contiguous flattened array. A 1-D array, containing the elements of the input, is returned — a
+        ///     VIEW whenever the requested reading order walks the input's memory front to back, otherwise a copy
+        ///     (NumPy's <c>PyArray_Ravel</c>, <c>numpy/_core/src/multiarray/shape.c</c>).
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="order">
         ///     The order in which to read the elements.
         ///     'C' - row-major, 'F' - column-major,
         ///     'A' - 'F' if a is F-contiguous (and not C-contiguous) else 'C',
-        ///     'K' - memory order.
+        ///     'K' - the order the elements occur in memory: C / F for a C- / F-contiguous array, a view when the array is
+        ///     dense in some other axis order (a transpose of a contiguous array), else a copy read in NpyIter's KEEPORDER
+        ///     axis order (each axis in increasing index — a negative stride is NOT reversed, a broadcast axis abstains).
         /// </param>
+        /// <returns>The 1-D result: a view that shares <paramref name="a"/>'s memory (and its writeability), or a fresh
+        ///     copy.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
+        /// <exception cref="ArgumentException">An order code other than C, F, A or K.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel.html</remarks>
         public static NDArray ravel(NDArray a, char order)
         {
-            char physical = OrderResolver.Resolve(order, a.Shape);
-
-            if (physical == 'F' && a.Shape.NDim > 1 && a.size > 1)
-            {
-                // F-order ravel: read column-major.
-                // When the source is F-contiguous, strides[0]==1 and memory is dense, so a
-                // linear walk from `offset` for `size` elements is exactly the F-order
-                // read-out — return a 1-D view sharing the underlying buffer (no copy).
-                // NumPy: np.shares_memory(np.ravel(aF, 'F'), aF) == True.
-                if (a.Shape.IsFContiguous)
-                {
-                    var vec = new Shape(new long[] { a.size }, new long[] { 1 }, a.Shape.offset, a.Shape.bufferSize);
-                    return new NDArray(a.Storage.Alias(vec)) { TensorEngine = a.TensorEngine };
-                }
-                // Non-F-contiguous source: must materialize column-major into fresh memory.
-                return a.flatten('F');
-            }
-
-            // C-order: view when possible, otherwise materialize a C-contiguous copy.
-            if (!a.Shape.IsContiguous)
-                return new NDArray(new UnmanagedStorage(a.Storage.CloneData(), Shape.Vector(a.size))) { TensorEngine = a.TensorEngine };
-
-            return a.reshape(Shape.Vector(a.size));
+            return NDArray.ravel(a, order);
         }
     }
 }

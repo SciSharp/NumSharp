@@ -159,8 +159,7 @@ non-served layout falls to the pre-existing route unchanged.
 | Surface | Gate | Kernels | Fallback (unchanged) |
 |---|---|---|---|
 | unary sign/negate/abs + floor/ceil/trunc/rint (`around`/`round` share Round) | `GenerateUnaryKernel` (contiguous keys) | `Unary.Decimal.cs`, `Unary.Round.Half.cs` | strided → scalar IL |
-| flat min/max (→ ptp) | `Max/MinElementwiseHalfFallback` (contiguous) | `Reduction.MinMax.Half.cs` | non-contig → `HalfMinMaxViaNDIter` |
-| nanmin/nanmax | `NanMin/NanMaxHalfHelper` bodies | same file (NaN-blend cores) | non-contig → `NanReductionScalar` |
+| max/min/nanmax/nanmin, flat AND axis, every layout (→ ptp) | `DefaultEngine.HalfMinMaxReduce` (ReduceAMax/AMin/NanMinMax, before any other route) | walks `Default.Reduction.MinMax.Half.cs` over the cores, run winners, priority-key folds and slab folds of `Reduction.MinMax.Half.cs` + the pair-select of `Binary.MinMax.Half.cs` | — (the old axis kernel key and the `dtype=float16` flat path adapt onto the same walk) |
 | elementwise maximum/minimum/fmax/fmin + add/sub/mul/div | `GenerateMixedTypeKernel` (SimdFull + both scalar-broadcast paths) | `Binary.MinMax.Half.cs`, `Binary.Arith.Half.cs` | SimdChunk/General → emitted IL |
 | comparisons ==/!=/</<=/>/>= | `GenerateComparisonKernel` (same three paths) | `Comparison.Half.cs` | SimdChunk/General → scalar IL |
 | clip (every mode × scalar/array bounds) | `Clip.Generate` | clip cores in `Binary.MinMax.Half.cs` | strided → `ClipStridedT` |
@@ -176,7 +175,8 @@ NDIter route *before* the MixedType kernel factory — `TryExecuteBinaryOpViaNDI
 | Family | 1K | 100K | 10M | Exactness |
 |---|---|---|---|---|
 | `max`/`min` (flat) | 6.3× | 57× | 40× | bit-exact (first-NaN verbatim) |
-| `ptp` | 3.4× | 51× | 35× | bit-exact (composition) |
+| `max`/`min`/`nanmax`/`nanmin`, flat + axis × 23 layouts (1K / 100K / **1M**, 2026-10-03) | geomean 5.6× (min 2.3×) | 41× (min 4.2×) | **79× (min 7.3×)** | bit-exact on every layout (first NaN / first ±0 in NumPy's visiting order); was geomean 1.6×, 169 of 276 cells under 1.5× |
+| `ptp` | 3.4× | 51× | 35× | bit-exact (composition); on every layout since 2026-10-03 — before, its NaN bits followed the wrong walks (3,622 of a 6,034-case NumPy probe) |
 | `maximum`/`fmax` (elementwise) | 5.6× | 56× | 27× | bit-exact |
 | `less` / `equal` | 2.7× / 1.8× | 40× / 9.7× | 24× / 5.4× | bit-exact |
 | `nanmax`/`nanmin` | 8.4× | 43× | 26× | bit-exact (all-NaN verbatim) |
@@ -216,6 +216,17 @@ not a shortfall. 1K cells are bounded by the per-call allocation/dispatch floor,
 8. **Prove first, at full width**: unaries get all-65,536 sweeps; reductions get a scalar fold
    transcribed from NumPy's C *plus* a live-NumPy differential (the source-derived model was
    wrong once — trap #3 — and only the live probe caught it).
+9. **"First" means NumPy's VISITING order, not memory order** (2026-10-03). A reduction folds
+   every axis in increasing logical index (`NPY_ITER_DONT_NEGATE_STRIDES`), so a reversed run is
+   visited from its HIGH address down — its first NaN / first zero is the highest one in memory —
+   and a flat reduction walks NumPy's K order (axes sorted by |stride|, a zero stride ambiguous).
+   The oracle tokenizes NaN and its pools hold one NaN, so a last-NaN-wins kernel passed every
+   tier until a payload-rich tier (`half_minmax.jsonl`) compared raw bytes.
+10. **A coin-flip branch per element costs more than the work on SHORT rows**: the "running
+    winner improves" branch is taken half the time on a row of three, so rows of ≤ 16 take a
+    branch-free masked select (10.5 → 5 ns per row); long rows keep the branchy fold (its branch
+    settles after a few elements). And inlining that long-row fold into the big walk method made
+    its loop ~1.5× slower — it stays `NoInlining`, one call per row.
 
 ## 8. Ceilings and what remains
 
@@ -226,13 +237,18 @@ not a shortfall. 1K cells are bounded by the per-call allocation/dispatch floor,
   bridge; not yet on T3's float path).
 - **The small-op floor**: at 1K, alloc/dispatch (~0.5–1 µs) dominates every kernel; improving
   it is cross-cutting NDArray-lifecycle work, not f16 work.
-- **Non-contiguous paths** keep the older fallbacks: the strided/NDIter f16 min/max fallback
-  returns canonical `Half.NaN` (payload lost) instead of first-NaN verbatim; f16 axis
-  reductions ride the generic driver. Both pre-existing, both documented above.
+- **Non-contiguous and axis min/max: CLOSED 2026-10-03.** The strided/NDIter f16 min/max fallback
+  returned canonical `Half.NaN`, the axis driver let a later NaN win and the flat walk took
+  reversed/permuted views in another order; `nanmax`/`nanmin` ran a scalar fold at 0.4–0.9× NumPy.
+  All four ops now run the bit-level walks of `Default.Reduction.MinMax.Half.cs` (ROW mode: a
+  SIMD core per ±1-stride row, the priority-key fold otherwise; SLAB mode: the pair-select over
+  4096-lane blocks, a stepped inner run gathered first), gated by the raw-byte `half_minmax`
+  oracle tier and the float16 selection contract on every other tier.
 - **Don't touch `median`/`sort`/`unique` as f16 work** — their gaps are sort-algorithm gaps
   (scalar radix vs NumPy's vqsort), not dtype gaps.
 
-Gates: `HalfMinMaxBitKernelTests`, `HalfPairMinMaxKernelTests`, `HalfComparisonKernelTests`,
+Gates: `HalfMinMaxBitKernelTests`, `HalfMinMaxLayoutTests`, `HalfPairMinMaxKernelTests`, `HalfComparisonKernelTests`,
 `HalfArithKernelTests`, `HalfRoundKernelTests` (test/NumSharp.Tests/Math/) + the FuzzMatrix
-oracle corpus; dev-time evidence per family: 1,200–13,000-case reference fuzz + 250–30,600-check
+oracle corpus (`half_minmax.jsonl` compares float16 max/min/nanmax/nanmin by raw bytes on every host, and ptp on
+x86 hosts, where `inf - inf` makes the recorded default NaN); dev-time evidence per family: 1,200–13,000-case reference fuzz + 250–30,600-check
 live-NumPy differentials, 0 fails throughout.

@@ -31,7 +31,7 @@ namespace NumSharp.Tests.Creation
             ((NDArray)np.mgrid["0.0:5"]).Should().BeOfType(NPTypeCode.Double)
                 .And.BeShaped(5).And.BeOfValues(0.0, 1.0, 2.0, 3.0, 4.0);
 
-            // Imaginary step -> linspace, stop inclusive, float64.
+            // Imaginary step -> NumPy's arange(0, n) * step + start, stop inclusive, float64.
             ((NDArray)np.mgrid["-1:1:5j"]).Should().BeOfType(NPTypeCode.Double)
                 .And.BeShaped(5).And.BeOfValues(-1.0, -0.5, 0.0, 0.5, 1.0);
         }
@@ -162,8 +162,9 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void MGrid_SingleImaginary_MissingStop_Throws()
         {
+            // np.mgrid[5::3j]: NumPy's (key.stop - start) is Python's None - 5.
             new Action(() => { NDArray _ = np.mgrid["5::3j"]; })
-                .Should().Throw<ValueError>().WithMessage("*imaginary step requires a stop*");
+                .Should().Throw<TypeError>().WithMessage("unsupported operand type(s) for -: 'NoneType' and 'int'");
         }
 
         [TestMethod]

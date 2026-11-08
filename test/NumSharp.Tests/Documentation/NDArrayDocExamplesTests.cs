@@ -485,13 +485,22 @@ namespace NumSharp.Tests.Documentation
         public void Generic_TypedWrappers()
         {
             NDArray<double> a = np.zeros(10).MakeGeneric<double>();
-            double first = a[0];
+            NDArray<double> head = a["0:3"];
+            head.shape.Should().Equal(3L);
+            double first = (double)a[0];
             first.Should().Be(0.0);
             a[0] = 3.14;
-            a[0].Should().Be(3.14);
+            ((double)a[0]).Should().Be(3.14);
+            ((double)head[0]).Should().Be(3.14, "the typed slice is a view");
 
-            np.zeros(3).AsGeneric<double>()[0].Should().Be(0.0);          // never allocates; returns null on mismatch
-            np.array(new[] { 1, 2, 3 }).AsOrMakeGeneric<double>()[0].Should().Be(1.0); // astype when dtype differs
+            // An untyped value is assigned through an NDArray reference or __setitem__.
+            NDArray u = a;
+            u["1:3"] = np.array(new[] { 1.0, 2.0 });
+            a.__setitem__("3:5", np.array(new[] { 3.0, 4.0 }));
+            a["0:5"].ToArray<double>().Should().Equal(3.14, 1.0, 2.0, 3.0, 4.0);
+
+            ((double)np.zeros(3).AsGeneric<double>()[0]).Should().Be(0.0);          // never allocates; returns null on mismatch
+            ((double)np.array(new[] { 1, 2, 3 }).AsOrMakeGeneric<double>()[0]).Should().Be(1.0); // astype when dtype differs
         }
 
         // ── Saving, Loading, and Interop ───────────────────────────────────────────────────────────
@@ -584,6 +593,11 @@ namespace NumSharp.Tests.Documentation
             int[,] md = (int[,])arr.ToMuliDimArray<int>();
             md[1, 1].Should().Be(4);
 
+            // The documented any-layout + conversion line: the transpose's logical elements, as float64.
+            double[,] mdT = (double[,])arr.T.ToMuliDimArray<double>();
+            mdT[0, 1].Should().Be(3.0);
+            mdT[1, 0].Should().Be(2.0);
+
             int[][] jag = (int[][])arr.ToJaggedArray<int>();
             jag[1][0].Should().Be(3);
 
@@ -637,10 +651,10 @@ namespace NumSharp.Tests.Documentation
             c["..."] = c + 1;
             c.ToArray<int>().Should().Equal(2, 3, 4);
 
-            // "NumSharpException: assignment destination is read-only" → copy the broadcast view first
+            // "ValueError: assignment destination is read-only" → copy the broadcast view first
             var bc = np.broadcast_to(np.arange(3), new Shape(2, 3));
             Action write = () => bc[0, 0] = 9;
-            write.Should().Throw<NumSharpException>().WithMessage("*read-only*");
+            write.Should().Throw<ValueError>().WithMessage("*read-only*");
         }
 
         // ── Second pass: the view / copy / read-only semantics the tables claim ─────────────────────
@@ -767,7 +781,7 @@ namespace NumSharp.Tests.Documentation
             var b = np.broadcast_to(np.arange(3), new Shape(2, 3));
             b.Shape.IsWriteable.Should().BeFalse("broadcast views are read-only");
             Action act = () => b[0, 0] = 99;
-            act.Should().Throw<NumSharpException>().WithMessage("*read-only*");
+            act.Should().Throw<ValueError>().WithMessage("*read-only*");
         }
 
         [TestMethod]
@@ -789,6 +803,30 @@ namespace NumSharp.Tests.Documentation
             d /= 4;
             d.typecode.Should().Be(NPTypeCode.Double);
             ((double)d[0]).Should().Be(2.5);
+        }
+
+        // ── Text is array data ──────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        ///     The "Text is array data" snippet (every value probed against NumPy 2.4.2): the three text families are plain
+        ///     <c>NDArray</c>s that share <see cref="NPTypeCode.String"/>, so only the full descriptor tells them apart; a
+        ///     <c>StringDType</c> element grows past the <c>U4</c> width it came from; a comparison with a C# string is
+        ///     NumPy's <c>str</c> comparison.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void TextIsArrayData()
+        {
+            var names = np.array(new[] { "cat", "dog", "bird" });
+            names.dtype.str.Should().Be("<U4", "the longest text sets the width");
+            var bytes = names.astype("S4");
+            bytes.ToString(true).Should().Be("array([b'cat', b'dog', b'bird'], dtype='|S4')");
+            var growing = names.astype(np.dtypes.StringDType());
+            growing[0] = "a longer label";
+            growing.ToString(true).Should().Be("array(['a longer label', 'dog', 'bird'], dtype=StringDType())");
+            (names == "cat").ToArray<bool>().Should().Equal(true, false, false);
+            foreach (var family in new[] { names, bytes, growing })
+                family.typecode.Should().Be(NPTypeCode.String, "the shared type code does not name the family");
         }
     }
 }

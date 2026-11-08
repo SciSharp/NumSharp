@@ -132,7 +132,8 @@ If a case is red, go to `references/triage.md`.
 > through `OpRegistry` and asserts the buffer pool balances — the `KnownEscapes` registry is empty, so if your op
 > strands a pooled intermediate it goes red **even with bit-exact values**. Run `FullyQualifiedName~UndisposedIntermediateTests`
 > too, and fix any leak in the op (dispose the intermediate / `[NDScoped]`) rather than allowlisting it. See
-> `references/triage.md` → "A red that is NOT a value divergence".
+> `references/triage.md` → "A red that is NOT a value divergence". Its corpus rows also credit the new public member
+> in the leak COMPLETENESS gate (`LeakSurfaceCoverageTests`); an API with no corpus route needs a `LeakCatalogue` entry.
 
 ## 6. What you do NOT need to do
 

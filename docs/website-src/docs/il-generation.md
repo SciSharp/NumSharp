@@ -19,9 +19,7 @@ and edge-case semantics survive the trip into hand-written machine code.
 
 ## At a Glance
 
-The kernel layer is large, and every figure below is measured from the
-checked-in source (see [Refreshing the Inventory](#refreshing-the-inventory)),
-never estimated:
+The kernel layer covers NumSharp's dtypes, layouts and operations. The source counts below are an inventory snapshot; [Refreshing the Inventory](#refreshing-the-inventory) shows how to reproduce them after kernel changes.
 
 | The system in numbers | |
 | --- | ---: |
@@ -32,7 +30,7 @@ never estimated:
 | `DynamicMethod` kernel factories | 57 |
 | Distinct generated-kernel caches | 45 |
 | Binary / unary / reduction / comparison ops | 17 / 35 / 20 / 6 |
-| Dtypes every kernel must handle | 15 |
+| NumSharp dtype families | 18 |
 | Binary memory-layout paths | 5 |
 | Total kernel source | ~48,000 lines |
 | Raw IL instructions emitted by hand | ~7,000 |
@@ -53,7 +51,7 @@ The operation surface those kernels cover:
 | Unary operations | 35 | trig, exp/log family, rounding, `abs`, `sign`, `reciprocal`, predicates, bitwise/logical not |
 | Reductions | 20 | `sum`, `prod`, `min`, `max`, `arg*`, `mean`, `std`, `var`, and NaN-aware variants |
 | Comparisons | 6 | `equal`, `not_equal`, `<`, `<=`, `>`, `>=` |
-| Dtypes | 15 | bool, integer widths, char, half, single, double, decimal, complex |
+| Dtypes | 18 | bool, integer widths, char, half, single, double, decimal, complex, bytes (`S`), Unicode (`U`), StringDType (`T`) |
 | Binary layout paths | 5 | full SIMD, scalar-left/right broadcast, chunked SIMD, general strided |
 
 ## Two Generators, Two Contracts
@@ -122,7 +120,9 @@ kernel:
 
 - **`DirectILKernelGenerator.InnerLoop.cs`** - the reusable inner-loop factory
   behind `np.evaluate` (the `NDExpr` DSL) and custom NDIter operations.
-- **`DirectILKernelGenerator.WeightedSum.cs`** - the kernel behind `np.average`.
+- **`DirectILKernelGenerator.WeightedSum.cs`** - a fused weighted-sum kernel
+  (`sum(a * w)` and `sum(w)` in one pass). `np.average` ran it until 2026-10-27;
+  it now runs NumPy's composition, whose sums keep `np.sum`'s pairwise order.
 
 So the class a kernel lives in tells you its *file neighborhood*, but the
 delegate signature tells you its *driving contract*. When in doubt, look at the
@@ -156,6 +156,32 @@ type utilities. Only the loop-driving model differs.
 | Reflection or intrinsic lookup behavior | `VectorMethodCache.cs` / `ScalarMethodCache.cs` | Eligibility checks and emitters must agree on which runtime methods exist. |
 | Cache observability or test reset | `GeneratedDelegates.cs` | Public live counts and internal clear hooks are centralized there. |
 
+
+### Text kernels are descriptor-aware
+
+String kernels resolve the full dtype descriptor. `S`, `U` and `StringDType`
+share `NPTypeCode.String`, but differ in element layout, width, ownership and NA rules.
+
+- `ILKernelGenerator.Text*` emits fixed-width text loops for comparisons, truth,
+  concatenation, repetition, search and transformations. Width-specialized chunks
+  and broadcast stages handle code units; Unicode properties and case mappings use
+  the CPython tables. NDIter supplies strides and masks; the rows form handles short
+  runs without a call per element.
+- `ILKernelGenerator.Text.VString` uses allocator-aware helpers over `T` cells.
+  Inline text can be processed inside the cell; longer text and NA cells follow the
+  descriptor's rules. Output strings belong to the destination's allocator, never
+  to an allocator referenced by a raw copied cell.
+- Text sorting/searching uses prefix keys and NumPy's ordering rules; text/number
+  casts use the shared format/parse machinery and descriptor-aware transfers.
+- `np.evaluate` compiles numerical expressions. A node over text inside an
+  expression (a comparison, a truth test, a `np.strings` function, a cast, a
+  concatenation, a `Where` with text branches, a reduction of text) runs over whole
+  arrays through the string kernels; a numeric result enters the fused numerical
+  pass, and a text result is read by the later text nodes or is the answer.
+
+See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md) for the
+implemented public surface, and [String operands and buffers](NDIter.md#string-operands-and-buffers)
+for the iterator contract.
 
 ## Source Inventory
 
@@ -774,8 +800,9 @@ care about: how many kernels this process has compiled.
    sizes - no managed allocations in the hot body.
 5. **Separate path selection from loop emission.** The house style is a
    dispatcher, then path-specific `Generate*` methods, then `Emit*Loop` helpers.
-6. **Handle all 15 dtypes,** or document the unsupported ones and give them a
-   clear fallback.
+6. **Handle NumSharp's dtypes where the operation applies.** Include string widths
+   and missing-value policies when resolving text operands. Unsupported combinations
+   need NumPy's refusal or a correct fallback, never a raw numeric loop over text cells.
 7. **Preserve view semantics.** Offset is already in the base pointer; strides
    must handle non-contiguous, negative, and broadcast cases.
 8. **Add NumPy-derived tests** - contiguous, strided, broadcast, empty/scalar,

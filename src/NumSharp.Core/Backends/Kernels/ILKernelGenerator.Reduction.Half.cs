@@ -40,11 +40,34 @@ namespace NumSharp.Backends.Kernels
         /// in FLOAT32 with the pairwise tree (blocksize 128, eight accumulators, split kept a
         /// multiple of 8). Returns the float32 stripe sum. Bit-for-bit identical to
         /// <c>np.add.reduce(float16)</c>. <paramref name="stride"/> is in ELEMENTS (may be negative).
-        /// The contiguous leaf maps NumPy's eight accumulators onto ONE <see cref="Vector256{Single}"/>
-        /// (lane k == r[k]); the strided leaf keeps the scalar eight-accumulator block.
+        /// A leaf maps NumPy's eight accumulators onto ONE <see cref="Vector256{Single}"/> (lane k == r[k]);
+        /// how its 8-element blocks are loaded depends on the stride: on AVX2 hosts a run of stride 1, -1 or 2
+        /// goes to <see cref="PairwiseFoldHalfRun"/> (vector loads, two-leaf nodes), any other stride to
+        /// <see cref="PairwiseFoldHalfStrided"/>.
         /// </summary>
+        /// <param name="a">Address of logical element 0.</param>
+        /// <param name="n">Element count (≥ 0; an empty fold returns <c>-0.0f</c>).</param>
+        /// <param name="stride">Distance between consecutive elements, in elements.</param>
+        /// <returns>The float32 pairwise sum.</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static unsafe float PairwiseFoldHalf(ushort* a, long n, long stride)
+        {
+            if (Avx2.IsSupported && (stride == 1 || stride == -1 || stride == 2))
+                return PairwiseFoldHalfRun(a, n, stride);
+            return PairwiseFoldHalfStrided(a, n, stride);
+        }
+
+        /// <summary>
+        /// <see cref="PairwiseFoldHalf"/> for any stride: the recursion and the -0.0-seeded base are NumPy's; a leaf's
+        /// eight float16 elements per block are read one by one (no wider load is safe for an arbitrary stride) and, on
+        /// AVX2 hosts, widened to float32 together — the scalar widen per element was ~5x slower.
+        /// </summary>
+        /// <param name="a">Address of logical element 0.</param>
+        /// <param name="n">Element count.</param>
+        /// <param name="stride">Distance between consecutive elements, in elements.</param>
+        /// <returns>The float32 pairwise sum.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe float PairwiseFoldHalfStrided(ushort* a, long n, long stride)
         {
             if (n < 8)
             {
@@ -54,15 +77,13 @@ namespace NumSharp.Backends.Kernels
             }
             if (n <= 128)
             {
-                if (stride == 1 && Avx2.IsSupported)
+                if (Avx2.IsSupported)
                 {
-                    var acc = LoadWiden8(a);
+                    var acc = GatherWiden8(a, stride);
                     long i = 8, end = n - (n % 8);
-                    for (; i + 16 <= end; i += 16) { acc = Avx.Add(acc, LoadWiden8(a + i)); acc = Avx.Add(acc, LoadWiden8(a + i + 8)); }
-                    for (; i < end; i += 8) acc = Avx.Add(acc, LoadWiden8(a + i));
-                    float res = ((acc.GetElement(0) + acc.GetElement(1)) + (acc.GetElement(2) + acc.GetElement(3)))
-                              + ((acc.GetElement(4) + acc.GetElement(5)) + (acc.GetElement(6) + acc.GetElement(7)));
-                    for (; i < n; i++) res += DirectILKernelGenerator.HalfToFloatScalarExact(a[i]);
+                    for (; i < end; i += 8) acc = Avx.Add(acc, GatherWiden8(a + i * stride, stride));
+                    float res = CombineHalfLeaf(acc);
+                    for (; i < n; i++) res += DirectILKernelGenerator.HalfToFloatScalarExact(a[i * stride]);
                     return res;
                 }
                 float r0 = HW(a, 0, stride), r1 = HW(a, 1, stride), r2 = HW(a, 2, stride), r3 = HW(a, 3, stride),
@@ -78,8 +99,116 @@ namespace NumSharp.Backends.Kernels
                 return sres;
             }
             long n2 = n / 2; n2 -= n2 % 8;
-            return PairwiseFoldHalf(a, n2, stride) + PairwiseFoldHalf(a + n2 * stride, n - n2, stride);
+            return PairwiseFoldHalfStrided(a, n2, stride) + PairwiseFoldHalfStrided(a + n2 * stride, n - n2, stride);
         }
+
+        /// <summary>
+        /// <see cref="PairwiseFoldHalf"/> for a run of stride 1, -1 or 2 (AVX2 hosts): each 8-element block is one vector
+        /// load (reversed: lanes reversed; stride 2: two loads, the even elements blended and shuffled into place —
+        /// never reading past the block's last element), and a node whose two halves are both leaves computes them in
+        /// one loop, two independent accumulator chains instead of one. Every accumulator still sums its elements in
+        /// NumPy's order, so the bits are <see cref="PairwiseFoldHalfStrided"/>'s.
+        /// </summary>
+        /// <param name="a">Address of logical element 0.</param>
+        /// <param name="n">Element count.</param>
+        /// <param name="step">1, -1 or 2.</param>
+        /// <returns>The float32 pairwise sum.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe float PairwiseFoldHalfRun(ushort* a, long n, long step)
+        {
+            if (n < 8)
+            {
+                float res = -0.0f;
+                for (long i = 0; i < n; i++) res += DirectILKernelGenerator.HalfToFloatScalarExact(a[i * step]);
+                return res;
+            }
+            if (n <= 128)
+            {
+                var acc = HalfBlock8(a, 0, step);
+                long i = 8, end = n - (n % 8);
+                for (; i < end; i += 8) acc = Avx.Add(acc, HalfBlock8(a, i, step));
+                float res = CombineHalfLeaf(acc);
+                for (; i < n; i++) res += DirectILKernelGenerator.HalfToFloatScalarExact(a[i * step]);
+                return res;
+            }
+            long n2 = n / 2; n2 -= n2 % 8;
+            long nr = n - n2;
+            ushort* b = a + n2 * step;
+            if (nr <= 128)
+            {
+                // Both halves are leaves (n2 ≤ nr, n2 ≥ 57): left (a, n2) — a multiple of 8, no tail — and right (b, nr),
+                // which has at most one more block (nr - n2 < 16) and its tail.
+                var x = HalfBlock8(a, 0, step);
+                var y = HalfBlock8(b, 0, step);
+                long i = 8;
+                for (; i < n2; i += 8) { x = Avx.Add(x, HalfBlock8(a, i, step)); y = Avx.Add(y, HalfBlock8(b, i, step)); }
+                long end = nr - (nr % 8);
+                for (; i < end; i += 8) y = Avx.Add(y, HalfBlock8(b, i, step));
+                float left = CombineHalfLeaf(x);
+                float right = CombineHalfLeaf(y);
+                for (; i < nr; i++) right += DirectILKernelGenerator.HalfToFloatScalarExact(b[i * step]);
+                return left + right;
+            }
+            return PairwiseFoldHalfRun(a, n2, step) + PairwiseFoldHalfRun(b, nr, step);
+        }
+
+        /// <summary>NumPy's leaf combine of the eight float32 accumulators: <c>((r0+r1)+(r2+r3)) + ((r4+r5)+(r6+r7))</c>.</summary>
+        /// <param name="acc">Lane k holds r[k].</param>
+        /// <returns>The leaf sum before its tail.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        private static float CombineHalfLeaf(Vector256<float> acc)
+            => ((acc.GetElement(0) + acc.GetElement(1)) + (acc.GetElement(2) + acc.GetElement(3)))
+             + ((acc.GetElement(4) + acc.GetElement(5)) + (acc.GetElement(6) + acc.GetElement(7)));
+
+        /// <summary>Word shuffle reversing eight float16 lanes (lane k ← lane 7-k).</summary>
+        private static readonly Vector128<byte> s_halfReverseWords = Vector128.Create((byte)14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
+
+        /// <summary>Word shuffle turning the stride-2 blend (p0, p8, p2, p10, p4, p12, p6, p14) into (p0, p2, …, p14).</summary>
+        private static readonly Vector128<byte> s_halfEvenWords = Vector128.Create((byte)0, 1, 4, 5, 8, 9, 12, 13, 2, 3, 6, 7, 10, 11, 14, 15);
+
+        /// <summary>
+        /// The 8-element block <c>[off, off + 8)</c> of a run of stride <paramref name="step"/> (1, -1 or 2), element
+        /// off + k in lane k, widened to float32 exactly (NumPy's npy_half_to_float, NaN payloads kept).
+        /// </summary>
+        /// <param name="leaf">The run's element 0.</param>
+        /// <param name="off">The block's first element index.</param>
+        /// <param name="step">1, -1 or 2 (the branch is loop-invariant and perfectly predicted).</param>
+        /// <returns>The widened block.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        private static unsafe Vector256<float> HalfBlock8(ushort* leaf, long off, long step)
+        {
+            if (step == 1)
+                return LoadWiden8(leaf + off);
+            if (step == -1)
+            {
+                // elements off .. off+7 sit at leaf-off-7 .. leaf-off: one load from the lowest address, words reversed.
+                var v = Sse2.LoadVector128(leaf - off - 7);
+                return WidenBits8(Ssse3.Shuffle(v.AsByte(), s_halfReverseWords).AsUInt16());
+            }
+            // step == 2: elements are p[0], p[2], …, p[14] with p = leaf + 2·off. Load p[0..8) and p[7..15) — the last
+            // word read is p[14], the block's own last element — take the odd words of the second, then reorder.
+            ushort* p = leaf + 2 * off;
+            var blend = Sse41.Blend(Sse2.LoadVector128(p), Sse2.LoadVector128(p + 7), 0b1010_1010);
+            return WidenBits8(Ssse3.Shuffle(blend.AsByte(), s_halfEvenWords).AsUInt16());
+        }
+
+        /// <summary>
+        /// Eight float16 elements at <c>p, p + s, …, p + 7s</c>, read one by one into a vector and widened to float32
+        /// together — the arbitrary-stride leaf's block.
+        /// </summary>
+        /// <param name="p">The block's first element.</param>
+        /// <param name="s">The element stride.</param>
+        /// <returns>The widened block.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        private static unsafe Vector256<float> GatherWiden8(ushort* p, long s)
+            => WidenBits8(Vector128.Create(p[0], p[s], p[2 * s], p[3 * s], p[4 * s], p[5 * s], p[6 * s], p[7 * s]));
+
+        /// <summary>Widens eight float16 bit patterns to float32 exactly (zero-extend, then NumPy's widen).</summary>
+        /// <param name="h">The bit patterns.</param>
+        /// <returns>The float32 values.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        private static Vector256<float> WidenBits8(Vector128<ushort> h)
+            => DirectILKernelGenerator.HalfBitsToFloatExact(Avx2.ConvertToVector256Int32(h));
 
         [MethodImpl(OptimizeAndInline)]
         private static unsafe Vector256<float> LoadWiden8(ushort* p)

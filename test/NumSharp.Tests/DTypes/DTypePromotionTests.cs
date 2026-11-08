@@ -153,8 +153,11 @@ namespace NumSharp.Tests.DTypes
             np.promote_types(np.dtype("char"), np.dtype("f2")).Should().BeSameAs(DType.Single, "Char ranks as uint16");
             Action td = () => np.promote_types(np.dtype("m8[s]"), np.dtype("decimal"));
             td.Should().Throw<DTypePromotionError>().WithMessage("The DTypes <class 'numpy.dtypes.TimeDelta64DType'> and <class 'numsharp.dtypes.DecimalDType'> do not have a common DType.*");
-            Action str = () => np.promote_types(np.dtype("i4"), np.dtype("String"));
-            str.Should().Throw<DTypePromotionError>();
+            // Text absorbs every numeric class at the width of its longest text (probed 2.4.2).
+            np.promote_types(np.dtype("i4"), np.dtype("U")).ToString(true).Should().Be("dtype('<U11')");
+            np.promote_types(np.dtype("u1"), np.dtype("S")).ToString(true).Should().Be("dtype('S3')");
+            np.promote_types(np.dtype("U3"), np.dtype("S5")).ToString(true).Should().Be("dtype('<U5')");
+            np.promote_types(np.dtype("U3"), np.dtype("decimal")).ToString(true).Should().Be("dtype('<U32')", "text absorbs NumSharp's decimal like a float");
         }
 
         // ---- result_type: NEP 50 weak literals ------------------------------------------------------------------------
@@ -316,8 +319,8 @@ namespace NumSharp.Tests.DTypes
             Action act = () => DTypePromotion.CommonDType(np.dtypes.DateTime64DType, np.dtypes.Float64DType);
             act.Should().Throw<DTypePromotionError>();
             // NotImplemented in both directions is null at the slot level
-            np.dtypes.Int32DType.CommonDType(np.dtypes.DateTime64DType).Should().BeNull("the class with the larger type number answers");
-            np.dtypes.DateTime64DType.CommonDType(np.dtypes.Int32DType).Should().BeNull();
+            np.dtypes.Int32DType.common_dtype(np.dtypes.DateTime64DType).Should().BeNull("the class with the larger type number answers");
+            np.dtypes.DateTime64DType.common_dtype(np.dtypes.Int32DType).Should().BeNull();
         }
 
         [TestMethod]
@@ -333,6 +336,80 @@ namespace NumSharp.Tests.DTypes
             empty.Should().Throw<ValueError>();
         }
 
+        /// <summary>
+        ///     A LONE literal skips promotion in NumPy and answers the dtype of <c>np.asarray(literal)</c>, which reads a
+        ///     Python int by value: <c>np.result_type(2**63)</c> and <c>np.result_type(2**64 - 1)</c> are uint64, a smaller int
+        ///     int64, a float float64, a complex complex128. Among other operands the literal is weak and its value never
+        ///     matters (<c>np.result_type(np.uint8, 2**63)</c> is uint8; two big ints meet in the abstract class, int64).
+        ///     All probed against 2.4.2. C# literals bind <c>np.result_type</c>'s NDArray overloads, so the object form is
+        ///     spelled with an explicit <c>object[]</c> here.
+        /// </summary>
+        [TestMethod]
+        public void ResultType_LoneLiteral_IsDiscoveredByValue()
+        {
+            np.result_type(new object[] { 9223372036854775808UL }).Should().BeSameAs(DType.UInt64);
+            np.result_type(new object[] { ulong.MaxValue }).Should().BeSameAs(DType.UInt64);
+            np.result_type(new object[] { (ulong)long.MaxValue }).Should().BeSameAs(DType.Int64);
+            np.result_type(new object[] { -1L }).Should().BeSameAs(DType.Int64);
+            np.result_type(new object[] { 1 }).Should().BeSameAs(DType.Int64, "a C# int is a Python int, whose array is intp");
+            np.result_type(new object[] { 1.5 }).Should().BeSameAs(DType.Double);
+            np.result_type(new object[] { 1.5f }).Should().BeSameAs(DType.Double, "a C# float is a Python float");
+            np.result_type(new object[] { new Complex(0, 1) }).Should().BeSameAs(DType.Complex);
+            np.result_type(new object[] { DType.Byte, 9223372036854775808UL }).Should().BeSameAs(DType.Byte);
+            np.result_type(new object[] { 9223372036854775808UL, 9223372036854775808UL }).Should().BeSameAs(DType.Int64);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.promote_types</c> converts both arguments with <c>PyArray_DescrConverter2</c>, which turns None
+        ///     into no descriptor, and refuses that with "did not understand one of the types" — None is not float64
+        ///     there. Every empty <c>np.result_type</c> spelling is NumPy's ValueError.
+        /// </summary>
+        [TestMethod]
+        public void PromoteTypes_None_And_EmptyResultType_AreNumPysErrors()
+        {
+            new Action(() => np.promote_types((DType)null, DType.Int32)).Should().Throw<TypeError>()
+                .WithMessage("did not understand one of the types");
+            new Action(() => np.promote_types(DType.Int32, (DType)null)).Should().Throw<TypeError>()
+                .WithMessage("did not understand one of the types");
+            const string Empty = "at least one array or dtype is required";
+            new Action(() => np.result_type(Array.Empty<object>())).Should().Throw<ValueError>().WithMessage(Empty);
+            new Action(() => np.result_type(Array.Empty<DType>())).Should().Throw<ValueError>().WithMessage(Empty);
+            new Action(() => np.result_type(Array.Empty<NPTypeCode>())).Should().Throw<ValueError>().WithMessage(Empty);
+            new Action(() => np.result_type(Array.Empty<NDArray>())).Should().Throw<ValueError>().WithMessage(Empty);
+            new Action(() => np.result_type(Array.Empty<string>())).Should().Throw<ValueError>().WithMessage(Empty);
+        }
+
+        /// <summary>
+        ///     <c>np.result_type</c> converts an operand that is neither an array nor a scalar with
+        ///     <c>PyArray_DescrConverter</c>, whose None is the default float64 descriptor — a STRONG operand, so it wins
+        ///     over narrower floats and weak literals alike. Probed against 2.4.2: <c>result_type(None)</c>,
+        ///     <c>(None, 1)</c>, <c>(None, 1.5)</c>, <c>(None, np.float32)</c>, <c>(None, np.float16)</c>,
+        ///     <c>(int8_array, None)</c> and <c>(None, None)</c> are float64; <c>(None, np.complex128)</c> is complex128;
+        ///     <c>(None, 'M8[s]')</c> raises the DTypePromotionError naming Float64DType first.
+        /// </summary>
+        [TestMethod]
+        public void ResultType_NullOperand_IsNumPysNone_StrongFloat64()
+        {
+            np.result_type((DType)null).Should().BeSameAs(DType.Double);
+            np.result_type((DType)null, DType.SByte).Should().BeSameAs(DType.Double);
+            np.result_type((DType)null, DType.Single).Should().BeSameAs(DType.Double);
+            np.result_type((DType)null, DType.Half).Should().BeSameAs(DType.Double);
+            np.result_type((DType)null, DType.Complex).Should().BeSameAs(DType.Complex);
+            np.result_type((DType)null, (DType)null).Should().BeSameAs(DType.Double);
+            np.result_type(new object[] { null, 1 }).Should().BeSameAs(DType.Double, "None is strong, the weak int adds nothing");
+            np.result_type(new object[] { null, 1.5 }).Should().BeSameAs(DType.Double);
+            np.result_type((string)null, "i1").Should().BeSameAs(DType.Double);
+            np.result_type((Type)null, typeof(sbyte)).Should().BeSameAs(DType.Double);
+
+            var a8 = np.array(new sbyte[] { 1, 2 });
+            np.result_type(a8, (NDArray)null).Should().BeSameAs(DType.Double);
+            np.result_type((NDArray)null).Should().BeSameAs(DType.Double);
+            np.result_type(a8, (NDArray)null, a8).Should().BeSameAs(DType.Double);
+
+            new Action(() => np.result_type((DType)null, np.dtype("M8[s]"))).Should().Throw<DTypePromotionError>()
+                .WithMessage("The DType <class 'numpy.dtypes.Float64DType'> could not be promoted by <class 'numpy.dtypes.DateTime64DType'>.*");
+        }
+
         [TestMethod]
         public void CastDescrToDType_AdaptsInstances()
         {
@@ -340,8 +417,10 @@ namespace NumSharp.Tests.DTypes
             DTypePromotion.CastDescrToDType(np.dtype("i4"), np.dtypes.TimeDelta64DType).str.Should().Be("<m8", "an integer lands on the generic unit");
             DTypePromotion.CastDescrToDType(np.dtype("M8[ns]"), np.dtypes.DateTime64DType).str.Should().Be("<M8[ns]");
             DTypePromotion.CastDescrToDType(np.dtype("i4"), np.dtypes.Float64DType).Should().BeSameAs(DType.Double, "a non-parametric target is always its default");
-            Action act = () => DTypePromotion.CastDescrToDType(np.dtype("i4"), DTypeRegistry.Str);
-            act.Should().Throw<TypeError>().WithMessage("cannot cast dtype int32 to <class 'numpy.dtypes.StrDType'>.");
+            // A number cast to the text class discovers the width of its longest text (int32: 11, float64: 32).
+            DTypePromotion.CastDescrToDType(np.dtype("i4"), DTypeRegistry.Str).str.Should().Be("<U11");
+            DTypePromotion.CastDescrToDType(np.dtype("f8"), DTypeRegistry.Bytes).str.Should().Be("|S32");
+            DTypePromotion.CastDescrToDType(np.dtype("S3"), DTypeRegistry.Str).str.Should().Be("<U3", "bytes to str keeps the character count");
             DTypePromotion.CastToDTypeAndPromoteDescriptors(new[] { np.dtype("m8[s]"), np.dtype("m8[ms]"), np.dtype("M8[us]") }, np.dtypes.DateTime64DType).str.Should().Be("<M8[us]");
         }
     }

@@ -7,11 +7,15 @@ using System.Threading;
 // =============================================================================
 //
 // RESPONSIBILITY:
-//   np.nonzero shares the per-dtype count + flat-scan IL kernels with np.argwhere
+//   np.nonzero and np.argwhere share the per-dtype count + flat-scan IL kernels
 //   (ArgwhereCountKernel, ArgwhereFlatKernel) — the only piece that differs is the
-//   "expand flat → coords" stage:
-//     * argwhere writes a row-major (count, ndim) matrix
-//     * nonzero writes ndim separate (count,) column arrays
+//   "expand flat → coords" stage, because NumPy lays their buffers out differently:
+//     * nonzero writes ONE row-major (count, ndim) multi-index matrix and returns its
+//       columns (PyArray_Nonzero) — the ArgwhereExpandKernel row expand;
+//     * argwhere is transpose(nonzero(a)): the ndim index arrays stacked into a fresh
+//       (ndim, count) C-order array, row d = coordinate d — this file's kernel, with
+//       outCols[d] = the d-th row. The flat indices may live in one of those rows: the
+//       kernel reads flat[i] before it writes column i of any row.
 //
 //   This file emits the column-layout expand kernel:
 //

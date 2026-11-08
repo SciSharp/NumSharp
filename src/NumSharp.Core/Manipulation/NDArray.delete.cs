@@ -14,6 +14,7 @@ namespace NumSharp
         ///     Negative indices are normalised; duplicates are silently collapsed.</param>
         /// <returns>A new 1-D array with the selected elements removed.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.delete.html</remarks>
+        [PlainReceiver]
         public NDArray delete(IEnumerable indices)
         {
             var list = new List<long>();

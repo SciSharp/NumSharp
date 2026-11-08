@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 
 namespace NumSharp.Tests.Indexing;
@@ -128,6 +129,99 @@ public class ChooseTests
             new NDArray[] { np.array(new sbyte[] { 1, 2 }), np.array(new sbyte[] { 3, 4 }) });
         r.GetTypeCode.Should().Be(NPTypeCode.SByte);
         r.ToArray<sbyte>().Should().Equal(1, 4);
+    }
+
+    // ---- the common dtype of three or more choices (parity QA-07) -------------
+
+    /// <summary>
+    ///     NumPy's <c>PyArray_ConvertToCommonType</c> runs ONE <c>PyArray_ResultType</c> over every choice, and NEP 50's
+    ///     promotion is not associative: these are the ten triples of NumPy's 13 dtypes where a left-to-right pairwise fold
+    ///     answers differently (<c>[int16, uint16, float16]</c> folds to float64), each with NumPy 2.4.2's
+    ///     <c>np.choose([0, 1, 2], …)</c> dtype; the values <c>[1, 2, 3]</c> come through.
+    /// </summary>
+    [TestMethod]
+    public void Choose_Dtype_ThreeChoices_IsNumPysResultType()
+    {
+        (NPTypeCode a, NPTypeCode b, NPTypeCode c, NPTypeCode numpy)[] cases =
+        {
+            (NPTypeCode.Byte, NPTypeCode.SByte, NPTypeCode.Half, NPTypeCode.Half),
+            (NPTypeCode.SByte, NPTypeCode.Byte, NPTypeCode.Half, NPTypeCode.Half),
+            (NPTypeCode.SByte, NPTypeCode.UInt16, NPTypeCode.Half, NPTypeCode.Single),
+            (NPTypeCode.SByte, NPTypeCode.UInt16, NPTypeCode.Single, NPTypeCode.Single),
+            (NPTypeCode.Int16, NPTypeCode.UInt16, NPTypeCode.Half, NPTypeCode.Single),
+            (NPTypeCode.Int16, NPTypeCode.UInt16, NPTypeCode.Single, NPTypeCode.Single),
+            (NPTypeCode.UInt16, NPTypeCode.SByte, NPTypeCode.Half, NPTypeCode.Single),
+            (NPTypeCode.UInt16, NPTypeCode.SByte, NPTypeCode.Single, NPTypeCode.Single),
+            (NPTypeCode.UInt16, NPTypeCode.Int16, NPTypeCode.Half, NPTypeCode.Single),
+            (NPTypeCode.UInt16, NPTypeCode.Int16, NPTypeCode.Single, NPTypeCode.Single),
+        };
+        using var index = np.array(new long[] { 0, 1, 2 });
+        foreach (var (a, b, c, numpy) in cases)
+        {
+            using var x = np.array(new long[] { 1, 2, 3 }).astype(a);
+            using var y = np.array(new long[] { 1, 2, 3 }).astype(b);
+            using var z = np.array(new long[] { 1, 2, 3 }).astype(c);
+            using var r = np.choose(index, new NDArray[] { x, y, z });
+            r.GetTypeCode.Should().Be(numpy, $"np.choose over [{a}, {b}, {c}]");
+            r.astype(NPTypeCode.Double).ToArray<double>().Should().Equal(1.0, 2.0, 3.0);
+        }
+    }
+
+    /// <summary>
+    ///     The common dtype does not depend on the choices' ORDER: every permutation of <c>[int16, uint16, float16]</c> is
+    ///     float32 and of <c>[uint8, int8, float16]</c> float16 (NumPy 2.4.2), where the pairwise fold gave float64 /
+    ///     float32 for some orders and float32 / float16 for others.
+    /// </summary>
+    [TestMethod]
+    public void Choose_Dtype_EveryOrderOfTheChoices_GivesOneDtype()
+    {
+        var lists = new (NPTypeCode[] dtypes, NPTypeCode numpy)[]
+        {
+            (new[] { NPTypeCode.Int16, NPTypeCode.UInt16, NPTypeCode.Half }, NPTypeCode.Single),
+            (new[] { NPTypeCode.Byte, NPTypeCode.SByte, NPTypeCode.Half }, NPTypeCode.Half),
+        };
+        int[][] permutations = { new[] { 0, 1, 2 }, new[] { 0, 2, 1 }, new[] { 1, 0, 2 }, new[] { 1, 2, 0 }, new[] { 2, 0, 1 }, new[] { 2, 1, 0 } };
+        using var index = np.array(new long[] { 2, 0, 1 });
+        foreach (var (dtypes, numpy) in lists)
+            foreach (var p in permutations)
+            {
+                var choices = p.Select(k => np.array(new long[] { 10 * k, 10 * k + 1, 10 * k + 2 }).astype(dtypes[k])).ToArray();
+                using var r = np.choose(index, choices);
+                r.GetTypeCode.Should().Be(numpy, $"order {string.Join(",", p.Select(k => dtypes[k]))}");
+                foreach (var ch in choices)
+                    ch.Dispose();
+            }
+    }
+
+    /// <summary>
+    ///     NumSharp's dtypes without a NumPy counterpart keep the pairwise table's rules inside the sequence: a char choice
+    ///     promotes as uint16 (<c>[int8, float16, char]</c> is float32, uint16's NumPy answer, not the float64 a char ranked
+    ///     by its own type number would give) and stays char at its own width (<c>[char, bool, uint8]</c>); decimal wins
+    ///     over every other real dtype and complex128 over decimal.
+    /// </summary>
+    [TestMethod]
+    public void Choose_Dtype_CharDecimalAndComplex_KeepTheirRules()
+    {
+        using var index = np.array(new long[] { 0, 1, 2 });
+        using var i8 = np.array(new sbyte[] { 1, 2, 3 });
+        using var f16 = np.array(new long[] { 1, 2, 3 }).astype(NPTypeCode.Half);
+        using var ch = np.array(new[] { 'a', 'b', 'c' });
+        using var b = np.array(new[] { true, false, true });
+        using var u8 = np.array(new byte[] { 1, 2, 3 });
+        using var i16 = np.array(new short[] { 1, 2, 3 });
+        using var u16 = np.array(new ushort[] { 1, 2, 3 });
+        using var dec = np.array(new[] { 1m, 2m, 3m });
+        using var c128 = np.array(new[] { new Complex(1, 1), new Complex(2, 2), new Complex(3, 3) });
+
+        using var charAsUInt16 = np.choose(index, new NDArray[] { i8, f16, ch });
+        using var charOwnWidth = np.choose(index, new NDArray[] { ch, b, u8 });
+        using var decimalWins = np.choose(index, new NDArray[] { i16, u16, dec });
+        using var complexWins = np.choose(index, new NDArray[] { dec, c128, i8 });
+
+        charAsUInt16.GetTypeCode.Should().Be(NPTypeCode.Single);
+        charOwnWidth.GetTypeCode.Should().Be(NPTypeCode.Char);
+        decimalWins.GetTypeCode.Should().Be(NPTypeCode.Decimal);
+        complexWins.GetTypeCode.Should().Be(NPTypeCode.Complex);
     }
 
     // ---- broadcasting --------------------------------------------------------
@@ -375,4 +469,103 @@ public class ChooseTests
         Action act = () => np.choose(np.array(0), np.array(5));
         act.Should().Throw<TypeError>().WithMessage("iteration over a 0-d array");
     }
+
+    // ---- lifetime: the [NDScoped] overloads release every intermediate ----------
+
+    /// <summary>
+    ///     A choice that needs a dtype cast and an <c>out=</c> destination each make a pooled temporary: the cast
+    ///     copy of the int32 choice, and the computed result that is then copied into <c>out</c>. Before the
+    ///     <c>choose</c> overloads carried <c>[NDScoped]</c>, only the int64 index copy was released by hand and
+    ///     both of these went to the finalizer. Now every buffer the call takes comes back before it returns.
+    ///     Measured in an exact pool window (re-run when a collection lands in it). NumPy 2.4.2:
+    ///     <c>np.choose([0, 1, 1, 0], [[1., 2., 3., 4.], np.array([10, 20, 30, 40], int32)], out=o)</c>
+    ///     returns <c>o</c> holding <c>[1., 20., 30., 4.]</c>.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize] // reads the process-wide pool counters
+    public void Choose_CastChoiceAndOut_ReleaseEveryIntermediate()
+    {
+        const int n = 4096; // large enough that the cast and the result come from the bucketed pool
+        var idx = np.array(Enumerable.Range(0, n).Select(i => (long)((i >> 1) & 1)).ToArray());
+        var c0 = np.arange(n).astype(np.float64);
+        var c1 = np.arange(n).astype(np.int32) * 10;
+        var o = np.zeros(new Shape(n), np.float64);
+        np.choose(idx, new[] { c0, c1 }, @out: o); // warm-up: kernels and pool buckets exist before the window
+
+        long acquired = 0, released = 0;
+        bool exact = false;
+        for (int attempt = 0; attempt < 5 && !exact; attempt++)
+        {
+            GcQuiescence.CollectYoung();
+            var window = GcQuiescence.OpenWindow();
+            long a0 = Acquisitions, r0 = Releases;
+            var r = np.choose(idx, new[] { c0, c1 }, @out: o);
+            acquired = Acquisitions - a0;
+            released = Releases - r0;
+            exact = GcQuiescence.Undisturbed(window);
+            ReferenceEquals(r, o).Should().BeTrue("out= returns the destination itself");
+        }
+
+        Assert.IsTrue(acquired >= 2, "the cast choice and the computed result must come from the pool, or the window measures nothing");
+        if (exact)
+            Assert.AreEqual(acquired, released, "every buffer choose takes is released before it returns");
+        else
+            Assert.IsTrue(released >= acquired, "every buffer choose takes is released before it returns");
+        o.GetDouble(0).Should().Be(0.0);
+        o.GetDouble(2).Should().Be(20.0);
+        o.GetDouble(5).Should().Be(5.0);
+        o.GetDouble(6).Should().Be(60.0);
+        LeakGuards.StillUsable(c1);
+        LeakGuards.StillUsable(idx);
+    }
+
+    /// <summary>
+    ///     The plain return path of the same call keeps exactly one buffer — the result — and releases the cast.
+    ///     NumPy 2.4.2: <c>np.choose([0, 1, 1, 0], [[1., 2., 3., 4.], np.array([10, 20, 30, 40], int32)])</c> →
+    ///     <c>[1., 20., 30., 4.]</c>, float64.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize] // reads the process-wide pool counters
+    public void Choose_CastChoice_KeepsOnlyTheResult()
+    {
+        const int n = 4096;
+        var idx = np.array(Enumerable.Range(0, n).Select(i => (long)((i >> 1) & 1)).ToArray());
+        var c0 = np.arange(n).astype(np.float64);
+        var c1 = np.arange(n).astype(np.int32) * 10;
+        np.choose(idx, new[] { c0, c1 }).Dispose(); // warm-up
+
+        long acquired = 0, released = 0;
+        bool exact = false;
+        NDArray r = null;
+        for (int attempt = 0; attempt < 5 && !exact; attempt++)
+        {
+            r?.Dispose();
+            GcQuiescence.CollectYoung();
+            var window = GcQuiescence.OpenWindow();
+            long a0 = Acquisitions, r0 = Releases;
+            r = np.choose(idx, new[] { c0, c1 });
+            acquired = Acquisitions - a0;
+            released = Releases - r0;
+            exact = GcQuiescence.Undisturbed(window);
+        }
+
+        Assert.IsTrue(acquired >= 2, "the cast choice and the result must come from the pool");
+        if (exact)
+            Assert.AreEqual(acquired - 1, released, "only the returned result keeps its buffer");
+        else
+            Assert.IsTrue(released >= acquired - 1, "only the returned result keeps its buffer");
+        r.GetTypeCode.Should().Be(NPTypeCode.Double);
+        r.GetDouble(2).Should().Be(20.0);
+        r.GetDouble(5).Should().Be(5.0);
+        LeakGuards.StillUsable(r);
+    }
+
+    /// <summary>Pooled buffers handed out so far (process-wide).</summary>
+    private static long Acquisitions => NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.Hits
+                                        + NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.Misses
+                                        + NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.ZeroedAllocs;
+
+    /// <summary>Pooled buffers given back so far (process-wide).</summary>
+    private static long Releases => NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.Returns
+                                    + NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool.ReturnsFreed;
 }

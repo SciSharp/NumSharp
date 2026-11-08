@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace NumSharp
 {
@@ -21,20 +20,24 @@ namespace NumSharp
         ///         <item>'ENSUREARRAY' / 'E' — ensure a base array instead of a subclass (no-op in NumSharp: no ndarray subclasses)</item>
         ///     </list>
         /// </param>
-        /// <returns>Array with the specified requirements and dtype if given. A copy is made only when needed.</returns>
+        /// <returns>Array with the specified requirements and dtype if given. A copy is made only when needed.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <param name="like">Reference array for NumPy's array-function dispatch — accepted for signature parity but has no observable effect in NumSharp (no array-subclass dispatch).</param>
         /// <exception cref="ValueError">If both 'C' and 'F' order are requested, or a requirement string is not understood.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>
         ///     Port of NumPy 2.x <c>numpy.require</c>. With no requirements this is exactly
         ///     <c>asanyarray(a, dtype)</c>. Otherwise it resolves an order ('A' by default, or 'C'/'F' when
         ///     requested), routes through <see cref="asarray(NDArray, DType, char, bool?, NDArray, string)"/>,
         ///     then makes a single copy (in the resolved order) if any of the remaining ALIGNED / WRITEABLE /
-        ///     OWNDATA flags is not already satisfied. ALIGNED is always satisfied in NumSharp (managed
-        ///     allocations), so only WRITEABLE (false for broadcast views) and OWNDATA (false for views)
-        ///     can force a copy. 'ENSUREARRAY' is accepted and stripped but has no effect — NumSharp has no
-        ///     ndarray subclasses to demote.
+        ///     OWNDATA flags is not already satisfied: ALIGNED (false after <c>setflags(align=False)</c> or over
+        ///     a caller's buffer at a misaligning byte offset), WRITEABLE (false for broadcast views) and
+        ///     OWNDATA (false for views). 'ENSUREARRAY' is accepted and stripped but has no effect — NumSharp has
+        ///     no ndarray subclasses to demote.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.require.html
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray require(NDArray a, DType dtype = null, string[] requirements = null, NDArray like = null)
         {
             if (a is null)
@@ -44,36 +47,9 @@ namespace NumSharp
             // dispatch, so it is accepted for signature parity but never read.
             _ = like;
 
-            // `not requirements` in NumPy is true for None AND an empty sequence.
-            if (requirements == null || requirements.Length == 0)
-                return asanyarray(a, dtype);
-
-            var reqs = new HashSet<char>();
-            foreach (var r in requirements)
-                reqs.Add(CanonicalizeRequirement(r));
-
-            // 'E' (ENSUREARRAY) demotes subclasses to base ndarray. NumSharp has none, so strip and ignore.
-            reqs.Remove('E');
-
-            bool wantC = reqs.Contains('C');
-            bool wantF = reqs.Contains('F');
-            if (wantC && wantF)
-                throw new ValueError("Cannot specify both \"C\" and \"F\" order");
-
-            char order = 'A';
-            if (wantF) { order = 'F'; reqs.Remove('F'); }
-            else if (wantC) { order = 'C'; reqs.Remove('C'); }
-
-            var arr = asarray(a, dtype, order);
-
-            // Remaining flags can only be A / W / O. NumPy copies (in `order`) on the first unsatisfied
-            // one; a copy owns its data, is writeable and aligned, so it satisfies all of them at once.
-            foreach (var prop in reqs)
-            {
-                if (!RequirementSatisfied(arr, prop))
-                    return arr.copy(order);
-            }
-            return arr;
+            // NumPy's statements (asanyarray for no requirement, else the names, the order, asarray and at most one copy)
+            // are the array object's.
+            return NDArray.require(a, dtype, requirements);
         }
 
         /// <summary>
@@ -83,11 +59,24 @@ namespace NumSharp
         ///     one token — its '_' is unrecognized and raises. Pass a single-element array
         ///     (<c>new[]{ "F_CONTIGUOUS" }</c>) to use the full alias.
         /// </summary>
+        /// <param name="a">The array to convert.</param>
+        /// <param name="dtype">The required data-type, or null to keep <paramref name="a"/>'s.</param>
+        /// <param name="requirements">The flag letters, one per character (case-insensitive); null or empty for none.</param>
+        /// <returns>Array with the requirements and dtype (see the list overload); a copy only when needed.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError">A character that is no flag letter, or both C and F.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.require.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.
+        /// </remarks>
         public static NDArray require(NDArray a, DType dtype, string requirements)
             => require(a, dtype, ToCharTokens(requirements));
 
         /// <summary>Splits a requirements string into one-character tokens (NumPy iterates a string by char).</summary>
+        /// <param name="requirements">The string, or null.</param>
+        /// <returns>One single-character token per character (a new array), or null for null (no requirement).</returns>
         private static string[] ToCharTokens(string requirements)
         {
             if (requirements == null)
@@ -97,59 +86,6 @@ namespace NumSharp
             for (int i = 0; i < requirements.Length; i++)
                 tokens[i] = requirements[i].ToString();
             return tokens;
-        }
-
-        /// <summary>
-        ///     Maps a requirement token to its canonical flag letter (C/F/A/W/O/E), matching NumPy's
-        ///     <c>POSSIBLE_FLAGS</c> alias table. Unknown tokens raise (NumPy raises KeyError here).
-        /// </summary>
-        private static char CanonicalizeRequirement(string requirement)
-        {
-            switch (requirement?.ToUpperInvariant())
-            {
-                case "C":
-                case "C_CONTIGUOUS":
-                case "CONTIGUOUS":
-                    return 'C';
-                case "F":
-                case "F_CONTIGUOUS":
-                case "FORTRAN":
-                    return 'F';
-                case "A":
-                case "ALIGNED":
-                    return 'A';
-                case "W":
-                case "WRITEABLE":
-                    return 'W';
-                case "O":
-                case "OWNDATA":
-                    return 'O';
-                case "E":
-                case "ENSUREARRAY":
-                    return 'E';
-                default:
-                    throw new ValueError($"Cannot understand requirement '{requirement}'");
-            }
-        }
-
-        /// <summary>
-        ///     Whether <paramref name="arr"/> already satisfies a single ALIGNED / WRITEABLE / OWNDATA flag.
-        ///     ALIGNED is always true for NumSharp's managed allocations; WRITEABLE is false for broadcast
-        ///     views; OWNDATA is false for any view (slice / reshape / transpose / broadcast).
-        /// </summary>
-        private static bool RequirementSatisfied(NDArray arr, char flag)
-        {
-            switch (flag)
-            {
-                case 'A':
-                    return true; // ALIGNED — always satisfied in NumSharp
-                case 'W':
-                    return arr.Shape.IsWriteable;
-                case 'O':
-                    return arr.Storage.OwnsData; // false for views AND externally-based arrays (memmaps)
-                default:
-                    return true;
-            }
         }
     }
 }

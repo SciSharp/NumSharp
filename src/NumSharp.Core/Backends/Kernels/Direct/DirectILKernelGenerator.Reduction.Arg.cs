@@ -12,7 +12,8 @@ using System.Runtime.Intrinsics;
 //
 // RESPONSIBILITY:
 //   - ArgMax/ArgMin reduction with SIMD index tracking
-//   - Two-pass algorithm: find extreme value with SIMD, then find index
+//   - Integer 8/16/32-bit lanes: two-pass (find extreme value with SIMD, then its index);
+//     64-bit lanes and floats: NumPy's single-pass SIMD tournament (argfunc.dispatch.c.src)
 //   - EmitArgMaxMinSimdLoop() - IL emission
 //   - ArgMaxSimdHelper<T>(), ArgMinSimdHelper<T>() - SIMD helpers
 //
@@ -86,6 +87,18 @@ namespace NumSharp.Backends.Kernels
         [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe long ArgMaxSimdHelper<T>(void* input, long totalSize) where T : unmanaged, IComparable<T>
         {
+            // 64-bit lanes take NumPy's single-pass tournament (see ArgMaxInt64Tournament): Vector256.Max<long>/<ulong>
+            // below would be emulated. Only where 256-bit SIMD is accelerated — elsewhere (ARM64) the tournament would
+            // run its scalar loop, while the Vector128 two-pass path below still vectorizes. Every test here folds per
+            // instantiation at JIT time, so other widths and hosts see no branch.
+            if (Vector256.IsHardwareAccelerated)
+            {
+                if (typeof(T) == typeof(long))
+                    return ArgMaxInt64Tournament((long*)input, totalSize);
+                if (typeof(T) == typeof(ulong))
+                    return ArgMaxInt64Tournament((ulong*)input, totalSize);
+            }
+
             if (totalSize == 0)
                 return -1;
 
@@ -219,6 +232,18 @@ namespace NumSharp.Backends.Kernels
         [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static unsafe long ArgMinSimdHelper<T>(void* input, long totalSize) where T : unmanaged, IComparable<T>
         {
+            // 64-bit lanes take NumPy's single-pass tournament (see ArgMinInt64Tournament): Vector256.Min<long>/<ulong>
+            // below would be emulated. Only where 256-bit SIMD is accelerated — elsewhere (ARM64) the tournament would
+            // run its scalar loop, while the Vector128 two-pass path below still vectorizes. Every test here folds per
+            // instantiation at JIT time, so other widths and hosts see no branch.
+            if (Vector256.IsHardwareAccelerated)
+            {
+                if (typeof(T) == typeof(long))
+                    return ArgMinInt64Tournament((long*)input, totalSize);
+                if (typeof(T) == typeof(ulong))
+                    return ArgMinInt64Tournament((ulong*)input, totalSize);
+            }
+
             if (totalSize == 0)
                 return -1;
 
@@ -757,6 +782,184 @@ namespace NumSharp.Backends.Kernels
                 double v = ip[i];
                 if (v < best || (double.IsNaN(v) && !double.IsNaN(best))) { best = v; bestIdx = i; }
             }
+            return bestIdx;
+        }
+
+        // -----------------------------------------------------------------
+        // SIMD 64-bit integer ArgMax/ArgMin — the port of NumPy's
+        // simd_argmax_{s64,u64} (argfunc.dispatch.c.src): the SAME single-pass
+        // 4×-unrolled tournament as the float helpers above, minus the NaN exits
+        // (integers have none). ArgMaxSimdHelper<long>/<ulong> route here instead
+        // of the generic two-pass sweep (a Vector256.Max pass for the extreme
+        // value, then a Vector256.Equals scan for its first index), because
+        // Vector256.Max<long>/<ulong> have no AVX2 instruction — the two-pass
+        // body was the slowest part of every int64/uint64 argmax: 2.0–2.6×
+        // slower than this tournament at 1K–100K elements wherever the maximum
+        // sits, 1.0–2.2× at 4M (pinned A/B), and an axis argmax's int64 rows ran
+        // 0.61–0.64× NumPy on it.
+        //
+        // 32-bit (and 8/16-bit) lanes KEEP the two-pass helper, on measurement:
+        // there Vector256.Max is one native instruction, and a 32-bit tournament
+        // was implemented and measured SLOWER in cache (0.30–0.85× the two-pass
+        // at 64–100K elements, because the tournament's blends cost more than a
+        // max plus an early-exiting equality scan); it only won on a 4M buffer
+        // whose single maximum sits late (1.3–1.6×), where the second pass goes
+        // back to memory. The common case decided it.
+
+        /// <summary>
+        /// ArgMax for 64-bit integer lanes (<see cref="long"/> / <see cref="ulong"/>) — NumPy's single-pass SIMD tournament
+        /// (<c>simd_argmax_s64</c> / <c>_u64</c>): the first index of the maximum, in one read of the input.
+        /// </summary>
+        /// <typeparam name="T"><see cref="long"/> or <see cref="ulong"/> (UInt64 compares are sign-flip emulated on AVX2 but stay vector ops).</typeparam>
+        /// <param name="ip">First element (contiguous).</param>
+        /// <param name="totalSize">Element count.</param>
+        /// <returns>The first index of the maximum; -1 for an empty input, 0 for a single element.</returns>
+        /// <remarks>
+        /// The index vector is 64-bit, so no length cap is needed. Ties keep the lowest index (strict compares, strict
+        /// accumulator moves, lowest-index horizontal reduce).
+        /// </remarks>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
+        internal static unsafe long ArgMaxInt64Tournament<T>(T* ip, long totalSize) where T : unmanaged, IBinaryInteger<T>
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            const int vstep = 4;              // Vector256<long>.Count
+            const int wstep = vstep * 4;
+            if (!Vector256.IsHardwareAccelerated || totalSize < wstep)
+            {
+                T sb = ip[0]; long si = 0;
+                for (long q = 1; q < totalSize; q++)
+                    if (ip[q] > sb) { sb = ip[q]; si = q; }
+                return si;
+            }
+
+            var vind0 = Vector256.Create(0L, 1L, 2L, 3L);
+            var vind1 = Vector256.Create(4L, 5L, 6L, 7L);
+            var vind2 = Vector256.Create(8L, 9L, 10L, 11L);
+            var vind3 = Vector256.Create(12L, 13L, 14L, 15L);
+            var accIdx = Vector256<long>.Zero;
+            var acc = Vector256.Create(ip[0]);
+            long i = 0;
+
+            for (long n = totalSize & -wstep; i < n; i += wstep)
+            {
+                var vi = Vector256.Create(i);
+                var a = Vector256.Load(ip + i);
+                var b = Vector256.Load(ip + i + vstep);
+                var c = Vector256.Load(ip + i + vstep * 2);
+                var d = Vector256.Load(ip + i + vstep * 3);
+
+                var mBA = Vector256.GreaterThan(b, a);
+                var mDC = Vector256.GreaterThan(d, c);
+                var xBA = Vector256.ConditionalSelect(mBA, b, a);
+                var xDC = Vector256.ConditionalSelect(mDC, d, c);
+                var mDCBA = Vector256.GreaterThan(xDC, xBA);
+                var xDCBA = Vector256.ConditionalSelect(mDCBA, xDC, xBA);
+
+                var idxBA = Vector256.ConditionalSelect(mBA.AsInt64(), vind1, vind0);
+                var idxDC = Vector256.ConditionalSelect(mDC.AsInt64(), vind3, vind2);
+                var idxDCBA = Vector256.ConditionalSelect(mDCBA.AsInt64(), idxDC, idxBA);
+
+                var mAcc = Vector256.GreaterThan(xDCBA, acc);
+                acc = Vector256.ConditionalSelect(mAcc, xDCBA, acc);
+                accIdx = Vector256.ConditionalSelect(mAcc.AsInt64(), vi + idxDCBA, accIdx);
+            }
+            for (long n = totalSize & -vstep; i < n; i += vstep)
+            {
+                var vi = Vector256.Create(i);
+                var a = Vector256.Load(ip + i);
+                var mAcc = Vector256.GreaterThan(a, acc);
+                acc = Vector256.ConditionalSelect(mAcc, a, acc);
+                accIdx = Vector256.ConditionalSelect(mAcc.AsInt64(), vi + vind0, accIdx);
+            }
+
+            T* dacc = stackalloc T[vstep];
+            long* didx = stackalloc long[vstep];
+            acc.Store(dacc); accIdx.Store(didx);
+            T best = dacc[0]; long bestIdx = didx[0];
+            for (int vj = 1; vj < vstep; vj++) if (dacc[vj] > best) { best = dacc[vj]; bestIdx = didx[vj]; }
+            for (int vj = 0; vj < vstep; vj++) if (best == dacc[vj] && bestIdx > didx[vj]) bestIdx = didx[vj];
+
+            for (; i < totalSize; i++)
+                if (ip[i] > best) { best = ip[i]; bestIdx = i; }
+            return bestIdx;
+        }
+
+        /// <summary>
+        /// ArgMin for 64-bit integer lanes (<see cref="long"/> / <see cref="ulong"/>) — NumPy's <c>simd_argmin_s64</c> /
+        /// <c>_u64</c>: the mirror of <see cref="ArgMaxInt64Tournament{T}"/> with strict <c>&lt;</c>.
+        /// </summary>
+        /// <typeparam name="T"><see cref="long"/> or <see cref="ulong"/>.</typeparam>
+        /// <param name="ip">First element (contiguous).</param>
+        /// <param name="totalSize">Element count.</param>
+        /// <returns>The first index of the minimum; -1 for an empty input, 0 for a single element.</returns>
+        /// <remarks>Same tie rule as <see cref="ArgMaxInt64Tournament{T}"/>.</remarks>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
+        internal static unsafe long ArgMinInt64Tournament<T>(T* ip, long totalSize) where T : unmanaged, IBinaryInteger<T>
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            const int vstep = 4;
+            const int wstep = vstep * 4;
+            if (!Vector256.IsHardwareAccelerated || totalSize < wstep)
+            {
+                T sb = ip[0]; long si = 0;
+                for (long q = 1; q < totalSize; q++)
+                    if (ip[q] < sb) { sb = ip[q]; si = q; }
+                return si;
+            }
+
+            var vind0 = Vector256.Create(0L, 1L, 2L, 3L);
+            var vind1 = Vector256.Create(4L, 5L, 6L, 7L);
+            var vind2 = Vector256.Create(8L, 9L, 10L, 11L);
+            var vind3 = Vector256.Create(12L, 13L, 14L, 15L);
+            var accIdx = Vector256<long>.Zero;
+            var acc = Vector256.Create(ip[0]);
+            long i = 0;
+
+            for (long n = totalSize & -wstep; i < n; i += wstep)
+            {
+                var vi = Vector256.Create(i);
+                var a = Vector256.Load(ip + i);
+                var b = Vector256.Load(ip + i + vstep);
+                var c = Vector256.Load(ip + i + vstep * 2);
+                var d = Vector256.Load(ip + i + vstep * 3);
+
+                var mBA = Vector256.LessThan(b, a);
+                var mDC = Vector256.LessThan(d, c);
+                var xBA = Vector256.ConditionalSelect(mBA, b, a);
+                var xDC = Vector256.ConditionalSelect(mDC, d, c);
+                var mDCBA = Vector256.LessThan(xDC, xBA);
+                var xDCBA = Vector256.ConditionalSelect(mDCBA, xDC, xBA);
+
+                var idxBA = Vector256.ConditionalSelect(mBA.AsInt64(), vind1, vind0);
+                var idxDC = Vector256.ConditionalSelect(mDC.AsInt64(), vind3, vind2);
+                var idxDCBA = Vector256.ConditionalSelect(mDCBA.AsInt64(), idxDC, idxBA);
+
+                var mAcc = Vector256.LessThan(xDCBA, acc);
+                acc = Vector256.ConditionalSelect(mAcc, xDCBA, acc);
+                accIdx = Vector256.ConditionalSelect(mAcc.AsInt64(), vi + idxDCBA, accIdx);
+            }
+            for (long n = totalSize & -vstep; i < n; i += vstep)
+            {
+                var vi = Vector256.Create(i);
+                var a = Vector256.Load(ip + i);
+                var mAcc = Vector256.LessThan(a, acc);
+                acc = Vector256.ConditionalSelect(mAcc, a, acc);
+                accIdx = Vector256.ConditionalSelect(mAcc.AsInt64(), vi + vind0, accIdx);
+            }
+
+            T* dacc = stackalloc T[vstep];
+            long* didx = stackalloc long[vstep];
+            acc.Store(dacc); accIdx.Store(didx);
+            T best = dacc[0]; long bestIdx = didx[0];
+            for (int vj = 1; vj < vstep; vj++) if (dacc[vj] < best) { best = dacc[vj]; bestIdx = didx[vj]; }
+            for (int vj = 0; vj < vstep; vj++) if (best == dacc[vj] && bestIdx > didx[vj]) bestIdx = didx[vj];
+
+            for (; i < totalSize; i++)
+                if (ip[i] < best) { best = ip[i]; bestIdx = i; }
             return bestIdx;
         }
 

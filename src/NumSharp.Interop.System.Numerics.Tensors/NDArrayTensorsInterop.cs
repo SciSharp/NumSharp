@@ -13,7 +13,7 @@ namespace NumSharp.Interop.Tensors
     ///     <see cref="System.Numerics.Tensors.TensorSpan{T}"/> and
     ///     <see cref="System.Numerics.Tensors.ReadOnlyTensorSpan{T}"/>.
     ///
-    ///     <para>This is a CONVERSION library in the mould of the ONNX Runtime / ML.NET bridges: it moves data
+    ///     <para>This is a CONVERSION library: it moves data
     ///     (or rather, descriptions of the same memory) across the boundary. It is NOT an engine backend —
     ///     <c>System.Numerics.Tensors</c> does not compute NumSharp operations (and routing NumSharp's kernels
     ///     through <c>TensorPrimitives</c> would abandon NumSharp's bit-exact-with-NumPy results), so there is
@@ -23,13 +23,13 @@ namespace NumSharp.Interop.Tensors
     ///     <para><b>The verbs</b> follow the house convention: <c>As…</c> shares memory (zero-copy view),
     ///     <c>To…</c> copies.</para>
     ///     <list type="table">
-    ///         <item><term><see cref="Export.AsTensorSpan{T}"/></term><description>NumSharp → a <see cref="System.Numerics.Tensors.TensorSpan{T}"/> / <see cref="System.Numerics.Tensors.ReadOnlyTensorSpan{T}"/> over the NDArray's own buffer (ANY non-negative-stride layout — contiguous, sliced, transposed, strided, broadcast; the buffer is ARC-rooted for the handle's lifetime)</description></item>
-    ///         <item><term><see cref="Export.ToTensor{T}"/></term><description>NumSharp → an independent, dense <see cref="System.Numerics.Tensors.Tensor{T}"/> copy (any layout, no lifetime coupling)</description></item>
-    ///         <item><term><see cref="Import.ToNDArray{T}(System.Numerics.Tensors.Tensor{T})"/></term><description>Tensors → NumSharp, a fresh owning C-contiguous copy (the safe default)</description></item>
-    ///         <item><term><see cref="Import.AsNDArray{T}(System.Numerics.Tensors.Tensor{T}, bool)"/></term><description>Tensors → NumSharp, a zero-copy view over the pinned managed backing store</description></item>
+    ///         <item><term><see cref="AsTensorSpan{T}(NDArray)"/></term><description>NumSharp → a <see cref="System.Numerics.Tensors.TensorSpan{T}"/> / <see cref="System.Numerics.Tensors.ReadOnlyTensorSpan{T}"/> over the NDArray's own buffer (ANY non-negative-stride layout — contiguous, sliced, transposed, strided, broadcast; the buffer is ARC-rooted for the handle's lifetime)</description></item>
+    ///         <item><term><see cref="ToTensor{T}(NDArray)"/></term><description>NumSharp → an independent, dense <see cref="System.Numerics.Tensors.Tensor{T}"/> copy (any layout, no lifetime coupling)</description></item>
+    ///         <item><term><see cref="ToNDArray{T}(System.Numerics.Tensors.Tensor{T})"/></term><description>Tensors → NumSharp, a fresh owning C-contiguous copy (the safe default)</description></item>
+    ///         <item><term><see cref="AsNDArray{T}(System.Numerics.Tensors.Tensor{T})"/></term><description>Tensors → NumSharp, a zero-copy view over the pinned managed backing store</description></item>
     ///     </list>
     ///
-    ///     <para><b>Dtype map.</b> Unlike ONNX Runtime (a fixed <c>TensorElementType</c> enum),
+    ///     <para><b>Dtype map.</b>
     ///     <c>System.Numerics.Tensors</c> containers are pure generics over an unmanaged <c>T</c> with NO dtype
     ///     tag, so <b>all 15 NumSharp dtypes cross zero-copy as their own CLR type</b> — bool, the eight
     ///     integers, <see cref="System.Char"/>, <see cref="System.Half"/> (directly, no <c>Float16</c>
@@ -37,11 +37,24 @@ namespace NumSharp.Interop.Tensors
     ///     Nothing is refused and nothing is converted. See <see cref="ToTensorElementClrType"/> /
     ///     <see cref="TypeCodeOf{T}"/>.</para>
     ///
+    ///     <para><b>Text.</b> NumSharp's text arrays (<c>U</c>, <c>S</c>, <c>StringDType</c>) are not an unmanaged element
+    ///     type, and no string can be shared with a managed <c>Tensor&lt;string&gt;</c>, so text crosses as a COPY both ways:
+    ///     <see cref="ToStringTensor"/> (an NA as <c>null</c>, <c>S</c> decoded as UTF-8) and
+    ///     <see cref="ToNDArray(System.Numerics.Tensors.Tensor{string})"/> (a <c>StringDType(na_object=None)</c> array, a
+    ///     <c>null</c> as the NA). The unmanaged verbs refuse a text array naming <see cref="ToStringTensor"/>.</para>
+    ///
     ///     <para><b>Layout.</b> A <see cref="System.Numerics.Tensors.TensorSpan{T}"/> carries explicit
-    ///     lengths+strides, so a sliced / transposed / strided / broadcast NDArray view shares zero-copy —
-    ///     a real advantage over the row-major-only ONNX bridge. The one exception is a <b>negative-stride</b>
+    ///     lengths+strides, so a sliced / transposed / strided / broadcast NDArray view shares zero-copy.
+    ///     The one exception is a <b>negative-stride</b>
     ///     view (e.g. <c>a[::-1]</c>): <c>System.Numerics.Tensors</c> forbids negative strides, so those are
-    ///     refused with a message pointing at <see cref="Export.ToTensor{T}"/> / <c>np.ascontiguousarray</c>.</para>
+    ///     refused with a message pointing at <see cref="ToTensor{T}(NDArray)"/> / <c>np.ascontiguousarray</c>.</para>
+    ///
+    ///     <para><b>Edge shapes.</b> The BCL has no rank 0, so a 0-d NumSharp scalar crosses as a single-element
+    ///     vector <c>[1]</c> through both export verbs, and the BCL's own rank-0 values
+    ///     (<c>Tensor&lt;T&gt;.Empty</c>, <c>ReadOnlyTensorSpan&lt;T&gt;.Empty</c>) hold no element and import as the
+    ///     empty vector <c>(0,)</c>. An empty array keeps its shape both ways (exported with every stride 0, the
+    ///     form the BCL accepts for a zero-size span). A tensor that starts past element 0 of its backing array
+    ///     (a <c>Slice</c>, a range indexer, <c>Tensor.Create(array, start, …)</c>) imports its own elements.</para>
     ///
     ///     <para><b>Experimental.</b> The BCL marks <c>Tensor{T}</c>/<c>TensorSpan{T}</c>
     ///     <c>[Experimental("SYSLIB5001")]</c>; this surface re-marks itself
@@ -63,7 +76,7 @@ namespace NumSharp.Interop.Tensors
         public static int LiveExports => Volatile.Read(ref _liveExports);
 
         /// <summary>
-        ///     Number of live import leases — NumSharp views (<see cref="Import.AsNDArray{T}(System.Numerics.Tensors.Tensor{T}, bool)"/>)
+        ///     Number of live import leases — NumSharp views (<see cref="AsNDArray{T}(System.Numerics.Tensors.Tensor{T})"/>)
         ///     currently holding a pinned <see cref="System.Numerics.Tensors.Tensor{T}"/> backing store. Released
         ///     when the LAST NumSharp view over the memory — derived slices included — is disposed or collected.
         /// </summary>
@@ -81,11 +94,17 @@ namespace NumSharp.Interop.Tensors
         ///     is simply the dtype's OWN CLR type: <see cref="System.Half"/> for <see cref="NPTypeCode.Half"/>
         ///     (directly, no wrapper), <see cref="char"/> for <see cref="NPTypeCode.Char"/>,
         ///     <see cref="System.Decimal"/> for <see cref="NPTypeCode.Decimal"/>,
-        ///     <see cref="System.Numerics.Complex"/> for <see cref="NPTypeCode.Complex"/>. Every dtype maps —
-        ///     the containers are unconstrained generics, so none is refused.
+        ///     <see cref="System.Numerics.Complex"/> for <see cref="NPTypeCode.Complex"/>. Every one of the 15 numeric and
+        ///     boolean dtypes maps; a text dtype has no unmanaged element type (<see cref="ToStringTensor"/> copies text).
         /// </summary>
-        public static Type ToTensorElementClrType(NPTypeCode code)
+        /// <param name="dtype">The NumSharp dtype.</param>
+        /// <returns>The CLR element type a tensor of that dtype uses.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="NotSupportedException">A text dtype (<c>U</c>, <c>S</c>, <c>StringDType</c>), refused with the
+        ///     text that names its class and <see cref="ToStringTensor"/>; or a dtype with no element storage.</exception>
+        public static Type ToTensorElementClrType(DType dtype)
         {
+            NPTypeCode code = (dtype ?? throw new ArgumentNullException(nameof(dtype))).GetTypeCode();
             switch (code)
             {
                 case NPTypeCode.Boolean: return typeof(bool);
@@ -103,8 +122,30 @@ namespace NumSharp.Interop.Tensors
                 case NPTypeCode.Double: return typeof(double);
                 case NPTypeCode.Decimal: return typeof(decimal);
                 case NPTypeCode.Complex: return typeof(Complex);
+                case NPTypeCode.String: throw new NotSupportedException(TextRefusal(dtype));
                 default: throw new NotSupportedException($"NumSharp dtype {code} has no CLR element type.");
             }
+        }
+
+        /// <summary>
+        ///     The refusal of a text dtype — fixed-width <c>U</c> / <c>S</c> or <c>StringDType</c>, the three classes of
+        ///     NumSharp's String storage lane — naming the array's class and the verb that does cross it,
+        ///     <see cref="ToStringTensor"/>. The dtype map and every unmanaged export verb throw this one text (the ML.NET
+        ///     bridge's rule: its maps and verbs say the same).
+        /// </summary>
+        /// <param name="dtype">The text dtype refused.</param>
+        /// <returns>The message.</returns>
+        internal static string TextRefusal(DType dtype)
+        {
+            string what = dtype.kind == 'T' ? $"a StringDType array ({dtype})" : $"a fixed-width text array ({dtype.str})";
+            string how = dtype.kind switch
+            {
+                'S' => "decodes its bytes as UTF-8 (np.strings.decode) into a Tensor<string>",
+                'T' => "copies its texts into a Tensor<string>, an NA as null",
+                _ => "copies its texts into a Tensor<string>",
+            };
+            return $"NumSharp text does not cross into System.Numerics.Tensors' unmanaged element types: this is {what}, and the " +
+                   $"bridge maps the numeric and boolean dtypes to their own CLR types. nd.ToStringTensor() {how}.";
         }
 
         /// <summary>
@@ -141,9 +182,17 @@ namespace NumSharp.Interop.Tensors
         ///     (<see cref="ToTensorElementClrType"/>) of the array's dtype. A mismatch would silently
         ///     reinterpret the bytes as a different dtype, so it is refused up front.
         /// </summary>
-        internal static void EnsureElementType<T>(NPTypeCode code, string verb) where T : unmanaged
+        /// <typeparam name="T">The element type the caller asked the verb for.</typeparam>
+        /// <param name="dtype">The array's own dtype (never its type code: see the body).</param>
+        /// <param name="verb">The verb's name, for the message.</param>
+        /// <exception cref="NotSupportedException">A text dtype, refused with <see cref="TextRefusal"/>.</exception>
+        /// <exception cref="ArgumentException"><typeparamref name="T"/> is not the dtype's element type.</exception>
+        internal static void EnsureElementType<T>(DType dtype, string verb) where T : unmanaged
         {
-            Type want = ToTensorElementClrType(code);
+            // The array's own dtype, not its type code: a text array's code is the String storage lane, whose implicit
+            // NPTypeCode -> DType conversion throws Core's "asked for a dtype by storage lane" before the map can refuse.
+            Type want = ToTensorElementClrType(dtype);
+            NPTypeCode code = dtype.GetTypeCode();
             if (typeof(T) != want)
                 throw new ArgumentException(
                     $"{verb}<{typeof(T).Name}>: a NumSharp {code} array crosses as {want.Name} " +
@@ -163,8 +212,7 @@ namespace NumSharp.Interop.Tensors
         ///     Take an ARC reference on the array's buffer and resolve the pointer to its first logical element
         ///     (<c>slice.Address + Shape.Offset × itemsize</c> — right for both a contiguous slice that re-seats
         ///     the storage address and a strided view that keeps the base address with a non-zero offset). The
-        ///     caller owns the reference and must <see cref="IArraySlice.Release"/> it. Identical to the ONNX
-        ///     bridge's <c>Pin</c>.
+        ///     caller owns the reference and must <see cref="IArraySlice.Release"/> it.
         /// </summary>
         internal static unsafe IArraySlice Pin(NDArray source, out byte* data)
         {
@@ -237,7 +285,7 @@ namespace NumSharp.Interop.Tensors
         ///     Wrap foreign (pinned managed) memory as a NumSharp <see cref="IArraySlice"/> whose memory-block
         ///     Disposer invokes <paramref name="dispose"/> exactly once when the LAST NumSharp reference (any
         ///     view sharing the block) is released — deterministically via <see cref="NDArray.Dispose"/> or by
-        ///     the finalizer safety net. The same primitive the ONNX / pythonnet bridges lease foreign buffers with.
+        ///     the finalizer safety net. The same primitive the pythonnet bridge leases foreign buffers with.
         /// </summary>
         internal static unsafe IArraySlice WrapExternal(NPTypeCode tc, void* p, long count, Action dispose)
         {

@@ -11,21 +11,21 @@ namespace NumSharp
         ///     and r/g/b channels(third axis). The functions concatenate, stack and block provide more general stacking and concatenation operations.
         /// </summary>
         /// <param name="tup">The arrays must have the same shape along all but the second axis, except 1-D arrays which can be any length.</param>
-        /// <returns>The array formed by stacking the given arrays.</returns>
+        /// <returns>The array formed by stacking the given arrays.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.hstack.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="tup"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="tup"/> is empty ("need at least one array to concatenate").</exception>
         public static NDArray hstack(params NDArray[] tup)
         {
             if (tup == null)
                 throw new ArgumentNullException(nameof(tup));
 
-            if (tup.Length == 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(tup));
-
-            tup = np.atleast_1d(tup); //handle scalars
-            if (tup[0].shape.Length == 1)
-                return np.concatenate(tup, 0);
-            else
-                return np.concatenate(tup, 1);
+            // NumPy's statements (atleast_1d(*tup), then concatenate along axis 0 for 1-d arrays, axis 1 otherwise) are the
+            // array object's.
+            return NDArray.hstack_(tup);
         }
     }
 }

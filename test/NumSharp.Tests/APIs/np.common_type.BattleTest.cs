@@ -301,22 +301,25 @@ public class NpCommonTypeBattleTests
 
     #region Argument validation
 
+    /// <summary>
+    ///     NumPy's <c>np.common_type()</c> with no array is <c>numpy.float16</c>: its loop starts from precision 0 and
+    ///     <c>array_type[0][0]</c> is half (probed against 2.4.2). Every spelling of the empty call answers the same.
+    /// </summary>
     [TestMethod]
-    public void CommonType_EmptyArrays_Throws()
+    public void CommonType_NoArrays_IsFloat16()
     {
-        new Action(() => np.common_type_code(Array.Empty<NDArray>())).Should().Throw<Exception>();
+        np.common_type().Should().BeSameAs(DType.Half);
+        np.common_type(Array.Empty<NDArray>()).Should().BeSameAs(DType.Half);
+        np.common_type_code(Array.Empty<NDArray>()).Should().Be(NPTypeCode.Half);
+        np.common_type_code(Array.Empty<NPTypeCode>()).Should().Be(NPTypeCode.Half);
     }
 
     [TestMethod]
     public void CommonType_NullArrays_Throws()
     {
-        new Action(() => np.common_type_code((NDArray[])null!)).Should().Throw<Exception>();
-    }
-
-    [TestMethod]
-    public void CommonTypeCode_EmptyTypes_Throws()
-    {
-        new Action(() => np.common_type_code(Array.Empty<NPTypeCode>())).Should().Throw<Exception>();
+        new Action(() => np.common_type((NDArray[])null!)).Should().Throw<ArgumentNullException>();
+        new Action(() => np.common_type_code((NDArray[])null!)).Should().Throw<ArgumentNullException>();
+        new Action(() => np.common_type_code((NPTypeCode[])null!)).Should().Throw<ArgumentNullException>();
     }
 
     #endregion

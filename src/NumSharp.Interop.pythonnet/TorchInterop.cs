@@ -32,11 +32,17 @@ namespace NumSharp.Interop.PythonNet
         /// </exception>
         /// <exception cref="NotSupportedException">
         ///     A shared conversion was requested for a negative-stride layout, which PyTorch tensors do
-        ///     not support. Use <paramref name="copy"/> to materialize it.
+        ///     not support (use <paramref name="copy"/> to materialize it), or the array holds text
+        ///     (<c>S</c>, <c>U</c> or <c>StringDType</c>): PyTorch has no string tensors.
         /// </exception>
         public static PyObject ToTorch(this NDArray source, bool copy = false, bool? requireGIL = null)
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
+
+            // PyTorch has no string tensors: torch.from_numpy refuses every numpy text dtype, so say so before any export.
+            if (source.typecode == NPTypeCode.String)
+                throw new NotSupportedException(
+                    $"PyTorch has no string tensors, so a {source.dtype} array cannot become a torch.Tensor. Cross it to numpy instead (ToNumpy / ToNumpyCopy).");
 
             if (!copy)
             {

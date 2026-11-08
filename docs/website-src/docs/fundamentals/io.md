@@ -14,6 +14,7 @@ NumSharp reads and writes the same file formats NumPy does, and - for the `.npy`
      np.load returns object dispatched on kind → Load_ReturnsObject_DispatchedOnKind
      mmap_mode 'r' is read-only → Mmap_Mode_R_IsReadOnly
      savetxt/loadtxt round-trip → SaveTxt_LoadTxt_RoundTrip
+     Text encodings → TextEncodings_Utf16AndCodePages
      fromstring (+ binary-mode-removed throw) → FromString_ParsesNumbers; FromString_BinaryModeRemoved_Throws
      raw tofile/fromfile → Raw_TofileFromfile_RoundTrip -->
 
@@ -56,7 +57,7 @@ var big = (NDArray)np.load("huge.npy", mmap_mode: "r");   // read-only view
 var rw  = (NDArray)np.load("huge.npy", mmap_mode: "r+");  // read-write, flushes to disk
 ```
 
-Modes match what NumPy does through `np.load`: `"r"`/`"readonly"`, `"r+"` (read-write), `"c"` (copy-on-write). mmap needs a real file **path** (a stream/`byte[]` cannot be mapped), and NumSharp refuses to map files it would otherwise transform on read (big-endian, `<U1`/`<c8`) with a clear `NotSupportedException`.
+Modes match what NumPy does through `np.load`: `"r"`/`"readonly"`, `"r+"` (read-write), `"c"` (copy-on-write). mmap needs a real file **path** (a stream/`byte[]` cannot be mapped), and NumSharp refuses to map files it would otherwise transform on read (big-endian, `<c8`) with a clear `NotSupportedException`. Fixed-width string files (`|S5`, `<U3`) map like numeric ones. A `StringDType` file holds a pickle, which has no fixed-size elements to map: NumPy and NumSharp raise `ValueError: Array can't be memory-mapped: Python objects in dtype.`
 
 ### The dtype map
 
@@ -65,10 +66,12 @@ Modes match what NumPy does through `np.load`: `"r"`/`"readonly"`, `"r+"` (read-
 | `\|b1`, `\|i1`, `\|u1` | Boolean, SByte, Byte | single-byte types use the `\|` prefix |
 | `<i2`…`<u8`, `<f2`, `<f4`, `<f8` | Int16…UInt64, Half, Single, Double | direct |
 | `<c16` | Complex | `<c8` (complex64) widens to Complex on read |
-| `<U1` | Char | 2-byte UTF-16 ↔ 4-byte UCS-4; non-BMP rejected |
+| `\|S5`, `<U3`, `>U3` | fixed-width strings (`S`, `U`) | byte for byte; a `>U3` file is byte-swapped per code point |
+| `<U1` (written) | Char | a `Char` array is written as `<U1` (2-byte UTF-16 → 4-byte UCS-4; non-BMP rejected) |
+| `\|O` with NumPy's pickle | `StringDType` (`T`) | NumPy's protocol-4 pickle of the array, byte for byte; loading needs `allow_pickle: true` (see [`.npy` files](strings-and-bytes.md#npy-files)) |
 | - | Decimal | **`NotSupportedException`** - no NumPy dtype |
 
-Big-endian files are byte-swapped to native on read. Object arrays, structured/subarray dtypes, `datetime64`/`timedelta64`, `S`/`U`(n>1)/`V`, `<f16`/`<c32` parse and then raise a precise message.
+Big-endian files are byte-swapped to native on read. A `<U1` file reads back as a `<U1` string array, not as `Char` (**breaking**: it read as `Char` before the string dtypes existed). Object arrays other than a `StringDType` array's pickle, structured/subarray dtypes, `datetime64`/`timedelta64`, `V`, zero-width `S0`/`U0`, `<f16`/`<c32` parse and then raise a precise message. NumSharp has no general unpickler: it reads only the pickle NumPy writes for a `StringDType` array, and it never runs a Python function that a file names.
 
 ---
 
@@ -82,7 +85,13 @@ np.savetxt("out.csv", arr, fmt: "%.3f", delimiter: ",");     // 2-D → one row 
 np.savetxt("out.csv", arr, fmt: "%d", header: "x,y", comments: "# ");
 ```
 
-A port of NumPy 2.4.2's `savetxt`, **byte-identical to NumPy's output**. A 1-D array writes one value per line; a 2-D array one row per line; 0-D/≥3-D raise `ValueError`. `fmt` is a Python `%`-format spec (single spec repeated per column, a multi-`%` template, or a per-column list). Targets: a filename (`.gz` → gzip), a `Stream`, or a `TextWriter`.
+A port of NumPy 2.4.2's `savetxt`, **byte-identical to NumPy's output**. A 1-D array writes one value per line; a 2-D array one row per line; 0-D/≥3-D raise `ValueError`. `fmt` is a Python `%`-format spec (single spec repeated per column, a multi-`%` template, or a per-column list); a `StringDType` array's elements are formatted as the Python objects NumPy's `getitem` returns (a `str`, or the NA object). Targets:
+
+- a filename: created first, then written gzip-compressed when its extension is exactly `.gz`, every `\n` translated to the platform's line separator before it is encoded (UTF-8 by default);
+- a `Stream`: each write encoded on its own, Latin-1 by default, as NumPy's `WriteWrap` encodes it;
+- a `TextWriter`: no encoding.
+
+The `%` operator is CPython's, errors included. Each row is `fmt % tuple(row)` over NumPy scalars, so `%r` of a `float32` is `np.float32(0.1)`. `%x`, `%X`, `%o` and `%c` take integers only: a `bool` or a float raises `TypeError`, which `savetxt` reports as `Mismatch between array dtype (...) and format specifier (...)` with Python's own text as the inner exception. A malformed format raises Python's `ValueError` (`incomplete format`, `unsupported format character 'y' (0x79) at index 1`); a `*` width takes a Python `int` only, so it fails on every element except a `StringDType` NA object that is an `int`.
 
 ### `np.loadtxt` - read delimited text
 
@@ -91,7 +100,55 @@ var m = np.loadtxt("data.csv", delimiter: ",", skiprows: 1);
 var cols = np.loadtxt("data.txt", usecols: [0, 2], dtype: np.float64);
 ```
 
-Round-trips `savetxt` (byte-exact values). Parameters mirror NumPy: `dtype` (default float64), `comments`, `delimiter` (whitespace-runs when unset), `converters`, `skiprows`, `usecols`, `unpack`, `ndmin`, `max_rows`, `quotechar`. Inputs: filename (`.gz` transparent), `Stream`, `TextReader`, or `IEnumerable<string>`. Parsers match NumPy's C reader - bool via int, range-checked integers, `PyOS_string_to_double` float semantics, and lowercase-`j` complex.
+Round-trips `savetxt` (byte-exact values). Parameters mirror NumPy: `dtype` (default float64; the fixed-width `U` / `S` and `StringDType` too), `comments`, `delimiter` (whitespace-runs when unset), `converters`, `skiprows`, `usecols`, `unpack`, `ndmin`, `max_rows`, `quotechar`. `comments` takes what NumPy takes: a string, `byte[]`, a sequence of them, or `null`; as in NumPy, a `null` element of a sequence keeps each line's first word, and an element of another type raises at the first line. Parsers match NumPy's C reader - bool via int, range-checked integers, `PyOS_string_to_double` float semantics, and lowercase-`j` complex. Inputs:
+
+- a filename, found as NumPy's `DataSource` finds it: when nothing has that name, the name with `.bz2`, `.gz`, `.xz` or `.lzma` appended is tried. It is read in chunks with universal newlines, as UTF-8 by default;
+- a `Stream`: iterated line by line, each line decoded on its own, Latin-1 by default;
+- a `TextReader`, or an `IEnumerable<string>`.
+
+On 1,000 to 1,000,000 rows (pinned to two cores), NumSharp reads integer text 2.6 to 2.7 times as fast as NumPy and float text 1.3 to 1.6 times. Float parsing is bounded by `double.Parse`, the analog of NumPy's `strtod`.
+
+### Text columns and mixed tables
+
+`loadtxt` can read `S`, `U` and `StringDType` columns, not just numbers. Keep heterogeneous columns in separate arrays, or load all fields as text and cast selected columns:
+
+```csharp
+var lines = new[] { "Rex,9", "Fido,3" };
+var labels = np.loadtxt(lines, dtype: np.dtypes.StringDType(), delimiter: ",", usecols: new[] { 0 });
+var ages = np.loadtxt(lines, dtype: np.int32, delimiter: ",", usecols: new[] { 1 });
+// labels: ['Rex' 'Fido']; ages: [9 3]
+```
+
+Choose a sized `U` / `S` when truncation is intentional, or `StringDType` to keep whole fields. Use `fmt: "%s"` when writing text arrays with `savetxt`; its default numeric format is not a text format. A StringDType missing object is written as its text (`None`, `nan`, etc.), so a text-file round trip needs an explicit dtype/converter to restore the missing-value policy. `.npy` / `.npz` preserve the descriptor; loading a `T` member requires `allow_pickle: true`.
+
+### Text encodings
+
+`encoding:` takes any name Python's `codecs.lookup` resolves (`"utf-16le"`, `"Windows-1252"`, `"L1"`, …), for these codecs, all exactly as CPython implements them, with CPython's error texts:
+
+| Codecs | Notes |
+|--------|-------|
+| `utf-8`, `utf-8-sig` | `utf-8-sig` drops a leading BOM when reading and writes one |
+| `utf-16`, `utf-32` | A BOM decides the byte order when reading a byte stream line by line (native little-endian without one). A file must start with one (`UnicodeError: UTF-16 stream does not start with BOM`). Writing puts a BOM before every write to a `Stream` and once at the start of a file |
+| `utf-16-le`, `utf-16-be`, `utf-32-le`, `utf-32-be` | No BOM is read or written |
+| `latin-1`, `ascii`, and the 70 single-byte code pages (`cp1252`, `iso8859_15`, `koi8_r`, `mac_roman`, `cp037`, …) | Tables generated from CPython 3.12 |
+
+```csharp
+var arr = np.array(new[] { "ab", "é" }, np.dtypes.StringDType());
+np.savetxt("out.txt", arr, fmt: "%s", encoding: "utf-16");                    // FF FE, then little-endian text
+var back = np.loadtxt("out.txt", np.dtypes.StringDType(), encoding: "UTF-16");  // ['ab', 'é']
+using var ms = new MemoryStream();
+np.savetxt(ms, arr, fmt: "%s", encoding: "Windows-1252");                     // 61 62 0A E9 0A
+np.savetxt(new MemoryStream(), np.array(new[] { "中" }, np.dtypes.StringDType()), fmt: "%s", encoding: "cp1252");
+    // UnicodeEncodeError: 'charmap' codec can't encode character '\u4e2d' in position 0: character maps to <undefined>
+```
+
+A decode error's position counts within the chunk NumPy's text layer decoded, so it is NumPy's position:
+
+- reading a file in chunks, the first 16,384 bytes form one chunk, and later chunks are sized from the bytes-per-character ratio;
+- iterating a file line by line (several comments, or a multi-character one), each chunk is 8,192 bytes;
+- reading a `Stream` line by line, each line is decoded on its own.
+
+An unknown name is `LookupError: unknown encoding: name`. A bytes-to-bytes codec (`base64`, `hex`) is `LookupError: 'base64' is not a text encoding; …`. The multi-byte codecs (Shift-JIS, GBK, Big5, the ISO-2022 family), `utf-7`, the escape codecs and IDNA throw `NotSupportedException`: NumSharp does not implement them. A file name's default is pinned to UTF-8, which is NumPy's default on Linux and macOS (Windows NumPy uses the ANSI code page).
 
 ### `np.fromstring` - parse numbers from a string
 
@@ -114,9 +171,11 @@ byte[] buf = File.ReadAllBytes("data.bin");
 var view = np.frombuffer(buf, np.float32);    // reinterpret bytes (no copy of the format)
 ```
 
-`tofile`/`fromfile` are the headerless raw path - you must know the dtype and byte order yourself (there is no self-describing header, unlike `.npy`). `np.frombuffer` reinterprets an existing .NET buffer as an array of a given dtype and is the general bridge for interop - see [Any library via np.frombuffer](../interop/np-frombuffer.md).
+`tofile`/`fromfile` are the headerless raw path - you must know the dtype and byte order yourself (there is no self-describing header, unlike `.npy`). With a `sep`, `tofile` writes text instead: `format % (item,)` for each element, where `item` is the Python object NumPy's `getitem` returns. So every float dtype formats as a Python `float` (a `float32` 0.1 writes `0.10000000149011612`), and a `bool` is an `int` (`'%x'` of `true` writes `1`). Each element's text must be ASCII (`UnicodeEncodeError` otherwise, where NumPy 2.4.2 crashes); `sep` and `format` may not hold a NUL or a lone surrogate, which is checked before the file is opened. `np.frombuffer` reinterprets an existing .NET buffer as an array of a given dtype and is the general bridge for interop - see [Any library via np.frombuffer](../interop/np-frombuffer.md).
 
 ---
+
+**The raw binary route is for fixed-layout data, including `S` / `U`, not `StringDType`.** `T` cells cannot be persisted as independent raw values: binary `tofile`, `fromfile`, `fromstring` and `frombuffer` refuse them. Use the StringDType `.npy` / `.npz` or text-file routes instead.
 
 ## Size limits
 
@@ -130,6 +189,8 @@ The `.npy`/`.npz` path streams in 256 KB chunks and round-trips files **larger t
 |----------------|--------|-------------|
 | `np.genfromtxt` | **not implemented** | `np.loadtxt` (needs no missing-value/structured support), or parse yourself |
 | `np.fromregex` | **not implemented** | requires structured dtypes; parse with .NET regex + `np.array` |
+| `.bz2` / `.xz` / `.lzma` file names in `loadtxt` / `savetxt` | **refused** (`NotSupportedException`) | .NET has no decompressor for them; decompress first, or use `.gz` |
+| URLs in `loadtxt` | **not implemented** (NumPy's `DataSource` downloads them) | download first |
 | Structured/record `.npy` files | **read raises** | `.npy` files with a structured dtype are rejected - NumSharp has no structured dtype ([Structured arrays](structured-arrays.md)) |
 
 Both `genfromtxt` and `fromregex` are built on NumPy's structured-dtype and masked-array machinery, which NumSharp does not model. Their non-structured subset is already covered by `loadtxt`.
@@ -181,10 +242,10 @@ Decimal has no NumPy dtype, so it cannot be written to `.npy`. Cast to `Double` 
 
 | Function | Purpose |
 |----------|---------|
-| `np.save(path, arr)` | write one array to `.npy` (byte-exact with NumPy) |
+| `np.save(path, arr, allow_pickle)` | write one array to `.npy` (byte-exact with NumPy; a `StringDType` array as NumPy's pickle) |
 | `np.savez(path, …)` / `np.savez_compressed(path, …)` | write an `.npz` archive (optionally compressed) |
 | `np.load(path, mmap_mode, allow_pickle, max_header_size)` | read `.npy`/`.npz` → `object` |
-| `np.load_npy(path)` / `np.load_npz(path)` | typed loads → `NDArray` / `NpzFile` |
+| `np.load_npy(path, allow_pickle)` / `np.load_npz(path, allow_pickle)` | typed loads → `NDArray` / `NpzFile` |
 | `np.savetxt(fname, X, fmt, delimiter, …)` | write delimited text (byte-exact) |
 | `np.loadtxt(fname, dtype, delimiter, skiprows, usecols, …)` | read delimited text |
 | `np.fromstring(s, dtype, count, sep)` | parse numbers from a string |

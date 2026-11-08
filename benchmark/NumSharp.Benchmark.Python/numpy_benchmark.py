@@ -661,12 +661,14 @@ def run_unary_benchmarks(n: int, dtype_name: str, iterations: int) -> List[Bench
             ("np.rint(a)", lambda: np.rint(family_a)),
             ("np.round(a)", lambda: np.round(family_a)),
         ]
-        # NumSharp np.modf supports only Single/Double/Decimal (see UnaryFamilyBenchmarks.Modf);
-        # decimal has no NumPy dtype, so the twin runs float32/float64 only. NumPy's modf DOES
-        # accept int/float16 (int up-casts to float64), but the C# side rejects them via
-        # VerifyUnsupportedDtype — benchmarking those here paired a real NumPy timing against a
-        # C# exception-throw (e.g. modf(int32) 10M: 71ms vs 0.37ms throw = a meaningless 192x).
-        if dtype_name in ("float32", "float64"):
+        # np.modf has a loop for every REAL dtype on both sides: bool/int promote to the narrowest
+        # float per width (int8->float16, int16->float32, int32+->float64), which NumSharp matches
+        # since 59f99320 (see UnaryFamilyBenchmarks.Modf). Only complex has no modf loop (TypeError
+        # on both sides); the C# side records it as rejection evidence, which has no NumPy timing
+        # peer, so the twin skips it. (Before 59f99320 NumSharp rejected everything except
+        # float32/float64/decimal, and pairing a real NumPy timing with a C# exception-throw read as
+        # a meaningless 192x, which is why this used to be float32/float64 only.)
+        if dtype_name != "complex128":
             family_cases.append(("np.modf(a)", lambda: np.modf(family_a)))
         for name, func in family_cases:
             r = benchmark(func, n, iterations=iterations)
@@ -754,9 +756,9 @@ def run_reduction_benchmarks(n: int, dtype_name: str, iterations: int) -> List[B
     r.name, r.category, r.suite, r.dtype = f"np.amin ({dtype_name})", "MinMax", "Reduction", dtype_name
     results.append(r)
 
-    def method_amin(): return a.min()
-    r = benchmark(method_amin, n, iterations=iterations)
-    r.name, r.category, r.suite, r.dtype = f"a.amin() [method] ({dtype_name})", "MinMax", "Reduction", dtype_name
+    def method_min(): return a.min()
+    r = benchmark(method_min, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"a.min() [method] ({dtype_name})", "MinMax", "Reduction", dtype_name
     results.append(r)
 
     def np_min(): return np.min(a)
@@ -769,9 +771,9 @@ def run_reduction_benchmarks(n: int, dtype_name: str, iterations: int) -> List[B
     r.name, r.category, r.suite, r.dtype = f"np.amax ({dtype_name})", "MinMax", "Reduction", dtype_name
     results.append(r)
 
-    def method_amax(): return a.max()
-    r = benchmark(method_amax, n, iterations=iterations)
-    r.name, r.category, r.suite, r.dtype = f"a.amax() [method] ({dtype_name})", "MinMax", "Reduction", dtype_name
+    def method_max(): return a.max()
+    r = benchmark(method_max, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"a.max() [method] ({dtype_name})", "MinMax", "Reduction", dtype_name
     results.append(r)
 
     def np_max(): return np.max(a)

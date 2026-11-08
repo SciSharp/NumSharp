@@ -8,21 +8,13 @@ namespace NumSharp.Tests.Logic
     ///
     /// These tests verify NumSharp behavior against NumPy 2.4.2.
     ///
+    /// TYPE PROMOTION (NEP 50, NumPy's PyArray_Where): a C# number literal is a weak Python scalar - it adopts the
+    /// array's dtype (np.where(cond, 1, uint8_array) is uint8), and two of them give NumPy's default dtype
+    /// (np.where(cond, 1, 0) is int64, np.where(cond, 1.0f, 0.0f) float64) -; an array, a 0-d one included, is strong.
+    ///
     /// KNOWN DIFFERENCES FROM NUMPY 2.x:
     ///
-    /// 1. Scalar Type Promotion (NEP50):
-    ///    NumPy 2.x uses "weak scalar" semantics where Python scalars adopt array dtype.
-    ///    NumSharp uses C# semantics where literals have fixed types (int=int32, etc).
-    ///
-    ///    Example: np.where(cond, 1, uint8_array)
-    ///    - NumPy 2.x: returns uint8 (weak scalar rule)
-    ///    - NumSharp: returns int32 (C# int literal is int32)
-    ///
-    /// 2. Python int Scalar Default:
-    ///    - NumPy: Python int → int64 (platform default)
-    ///    - NumSharp: C# int literal → int32
-    ///
-    /// 3. Missing sbyte (int8) support:
+    /// 1. Missing sbyte (int8) support:
     ///    NumSharp does not support sbyte arrays (throws NotSupportedException).
     /// </summary>
     [TestClass]
@@ -352,26 +344,31 @@ namespace NumSharp.Tests.Logic
             Assert.AreEqual(typeof(short), result.dtype);
         }
 
+        /// <summary>
+        /// A C# byte literal is a weak Python int (the boundary map), so two of them are NumPy's default integer:
+        /// np.where([True, False], 1, 0) -> int64 [1, 0] (NumPy 2.4.2).
+        /// </summary>
         [TestMethod]
-        public void Where_TwoScalars_Byte_StaysByte()
+        public void Where_TwoScalars_Byte_AreTheDefaultInteger()
         {
-            // C# byte (like np.uint8) stays byte, not widened to int64
             var cond = np.array(new[] { true, false });
             var result = np.where(cond, (byte)1, (byte)0);
 
-            Assert.AreEqual(typeof(byte), result.dtype);
-            Assert.AreEqual((byte)1, (byte)result[0]);
-            Assert.AreEqual((byte)0, (byte)result[1]);
+            Assert.AreEqual(typeof(long), result.dtype);
+            Assert.AreEqual(1L, (long)result[0]);
+            Assert.AreEqual(0L, (long)result[1]);
         }
 
+        /// <summary>
+        /// A C# short literal is a weak Python int: np.where([True, False], 100, 200) -> int64 (NumPy 2.4.2).
+        /// </summary>
         [TestMethod]
-        public void Where_TwoScalars_Short_StaysShort()
+        public void Where_TwoScalars_Short_AreTheDefaultInteger()
         {
-            // C# short (like np.int16) stays short
             var cond = np.array(new[] { true, false });
             var result = np.where(cond, (short)100, (short)200);
 
-            Assert.AreEqual(typeof(short), result.dtype);
+            Assert.AreEqual(typeof(long), result.dtype);
         }
 
         [TestMethod]
@@ -729,38 +726,37 @@ namespace NumSharp.Tests.Logic
         }
 
         /// <summary>
-        /// Two same-type scalars preserve their type.
-        /// Note: NumPy would return int64 for Python int literals, but C# int32 scalars
-        /// cannot be distinguished from explicit np.array(1, dtype=int32), so we preserve.
+        /// Two C# integer literals are two weak Python ints: their common dtype is NumPy's default integer, whatever the
+        /// C# type (a literal's 0-d array is marked WasPythonLiteral, so it is told apart from np.array(1, dtype=int32)).
+        /// np.where([True, False], 1, 0) -> int64 [1, 0] (NumPy 2.4.2).
         /// </summary>
         [TestMethod]
-        public void Where_TwoScalars_SameType_Preserved()
+        public void Where_TwoScalars_AreTheDefaultInteger()
         {
             var cond = np.array(new[] { true, false });
 
-            // int + int → int (preserved)
+            // int + int -> int64
             var result = np.where(cond, 1, 0);
-            Assert.AreEqual(typeof(int), result.dtype);
-            Assert.AreEqual(1, (int)result[0]);
-            Assert.AreEqual(0, (int)result[1]);
+            Assert.AreEqual(typeof(long), result.dtype);
+            Assert.AreEqual(1L, (long)result[0]);
+            Assert.AreEqual(0L, (long)result[1]);
 
-            // long + long → long (preserved)
+            // long + long -> int64
             result = np.where(cond, 1L, 0L);
             Assert.AreEqual(typeof(long), result.dtype);
         }
 
         /// <summary>
-        /// Verifies C# float scalars stay float32 (like np.float32, not Python float).
+        /// A C# float literal is a weak Python float (the boundary map), so two of them are NumPy's default float:
+        /// np.where([True, False], 1.0, 0.0) -> float64 (NumPy 2.4.2). An explicit float32 array stays float32.
         /// </summary>
         [TestMethod]
-        public void Where_TwoScalars_Float32_StaysFloat32()
+        public void Where_TwoScalars_Float32_AreTheDefaultFloat()
         {
-            // C# float (1.0f) is like np.float32, not Python's float (which is float64)
-            // np.where(cond, np.float32(1.0), np.float32(0.0)) -> float32
             var cond = np.array(new[] { true, false });
             var result = np.where(cond, 1.0f, 0.0f);
 
-            Assert.AreEqual(typeof(float), result.dtype);
+            Assert.AreEqual(typeof(double), result.dtype);
         }
 
         /// <summary>

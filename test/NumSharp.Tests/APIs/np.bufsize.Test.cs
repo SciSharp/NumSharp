@@ -11,10 +11,11 @@ namespace NumSharp.Tests.APIs
     ///     (see <c>numpy._core._ufunc_config.setbufsize</c> + <c>umath/extobj.c</c>).
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // redirects the process-wide Console.Out
     public class np_bufsize_Test
     {
-        // bufsize is thread-local and persists until changed; reset after every test so a value
-        // set on the runner thread never leaks into the next test.
+        // bufsize is context-local (NumPy's ContextVar) and persists in the flow until changed; reset after every test so
+        // a value set on the runner thread never leaks into the next test.
         [TestCleanup]
         public void Reset() => np.setbufsize(8192);
 
@@ -151,8 +152,12 @@ namespace NumSharp.Tests.APIs
             np.array_equal(r1, r2).Should().BeTrue();
         }
 
+        /// <summary>
+        ///     NumPy 2.4.2 under Python 3.12: a new <c>threading.Thread</c> starts with an empty context, so it reads the
+        ///     8192 default after the starting thread's <c>np.setbufsize(1024)</c>, and its own setting stays in it.
+        /// </summary>
         [TestMethod]
-        public void Bufsize_IsThreadLocal()
+        public void Bufsize_NewThreadStartsAtTheDefault()
         {
             np.setbufsize(4096);
             long seen = -1, after = -1;
@@ -169,6 +174,24 @@ namespace NumSharp.Tests.APIs
             np.getbufsize().Should().Be(4096L);   // main thread unaffected by the worker
         }
 
+        /// <summary>
+        ///     NumPy 2.4.2 under Python 3.12: <c>asyncio.to_thread</c> and an <c>await</c> continuation run in a copy of the
+        ///     caller's context, so they read the caller's <c>np.setbufsize(1024)</c> (parity QA-40). <c>Task.Run</c> and the
+        ///     continuation after <c>Task.Yield</c> are their .NET twins.
+        /// </summary>
+        /// <returns>The test's task.</returns>
+        [TestMethod]
+        public async System.Threading.Tasks.Task Bufsize_FlowsIntoTasksAndAwaits()
+        {
+            np.setbufsize(1024);
+            long onTask = await System.Threading.Tasks.Task.Run(() => np.getbufsize());
+            await System.Threading.Tasks.Task.Yield();
+            long resumed = np.getbufsize();
+
+            onTask.Should().Be(1024L);
+            resumed.Should().Be(1024L);
+        }
+
         [TestMethod]
         public void Current_Equals_GetBufsize()
         {
@@ -178,12 +201,36 @@ namespace NumSharp.Tests.APIs
             NDIterBufferManager.CurrentBufferSize.Should().Be(320L);
         }
 
+        /// <summary>
+        ///     NumPy 2.4.2 (probed): np.nditer hands NpyIter a buffersize of 0, which the buffering setup reads as NPY_BUFSIZE
+        ///     (8192) — np.setbufsize changes the UFUNC buffers only. An (8, 8) int64 array without a cast coalesces to one run of
+        ///     64 and is one fill of 64 either way (debug_print's <c>BufferSize: 64</c>, the setup's size, for both 16 and 8192).
+        /// </summary>
         [TestMethod]
-        public void SetBufsize_ChangesNdIterBuffer()
+        public void SetBufsize_DoesNotReachNdIter()
         {
-            // Functional wiring, not a no-op: a buffered nditer's BufferSize follows setbufsize.
-            ObserveNdIterBufferSize(16).Should().Be(16L);
-            ObserveNdIterBufferSize(8192).Should().Be(8192L);
+            ObserveNdIterBufferSize(16).Should().Be(64L);
+            ObserveNdIterBufferSize(8192).Should().Be(64L);
+        }
+
+        /// <summary>
+        ///     Functional wiring, not a no-op: the engine's own buffered iterators (the ufunc out= / where= routes, which build
+        ///     theirs with a buffer size of 0) follow np.setbufsize, as NumPy's ufunc machinery hands its iterator the extobj
+        ///     buffer size. A cast iteration of 100 elements fills 16 at a time under np.setbufsize(16), 100 at once under the
+        ///     default.
+        /// </summary>
+        [TestMethod]
+        public unsafe void SetBufsize_ChangesTheEngineIteratorBuffer()
+        {
+            foreach (var (bufsize, expected) in new[] { (16L, 16L), (8192L, 100L) })
+            {
+                np.setbufsize(bufsize);
+                using var a = np.arange(100);
+                using var iter = NDIterRef.MultiNew(1, new[] { a },
+                    NDIterGlobalFlags.BUFFERED | NDIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
+                    NPY_CASTING.NPY_SAFE_CASTING, new[] { NDIterPerOpFlags.READONLY }, new[] { NPTypeCode.Double });
+                (*iter.GetInnerLoopSizePtr()).Should().Be(expected, $"np.setbufsize({bufsize})");
+            }
         }
 
         private static long ObserveNdIterBufferSize(long bufsize)

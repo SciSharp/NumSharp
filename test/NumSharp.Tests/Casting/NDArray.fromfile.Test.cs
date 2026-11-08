@@ -178,7 +178,7 @@ namespace NumSharp.Tests.Casting
         }
 
         [TestMethod]
-        public void Text_Complex_BareForm_And_ParenthesizedSuperset()
+        public void Text_Complex_BareForm_And_ParenthesizedRefused()
         {
             // NumPy reads the bare "a+bj" form (whitespace-separated).
             string p = TempWithText("1+2j 3-4j 5j");
@@ -190,14 +190,13 @@ namespace NumSharp.Tests.Casting
             }
             finally { File.Delete(p); }
 
-            // Superset: NumSharp also reads the parenthesized "(1+2j)" form its own tofile writes
-            // (NumPy's text reader errors on this, so tofile/fromfile round-trips complex here, unlike NumPy).
+            // The parenthesized "(1+2j)" form str() writes is not a number to CDOUBLE_scan: NumPy 2.4.2 raises (probed),
+            // and so does the port (it read it as a superset before, which NumPy's reader never did).
             p = TempWithText("(1+2j),(3+4j)");
             try
             {
-                CollectionAssert.AreEqual(
-                    new[] { new Complex(1, 2), new Complex(3, 4) },
-                    np.fromfile(p, NPTypeCode.Complex, sep: ",").ToArray<Complex>());
+                var e = Assert.ThrowsException<ValueError>(() => np.fromfile(p, NPTypeCode.Complex, sep: ","));
+                Assert.AreEqual("string or file could not be read to its end due to unmatched data", e.Message);
             }
             finally { File.Delete(p); }
         }

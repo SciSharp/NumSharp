@@ -7,8 +7,8 @@ namespace NumSharp.Tests.Fourier
     ///     out= dtype flexibility (NumPy ufunc same_kind casting FROM the loop output dtype).
     ///     Loop dtype is complex128 for fft/ifft/rfft, float64 for irfft; out= is accepted iff the loop
     ///     dtype casts to it under 'same_kind'. Values/messages verified verbatim against NumPy 2.4.2.
-    ///     (NumSharp raises ArgumentException with NumPy's UFuncTypeError text — the house convention,
-    ///     identical to DefaultEngine.UfuncOut.ValidateOutCast for clip/negative/etc.)
+    ///     (NumSharp raises TypeError, the class of NumPy's UFuncTypeError, with its text — identical to
+    ///     DefaultEngine.UfuncOut.ValidateOutCast for clip/negative/etc.)
     /// </summary>
     [TestClass]
     public class NpFftOutDtypeTest : TestClass
@@ -57,13 +57,13 @@ namespace NumSharp.Tests.Fourier
         [TestMethod]
         public void Fft_Float64Out_RaisesUfuncCast()
             => new Action(() => np.fft.fft(np.arange(4).astype(np.float64), @out: new NDArray(np.float64, new Shape(4))))
-                .Should().Throw<ArgumentException>()
+                .Should().Throw<TypeError>()
                 .WithMessage("Cannot cast ufunc 'fft' output from dtype('complex128') to dtype('float64') with casting rule 'same_kind'");
 
         [TestMethod]
         public void Rfft_Float64Out_RaisesUfuncCast_NamesEvenLoop()
             => new Action(() => np.fft.rfft(np.arange(4).astype(np.float64), @out: new NDArray(np.float64, new Shape(3))))
-                .Should().Throw<ArgumentException>()
+                .Should().Throw<TypeError>()
                 .WithMessage("Cannot cast ufunc 'rfft_n_even' output*to dtype('float64')*same_kind*");
 
         [TestMethod]
@@ -71,7 +71,7 @@ namespace NumSharp.Tests.Fourier
         {
             var half = np.fft.rfft(np.arange(4).astype(np.float64));
             new Action(() => np.fft.irfft(half, n: 4, @out: new NDArray(np.int64, new Shape(4))))
-                .Should().Throw<ArgumentException>()
+                .Should().Throw<TypeError>()
                 .WithMessage("Cannot cast ufunc 'irfft' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'");
         }
     }

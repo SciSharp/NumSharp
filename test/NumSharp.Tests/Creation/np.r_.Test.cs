@@ -513,6 +513,44 @@ namespace NumSharp.Tests.Creation
                 .Should().Throw<ValueError>().WithMessage("special directives must be the first entry.*");
         }
 
+        /// <summary>
+        ///     np.r_ types its result <c>result_type(*arrays, *scalars)</c>: one order-independent NEP 50 reduction (parity
+        ///     QA-51), so every order of three arrays gives NumPy 2.4.2's single answer (the triples np.select's test
+        ///     shares; a pairwise fold from the left gave float64 / float32 for two of them).
+        /// </summary>
+        [TestMethod]
+        public void R_ResultDtype_EveryOrderOfThreeArrays_IsNumPysResultType()
+        {
+            foreach (var (types, expected) in NumSharp.Tests.Indexing.SelectNumPyOrderTests.ThreeDtypeTriples)
+                foreach (var order in NumSharp.Tests.Indexing.SelectNumPyOrderTests.OrdersOf(types))
+                {
+                    var parts = new NDArray[3];
+                    for (int i = 0; i < 3; i++)
+                        parts[i] = np.array(new long[] { 1, 0, 1 }).astype(order[i]);
+                    using var r = np.r_[parts[0], parts[1], parts[2]];
+                    r.typecode.Should().Be(expected, $"np.r_ over [{string.Join(", ", order)}] is result_type's answer");
+                    foreach (var p in parts)
+                        p.Dispose();
+                }
+        }
+
+        /// <summary>
+        ///     The values arrive in that dtype: NumPy 2.4.2's <c>np.r_[f16, u16, i16]</c> is float32
+        ///     <c>[0.5, 1.5, 2.5, 4, 5, 6, 1, 2, 3]</c>.
+        /// </summary>
+        [TestMethod]
+        public void R_ResultValues_ThreeDtypes_AreCastIntoResultType()
+        {
+            using var i16 = np.array(new short[] { 1, 2, 3 });
+            using var u16 = np.array(new ushort[] { 4, 5, 6 });
+            using var f16 = np.array(new[] { 0.5, 1.5, 2.5 }).astype(np.float16);
+
+            using var r = np.r_[f16, u16, i16];
+
+            r.dtype.Should().Be(np.float32);
+            r.ToArray<float>().Should().Equal(0.5f, 1.5f, 2.5f, 4f, 5f, 6f, 1f, 2f, 3f);
+        }
+
         [TestMethod]
         public void Concatenators_AreSingletonsWithNumPysZeroLength()
         {

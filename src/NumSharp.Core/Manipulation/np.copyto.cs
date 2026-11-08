@@ -1,7 +1,12 @@
 using System;
+using System.Numerics;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Kernels;
+using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Backends.Unmanaged.Pooling;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -9,209 +14,197 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Copies values from one array to another, broadcasting as necessary.
+        ///     Copies values from one array to another, broadcasting as necessary: NumPy's <c>np.copyto(dst, src,
+        ///     casting='same_kind', where=True)</c>, a statement-for-statement port of <c>array_copyto</c> →
+        ///     <c>PyArray_AssignArray</c> (<c>numpy/_core/src/multiarray/array_assign_array.c</c>).
         /// </summary>
-        /// <param name="dst">The array into which values are copied.</param>
-        /// <param name="src">The array from which values are copied.</param>
-        /// <param name="casting">Controls what kind of data casting may occur when copying. Default <c>"same_kind"</c>.
-        ///     Allowed values: <c>"no"</c>, <c>"equiv"</c>, <c>"safe"</c>, <c>"same_kind"</c>, <c>"unsafe"</c>.</param>
-        /// <param name="where">Optional boolean mask broadcast to <paramref name="dst"/>'s shape. Elements of
-        ///     <paramref name="src"/> are only written to <paramref name="dst"/> where the mask is <c>true</c>.
-        ///     <c>null</c> (default) is equivalent to <c>where=True</c> — every element is copied.</param>
-        /// <exception cref="NumSharpException">If <paramref name="dst"/> is read-only (NumPy raises
-        ///     <c>ValueError: assignment destination is read-only</c>; the standard write guard —
-        ///     <see cref="NumSharpException.ThrowIfNotWriteable"/> — is the same one every other
-        ///     write path uses).</exception>
-        /// <exception cref="ArgumentException">If <paramref name="casting"/> is not a recognised casting
-        ///     name, or <paramref name="where"/> is not a boolean array.</exception>
-        /// <exception cref="InvalidCastException">If casting from <paramref name="src"/>'s dtype to
-        ///     <paramref name="dst"/>'s dtype is not allowed under the chosen rule (NumPy raises
-        ///     <c>TypeError</c>).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.copyto.html</remarks>
-        [NDScoped]
+        /// <param name="dst">The array into which values are copied (written in place).</param>
+        /// <param name="src">The array from which values are copied. It broadcasts to <paramref name="dst"/>'s shape;
+        ///     leading axes of extent 1 beyond <paramref name="dst"/>'s rank are stripped first (NumPy's backward
+        ///     compatibility rule), so a <c>(1, 3)</c> source fills a <c>(3,)</c> destination. A 0-d array is a SCALAR
+        ///     source (NumPy's <c>PyArray_AssignRawScalar</c>): cast once, then written to every selected element. An
+        ///     <see cref="NDArray"/> is always NumPy's ndarray (STRONG); a C# number binds
+        ///     <see cref="copyto{T}(NDArray, T, string, NDArray)"/> instead, which is NumPy's Python scalar (weak). A null
+        ///     (<c>(NDArray)null</c>) is Python's <c>None</c>: NumPy's 0-d OBJECT array, castable only under
+        ///     <c>casting='unsafe'</c>, where it stores NaN / <c>nan+nanj</c> / <c>False</c> / <c>'None'</c> / a
+        ///     <c>StringDType</c> NA object, or raises <c>int(None)</c>'s TypeError for an integer destination.</param>
+        /// <param name="casting">Which casts from <paramref name="src"/>'s dtype to <paramref name="dst"/>'s are allowed:
+        ///     <c>"no"</c>, <c>"equiv"</c>, <c>"safe"</c>, <c>"same_kind"</c> (the default) or <c>"unsafe"</c>.</param>
+        /// <param name="where">A bool mask broadcast to <paramref name="dst"/>'s shape: elements are written only where it
+        ///     is true. <c>null</c> (the default) is NumPy's <c>where=True</c>. A 0-d mask is NumPy's scalar optimization:
+        ///     true copies everything, false copies nothing (after the source shape has been checked).</param>
+        /// <exception cref="TypeError"><paramref name="casting"/> is <c>null</c>: "casting must be str, not NoneType".</exception>
+        /// <exception cref="ValueError"><paramref name="casting"/> is not one of the five names ("casting must be one of
+        ///     'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')"); <paramref name="dst"/> is read-only
+        ///     ("assignment destination is read-only"); <paramref name="src"/> does not broadcast to
+        ///     <paramref name="dst"/> ("could not broadcast input array from shape (4,) into shape (3,)"); or
+        ///     <paramref name="where"/> does not ("could not broadcast where mask from shape (2,) into shape (3,)") —
+        ///     NumPy's ValueError texts.</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array: "Cannot cast array data from
+        ///     dtype('int64') to dtype('bool') according to the rule 'safe'" ("scalar" for a 0-d mask) — NumPy's TypeError
+        ///     text, under the house type every ufunc's <c>where=</c> check raises.</exception>
+        /// <exception cref="InvalidCastException">The cast from <paramref name="src"/>'s dtype to <paramref name="dst"/>'s is
+        ///     not allowed under <paramref name="casting"/>: "Cannot cast array data from dtype('float64') to dtype('int32')
+        ///     according to the rule 'same_kind'" ("Cannot cast scalar from …" for a 0-d source) — NumPy's TypeError text,
+        ///     under the house type of every cast check (astype, concatenate, NDIter); a <c>None</c> source under any rule but
+        ///     <c>'unsafe'</c> ("Cannot cast scalar from dtype('O') to …").</exception>
+        /// <exception cref="TypeError">A <c>None</c> source (<paramref name="src"/> null) under <c>casting='unsafe'</c> into
+        ///     an integer or <c>decimal</c> destination with an element to convert: Python's <c>int(None)</c>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="dst"/> is <c>null</c>.</exception>
+        /// <remarks>
+        ///     <para><b>NumPy's checks, in NumPy's order</b> (each probed on 2.4.2): the casting name, the where mask's
+        ///     dtype, then — for an array source — a redundant self-copy returns at once (the same data, dtype, shape and
+        ///     strides: <c>np.copyto(a, a)</c> is legal even when <c>a</c> is read-only), the read-only destination, the
+        ///     cast rule, the source's broadcast, the 0-d mask, the mask's broadcast; for a 0-d source: the read-only
+        ///     destination, the cast rule, the mask's broadcast.</para>
+        ///     <para><b>Overlap.</b> A source that may share memory with the destination is copied first, as NumPy does,
+        ///     unless the destination is 1-D with both runs in the same direction; then the copy walks in NumPy's raw order
+        ///     (a negative destination stride flipped; backward when the source starts below the destination inside it), so
+        ///     overlapping views with different strides give NumPy's bits (<c>np.copyto(a[3:19:2], a[6:14])</c> reads
+        ///     elements it has already written, in NumPy and here).</para>
+        ///     <para><b>Kernels.</b> The masked copy is a bit copy of the destination's element width over NumPy's prepared
+        ///     iteration (<see cref="DirectILKernelGenerator.TryGetMaskedAssignKernel"/>): a SIMD blend for contiguous
+        ///     runs, a hoisted value for a broadcast source, a branch-free select otherwise. A source of another dtype is
+        ///     cast into the destination's dtype first (one element per distinct source element, laid out in the
+        ///     destination's memory order). The unmasked copy is <see cref="NDIter.Copy(UnmanagedStorage, UnmanagedStorage)"/>.</para>
+        ///     <para><b>Operand roots.</b> <see cref="NDAnchoredAttribute"/>: the kernels read raw addresses and the copy runs
+        ///     storage to storage, so a caller's temporary <paramref name="src"/>, <paramref name="where"/> or even
+        ///     <paramref name="dst"/> (<c>np.copyto(np.zeros(n), x)</c>) would otherwise be collectable mid-copy and its
+        ///     buffer pooled under the kernel. The weaver roots all three until the call returns; no scope is opened (this
+        ///     is a hot internal primitive, and it builds no array it reads after its last use).</para>
+        /// </remarks>
+        [NDAnchored]
         public static void copyto(NDArray dst, NDArray src, string casting = "same_kind", NDArray @where = null)
         {
-            if (dst is null)
-                throw new ArgumentNullException(nameof(dst));
-
-            if (src is null)
-                throw new ArgumentNullException(nameof(src));
-
-            // NumPy raises ValueError on write to a read-only destination (PyArray_FailUnlessWriteable);
-            // route through the one standard guard so every write path throws the identical error.
-            NumSharpException.ThrowIfNotWriteable(dst.Shape);
-
-            // NumPy raises ValueError for unrecognised casting names.
-            NPY_CASTING castingRule = ParseCastingName(casting);
-
-            // NumPy raises TypeError when the cast violates the rule.
-            if (!NDIterCasting.CanCast(src.GetTypeCode, dst.GetTypeCode, castingRule))
-            {
-                throw new InvalidCastException(
-                    $"Cannot cast array data from dtype('{src.GetTypeCode.AsNumpyDtypeName()}') " +
-                    $"to dtype('{dst.GetTypeCode.AsNumpyDtypeName()}') " +
-                    $"according to the rule '{CastingRuleName(castingRule)}'");
-            }
-
-            if (@where is null)
-            {
-                NDIter.Copy(dst, src);
-                return;
-            }
-
-            if (@where.GetTypeCode != NPTypeCode.Boolean)
-                throw new ArgumentException(
-                    $"where must be a boolean array, got dtype('{@where.GetTypeCode.AsNumpyDtypeName()}')",
-                    nameof(@where));
-
-            // 0-d scalar mask short-circuit (matches NumPy array_assign_array.c:433-446).
-            // Skips broadcasting+per-element iteration when the mask is unambiguous:
-            //   where=False → no-op, where=True → fall through to the unmasked fast path.
-            if (@where.Shape.IsScalar || @where.size == 1)
-            {
-                bool value = ReadScalarBool(@where);
-                if (!value)
-                    return;
-                NDIter.Copy(dst, src);
-                return;
-            }
-
-            CopyWithMask(dst, src, @where);
-        }
-
-        private static unsafe bool ReadScalarBool(NDArray array)
-        {
-            byte* basePtr = array.Storage.Address + array.Shape.offset * InfoOf.GetSize(NPTypeCode.Boolean);
-            return *(bool*)basePtr;
-        }
-
-        private static NPY_CASTING ParseCastingName(string casting)
-        {
-            if (casting is null)
-                throw new ArgumentNullException(nameof(casting));
-
-            switch (casting)
-            {
-                case "no": return NPY_CASTING.NPY_NO_CASTING;
-                case "equiv": return NPY_CASTING.NPY_EQUIV_CASTING;
-                case "safe": return NPY_CASTING.NPY_SAFE_CASTING;
-                case "same_kind": return NPY_CASTING.NPY_SAME_KIND_CASTING;
-                case "unsafe": return NPY_CASTING.NPY_UNSAFE_CASTING;
-                default:
-                    throw new ArgumentException(
-                        $"casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '{casting}')",
-                        nameof(casting));
-            }
-        }
-
-        private static string CastingRuleName(NPY_CASTING casting)
-        {
-            switch (casting)
-            {
-                case NPY_CASTING.NPY_NO_CASTING: return "no";
-                case NPY_CASTING.NPY_EQUIV_CASTING: return "equiv";
-                case NPY_CASTING.NPY_SAFE_CASTING: return "safe";
-                case NPY_CASTING.NPY_SAME_KIND_CASTING: return "same_kind";
-                case NPY_CASTING.NPY_UNSAFE_CASTING: return "unsafe";
-                default: return "unknown";
-            }
+            // npy_parse_arguments runs PyArray_CastingConverter before anything reads dst or src; the rest of
+            // array_copyto - the matrix region, the null check, the mask's conversion, the assignment - is the array
+            // object's (UnmanagedStorage.Copyto), which the engine's stores call directly.
+            NPY_CASTING rule = CopytoCastingConverter(casting);
+            UnmanagedStorage.Copyto(dst, src, rule, @where);
         }
 
         /// <summary>
-        ///     Conditional copy: writes <paramref name="src"/> into <paramref name="dst"/> only at positions
-        ///     where the broadcast <paramref name="where"/> mask is <c>true</c>. <paramref name="src"/> and
-        ///     <paramref name="where"/> are both broadcast to <paramref name="dst"/>'s shape; broadcast
-        ///     incompatibility surfaces as an <see cref="IncorrectShapeException"/> from <see cref="broadcast_to"/>.
-        ///     Iterates in C-order to match NumPy's element traversal.
+        ///     <c>np.copyto(dst, src)</c> with a C# scalar source — NumPy's Python scalar. A C# integer, <c>float</c>,
+        ///     <c>double</c> or <see cref="Complex"/> is WEAK (NEP 50): it takes the destination's dtype within its kind, so
+        ///     <c>np.copyto(uint8_array, 0)</c> and <c>np.copyto(float32_array, 0.1, casting: "safe")</c> are legal, and an
+        ///     integer that does not fit the destination raises instead of wrapping. A <c>bool</c>, <see cref="Half"/>,
+        ///     <c>char</c> or <c>decimal</c> is STRONG (a Python bool, a NumPy scalar): a 0-d array of its own dtype.
         /// </summary>
-        private static unsafe void CopyWithMask(NDArray dst, NDArray src, NDArray @where)
+        /// <typeparam name="T">The C# scalar type. Pass an <see cref="NDArray"/> (0-d or not) for NumPy's ndarray
+        ///     semantics: <c>NDArray.Scalar(1000L)</c> into int8 wraps to -24 like <c>np.array(1000)</c>, while the literal
+        ///     <c>1000</c> raises like the Python int.</typeparam>
+        /// <param name="dst">The array into which the value is copied.</param>
+        /// <param name="src">The value.</param>
+        /// <param name="casting">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</param>
+        /// <param name="where">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</param>
+        /// <exception cref="OverflowException">A weak integer does not fit an integer destination: "Python integer 1000 out
+        ///     of bounds for int8" (NumPy's OverflowError, raised before the mask is checked); a <c>ulong</c> past
+        ///     <see cref="long.MaxValue"/> into an integer other than uint32/uint64: "Python int too large to convert to C
+        ///     long" (the LP64 text NumSharp pins).</exception>
+        /// <exception cref="TypeError"><paramref name="casting"/> is <c>"equiv"</c> and the destination's dtype is not the
+        ///     scalar's own default (int64, float64, complex128): "cannot cast Python int to int32 under the casting rule
+        ///     'equiv'" — NumPy's text; or <paramref name="casting"/> is <c>null</c>.</exception>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> is an unmanaged type with no NumPy counterpart
+        ///     (for example <see cref="DateTime"/>).</exception>
+        /// <exception cref="ValueError">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</exception>
+        /// <exception cref="ArgumentException">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</exception>
+        /// <exception cref="InvalidCastException">The scalar's resolved dtype cannot be cast to the destination's under
+        ///     <paramref name="casting"/>: a float into an integer destination ("Cannot cast scalar from dtype('float64') to
+        ///     dtype('int32') according to the rule 'same_kind'"), an int into a bool destination (dtype('int64')), a complex
+        ///     into a real one.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="dst"/> is <c>null</c>.</exception>
+        /// <remarks>
+        ///     <para>NumPy's <c>array_copyto</c>: <c>npy_mark_tmp_array_if_pyscalar</c> marks the scalar weak,
+        ///     <c>npy_find_descr_for_scalar</c> picks the dtype it is stored in — the common DType of the scalar's abstract
+        ///     class (<c>_PyLongDType</c>, <c>_PyFloatDType</c>, <c>_PyComplexDType</c>) and the destination's class: the
+        ///     destination's own dtype for a number of a kind it can hold, int64 for an int into bool, float64 for a float
+        ///     into an integer or bool — and <c>npy_update_operand_for_scalar</c> stores it there with the element setter
+        ///     (<c>PyArray_Pack</c>: range-checked, never wrapped). The 0-d value is then assigned like any 0-d source.</para>
+        ///     <para>NumSharp has one complex width, so a complex into a float32 destination is resolved (and reported) as
+        ///     complex128 where NumPy says complex64.</para>
+        ///     <para><b>Operand roots.</b> <see cref="NDAnchoredAttribute"/>, as on
+        ///     <see cref="copyto(NDArray, NDArray, string, NDArray)"/>: the destination and the mask stay reachable while
+        ///     the fill kernel writes and reads them, even when the caller passed them as temporaries.</para>
+        /// </remarks>
+        [NDAnchored]
+        public static unsafe void copyto<T>(NDArray dst, T src, string casting = "same_kind", NDArray @where = null)
+            where T : unmanaged
         {
-            // Broadcast src + mask shapes against dst — validates compatibility and yields
-            // shape-matched views with stride=0 along stretched dimensions.
-            Shape srcShape = np.broadcast_to(src.Shape, dst.Shape);
-            Shape maskShape = np.broadcast_to(@where.Shape, dst.Shape);
-            Shape dstShape = dst.Shape;
+            NPY_CASTING rule = CopytoCastingConverter(casting);
+            if (dst is null)
+                throw new ArgumentNullException(nameof(dst));
 
-            long size = dstShape.size;
-            if (size == 0)
-                return;
-
-            int ndim = dstShape.NDim;
-            NPTypeCode srcType = src.GetTypeCode;
-            NPTypeCode dstType = dst.GetTypeCode;
-            int srcElemSize = InfoOf.GetSize(srcType);
-            int dstElemSize = InfoOf.GetSize(dstType);
-            int maskElemSize = InfoOf.GetSize(NPTypeCode.Boolean);
-
-            byte* srcBase = src.Storage.Address + srcShape.offset * srcElemSize;
-            byte* dstBase = dst.Storage.Address + dstShape.offset * dstElemSize;
-            byte* maskBase = @where.Storage.Address + maskShape.offset * maskElemSize;
-
-            // 0-d scalar destination: single conditional element.
-            if (ndim == 0)
+            // A C# char into a fixed-width string array is one character of TEXT (setitem reads it the same way), not
+            // NumSharp's numeric Char dtype: NumPy's np.copyto(u, 'x').
+            if (typeof(T) == typeof(char) && dst.typecode == NPTypeCode.String)
             {
-                if (*(bool*)maskBase)
-                    NDIterCasting.ConvertValue(srcBase, dstBase, srcType, dstType);
+                copyto(dst, ((char)(object)src).ToString(), casting, @where);
                 return;
             }
 
-            long* shape = stackalloc long[ndim];
-            long* srcStrides = stackalloc long[ndim];
-            long* dstStrides = stackalloc long[ndim];
-            long* maskStrides = stackalloc long[ndim];
-
-            for (int d = 0; d < ndim; d++)
+            if (typeof(T) == typeof(bool) || typeof(T) == typeof(Half) || typeof(T) == typeof(char) || typeof(T) == typeof(decimal))
             {
-                shape[d] = dstShape.dimensions[d];
-                srcStrides[d] = srcShape.strides[d];
-                dstStrides[d] = dstShape.strides[d];
-                maskStrides[d] = maskShape.strides[d];
-            }
-
-            // IL fast path: SIMD masked-cast kernel (ConditionalSelect for 1:1 lane strategies;
-            // scalar inner loop with mask gate + inline conversion for widen/narrow strategies).
-            // Both paths use incremental coord advance — no mod/div per element.
-            var maskedKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
-                .TryGetMaskedCastKernel(srcType, dstType);
-            if (maskedKernel != null)
-            {
-                maskedKernel(srcBase, dstBase, maskBase, srcStrides, dstStrides, maskStrides, shape, ndim);
+                // A Python bool is not marked weak (npy_mark_tmp_array_if_pyscalar requires an integer array), and Half /
+                // char / decimal are NumPy scalars: each is a 0-d array of its own dtype, assigned like one.
+                byte* slot = stackalloc byte[16];
+                *(T*)slot = src;
+                DefaultEngine.ValidateWhereMask(@where);
+                UnmanagedStorage.CopytoAssignRawScalar(dst, slot, InfoOf<T>.NPTypeCode, @where, rule);
                 return;
             }
 
-            // Scalar fallback for unsupported types (Decimal/Complex/Half/Char/Boolean involved).
-            long* coords = stackalloc long[ndim];
-            for (int d = 0; d < ndim; d++) coords[d] = 0;
+            PyScalarKind kind;
+            if (typeof(T) == typeof(sbyte) || typeof(T) == typeof(byte) || typeof(T) == typeof(short) || typeof(T) == typeof(ushort)
+                || typeof(T) == typeof(int) || typeof(T) == typeof(uint) || typeof(T) == typeof(long) || typeof(T) == typeof(ulong))
+                kind = PyScalarKind.Int;
+            else if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+                kind = PyScalarKind.Float;
+            else if (typeof(T) == typeof(Complex))
+                kind = PyScalarKind.Complex;
+            else
+                throw new NotSupportedException($"np.copyto: a {typeof(T).Name} source has no NumPy dtype.");
 
-            for (long i = 0; i < size; i++)
-            {
-                long srcOffset = 0;
-                long dstOffset = 0;
-                long maskOffset = 0;
-                for (int d = 0; d < ndim; d++)
-                {
-                    srcOffset += coords[d] * srcStrides[d];
-                    dstOffset += coords[d] * dstStrides[d];
-                    maskOffset += coords[d] * maskStrides[d];
-                }
+            UnmanagedStorage.CopytoPythonScalar(dst, src, kind, rule, @where);
+        }
 
-                if (*(bool*)(maskBase + maskOffset * maskElemSize))
-                {
-                    NDIterCasting.ConvertValue(
-                        srcBase + srcOffset * srcElemSize,
-                        dstBase + dstOffset * dstElemSize,
-                        srcType, dstType);
-                }
+        /// <summary>
+        ///     <c>np.copyto(dst, src)</c> with an arbitrary-size integer source — NumPy's Python int of any magnitude
+        ///     (weak, range-checked against the destination). See <see cref="copyto{T}(NDArray, T, string, NDArray)"/>.
+        /// </summary>
+        /// <param name="dst">The array into which the value is copied.</param>
+        /// <param name="src">The integer.</param>
+        /// <param name="casting">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</param>
+        /// <param name="where">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</param>
+        /// <exception cref="OverflowException">The integer does not fit an integer destination (NumPy's OverflowError texts),
+        ///     or is past the double range for a float destination ("int too large to convert to float").</exception>
+        /// <exception cref="TypeError">See <see cref="copyto{T}(NDArray, T, string, NDArray)"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</exception>
+        /// <exception cref="ArgumentException">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</exception>
+        /// <exception cref="InvalidCastException">See <see cref="copyto{T}(NDArray, T, string, NDArray)"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="dst"/> is <c>null</c>.</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/>: the destination and the mask stay reachable while the fill kernel
+        ///     runs, as on <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</remarks>
+        [NDAnchored]
+        public static void copyto(NDArray dst, BigInteger src, string casting = "same_kind", NDArray @where = null)
+        {
+            NPY_CASTING rule = CopytoCastingConverter(casting);
+            if (dst is null)
+                throw new ArgumentNullException(nameof(dst));
+            UnmanagedStorage.CopytoPythonScalar(dst, src, PyScalarKind.Int, rule, @where);
+        }
 
-                // Advance C-order (innermost dimension changes fastest).
-                for (int d = ndim - 1; d >= 0; d--)
-                {
-                    coords[d]++;
-                    if (coords[d] < shape[d])
-                        break;
-                    coords[d] = 0;
-                }
-            }
+        /// <summary>
+        ///     NumPy's <c>PyArray_CastingConverter</c> for <c>np.copyto</c>'s <c>casting</c> argument.
+        /// </summary>
+        /// <param name="casting">The caller's casting name.</param>
+        /// <returns>The casting level.</returns>
+        /// <exception cref="TypeError"><paramref name="casting"/> is <c>null</c> ("casting must be str, not NoneType").</exception>
+        /// <exception cref="ValueError">An unknown name (NumPy's "casting must be one of …" text).</exception>
+        private static NPY_CASTING CopytoCastingConverter(string casting)
+        {
+            if (casting is null)
+                throw new TypeError("casting must be str, not NoneType");
+            return DTypeCasting.ParseCasting(casting);
         }
     }
 }

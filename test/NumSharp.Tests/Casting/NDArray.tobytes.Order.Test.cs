@@ -144,13 +144,36 @@ namespace NumSharp.Tests.Casting
             }
         }
 
+        /// <summary>
+        ///     An unknown order letter is NumPy's PyArray_OrderConverter ValueError (<c>order must be one of 'C', 'F', 'A',
+        ///     or 'K' (got 'X')</c>); <see cref="ValueError"/> is an ArgumentException, the type it threw before.
+        /// </summary>
         [TestMethod]
         public void InvalidOrder_Throws_ArgumentException()
         {
             foreach (char bad in new[] { 'X', 'Z', '1', 'G', ' ', '\0' })
             {
                 var a = np.arange(3).astype(NPTypeCode.Int32);
-                Assert.ThrowsException<ArgumentException>(() => a.tobytes(bad), $"order '{bad}' must throw");
+                var ex = Assert.ThrowsException<ValueError>(() => a.tobytes(bad), $"order '{bad}' must throw");
+                Assert.AreEqual($"order must be one of 'C', 'F', 'A', or 'K' (got '{bad}')", ex.Message);
+            }
+        }
+
+        /// <summary>
+        ///     NumPy converts the order while it parses tobytes' arguments, before it looks at the array, so an EMPTY array
+        ///     refuses an invalid order too (NumSharp returned no bytes first). NumPy 2.4.2: <c>np.zeros(0).tobytes(order='Z')</c>
+        ///     raises <c>ValueError: order must be one of 'C', 'F', 'A', or 'K' (got 'Z')</c>; the four valid orders, either
+        ///     case, give <c>b''</c>.
+        /// </summary>
+        [TestMethod]
+        public void InvalidOrder_EmptyArray_StillThrows()
+        {
+            foreach (var empty in new[] { np.zeros(new Shape(0)), np.zeros(new Shape(0, 3)).astype(NPTypeCode.Int16) })
+            {
+                var ex = Assert.ThrowsException<ValueError>(() => empty.tobytes('Z'));
+                Assert.AreEqual("order must be one of 'C', 'F', 'A', or 'K' (got 'Z')", ex.Message);
+                foreach (char ok in new[] { 'C', 'F', 'A', 'K', 'c', 'f', 'a', 'k' })
+                    Assert.AreEqual(0, empty.tobytes(ok).Length, $"order '{ok}'");
             }
         }
 

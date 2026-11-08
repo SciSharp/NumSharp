@@ -128,14 +128,77 @@ namespace NumSharp.Tests.Interop
             NDArrayPythonInterop.FromBufferFormat("<u", 2).Should().Be(NPTypeCode.Char, "ctypes.c_wchar arrays export '<u'");
             NDArrayPythonInterop.FromBufferFormat("u", 1).Should().Be(NPTypeCode.Byte, "a degenerate single-byte text unit is raw bytes");
 
-            ((Action)(() => NDArrayPythonInterop.FromBufferFormat("u", 4)))
-                .Should().Throw<NotSupportedException>().WithMessage("*UCS-4*ToNDArray*", "4-byte wchar_t (linux/macOS) narrows only as a copy");
-            ((Action)(() => NDArrayPythonInterop.FromBufferFormat("w", 4)))
-                .Should().Throw<NotSupportedException>().WithMessage("*UCS-4*ToNDArray*", "'w' is UCS-4 by definition (array.array('w') on 3.13+)");
-            ((Action)(() => NDArrayPythonInterop.FromBufferFormat("1w", 4)))
-                .Should().Throw<NotSupportedException>().WithMessage("*UCS-4*ToNDArray*", "numpy '<U1' exports the count-prefixed '1w'");
+            // A 4-byte unit is one UCS-4 code point: NumSharp's U1 holds exactly that, so it is a dtype of its own (not a
+            // narrowed Char) — the same bytes numpy's '<U1' holds.
+            NDArrayPythonInterop.FromBufferFormat("u", 4).Should().Be(np.dtype("U1"), "4-byte wchar_t (linux/macOS) is one UCS-4 code point");
+            NDArrayPythonInterop.FromBufferFormat("w", 4).Should().Be(np.dtype("U1"), "'w' is UCS-4 by definition (array.array('w') on 3.13+)");
+            NDArrayPythonInterop.FromBufferFormat("1w", 4).Should().Be(np.dtype("U1"), "numpy '<U1' exports the count-prefixed '1w'");
             ((Action)(() => NDArrayPythonInterop.FromBufferFormat(">u", 2)))
                 .Should().Throw<NotSupportedException>().WithMessage("*big-endian*", "UTF-16 is byte-order sensitive — 2-byte 'u' is not exempt like 1-byte codes");
+        }
+
+        /// <summary>
+        ///     The PEP 3118 text formats numpy's buffers report map to NumSharp's sized string dtypes (and back): a count is
+        ///     characters, UCS-4 has a byte order (a big-endian view is refused with the copy route), a byte string does not,
+        ///     a count that disagrees with the item size matches nothing, an object buffer and a <c>StringDType</c> refuse.
+        /// </summary>
+        [TestMethod]
+        public void FromBufferFormat_TextCodes_MapToSizedStringDtypes()
+        {
+            // numpy's own buffers count characters: '5s' is S5 (5 bytes), '5w' is U5 (5 code points, 20 bytes); a lone
+            // code means one character. The byte order of UCS-4 matters; a byte string's does not.
+            NDArrayPythonInterop.FromBufferFormat("5s", 5).Should().Be(np.dtype("S5"));
+            NDArrayPythonInterop.FromBufferFormat("s", 1).Should().Be(np.dtype("S1"));
+            NDArrayPythonInterop.FromBufferFormat(">5s", 5).Should().Be(np.dtype("S5"), "a byte string has no byte order");
+            NDArrayPythonInterop.FromBufferFormat("5w", 20).Should().Be(np.dtype("U5"));
+            NDArrayPythonInterop.FromBufferFormat("=2w", 8).Should().Be(np.dtype("U2"), "numpy marks an unaligned U field '=2w'");
+            NDArrayPythonInterop.FromBufferFormat("<12w", 48).Should().Be(np.dtype("U12"));
+            NDArrayPythonInterop.FromBufferFormat("5w", 20).itemsize.Should().Be(20);
+
+            ((Action)(() => NDArrayPythonInterop.FromBufferFormat(">5w", 20)))
+                .Should().Throw<NotSupportedException>().WithMessage("*big-endian UCS-4*byte-swaps*U5*");
+            ((Action)(() => NDArrayPythonInterop.FromBufferFormat("!3w", 12)))
+                .Should().Throw<NotSupportedException>().WithMessage("*big-endian UCS-4*");
+            ((Action)(() => NDArrayPythonInterop.FromBufferFormat("5w", 16)))
+                .Should().Throw<NotSupportedException>().WithMessage("*5 character(s) (20 bytes)*itemsize 16*", "a count that disagrees with the itemsize matches no dtype");
+            ((Action)(() => NDArrayPythonInterop.FromBufferFormat("O", 8)))
+                .Should().Throw<NotSupportedException>().WithMessage("*object dtype 'O'*str*StringDType copy*");
+
+            // The reverse map writes exactly the formats numpy's buffers report.
+            NDArrayPythonInterop.ToBufferFormat(np.dtype("S5")).Should().Be("5s");
+            NDArrayPythonInterop.ToBufferFormat(np.dtype("U3")).Should().Be("3w");
+            ((Action)(() => NDArrayPythonInterop.ToBufferFormat(np.dtypes.StringDType())))
+                .Should().Throw<NotSupportedException>().WithMessage("*cannot include dtype 'numpy.dtypes.StringDType' in a buffer*");
+        }
+
+        /// <summary>
+        ///     numpy's text typestrs map to NumSharp's sized string dtypes and back (<c>'&lt;U1'</c> is <c>U1</c>, not
+        ///     <c>Char</c>); a big-endian <c>U</c> typestr, a <c>StringDType</c> typestr and the object typestr refuse with
+        ///     the copy route in the message.
+        /// </summary>
+        [TestMethod]
+        public void TextTypestrs_MapBothWays()
+        {
+            // The typestrs __array_interface__ and dtype.str give: '|S5', '<U5'; a byte string ignores any byte order.
+            NDArrayPythonInterop.FromNumpyDtypeStr("|S5").Should().Be(np.dtype("S5"));
+            NDArrayPythonInterop.FromNumpyDtypeStr("<S5").Should().Be(np.dtype("S5"));
+            NDArrayPythonInterop.FromNumpyDtypeStr(">S5").Should().Be(np.dtype("S5"));
+            NDArrayPythonInterop.FromNumpyDtypeStr("<U1").Should().Be(np.dtype("U1"), "numpy '<U1' is NumSharp's U1 (not Char)");
+            NDArrayPythonInterop.FromNumpyDtypeStr("=U7").Should().Be(np.dtype("U7"));
+            ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr(">U3")))
+                .Should().Throw<NotSupportedException>().WithMessage("*big-endian UCS-4 text '>U3'*byte-swaps*U3*");
+            ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr("StringDType()")))
+                .Should().Throw<NotSupportedException>().WithMessage("*StringDType() has no buffer form*copy*");
+            ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr("StringDType(na_object=None)")))
+                .Should().Throw<NotSupportedException>().WithMessage("*StringDType(na_object=None) has no buffer form*");
+            ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr("|O")))
+                .Should().Throw<NotSupportedException>().WithMessage("*object dtype '|O'*");
+
+            NDArrayPythonInterop.ToNumpyDtypeStr(np.dtype("S5")).Should().Be("|S5");
+            NDArrayPythonInterop.ToNumpyDtypeStr(np.dtype("U5")).Should().Be("<U5");
+            NDArrayPythonInterop.ToNumpyDtypeStr(np.dtype("U1")).Should().Be("<U1");
+            ((Action)(() => NDArrayPythonInterop.ToNumpyDtypeStr(np.dtypes.StringDType(null, coerce: false))))
+                .Should().Throw<NotSupportedException>().WithMessage("*StringDType(na_object=None, coerce=False) has no buffer form*");
         }
 
         [TestMethod]
@@ -149,18 +212,18 @@ namespace NumSharp.Tests.Interop
                 .Should().Throw<NotSupportedException>().WithMessage("*float64*", "x87/quad long double has no NumSharp dtype");
         }
 
+        /// <summary>
+        ///     The complex64 typestr refuses with the widening-copy guidance the buffer-format path gives, not the generic
+        ///     "has no NumSharp dtype".
+        /// </summary>
         [TestMethod]
-        public void FromNumpyDtypeStr_Complex64AndUcs4_ThrowWithConversionGuidance()
+        public void FromNumpyDtypeStr_Complex64_ThrowsWithConversionGuidance()
         {
-            // The typestr twins of buffer 'Zf' / '1w' — reachable through __array_interface__ when a
-            // NON-contiguous complex64 / U1 numpy array is viewed — must carry the same guidance as
-            // the buffer-format path, not the generic "has no NumSharp dtype".
+            // The typestr twin of buffer 'Zf' — reachable through __array_interface__ when a NON-contiguous complex64 numpy
+            // array is viewed — must carry the same guidance as the buffer-format path, not the generic "has no NumSharp
+            // dtype". (Its text twins, '<U1' / '<U3', are real NumSharp dtypes now: TextTypestrs_MapBothWays.)
             ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr("<c8")))
                 .Should().Throw<NotSupportedException>().WithMessage("*complex64*ToNDArray*");
-            ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr("<U1")))
-                .Should().Throw<NotSupportedException>().WithMessage("*UCS-4*ToNDArray*");
-            ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr("<U3")))
-                .Should().Throw<NotSupportedException>("multi-char unicode elements are whole strings, not single code points");
         }
     }
 }

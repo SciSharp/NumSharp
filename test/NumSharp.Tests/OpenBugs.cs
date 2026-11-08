@@ -2580,5 +2580,61 @@ namespace NumSharp.Tests
                 "NumSharp: check_and_adjust_axis converts -4 to ndim+(-4) = -1, then the " +
                 "array access dims[-1] throws IndexOutOfRangeException.");
         }
+
+        /// <summary>
+        ///     NumPy 2.4's <c>casting='same_value'</c> for a numeric <c>astype</c>: the cast runs through value-checking loops
+        ///     (<c>lowlevel_strided_loops.c.src</c>'s same-value checks: a non-finite value into an integer, a value outside the
+        ///     target's range, a value that does not round-trip), so <c>np.array([2.0, 3.0]).astype(np.int32,
+        ///     casting='same_value')</c> is <c>[2, 3]</c> and <c>np.array([1.5]).astype(np.int32, casting='same_value')</c> raises
+        ///     <c>ValueError: could not cast 'same_value' double to long</c> (Windows NumPy's C name of int32; LP64 says
+        ///     <c>int</c>). NumSharp's numeric casts have no such loop: astype raises NotSupportedException for a cast between
+        ///     two storage types (found by P3 batch 9b's replay of astype's snapshot, 600 cases).
+        /// </summary>
+        [TestMethod]
+        [OpenBugs]
+        public void Bug_Astype_SameValueCasting_NumericCastsHaveNoValueCheck()
+        {
+            var exact = np.array(new[] { 2.0, 3.0 }).astype(np.int32, true, 'K', "same_value");
+            exact.ToArray<int>().Should().Equal(2, 3);
+
+            Action lossy = () => np.array(new[] { 1.5 }).astype(np.int32, true, 'K', "same_value");
+            lossy.Should().Throw<ValueError>().WithMessage("could not cast 'same_value' double to *");
+        }
+
+        /// <summary>
+        ///     NumPy's <c>iter(a)</c> walks the FIRST axis, so an array whose first axis is not empty yields its rows even when a
+        ///     later axis is: <c>list(np.zeros((3, 0)))</c> is three arrays of shape <c>(0,)</c> (NumPy 2.4.2). NumSharp's
+        ///     <c>NDArray.GetEnumerator</c> (and so <c>__iter__</c> and <c>foreach</c>) returns nothing for ANY array of size 0
+        ///     (its first test is <c>Shape.size == 0</c>), so the three rows are lost. NDCharArray's enumerator counts
+        ///     <c>Shape.dimensions[0]</c> and is right. Found by the np.mintypecode port (2026-11-05), which counts the first
+        ///     axis itself (<c>np.mintypecode(np.zeros((3, 0), 'f'))</c> is <c>'f'</c> in both).
+        /// </summary>
+        [TestMethod]
+        [OpenBugs]
+        public void NDArrayIter_EmptySecondAxis_YieldsTheRows()
+        {
+            var a = np.zeros(new Shape(3, 0), np.float32);
+            var rows = a.Cast<NDArray>().ToList();
+            rows.Should().HaveCount(3, "NumPy: list(np.zeros((3, 0))) has 3 rows");
+            rows.Should().OnlyContain(r => r.ndim == 1 && r.size == 0);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.array("d")</c> is an explicit 0-d ndarray, not a <c>str</c>: <c>isinstance(np.array("d"), str)</c>
+        ///     is False, and <c>np.mintypecode([np.array("d")], typeset="Ud")</c> reads it through <c>asarray(t).dtype.char</c>
+        ///     as <c>'U'</c> (then "substring not found"). NumSharp marks an explicit 0-d array only for an UNMANAGED scalar
+        ///     (<c>np.array&lt;T&gt;(T)</c>, <c>NDArray.MarkExplicitZeroDimArray</c>); <c>np.array(string)</c> returns it
+        ///     unmarked, so the boundary map reads it as a <c>numpy.str_</c> scalar (<c>NDScalarType.PyStr.__instancecheck__</c>
+        ///     is True) and np.mintypecode takes its text. Found by the np.mintypecode port (2026-11-05).
+        /// </summary>
+        [TestMethod]
+        [OpenBugs]
+        public void NpArrayOfString_IsAnExplicitZeroDimArray()
+        {
+            var explicitZeroDim = np.array("d");
+            NDScalarType.PyStr.__instancecheck__(explicitZeroDim).Should().BeFalse("NumPy: isinstance(np.array('d'), str) is False");
+            Action act = () => np.mintypecode(new object[] { explicitZeroDim }, "Ud");
+            act.Should().Throw<ValueError>().WithMessage("substring not found");
+        }
     }
 }

@@ -12,9 +12,6 @@ namespace NumSharp.Backends
         private static long CountNonZeroDispatch<T>(NDArray nd) where T : unmanaged
             => count_nonzero<T>(nd.MakeGeneric<T>());
 
-        private static void CountNonZeroAxisDispatch<T>(NDArray nd, NDArray result, int axis) where T : unmanaged
-            => count_nonzero_axis<T>(nd.MakeGeneric<T>(), result, axis);
-
         /// <summary>
         ///     <c>np.nonzero</c> — returns a tuple of <c>ndim</c> int64 arrays of length
         ///     <c>N</c>, containing the per-dim coordinates of non-zero elements in C-order.
@@ -23,7 +20,7 @@ namespace NumSharp.Backends
         ///     <b>Implementation:</b> three IL-emitted kernels keyed off the element type
         ///     (<see cref="DirectILKernelGenerator.GetArgwhereCountKernel"/>,
         ///     <see cref="DirectILKernelGenerator.GetArgwhereFlatKernel"/>,
-        ///     <see cref="DirectILKernelGenerator.GetNonZeroPerDimKernel"/>). The runtime call
+        ///     <see cref="DirectILKernelGenerator.GetArgwhereExpandKernel"/>). The runtime call
         ///     site has zero <c>typeof(T)</c> branches: it looks the kernels up in the
         ///     per-dtype <see cref="System.Collections.Concurrent.ConcurrentDictionary{Type,Object}"/>
         ///     cache and invokes them. Every loop (SIMD popcount, SIMD bit-scan, coord
@@ -33,16 +30,19 @@ namespace NumSharp.Backends
         ///     <para>
         ///     <b>Two-pass pre-size-then-fill:</b> the SIMD popcount sizes the result
         ///     exactly, the SIMD bit-scan writes flat indices either straight into the
-        ///     ndim==1 result buffer or into a temp <c>long[]</c> which the IL per-dim
-        ///     expand kernel walks once to emit the per-axis columns. Mirrors the design
-        ///     of <see cref="DefaultEngine.Argwhere"/>.
+        ///     ndim==1 result buffer or into a temp <c>long[]</c> which the IL row-expand
+        ///     kernel walks once to fill the shared <c>(count, ndim)</c> multi-index matrix
+        ///     whose columns are the result. Mirrors the design of
+        ///     <see cref="DefaultEngine.Argwhere"/>, which fills NumPy's transposed
+        ///     <c>(ndim, count)</c> stack instead.
         ///     </para>
         ///
         ///     <para>
         ///     Routing:
         ///     <list type="bullet">
-        ///       <item>0-d → promote via <c>atleast_1d</c>, recurse
-        ///             (truthy→<c>([0],)</c>, falsy→<c>([],)</c>).</item>
+        ///       <item>0-d → NumPy 2.x's ValueError, every dtype, bool with its longer text (parity QA-02: the numeric
+        ///             dtypes used to answer like <c>atleast_1d(a).nonzero()</c>, which NumPy's message points callers
+        ///             to).</item>
         ///       <item>size == 0 → tuple of <c>ndim</c> empty int64 arrays.</item>
         ///       <item>Contiguous → IL count + IL flat-scan + (ndim==1 ? direct write : IL per-dim expand).</item>
         ///       <item>Non-contiguous → materialize via <c>ascontiguousarray</c> then
@@ -50,19 +50,34 @@ namespace NumSharp.Backends
         ///     </list>
         ///     </para>
         /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <returns>One int64 index array per dimension.</returns>
+        /// <exception cref="ValueError">A 0-d array of any dtype, raised before the element is read (single-argument
+        ///     <c>np.where</c> inherits it): NumPy's <c>Calling nonzero on 0d arrays is not allowed. Use
+        ///     np.atleast_1d(scalar).nonzero() instead.</c>, which a bool array follows with <c>If the context of this
+        ///     error is of the form `arr[nonzero(cond)]`, just use `arr[cond]`.</c> (<see cref="NonZero0dMessage"/>).</exception>
+        /// <remarks>A string array of at least one dimension is searched by its truth values (a non-empty string is True;
+        ///     the nonzero route never raises).</remarks>
         [NDScoped]
         public override unsafe NDArray<long>[] NonZero(NDArray nd)
         {
+            // Text: NumPy's nonzero refuses a 0-d array before it reads the element (the string stand-in raises the
+            // non-bool text itself), then reads the strings' truth values: the stand-in is the truth array, searched below.
+            if (Strings.NDStringUfuncs.ReduceStandIn("nonzero", nd) is { } standIn)
+            {
+                using (standIn)
+                    return NonZero(standIn);
+            }
             // Boundary scope: the yielded tuple is the column VIEWS; the shared multi-index base
-            // matrix (and the 0-d promotion view) are reclaimed at exit — ARC keeps the buffer
-            // alive through the yielded views until the caller releases them.
+            // matrix is reclaimed at exit — ARC keeps the buffer alive through the yielded views until the caller
+            // releases them.
 
-            // 0-d: NumPy 2.4 raises ValueError, but its own error message suggests
-            // `np.atleast_1d(scalar).nonzero()`, which is exactly the result our
-            // historical implementation has always produced. Preserve that semantic
-            // (otherwise this becomes a breaking-change PR for downstream callers).
+            // 0-d: NumPy 2.4.2 refuses for every dtype, before reading the element. The numeric dtypes used to answer like
+            // np.atleast_1d(a).nonzero() to spare callers a break; the owner chose NumPy's error (parity QA-02, principle
+            // 4), and the message names the one-line migration. np.argwhere keeps its own atleast_1d branch (NumPy's), so
+            // it never reaches here 0-d.
             if (nd.ndim == 0)
-                return NonZero(np.atleast_1d(nd));
+                throw new ValueError(NonZero0dMessage(nd.typecode));
 
             int ndim = nd.ndim;
             long size = nd.size;
@@ -80,7 +95,7 @@ namespace NumSharp.Backends
             NDArray source = nd;
             if (!nd.Shape.IsContiguous)
             {
-                materialized = np.ascontiguousarray(nd);
+                materialized = NDArray.ascontiguousarray(nd, null);
                 source = materialized;
             }
             var sourceShape = source.Shape;
@@ -105,7 +120,7 @@ namespace NumSharp.Backends
                 // (count, 1) base). The base matrix is byte-identical to np.argwhere's result, so
                 // the ndim>1 fill drives the SAME row-expand IL kernel (one sequential write
                 // stream — better locality than ndim separate column streams).
-                var multiIndex = new NDArray(NPTypeCode.Int64, new Shape(count, ndim), false);
+                var multiIndex = NewArray(NPTypeCode.Int64, new Shape(count, ndim), false);
                 long* resPtr = (long*)multiIndex.Storage.Address;
 
                 // ndim == 1: the (count, 1) matrix's single column IS the flat index list —
@@ -160,14 +175,36 @@ namespace NumSharp.Backends
                 // keep `materialized` rooted until the call site here. For the contig
                 // fast path materialized is null and Dispose is skipped.
                 materialized?.Dispose();
+                // The contiguous route reads the CALLER's operand through basePtr; a temporary operand
+                // (`np.argwhere(a > 0)`) is referenced only by this parameter, which the JIT may treat as dead
+                // once the pointer is taken — keep it reachable until the kernels are done.
+                GC.KeepAlive(nd);
             }
         }
 
-        private static NDArray<long>[] MakeEmptyNonZeroResult(int ndim)
+        /// <summary>
+        ///     NumPy 2.4.2's refusal text for <c>nonzero</c> of a 0-d array (<c>PyArray_Nonzero</c>,
+        ///     <c>item_selection.c</c>): every dtype gets <c>Calling nonzero on 0d arrays is not allowed. Use
+        ///     np.atleast_1d(scalar).nonzero() instead.</c>, and a BOOL array gets the hint <c>If the context of this
+        ///     error is of the form `arr[nonzero(cond)]`, just use `arr[cond]`.</c> after it, because a 0-d boolean
+        ///     condition is usually a mask written as <c>arr[np.nonzero(cond)]</c>.
+        /// </summary>
+        /// <param name="dtype">The 0-d array's dtype; only <see cref="NPTypeCode.Boolean"/> changes the text.</param>
+        /// <returns>The text to raise as a <see cref="ValueError"/>.</returns>
+        /// <remarks>Shared by every 0-d nonzero refusal that can see a bool operand (np.nonzero / ndarray.nonzero /
+        ///     single-argument np.where, numpy.ma's nonzero through them); the string stand-in and the object array
+        ///     (<c>NDListArray</c>) are never bool and keep the short text.</remarks>
+        internal static string NonZero0dMessage(NPTypeCode dtype)
+            => dtype == NPTypeCode.Boolean
+                ? "Calling nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead. "
+                  + "If the context of this error is of the form `arr[nonzero(cond)]`, just use `arr[cond]`."
+                : "Calling nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead.";
+
+        private NDArray<long>[] MakeEmptyNonZeroResult(int ndim)
         {
             // NumPy: even the empty result is columns of a shared (0, ndim) multi-index buffer —
             // each tuple entry keeps byte stride ndim*8 and owndata=False (probed 2.4.2).
-            var emptyBase = new NDArray(NPTypeCode.Int64, new Shape(0, ndim), false);
+            var emptyBase = NewArray(NPTypeCode.Int64, new Shape(0, ndim), false);
             var views = MakeNonZeroColumnViews(emptyBase, 0, ndim);
             emptyBase.Dispose(); // each column view holds its own counted ref on the shared buffer
             return views;
@@ -197,14 +234,25 @@ namespace NumSharp.Backends
         /// <summary>
         /// Count the number of non-zero elements in the array.
         /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <returns>The number of elements whose truth value is True.</returns>
+        /// <remarks>A string array is counted by its truth values (a non-empty string counts; never raises).</remarks>
         /// <remarks>
         /// NumPy-aligned: np.count_nonzero([0, 1, 0, 2]) = 2
         /// </remarks>
         [NDScoped]
         public override long CountNonZero(NDArray nd)
         {
+            // An array with no element counts nothing, before anything reads it (np.count_nonzero's first statement, moved
+            // here by the np-layer dtype plan's P1b: an empty text array never builds its truth array).
             if (nd.size == 0)
                 return 0;
+            // Text: NumPy's count_nonzero reads the strings' truth values (the nonzero route): the stand-in is the truth array.
+            if (Strings.NDStringUfuncs.ReduceStandIn("count_nonzero", nd) is { } standIn)
+            {
+                using (standIn)
+                    return CountNonZero(standIn);
+            }
 
             // Scalar return — scope only: reclaims the per-dispatch MakeGeneric alias
             // (a fresh wrapper over nd's storage that otherwise strands on the finalizer).
@@ -214,51 +262,83 @@ namespace NumSharp.Backends
         /// <summary>
         /// Count non-zero elements along a specific axis.
         /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <param name="axis">The reduced axis.</param>
+        /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
+        /// <returns>The int64 counts: NumPy's read-only scalar stand-in when the result is 0-d (a 1-D or 0-d input without
+        ///     keepdims, empty or not), a fresh writeable array otherwise.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds — the sum's rule NumPy's count_nonzero
+        ///     inherits (<c>a.astype(bool).sum(axis)</c>), so a 0-d input accepts 0 and -1 and nothing else.</exception>
+        /// <remarks>A string array is counted by its truth values: NumPy's <c>(a != '').sum(axis)</c> (never raises).</remarks>
         [NDScoped]
         public override NDArray CountNonZero(NDArray nd, int axis, bool keepdims = false)
         {
-            // Boundary scope: reclaims the per-dispatch MakeGeneric alias; the result is yielded.
-
-            var shape = nd.Shape;
-
-            // Normalize axis
-            while (axis < 0)
-                axis = nd.ndim + axis;
-            if (axis >= nd.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis));
-
-            // Compute output shape
-            var outputDims = new long[nd.ndim - 1];
-            for (int d = 0, od = 0; d < nd.ndim; d++)
-                if (d != axis) outputDims[od++] = shape.dimensions[d];
-
-            var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
-            var result = new NDArray(NPTypeCode.Int64, outputShape, false);
-
+            // Text: NumPy's count_nonzero is (a != '').sum(axis) — the strings' truth values, after the sum's axis check (a
+            // 0-d input accepts 0 and -1): the stand-in is the truth array, summed below.
+            if (Strings.NDStringUfuncs.ReduceStandIn("count_nonzero", nd, (int?)axis) is { } standIn)
+            {
+                using (standIn)
+                    return CountNonZero(standIn, axis, keepdims);
+            }
             if (nd.size == 0)
             {
-                // Already zeros from allocation
+                // An array with no element: int64 zeros of the reduced shape (np.count_nonzero's branch, moved here by the
+                // np-layer dtype plan's P1b). The axis is validated as NumPy's sum validates it: an AxisError naming the
+                // axis as given (a wrapping loop used to turn -3 on a 1-D array into axis 0).
+                if (axis < -nd.ndim || axis >= nd.ndim)
+                    throw new AxisError(axis, nd.ndim);
+                if (axis < 0)
+                    axis += nd.ndim;
+
+                var resultShape = Shape.GetAxis(nd.Shape, axis);
+                // np.zeros(shape, int64)'s own allocation (a zero-filled owner), without the call up into np.*.
+                var empty = NewArray(NPTypeCode.Int64, new Shape(resultShape, copy: false), true);
                 if (keepdims)
                 {
                     var ks = new long[nd.ndim];
                     for (int d = 0, sd = 0; d < nd.ndim; d++)
-                        ks[d] = (d == axis) ? 1 : outputDims[sd++];
-                    result.Storage.Reshape(new Shape(ks));
+                        ks[d] = (d == axis) ? 1 : resultShape[sd++];
+                    empty.Storage.Reshape(new Shape(ks, copy: false));
                 }
-                return result;
+                // NumPy's count is a.astype(bool).sum(axis), so a 1-D input's 0-d count is the sum's scalar, as the
+                // non-empty route below returns it (np.linalg.matrix_rank of an empty matrix with a tolerance came back
+                // writeable through here). A no-op for an array result.
+                return empty.MarkReductionScalar();
             }
+            // Boundary scope: reclaims the cast copy of a failed call and the scalar path's temporaries; the result is yielded.
 
-            NpFunc.Invoke(nd.typecode, CountNonZeroAxisDispatch<int>, nd, result, axis);
-
-            if (keepdims)
+            // NumPy's count_nonzero(a, axis) is a.astype(bool).sum(axis=axis, dtype=intp), so the sum's axis rule holds: a
+            // 0-d input accepts 0 and -1 (a reduction over no axis — the 0-d count of its one element), and every other
+            // axis is normalize_axis_index's AxisError. The wrap-then-test loop this replaces never ended for a negative
+            // axis of a 0-d input, and accepted -ndim - 1 (counting along the last axis).
+            if (nd.ndim == 0)
             {
-                var ks = new long[nd.ndim];
-                for (int d = 0, sd = 0; d < nd.ndim; d++)
-                    ks[d] = (d == axis) ? 1 : (sd < outputDims.Length ? outputDims[sd++] : 1);
-                result.Storage.Reshape(new Shape(ks));
+                if (axis != 0 && axis != -1)
+                    throw new AxisError(axis, 0);
+                // The sum of a 0-d input is NumPy's scalar, keepdims or not (np.count_nonzero(np.array(5), axis=0) is
+                // np.int64(1)); NDArray.Scalar alone is a writeable 0-d array.
+                return NewScalar(CountNonZero(nd)).MarkReductionScalar();
             }
 
-            return result;
+            axis = Shape.check_and_adjust_axis(nd.ndim, axis);
+
+            // NumPy's count_nonzero along an axis IS `a.astype(bool, copy=False).sum(axis=axis, dtype=np.intp,
+            // keepdims=keepdims)` (numeric.py): the bool cast (NaN and inf true, -0.0 false, a complex value true when
+            // either part is nonzero), then add.reduce in the int64 loop. Running exactly that gives NumPy's result
+            // layout — the reduce iterator's allocation in the input's memory order, F for an F input (plan
+            // api-parameter-parity X10) — and np.sum's bool axis-count routes; the per-output scalar loop it replaces
+            // wrote C order and ran 15-100x slower than these routes at 100K-1M elements.
+            NDArray truth = nd.typecode == NPTypeCode.Boolean ? nd : nd.astype(np.@bool, false);
+            try
+            {
+                return Sum(truth, axis, np.int64, keepdims);
+            }
+            finally
+            {
+                // The cast copy is this call's temporary; a bool input is the caller's array and stays alive.
+                if (!ReferenceEquals(truth, nd))
+                    truth.Dispose();
+            }
         }
 
         /// <summary>
@@ -268,7 +348,7 @@ namespace NumSharp.Backends
         /// which is the SAME SIMD popcount kernel used by <c>np.nonzero</c>'s pre-size
         /// pass: load a Vector&lt;T&gt;, compare-ne-zero, ExtractMostSignificantBits,
         /// PopCount the inverted mask. The earlier scalar
-        /// <see cref="EqualityComparer{T}.Default.Equals"/> per-element loop was a
+        /// <c>EqualityComparer&lt;T&gt;.Default.Equals</c> per-element loop was a
         /// 109× regression vs NumPy (2.1 ms vs 19 µs on 1 M bool).
         /// </summary>
         private static unsafe long count_nonzero<T>(NDArray<T> x) where T : unmanaged
@@ -302,63 +382,6 @@ namespace NumSharp.Backends
             // Strided path: use NDIter for layout-aware traversal.
             using var iter = NDIterRef.New(x, NDIterGlobalFlags.EXTERNAL_LOOP);
             return iter.ExecuteReducing<CountNonZeroKernel<T>, long>(default, 0L);
-        }
-
-        /// <summary>
-        /// Count non-zero elements along an axis.
-        /// </summary>
-        private static unsafe void count_nonzero_axis<T>(NDArray<T> x, NDArray result, int axis) where T : unmanaged
-        {
-            var shape = x.Shape;
-            long axisSize = shape.dimensions[axis];
-            var outputSize = result.size;
-            T zero = default;
-
-            // Compute output dimension strides for coordinate calculation
-            int outputNdim = x.ndim - 1;
-            Span<long> outputDimStrides = stackalloc long[outputNdim > 0 ? outputNdim : 1];
-            if (outputNdim > 0)
-            {
-                outputDimStrides[outputNdim - 1] = 1;
-                for (int d = outputNdim - 2; d >= 0; d--)
-                {
-                    int inputDim = d >= axis ? d + 1 : d;
-                    int nextInputDim = (d + 1) >= axis ? d + 2 : d + 1;
-                    outputDimStrides[d] = outputDimStrides[d + 1] * shape.dimensions[nextInputDim];
-                }
-            }
-
-            long axisStride = shape.strides[axis];
-
-            // Use direct pointer access to result array (result is contiguous Int64)
-            long* resultPtr = (long*)result.Address;
-
-            for (long outIdx = 0; outIdx < outputSize; outIdx++)
-            {
-                // Convert linear output index to input coordinates
-                long remaining = outIdx;
-                long inputBaseOffset = 0;
-
-                for (int d = 0; d < outputNdim; d++)
-                {
-                    int inputDim = d >= axis ? d + 1 : d;
-                    long coord = remaining / outputDimStrides[d];
-                    remaining = remaining % outputDimStrides[d];
-                    inputBaseOffset += coord * shape.strides[inputDim];
-                }
-
-                // Count non-zeros along axis
-                long count = 0;
-                T* basePtr = (T*)x.Address + shape.offset + inputBaseOffset;
-                for (long i = 0; i < axisSize; i++)
-                {
-                    if (!EqualityComparer<T>.Default.Equals(basePtr[i * axisStride], zero))
-                        count++;
-                }
-
-                // Write directly to result buffer using linear index
-                resultPtr[outIdx] = count;
-            }
         }
 
     }

@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace NumSharp
 {
@@ -12,80 +10,69 @@ namespace NumSharp
         ///     so unsigned/signed integer overflow wraps the same way NumPy does
         ///     (e.g. <c>ptp(uint8[0,255]) == 255</c>, <c>ptp(int8[-128,127]) == -1</c>).
         /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ptp.html</remarks>
+        /// <param name="a">The array (numbers or StringDType; fixed-width text is refused as NumPy refuses it).</param>
+        /// <param name="axis">The reduced axis (negative counts from the end; a 0-d array accepts 0 and -1), or null for
+        ///     every axis.</param>
+        /// <param name="out">An optional output of the result's shape; the result is written into it and it is
+        ///     returned.</param>
+        /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise the range, a fresh array (read-only when 0-d:
+        ///     NumPy's scalar); a <c>numpy.matrix</c> operand gives a matrix.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ptp.html — NumPy's whole function is
+        ///     the engine's <see cref="TensorEngine.Ptp(NDArray, int?, NDArray, bool)"/> (the np-layer dtype plan, P1b and
+        ///     PE); this applies the matrix rule and calls it.</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">Fixed-width text, or a text out (NumPy's maximum.reduce refuses the loop).</exception>
+        /// <exception cref="ValueError">An <paramref name="out"/> that _ptp's <c>maximum.reduce(a, axis, out=out)</c>
+        ///     refuses in its prologue, before anything is computed: of the wrong rank (<c>output parameter for reduction
+        ///     operation maximum has the wrong number of dimensions: Found 2 but expected 1</c>) or with a length-1 axis
+        ///     where the result is longer (parity QA-31).</exception>
+        /// <exception cref="IncorrectShapeException">An <paramref name="out"/> whose axes do not broadcast with the
+        ///     result's (<c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3)
+        ///     (3,4) </c>), NumPy's ValueError under the house type of a broadcast failure.</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a read-only out; an empty reduction (no identity).</exception>
         [NDScoped]
         public static NDArray ptp(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-
-            var maxRes = np.amax(a, axis, keepdims);
-            var minRes = np.amin(a, axis, keepdims);
-            var diff = maxRes - minRes;
-
-            // Fresh 0-d ptp is a numpy SCALAR (read-only); out= returns the writeable out.
-            return @out is null ? diff.MarkReductionScalar() : WriteOrReturn(diff, @out);
+            // NumPy's ptp is _methods._ptp: subtract(maximum.reduce(a, axis, out, keepdims), minimum.reduce(a, axis,
+            // keepdims), out). The whole function, its text routes included, is the engine's: TensorEngine.Ptp of a's
+            // engine (a null a is refused above).
+            return a.TensorEngine.Ptp(a, axis, @out, keepdims);
         }
 
+        /// <summary>
+        ///     Range of values (maximum - minimum) over the axes of a tuple: NumPy's
+        ///     <c>np.ptp(a, axis=(…))</c>, i.e. <c>maximum.reduce(a, axis) - minimum.reduce(a, axis)</c>.
+        /// </summary>
+        /// <param name="a">The array.</param>
+        /// <param name="axis">The reduced axes (negative values count from the end), or null for every axis. An empty array
+        ///     reduces nothing (the result is <c>a - a</c>).</param>
+        /// <param name="out">An optional output; the result is written into it and it is returned.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <returns>The range, dtype preserved (integer overflow wraps as in NumPy).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="AxisError">An axis is out of range (a 0-d input has no axis for a tuple to name).</exception>
+        /// <exception cref="ValueError">An axis appears twice ("duplicate value in 'axis'"); a <c>numpy.matrix</c> operand
+        ///     whose result cannot be a matrix.</exception>
+        /// <exception cref="TypeError">Fixed-width text, or a text out (NumPy's maximum.reduce refuses the loop).</exception>
+        /// <exception cref="ValueError">An <paramref name="out"/> that _ptp's <c>maximum.reduce(a, axis, out=out)</c>
+        ///     refuses in its prologue, before anything is computed: of the wrong rank (<c>output parameter for reduction
+        ///     operation maximum has the wrong number of dimensions: Found 2 but expected 1</c>) or with a length-1 axis
+        ///     where the result is longer (parity QA-31).</exception>
+        /// <exception cref="IncorrectShapeException">An <paramref name="out"/> whose axes do not broadcast with the
+        ///     result's (<c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3)
+        ///     (3,4) </c>), NumPy's ValueError under the house type of a broadcast failure.</exception>
+        /// <remarks>NumPy's whole function is the engine's <see cref="TensorEngine.Ptp(NDArray, int[], NDArray, bool)"/>
+        ///     (the np-layer dtype plan, P1b and PE); this applies the matrix rule and calls it.</remarks>
         [NDScoped]
         public static NDArray ptp(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            if (axis is null) return ptp(a, (int?)null, @out, keepdims);
-            if (axis.Length == 1) return ptp(a, (int?)axis[0], @out, keepdims);
-
-            int ndim = a.ndim;
-            var normalized = new int[axis.Length];
-            for (int i = 0; i < axis.Length; i++)
-            {
-                int ax = axis[i];
-                if (ax < 0) ax += ndim;
-                if (ax < 0 || ax >= ndim)
-                    throw new ArgumentOutOfRangeException(nameof(axis),
-                        $"axis {axis[i]} is out of bounds for array of dimension {ndim}");
-                normalized[i] = ax;
-            }
-
-            var sortedDesc = (int[])normalized.Clone();
-            Array.Sort(sortedDesc);
-            for (int i = 1; i < sortedDesc.Length; i++)
-                if (sortedDesc[i] == sortedDesc[i - 1])
-                    throw new ArgumentException("duplicate value in 'axis'");
-            Array.Reverse(sortedDesc);
-
-            NDArray maxRes = a;
-            NDArray minRes = a;
-            foreach (var ax in sortedDesc)
-            {
-                maxRes = np.amax(maxRes, ax, keepdims: true);
-                minRes = np.amin(minRes, ax, keepdims: true);
-            }
-
-            NDArray diff = maxRes - minRes;
-
-            if (!keepdims)
-            {
-                var kept = new List<long>(ndim - normalized.Length);
-                for (int i = 0; i < ndim; i++)
-                {
-                    bool reduced = false;
-                    for (int j = 0; j < normalized.Length; j++)
-                        if (normalized[j] == i) { reduced = true; break; }
-                    if (!reduced) kept.Add(a.shape[i]);
-                }
-                diff = diff.reshape(kept.ToArray());
-            }
-
-            return WriteOrReturn(diff, @out);
-        }
-
-        private static NDArray WriteOrReturn(NDArray diff, NDArray @out)
-        {
-            if (@out is null) return diff;
-            if (!diff.shape.SequenceEqual(@out.shape))
-                throw new ArgumentException(
-                    $"out has wrong shape; expected=[{string.Join(",", diff.shape)}] got=[{string.Join(",", @out.shape)}]");
-            np.copyto(@out, diff);
-            return @out;
+            // NumPy's ptp with a tuple axis (maximum.reduce's tuple checks first) is the engine's too: TensorEngine.Ptp
+            // of a's engine (a null a is refused above).
+            return a.TensorEngine.Ptp(a, axis, @out, keepdims);
         }
     }
 }

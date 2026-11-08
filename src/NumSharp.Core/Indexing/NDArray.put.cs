@@ -11,7 +11,10 @@ namespace NumSharp
         /// <param name="values">Values to place at <paramref name="indices"/>. Broadcast/repeated to match the number of indices if necessary.</param>
         /// <param name="mode">How out-of-bounds indices behave: "raise" (default), "wrap", or "clip".</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.put.html</remarks>
+        [PlainReceiver]
         public void put(NDArray indices, NDArray values, string mode = "raise")
-            => np.put(this, indices, values, mode);
+        {
+            np.put(this, indices, values, mode);
+        }
     }
 }

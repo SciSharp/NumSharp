@@ -5,44 +5,39 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Broadcast any number of arrays against each other.
+        ///     Broadcast any number of arrays against each other (NumPy 2.4.2's <c>numpy.broadcast_arrays</c>): an array
+        ///     already of the common shape comes back as itself, every other one as a view, writeable only when its array is.
         /// </summary>
         /// <param name="ndArrays">The arrays to broadcast.</param>
-        /// <returns>These arrays are views on the original arrays. They are typically not contiguous. Furthermore, more than one element of a broadcasted array may refer to a single memory location. If you need to write to the arrays, make copies first.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html</remarks>
+        /// <returns>One array per input: the input itself when its shape is the broadcast shape, else a view on it. Views are
+        ///     typically not contiguous, and more than one element of a broadcasted array may refer to a single memory
+        ///     location: copy first to write to them independently. A view of a read-only array is read-only.</returns>
+        /// <exception cref="IncorrectShapeException">The arrays do not broadcast together.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html. See
+        ///     <see cref="NDArray.broadcast_arrays(NDArray[])"/> for the writeable rule (parity QA-34). A result that IS an
+        ///     input must not be disposed as if it were a new view.</remarks>
         public static NDArray[] broadcast_arrays(params NDArray[] ndArrays)
-        {
-            int len = ndArrays.Length;
-            int i;
-            var inputShapes = new Shape[len];
-            for (i = 0; i < len; i++)
-                inputShapes[i] = ndArrays[i].Shape;
-            var outputShapes = Shape.Broadcast(inputShapes);
-
-            var list = new NDArray[len];
-            for (i = 0; i < len; i++)
-                // NumPy 2.4.2 parity: broadcast_arrays results are WRITEABLE (unlike broadcast_to),
-                // even for stretched (stride-0) dimensions. NumPy emits a FutureWarning that a future
-                // version will change this, but 2.4.2 still returns writeable=True. Force the flag on so
-                // even a broadcasted subshape (which Shape.Broadcast marks read-only) stays writeable.
-                list[i] = new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(ndArrays[i].Storage, outputShapes[i].WithFlags(flagsToSet: ArrayFlags.WRITEABLE)));
-
-            return list;
-        }
+            // The statement is the array object's (NDArray.broadcast_arrays, Backends/NDArray.StrideTricks.cs).
+            => NDArray.broadcast_arrays(ndArrays);
 
         /// <summary>
-        ///     Broadcast two arrays against each other.
+        ///     Broadcast two arrays against each other (NumPy 2.4.2's <c>numpy.broadcast_arrays(lhs, rhs)</c>): an array
+        ///     already of the common shape comes back as itself, the other as a view, writeable only when its array is.
         /// </summary>
         /// <param name="lhs">An array to broadcast.</param>
         /// <param name="rhs">An array to broadcast.</param>
-        /// <returns>These arrays are views on the original arrays. They are typically not contiguous. Furthermore, more than one element of a broadcasted array may refer to a single memory location. If you need to write to the arrays, make copies first.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html</remarks>
+        /// <returns>The two results: each the input itself when its shape is the broadcast shape, else a view on it. Views
+        ///     are typically not contiguous, and more than one element of a broadcasted array may refer to a single memory
+        ///     location: copy first to write to them independently. A view of a read-only array is read-only.</returns>
+        /// <exception cref="IncorrectShapeException">The arrays do not broadcast together: NumPy's <c>shape mismatch: objects
+        ///     cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1 with shape
+        ///     (4,).</c> (parity QA-30).</exception>
+        /// <exception cref="ValueError">The broadcast shape's element count does not fit a 64-bit integer
+        ///     (<c>broadcast dimensions too large.</c>).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html; the same statement as the
+        ///     params overload (<see cref="NDArray.BroadcastArraysMember"/> per operand).</remarks>
         public static (NDArray Lhs, NDArray Rhs) broadcast_arrays(NDArray lhs, NDArray rhs)
-        {
-            var (leftShape, rightShape) = Shape.Broadcast(lhs.Shape, rhs.Shape);
-            // NumPy 2.4.2 parity: broadcast_arrays results are WRITEABLE (see the params overload above).
-            return (new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(lhs.Storage, leftShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE))),
-                new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(rhs.Storage, rightShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE))));
-        }
+            // The statement is the array object's (NDArray.broadcast_arrays, Backends/NDArray.StrideTricks.cs).
+            => NDArray.broadcast_arrays(lhs, rhs);
     }
 }

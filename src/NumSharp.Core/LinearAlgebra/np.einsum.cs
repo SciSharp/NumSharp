@@ -1,5 +1,6 @@
 using System;
-using System.Runtime.CompilerServices;
+using System.Globalization;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -19,7 +20,8 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.einsum.html
         ///     <para>
-        ///     The contraction is a composition over the matrix products — a port of NumPy's
+        ///     The body is <see cref="TensorEngine.Einsum"/> (<c>TensorEngine.EinsumFunc.cs</c>), which
+        ///     <c>DefaultEngine</c> implements as a composition over the matrix products — a port of NumPy's
         ///     <c>bmm_einsum</c> (its <c>optimize=</c> path) that reduces each pairwise contraction to
         ///     <see cref="matmul"/>, so it <b>runs through OpenBLAS whenever a backend is referenced</b>
         ///     (byte-identical to NumPy for float32/float64/complex128) and through the managed GEMM
@@ -49,19 +51,30 @@ namespace NumSharp
         ///     <c>Size of label 'j' for operand 1 (3) does not match previous terms (4).</c>
         ///     </para>
         /// </remarks>
-        /// <exception cref="NotSupportedException">Always, once the subscripts validate.</exception>
+        /// <exception cref="ValueError">Subscripts NumPy refuses, with its parser's texts; an <c>out=</c> whose extents
+        ///     differ from the result's (see <see cref="TensorEngine.Einsum"/>).</exception>
+        /// <exception cref="TypeError">An operand that cannot reach the loop dtype, or text outside the view
+        ///     path.</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        /// </remarks>
         public static NDArray einsum(string subscripts, params NDArray[] operands)
             => einsum(subscripts, operands, null);
 
         /// <summary>
         ///     Evaluates the Einstein summation convention, with NumPy's full keyword surface.
         /// </summary>
+        /// <param name="subscripts">The subscripts string, as for <see cref="einsum(string, NDArray[])"/>
+        ///     (<c>"ij,jk-&gt;ik"</c>).</param>
+        /// <param name="operands">The arrays the subscripts label, in order.</param>
         /// <param name="out">Where the calculation would be deposited. Its RANK is validated now.</param>
         /// <param name="dtype">Forces the accumulation dtype.</param>
-        /// <param name="order">Memory layout of the result — <c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
+        /// <param name="order">Memory layout of the result — <c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>, in
+        ///     either case (NumPy's order converter).</param>
         /// <param name="casting">
         ///     Casting rule — <c>"no"</c>, <c>"equiv"</c>, <c>"safe"</c>, <c>"same_kind"</c> or
-        ///     <c>"unsafe"</c>.
+        ///     <c>"unsafe"</c>, spelled exactly.
         /// </param>
         /// <param name="optimize">
         ///     <c>false</c> (the default), <c>true</c>, <c>"greedy"</c> or <c>"optimal"</c>. NumPy
@@ -76,26 +89,31 @@ namespace NumSharp
         ///     AND the <c>params</c> one, and the compiler rejects the call as ambiguous.
         ///     <inheritdoc cref="einsum(string, NDArray[])"/>
         /// </remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="subscripts"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="casting"/> is null (<c>casting must be str, not NoneType</c>);
+        ///     an <paramref name="optimize"/> NumPy does not understand; an operand that cannot reach the loop dtype,
+        ///     or a result that cannot reach <paramref name="out"/>'s dtype, under <paramref name="casting"/>; text
+        ///     outside the view path.</exception>
+        /// <exception cref="ValueError">No operand; an <paramref name="order"/> letter or a <paramref name="casting"/>
+        ///     name NumPy refuses, with its texts; malformed subscripts; an <paramref name="out"/> of another shape (before
+        ///     any cast check, as NumPy's iterator broadcasts the out first), or a read-only one. The full list is
+        ///     <see cref="TensorEngine.Einsum"/>'s.</exception>
+        /// <exception cref="RuntimeError">An explicit path (<c>optimize: new object[] { "einsum_path", ... }</c> or an
+        ///     <see cref="EinsumPath"/>) that leaves operands uncontracted: <c>np.einsum_path</c>'s text, checked before
+        ///     <paramref name="order"/>, <paramref name="casting"/> and <paramref name="out"/>, as NumPy's einsum plans
+        ///     first.</exception>
+        /// <exception cref="IndexError">An explicit path, or an ellipsis, naming an operand that is not there
+        ///     (<c>np.einsum_path</c>'s <c>pop index out of range</c> / <c>list index out of range</c>).</exception>
         public static NDArray einsum(string subscripts, NDArray[] operands, NDArray @out = null,
             DType dtype = null, char order = 'K', string casting = "safe", object optimize = null)
         {
-            if (subscripts is null)
-                throw new ArgumentNullException(nameof(subscripts));
-
-            if (operands is null || operands.Length == 0)
-                throw new ValueError(
-                    "must specify the einstein sum subscripts string and at least one operand");
-
-            RequireOrder(order);
-            RequireCasting(casting);
-            RequireOptimize(optimize);
-
-            // The contractor parses AND validates (rank, ellipsis grammar, operand count, output
-            // labels, out='s rank, every diagonal and every label extent) before it contracts — so a
-            // malformed expression is rejected there with NumPy's own text. It is a pure composition
-            // over the matrix products (see np.einsum.Contract.cs), so it reaches a backend the same
-            // indirect way tensordot/multi_dot do — through np.matmul — with no engine seam of its own.
-            return EinsumContract(subscripts, operands, @out, dtype, order, casting, optimize);
+            // The engine of the first operand, as np.dot dispatches on its first; with no operand (or a null first one)
+            // none decides, and TensorEngine.Default's member raises NumPy's error for it. The engine member checks the
+            // arguments, parses and validates the subscripts (rank, ellipsis grammar, operand count, output labels,
+            // out='s rank, every diagonal and every label extent) and contracts over the matrix products, so it reaches a
+            // backend the same indirect way tensordot / multi_dot do, through matmul.
+            TensorEngine engine = operands is { Length: > 0 } && operands[0] is { } first ? first.TensorEngine : TensorEngine.Default;
+            return engine.Einsum(subscripts, operands, @out, dtype, order, casting, optimize);
         }
 
         /// <summary>
@@ -133,7 +151,7 @@ namespace NumSharp
                 {
                     arrays[i - 1] = operands[i] as NDArray
                                     ?? throw new TypeError(
-                                        $"einsum operand {i - 1} must be an NDArray, got {operands[i]?.GetType().Name ?? "null"}");
+                                        string.Create(CultureInfo.InvariantCulture, $"einsum operand {i - 1} must be an NDArray, got {operands[i]?.GetType().Name ?? "null"}"));
                 }
 
                 return einsum(subscripts, arrays, null);
@@ -143,41 +161,5 @@ namespace NumSharp
             return einsum(rendered, parsed, null);
         }
 
-        private static void RequireOrder(char order)
-        {
-            if (order is not ('C' or 'F' or 'A' or 'K'))
-                throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
-        }
-
-        private static void RequireCasting(string casting)
-        {
-            if (casting is not ("no" or "equiv" or "safe" or "same_kind" or "unsafe"))
-                throw new ValueError(
-                    $"casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '{casting}')");
-        }
-
-        private static void RequireOptimize(object optimize)
-        {
-            // NumPy accepts False/True/'greedy'/'optimal' — and silently tolerates any other STRING,
-            // falling through to greedy. It also accepts a precomputed path from np.einsum_path (an
-            // EinsumPath, or NumPy's raw ['einsum_path', …] list) and a ('greedy'|'optimal', memory)
-            // tuple. NumSharp still contracts left-to-right whatever the path says (documented above),
-            // so this ACCEPTS-and-VALIDATES the same shapes NumPy does without acting on them.
-            switch (optimize)
-            {
-                case null:
-                case bool:
-                case string:
-                case EinsumPath:
-                    return;
-            }
-
-            if (optimize is ITuple tuple && tuple.Length == 2 && tuple[0] is string && IsNumber(tuple[1]))
-                return;
-            if (optimize is object[] list && list.Length > 0 && (list[0] as string) == EinsumPath.Marker)
-                return;
-
-            throw new TypeError($"Did not understand the path: {PyRepr(optimize)}");
-        }
     }
 }

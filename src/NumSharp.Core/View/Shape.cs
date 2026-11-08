@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using NumSharp.Utilities;
@@ -62,9 +63,32 @@ namespace NumSharp
         internal const char layout = 'C';
 
         internal readonly int _hashCode;
-        internal readonly long size;
-        internal readonly long[] dimensions;
-        internal readonly long[] strides;
+
+        /// <summary>
+        ///     The element count (the product of <see cref="dimensions"/>; 1 for a 0-d shape), read without a property call -
+        ///     the same value as <see cref="Size"/>.
+        /// </summary>
+        public readonly long size;
+
+        /// <summary>
+        ///     The extent of every axis: the shape's OWN array, shared with every shape and array built on it - no copy, unlike
+        ///     <see cref="Dimensions"/>.
+        /// </summary>
+        /// <remarks>
+        ///     For hot reads (an interop bridge, a kernel's setup) that cannot afford <see cref="Dimensions"/>' allocation per
+        ///     read. Footgun: writing into it changes this shape, and every array sharing the array, without updating the cached
+        ///     size, flags or hash - a later read goes past the buffer with no check. Treat it as read-only; build a new shape
+        ///     to change one.
+        /// </remarks>
+        public readonly long[] dimensions;
+
+        /// <summary>
+        ///     The stride of every axis in ELEMENTS (0 on a broadcast axis, negative on a reversed one): the shape's OWN array,
+        ///     shared like <see cref="dimensions"/> - no copy, unlike <see cref="Strides"/>.
+        /// </summary>
+        /// <remarks>Footgun, as for <see cref="dimensions"/>: writing into it retargets every array sharing it with stale
+        ///     flags and no bounds check. Read-only by contract.</remarks>
+        public readonly long[] strides;
 
         /// <summary>
         ///     Size of the underlying buffer (NumPy-aligned architecture).
@@ -72,14 +96,16 @@ namespace NumSharp
         ///     this is the actual buffer size (not the view size), used for
         ///     bounds checking and InternalArray slicing.
         /// </summary>
-        internal readonly long bufferSize;
+        /// <remarks>The same value as <see cref="BufferSize"/>, read without a property call.</remarks>
+        public readonly long bufferSize;
 
         /// <summary>
         ///     Base offset into storage (NumPy-aligned architecture).
         ///     Computed at slice/broadcast time, enabling simple element access:
         ///     element[indices] = data[offset + sum(indices * strides)]
         /// </summary>
-        internal readonly long offset;
+        /// <remarks>The same value as <see cref="Offset"/>, counted in elements, read without a property call.</remarks>
+        public readonly long offset;
 
         /// <summary>
         ///     True if this shape represents a view (sliced) into underlying data.
@@ -334,7 +360,7 @@ namespace NumSharp
 
         /// <summary>
         ///     Is this a simple sliced shape that uses the fast GetOffsetSimple path?
-        ///     True when: IsSliced && !IsBroadcasted
+        ///     True when: <c>IsSliced &amp;&amp; !IsBroadcasted</c>
         ///     For simple slices, element access is: offset + sum(indices * strides)
         /// </summary>
         public readonly bool IsSimpleSlice
@@ -436,7 +462,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Is this shape a scalar? (<see cref="NDim"/>==0 && <see cref="size"/> == 1)
+        ///     Is this shape a scalar? (<see cref="NDim"/> == 0 &amp;&amp; <see cref="size"/> == 1)
         /// </summary>
         public readonly bool IsScalar;
 
@@ -456,7 +482,7 @@ namespace NumSharp
         /// <summary>
         ///     Singleton instance of a <see cref="Shape"/> that represents a scalar.
         /// </summary>
-        public static readonly Shape Scalar = new Shape(Array.Empty<long>());
+        public static readonly Shape Scalar = new Shape(Array.Empty<long>(), copy: false);
 
         /// <summary>
         ///     Create a new scalar shape
@@ -492,16 +518,68 @@ namespace NumSharp
             get => dimensions.Length;
         }
 
+        /// <summary>
+        ///     The extent of every axis (NumPy's <c>ndarray.shape</c>), as a NEW array on every read: NumPy hands out an
+        ///     immutable tuple, so writing into the returned array never changes this shape or any array built on it.
+        /// </summary>
+        /// <value>A copy of the dimensions, the caller's to keep or change. A 0-d shape returns its empty array (there is
+        ///     no element to write into) and an uninitialized <c>default(Shape)</c> returns <c>null</c>.</value>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Why a copy.</b> Shapes and arrays SHARE dimension arrays (an allocation keeps its caller's shape, an
+        ///     elementwise result keeps its input's), so returning the shared array let <c>x.Shape.Dimensions[0] = 100</c>
+        ///     change <c>x</c>, and every array sharing it, to <c>(100, 4)</c> over 12 elements: the cached size, flags and
+        ///     buffer stayed, so the new rows read past the buffer. Plan <c>docs/plans/view-shape-open-bugs.md</c>, bug 2c.
+        ///     </para>
+        ///     <para>
+        ///     The copy costs one small allocation per read. Code inside NumSharp reads the internal <c>dimensions</c> field
+        ///     instead; a caller that needs one extent should use <see cref="this[int]"/> or <see cref="NDim"/>, which do not
+        ///     allocate, and a caller that reads the whole array in a hot loop should hoist it.
+        ///     </para>
+        /// </remarks>
         public readonly long[] Dimensions
         {
             [MethodImpl(Inline)]
-            get => dimensions;
+            get
+            {
+                // An empty array (0-d) has no element to write into and a default Shape has no array at all, so both are
+                // handed out as they are; anything else is cloned so the shared array never leaves the struct.
+                var dims = dimensions;
+                return dims is null || dims.Length == 0 ? dims : (long[])dims.Clone();
+            }
         }
 
+        /// <summary>
+        ///     The stride of every axis in ELEMENTS, as a NEW array on every read: writing into the returned array never
+        ///     changes this shape or any array built on it. NumPy's <c>ndarray.strides</c> counts BYTES; that is
+        ///     <see cref="NDArray.strides"/>, which scales these by the item size.
+        /// </summary>
+        /// <value>A copy of the element strides (0 on a broadcast axis, negative on a reversed one), the caller's to keep or
+        ///     change. A 0-d shape returns its empty array and an uninitialized <c>default(Shape)</c> returns
+        ///     <c>null</c>.</value>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Why a copy.</b> Shapes and arrays SHARE stride arrays, and the cached flags (C/F-contiguity, broadcast,
+        ///     writeable) and every kernel's addressing come from them. Returning the shared array let
+        ///     <c>x.Shape.Strides[0] = 1000</c> retarget <c>x</c>'s reads past its buffer with no check and with stale flags.
+        ///     NumPy has no unchecked route: its <c>strides</c> setter validates the request (<c>PyArray_CheckStrides</c>).
+        ///     Plan <c>docs/plans/view-shape-open-bugs.md</c>, bug 2c.
+        ///     </para>
+        ///     <para>
+        ///     The copy costs one small allocation per read. Code inside NumSharp reads the internal <c>strides</c> field
+        ///     instead; a caller that reads the whole array in a hot loop should hoist it.
+        ///     </para>
+        /// </remarks>
         public readonly long[] Strides
         {
             [MethodImpl(Inline)]
-            get => strides;
+            get
+            {
+                // Same rule as Dimensions: the empty and the missing array are handed out as they are, anything else is
+                // cloned so the shared array never leaves the struct.
+                var st = strides;
+                return st is null || st.Length == 0 ? st : (long[])st.Clone();
+            }
         }
 
         /// <summary>
@@ -566,7 +644,14 @@ namespace NumSharp
         /// <param name="strides">Stride values (not cloned - caller must provide fresh array)</param>
         /// <param name="offset">Offset into underlying buffer</param>
         /// <param name="bufferSize">Size of underlying buffer</param>
-        internal Shape(long[] dims, long[] strides, long offset, long bufferSize)
+        /// <remarks>
+        ///     The constructor a bridge package lays a strided, offset view over a foreign buffer with. Footguns: it ADOPTS both
+        ///     arrays (the caller must never write into them afterwards, see <see cref="dimensions"/>), and it checks nothing -
+        ///     an element reached through <paramref name="offset"/> and <paramref name="strides"/> outside
+        ///     <paramref name="bufferSize"/> is read or written outside the buffer. <see cref="Shape(long[], long[])"/> copies
+        ///     and validates; use it when the input is not already known to be valid.
+        /// </remarks>
+        public Shape(long[] dims, long[] strides, long offset, long bufferSize)
         {
             this.dimensions = dims ?? Array.Empty<long>();
             this.strides = strides ?? Array.Empty<long>();
@@ -652,66 +737,210 @@ namespace NumSharp
             this._flags = other._flags;
         }
 
-        public Shape(long[] dims, long[] strides)
+        /// <summary>
+        ///     A shape with explicit element <paramref name="strides"/>, at offset 0 over a buffer of exactly <c>size</c>
+        ///     elements. By default it keeps COPIES of both arrays, so changing either array afterwards never changes this
+        ///     shape or an array built on it (NumPy copies every shape or strides sequence it is given; plan
+        ///     <c>docs/plans/view-shape-open-bugs.md</c>, bug 2d).
+        /// </summary>
+        /// <param name="dims">The extent of every axis. Copied unless <paramref name="copy"/> is <c>false</c>.</param>
+        /// <param name="strides">The stride of every axis, in ELEMENTS (0 for a broadcast axis, negative for a reversed
+        ///     one). Copied unless <paramref name="copy"/> is <c>false</c>. Not validated against a buffer: an array that
+        ///     installs this shape must own enough memory.</param>
+        /// <param name="copy"><c>true</c> (the default, NumPy's behaviour): the shape keeps copies of both arrays.
+        ///     <c>false</c>: the shape keeps the two arrays themselves and saves two small allocations; the caller must never
+        ///     write into either of them again (see remarks).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="dims"/> or <paramref name="strides"/> is
+        ///     <c>null</c>.</exception>
+        /// <exception cref="ArgumentException">The two arrays differ in length.</exception>
+        /// <remarks>
+        ///     <c>copy: false</c> is for arrays nothing will write into: ones the caller just built, or another shape's own
+        ///     (a shape never writes into its arrays). The shape caches its size and flags when it is built, and every array
+        ///     built on it shares the two arrays, so a later write into one passed with <c>copy: false</c> changes those
+        ///     arrays' layout but not their size or buffer: indexing then reads and writes past the buffer. NumPy has no
+        ///     such mode; its arrays always own their dimensions and strides.
+        /// </remarks>
+        public Shape(long[] dims, long[] strides, bool copy = true)
         {
-            if (dims == null)
-                throw new ArgumentNullException(nameof(dims));
-
-            if (strides == null)
-                throw new ArgumentNullException(nameof(strides));
-
-            if (dims.Length != strides.Length)
-                throw new ArgumentException($"While trying to construct a shape, given dimensions and strides does not match size ({dims.Length} != {strides.Length})");
-
-            this.dimensions = dims;
-            this.strides = strides;
-            this.offset = 0;
-
-            (this.size, this._hashCode) = ComputeSizeAndHash(dims);
-            this.bufferSize = size;
-            this.IsScalar = size == 1 && dims.Length == 0;
-            this._flags = ComputeFlagsStatic(dims, strides);
-        }
-
-        public Shape(long[] dims, long[] strides, Shape originalShape)
-        {
-            if (dims == null)
-                throw new ArgumentNullException(nameof(dims));
-
-            if (strides == null)
-                throw new ArgumentNullException(nameof(strides));
-
-            if (dims.Length != strides.Length)
-                throw new ArgumentException($"While trying to construct a shape, given dimensions and strides does not match size ({dims.Length} != {strides.Length})");
-
-            this.dimensions = dims;
-            this.strides = strides;
-            this.offset = 0;
-
-            (this.size, this._hashCode) = ComputeSizeAndHash(dims);
-            // For broadcast shapes, bufferSize is the original (pre-broadcast) size
-            this.bufferSize = originalShape.bufferSize > 0 ? originalShape.bufferSize : originalShape.size;
-            this.IsScalar = size == 1 && dims.Length == 0;
-            this._flags = ComputeFlagsStatic(dims, strides);
+            // The checks run before anything is copied, so a bad argument costs no allocation, and they run for
+            // copy: false too, because the adopting core trusts both arrays as they are.
+            ValidateDimsAndStrides(dims, strides);
+            this = copy
+                ? new Shape(CopyOf(dims), CopyOf(strides), AdoptTag.Owned)
+                : new Shape(dims, strides, AdoptTag.Owned);
         }
 
         /// <summary>
-        ///     Primary constructor with long dimensions.
+        ///     A shape with explicit element <paramref name="strides"/> over COPIES of the caller's arrays, at offset 0, whose
+        ///     buffer is <paramref name="originalShape"/>'s (its buffer size, or its size when the buffer size is unset): the
+        ///     form a broadcast of <paramref name="originalShape"/> takes. Changing either array afterwards never changes this
+        ///     shape (bug 2d).
         /// </summary>
-        [MethodImpl(Optimize)]
-        public Shape(params long[] dims)
+        /// <param name="dims">The extent of every axis. Copied.</param>
+        /// <param name="strides">The stride of every axis, in elements. Copied.</param>
+        /// <param name="originalShape">The shape whose buffer this one addresses; only its buffer size is read.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="dims"/> or <paramref name="strides"/> is
+        ///     <c>null</c>.</exception>
+        /// <exception cref="ArgumentException">The two arrays differ in length.</exception>
+        public Shape(long[] dims, long[] strides, Shape originalShape)
         {
-            if (dims == null)
-                dims = Array.Empty<long>();
+            ValidateDimsAndStrides(dims, strides);
+            // For broadcast shapes, bufferSize is the original (pre-broadcast) size. The adopting view constructor
+            // computes the size, hash and flags from the two copies exactly as this constructor did.
+            this = new Shape(CopyOf(dims), CopyOf(strides), 0,
+                originalShape.bufferSize > 0 ? originalShape.bufferSize : originalShape.size);
+        }
 
-            this.dimensions = dims;
-            this.strides = ComputeContiguousStrides(dims);
+        /// <summary>
+        ///     A C-contiguous shape over a COPY of the caller's dimensions (NumPy's <c>np.empty(shape)</c> layout). Changing
+        ///     <paramref name="dims"/> afterwards never changes this shape or an array built on it: NumPy copies the sequence
+        ///     (<c>PyArray_IntpConverter</c>) and an array owns its dimensions (<c>PyArray_NewFromDescr_int</c>).
+        /// </summary>
+        /// <param name="dims">The extent of every axis; <c>null</c> or empty is the 0-d shape. Copied.</param>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Why a copy.</b> Shapes and arrays SHARE dimension arrays, so keeping the caller's array let
+        ///     <c>long[] s = {3, 4}; var a = np.zeros(s); s[0] = 100;</c> turn <c>a</c> into <c>(100, 4)</c> over 12
+        ///     elements: the cached size and the buffer stayed, so the new rows read past the buffer (plan
+        ///     <c>docs/plans/view-shape-open-bugs.md</c>, bug 2d).
+        ///     </para>
+        ///     <para>
+        ///     Inline values (<c>new Shape(3, 4)</c>) bind the <see cref="Shape(ReadOnlySpan{long})"/> overload, which
+        ///     allocates the one array this shape keeps; a C# 12 caller, which has no span <c>params</c>, binds this one. An
+        ///     array argument costs one copy. A caller that built the array itself and will never write into it again
+        ///     skips the copy with <see cref="Shape(long[], char, bool)"/>: <c>new Shape(dims, copy: false)</c>.
+        ///     </para>
+        /// </remarks>
+        [MethodImpl(Optimize)]
+        public Shape(params long[] dims) : this(CopyOf(dims), AdoptTag.Owned)
+        {
+        }
+
+        /// <summary>
+        ///     A C-contiguous shape over the given dimensions, copied into the one array the shape keeps. This is the
+        ///     overload inline values bind (<c>new Shape(3, 4)</c>, <c>new Shape(n)</c>): the values arrive on the caller's
+        ///     stack, so building the shape allocates its dimension array once, as the array form did before it copied.
+        /// </summary>
+        /// <param name="dims">The extent of every axis; empty is the 0-d shape.</param>
+        [MethodImpl(Optimize)]
+        public Shape(params ReadOnlySpan<long> dims) : this(dims.IsEmpty ? Array.Empty<long>() : dims.ToArray(), AdoptTag.Owned)
+        {
+        }
+
+        /// <summary>
+        ///     Marks the private constructors that take OWNERSHIP of the arrays they are given (no copy), so their
+        ///     signatures cannot collide with the public constructors, which take the same arrays and copy them unless told
+        ///     <c>copy: false</c>.
+        /// </summary>
+        private enum AdoptTag : byte
+        {
+            /// <summary>The arrays are the new shape's own: nothing else holds them, or nothing writes into them.</summary>
+            Owned
+        }
+
+        /// <summary>
+        ///     The adopting core of the C-contiguous constructors: <paramref name="ownedDims"/> becomes this shape's
+        ///     dimension array as it is.
+        /// </summary>
+        /// <param name="ownedDims">The dimensions, owned from now on by this shape (never <c>null</c>).</param>
+        /// <param name="tag">Disambiguates the overload; always <see cref="AdoptTag.Owned"/>.</param>
+        [MethodImpl(Optimize)]
+        private Shape(long[] ownedDims, AdoptTag tag)
+        {
+            this.dimensions = ownedDims;
+            this.strides = ComputeContiguousStrides(ownedDims);
             this.offset = 0;
 
-            (this.size, this._hashCode) = ComputeSizeAndHash(dims);
+            (this.size, this._hashCode) = ComputeSizeAndHash(ownedDims);
             this.bufferSize = size;
             this.IsScalar = _hashCode == int.MinValue;
-            this._flags = ComputeFlagsStatic(dims, strides);
+            this._flags = ComputeFlagsStatic(ownedDims, strides);
+        }
+
+        /// <summary>
+        ///     The adopting core of the explicit-strides constructor: both arrays become this shape's as they are, at offset
+        ///     0 over a buffer of exactly <c>size</c> elements.
+        /// </summary>
+        /// <param name="ownedDims">The dimensions, owned from now on by this shape (already validated).</param>
+        /// <param name="ownedStrides">The element strides, owned from now on by this shape (same length).</param>
+        /// <param name="tag">Disambiguates the overload; always <see cref="AdoptTag.Owned"/>.</param>
+        private Shape(long[] ownedDims, long[] ownedStrides, AdoptTag tag)
+        {
+            this.dimensions = ownedDims;
+            this.strides = ownedStrides;
+            this.offset = 0;
+
+            (this.size, this._hashCode) = ComputeSizeAndHash(ownedDims);
+            this.bufferSize = size;
+            this.IsScalar = size == 1 && ownedDims.Length == 0;
+            this._flags = ComputeFlagsStatic(ownedDims, ownedStrides);
+        }
+
+        /// <summary>
+        ///     The adopting core of the ordered constructor: <paramref name="ownedDims"/> becomes this shape's dimension
+        ///     array as it is, with C or F strides.
+        /// </summary>
+        /// <param name="order">'C' or 'F', already validated.</param>
+        /// <param name="ownedDims">The dimensions, owned from now on by this shape (never <c>null</c>).</param>
+        /// <param name="tag">Disambiguates the overload; always <see cref="AdoptTag.Owned"/>.</param>
+        [MethodImpl(Optimize)]
+        private Shape(char order, long[] ownedDims, AdoptTag tag)
+        {
+            this.dimensions = ownedDims;
+            this.strides = order == 'F'
+                ? ComputeFContiguousStrides(ownedDims)
+                : ComputeContiguousStrides(ownedDims);
+            this.offset = 0;
+
+            (this.size, this._hashCode) = ComputeSizeAndHash(ownedDims);
+            this.bufferSize = size;
+            this.IsScalar = _hashCode == int.MinValue;
+            this._flags = ComputeFlagsStatic(ownedDims, strides);
+        }
+
+        /// <summary>
+        ///     The caller's dimensions as an array the new shape may own: a clone, or the shared empty array for
+        ///     <c>null</c> and empty input (a 0-d shape has nothing to write into).
+        /// </summary>
+        /// <param name="source">The caller's array, or <c>null</c>.</param>
+        /// <returns>An array nothing but the new shape holds.</returns>
+        [MethodImpl(Inline)]
+        private static long[] CopyOf(long[] source) =>
+            source is null || source.Length == 0 ? Array.Empty<long>() : (long[])source.Clone();
+
+        /// <summary>
+        ///     The argument checks of the explicit-strides constructors, run before anything is copied.
+        /// </summary>
+        /// <param name="dims">The dimensions to check.</param>
+        /// <param name="strides">The strides to check.</param>
+        /// <exception cref="ArgumentNullException">Either array is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException">The two arrays differ in length.</exception>
+        private static void ValidateDimsAndStrides(long[] dims, long[] strides)
+        {
+            if (dims == null)
+                throw new ArgumentNullException(nameof(dims));
+
+            if (strides == null)
+                throw new ArgumentNullException(nameof(strides));
+
+            if (dims.Length != strides.Length)
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"While trying to construct a shape, given dimensions and strides does not match size ({dims.Length} != {strides.Length})"));
+        }
+
+        /// <summary>
+        ///     The physical-order check of the ordered constructors: only 'C' and 'F' name a layout here.
+        /// </summary>
+        /// <param name="order">The requested order.</param>
+        /// <returns><paramref name="order"/>, unchanged.</returns>
+        /// <exception cref="ArgumentException"><paramref name="order"/> is not 'C' or 'F' (a logical order such as 'A' or
+        ///     'K' must be resolved first, through <c>OrderResolver</c>).</exception>
+        private static char ValidPhysicalOrder(char order)
+        {
+            if (order != 'C' && order != 'F')
+                throw new ArgumentException(
+                    $"Physical order must be 'C' or 'F' (got '{order}'). Use OrderResolver to resolve 'A' or 'K'.",
+                    nameof(order));
+            return order;
         }
 
         /// <summary>
@@ -759,31 +988,41 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Constructs a Shape with a specified physical memory order.
-        ///     Only 'C' (row-major) and 'F' (column-major) are valid — logical orders
-        ///     ('A', 'K') must be resolved to a physical order first via OrderResolver.
+        ///     A C- or F-contiguous shape (NumPy's <c>np.empty(shape, order=order)</c> layout). By default it keeps a COPY of
+        ///     <paramref name="dims"/>, so changing the array afterwards never changes this shape or an array built on it
+        ///     (NumPy copies every shape sequence it is given; bug 2d). <c>copy: false</c> keeps the array itself, for one
+        ///     nothing will write into.
         /// </summary>
-        /// <param name="dims">Dimension sizes.</param>
-        /// <param name="order">Physical memory order: 'C' or 'F'.</param>
-        /// <exception cref="ArgumentException">Thrown if order is not 'C' or 'F'.</exception>
+        /// <param name="dims">The extent of every axis; <c>null</c> or empty is the 0-d shape. Copied unless
+        ///     <paramref name="copy"/> is <c>false</c>.</param>
+        /// <param name="order">Physical memory order: 'C' (row-major, the default) or 'F' (column-major). A logical order
+        ///     ('A', 'K') must be resolved to a physical one first, through <c>OrderResolver</c>.</param>
+        /// <param name="copy"><c>true</c> (the default, NumPy's behaviour): the shape keeps a copy of
+        ///     <paramref name="dims"/>. <c>false</c>: the shape keeps <paramref name="dims"/> itself and saves one small
+        ///     allocation; the caller must never write into the array again (see remarks). Pass it by name,
+        ///     <c>new Shape(dims, copy: false)</c>: a positional <c>false</c> lands on <paramref name="order"/> and does not
+        ///     compile.</param>
+        /// <exception cref="ArgumentException"><paramref name="order"/> is not 'C' or 'F' (checked before anything is
+        ///     copied).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <c>new Shape(dims)</c> binds <see cref="Shape(long[])"/> and copies; this overload serves an explicit order,
+        ///     <c>copy: false</c>, or both.
+        ///     </para>
+        ///     <para>
+        ///     <b>copy: false.</b> For an array nothing will write into: one the caller just built, or another shape's own (a
+        ///     shape never writes into its arrays). The shape caches its size and flags when it is built, and every array
+        ///     built on it shares <paramref name="dims"/>, so a later write into it changes those arrays' dimensions but not
+        ///     their size or buffer: <c>long[] s = {3, 4}; var a = np.zeros(new Shape(s, copy: false)); s[0] = 100;</c>
+        ///     makes <c>a</c> <c>(100, 4)</c> over its 12 elements, and <c>a[99, 3]</c> addresses element 399. NumPy has no
+        ///     such mode; its arrays always own their dimensions.
+        ///     </para>
+        /// </remarks>
         [MethodImpl(Optimize)]
-        public Shape(long[] dims, char order)
+        public Shape(long[] dims, char order = 'C', bool copy = true)
+            : this(ValidPhysicalOrder(order), copy ? CopyOf(dims) : (dims ?? Array.Empty<long>()), AdoptTag.Owned)
         {
-            if (order != 'C' && order != 'F')
-                throw new ArgumentException(
-                    $"Physical order must be 'C' or 'F' (got '{order}'). Use OrderResolver to resolve 'A' or 'K'.",
-                    nameof(order));
-
-            this.dimensions = dims ?? Array.Empty<long>();
-            this.strides = order == 'F'
-                ? ComputeFContiguousStrides(this.dimensions)
-                : ComputeContiguousStrides(this.dimensions);
-            this.offset = 0;
-
-            (this.size, this._hashCode) = ComputeSizeAndHash(this.dimensions);
-            this.bufferSize = size;
-            this.IsScalar = _hashCode == int.MinValue;
-            this._flags = ComputeFlagsStatic(this.dimensions, this.strides);
+            // ValidPhysicalOrder is the first argument, so a bad order throws before the copy is made.
         }
 
 #endregion
@@ -799,12 +1038,25 @@ namespace NumSharp
             return new Shape(new long[ndim], new long[ndim], 0, 0);
         }
 
+        /// <summary>
+        ///     The extent of dimension <paramref name="dim"/> — NumPy's <c>a.shape[dim]</c>. Read-only: a
+        ///     <see cref="Shape"/> is immutable, like the tuple NumPy hands out.
+        /// </summary>
+        /// <param name="dim">The axis; a negative axis counts from the end (<c>-1</c> is the last).</param>
+        /// <returns>The number of elements along that axis.</returns>
+        /// <exception cref="IndexOutOfRangeException"><paramref name="dim"/> is outside <c>[-NDim, NDim)</c>.</exception>
+        /// <remarks>
+        ///     There is no setter, on purpose. Shapes and arrays SHARE dimension arrays (an allocation keeps the caller's
+        ///     shape, an elementwise result keeps its input's), so a setter that wrote into the array changed every array
+        ///     sharing it — and only its dimensions: the cached size and the buffer stayed, so the new rows read past the
+        ///     buffer (<c>var s = new Shape(3, 4); var a = np.zeros(s); s[0] = 100;</c> made <c>a</c> <c>(100, 4)</c> over
+        ///     12 elements). NumPy's arrays own their dimensions and hand out immutable tuples; build a new shape instead
+        ///     (<c>new Shape(...)</c>, <c>reshape</c>).
+        /// </remarks>
         public readonly long this[int dim]
         {
             [MethodImpl(Inline)]
             get => dimensions[dim < 0 ? dimensions.Length + dim : dim];
-            [MethodImpl(Inline)]
-            set => dimensions[dim < 0 ? dimensions.Length + dim : dim] = value;
         }
 
         /// <summary>
@@ -932,7 +1184,7 @@ namespace NumSharp
 
 
         /// <summary>
-        ///     Gets the shape based on given <see cref="indicies"/> and the index offset (C-Contiguous) inside the current storage.
+        ///     Gets the shape based on given <paramref name="indicies"/> and the index offset (C-Contiguous) inside the current storage.
         /// </summary>
         /// <param name="indicies">The selection of indexes 0 based.</param>
         /// <returns></returns>
@@ -985,7 +1237,7 @@ namespace NumSharp
             // Use bufferSize for bounds checking (NumPy-aligned: no ViewInfo dependency)
             long boundSize = bufferSize > 0 ? bufferSize : size;
             if (offset >= boundSize && AddressesAnElement(dim))
-                throw new IndexOutOfRangeException($"The offset {offset} is out of range in Shape {boundSize}");
+                throw new IndexOutOfRangeException(string.Create(CultureInfo.InvariantCulture, $"The offset {offset} is out of range in Shape {boundSize}"));
 
             if (indicies.Length == dimensions.Length)
                 return (Scalar, offset);
@@ -997,7 +1249,7 @@ namespace NumSharp
 
             //TODO! This is not full support of sliced,
             //TODO! when sliced it usually diverts from this function but it would be better if we add support for sliced arrays too.
-            return (new Shape(innerShape), offset);
+            return (new Shape(innerShape, copy: false), offset);
         }
 
         /// <summary>
@@ -1147,6 +1399,19 @@ namespace NumSharp
             return GetAxis(shape.dimensions, axis);
         }
 
+        /// <summary>
+        ///     The dimensions with one axis removed — the shape a reduction over <paramref name="axis"/> leaves.
+        /// </summary>
+        /// <param name="dims">The dimensions.</param>
+        /// <param name="axis">The removed axis; negative values count from the end.</param>
+        /// <returns>A new array without <paramref name="axis"/> (empty for 0-d dimensions, whatever the axis).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dims"/> is null.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for a 1-D or higher shape.</exception>
+        /// <remarks>
+        ///     A negative axis is NumPy's normalization (<c>-2</c> is the second-to-last axis). This helper used to map
+        ///     EVERY negative axis to the last one and raise the legacy parenthesized AxisOutOfRangeException; its callers
+        ///     pass normalized axes, so only a direct caller ever saw the difference.
+        /// </remarks>
         public static long[] GetAxis(long[] dims, int axis)
         {
             if (dims == null)
@@ -1155,10 +1420,7 @@ namespace NumSharp
             if (dims.Length == 0)
                 return Array.Empty<long>();
 
-            if (axis <= -1) axis = dims.Length - 1;
-            if (axis >= dims.Length)
-                throw new AxisOutOfRangeException(dims.Length, axis);
-
+            axis = check_and_adjust_axis(dims.Length, axis);
             return dims.RemoveAt(axis);
         }
 
@@ -1222,11 +1484,15 @@ namespace NumSharp
             // where offset = parent.offset + sum(parent.strides[d] * start[d])
             // and stride = parent.stride * step
 
-            var sliced_axes = new List<long>();
-            var sliced_strides_list = new List<long>();
+            // The kept axes are written into arrays of the parent's rank and cut to their count at the end (an integer
+            // slice drops its axis): two exact allocations where two growing lists made six.
+            int nd = NDim;
+            var sliced_axes = new long[nd];
+            var sliced_strides_list = new long[nd];
+            int kept = 0;
             long sliceOffset = this.offset;
 
-            for (int i = 0; i < NDim; i++)
+            for (int i = 0; i < nd; i++)
             {
                 var dim = dimensions[i];
                 var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All;
@@ -1243,17 +1509,18 @@ namespace NumSharp
 
                 // Non-index slice: add to output dimensions and strides
                 long count = Math.Abs(slice_def.Count);
-                sliced_axes.Add(count);
+                sliced_axes[kept] = count;
 
                 // new_stride = parent.stride * step
                 // Negative step produces negative stride (for reversed iteration)
-                sliced_strides_list.Add(strides[i] * slice_def.Step);
+                sliced_strides_list[kept] = strides[i] * slice_def.Step;
+                kept++;
             }
 
             // Preserve bufferSize from parent (or compute from parent.size if not set)
             long parentBufferSize = bufferSize > 0 ? bufferSize : size;
 
-            if (sliced_axes.Count == 0) // Result is a scalar
+            if (kept == 0) // Result is a scalar
             {
                 // Create scalar via constructor with offset/bufferSize
                 var scalar = new Shape(Array.Empty<long>(), Array.Empty<long>(), sliceOffset, parentBufferSize);
@@ -1263,8 +1530,13 @@ namespace NumSharp
                 return scalar;
             }
 
-            var sliced_dims = sliced_axes.ToArray();
-            var sliced_strides = sliced_strides_list.ToArray();
+            var sliced_dims = sliced_axes;
+            var sliced_strides = sliced_strides_list;
+            if (kept < nd)
+            {
+                System.Array.Resize(ref sliced_dims, kept);
+                System.Array.Resize(ref sliced_strides, kept);
+            }
 
             // Create slice result via constructor
             var result = new Shape(sliced_dims, sliced_strides, sliceOffset, parentBufferSize);
@@ -1287,7 +1559,7 @@ namespace NumSharp
             for (int i = 0; i < shape.dimensions.Length; i++)
             {
                 if (shape.dimensions[i] > int.MaxValue)
-                    throw new OverflowException($"Dimension {i} value {shape.dimensions[i]} exceeds int.MaxValue");
+                    throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Dimension {i} value {shape.dimensions[i]} exceeds int.MaxValue"));
                 result[i] = (int)shape.dimensions[i];
             }
 
@@ -1318,7 +1590,7 @@ namespace NumSharp
         public static explicit operator int(Shape shape)
         {
             if (shape.Size > int.MaxValue)
-                throw new OverflowException($"Shape size {shape.Size} exceeds int.MaxValue");
+                throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Shape size {shape.Size} exceeds int.MaxValue"));
             return (int)shape.Size;
         }
 
@@ -1519,13 +1791,13 @@ namespace NumSharp
             // code only wrapped negatives, leaving per-axis OOB to slip through whenever the
             // resulting flat offset still landed inside the buffer (e.g. a[0,4] returned a[1,0]).
             if (coords.Length > dimensions.Length)
-                throw new IndexError($"too many indices for array: array is {dimensions.Length}-dimensional, but {coords.Length} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {dimensions.Length}-dimensional, but {coords.Length} were indexed"));
             for (int i = 0; i < coords.Length; i++)
             {
                 var curr = coords[i];
                 var dim = dimensions[i];
                 if (curr < -dim || curr >= dim)
-                    throw new IndexError($"index {curr} is out of bounds for axis {i} with size {dim}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {curr} is out of bounds for axis {i} with size {dim}"));
                 if (curr < 0)
                     coords[i] = dim + curr;
             }
@@ -1540,13 +1812,13 @@ namespace NumSharp
         public static int[] InferNegativeCoordinates(long[] dimensions, int[] coords)
         {
             if (coords.Length > dimensions.Length)
-                throw new IndexError($"too many indices for array: array is {dimensions.Length}-dimensional, but {coords.Length} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {dimensions.Length}-dimensional, but {coords.Length} were indexed"));
             for (int i = 0; i < coords.Length; i++)
             {
                 var curr = coords[i];
                 var dim = dimensions[i];
                 if (curr < -dim || curr >= dim)
-                    throw new IndexError($"index {curr} is out of bounds for axis {i} with size {dim}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {curr} is out of bounds for axis {i} with size {dim}"));
                 if (curr < 0)
                     coords[i] = (int)(dim + curr);
             }
@@ -1562,20 +1834,20 @@ namespace NumSharp
         public static unsafe void InferNegativeCoordinates(long[] dimensions, int* coords, int ndims)
         {
             if (ndims > dimensions.Length)
-                throw new IndexError($"too many indices for array: array is {dimensions.Length}-dimensional, but {ndims} were indexed");
+                throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"too many indices for array: array is {dimensions.Length}-dimensional, but {ndims} were indexed"));
             for (int i = 0; i < ndims; i++)
             {
                 var curr = coords[i];
                 var dim = dimensions[i];
                 if (curr < -dim || curr >= dim)
-                    throw new IndexError($"index {curr} is out of bounds for axis {i} with size {dim}");
+                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {curr} is out of bounds for axis {i} with size {dim}"));
                 if (curr < 0)
                     coords[i] = (int)(dim + curr);
             }
         }
 
         public override string ToString() =>
-            "(" + string.Join(", ", dimensions) + ")";
+            "(" + string.Join(", ", Array.ConvertAll(dimensions, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
 
         /// <summary>
         ///     This shape written the way a Python tuple prints — no space after the comma, and a
@@ -1591,8 +1863,8 @@ namespace NumSharp
             if (dimensions == null || dimensions.Length == 0)
                 return "()";
             if (dimensions.Length == 1)
-                return "(" + dimensions[0] + ",)";
-            return "(" + string.Join(",", dimensions) + ")";
+                return "(" + dimensions[0].ToString(CultureInfo.InvariantCulture) + ",)";
+            return "(" + string.Join(",", Array.ConvertAll(dimensions, d => d.ToString(CultureInfo.InvariantCulture))) + ")";
         }
 
         /// <summary>Creates a new object that is a copy of the current instance.</summary>
@@ -1621,7 +1893,7 @@ namespace NumSharp
                 return this; // readonly struct copy
 
             if (unview || unbroadcast)
-                return new Shape((long[])this.dimensions.Clone());
+                return new Shape(this.dimensions, copy: false);
 
             // Deep clone via copy constructor
             if (deep)
@@ -1638,7 +1910,7 @@ namespace NumSharp
             if (IsScalar)
                 return NewScalar();
 
-            return new Shape((long[])this.dimensions.Clone());
+            return new Shape(this.dimensions, copy: false);
         }
     }
 }

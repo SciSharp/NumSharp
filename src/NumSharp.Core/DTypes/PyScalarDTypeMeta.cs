@@ -17,7 +17,7 @@ namespace NumSharp
     ///     NumPy's abstract DType classes for Python scalars — <c>numpy.dtypes._PyLongDType</c>,
     ///     <c>_PyFloatDType</c>, <c>_PyComplexDType</c> (<c>abstractdtypes.c</c>). They are how NEP 50 "weak" promotion
     ///     works: a literal contributes only its abstract CLASS to <c>result_type</c> (no descriptor, so no value or
-    ///     width), and the class's <see cref="CommonDType"/> lets the other operand's dtype win within its kind
+    ///     width), and the class's <see cref="common_dtype"/> lets the other operand's dtype win within its kind
     ///     (<c>int8 + 300 → int8</c>, <c>float32 + 1e300 → float32</c>) while still lifting across kinds
     ///     (<c>int8 + 1.5 → float64</c>). A literal that survives alone falls back to the class default
     ///     (<c>int64</c> / <c>float64</c> / <c>complex128</c>).
@@ -31,9 +31,13 @@ namespace NumSharp
     {
         private readonly NPTypeCode _defaultCode;
 
+        /// <summary>Builds one abstract scalar class; only <see cref="DTypeRegistry"/> calls this, once per <see cref="PyScalarKind"/>.</summary>
+        /// <param name="name">NumPy's class name (<c>"_PyLongDType"</c>).</param>
+        /// <param name="pyKind">Which literal category the class stands for.</param>
+        /// <param name="defaultCode">The storage type a lone literal of the category resolves to.</param>
         internal PyScalarDTypeMeta(string name, PyScalarKind pyKind, NPTypeCode defaultCode)
             : base(name, "numpy.dtypes", -1, scalarType: null, scalarName: name, NPTypeCode.Empty, kind: '\0', typeChar: '\0',
-                itemSize: -1, alignment: -1, DTypeFlags.Abstract)
+                itemSize: -1, alignment: -1, DTypeFlags.NPY_DT_ABSTRACT)
         {
             PyKind = pyKind;
             _defaultCode = defaultCode;
@@ -43,10 +47,49 @@ namespace NumSharp
         public PyScalarKind PyKind { get; }
 
         /// <summary>The default descriptor a lone literal resolves to: <c>int64</c> (NumPy's <c>intp</c>), <c>float64</c>, <c>complex128</c>.</summary>
-        public override DType DefaultDescr() => DTypeRegistry.FromTypeCode(_defaultCode).Singleton;
+        /// <returns>The singleton of the default class.</returns>
+        public override DType default_descr() => DTypeRegistry.FromTypeCode(_defaultCode).singleton;
+
+        /// <summary>
+        ///     The slot <c>discover_descr_from_pyobject</c> (NumPy's <c>discover_descriptor_from_py{long,float,complex}</c>,
+        ///     <c>abstractdtypes.c</c>): the descriptor array coercion gives a Python scalar of this category, which is also what
+        ///     <c>np.result_type(literal)</c> answers (a lone operand skips promotion and returns the dtype of
+        ///     <c>np.asarray(literal)</c>). For a Python int NumPy's <c>discover_descriptor_from_pylong</c> reads the VALUE:
+        ///     int64 when it fits (NumPy's <c>intp</c>), uint64 when only that holds it (<c>2**64 - 1</c>;
+        ///     <c>np.result_type(2**63)</c> is uint64), and NumPy's object descriptor past 64 bits, which NumSharp refuses. A
+        ///     Python float is float64 and a Python complex complex128 whatever their value
+        ///     (<c>discover_descriptor_from_pyfloat</c> / <c>_pycomplex</c>). As an operand among others the literal stays weak
+        ///     and its value never matters (<c>np.result_type(np.uint8, 2**63)</c> is uint8).
+        /// </summary>
+        /// <param name="obj">A value of this category in the C# boundary map: an integer primitive or
+        ///     <see cref="System.Numerics.BigInteger"/> for <c>_PyLongDType</c>.</param>
+        /// <returns>The default descriptor, or uint64 for a Python int past int64 that uint64 holds.</returns>
+        /// <exception cref="NotSupportedException">A Python int past 64 bits (NumPy builds an object array, a dtype NumSharp
+        ///     does not have).</exception>
+        public override DType discover_descr_from_pyobject(object obj)
+        {
+            if (PyKind == PyScalarKind.Int)
+            {
+                switch (obj)
+                {
+                    case ulong u when u > long.MaxValue:
+                        return DTypeRegistry.FromTypeCode(NPTypeCode.UInt64).singleton;
+                    case System.Numerics.BigInteger big when big < long.MinValue || big > long.MaxValue:
+                        // PyLong_AsLongLong failed: PyLong_AsUnsignedLongLong, then object.
+                        if (big.Sign > 0 && big <= ulong.MaxValue)
+                            return DTypeRegistry.FromTypeCode(NPTypeCode.UInt64).singleton;
+                        throw new NotSupportedException(
+                            "A Python int past 64 bits makes NumPy build an object array, which NumSharp does not have.");
+                }
+            }
+            // Every other C# integer primitive fits int64; a Python float / complex has one descriptor.
+            return default_descr();
+        }
 
         /// <summary>Weak literals map onto the C# primitives of their category.</summary>
-        public override bool IsKnownScalarType(Type type)
+        /// <param name="type">The C# type of the literal.</param>
+        /// <returns>True when <paramref name="type"/> is a C# primitive of this class's category.</returns>
+        public override bool is_known_scalar_type(Type type)
         {
             if (type == null)
                 return false;
@@ -73,14 +116,17 @@ namespace NumSharp
         ///     than through NumPy's opaque-user-dtype fallback; a genuinely foreign legacy class still takes that
         ///     fallback (promote with the smallest concrete type of the literal's category and let it decide).
         /// </summary>
-        public override DTypeMeta CommonDType(DTypeMeta other)
+        /// <param name="other">The other operand's class.</param>
+        /// <returns>The common class, or null (NotImplemented) when the other class must answer.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+        public override DTypeMeta common_dtype(DTypeMeta other)
         {
             if (other == null)
                 throw new ArgumentNullException(nameof(other));
 
-            bool otherIsBuiltin = other.IsLegacy && other.HasStorage
+            bool otherIsBuiltin = other._legacy && other.HasStorage
                                   && (other.Kind == 'b' || other.Kind == 'i' || other.Kind == 'u' || other.Kind == 'f' || other.Kind == 'c');
-            bool otherIsUser = other.IsLegacy && !otherIsBuiltin && other.TypeNum >= 256;
+            bool otherIsUser = other._legacy && !otherIsBuiltin && other.type_num >= 256;
 
             switch (PyKind)
             {
@@ -93,9 +139,9 @@ namespace NumSharp
                     else if (otherIsUser)
                     {
                         /* This is a back-compat fallback to usually do the right thing... */
-                        return other.CommonDType(DTypeRegistry.UInt8)
-                               ?? other.CommonDType(DTypeRegistry.Int8)
-                               ?? other.CommonDType(DTypeRegistry.Int64);
+                        return other.common_dtype(DTypeRegistry.UInt8)
+                               ?? other.common_dtype(DTypeRegistry.Int8)
+                               ?? other.common_dtype(DTypeRegistry.Int64);
                     }
                     return null;
 
@@ -111,7 +157,7 @@ namespace NumSharp
                     }
                     else if (otherIsUser)
                     {
-                        return other.CommonDType(DTypeRegistry.Half) ?? other.CommonDType(DTypeRegistry.Double);
+                        return other.common_dtype(DTypeRegistry.Half) ?? other.common_dtype(DTypeRegistry.Double);
                     }
                     return null;
 
@@ -123,7 +169,7 @@ namespace NumSharp
                     }
                     else if (otherIsUser)
                     {
-                        return other.CommonDType(DTypeRegistry.Complex128);
+                        return other.common_dtype(DTypeRegistry.Complex128);
                     }
                     else if (other is PyScalarDTypeMeta py2 && (py2.PyKind == PyScalarKind.Int || py2.PyKind == PyScalarKind.Float))
                     {

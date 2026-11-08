@@ -1,3 +1,5 @@
+using System;
+using NumSharp.Backends;
 using NumSharp.Statistics;
 
 namespace NumSharp
@@ -6,28 +8,109 @@ namespace NumSharp
     {
         /// <summary>
         ///     Compute the median along the specified axis.
-        ///     For an even-sized slice the median is the mean of the two central values;
-        ///     for an odd-sized slice it is the single central value. Equivalent to
-        ///     <c>np.quantile(a, 0.5)</c> for our purposes, which matches NumPy's contract.
+        ///     For an even-sized slice the median is the <b>mean</b> of the two central values,
+        ///     <c>(a+b)/2</c>; for an odd-sized slice it is the single central value. This is NOT
+        ///     the same code path as <c>np.quantile(a, 0.5)</c> — NumPy computes <c>np.median</c>
+        ///     via <c>mean(part[middle])</c>, which disagrees with the quantile <c>_lerp</c> at
+        ///     q=0.5 by up to 1 ULP on ~10 % of inputs — so <c>medianMean: true</c> is REQUIRED
+        ///     for bit-exact parity.
         /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.median.html</remarks>
+        /// <param name="a">The data (bool computes as its 0 / 1 values; text: see the exceptions).</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), or null for the flattened data.</param>
+        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy anyway).</param>
+        /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <returns>The median (NaN for an empty slice); <paramref name="out"/> itself when one is given.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> that np.median's closing <c>mean(part[indexer], out=out)</c>
+        ///     refuses in its add.reduce prologue, before anything is computed: read-only (<c>output array is read-only</c>),
+        ///     of the wrong rank (<c>output parameter for reduction operation add has the wrong number of dimensions: Found 2
+        ///     but expected 1</c>) or with a length-1 axis where the result is longer (parity QA-31).</exception>
+        /// <exception cref="IncorrectShapeException">An <paramref name="out"/> whose axes do not broadcast with the
+        ///     result's: the prologue's iterator text over the partition's middle slice (<c>operands could not be broadcast
+        ///     together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3) (1,4) </c>), NumPy's ValueError.</exception>
+        /// <exception cref="TypeError">Text data or a text <paramref name="out"/>: NumPy's closing <c>mean</c> refuses (its
+        ///     verbatim text). A NEP 55 <c>StringDType</c> array is sorted first (NumPy's partition of a <c>StringDType</c>
+        ///     line), then its mean's divide refuses the concatenated text.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> array: a None-like NA in a line of two or more elements (the sort's
+        ///     <c>Cannot compare null that is not a nan-like value</c>), an empty reduced axis (the mean's add.reduce has no
+        ///     identity) or a read-only <paramref name="out"/>.</exception>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
+        ///     argument 'axis'</c>), after the axes and keepdims' out are checked. With <c>overwrite_input</c> and no axis
+        ///     NumPy partitions the text itself instead: its broadcast error for an even length other than 2
+        ///     (<see cref="IncorrectShapeException"/>), else the closing mean's refusal of text.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.median.html
+        ///     <para>A <c>StringDType</c> median exists only when the middle elements are NaN-like NAs: NumPy's
+        ///     <c>np.float64(nan)</c>, a read-only 0-d float64 here.</para>
+        /// </remarks>
+        /// <exception cref="IndexError"><paramref name="keepdims"/> with an <paramref name="out"/> NumPy cannot index:
+        ///     <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (too few dimensions, or a reduced axis of length 0),
+        ///     raised for every dtype before the text refusals.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         public static NDArray median(NDArray a,
             int? axis = null, NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
-            int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
-            // NumPy's np.median returns nan for an empty slice (np.quantile/percentile raise);
-            // emptyReturnsNaN routes the empty-axis case to a nan fill instead.
-            return QuantileEngine.Compute(a, new[] { 0.5 }, axisArr, @out, overwrite_input,
-                QuantileMethod.Linear, keepdims, qIsScalar: true, emptyReturnsNaN: true,
-                allowBooleanContinuous: true);
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            // NumPy's np.median body (the text routes, then the numeric median) is TensorEngine.Median's: the facade
+            // holds only the class rules above.
+            // NumPy's _ureduce turns an int axis into a 1-tuple: the engine member takes the axes as an array.
+            return a.TensorEngine.Median(a, axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input,
+                keepdims);
         }
 
+        /// <summary>
+        ///     The median over SEVERAL axes at once (NumPy's tuple <c>axis</c>): the reduced axes are merged into one, an
+        ///     even-sized slice gives the mean of its two central values (NumPy's <c>mean(part[middle])</c>, not the
+        ///     quantile lerp), an empty slice gives NaN, and an EMPTY axis list reduces nothing.
+        /// </summary>
+        /// <param name="a">The data (bool computes as its 0 / 1 values; text is refused as NumPy refuses it, see the
+        ///     exceptions).</param>
+        /// <param name="axis">The axes to reduce (negative values count from the end); null reduces the flattened
+        ///     data.</param>
+        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy
+        ///     anyway).</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <returns>The median over the reduced axes; <paramref name="out"/> itself when one is given.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError">An axis repeats; or, for a <c>StringDType</c> array, a None-like NA in a sorted line of
+        ///     two or more elements (<c>Cannot compare null that is not a nan-like value</c>), an empty reduced axis (the
+        ///     mean's add.reduce has no identity) or a read-only <paramref name="out"/>. A <c>StringDType</c> median exists
+        ///     only over NaN-like NAs (<c>np.float64(nan)</c>).</exception>
+        /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> that np.median's closing <c>mean(part[indexer], out=out)</c>
+        ///     refuses in its add.reduce prologue, before anything is computed: read-only (<c>output array is read-only</c>),
+        ///     of the wrong rank (<c>output parameter for reduction operation add has the wrong number of dimensions: Found 2
+        ///     but expected 1</c>) or with a length-1 axis where the result is longer (parity QA-31).</exception>
+        /// <exception cref="IncorrectShapeException">An <paramref name="out"/> whose axes do not broadcast with the
+        ///     result's: the prologue's iterator text over the partition's middle slice (<c>operands could not be broadcast
+        ///     together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3) (1,4) </c>), NumPy's ValueError.</exception>
+        /// <exception cref="TypeError">Text data or a text <paramref name="out"/> that NumPy's closing mean refuses (its
+        ///     verbatim text); a <c>StringDType</c> array after its sort (the mean's divide refuses the concatenated text).</exception>
+        /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
+        ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
+        ///     own Python code (<c>np.median(m, axis=())</c> reduces axis 1).</remarks>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition
+        ///     (<c>chararray.partition() got an unexpected keyword argument 'axis'</c>), after the axes and keepdims' out are
+        ///     checked. With <c>overwrite_input</c> and no axis NumPy partitions the text itself instead: its broadcast error
+        ///     for an even length other than 2 (<see cref="IncorrectShapeException"/>), else the closing mean's refusal of
+        ///     text.</exception>
+        /// <exception cref="IndexError"><paramref name="keepdims"/> with an <paramref name="out"/> NumPy cannot index:
+        ///     <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (too few dimensions, or a reduced axis of length 0),
+        ///     raised for every dtype before the text refusals.</exception>
+        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0, any dtype:
+        ///     <c>_ureduce</c>'s merge cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape
+        ///     (0,newaxis)</c>), raised before the text refusals.</exception>
         public static NDArray median(NDArray a, int[] axis,
             NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
-            return QuantileEngine.Compute(a, new[] { 0.5 }, axis, @out, overwrite_input,
-                QuantileMethod.Linear, keepdims, qIsScalar: true, emptyReturnsNaN: true,
-                allowBooleanContinuous: true);
+            if (a is null) throw new ArgumentNullException(nameof(a));
+            // NumPy's np.median body (the text routes, then the numeric median) is TensorEngine.Median's: the facade
+            // holds only the class rules above.
+            return a.TensorEngine.Median(a, axis, @out, overwrite_input, keepdims);
         }
     }
 }

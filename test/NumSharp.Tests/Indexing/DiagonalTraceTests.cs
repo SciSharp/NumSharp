@@ -294,13 +294,65 @@ public class DiagonalTraceTests
         r.ToArray<long>().Should().Equal(16L, 18L, 20L, 22L);
     }
 
+    /// <summary>
+    ///     A misshapen out is refused by add.reduce's prologue with NumPy's texts (probed 2.4.2): a length that does not
+    ///     broadcast against the (4, 2) diagonal is the "remapped shapes" text (the house IncorrectShapeException for
+    ///     NumPy's ValueError), a wrong rank the reduction's rank text. Until P1d the engine raised its own
+    ///     "output array does not match result of trace" ArgumentException for both.
+    /// </summary>
     [TestMethod]
     public void Trace_OutDispatch_WrongShape_Raises()
     {
         var c = np.arange(24, NPTypeCode.Int32).reshape(2, 3, 4);
         var outArr = np.zeros(new Shape(5), NPTypeCode.Int64);
         var action = () => np.trace(c, @out: outArr);
-        action.Should().Throw<ArgumentException>().WithMessage("*output array does not match*");
+        action.Should().Throw<IncorrectShapeException>().WithMessage(
+            "operands could not be broadcast together with remapped shapes [original->remapped]: (5,)->(5,newaxis) (4,2) ");
+        var wrongRank = np.zeros(new Shape(4, 1), NPTypeCode.Int64);
+        new Action(() => np.trace(c, @out: wrongRank)).Should().Throw<ValueError>().WithMessage(
+            "output parameter for reduction operation add has the wrong number of dimensions: Found 2 but expected 1");
+    }
+
+    /// <summary>
+    ///     A read-only out is refused first, with add.reduce's text ("output array is read-only"; it raised np.copyto's
+    ///     "assignment destination is read-only" before P1d), and before the out's shape is looked at.
+    /// </summary>
+    [TestMethod]
+    public void Trace_Out_ReadOnly_RaisesFirst()
+    {
+        var c = np.arange(24, NPTypeCode.Int32).reshape(2, 3, 4);
+        var readOnly = np.zeros(new Shape(5), NPTypeCode.Int64);
+        readOnly.setflags(write: false);
+        new Action(() => np.trace(c, @out: readOnly)).Should().Throw<ValueError>().WithMessage("output array is read-only");
+    }
+
+    /// <summary>
+    ///     Without dtype= the trace into an out sums in promote_types(out.dtype, a.dtype) with no widening (NumPy's
+    ///     add.reduce with an out operand, probed 2.4.2): an int8 diagonal [100, 100, 56] into a bool out wraps to 0 in the
+    ///     int8 loop and stores False (the int64 accumulator stored True), a float32 diagonal [16777216, 1, 1] into a
+    ///     float64 out adds in float64 (16777218, not float32's 16777216), and a uint64 diagonal [2^63 + 1, 0] into an
+    ///     int64 out runs the float64 loop and stores INT64_MIN.
+    /// </summary>
+    [TestMethod]
+    public void Trace_Out_LoopIsThePromotionOfOutAndInput()
+    {
+        var b = np.zeros(Shape.Scalar, NPTypeCode.Boolean);
+        np.trace(np.diag(np.array(new sbyte[] { 100, 100, 56 })), @out: b);
+        b.GetBoolean().Should().BeFalse();
+
+        var f = np.zeros(Shape.Scalar, NPTypeCode.Double);
+        np.trace(np.diag(np.array(new float[] { 16777216f, 1f, 1f })), @out: f);
+        f.GetDouble().Should().Be(16777218.0);
+
+        var l = np.zeros(Shape.Scalar, NPTypeCode.Int64);
+        var r = np.trace(np.diag(np.array(new ulong[] { (1UL << 63) + 1, 0 })), @out: l);
+        ReferenceEquals(r, l).Should().BeTrue();
+        l.GetInt64().Should().Be(long.MinValue);
+
+        // A dtype= still decides the loop: int64 sums 256 and stores True.
+        var t = np.zeros(Shape.Scalar, NPTypeCode.Boolean);
+        np.trace(np.diag(np.array(new sbyte[] { 100, 100, 56 })), dtype: np.int64, @out: t);
+        t.GetBoolean().Should().BeTrue();
     }
 
     [TestMethod]

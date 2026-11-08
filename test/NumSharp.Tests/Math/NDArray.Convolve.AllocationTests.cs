@@ -44,8 +44,8 @@ namespace NumSharp.Tests.Math
         ///     Comparing the two sizes is what makes it threshold-free: the bug is defined by
         ///     allocation TRACKING the element count, so the ratio is the assertion and the
         ///     absolute cap is only a backstop. Both are measured with
-        ///     <see cref="AllocationTests.MinAllocated"/> (best-of-N floor) because
-        ///     <c>GC.GetTotalAllocatedBytes</c> is process-wide and noise can only ever add.
+        ///     <see cref="AllocationTests.MinAllocated"/>: this thread's allocations only (the
+        ///     other tests run in parallel), best-of-N because one-off noise can only add.
         /// </remarks>
         [TestMethod]
         public void ConvolveSame_DoesNotAllocatePerElementPair()

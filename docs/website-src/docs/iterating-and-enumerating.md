@@ -11,6 +11,26 @@ This page is the user-facing guide. For the iterator *engine* - coalescing, buff
 
 ---
 
+## Iterating text
+
+**The typed `ref T` / `Span<T>` advice below applies to unmanaged CLR element types, not string dtypes.** An `S` / `U` buffer is packed bytes/code points, not an array of managed `string` references; `StringDType` cells belong to an allocator. `np.nditer<string>` and `Unsafe.Span<string>()` are not text views.
+
+Use `item()`, `tolist()`, a normal `foreach`, `NDArray.AsStringArray` for non-missing string values, or the descriptor-aware `np.nditer` object. A `StringDType` iterator requires `refs_ok`:
+
+```csharp
+var text = np.array(new object[] { "cat", null }, np.dtypes.StringDType(na_object: null));
+using var it = np.nditer(text, flags: new[] { "refs_ok" });
+foreach (var operands in it)
+{
+    object value = operands[0].item(); // "cat", then null; the NA object is preserved
+    Console.WriteLine(value is null ? "<missing>" : value);
+}
+```
+
+`S` / `U` iterators need no `refs_ok`; buffered text/number casts use full `DType` descriptors. Dispose the iterator to flush writes. For an `NDCharArray`, ordinary element access and 1-D iteration strip trailing whitespace, while `item()` and `tolist()` do not. See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md).
+
+---
+
 ## Which one should I use?
 
 Ranked **strictly by the ≈ time column** - one full walk of a 100,000-element `float64` array, C-contiguous, fastest first. The **recommended, non-boxed forms**:
@@ -66,7 +86,7 @@ If you need the raw buffer in .NET vector code, `nd.Unsafe.Span<T>()` hands SIMD
 
 ## .NET interop - `Span<T>` / `Memory<T>` / arrays / `IEnumerable<T>`
 
-Two ways to hand an `NDArray` to plain .NET code - a **zero-copy aliasing** side (`nd.Unsafe`, the absolute performance ceiling: no copy, no walk) and a **safe copying / enumerable** side (extensions). Both cover all 15 dtypes.
+Two ways to hand an `NDArray` to plain .NET code - a **zero-copy aliasing** side (`nd.Unsafe`, the absolute performance ceiling: no copy, no walk) and a **safe copying / enumerable** side (extensions). The typed buffer APIs require an unmanaged `T`; use the [text accessors](#iterating-text) for string values.
 
 ### `nd.Unsafe` - zero-copy BCL views (aliasing; you must keep the NDArray alive)
 
@@ -99,7 +119,7 @@ Unlike the aliasing views, these **materialize or copy** into caller-owned .NET 
 ```csharp
 double[] all      = a.ToArray<double>();                  // C-order copy (any layout) - already on NDArray
 double   mean     = a.AsEnumerable<double>().Average();   // LINQ / IEnumerable<T>, unboxed, any layout
-var      evens    = a.AsEnumerable<int>().Where(x => x % 2 == 0).ToList();
+var      evens    = a.AsEnumerable<double>().Where(x => x % 2 == 0).ToList();   // T is the dtype's own type (double here)
 
 double[] fromIter = np.flat<double>(a).ToArray();         // materialize any iterator (C-order here)
 int      copied   = np.nditer<double>(a).CopyTo(dest);    // pour an iterator into your own Span<T>/array
@@ -131,7 +151,7 @@ foreach (Span<double> chunk in np.nditer_chunks<double>(a, writeable: true))
     System.Numerics.Tensors.TensorPrimitives.Multiply(chunk, 2.0, chunk);
 ```
 
-A **contiguous array arrives as a single chunk** - and so do F-contiguous, transposed and reversed views, which the iterator coalesces. Both work on every layout and all 15 dtypes.
+A **contiguous array arrives as a single chunk** - and so do F-contiguous, transposed and reversed views, which the iterator coalesces. `T` must be an unmanaged element type; text values use the [descriptor-aware iterator](#iterating-text).
 
 **Rules of the road** (all matching NumPy's `nditer` where a counterpart exists):
 

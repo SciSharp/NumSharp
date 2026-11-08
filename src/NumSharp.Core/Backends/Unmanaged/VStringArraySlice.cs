@@ -1,0 +1,790 @@
+using System;
+using System.Collections;
+using System.Globalization;
+using System.Runtime.InteropServices;
+using NumSharp.Backends.Strings;
+using NumSharp.Backends.Unmanaged.Pooling;
+using NumSharp.Utilities;
+
+namespace NumSharp.Backends.Unmanaged
+{
+    /// <summary>
+    ///     The ELEMENT view of a NEP 55 <c>StringDType</c> buffer — the <see cref="IArraySlice"/> a <c>T</c>
+    ///     <see cref="UnmanagedStorage"/> holds as its <see cref="UnmanagedStorage.InternalArray"/>. The elements are NumPy's
+    ///     16-byte packed cells (<see cref="Cells"/>, an ordinary <see cref="ArraySlice{T}"/> of <see cref="byte"/>, so pooling,
+    ///     reference counting and views are the numeric lanes'); the text of elements longer than 15 bytes lives in the
+    ///     buffer's <see cref="Allocator"/> (an arena and heap strings), which the cells' memory block owns.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///     <b>Views share, copies duplicate.</b> <see cref="Slice(long, long)"/> (contiguous slicing, views, sub-arrays) shares
+    ///     the cells AND the allocator: a write through a view is a write into the same buffer. <see cref="Clone"/> allocates a
+    ///     new buffer with a new allocator and DUPLICATES every string into it (NumPy's <c>NpyString_dup</c>), so the copy's
+    ///     arena is compact and its cells never point into the source's memory.
+    ///     </para>
+    ///     <para>
+    ///     <b>No raw element access.</b> A cell is meaningful only with its own allocator: an arena offset read with another
+    ///     buffer's arena reads someone else's text, and a heap pointer copied into another buffer would be freed twice by the
+    ///     two clear loops. So the typed accessors refuse, <see cref="Clone{T}"/> refuses, and the raw byte accessors
+    ///     (<see cref="AsSpan{T}"/>, <see cref="CopyTo{T}(Span{T})"/>) expose the cells only as BYTES to read
+    ///     (NumPy's <c>tobytes()</c> of a <c>T</c> array is exactly these cells); writing such bytes into another
+    ///     <c>StringDType</c> buffer is never valid.
+    ///     </para>
+    ///     <para>
+    ///     <b>Element values.</b> <see cref="GetIndex(long)"/> is NumPy's <c>stringdtype_getitem</c>: a <see cref="string"/>, or
+    ///     the descriptor's <c>na_object</c> for an NA cell (<c>''</c> when the descriptor has none).
+    ///     <see cref="SetIndex(long, object)"/> is <c>stringdtype_setitem</c>: the NA object packs an NA cell; any other value
+    ///     is stored as its Python <c>str()</c> when the descriptor coerces (a <see cref="string"/> or <see cref="char"/> as
+    ///     itself, <c>bytes</c> decoded as strict UTF-8), else only text is accepted.
+    ///     </para>
+    /// </remarks>
+    public sealed unsafe class VStringArraySlice : IArraySlice
+    {
+        /// <summary>The error text of a non-text value under <c>coerce=False</c> (<c>as_pystring</c>).</summary>
+        internal const string CoercionDisabledText = "StringDType only allows string data when string coercion is disabled.";
+
+        /// <summary>
+        ///     Wraps cells that belong to <paramref name="allocator"/> as <c>cells.Count / 16</c> elements of
+        ///     <paramref name="descr"/>.
+        /// </summary>
+        /// <param name="cells">The cells (a whole number of 16-byte cells).</param>
+        /// <param name="allocator">The allocator of the buffer the cells belong to.</param>
+        /// <param name="descr">A <c>StringDType</c> descriptor.</param>
+        /// <exception cref="ArgumentNullException">An argument is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="descr"/> is not a <c>StringDType</c> descriptor, or the cells
+        ///     are not a whole number of 16-byte cells.</exception>
+        internal VStringArraySlice(ArraySlice<byte> cells, VStringAllocator allocator, DType descr)
+        {
+            Allocator = allocator ?? throw new ArgumentNullException(nameof(allocator));
+            if (descr is null)
+                throw new ArgumentNullException(nameof(descr));
+            if (descr.Meta is not VStringDTypeMeta)
+                throw new ArgumentException($"{descr.ToString(true)} is not a StringDType descriptor.", nameof(descr));
+            if (cells.Count % VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING != 0)
+                throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"A buffer of {cells.Count} bytes is not a whole number of 16-byte cells."), nameof(cells));
+            Cells = cells;
+            Descr = descr;
+            Count = cells.Count / VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+        }
+
+        /// <summary>
+        ///     Allocates a buffer of <paramref name="count"/> elements of <paramref name="descr"/>: ZERO-FILLED cells (every
+        ///     element is <c>''</c>, NumPy's <c>NPY_NEEDS_INIT</c>) and a new allocator, both owned by one memory block whose
+        ///     release runs the clear loop (frees the heap strings and the arena) before the cells go back to the pool.
+        /// </summary>
+        /// <param name="descr">A <c>StringDType</c> descriptor.</param>
+        /// <param name="count">The number of elements (the caller has already run <see cref="AllocationGuard"/> on 16-byte
+        ///     elements, so <c>count * 16</c> cannot overflow).</param>
+        /// <returns>The new slice (the only reference to its block).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="descr"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="descr"/> is not a <c>StringDType</c> descriptor.</exception>
+        /// <exception cref="OutOfMemoryException">The cells cannot be allocated.</exception>
+        public static VStringArraySlice Allocate(DType descr, long count)
+        {
+            if (descr is null)
+                throw new ArgumentNullException(nameof(descr));
+            if (descr.Meta is not VStringDTypeMeta)
+                throw new ArgumentException($"{descr.ToString(true)} is not a StringDType descriptor.", nameof(descr));
+            long bytes = count * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            var allocator = new VStringAllocator();
+            IntPtr ptr;
+            if (bytes > 0 && SizeBucketedBufferPool.PrefersWriteOnce(bytes))
+            {
+                // Up to the pool's window a recycled buffer cleared once beats calloc: calloc hands out fresh pages, whose
+                // first-touch faults cost about eight times the clear (a 100K-cell result: ~450 us of faults against ~55
+                // us), and every cell of a fresh StringDType array is touched anyway — written by the kernel that filled
+                // it, or read as '' by NumPy's NPY_NEEDS_INIT contract. Past the window the allocator's fresh demand-zero
+                // pages are the cheaper zero (np.tri's measured cliff).
+                ptr = SizeBucketedBufferPool.Take(bytes);
+                NativeMemory.Clear((void*)ptr, (nuint)bytes);
+            }
+            else
+            {
+                ptr = SizeBucketedBufferPool.TakeZeroed(bytes);
+            }
+            // The block OWNS the allocator: its release (the last view's Release, or the block's finalizer) runs NumPy's
+            // clear loop over every cell of the WHOLE buffer, frees the arena, and only then returns the cells to the pool —
+            // so no heap string outlives the buffer and no cell outlives its allocator.
+            var block = new UnmanagedMemoryBlock<byte>((byte*)ptr, bytes, () =>
+            {
+                allocator.ClearAndFree((byte*)ptr, count);
+                SizeBucketedBufferPool.Return(ptr, bytes);
+            });
+            return new VStringArraySlice(new ArraySlice<byte>(block), allocator, descr);
+        }
+
+        /// <summary>The packed cells: <see cref="Count"/> × 16 bytes.</summary>
+        public ArraySlice<byte> Cells { get; }
+
+        /// <summary>The allocator of the buffer these cells belong to (shared by every view of it).</summary>
+        /// <remarks>The one allocator <see cref="Cells"/> may be read and written with: lock it
+        ///     (<see cref="VStringAllocator.acquire_allocator"/>) around every <c>load</c> / <c>pack</c>, and never use it with
+        ///     cells of another buffer.</remarks>
+        public VStringAllocator Allocator { get; }
+
+        /// <summary>The element descriptor (a <c>StringDType</c> instance: its <c>na_object</c> and <c>coerce</c>).</summary>
+        public DType Descr { get; }
+
+        /// <summary>True when the descriptor has a missing-data object (its NA cells read as that object).</summary>
+        public bool HasNAObject => Descr.VString.HasNAObject;
+
+        // ---------------------------------------------------------------------------------------------
+        // IMemoryBlock — element semantics
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>The number of string ELEMENTS (cells, not bytes).</summary>
+        public long Count { get; }
+
+        /// <summary>Bytes per element: one 16-byte cell.</summary>
+        public int ItemLength => VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+
+        /// <summary>Total cell bytes (<see cref="Count"/> × 16; the text in the allocator is not counted, as NumPy's <c>nbytes</c>).</summary>
+        public long BytesLength => Count * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+
+        /// <summary>Always <see cref="NPTypeCode.String"/>: the lane shared with <c>S</c> / <c>U</c> (the descriptor's
+        ///     class tells the layouts apart).</summary>
+        public NPTypeCode TypeCode => NPTypeCode.String;
+
+        /// <summary>The first cell.</summary>
+        public byte* Address => Cells.Address;
+
+        /// <inheritdoc/>
+        void* IMemoryBlock.Address => Cells.VoidAddress;
+
+        /// <summary>The cells' memory block (pool, reference count, and the allocator's lifetime).</summary>
+        public IMemoryBlock MemoryBlock => Cells.MemoryBlock;
+
+        // ---------------------------------------------------------------------------------------------
+        // Element access (stringdtype_getitem / stringdtype_setitem)
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Element <paramref name="index"/> as its C# value (<c>stringdtype_getitem</c>): the text as a <see cref="string"/>,
+        ///     or the descriptor's <c>na_object</c> for an NA cell (<c>''</c> when the descriptor has none).
+        /// </summary>
+        /// <param name="index">The element index.</param>
+        /// <returns>A <see cref="string"/>, or the NA object (possibly null, NumPy's <c>None</c>).</returns>
+        /// <exception cref="OutOfMemoryException"><c>Failed to load string in StringDType getitem</c> (a corrupt cell), or a
+        ///     text too long for a .NET string.</exception>
+        public object GetIndex(long index)
+        {
+            Allocator.acquire_allocator();
+            try
+            {
+                int isNull = Allocator.load(Address + index * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, out byte* buf, out long size);
+                if (isNull < 0)
+                    throw new OutOfMemoryException("Failed to load string in StringDType getitem");
+                if (isNull == 1)
+                    return HasNAObject ? Descr.VString.na_object : string.Empty;
+                return Decode(buf, size);
+            }
+            finally
+            {
+                Allocator.release_allocator();
+            }
+        }
+
+        /// <summary>
+        ///     The values of the strided run <c>start + i * stride</c> (see <see cref="IArraySlice.GetItems"/>): what
+        ///     <see cref="GetIndex(long)"/> returns for each element — the text as a <see cref="string"/>, the descriptor's
+        ///     <c>na_object</c> for an NA cell (<c>''</c> when it has none) — under ONE hold of the allocator's lock.
+        /// </summary>
+        /// <param name="start">The first element.</param>
+        /// <param name="stride">The step in elements (0 repeats an element, negative walks back).</param>
+        /// <param name="destination">Receives the values.</param>
+        /// <exception cref="OutOfMemoryException"><c>Failed to load string in StringDType getitem</c> (a corrupt cell), or a
+        ///     text too long for a .NET string, at the first such element (the slots before it are filled).</exception>
+        /// <remarks>
+        ///     NumPy's <c>stringdtype_getitem</c> acquires and releases the allocator for every element; the lock exists so
+        ///     that no store moves the arena or frees a heap text while a read follows a cell's pointer, and holding it for the
+        ///     whole run guards the same reads (another thread's store into this buffer waits for the run). The arena base is
+        ///     therefore read once, and each cell is unpacked by <see cref="NDVStringCells.Load"/> (NumPy's
+        ///     <c>NpyString_load</c> with the base given), as the comparison kernels do.
+        /// </remarks>
+        public void GetItems(long start, long stride, Span<object> destination)
+        {
+            if (destination.IsEmpty)
+                return;
+            // The NA reading is a property of the descriptor, the same for every cell of the run.
+            object na = HasNAObject ? Descr.VString.na_object : string.Empty;
+            byte* cell = Address + start * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            long step = stride * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            Allocator.acquire_allocator();
+            try
+            {
+                byte* arena = Allocator.ArenaBase;
+                for (int i = 0; i < destination.Length; i++, cell += step)
+                {
+                    int isNull = NDVStringCells.Load(cell, arena, out byte* buf, out long size);
+                    if (isNull < 0)
+                        throw new OutOfMemoryException("Failed to load string in StringDType getitem");
+                    destination[i] = isNull == 1 ? na : Decode(buf, size);
+                }
+            }
+            finally
+            {
+                Allocator.release_allocator();
+            }
+        }
+
+        /// <summary>
+        ///     Stores <paramref name="value"/> into element <paramref name="index"/> (<c>stringdtype_setitem</c>): the
+        ///     descriptor's NA object (by NumPy's <c>na_eq_cmp</c>) packs an NA cell; any other value is converted by
+        ///     <see cref="AsPyString"/>, encoded as strict UTF-8 and packed.
+        /// </summary>
+        /// <param name="index">The element index.</param>
+        /// <param name="value">Any C# value standing in for a Python object (see <see cref="NDPyObject"/>).</param>
+        /// <exception cref="ValueError">A value that is not text under <c>coerce=False</c>.</exception>
+        /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
+        /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
+        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to pack string during StringDType setitem</c>.</exception>
+        [System.Runtime.CompilerServices.SkipLocalsInit]
+        public void SetIndex(long index, object value)
+        {
+            // NumPy compares with the NA object and converts the value before it packs; both can raise, so they run before
+            // the cell is touched (an error leaves the element as it was). The UTF-8 form goes into stack space (a text whose
+            // form could be longer gets a heap array): no allocation per stored text.
+            bool isNA = IsNAValue(value);
+            Span<byte> scratch = stackalloc byte[StackEncodeBytes];
+            ReadOnlySpan<byte> utf8 = isNA ? default : EncodeForStore(AsPyString(value, Descr.VString.coerce), scratch);
+            Allocator.acquire_allocator();
+            try
+            {
+                PackValue(Address + index * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, isNA, utf8);
+            }
+            finally
+            {
+                Allocator.release_allocator();
+            }
+        }
+
+        /// <summary>
+        ///     Stores <paramref name="values"/> into elements 0 … <c>values.Count - 1</c> of a FRESH buffer, each by setitem (see
+        ///     <see cref="SetIndex(long, object)"/>), with the allocator locked ONCE for the whole run — <c>np.array(values,
+        ///     dtype=StringDType)</c>. The cells and the arena come out byte for byte as NumPy's element-by-element stores leave
+        ///     them; only the arena's capacity differs.
+        /// </summary>
+        /// <param name="values">The values, in element order (no more than <see cref="Count"/>); the buffer's cells must be
+        ///     all zero and its arena empty (a buffer <see cref="Allocate"/> just made, which is what <c>np.array</c> fills).</param>
+        /// <exception cref="ValueError">A value that is not text under <c>coerce=False</c>.</exception>
+        /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
+        /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
+        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to pack string during StringDType setitem</c> (or
+        ///     <c>Failed to pack null string during StringDType setitem</c> for an NA element).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Two passes over the leading run of strings, then the general store.</b> Pass 1 walks the values while they are
+        ///     <see cref="string"/>s and settles every element that needs no arena: an NA value packs its NA cell, a short text
+        ///     (UTF-8 size up to 15) is written into its cell, an empty text leaves its fresh cell all zero, as
+        ///     <c>NpyString_pack</c> does. A medium or long text is only MARKED (its cell keeps byte 15 zero and holds a nonzero
+        ///     size estimate in bytes 0–7) and counted. The arena is then reserved once (<see cref="VStringAllocator.TryReserve"/>)
+        ///     and pass 2 visits the marked cells IN ELEMENT ORDER, encoding each text straight into its arena slot at the bump
+        ///     pointer (<see cref="VStringAllocator.AppendFresh"/>). From the first value pass 1 cannot place — a value that is
+        ///     not a <see cref="string"/> (a number's <c>str()</c>, <c>bytes</c>, the NA object of another kind) or a short text
+        ///     with a lone surrogate — the remaining values go through the general per-element store, unchanged.
+        ///     </para>
+        ///     <para>
+        ///     <b>Why the bytes are NumPy's.</b> An arena offset is the cursor at the moment of the append, and only medium and
+        ///     long texts move the cursor: short texts, empty texts and NAs live in their cells. Settling those first and
+        ///     appending the others afterwards in element order therefore puts every arena text at the offset the sequential
+        ///     stores give it, and the general store continues from the same cursor. The reservation changes only the arena's
+        ///     capacity, which no NumPy API observes.
+        ///     </para>
+        ///     <para>
+        ///     <b>Errors in NumPy's order.</b> NumPy stores element by element and raises at the first element that fails. Pass 1
+        ///     never raises for a text: a lone surrogate in a short text ends pass 1 there, and one in a medium / long text is
+        ///     found by pass 2's exact size (<see cref="NDUtf8.GetByteCount"/>), which raises CPython's
+        ///     <c>UnicodeEncodeError</c> after every earlier arena text is appended. Pass 1's own writes past such an element
+        ///     (its short texts and NAs) are not observable: the caller discards the buffer on any error, as NumPy discards its
+        ///     half-built array. An allocation failure (only reachable through <see cref="VStringAllocator.FailAllocationAfter"/>
+        ///     or an exhausted heap) happens at the same element and in the same count as before, because every arena append —
+        ///     the bump pointer declines while a failure is scheduled — still runs in element order.
+        ///     </para>
+        ///     <para>
+        ///     <b>Why pass 1 counts a long text by its LENGTH.</b> One byte per UTF-16 unit is the exact UTF-8 size of an ASCII
+        ///     text, and reading the text to prove more would be a second pass over every long text (measured: an exact count
+        ///     there cost as much as the reservation saved at 20–60 characters). A non-ASCII text is under-counted; pass 2 then
+        ///     grows the arena by NumPy's 25 % steps for the difference, still correct.
+        ///     </para>
+        ///     <para>
+        ///     <b>Measured</b> (100,000 ASCII texts, ns per element, the old store → this one, NumPy 2.4.2 in brackets): 4–12
+        ///     characters 28.3 → 21.8 (75.8), 20–60 characters 107 → 49.7 (126), 300–500 characters 1,067 → 263 (662). The old
+        ///     store encoded each text into scratch (a new byte array past 256 characters) and copied it again, and let the
+        ///     arena grow by 25 % steps, which copied and zeroed it some 50 times on the way to 40 MB. The parts, measured
+        ///     apart at 20–60 / 300–500 characters: the reservation is worth ~40 / ~700 ns, the in-place encode ~20 / ~50 ns.
+        ///     </para>
+        /// </remarks>
+        [System.Runtime.CompilerServices.SkipLocalsInit]
+        internal void SetRange(System.Collections.Generic.IReadOnlyList<object> values)
+        {
+            const int Cell = VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            Span<byte> scratch = stackalloc byte[StackEncodeBytes];
+            bool coerce = Descr.VString.coerce;
+            bool hasNA = Descr.VString.HasNAObject; // no NA object: no value can be NA, skip the comparison per element
+            // A string[] or object[] (the common inputs) is read as an array: the interface call per element cost more than
+            // the store of a short text.
+            object[] array = values as object[];
+            int count = values.Count;
+            Allocator.acquire_allocator();
+            try
+            {
+                // The passes rely on a fresh buffer: a pass-1 mark is told from a stored cell by byte 15, and AppendFresh writes
+                // a cell that held nothing. The only caller is VStringDTypeMeta.SetFreshItems, the coercion's run over the
+                // zero-filled allocation it has just made.
+                System.Diagnostics.Debug.Assert(!Allocator.HoldsLongStrings, "SetRange fills a fresh StringDType buffer.");
+
+                // Pass 1: every leading string that needs no arena is stored; a medium / long one is marked and counted.
+                long need = 0;
+                int pending = 0;
+                int stop = 0;
+                for (; stop < count; stop++)
+                {
+                    object value = array != null ? array[stop] : values[stop];
+                    if (value is not string text)
+                        break; // its conversion (str(), bytes, coerce=False) can raise: the general store runs from here
+                    byte* cell = Address + (long)stop * Cell;
+                    if (hasNA && IsNAValue(value))
+                    {
+                        // A string equal to the NA object: pack_null of a fresh cell sets the missing flag, no arena.
+                        if (Allocator.pack_null(cell) < 0)
+                            throw new OutOfMemoryException("Failed to pack null string during StringDType setitem");
+                        continue;
+                    }
+                    if (TryWriteShortAscii(cell, text))
+                        continue;
+                    int length = text.Length;
+                    if (length <= VStringAllocator.NPY_SHORT_STRING_MAX_SIZE)
+                    {
+                        // Empty or non-ASCII and at most 15 units: the exact UTF-8 size decides between the cell and the arena.
+                        if (!NDUtf8.TryGetByteCount(text, out int size))
+                            break; // a lone surrogate: the general store raises CPython's error at this element
+                        if (size <= VStringAllocator.NPY_SHORT_STRING_MAX_SIZE)
+                        {
+                            // NpyString_pack's short cell: the text in bytes 0..size-1, the rest zero, byte 15 the flags and
+                            // the size. '' writes nothing, leaving the fresh cell all zero as pack_empty does.
+                            if (size > 0)
+                            {
+                                NDUtf8.EncodeExact(text, cell, size);
+                                cell[15] = (byte)(VStringAllocator.NPY_STRING_INITIALIZED | VStringAllocator.NPY_STRING_OUTSIDE_ARENA | size);
+                            }
+                            continue;
+                        }
+                        // Few units of multi-byte characters: a medium text after all, counted exactly.
+                        *(long*)cell = size;
+                        need += VStringAllocator.ArenaBytesForText(size);
+                        pending++;
+                        continue;
+                    }
+                    // A medium / long text: marked and counted at one byte per unit (exact for ASCII, see the remarks).
+                    *(long*)cell = length;
+                    need += VStringAllocator.ArenaBytesForText(length);
+                    pending++;
+                }
+
+                // Pass 2: the marked texts, in element order, each encoded straight into its arena slot.
+                if (pending > 0)
+                {
+                    Allocator.TryReserve(need);
+                    for (int i = 0; i < stop; i++)
+                    {
+                        byte* cell = Address + (long)i * Cell;
+                        // A stored cell has byte 15 set (short: INITIALIZED | OUTSIDE_ARENA, NA: MISSING); an empty text's cell
+                        // is all zero; only a mark holds a nonzero size under a zero byte 15.
+                        if (cell[15] != 0 || *(long*)cell == 0)
+                            continue;
+                        AppendMarkedText(cell, (string)(array != null ? array[i] : values[i]));
+                    }
+                }
+
+                // The general store from the first value pass 1 could not place (see the remarks).
+                for (int i = stop; i < count; i++)
+                {
+                    object value = array != null ? array[i] : values[i];
+                    // The common element, a short ASCII string, written straight into its cell (what Pack gives for it).
+                    if (value is string text && !(hasNA && IsNAValue(value))
+                        && TryWriteShortAscii(Address + (long)i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, text))
+                        continue;
+                    bool isNA = hasNA && IsNAValue(value);
+                    ReadOnlySpan<byte> utf8 = isNA ? default : EncodeForStore(AsPyString(value, coerce), scratch);
+                    PackValue(Address + (long)i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, isNA, utf8);
+                }
+            }
+            finally
+            {
+                Allocator.release_allocator();
+            }
+        }
+
+        /// <summary>
+        ///     Appends a text that <see cref="SetRange"/>'s pass 1 marked (a medium or long text of a fresh cell) to the arena
+        ///     and encodes it in place: the cell and the arena bytes <c>NpyString_pack</c> gives a fresh cell, without the scratch
+        ///     copy.
+        /// </summary>
+        /// <param name="cell">The marked cell (byte 15 zero, a size estimate in bytes 0–7); the allocator lock is held.</param>
+        /// <param name="text">The element's text.</param>
+        /// <exception cref="UnicodeEncodeError">The text holds a lone surrogate (CPython's text, raised by the exact size).</exception>
+        /// <exception cref="OverflowException">The UTF-8 form is longer than <see cref="int.MaxValue"/> bytes.</exception>
+        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to pack string during StringDType setitem</c>: the arena
+        ///     cannot grow.</exception>
+        /// <remarks>
+        ///     The bump pointer (<see cref="VStringAllocator.AppendFresh"/>) declines when the reservation is used up (an
+        ///     under-counted non-ASCII text) or while a test schedules an allocation failure; the general allocation
+        ///     (<see cref="VStringAllocator.newemptysize"/>) then grows the arena NumPy's way, or fails at the scheduled
+        ///     allocation. Either way the text is encoded at the slot's address before the next allocation can move the arena.
+        /// </remarks>
+        private void AppendMarkedText(byte* cell, string text)
+        {
+            // The exact size: one byte per unit for ASCII (vectorized), CPython's error for a lone surrogate.
+            int size = NDUtf8.GetByteCount(text);
+            // Clear the mark: both allocation routes expect the cell of a never-written element.
+            *(ulong*)cell = 0;
+            byte* slot = Allocator.AppendFresh(cell, size);
+            if (slot == null)
+            {
+                if (Allocator.newemptysize(size, cell) < 0)
+                    throw new OutOfMemoryException("Failed to pack string during StringDType setitem");
+                slot = Allocator.VStringBuffer(cell);
+            }
+            NDUtf8.EncodeExact(text, slot, size);
+        }
+
+        /// <summary>The stack space an element store encodes its text into (a text whose UTF-8 form could be longer — up to
+        ///     3 bytes per UTF-16 unit — uses a heap array instead).</summary>
+        private const int StackEncodeBytes = 768;
+
+        /// <summary>
+        ///     Writes a non-empty ASCII text of at most 15 characters straight into a cell that holds no arena or heap text —
+        ///     the short-string cell <c>NpyString_pack</c> produces there (<c>free</c> releases nothing, <c>newsize</c> sets the
+        ///     flags and length, the bytes after the text are zero) without the UTF-8 transcoder and the allocator calls.
+        /// </summary>
+        /// <param name="cell">The cell (the allocator lock is held).</param>
+        /// <param name="text">The text.</param>
+        /// <returns>False, writing nothing, for an empty, longer or non-ASCII text or a cell that holds arena / heap text.</returns>
+        private static bool TryWriteShortAscii(byte* cell, string text)
+        {
+            int length = text.Length;
+            byte flags = cell[15];
+            if (length == 0 || length > VStringAllocator.NPY_SHORT_STRING_MAX_SIZE
+                || (flags & VStringAllocator.NPY_STRING_LONG) != 0 || (flags != 0 && (flags & VStringAllocator.NPY_STRING_OUTSIDE_ARENA) == 0)
+                || !System.Text.Ascii.IsValid(text))
+                return false;
+            *(ulong*)cell = 0;
+            *(ulong*)(cell + 8) = 0;
+            for (int k = 0; k < length; k++)
+                cell[k] = (byte)text[k];
+            cell[15] = (byte)(VStringAllocator.NPY_STRING_INITIALIZED | VStringAllocator.NPY_STRING_OUTSIDE_ARENA | length);
+            return true;
+        }
+
+        /// <summary>The strict UTF-8 form of a stored text, in <paramref name="scratch"/> when it surely fits there.</summary>
+        /// <param name="text">The text.</param>
+        /// <param name="scratch">Stack space of <see cref="StackEncodeBytes"/> bytes.</param>
+        /// <returns>The UTF-8 bytes (a slice of <paramref name="scratch"/>, or a new array).</returns>
+        /// <exception cref="UnicodeEncodeError">A lone surrogate.</exception>
+        private static ReadOnlySpan<byte> EncodeForStore(string text, Span<byte> scratch)
+            => text.Length <= scratch.Length / 3 ? scratch.Slice(0, NDUtf8.Encode(text, scratch)) : NDUtf8.Encode(text);
+
+        /// <summary>Element access by index (see <see cref="GetIndex(long)"/> / <see cref="SetIndex(long, object)"/>).</summary>
+        /// <param name="index">The element index.</param>
+        public object this[long index]
+        {
+            get => GetIndex(index);
+            set => SetIndex(index, value);
+        }
+
+        /// <summary>Typed element access is meaningless for a <c>StringDType</c> cell; refused.</summary>
+        /// <typeparam name="T">Any unmanaged type.</typeparam>
+        /// <param name="index">Ignored.</param>
+        /// <returns>Never returns.</returns>
+        /// <exception cref="NotSupportedException">Always.</exception>
+        public T GetIndex<T>(long index) where T : unmanaged
+            => throw new NotSupportedException($"A {Descr} element is text; read it with GetIndex(long) (a string or the NA object), not as {typeof(T).Name}.");
+
+        /// <summary>Typed element writes are meaningless for a <c>StringDType</c> cell; refused.</summary>
+        /// <typeparam name="T">Any unmanaged type.</typeparam>
+        /// <param name="index">Ignored.</param>
+        /// <param name="value">Ignored.</param>
+        /// <exception cref="NotSupportedException">Always.</exception>
+        public void SetIndex<T>(long index, T value) where T : unmanaged
+            => throw new NotSupportedException($"A {Descr} element is text; write it with SetIndex(long, object), not as {typeof(T).Name}.");
+
+        /// <summary>
+        ///     Writes <paramref name="value"/> into every element (NumPy's <c>fill</c>: the value is converted ONCE, then packed
+        ///     into each cell — a long text gets its own allocation per element, as NumPy's duplicating copy gives it).
+        /// </summary>
+        /// <param name="value">The value (see <see cref="SetIndex(long, object)"/>); it is converted even when there are no
+        ///     elements, as NumPy packs it into a scalar first.</param>
+        /// <exception cref="ValueError">See <see cref="SetIndex(long, object)"/>.</exception>
+        /// <exception cref="UnicodeDecodeError">See <see cref="SetIndex(long, object)"/>.</exception>
+        /// <exception cref="UnicodeEncodeError">See <see cref="SetIndex(long, object)"/>.</exception>
+        /// <exception cref="OutOfMemoryException">See <see cref="SetIndex(long, object)"/>.</exception>
+        public void Fill(object value)
+        {
+            bool isNA = IsNAValue(value);
+            byte[] utf8 = isNA ? null : NDUtf8.Encode(AsPyString(value, Descr.VString.coerce));
+            if (Count == 0)
+                return;
+            Allocator.acquire_allocator();
+            try
+            {
+                for (long i = 0; i < Count; i++)
+                    PackValue(Address + i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, isNA, utf8);
+            }
+            finally
+            {
+                Allocator.release_allocator();
+            }
+        }
+
+        /// <summary>Whether a value is this descriptor's NA object (NumPy's <c>na_eq_cmp(value, na_object)</c>; never true
+        ///     without one).</summary>
+        /// <param name="value">The value.</param>
+        /// <returns>True when the value packs an NA cell.</returns>
+        internal bool IsNAValue(object value)
+        {
+            var p = Descr.VString;
+            return p.HasNAObject && NDPyObject.Equal(value, p.na_object);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>as_pystring</c>: the Python <c>str</c> a value is stored as. A <see cref="string"/> (and a
+        ///     <see cref="char"/>, the one-character <c>str</c> of every NumSharp string store) is itself; under
+        ///     <c>coerce=False</c> anything else raises; otherwise <c>bytes</c> are decoded as strict UTF-8 and any other value
+        ///     is its <c>str()</c> (<see cref="NDPyObject.Str"/>).
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <param name="coerce">The descriptor's <c>coerce</c>.</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="ValueError">A value that is not text under <c>coerce=False</c>.</exception>
+        /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
+        internal static string AsPyString(object value, bool coerce)
+        {
+            switch (value)
+            {
+                case string s:
+                    return s;
+                case char c:
+                    return c.ToString();
+            }
+            if (!coerce)
+                throw new ValueError(CoercionDisabledText);
+            if (value is byte[] bytes)
+                return NDUtf8.DecodeStrict(bytes); // assume UTF-8 encoding (PyUnicode_FromStringAndSize)
+            return NDPyObject.Str(value);
+        }
+
+        /// <summary>Packs a converted value into a cell (the allocator lock must be held).</summary>
+        /// <param name="cell">The cell.</param>
+        /// <param name="isNA">True to pack an NA cell.</param>
+        /// <param name="utf8">The UTF-8 text (ignored for an NA cell).</param>
+        /// <exception cref="OutOfMemoryException">NumPy's setitem <c>MemoryError</c> texts.</exception>
+        private void PackValue(byte* cell, bool isNA, ReadOnlySpan<byte> utf8)
+        {
+            if (isNA)
+            {
+                if (Allocator.pack_null(cell) < 0)
+                    throw new OutOfMemoryException("Failed to pack null string during StringDType setitem");
+                return;
+            }
+            fixed (byte* b = utf8)
+            {
+                if (Allocator.pack(cell, b, utf8.Length) < 0)
+                    throw new OutOfMemoryException("Failed to pack string during StringDType setitem");
+            }
+        }
+
+        /// <summary>Decodes a cell's UTF-8 text (always valid: every write encoded it strictly).</summary>
+        /// <param name="buf">The first byte.</param>
+        /// <param name="size">The byte count.</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="OutOfMemoryException">A text longer than a .NET string can be.</exception>
+        private static string Decode(byte* buf, long size)
+        {
+            if (size > int.MaxValue)
+                throw new OutOfMemoryException(string.Create(CultureInfo.InvariantCulture, $"A StringDType element of {size} bytes is longer than a .NET string can be."));
+            return NDUtf8.DecodeTrusted(new ReadOnlySpan<byte>(buf, (int)size));
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Slicing / cloning — element units
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>The elements from <paramref name="start"/> to the end, sharing the cells and the allocator.</summary>
+        /// <param name="start">The first element.</param>
+        /// <returns>A slice over the same buffer.</returns>
+        public IArraySlice Slice(long start) => Slice(start, Count - start);
+
+        /// <summary><paramref name="count"/> elements from <paramref name="start"/>, sharing the cells and the allocator.</summary>
+        /// <param name="start">The first element.</param>
+        /// <param name="count">The number of elements.</param>
+        /// <returns>A slice over the same buffer (a write through it is a write into this buffer).</returns>
+        public IArraySlice Slice(long start, long count)
+            => new VStringArraySlice(Cells.Slice(start * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, count * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING), Allocator, Descr);
+
+        /// <summary>
+        ///     A deep copy: a new buffer with a new allocator and every string DUPLICATED into it (NumPy's <c>NpyString_dup</c>
+        ///     per element, in order, so the copy's arena is compact); NA cells stay NA.
+        /// </summary>
+        /// <returns>The copy.</returns>
+        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to allocate string in string to string cast</c>.</exception>
+        public IArraySlice Clone()
+        {
+            var copy = Allocate(Descr, Count);
+            try
+            {
+                VStringAllocator.acquire_allocators(Allocator, copy.Allocator);
+                try
+                {
+                    byte* src = Address, dst = copy.Address;
+                    // The fresh copy takes every medium / long string at its arena's cursor: reserve the exact total once
+                    // (VStringAllocator.TryReserve) instead of growing by 25 % steps.
+                    if (Allocator.HoldsLongStrings)
+                    {
+                        long need = 0;
+                        for (long i = 0; i < Count; i++)
+                            need += VStringAllocator.ArenaBytesForDuplicate(src + i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING);
+                        copy.Allocator.TryReserve(need);
+                    }
+                    for (long i = 0; i < Count; i++)
+                        VStringAllocator.FreeAndCopy(Allocator, copy.Allocator, src + i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING,
+                            dst + i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, "string to string cast");
+                }
+                finally
+                {
+                    VStringAllocator.release_allocators(Allocator, copy.Allocator);
+                }
+            }
+            catch
+            {
+                // The half-built copy owns heap strings already and nothing references it yet: free it now (its clear loop
+                // frees them). A plain Release would be a stray decrement on a block no one has counted.
+                copy.DangerousFree();
+                throw;
+            }
+            return copy;
+        }
+
+        /// <inheritdoc/>
+        object ICloneable.Clone() => Clone();
+
+        /// <summary>A typed clone would copy cells away from their allocator; refused.</summary>
+        /// <typeparam name="T">Any unmanaged type.</typeparam>
+        /// <returns>Never returns.</returns>
+        /// <exception cref="NotSupportedException">Always: clone the slice itself (<see cref="Clone()"/>).</exception>
+        public ArraySlice<T> Clone<T>() where T : unmanaged
+            => throw new NotSupportedException($"A {Descr} buffer's cells refer to its own allocator; copy it with Clone(), not as raw {typeof(T).Name} values.");
+
+        // ---------------------------------------------------------------------------------------------
+        // Raw cell access (read-only bytes)
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>The cells as raw bytes (NumPy's <c>tobytes()</c> of a <c>T</c> array); only <see cref="byte"/>.</summary>
+        /// <typeparam name="T"><see cref="byte"/>.</typeparam>
+        /// <returns>A span over the cells, no copy. Writing it into another buffer's cells is never valid.</returns>
+        /// <exception cref="NotSupportedException">Any other <typeparamref name="T"/>.</exception>
+        public UnmanagedSpan<T> AsSpan<T>() where T : unmanaged
+        {
+            CheckByte<T>();
+            return new UnmanagedSpan<T>((T*)Cells.Address, Cells.Count);
+        }
+
+        /// <summary>Copies the raw cells into <paramref name="destination"/> (the destination's element type only sizes it).</summary>
+        /// <typeparam name="T">Any element type; the destination must hold at least <see cref="BytesLength"/> bytes.</typeparam>
+        /// <param name="destination">The target span.</param>
+        /// <exception cref="ArgumentException"><paramref name="destination"/> is too short.</exception>
+        public void CopyTo<T>(Span<T> destination)
+        {
+            long sourceBytes = Cells.Count;
+            long destinationBytes = (long)destination.Length * System.Runtime.CompilerServices.Unsafe.SizeOf<T>();
+            if ((ulong)sourceBytes > (ulong)destinationBytes)
+                throw new ArgumentException("Destination was too short.");
+            Buffer.MemoryCopy(Cells.Address, System.Runtime.CompilerServices.Unsafe.AsPointer(ref destination.GetPinnableReference()), destinationBytes, sourceBytes);
+        }
+
+        /// <summary>Copies the raw cells into <paramref name="destination"/> (see <see cref="CopyTo{T}(Span{T})"/>).</summary>
+        /// <typeparam name="T">Any unmanaged type; the destination must hold at least <see cref="BytesLength"/> bytes.</typeparam>
+        /// <param name="destination">The target span.</param>
+        /// <exception cref="ArgumentException"><paramref name="destination"/> is too short.</exception>
+        public void CopyTo<T>(UnmanagedSpan<T> destination) where T : unmanaged
+        {
+            long sourceBytes = Cells.Count;
+            long destinationBytes = destination.Length * sizeof(T);
+            if ((ulong)sourceBytes > (ulong)destinationBytes)
+                throw new ArgumentException("Destination was too short.");
+            Buffer.MemoryCopy(Cells.Address, System.Runtime.CompilerServices.Unsafe.AsPointer(ref destination.GetPinnableReference()), destinationBytes, sourceBytes);
+        }
+
+        /// <summary>A reference to the first cell byte.</summary>
+        /// <typeparam name="T"><see cref="byte"/>.</typeparam>
+        /// <returns>The reference.</returns>
+        /// <exception cref="NotSupportedException">Any other <typeparamref name="T"/>.</exception>
+        public ref T GetPinnableReference<T>() where T : unmanaged
+        {
+            CheckByte<T>();
+            return ref *(T*)Cells.Address;
+        }
+
+        /// <summary>Rejects every raw unit type but <see cref="byte"/>.</summary>
+        /// <typeparam name="T">The requested unit type.</typeparam>
+        /// <exception cref="NotSupportedException">Any other <typeparamref name="T"/>.</exception>
+        private void CheckByte<T>() where T : unmanaged
+        {
+            if (typeof(T) != typeof(byte))
+                throw new NotSupportedException($"A {Descr} buffer exposes its cells only as raw bytes, not as {typeof(T).Name}.");
+        }
+
+        /// <summary>
+        ///     The elements as a managed array: <c>string[]</c> when the descriptor has no NA object, else <c>object[]</c>
+        ///     (an NA cell is the NA object).
+        /// </summary>
+        /// <returns>The values in buffer order.</returns>
+        /// <exception cref="OutOfMemoryException">See <see cref="GetIndex(long)"/>.</exception>
+        public Array ToArray()
+        {
+            if (!HasNAObject)
+            {
+                var strings = new string[Count];
+                for (long i = 0; i < Count; i++)
+                    strings[i] = (string)GetIndex(i);
+                return strings;
+            }
+            var values = new object[Count];
+            for (long i = 0; i < Count; i++)
+                values[i] = GetIndex(i);
+            return values;
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Lifetime — forwarded to the cells' block (which owns the allocator)
+        // ---------------------------------------------------------------------------------------------
+
+        /// <inheritdoc/>
+        public void DangerousFree() => Cells.DangerousFree();
+
+        /// <inheritdoc/>
+        public bool TryAddRef() => Cells.TryAddRef();
+
+        /// <inheritdoc/>
+        public void Release() => Cells.Release();
+
+        /// <inheritdoc/>
+        public void Abandon() => Cells.Abandon();
+
+        /// <inheritdoc/>
+        public bool IsReleased => Cells.IsReleased;
+
+        /// <inheritdoc/>
+        public bool IsUniquelyReferenced => Cells.IsUniquelyReferenced;
+
+        /// <summary>Enumerates the elements as C# values (see <see cref="GetIndex(long)"/>).</summary>
+        /// <returns>The enumerator.</returns>
+        public IEnumerator GetEnumerator()
+        {
+            for (long i = 0; i < Count; i++)
+                yield return GetIndex(i);
+        }
+
+        /// <inheritdoc/>
+        public override string ToString() => $"VStringArraySlice({Descr}, Count={Count})";
+    }
+}

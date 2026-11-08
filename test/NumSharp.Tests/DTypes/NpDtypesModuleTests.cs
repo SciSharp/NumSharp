@@ -29,10 +29,24 @@ namespace NumSharp.Tests.DTypes
         [DataRow("TimeDelta64DType", "m8", 22)]
         public void Classes_AreTheClassesOfTheirDescriptors(string className, string spelling, int typeNum)
         {
+            // The four C-integer classes carry a platform-dependent type_num (LLP64 Windows: 7/8/9/10;
+            // LP64: 5/6/7/8). The DataRow carries the LP64 values; remap to the local platform, matching
+            // np.dtype('int32'/'int64').num on the host (see DTypeRegistry's CLongIs32Bit).
+            bool cLongIs32 = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) || IntPtr.Size != 8;
+            if (cLongIs32)
+                typeNum = className switch
+                {
+                    "Int32DType" => 7,
+                    "UInt32DType" => 8,
+                    "Int64DType" => 9,
+                    "UInt64DType" => 10,
+                    _ => typeNum
+                };
+
             var meta = (DTypeMeta)typeof(np.dtypes).GetProperty(className).GetValue(null);
             meta.Name.Should().Be(className);
             meta.FullName.Should().Be("numpy.dtypes." + className);
-            meta.TypeNum.Should().Be(typeNum);
+            meta.type_num.Should().Be(typeNum);
             np.dtype(spelling).Meta.Should().BeSameAs(meta, "type(np.dtype(spelling)) is the class");
             DTypeRegistry.FromName(className).Should().BeSameAs(meta);
             DTypeRegistry.FromTypeNum(typeNum).Should().BeSameAs(meta);
@@ -46,12 +60,29 @@ namespace NumSharp.Tests.DTypes
             np.dtypes.UByteDType.Should().BeSameAs(np.dtypes.UInt8DType);
             np.dtypes.ShortDType.Should().BeSameAs(np.dtypes.Int16DType);
             np.dtypes.UShortDType.Should().BeSameAs(np.dtypes.UInt16DType);
-            np.dtypes.IntDType.Should().BeSameAs(np.dtypes.Int32DType);
-            np.dtypes.UIntDType.Should().BeSameAs(np.dtypes.UInt32DType);
-            np.dtypes.LongLongDType.Should().BeSameAs(np.dtypes.Int64DType);
-            np.dtypes.ULongLongDType.Should().BeSameAs(np.dtypes.UInt64DType);
-            np.dtypes.LongDoubleDType.Should().BeSameAs(np.dtypes.Float64DType, "no extended precision, as on NumPy's win-amd64 build");
-            np.dtypes.CLongDoubleDType.Should().BeSameAs(np.dtypes.Complex128DType);
+            // The C type of each width that is NOT the canonical class's is a class of its own, as in NumPy: on LLP64 the C
+            // int (int32 is the C long there), on LP64 the C long long (int64 is the C long there).
+            if (DTypeRegistry.CLongIs32Bit)
+            {
+                np.dtypes.IntDType.Should().NotBeSameAs(np.dtypes.Int32DType);
+                np.dtypes.UIntDType.Should().NotBeSameAs(np.dtypes.UInt32DType);
+                np.dtypes.LongLongDType.Should().BeSameAs(np.dtypes.Int64DType);
+                np.dtypes.ULongLongDType.Should().BeSameAs(np.dtypes.UInt64DType);
+                np.dtypes.Int64DType.Aliases.Should().Contain("LongLongDType");
+            }
+            else
+            {
+                np.dtypes.IntDType.Should().BeSameAs(np.dtypes.Int32DType);
+                np.dtypes.UIntDType.Should().BeSameAs(np.dtypes.UInt32DType);
+                np.dtypes.LongLongDType.Should().NotBeSameAs(np.dtypes.Int64DType);
+                np.dtypes.ULongLongDType.Should().NotBeSameAs(np.dtypes.UInt64DType);
+                np.dtypes.Int32DType.Aliases.Should().Contain("IntDType");
+            }
+            // long double is its own class on every platform (8 bytes in NumSharp, as on NumPy's win-amd64 build).
+            np.dtypes.LongDoubleDType.Should().NotBeSameAs(np.dtypes.Float64DType);
+            np.dtypes.CLongDoubleDType.Should().NotBeSameAs(np.dtypes.Complex128DType);
+            np.dtypes.LongDoubleDType.type_num.Should().Be(13);
+            np.dtypes.CLongDoubleDType.type_num.Should().Be(16);
 
             // C long: 32-bit on Windows and 32-bit hosts, 64-bit on LP64 Unix — the same rule np.dtype('l') follows.
             np.dtypes.LongDType.Should().BeSameAs(np.dtype("l").Meta);
@@ -59,41 +90,45 @@ namespace NumSharp.Tests.DTypes
             DTypeRegistry.FromName("LongDType").Should().BeSameAs(np.dtypes.LongDType);
             DTypeRegistry.FromName("ByteDType").Should().BeSameAs(np.dtypes.Int8DType);
             np.dtypes.Int8DType.Aliases.Should().Equal("ByteDType");
-            np.dtypes.Int32DType.Aliases.Should().Contain("IntDType");
+            np.dtypes.Float64DType.Aliases.Should().BeEmpty();
         }
 
         [TestMethod]
         public void NumSharpOnlyClasses()
         {
             np.dtypes.DecimalDType.FullName.Should().Be("numsharp.dtypes.DecimalDType");
-            np.dtypes.DecimalDType.TypeNum.Should().Be(256);
+            np.dtypes.DecimalDType.type_num.Should().Be(256);
             np.dtypes.DecimalDType.Kind.Should().Be('f');
-            np.dtypes.DecimalDType.ScalarType.Should().Be(typeof(decimal));
+            np.dtypes.DecimalDType.TypeChar.Should().Be('A');
+            np.dtypes.DecimalDType.type.Should().Be(typeof(decimal));
             np.dtypes.CharDType.FullName.Should().Be("numsharp.dtypes.CharDType");
-            np.dtypes.CharDType.TypeNum.Should().Be(257);
+            np.dtypes.CharDType.type_num.Should().Be(257);
             np.dtypes.CharDType.Kind.Should().Be('u');
-            np.dtypes.CharDType.TypeChar.Should().Be('c');
+            np.dtypes.CharDType.TypeChar.Should().Be('u');
             DTypeRegistry.Str.Name.Should().Be("StrDType");
-            DTypeRegistry.Str.TypeNum.Should().Be(19);
-            DTypeRegistry.Str.HasStorage.Should().BeTrue("the vestigial NPTypeCode.String is its code");
-            typeof(np.dtypes).GetProperty("StrDType").Should().BeNull("the vestigial string slot is not exported on np.dtypes");
+            DTypeRegistry.Str.type_num.Should().Be(19);
+            DTypeRegistry.Str.HasStorage.Should().BeTrue("NPTypeCode.String is the lane both string classes store in");
+            // Both string classes are NumPy dtypes and are exported like the numeric ones (np.dtypes.StrDType / BytesDType).
+            np.dtypes.StrDType.Should().BeSameAs(DTypeRegistry.Str);
+            np.dtypes.BytesDType.Should().BeSameAs(DTypeRegistry.Bytes);
+            DTypeRegistry.Bytes.type_num.Should().Be(18);
         }
 
         [TestMethod]
         public void Flags_MatchNumPy()
         {
-            (np.dtypes.Int8DType.IsAbstract, np.dtypes.Int8DType.IsLegacy, np.dtypes.Int8DType.IsParametric, np.dtypes.Int8DType.IsNumeric)
+            (np.dtypes.Int8DType._abstract, np.dtypes.Int8DType._legacy, np.dtypes.Int8DType._parametric, np.dtypes.Int8DType._is_numeric)
                 .Should().Be((false, true, false, true));
-            (np.dtypes.BoolDType.IsAbstract, np.dtypes.BoolDType.IsLegacy, np.dtypes.BoolDType.IsParametric, np.dtypes.BoolDType.IsNumeric)
+            (np.dtypes.BoolDType._abstract, np.dtypes.BoolDType._legacy, np.dtypes.BoolDType._parametric, np.dtypes.BoolDType._is_numeric)
                 .Should().Be((false, true, false, true));
-            (np.dtypes.DateTime64DType.IsAbstract, np.dtypes.DateTime64DType.IsLegacy, np.dtypes.DateTime64DType.IsParametric, np.dtypes.DateTime64DType.IsNumeric)
+            (np.dtypes.DateTime64DType._abstract, np.dtypes.DateTime64DType._legacy, np.dtypes.DateTime64DType._parametric, np.dtypes.DateTime64DType._is_numeric)
                 .Should().Be((false, true, true, false));
-            (np.dtypes.TimeDelta64DType.IsAbstract, np.dtypes.TimeDelta64DType.IsLegacy, np.dtypes.TimeDelta64DType.IsParametric, np.dtypes.TimeDelta64DType.IsNumeric)
+            (np.dtypes.TimeDelta64DType._abstract, np.dtypes.TimeDelta64DType._legacy, np.dtypes.TimeDelta64DType._parametric, np.dtypes.TimeDelta64DType._is_numeric)
                 .Should().Be((false, true, true, false));
-            (DTypeRegistry.PyLong.IsAbstract, DTypeRegistry.PyLong.IsLegacy, DTypeRegistry.PyLong.IsParametric, DTypeRegistry.PyLong.IsNumeric)
+            (DTypeRegistry.PyLong._abstract, DTypeRegistry.PyLong._legacy, DTypeRegistry.PyLong._parametric, DTypeRegistry.PyLong._is_numeric)
                 .Should().Be((true, false, false, false));
-            np.dtypes.Int8DType.Flags.Should().Be(DTypeFlags.Legacy | DTypeFlags.Numeric);
-            ((int)DTypeFlags.Legacy, (int)DTypeFlags.Abstract, (int)DTypeFlags.Parametric, (int)DTypeFlags.Numeric).Should().Be((1, 2, 4, 8), "NumPy's NPY_DT_* bits");
+            np.dtypes.Int8DType.flags.Should().Be(DTypeFlags.NPY_DT_LEGACY | DTypeFlags.NPY_DT_NUMERIC);
+            ((int)DTypeFlags.NPY_DT_LEGACY, (int)DTypeFlags.NPY_DT_ABSTRACT, (int)DTypeFlags.NPY_DT_PARAMETRIC, (int)DTypeFlags.NPY_DT_NUMERIC).Should().Be((1, 2, 4, 8), "NumPy's NPY_DT_* bits");
             np.dtypes.DateTime64DType.HasStorage.Should().BeFalse("Stage A: descriptor-level only");
             np.dtypes.Int8DType.HasStorage.Should().BeTrue();
             np.dtypes.Int8DType.TypeCode.Should().Be(NPTypeCode.SByte);
@@ -101,38 +136,38 @@ namespace NumSharp.Tests.DTypes
             np.dtypes.DateTime64DType.IsTimedelta.Should().BeFalse();
             np.dtypes.TimeDelta64DType.IsTimedelta.Should().BeTrue();
             np.dtypes.Int8DType.HasReferences.Should().BeFalse();
-            np.dtypes.Int8DType.GetClearLoop(DType.SByte).Should().BeNull();
-            np.dtypes.Int8DType.GetFillZeroLoop(DType.SByte).Should().BeNull();
+            np.dtypes.Int8DType.get_clear_loop(DType.SByte).Should().BeNull();
+            np.dtypes.Int8DType.get_fill_zero_loop(DType.SByte).Should().BeNull();
         }
 
         [TestMethod]
         public void ClassSurface()
         {
-            np.dtypes.Float64DType.ScalarType.Should().Be(typeof(double));
+            np.dtypes.Float64DType.type.Should().Be(typeof(double));
             np.dtypes.Float64DType.ScalarName.Should().Be("float64");
             np.dtypes.Float64DType.Kind.Should().Be('f');
             np.dtypes.Float64DType.TypeChar.Should().Be('d');
             np.dtypes.Float64DType.ItemSize.Should().Be(8);
             np.dtypes.Float64DType.Alignment.Should().Be(8);
             np.dtypes.Complex128DType.Alignment.Should().Be(8);
-            np.dtypes.Float64DType.Singleton.Should().BeSameAs(DType.Double);
-            np.dtypes.Float64DType.DefaultDescr().Should().BeSameAs(DType.Double);
-            np.dtypes.DateTime64DType.ScalarType.Should().BeNull();
+            np.dtypes.Float64DType.singleton.Should().BeSameAs(DType.Double);
+            np.dtypes.Float64DType.default_descr().Should().BeSameAs(DType.Double);
+            np.dtypes.DateTime64DType.type.Should().BeNull();
             np.dtypes.DateTime64DType.ScalarName.Should().Be("datetime64");
-            np.dtypes.DateTime64DType.DefaultDescr().Should().Be(np.dtype("M8"));
-            np.dtypes.DateTime64DType.DefaultDescr().Should().NotBeSameAs(np.dtypes.DateTime64DType.Singleton, "NumPy copies the singleton");
+            np.dtypes.DateTime64DType.default_descr().Should().Be(np.dtype("M8"));
+            np.dtypes.DateTime64DType.default_descr().Should().NotBeSameAs(np.dtypes.DateTime64DType.singleton, "NumPy copies the singleton");
             np.dtypes.DateTime64DType.Descr(NPY_DATETIMEUNIT.NPY_FR_ns).Should().Be(np.dtype("M8[ns]"));
             np.dtypes.TimeDelta64DType.Descr(new DatetimeMetaData(NPY_DATETIMEUNIT.NPY_FR_W, 2)).Should().Be(np.dtype("m8[2W]"));
-            np.dtypes.Float64DType.IsKnownScalarType(typeof(double)).Should().BeTrue();
-            np.dtypes.Float64DType.IsKnownScalarType(typeof(double[])).Should().BeTrue();
-            np.dtypes.Float64DType.IsKnownScalarType(typeof(float)).Should().BeFalse();
-            DTypeRegistry.PyLong.IsKnownScalarType(typeof(int)).Should().BeTrue();
-            DTypeRegistry.PyLong.IsKnownScalarType(typeof(bool)).Should().BeFalse("bool is strong");
-            DTypeRegistry.PyFloat.IsKnownScalarType(typeof(float)).Should().BeTrue();
-            DTypeRegistry.PyComplex.IsKnownScalarType(typeof(Complex)).Should().BeTrue();
-            DTypeRegistry.PyLong.DefaultDescr().Should().BeSameAs(DType.Int64);
-            DTypeRegistry.PyFloat.DefaultDescr().Should().BeSameAs(DType.Double);
-            DTypeRegistry.PyComplex.DefaultDescr().Should().BeSameAs(DType.Complex);
+            np.dtypes.Float64DType.is_known_scalar_type(typeof(double)).Should().BeTrue();
+            np.dtypes.Float64DType.is_known_scalar_type(typeof(double[])).Should().BeTrue();
+            np.dtypes.Float64DType.is_known_scalar_type(typeof(float)).Should().BeFalse();
+            DTypeRegistry.PyLong.is_known_scalar_type(typeof(int)).Should().BeTrue();
+            DTypeRegistry.PyLong.is_known_scalar_type(typeof(bool)).Should().BeFalse("bool is strong");
+            DTypeRegistry.PyFloat.is_known_scalar_type(typeof(float)).Should().BeTrue();
+            DTypeRegistry.PyComplex.is_known_scalar_type(typeof(Complex)).Should().BeTrue();
+            DTypeRegistry.PyLong.default_descr().Should().BeSameAs(DType.Int64);
+            DTypeRegistry.PyFloat.default_descr().Should().BeSameAs(DType.Double);
+            DTypeRegistry.PyComplex.default_descr().Should().BeSameAs(DType.Complex);
             DTypeRegistry.PyLong.PyKind.Should().Be(PyScalarKind.Int);
         }
 
@@ -169,23 +204,25 @@ namespace NumSharp.Tests.DTypes
             DTypeRegistry.FromName("nope").Should().BeNull();
             DTypeRegistry.FromName(null).Should().BeNull();
             DTypeRegistry.All.Count.Should().BeGreaterThanOrEqualTo(21, "16 legacy + 2 datetime + 3 abstract");
-            DTypeRegistry.All.Select(m => m.TypeNum).Where(n => n >= 0).Should().OnlyHaveUniqueItems();
+            DTypeRegistry.All.Select(m => m.type_num).Where(n => n >= 0).Should().OnlyHaveUniqueItems();
         }
 
         [TestMethod]
         public void Registry_Register_RejectsDuplicates()
         {
             Action dup = () => DTypeRegistry.Register(new DuplicateMeta());
-            dup.Should().Throw<InvalidOperationException>().WithMessage("*type number 5*");
+            dup.Should().Throw<InvalidOperationException>().WithMessage("*type number 3*");
             Action nullMeta = () => DTypeRegistry.Register(null);
             nullMeta.Should().Throw<ArgumentNullException>();
         }
 
+        // Uses NPY_SHORT (3) — Int16's number, which is registered on EVERY platform (unlike NPY_INT=5, which is
+        // unused on LLP64/Windows where Int32 is NPY_LONG=7), so the duplicate-rejection assertion is platform-stable.
         private sealed class DuplicateMeta : DTypeMeta
         {
-            public DuplicateMeta() : base("DuplicateDType", "test", 5, typeof(int), "dup", NPTypeCode.Empty, 'i', 'x', 4, 4, DTypeFlags.Legacy) { }
-            public override DType DefaultDescr() => throw new NotSupportedException();
-            public override DTypeMeta CommonDType(DTypeMeta other) => null;
+            public DuplicateMeta() : base("DuplicateDType", "test", 3, typeof(int), "dup", NPTypeCode.Empty, 'i', 'x', 4, 4, DTypeFlags.NPY_DT_LEGACY) { }
+            public override DType default_descr() => throw new NotSupportedException();
+            public override DTypeMeta common_dtype(DTypeMeta other) => null;
         }
     }
 }

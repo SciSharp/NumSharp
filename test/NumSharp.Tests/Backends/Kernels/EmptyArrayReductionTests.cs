@@ -17,11 +17,11 @@ public class EmptyArrayReductionTests
     /// "zero-size array to reduction operation maximum which has no identity"
     /// </summary>
     [TestMethod]
-    public void Max_EmptyArray_ThrowsArgumentException()
+    public void Max_EmptyArray_ThrowsValueError()
     {
         var empty = np.array(new double[0]);
 
-        Assert.ThrowsException<ArgumentException>(() => np.max(empty));
+        Assert.ThrowsException<ValueError>(() => np.max(empty));
     }
 
     /// <summary>
@@ -29,63 +29,57 @@ public class EmptyArrayReductionTests
     /// "zero-size array to reduction operation minimum which has no identity"
     /// </summary>
     [TestMethod]
-    public void Min_EmptyArray_ThrowsArgumentException()
+    public void Min_EmptyArray_ThrowsValueError()
     {
         var empty = np.array(new double[0]);
 
-        Assert.ThrowsException<ArgumentException>(() => np.min(empty));
+        Assert.ThrowsException<ValueError>(() => np.min(empty));
     }
 
     /// <summary>
     /// NumPy: np.amax(np.array([])) raises ValueError
     /// </summary>
     [TestMethod]
-    public void AMax_EmptyArray_ThrowsArgumentException()
+    public void AMax_EmptyArray_ThrowsValueError()
     {
         var empty = np.array(new double[0]);
 
-        Assert.ThrowsException<ArgumentException>(() => np.amax(empty));
+        Assert.ThrowsException<ValueError>(() => np.amax(empty));
     }
 
     /// <summary>
     /// NumPy: np.amin(np.array([])) raises ValueError
     /// </summary>
     [TestMethod]
-    public void AMin_EmptyArray_ThrowsArgumentException()
+    public void AMin_EmptyArray_ThrowsValueError()
     {
         var empty = np.array(new double[0]);
 
-        Assert.ThrowsException<ArgumentException>(() => np.amin(empty));
+        Assert.ThrowsException<ValueError>(() => np.amin(empty));
     }
 
     /// <summary>
-    /// Verify error message matches NumPy's format.
+    /// The error is NumPy's ValueError with NumPy's exact text.
     /// </summary>
     [TestMethod]
     public void Max_EmptyArray_ErrorMessageMatchesNumPy()
     {
         var empty = np.array(new double[0]);
 
-        var ex = Assert.ThrowsException<ArgumentException>(() => np.max(empty));
-        Assert.IsTrue(ex.Message.Contains("zero-size array"),
-            $"Error message should mention 'zero-size array': {ex.Message}");
-        Assert.IsTrue(ex.Message.Contains("maximum"),
-            $"Error message should mention 'maximum': {ex.Message}");
+        var ex = Assert.ThrowsException<ValueError>(() => np.max(empty));
+        Assert.AreEqual("zero-size array to reduction operation maximum which has no identity", ex.Message);
     }
 
     /// <summary>
-    /// Verify error message matches NumPy's format.
+    /// The error is NumPy's ValueError with NumPy's exact text.
     /// </summary>
     [TestMethod]
     public void Min_EmptyArray_ErrorMessageMatchesNumPy()
     {
         var empty = np.array(new double[0]);
 
-        var ex = Assert.ThrowsException<ArgumentException>(() => np.min(empty));
-        Assert.IsTrue(ex.Message.Contains("zero-size array"),
-            $"Error message should mention 'zero-size array': {ex.Message}");
-        Assert.IsTrue(ex.Message.Contains("minimum"),
-            $"Error message should mention 'minimum': {ex.Message}");
+        var ex = Assert.ThrowsException<ValueError>(() => np.min(empty));
+        Assert.AreEqual("zero-size array to reduction operation minimum which has no identity", ex.Message);
     }
 
     #endregion
@@ -182,22 +176,22 @@ public class EmptyArrayReductionTests
     /// Empty int32 array should throw for max.
     /// </summary>
     [TestMethod]
-    public void Max_EmptyInt32Array_ThrowsArgumentException()
+    public void Max_EmptyInt32Array_ThrowsValueError()
     {
         var empty = np.array(new int[0]);
 
-        Assert.ThrowsException<ArgumentException>(() => np.max(empty));
+        Assert.ThrowsException<ValueError>(() => np.max(empty));
     }
 
     /// <summary>
     /// Empty float32 array should throw for max.
     /// </summary>
     [TestMethod]
-    public void Max_EmptyFloat32Array_ThrowsArgumentException()
+    public void Max_EmptyFloat32Array_ThrowsValueError()
     {
         var empty = np.array(new float[0]);
 
-        Assert.ThrowsException<ArgumentException>(() => np.max(empty));
+        Assert.ThrowsException<ValueError>(() => np.max(empty));
     }
 
     #endregion

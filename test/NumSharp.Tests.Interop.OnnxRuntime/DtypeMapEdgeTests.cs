@@ -13,7 +13,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
     ///     Edge coverage of the dtype seam that <see cref="DtypeMapTests"/> leaves: the FULL
     ///     <see cref="NDArrayOnnxInterop.ToTensorElementClrType"/> map, the generic <c>TypeCodeOf&lt;T&gt;</c>
     ///     (including the three throwing T's and the catch-all), <c>EnsureElementType&lt;T&gt;</c>'s three
-    ///     outcomes, and a string <see cref="OrtValue"/> refused at the <c>IsString</c> gate of both import verbs.
+    ///     outcomes, and a string <see cref="OrtValue"/> read as a text array by both import verbs.
     /// </summary>
     [TestClass]
     public class DtypeMapEdgeTests : OnnxTestBase
@@ -36,6 +36,44 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             NDArrayOnnxInterop.ToTensorElementClrType(NPTypeCode.Double).Should().Be(typeof(double));
             NDArrayOnnxInterop.ToTensorElementClrType(NPTypeCode.Decimal).Should().BeNull("no ONNX element type");
             NDArrayOnnxInterop.ToTensorElementClrType(NPTypeCode.Complex).Should().BeNull("no ONNX element type");
+        }
+
+        /// <summary>
+        ///     A descriptor whose class has no NumSharp storage (datetime64, timedelta64, with any unit) is a dtype with no
+        ///     ONNX element type, like Decimal: the <c>Try</c> map answers <c>false</c>, the CLR-type map answers
+        ///     <c>null</c>, and the throwing map throws this package's own message. All three used to throw NumSharp's "has
+        ///     no NumSharp storage yet" error, the <c>Try</c> form included. A non-native descriptor still maps like its
+        ///     native twin, and a null dtype is <c>false</c> for <c>Try</c> and an argument error for the other two.
+        /// </summary>
+        [TestMethod]
+        public void DescriptorsWithoutStorage_AreUnmappedDtypes_NotErrors()
+        {
+            foreach (string spelling in new[] { "M8[ns]", "m8", "datetime64[10ns]", "timedelta64[s]", "M8" })
+            {
+                DType descriptor = np.dtype(spelling);
+                descriptor.Meta.TypeCode.Should().Be(NPTypeCode.Empty, $"{spelling} has no storage lane");
+
+                NDArrayOnnxInterop.TryToTensorElementType(descriptor, out TensorElementType type).Should().BeFalse(spelling);
+                type.Should().Be(default(TensorElementType), spelling);
+                NDArrayOnnxInterop.ToTensorElementClrType(descriptor).Should().BeNull(spelling);
+                new Action(() => NDArrayOnnxInterop.ToTensorElementType(descriptor)).Should().Throw<NotSupportedException>(spelling)
+                    .WithMessage($"*{descriptor.name}*no ONNX tensor element type*int64*");
+            }
+
+            DType bigEndian = np.dtype(">i4");
+            bigEndian.isnative.Should().BeFalse();
+            NDArrayOnnxInterop.TryToTensorElementType(bigEndian, out TensorElementType int32).Should().BeTrue();
+            int32.Should().Be(TensorElementType.Int32, "a non-native descriptor maps like its native twin");
+            NDArrayOnnxInterop.ToTensorElementType(bigEndian).Should().Be(TensorElementType.Int32);
+            NDArrayOnnxInterop.ToTensorElementClrType(bigEndian).Should().Be(typeof(int));
+
+            NDArrayOnnxInterop.TryToTensorElementType(null, out _).Should().BeFalse("Try never throws");
+            new Action(() => NDArrayOnnxInterop.ToTensorElementType(null)).Should().Throw<ArgumentNullException>();
+            new Action(() => NDArrayOnnxInterop.ToTensorElementClrType(null)).Should().Throw<ArgumentNullException>();
+
+            // The two dtypes that do have storage and no ONNX type keep their own messages.
+            new Action(() => NDArrayOnnxInterop.ToTensorElementType(NPTypeCode.Decimal)).Should().Throw<NotSupportedException>().WithMessage("*Decimal*astype*");
+            new Action(() => NDArrayOnnxInterop.ToTensorElementType(NPTypeCode.Complex)).Should().Throw<NotSupportedException>().WithMessage("*complex*");
         }
 
         [TestMethod]
@@ -87,16 +125,28 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 .Should().Throw<NotSupportedException>().WithMessage("*complex*");
         }
 
+        /// <summary>
+        ///     A string <see cref="OrtValue"/> takes the string branch of both import verbs: a text array (fixed-width
+        ///     <c>U</c>), a copy under the default mode, and a refusal only under <see cref="OnnxCodecMode.View"/>. Both
+        ///     verbs used to refuse it at this gate, because NumSharp had no text dtype.
+        /// </summary>
         [TestMethod]
-        public void StringTensor_IsRefused_AtTheIsStringGate_OfBothImportVerbs()
+        public void StringTensor_TakesTheTextBranch_OfBothImportVerbs()
         {
             using OrtValue strings = OrtValue.CreateTensorWithEmptyStrings(OrtAllocator.DefaultInstance, new long[] { 2 });
             strings.OnnxType.Should().Be(OnnxValueType.ONNX_TYPE_TENSOR);
             strings.GetTensorTypeAndShape().IsString.Should().BeTrue();
+            strings.StringTensorSetElementAt("ab".AsSpan(), 1);
 
-            new Action(() => strings.ToNDArray()).Should().Throw<NotSupportedException>().WithMessage("*GetStringTensorAsArray*");
-            new Action(() => strings.AsNDArray()).Should().Throw<NotSupportedException>().WithMessage("*GetStringTensorAsArray*");
-            NDArrayOnnxInterop.LiveImports.Should().Be(0, "a refused import leases nothing");
+            using (NDArray copy = strings.ToNDArray())
+            {
+                copy.typecode.Should().Be(NPTypeCode.String);
+                NDArray.AsStringArray(copy).Should().Equal("", "ab");
+            }
+            using (NDArray auto = strings.AsNDArray())
+                NDArray.AsStringArray(auto).Should().Equal("", "ab");
+            new Action(() => strings.AsNDArray(mode: OnnxCodecMode.View)).Should().Throw<InvalidOperationException>().WithMessage("*text*only as a copy*");
+            NDArrayOnnxInterop.LiveImports.Should().Be(0, "a text import is a copy: it leases nothing");
         }
     }
 }

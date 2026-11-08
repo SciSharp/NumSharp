@@ -42,6 +42,14 @@ Force a copy with `.copy()` (or `np.copy(arr)`).
 
 ---
 
+## Text arrays and chararrays
+
+`S` / `U` and variable-width `StringDType` use the same view/copy rules. A `T` view shares both cells and their allocator; `.copy()` duplicates the text into its own allocator. It is **not** safe to implement that copy with raw `tobytes()` cells, which may contain offsets or pointers valid only in the original allocation. Reinterpreting a `T` array as another dtype is refused.
+
+`NDCharArray` is a subclass with one important element-access exception: `c[0]` is a read-only, stripped scalar stand-in, not an alias through which to update the original. `c[0] = value` still writes to `c`. Its ordinary slices are chararray views. Also, `np.@char.asarray` is not a blanket no-copy promise: NumPy's `U` chararray path copies even with `copy: false`, while its `S` path can share. See [The chararray class](strings-and-bytes.md#the-chararray-class).
+
+---
+
 ## Indexing operations
 
 The rule is mechanical:

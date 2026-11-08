@@ -58,12 +58,15 @@ namespace NumSharp.Tests.Math
             Assert.ThrowsException<ArgumentException>(() => np.diff(x, -1));
         }
 
+        /// <summary>
+        ///     np.diff of a 0-d input raises NumPy's ValueError ("diff requires input that is at least one dimensional").
+        /// </summary>
         [TestMethod]
         public void Diff_0D_Throws()
         {
             // np.diff(np.array(5)) -> ValueError "diff requires input that is at least one dimensional"
             NDArray scalar = np.asarray(5);
-            Assert.ThrowsException<ArgumentException>(() => np.diff(scalar));
+            Assert.ThrowsException<ValueError>(() => np.diff(scalar));
         }
 
         // ---------------------------------------------------------------- diff: axes
@@ -98,12 +101,15 @@ namespace NumSharp.Tests.Math
             np.diff(m, axis: -2).Should().Be(new int[,] { { -1, 2, 0, -2 } });
         }
 
+        /// <summary>
+        ///     np.diff with an out-of-range axis raises NumPy's AxisError.
+        /// </summary>
         [TestMethod]
         public void Diff_AxisOutOfBounds_Throws()
         {
             // np.diff(m, axis=2) on 2-D -> AxisError
             NDArray m = new int[,] { { 1, 2 }, { 3, 4 } };
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.diff(m, axis: 2));
+            Assert.ThrowsException<AxisError>(() => np.diff(m, axis: 2));
         }
 
         // ---------------------------------------------------------------- diff: dtypes
@@ -378,12 +384,16 @@ namespace NumSharp.Tests.Math
             np.ediff1d(u8).Should().Be(new byte[] { 255 });
         }
 
+        /// <summary>
+        ///     np.ediff1d of a bool array raises NumPy's boolean-subtract TypeError (ediff1d subtracts, it has no not_equal
+        ///     path as np.diff has).
+        /// </summary>
         [TestMethod]
         public void Ediff1d_Bool_Throws()
         {
             // ediff1d uses subtract (no not_equal special case); NumPy rejects bool subtract.
             NDArray b = new bool[] { true, false, true };
-            Assert.ThrowsException<NotSupportedException>(() => np.ediff1d(b));
+            Assert.ThrowsException<TypeError>(() => np.ediff1d(b));
         }
 
         [TestMethod]
@@ -391,7 +401,7 @@ namespace NumSharp.Tests.Math
         {
             // float to_begin into int array: can_cast(float, int, same_kind) == False -> TypeError
             NDArray x = new int[] { 1, 2, 3 };
-            Assert.ThrowsException<ArgumentException>(() => np.ediff1d(x, to_begin: 0.5));
+            Assert.ThrowsException<TypeError>(() => np.ediff1d(x, to_begin: 0.5));
         }
 
         [TestMethod]
@@ -400,6 +410,26 @@ namespace NumSharp.Tests.Math
             // arange-like strided view ravels in C order before differencing
             var strided = ((NDArray)new int[] { 1, 2, 4, 7, 0 })["::2"]; // [1,4,0]
             np.ediff1d(strided).Should().Be(new int[] { 3, -4 });
+        }
+
+        /// <summary>
+        ///     Parity QA-08: an incompatible <c>to_begin</c> / <c>to_end</c> is NumPy's plain TypeError with its exact text
+        ///     (no .NET parameter suffix): <c>np.ediff1d(int8_array, to_begin=[1.5])</c> and <c>to_end=2.5</c>, NumPy 2.4.2's
+        ///     answers.
+        /// </summary>
+        [TestMethod]
+        public void Ediff1d_IncompatibleEnds_RaiseNumPysTypeErrorAndText()
+        {
+            using var a = np.array(new sbyte[] { 1, 2, 4 });
+            using var begin = np.array(new[] { 1.5 });
+
+            Action toBegin = () => np.ediff1d(a, to_begin: begin);
+            Action toEnd = () => np.ediff1d(a, to_end: 2.5);
+
+            toBegin.Should().ThrowExactly<TypeError>()
+                .Which.Message.Should().Be("dtype of `to_begin` must be compatible with input `ary` under the `same_kind` rule.");
+            toEnd.Should().ThrowExactly<TypeError>()
+                .Which.Message.Should().Be("dtype of `to_end` must be compatible with input `ary` under the `same_kind` rule.");
         }
     }
 }

@@ -9,6 +9,7 @@ namespace NumSharp
             /// <summary>
             ///     Eigenvalues and right eigenvectors of a general (not necessarily symmetric) matrix.
             /// </summary>
+            /// <param name="a">The square matrix, or a stack of them.</param>
             /// <returns><c>(eigenvalues, eigenvectors)</c>, the columns of the second being the vectors.</returns>
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.eig.html
@@ -19,76 +20,39 @@ namespace NumSharp
             ///     Hermitian — it is both faster and guaranteed to give real eigenvalues.
             ///     </para>
             /// </remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
-            [NDScoped] // reclaims the ToCommon cast temp and the pre-collapse complex w/v CollapseEig supersedes
+            /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+            /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or an operand holding inf / NaN.</exception>
+            /// <exception cref="TypeError">A text operand, or a float16, decimal or char operand.</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static (NDArray eigenvalues, NDArray eigenvectors) eig(NDArray a)
             {
-                AssertStackedSquare(a);
-                AssertFinite(a);
-                var common = CommonType(a);
-                var (w, v) = a.TensorEngine.Eig(ToCommon(a, common), computeVectors: true);
-                return CollapseEig(w, v, common);
+                if (a is null) throw new ArgumentNullException(nameof(a));
+                return a.TensorEngine.Linalg.Eig(a);
             }
 
             /// <summary>
             ///     Eigenvalues of a general matrix, without the eigenvectors.
             /// </summary>
+            /// <param name="a">The square matrix, or a stack of them.</param>
+            /// <returns>The eigenvalues: real for a real operand whose eigenvalues are all real, else complex.</returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvals.html</remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
-            [NDScoped] // reclaims the ToCommon cast temp and the pre-collapse complex eigenvalues
+            /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
+            /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or an operand holding inf / NaN.</exception>
+            /// <exception cref="TypeError">A text operand, or a float16, decimal or char operand.</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+            [NDScoped] // the facade keeps its scope over the call; the Linalg member scopes the computation's own
             public static NDArray eigvals(NDArray a)
             {
-                AssertStackedSquare(a);
-                AssertFinite(a);
-                var common = CommonType(a);
-                var w = a.TensorEngine.Eig(ToCommon(a, common), computeVectors: false).eigenvalues;
-                return CollapseEig(w, null, common).eigenvalues;
-            }
-
-            /// <summary>
-            ///     NumPy's <c>eig</c>/<c>eigvals</c> Python-layer tail. The LAPACK <c>geev</c> gufunc
-            ///     ALWAYS returns complex128 (a real matrix can carry a complex-conjugate eigenpair), so
-            ///     for a REAL operand the result is collapsed to a real dtype when every imaginary part
-            ///     is zero (<c>if not isComplexType(t) and all(w.imag == 0)</c>); otherwise it stays
-            ///     complex. The final width then follows the operand: <c>float32 → float32</c> when real
-            ///     (<c>complex128</c> when complex — NumSharp has no complex64), <c>float64</c>/int/bool
-            ///     <c>→ float64</c> when real, and a complex operand stays complex.
-            /// </summary>
-            private static (NDArray eigenvalues, NDArray eigenvectors) CollapseEig(NDArray w, NDArray v, NPTypeCode common)
-            {
-                NPTypeCode resultType;
-                // NumPy's `all(w.imag == 0)`. Expressed as `!any(imag)` — for a float array `np.any`
-                // is "any truthy", and a NaN is truthy (`np.any([nan])` is True) exactly as a nonzero
-                // is, so `!any(imag)` is True iff every imaginary part is 0 AND none is NaN — bit-for-bit
-                // the same predicate as `all(equal(imag, 0))` (verified on zero/nonzero/NaN), but a single
-                // reduction over the strided imaginary view instead of `equal` (which allocates a bool
-                // array) followed by `all`.
-                if (common != NPTypeCode.Complex && !np.any(np.imag(w)))
-                {
-                    // Every eigenvalue is real — drop the (zero) imaginary part and take the real dtype.
-                    w = np.real(w);
-                    v = v is null ? null : np.real(v);
-                    resultType = common == NPTypeCode.Single ? NPTypeCode.Single : NPTypeCode.Double;
-                }
-                else
-                {
-                    // csingle and cdouble both collapse onto NumSharp's single complex width.
-                    resultType = NPTypeCode.Complex;
-                }
-
-                // NumPy's `w.astype(result_t, copy=False)`: for a real operand np.real already produced
-                // the float64 result (so astype is a no-op), and the complex branch's w/v are already
-                // the complex128 the geev seam returned — copy:false avoids re-copying the (up to n×n)
-                // eigenvector buffer whenever the dtype already matches. Only float32's real collapse
-                // and any genuine width change still cast.
-                w = w.astype(resultType, copy: false);
-                v = v is null ? null : v.astype(resultType, copy: false);
-                return (w, v);
+                if (a is null) throw new ArgumentNullException(nameof(a));
+                return a.TensorEngine.Linalg.Eigvals(a);
             }
 
             /// <summary>
             ///     Eigenvalues and eigenvectors of a real symmetric or complex Hermitian matrix.
             /// </summary>
+            /// <param name="a">The real symmetric / complex Hermitian matrix, or a stack of them.</param>
             /// <param name="UPLO">
             ///     Which triangle holds the data — <c>'L'</c> (default) or <c>'U'</c>. Case
             ///     insensitive. The other triangle is NOT read, so a non-symmetric operand is
@@ -100,38 +64,31 @@ namespace NumSharp
             ///     counterpart dtype.
             /// </returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigh.html</remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
-            [NDScoped] // reclaims the ToCommon cast temp; the tuple is yielded component-wise
+            /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>);
+            ///     a <paramref name="UPLO"/> that is neither 'L' nor 'U'.</exception>
+            /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
+            /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
+            /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static (NDArray eigenvalues, NDArray eigenvectors) eigh(NDArray a, char UPLO = 'L')
             {
-                char uplo = RequireUplo(UPLO);
-                AssertStackedSquare(a);
-                var common = CommonType(a);
-                return a.TensorEngine.Eigh(ToCommon(a, common), uplo, computeVectors: true);
+                if (a is null) throw new ArgumentNullException(nameof(a));
+                return a.TensorEngine.Linalg.Eigh(a, UPLO);
             }
 
             /// <summary>
             ///     Eigenvalues of a real symmetric or complex Hermitian matrix, ascending.
             /// </summary>
             /// <inheritdoc cref="eigh"/>
-            [NDScoped] // reclaims the ToCommon cast temp (the discarded eigenvector slot is null here)
+            /// <returns>The eigenvalues, ascending and real.</returns>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+            [NDScoped] // the facade keeps its scope over the call; the Linalg member scopes the computation's own
             public static NDArray eigvalsh(NDArray a, char UPLO = 'L')
             {
-                char uplo = RequireUplo(UPLO);
-                AssertStackedSquare(a);
-                var common = CommonType(a);
-                return a.TensorEngine.Eigh(ToCommon(a, common), uplo, computeVectors: false).eigenvalues;
-            }
-
-            /// <summary>
-            ///     NumPy validates UPLO before touching the array, and accepts either case.
-            /// </summary>
-            private static char RequireUplo(char uplo)
-            {
-                char upper = char.ToUpperInvariant(uplo);
-                if (upper != 'L' && upper != 'U')
-                    throw new ValueError("UPLO argument must be 'L' or 'U'");
-                return upper;
+                if (a is null) throw new ArgumentNullException(nameof(a));
+                return a.TensorEngine.Linalg.Eigvalsh(a, UPLO);
             }
         }
     }

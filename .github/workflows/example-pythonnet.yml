@@ -1,0 +1,92 @@
+name: "Example: NumSharp with Python"
+
+# The pipeline of examples/NumSharpPythonnetGhActionsCicd: a .NET test project that embeds CPython
+# through pythonnet and drives NumPy, pandas, SciPy, scikit-learn, Matplotlib and PyTorch over
+# NumSharp arrays, on the three operating systems GitHub hosts. The README of that folder explains
+# each step and what to change when you copy this file to your own repository.
+
+# The `paths` filters start a run only when the example or this file changes. The project restores
+# the published NuGet package, as your project does, so a change to the source of NumSharp cannot
+# change its result. The interop test suite of the main workflow covers the source.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "master", "main" ]
+    paths:
+      - "examples/NumSharpPythonnetGhActionsCicd/**"
+      - ".github/workflows/example-pythonnet.yml"
+  pull_request:
+    branches: [ "master", "main" ]
+    paths:
+      - "examples/NumSharpPythonnetGhActionsCicd/**"
+      - ".github/workflows/example-pythonnet.yml"
+
+# The job only reads the repository.
+permissions:
+  contents: read
+
+# A newer commit on the same branch makes the run of the older one pointless: cancel it.
+concurrency:
+  group: example-pythonnet-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    strategy:
+      # Let every operating system report: a failure on one must not hide the result of the others.
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+
+    defaults:
+      run:
+        working-directory: examples/NumSharpPythonnetGhActionsCicd
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      # pythonnet 3.0.5 drives Python 3.7 to 3.13, and the pinned libraries need 3.11 or later.
+      # `cache: pip` keeps the downloaded wheels between runs; the key is the hash of
+      # requirements.txt, so a changed pin downloads again and nothing else does.
+      - name: Set up Python
+        id: python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: examples/NumSharpPythonnetGhActionsCicd/requirements.txt
+
+      # Into the interpreter of this job. A hosted runner is a new machine for every job, so a virtual
+      # environment adds nothing here. On a self-hosted runner use one: see the README.
+      - name: Install the Python libraries
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      # A step of its own, so that a compile error fails here, before Python starts.
+      - name: Build
+        run: dotnet build --configuration Release
+
+      # The tests embed exactly the interpreter that the steps above installed into: its path is an
+      # output of setup-python. Nothing searches PATH, and a missing interpreter fails the run.
+      - name: Test
+        env:
+          NUMSHARP_PYTHONNET_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: dotnet test --configuration Release --no-build --logger "trx;LogFileName=results.trx" --results-directory TestResults
+
+      # The .trx report and the figure that the Matplotlib test rendered. `!cancelled()` uploads them
+      # after a failed test step too, which is when the report is needed most.
+      - name: Upload the test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: example-pythonnet-${{ matrix.os }}
+          path: examples/NumSharpPythonnetGhActionsCicd/TestResults
+          if-no-files-found: ignore

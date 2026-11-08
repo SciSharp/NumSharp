@@ -16,6 +16,7 @@ namespace NumSharp
         /// <param name="shape">Overrides the shape of the result.</param>
         /// <returns>Array of uninitialized (arbitrary) data with the same shape and type as prototype.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty_like.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray empty_like(NDArray prototype, DType dtype = null, Shape shape = default, string device = null)
             => empty_like(prototype, dtype, shape, 'K', device);
 
@@ -27,15 +28,18 @@ namespace NumSharp
         /// <param name="shape">Overrides the shape of the result.</param>
         /// <param name="order">Memory layout: 'C', 'F', 'A' or 'K' (default, preserves prototype layout).</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
-        /// <returns>Array of uninitialized (arbitrary) data with the same shape and type as prototype.</returns>
+        /// <returns>Array of uninitialized (arbitrary) data with the same shape and type as prototype.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty_like.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError"><paramref name="order"/> is not one of C, F, A, K in either case (<c>order must be one
+        ///     of 'C', 'F', 'A', or 'K' (got 'Z')</c>), reported before the device, as NumPy's empty_like converts its
+        ///     arguments in order.</exception>
+        /// <exception cref="ValueError"><paramref name="device"/> is neither null nor <c>"cpu"</c> (NumPy's <c>Device not
+        ///     understood. Only "cpu" is allowed, but received: ...</c>).</exception>
         public static NDArray empty_like(NDArray prototype, DType dtype, Shape shape, char order, string device = null)
-        {
-            ValidateDevice(device);
-            char physical = OrderResolver.Resolve(order, prototype.Shape);
-            var dims = shape.IsEmpty ? (long[])prototype.shape.Clone() : (long[])shape;
-            var resolvedShape = new Shape(dims, physical);
-            return new NDArray(dtype ?? prototype.dtype, resolvedShape, false);
-        }
+            // NumPy's statements (the argument checks in their order, the layout, the allocation) are the array object's.
+            => NDArray.empty_like(prototype, dtype, shape, order, device);
     }
 }

@@ -100,8 +100,8 @@ legacy classes refuse (`DateTime64DType()` → "Preliminary-API: … can only be
 ```
 NumSharp.DTypeMeta                (abstract) — the DType CLASS. One live object per dtype class.
  ├─ LegacyBuiltinDTypeMeta        the 15 storage-backed types + the vestigial NPTypeCode.String; data-driven
- │                                (name, TypeNum, TypeCode, ScalarType, Kind, TypeChar, ItemSize, Alignment,
- │                                flags, aliases). common_dtype = the existing frozen promotion table.
+ │                                (Name, type_num, TypeCode, type, Kind, TypeChar, ItemSize, Alignment,
+ │                                flags, Aliases). common_dtype = the existing frozen promotion table.
  ├─ PyScalarDTypeMeta (internal)  _PyLongDType/_PyFloatDType/_PyComplexDType — NEP 50 weak C# literals
  └─ DatetimeDTypeMeta             DateTime64DType / TimeDelta64DType — PARAMETRIC; unit metadata on the
                                   instance; GCD promotion; unit casting rules. (descriptor-level in stage A)
@@ -113,8 +113,8 @@ NumSharp.DType                    (sealed) — the descriptor INSTANCE (was the 
 NumSharp.DTypeRegistry            static — NPTypeCode/Type/type_num/char/name → DTypeMeta; Register().
 NumSharp.DTypePromotion           static — CommonDType, PromoteDTypeSequence, PromoteTypes, ResultType,
                                   CastDescrToDType, CastToDTypeAndPromoteDescriptors (NEP 42 + NEP 50).
-NumSharp.ArrayMethod              (abstract, NEP 43) name/nin/nout/Casting/Flags/DTypes,
- └─ CastingImpl                     ResolveDescriptors(given → loop, view_offset) + GetStridedLoop(...).
+NumSharp.ArrayMethod              (abstract, NEP 43) name/nin/nout/casting/flags/dtypes,
+ └─ CastingImpl                     resolve_descriptors(given → loop, view_offset) + get_strided_loop(...).
     ├─ BuiltinCastingImpl           builtin→builtin (safety from the promotion table + kind order; loop =
     │                               the existing IL cast kernels — the engine still drives them directly)
     └─ TimeToTime/DatetimeToTimedelta/NumericToTime/TimeToNumeric CastingImpls (descriptor-level)
@@ -173,15 +173,34 @@ DTypePromotionError : TypeError   numpy.exceptions.DTypePromotionError, verbatim
 | Boolean | BoolDType | 0 | `b` (was `'?'` — fixed, AuditV2 T1.52) | `?` | |
 | SByte / Byte | Int8DType / UInt8DType | 1 / 2 | i / u | b / B | |
 | Int16 / UInt16 | Int16DType / UInt16DType | 3 / 4 | i / u | h / H | |
-| Int32 / UInt32 | Int32DType / UInt32DType | 5 / 6 | i / u | i / I | `IntDType` alias; `LongDType` on Windows |
-| Int64 / UInt64 | Int64DType / UInt64DType | 7 / 8 | i / u | l / L | LP64 convention (existing `ToTYPECHAR`); `LongLongDType` alias; `LongDType` on LP64 |
+| Int32 / UInt32 | Int32DType / UInt32DType | LP64 **5 / 6**, LLP64 **7 / 8** | i / u | LP64 `i / I`, LLP64 `l / L` | **platform-resolved** (see below); `IntDType` alias; `LongDType` on Windows |
+| Int64 / UInt64 | Int64DType / UInt64DType | LP64 **7 / 8**, LLP64 **9 / 10** | i / u | LP64 `l / L`, LLP64 `q / Q` | **platform-resolved**; `LongLongDType` alias; `LongDType` on LP64 |
 | Half / Single / Double | Float16/32/64DType | 23 / 11 / 12 | f | e / f / d | `LongDoubleDType` → Float64 (`'g'` collapses) |
 | Complex | Complex128DType | 15 | c | D | `CLongDoubleDType` → Complex128; complex64 stays unsupported |
-| Decimal | DecimalDType (NumSharp) | 256 | f | q (legacy `ToTYPECHAR`) | `isbuiltin 2` (user-defined range), name `decimal`, str `<f16` |
-| Char | CharDType (NumSharp) | 257 | u (was `'S'`) | c | promotes/prints as uint16 everywhere; name `char`, str `<u2` |
-| String (vestigial) | — | 19 | U | none | no storage; only the `"string"`/`"String"` aliases reach it |
+| Decimal | DecimalDType (NumSharp) | 256 | f | q (borrowed: int64's letter) | `isbuiltin 2` (user-defined range), name `decimal`, str `<f16`; `NPTypeCode.ToTYPECHAR` REFUSES it (2026-10-29): NumPy has no decimal dtype, and the borrowed `'q'` made `find_common_type` rank a decimal as int64 |
+| Char | CharDType (NumSharp) | 257 | u (was `'S'`) | c (borrowed: NumPy's `S1`) | promotes/prints as uint16 everywhere; name `char`, str `<u2`; `ToTYPECHAR` refuses it like decimal |
+| String (vestigial) | — | 19 | U | U | no storage; only the `"string"`/`"String"` aliases reach it; `ToTYPECHAR(NPTypeCode.String)` is `'U'` |
 | — | DateTime64DType | 21 | M | M | parametric, descriptor-level in stage A |
 | — | TimeDelta64DType | 22 | m | m | parametric, descriptor-level in stage A |
+
+**The four C-integer types are platform-resolved (2026-09-13), so `dtype.num`/`.char` are byte-identical to the
+LOCAL NumPy.** `np.dtype('int32')`/`np.dtype('int64')` resolve to whichever C integer is that width: on LP64
+(Linux/macOS, C `long` = 64-bit) `int32 == NPY_INT (5,'i')` and `int64 == NPY_LONG (7,'l')`; on LLP64 (Windows / any
+32-bit process, C `long` = 32-bit) `int32 == NPY_LONG (7,'l')` and `int64 == NPY_LONGLONG (9,'q')` — verified against
+numpy 2.4.2. `DTypeRegistry` maps NumSharp's single Int32/UInt32/Int64/UInt64 onto the platform-correct `(num, char)`
+via the existing `CLongIs32Bit` switch (the same switch the `LongDType`/`LongLongDType` aliases already used — the nums
+are now CONSISTENT with those aliases, where before they were hard-coded LP64). Everything else (bool 0, float32 11,
+float64 12, complex128 15, half 23, str 19, datetime 21, timedelta 22, Decimal 256, Char 257) is platform-independent.
+
+**`NPY_TYPES` (the identity enum) landed alongside `NPTypeCode` (the computational switch).** `Creation/np.dtype.cs`
+now carries `public enum NPY_TYPES` — a byte-identical mirror of NumPy's C `NPY_TYPES` (`ndarraytypes.h`), sibling to
+the existing `NPY_TYPECHAR`, plus the NumSharp user-range extras `NUMSHARP_DECIMAL`(256)/`NUMSHARP_CHAR`(257).
+`DType.type_num` returns it (`(NPY_TYPES)Meta.type_num`); `DType.num` stays `int` (NumPy's `.num` is an int);
+`DType.From(NPY_TYPES)` is the `PyArray_DescrFromType` reverse (rejecting a number with no NumSharp class on the
+platform). `NPTypeCode` is untouched — it remains the storage/kernel discriminator every backend `switch`/IL generator
+dispatches on; the `DType` descriptor is served ALONGSIDE it into the kernels (Stage C). Gate: `DTypeDescriptorTests`
+(`Builtin_Surface` + `type_num`) and `NpDtypesModuleTests` are now platform-aware; full DType/promotion/parity suite
+1523 green, `dtype_text` fuzz tier + `OracleSurfaceCoverage` green.
 
 ## 3. Stages
 
@@ -203,7 +222,7 @@ type; `UnmanagedStorage` gains a `Descr` field (today it is derived from `_typec
 NumPy analysis): `NPTypeCode.DateTime64/TimeDelta64`, an int64 slice lane, the NaT sentinel, the
 arithmetic/comparison/min-max ufunc loops registered as `ArrayMethod`s against the datetime metas
 (NEP 43 dispatch for non-legacy dtypes), ISO-8601 parse/format, `arange`, `astype` between units, the
-`.npy` descr. The `ArrayMethod.GetStridedLoop` contract is `NDInnerLoopFunc` — NumSharp's existing
+`.npy` descr. The `ArrayMethod.get_strided_loop` contract is `NDInnerLoopFunc` — NumSharp's existing
 `PyUFuncGenericFunction` analog — so NDIter drives new loops without a new driver.
 
 **Stage D — strings.** `StrDType` (`U`) / `BytesDType` (`S`) as parametric legacy metas (itemsize
@@ -216,11 +235,11 @@ already declared on `DTypeMeta`).
 | NEP | Requirement | NumSharp |
 |---|---|---|
 | 40 | legacy dtype layout is what to move away from | `NPTypeCode` demoted to a per-meta storage key |
-| 41 | dtypes are classes; scalars are not dtype instances; `np.dtype[np.float64]` class getter | `DTypeMeta` instances are the classes; `DType.type`/`Meta.ScalarType` is the C# scalar type; `DTypeRegistry.FromScalarType(typeof(double))` ≙ `np.dtype[np.float64]` |
+| 41 | dtypes are classes; scalars are not dtype instances; `np.dtype[np.float64]` class getter | `DTypeMeta` instances are the classes; `DType.type`/`Meta.type` is the C# scalar type; `DTypeRegistry.FromScalarType(typeof(double))` ≙ `np.dtype[np.float64]` |
 | 42 | `__common_dtype__`/`__common_instance__`/`default_descr`/`discover_descr_from_pyobject`/`is_known_scalar_type`/`ensure_canonical`/`getitem`/`setitem`; abstract & parametric flags; `CastingImpl.resolve_descriptors`; `np.dtype('S')`-class-vs-instance | the same slots as virtual methods; `DTypeFlags`; `CastingImpl`; unsized/generic descriptors stand for the class |
 | 43 | `ArrayMethod` (`resolve_descriptors`, `get_loop`, context, flags, casting), promoters keyed on DType classes | `ArrayMethod`/`CastingImpl`/`ArrayMethodContext`; loop contract = `NDInnerLoopFunc`; flags = existing `NDArrayMethodFlags` |
 | 50 | weak Python scalars; `result_type(int8, 300) → int8`; 0-D arrays are strong | `PyScalarDTypeMeta` for C# literals; `np.result_type(params object[])` treats every `NDArray` as strong (the operator path's 0-D weakness stays the documented `[Misaligned]`) |
-| 55 | variable-width `StringDType` | slots reserved (`HasReferences`/`GetClearLoop`), num 2056 reserved, stage D |
+| 55 | variable-width `StringDType` | slots reserved (`HasReferences`/`get_clear_loop`), num 2056 reserved, stage D |
 | 56 | `np.isdtype`, `np.dtypes` namespace, `promote_types`/`result_type` on dtypes | `np.dtypes` facade; `DType` overloads |
 
 ## 5. Implementation status
@@ -300,9 +319,9 @@ Things learned while landing it that the design above did not anticipate:
   plan expected to rewrite needed no change. The cost is `(Type)a.dtype` / `a.dtype.type` wherever a `Type` is required by
   signature (kernel-factory lookups, `Convert.ChangeType`, `Type.Name` in messages → `dtype.type.Name`).
 * **A static-initialization cycle had to be broken.** `np`'s field initializers now run `DType.From` → `DTypeRegistry`'s
-  constructor, which registered the 15×15 `BuiltinCastingImpl`s whose minimal `Casting` read `np._nptypemap_arr_arr` — filled by
+  constructor, which registered the 15×15 `BuiltinCastingImpl`s whose minimal `casting` read `np._nptypemap_arr_arr` — filled by
   `static np()` AFTER the field initializers — so the registry saw null and the process died with
-  `TypeInitializationException`. `ArrayMethod.Casting` is `virtual` and `BuiltinCastingImpl` computes it on first read (a
+  `TypeInitializationException`. `ArrayMethod.casting` is `virtual` and `BuiltinCastingImpl` computes it on first read (a
   constant; the laziness is unobservable). The `static np()` tables are built as `Dictionary<(DType, DType), DType>` (the
   aliases ARE descriptors) and the frozen `Type`/`NPTypeCode`-keyed maps are derived. Both orders are probed in fresh
   processes (np-first and registry-first).
@@ -318,4 +337,241 @@ Things learned while landing it that the design above did not anticipate:
   `a.dtype.type.Name` (C#); `np.X` where a `Type` is required by signature → `np.X.type`; reflection over
   `np.array(Array, Type, …)` → `typeof(DType)`; `np.isdtype(x, "floating")` raises.
 
-**Not yet** (unchanged from §3): datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`), strings (D).
+**Stage D phase 1 landed (2026-10-07, branch `strings`) — fixed-width `S` / `U` storage, byte-perfect with NumPy 2.4.2.**
+
+* **Metas.** `StringDTypeMeta` (`DTypes/StringDTypeMeta.cs`) is NumPy's `BytesDType` (`'S'`, num 18, one byte per character)
+  and `StrDType` (`'U'`, num 19, one UCS-4 code point per character), PARAMETRIC: the length lives on the descriptor
+  (`S5` → itemsize 5, `U5` → 20), `common_instance` takes the longer one, `S + U → U`, and a number promotes to text of its
+  `REQUIRED_STR_LEN` (bool 5, unsigned {1:3, 2:5, 4:10, 8:20}, signed +1, float 32, complex 64). `StringCastingImpls.cs`
+  ports `string_to_string_resolve_descriptors` (longer = safe, shorter = same_kind, equal = no / a `U` byte swap = equiv)
+  and the numeric → string length casts. The unsized descriptors (`np.dtype("U")`, `'S'`, itemsize 0) parse, print and
+  promote, and adapt to the operand (`PyArray_AdaptDescriptorToArray`) wherever NumPy sizes them.
+* **Storage.** One storage lane, `NPTypeCode.String`, holds every width of both classes: `StringArraySlice` is an element
+  view over an ordinary `ArraySlice<byte>` (so pooling, ARC lifetime and views are the numeric lanes'), and the
+  descriptor (`UnmanagedStorage.Descr`) carries the class and width. `NPTypeCode.String` alone therefore names NO dtype —
+  every allocation of a string result takes a descriptor. The codec (`Backends/Strings/NDStringCodec.cs`) is NumPy's
+  `STRING_/UNICODE_ getitem/setitem`: NUL padding, trailing NULs stripped on read, embedded NULs kept, a C# `string` is
+  `str`, a `byte[]` is `bytes`, supplementary-plane text is one UCS-4 unit.
+* **Movement.** `NDStringCopy` runs every string copy (`NDIter.Copy`, `copyto`, `astype`, slice assignment,
+  concatenate, take/put/place/putmask, where, pad …) on the numeric kernels through UNIT VIEWS: a string array of shape
+  `D` is copied as a `uint8` / `uint32` array of shape `D + (chars,)`, so broadcasting, every layout, the overlap guard
+  and the SIMD copy kernels are the numeric ones; `S ↔ U` is NumPy's legacy ASCII cast with Python's
+  `UnicodeEncodeError` / `UnicodeDecodeError` texts.
+* **Printing.** `Backends/Printing/PyRepr.cs` is CPython's `unicode_repr` / `PyBytes_Repr` / `str.isprintable` / `len`,
+  so `str` / `repr` / `array2string` of a string array are NumPy's bytes.
+* **Computing on text is the next phase.** Where NumPy REFUSES a call (no string loop: `np.sum`, `np.sqrt`, gufuncs),
+  NumSharp raises NumPy's exception and text; where NumPy COMPUTES (comparisons, concatenation, truth tests, sorting,
+  searching, text ↔ number parsing), it throws `StringComputationNotSupportedException` (a `NotSupportedException`).
+  Both come after NumPy's earlier checks, in NumPy's order (`Backends/Strings/NDStringUfuncs{,.Precedence}.cs`):
+  the `dtype=` class check, a read-only `out=`, a non-bool `where=`, the axis (three rules — `ufunc.reduce`, the counting
+  statistics, the ravelling arg / scan / sort family), the quantile family's q / axis / method / empty-axis order, the
+  output cast and the broadcast of a computing loop. An unsized string `dtype=` request gets NumPy's per-ufunc answer
+  (`No loop matching …`, the class-form `UFuncTypeError`, the string `add` formatting numbers as text, the string
+  `multiply` 'out' text). The add family ignores a NUMERIC request over text (the string add loop resolves from the
+  operands: `np.sum(u, dtype='f8')` is the add.reduce refusal), every other reduction parses (next phase).
+* **`.npy`.** `|S5` / `<U3` / `>U3` files read and write byte for byte (mmap included). **Breaking:** a `<U1` file reads
+  back as a `<U1` string array, not `Char`; `Char` is still written as `<U1`.
+* **Gate.** The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings.jsonl` — one
+  `strings_<section>.jsonl` file per section since 2026-10-13 —,
+  14,175 cases at landing — 18,790 after the validation pass below, 21,552 after its numpy.ma pass, 12,569 of them NumPy
+  errors compared by type map + verbatim text; 18 sections: dtype, creation, astype, views, movement, mutation, access,
+  printing, ufuncs, reductions, strdtype, strprec, straxis, strcov, strshape, strvalid, strsurface, strma). A phase-2 case
+  (NumPy returns, or raises a parse error) passes as "deferred" while NumSharp throws
+  `StringComputationNotSupportedException` and is held to NumPy's answer the moment NumSharp computes it — the next
+  phase is gated by the same corpus. Unit tests: `Backends/Strings/StringCallOrderTests.cs` (one per precedence rule),
+  `Documentation/FundamentalsStringsBytesDocTests.cs`, the frombuffer / getfield / file I/O string tests.
+* **Movement perf** (NPY/NS, two pinned P-cores, 100K / 1M `<U8`): copy 5.0 / 3.7×, strided / reversed / transposed
+  copies 2.5–4.4×, `astype` width changes 2.7–4.2×, `S ↔ U` 44–86×, concatenate 3.3–3.6×, take / fancy / mask 1.7–3.1×,
+  `np.where` 3.7–5.8×. Same-layout copies are one block move; non-overlapping copies over at most two effective axes run
+  the `ElementCopy` IL kernel (constant-size cpblk + initblk per element); `np.where` runs the `WhereBytes` kernel;
+  integer-index and prefix-mask gathers take the fancy-index kernel route; fully-written `U` results skip the NEEDS_INIT
+  zero fill. Floors: 1K calls (the per-call NDArray floor), `copyto` / fill (memory-bound), `AsStringArray` at 1M
+  (.NET GC of live strings).
+* **Traps found.**
+  - NumPy's ufunc DISPATCH CACHE makes an answer depend on call history: after
+    `np.multiply(u, int8, dtype='U')` (whose promoter casts int8 → int64 and is cached per DType tuple),
+    `np.prod(int8_array, dtype='U')` finds the string repeat loop ('out' kwarg text), where a fresh process names no
+    loop. The generator runs the reductions before the binary ufuncs, so the corpus records the fresh answer.
+  - A test corpus of "string" cases must not include numeric-only calls: they test numeric behavior (reduction 0-d
+    results are read-only reduction scalars in NumSharp, NumPy's generator sees a writeable 0-d array).
+  - `GetString` / `SetString` (the `Char` vector API) used to `Debug.Assert` the dtype, so a Release build read a `U`
+    array's UCS-4 bytes as UTF-16; they refuse a non-`Char` array now.
+
+**Stage D phase 1 validation (2026-10-07, branch `strings`).** A whole-surface sweep (every public `np.*`, `np.linalg`,
+`np.random`, `np.fft`, `np.ma` and `NDArray` member called with string operands, compared with NumPy 2.4.2) and three new
+oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
+
+* **The deferral rule, made exact.** Defer (`StringComputationNotSupportedException`) only where NumPy reads the text:
+  compares it, concatenates it, parses it, or formats numbers into a text result. Where dtypes, sizes or shapes alone
+  decide NumPy's answer — also after a computation that cannot fail — give that answer.
+* **Shape-decided answers** (section `strshape`, 1,674 cases; `Backends/Strings/NDStringUfuncs.ShapeDecided.cs`). NumPy's
+  loops read no element of an empty input and compare nothing in a line of one element, and a pair with no comparison
+  loop takes the `==` operator's all-False fallback. So truth tests, `count_nonzero`, the nonzero family, the
+  arg-reductions, sort / argsort / partition, `np.unique` (all forms), `isin`, the set routines, `array_equal` /
+  `array_equiv`, `lexsort`, `sort_complex` and `trim_zeros` answer from the shape: the numeric path runs on a BOOL
+  STAND-IN of the operand's shape (results, errors, `out=` / `where=` / keepdims all NumPy's), and the values a result
+  carries are restored from the input. Binary ufuncs over an empty broadcast return their empty result (`BinaryGuard`).
+* **Check order before a conversion** (section `strvalid`, 173 cases): interp / digitize / repeat (depth, then the 'safe'
+  cast), conversions of nothing (astype / copyto / setitem / where / concatenate / choose), place / putmask (an ndarray
+  value meets `PyArray_FromAny`'s 'safe' rule; a C# array is a Python LIST, converted directly — new `Array` overloads),
+  insert / delete with an array obj, searchsorted's side / sorter checks, choose's modes.
+* **The rest of the surface** (section `strsurface`, 2,768 cases): the linalg gufuncs' input-cast refusals (with NumPy's
+  gufunc names), `pinv` / `tensorinv` / `norm` order, the products (`dot` / `inner` / `vdot` / `tensordot` / `cross`:
+  0-d, alignment, out, itemsize), convolve / correlate depth and empties, `SeedSequence` / spawn keys / Philox counters
+  over text arrays and random integer bounds (CPython's `int()` ported in `RandomSampling/PythonInt.cs`), the histogram
+  family (text data, bins, weights, ranges), quantile `q`, reductions and scans with `out=` (the loop resolved on
+  `(out, input)`), nanargmax's out checks, polynomials, emath, unravel / ravel (`only int indices permitted`), dtype
+  predicates over arrays, `ediff1d`, text `where=` masks, `complex()` of a 0-d text array, `fill` with a sequence.
+* **Numeric fixes found on the way** (all NumPy 2.4.2, unit-tested): `norm` of an empty operand (the inf / 1 / 2 orders
+  reduce with `initial=0`), `matrix_power(a, 1) is a`, `np.cross` broadcasts its leading axes (np.broadcast's text) and
+  checks `axisc` before the dtype, `histogramdd`'s H is a view of the padded counts and an edges array the caller passed
+  comes back as the same object, histogramdd's per-dimension scalar bin checks, `tensorinv` with `ind > ndim`, argsort of
+  a 0-d array, 1-D `unique(axis=0)` takes the flat path, `concatenate(axis=None)` of 0-d operands, insert of a
+  one-element sequence obj, delete of an N-D / int8 obj, `min_scalar_type(NDArray)` (returned null), the digitize /
+  trim_zeros / insert / delete / searchsorted / correlate error classes.
+* **numpy.ma over text** (section `strma`, 2,762 cases: every numpy.ma function over masked U / S operands of every
+  layout — 0-d, empty, all-masked, a custom fill, a hard mask — recording data, mask, fill value and hardness; unit
+  `Backends/Strings/StringMaskedArrayTests.cs` + `Ma/NDMaskedArrayNumPyStatementsTests.cs`). numpy.ma's statements in its
+  order (`refs/numpy/numpy/ma/core.py`, `extras.py`):
+  - **Refusals.** A member whose ufunc has no string loop raises NumPy's text: the masked reductions / scans (`add.reduce`'s
+    resolved-dtypes TypeError, also for an empty or fully masked operand), products (`ma.inner` reshapes a 0-d operand
+    before np.inner's alignment check; `ma.outer` is the string multiply's 'out' text), the two-operand extrema
+    (`where(less(a, b), a, b)`: the comparison's class-form no-loop text), `clip` (a Python-scalar bound named by its
+    default descriptor, int64 / float64), `allclose` (`isinf`'s safe-casting text, or the str / `_PyFloatDType`
+    DTypePromotionError of `result_type(y, 1.)`), `median` (after its axis check), `trace` without a mask,
+    `masked_values` (`equal`'s no-loop text).
+  - **Deferrals.** A member that reads the text defers: a number formatted into a masked slot (`filled(5)`), truth values
+    (`alltrue`, `nonzero`, a text `compress` condition), a sort with masked and unmasked text (its key is the fill
+    value), `trace` with a mask (`astype(float64)` parses), `vander` with one column (writes the formatted `'1'`).
+  - **The text fill value.** NumPy's getter stores `_check_fill_value(None, dtype)` = `np.array('N/A')` at ITS OWN width
+    (`<U3` / `|S3`) the first time it is read; a later assignment writes INTO that stored array (`'hello'` → `'hel'`,
+    `None` after a `'zz'` on `<U2` → `'N/'`); `__array_finalize__` converts an inherited fill to a new dtype (`<U1` →
+    `'N'`), `_update_from` shares it unconverted; repr materializes it, str does not.
+  - **numpy.ma bugs it found for every dtype**, fixed: fill / hard-mask inheritance (`_arraymethod` views inherit, `take`
+    does not, `*_like` copy the mask, `_fromnxfunction` results always carry a mask array, `concatenate` shrinks an
+    all-False mask), `ma.array` soft by default vs `masked_array` inheriting, an adopted caller's bool mask
+    (`getmask(x) is m`, writes land in it), `getdata` / `filled` / `compressed` / `compress_nd` views, an in-place
+    `shrink_mask`, `argsort`'s default axis (flattened from 2-D), `alltrue` / `sometrue` as logical reductions along axis
+    0, `count` without a mask a writeable full array, `flatnotmasked_edges`' three cases, `trace` casting the diagonal
+    first with a mask (`[2**53, 1, 1]` sums to 2**53 in float64, 2**53 + 2 without a mask), `allclose` statement for
+    statement (a 0-d x against a masked y is NumPy's MaskError), `average`'s 0-d `AttributeError`, `setdiff1d` keeping
+    the first operand's dtype, `unique` keeping the first masked element's data.
+  - **np.* bugs it found:** `np.stack` of 0-d operands (`(n,)`, was `(n, 1)`), `np.convolve` checking emptiness before
+    the length swap, `np.vander` over text (the columns decide), `np.clip`'s no-loop text, `np.unique` of a contiguous
+    view whose shape carries a non-zero offset (the hash path and the key extraction read the elements BEFORE the view).
+* **numpy.ma attributes and operators** (follow-up, same day; unit `Ma/NDMaskedArrayInheritanceTests.cs`). A probe of
+  every result kind against NumPy (116 attribute cases: fill value, hardness, mask form, data at every slot; 143
+  operator and mask-sharing cases: a masked write through the result, then the operand's mask read back) found 73
+  differences, all fixed but 4 representational ones (a NumPy scalar or plain-array return stands as a 0-d or
+  unmasked masked array; a numeric fill keeps its C# type):
+  - the masked ufunc wrappers end with `_update_from(a)` (else `b`): the fill value RAW (an int64 fill stays int64 on a
+    float result) and the hard mask; `ma.power` updates from its BASE only and fills invalid slots with that fill; the
+    shifts are plain functions (`masked_array(left_shift(filled(a, 0), n), mask=m)`: masked slots shifted from 0, the
+    operand's mask adopted, nothing inherited);
+  - MaskedArray defines `+ - * / // **` and the comparisons only: `-x`, `~x`, `%`, `&`, `|`, `^` run ndarray's PLAIN
+    ufunc with weak C# numbers and `__array_wrap__` (no fill-back; `mask_or` of the operands' full masks, shrunk; `%`'s
+    `_DomainSafeDivide` slots filled with 1; a unary operator shares the operand's mask object); `< > <= >=` run
+    `_comparison` (`compare(self.data, getdata(other))` with a STRONG C# number, no fill-back, a COPY of the mask shrunk
+    to nomask, the fill value cast to bool, `scalar < x` as x's reflected method);
+  - `copy`, `astype` (mask copied), `view` (mask shared; a dtype argument resets a stored fill; `fill_value=` replaces
+    only a stored one), `diagonal`, `clip` (mask copied), `round` (mask shared), `sort`, `anom` and `diff` inherit;
+    `real` / `imag` (mask copied) and `mT` (mask view) are soft with the default fill;
+  - a binary masked ufunc returned the operand's own mask object when only one operand had a mask, so masking the
+    result masked the operand: NumPy's `logical_or(ma, getmaskarray(b))` is a new array;
+  - `ma.sort` is NumPy's statements (a finalized copy, `a[...] = take_along_axis(a, argsort)`: a HARD mask keeps the old
+    masked slots' data and ORs the masks); a floating masked slot sorts by NaN, after +inf;
+  - `ma.dot` always computes `~dot(~ma, ~mb)` (an empty contraction masks every slot; an array result carries a mask
+    array; a masked 0-d result is a 0-d array with a True mask); `ma.diff` broadcasts a 0-d prepend / append and
+    returns the operand itself for `n=0`; `masked_where(copy=False)` masks the input in place.
+* **Open.** (`np.ma.isin` / `in1d`'s numeric algorithm is NumPy's statements since 2026-10-08, with the other ma
+  arraysetops: `Ma/NDMaskedArray.SetOps.cs`, the zero-excuse `ma_setops.jsonl` tier; `ma.put` is NumPy's
+  `MaskedArray.put` statements since 2026-10-08 — a hard-masked N-D put raises NumPy's IndexError, the zero-excuse
+  `ma_put.jsonl` tier; numeric fill values are stored, converted and materialized as NumPy's are since 2026-10-08 —
+  the text path's model for every dtype, the zero-excuse `ma_fill.jsonl` tier; `np.nditer` iterates strings since
+  2026-10-08 — the iterator carries descriptors: 0-d `S` / `U` views, buffered and copy-route conversions between
+  widths and between `S` and `U` (ASCII; NumPy's Unicode errors otherwise), write-back at close, `np.nested_iters`'
+  per-level split; the string oracle's `striter` section, the numeric `nditer_construct` / `nditer_protocol` tiers;
+  a conversion between text and numbers is phase 2's `StringComputationNotSupportedException`; a BUFFERED reduction
+  through `np.nditer` is NumPy's since 2026-10-14 — the port of NumPy's buffering, strings phase 1 package P1.7g —
+  where it was wrong for every dtype, `OpenBugs.NditerBufferedReduce.cs` now regression pins.) (`argwhere` /
+  `flatnonzero` / `unravel_index` return NumPy's views since 2026-10-08 — the string oracle no longer excuses their layout;
+  plan `api-parameter-parity.md` X37. An empty matrix's QR / SVD — every factorisation of an empty matrix or a zero-size
+  batch — is NumPy's answer without a backend since 2026-10-08: `Backends/Default/LinearAlgebra/LinAlgEmpty.cs`, the
+  portable `linalg_empty.jsonl` tier, plan `api-parameter-parity.md` X34.)
+
+**NumPy's names and a probed oracle (2026-10-14).**
+
+* **Every member NumPy names keeps NumPy's spelling, case for case** (the owner's rule: only class names take the house
+  `ND*` style). `DTypeMeta`: the Python class attributes `type` (was `ScalarType`), `_abstract`, `_parametric`, `_legacy`,
+  `_is_numeric` (were `IsAbstract`…); the C fields `singleton`, `type_num`, `flags`; the NEP 42 slots `default_descr`,
+  `common_dtype`, `common_instance`, `ensure_canonical`, `discover_descr_from_pyobject`, `is_known_scalar_type`,
+  `get_clear_loop`, `get_fill_zero_loop`; `within_dtype_castingimpl` and the new read-only `castingimpls` view.
+  `DTypeFlags`: `NPY_DT_LEGACY` / `_ABSTRACT` / `_PARAMETRIC` / `_NUMERIC`. `DType`: the byte-order characters `NPY_NATIVE`,
+  `NPY_IGNORE`, `NPY_SWAP`, `NPY_LITTLE`, `NPY_BIG`, `NPY_NATBYTE`, `NPY_OPPBYTE` (were `NativeByteOrder`…). C function names
+  keep NumPy's PascalCase after the `PyArray_` prefix (`GetCastingImpl`, `AddCastingImpl`, `DTypePromotion.*`).
+* **The other ports of the folder (2026-10-15).** `ArrayMethod`: the fields of NumPy's `PyArrayMethodObject` and
+  `PyBoundArrayMethodObject`, `name`, `nin`, `nout`, `casting`, `flags`, `dtypes`, `resolve_descriptors()`,
+  `get_strided_loop()` (were `Name`, `NIn`, `NOut`, `Casting`, `Flags`, `DTypes`, `ResolveDescriptors()`,
+  `GetStridedLoop()`); `ArrayMethodContext`: `PyArrayMethod_Context`'s `method`, `descriptors`; `DatetimeMetaData`:
+  `PyArray_DatetimeMetaData`'s `@base`, `num` (were `Base`, `Num`). Kept: members with no NumPy name
+  (`CastingImpl.From`/`To`/`IsWithinDType`, `ArrayMethod.NoView`) and the helpers that port NumPy-internal C functions
+  (`DatetimeMetaData.Parse`/`Divides`/`GreatestCommonDivisor`/`CanCast*`, `DTypeCasting.ParseCasting`/`CastingToString`).
+  The oracle's `members` record carries each struct's fields as NumPy's headers have them, and the replay's
+  `StructPorts` holds the C# class to them, listing every unported field with its reason (self-retiring).
+  On branch `strings` (same day): `VStringParameters` takes the field names of `PyArray_StringDTypeObject` (`na_object`,
+  `coerce`, `has_nan_na`, `has_string_na`, `na_name`, `default_string`; were `NAObject`, `Coerce`, `HasNanNA`,
+  `HasStringNA`, `NAName`, `DefaultString`), `VStringDTypeMeta.CellSize` / `CellAlignment` are NumPy's macros
+  `SIZEOF_NPY_PACKED_STATIC_STRING` / `ALIGNOF_NPY_PACKED_STATIC_STRING`, and `DTypeMeta.NeedsInitFlag` is `NPY_NEEDS_INIT`.
+  The oracle records that struct (unported: `base`, `array_owned`, `allocator`) and the three macros' values, which the
+  replay's `MacroHolders` checks. The class records of `StrDType`, `BytesDType` and `StringDType` are compared there and
+  match NumPy. In a second commit the same day the NumPy ports `strings` added outside the folder took NumPy's names:
+  `VStringAllocator`'s constants are `static_string.c`'s macros (`NPY_STRING_MISSING`, `NPY_STRING_INITIALIZED`,
+  `NPY_STRING_OUTSIDE_ARENA`, `NPY_STRING_LONG`, `NPY_STRING_FLAG_MASK`, `NPY_SHORT_STRING_SIZE_MASK`,
+  `NPY_SHORT_STRING_MAX_SIZE`, `NPY_MEDIUM_STRING_MAX_SIZE`, `NPY_MAX_STRING_SIZE`, `SIZEOF_NPY_PACKED_STATIC_STRING`;
+  were `Missing`, `Initialized`, `OutsideArena`, `Long`, `FlagMask`, `ShortSizeMask`, `ShortMaxSize`, `MediumMaxSize`,
+  `MaxStringSize`, `CellSize`), and its `NpyString_*` ports carry the function's name after the prefix (`load`, `pack`,
+  `pack_null`, `pack_empty`, `newsize`, `newemptysize`, `free`, `dup`, `isnull`, `size`, `share_memory`,
+  `acquire_allocator`, `release_allocator`, `acquire_allocators`, `release_allocators`; were `Load`, `Pack`, `PackNull`,
+  `PackEmpty`, `NewSize`, `NewEmptySize`, `Free`, `Dup`, `IsNull`, `Size`, `ShareMemory`, `Acquire`, `Release`,
+  `AcquirePair` / `AcquireAll`, `ReleasePair` / `ReleaseAll`). The pythonnet binding `NumpyStringApi` takes the same
+  names for the C API slots it calls; `np.strings.str_len` (was `StrLen`), `np.ClipmodeConverter`
+  (`PyArray_ClipmodeConverter`, was `ClipModeConverter`) and `StringCastingImpls.GetDatetimeISO8601StrLen`
+  (`NpyDatetime_GetDatetimeISO8601StrLen`, was `DatetimeIsoStrLen`) too. The oracle records `static_string.c`'s macros
+  and its `NpyString_` functions; the replay holds the allocator to them through `MacroHolders` (now several holders per
+  macro) and the new `FunctionPorts` (unported, self-retiring: `new_allocator`, the constructor; `free_allocator`, the
+  end of `ClearAndFree`; `cmp`, phase 2). Not renamed: `NDArrayMethodFlags` (journey4's, NumPy's `NPY_METH_*`), and the
+  CPython ports (pickle, codecs, `str()`), whose names are not NumPy's.
+* **Ported:** `dtype.isalignedstruct`, `len(dtype)` (`__len__`, 0 fields), `dtype[key]` (`__getitem__`, NumPy's KeyError),
+  `dtype.metadata` and `np.dtype(dtype, align, copy, metadata)` (`arraydescr_new`'s statements: `copy` copies only a
+  singleton, `metadata` always copies and merges without overwriting existing keys).
+* **Fixed:** `newbyteorder` is `PyArray_ByteorderConverter` + `PyArray_DescrNewByteorder` (a requested host order stays an
+  explicit `'<'`; a swap of a non-native descriptor gives the explicit host order — surface gap SU17; the error quotes the
+  whole string, `None` is TypeError); `isnative` is `PyArray_ISNBO`; equality and hashing read `'='` as the host order;
+  `repr` uses the short `'<f8'` form whenever the stored byte order is explicit; the parser folds an explicit host order
+  into `'='` and returns the datetime LETTERS as the builtin singletons (`np.dtype('M').isbuiltin == 1`); `ensure_canonical`
+  returns a fresh native copy, never the singleton (`np.result_type(np.dtype('>f8')).isbuiltin == 0`); `promote_types`'
+  fast path is pointer identity, so equal-but-distinct inputs come back as the singleton.
+* **Gate:** `test/oracle/gen_dtype_oracle.py` writes `test/NumSharp.Tests/DTypes/corpus/dtype_oracle.{llp64,lp64}.jsonl`
+  (4,683 records: member names incl. the C slots read from `dtype_api.h` / `dtypemeta.h`, 1,014 descriptors × every
+  attribute, 98 errors, 784 comparison pairs, 812 promotions, 33 classes, 1,941 casting resolutions), one per C `long`
+  model, from Windows NumPy and WSL's Linux NumPy; `DTypes/DTypeOracleTests.cs` replays the host's model (8/8 planted bugs
+  killed; the LP64 file verified under Linux .NET). Self-retiring exemptions: the dunders C# has no use for, the unported
+  slots (`setitem`, `getitem`, `finalize_descr`, `get_constant`, ArrFuncs, `sort_meth`/`argsort_meth`), the absent classes,
+  the collapsed C-integer / long-double classes, the datetime `type` (Stage C) and the asymmetric `M8[1000ms] == M8[s]`.
+
+**Stage D complete (2026-10-19, branch `strings`) — text as data and computing on text for `S`, `U` and NEP 55
+`StringDType`.** Phase 1 (`docs/plans/strings-phase1-completion.md`, the owner's direction of 2026-10-10: `StringDType`
+and the text ↔ number casts belong to it) ended with P1.7f, the whole surface with `T` (`01566b27`): a reflection sweep
+of every `np.*`, module and `NDArray` method with a `StringDType` operand in each array slot ends in 0 generic phase-1
+refusals. Phase 2 (`docs/plans/strings-phase2.md`) ended with P2.7, the switch-over (`52cf04bb`, `6513b2cd`,
+`f44c9579`, `01566b27` and its closing commit): every computation NumPy runs on text computes — the comparisons and
+truth values, concatenation and repetition, the reductions, sorting / searching / sets and the order statistics, all 46
+`numpy.strings` functions, the reductions into a text `out=` with NumPy's loop resolution —, and
+`StringComputationNotSupportedException` is only `np.evaluate`'s refusal of a text operand (since
+`docs/plans/evaluate-text.md` E1 / E2, of a text node whose NumPy answer is not a number or a bool). Gates: the string oracle
+(`test/oracle/gen_strings_oracle.py`, 64 sections, 266,059 NumPy 2.4.2 cases, every one strict) and the
+`benchmark/strings` subsystem of `run_benchmark.py`. What stays out: NumPy's object arrays (a computation whose NumPy
+result is an object array of Python strings, as in the `numpy.polynomial` recurrences over text, raises
+`NotSupportedException`) and the NumPy 2.4.2 defects the plans list as not reproduced.
+
+**Not yet:** datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`).

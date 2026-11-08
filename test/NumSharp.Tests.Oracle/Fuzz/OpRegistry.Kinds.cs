@@ -23,9 +23,9 @@ namespace NumSharp.Tests.Fuzz
     ///
     ///     <para>
     ///     <b>The iteration protocol used here is NumPy's own</b> — <c>while (!it.finished) { read;
-    ///     it.iternext(); }</c> — not <c>foreach</c>. np.NDIterator.MoveNext publishes THEN advances
-    ///     (matching Python's <c>__next__</c>), so mixing the two styles would offset the trace by
-    ///     one step. Values are read with GetAtIndex, which COPIES: <c>it[0]</c> aliases the
+    ///     it.iternext(); }</c> — for the traces, and <c>foreach</c> (np.NDIterator.MoveNext, which
+    ///     advances on ENTRY like Python's <c>__next__</c>) for the construction tier; the two are never
+    ///     mixed on one iterator. Values are read with GetAtIndex, which COPIES: <c>it[0]</c> aliases the
     ///     iterator's live data pointer (and, when buffered, a buffer the next step refills), so
     ///     holding the view instead of its value is the documented foot-gun.
     ///     </para>
@@ -39,7 +39,9 @@ namespace NumSharp.Tests.Fuzz
                 "tuple" => ApplyTuple(op, p, ops),
                 "dtype" => ApplyDtype(op, p, ops),
                 "text" => ApplyText(op, p, ops),
-                _ => Apply(op, p, ops),
+                // The PCG64 Generator op has its own handler (it is not in Apply's switch); routing it here too means
+                // every caller of Invoke — the error-parity check included — reaches it, not only the value path.
+                _ => op == "grnd" ? GeneratorDraw(p, ops) : Apply(op, p, ops),
             };
 
         // ---- array / scalar results ---------------------------------------------------------
@@ -52,6 +54,10 @@ namespace NumSharp.Tests.Fuzz
         {
             switch (op)
             {
+                // A ranged, buffered cast iteration's value stream (OpRegistry.Nditer.cs).
+                case "nditer_ranged":
+                    return NditerRangedFromCorpus(p, ops);
+
                 // ---- iterator traces (array-shaped) ----
                 //
                 // np.ndindex has NO operand: the index space comes entirely from params, like the
@@ -147,9 +153,15 @@ namespace NumSharp.Tests.Fuzz
                                                       FuzzCorpus.DtypeToTC(p["to"].GetString()),
                                                       p["casting"].GetString()));
                 case "isdtype":
+                    // The surface tier's scalar-class cases (arg / kinds dicts) take the scalar-type adapter.
+                    if (p.ContainsKey("kinds"))
+                        return ScalarTypeIsDtype(p);
                     return NDArray.Scalar(np.isdtype(FuzzCorpus.DtypeToTC(p["dtype"].GetString()),
                                                       p["kind_name"].GetString()));
                 case "issubdtype":
+                    // The surface tier's scalar-class cases (arg1 / arg2 dicts) take the scalar-type adapter.
+                    if (p.ContainsKey("arg1"))
+                        return ScalarTypeIsSubdtype(p);
                     return NDArray.Scalar(np.issubdtype(FuzzCorpus.DtypeToTC(p["a"].GetString()),
                                                         FuzzCorpus.DtypeToTC(p["b"].GetString())));
                 case "isfortran":
@@ -167,8 +179,10 @@ namespace NumSharp.Tests.Fuzz
                         p.TryGetValue("axis", out var ax) && ax.ValueKind != JsonValueKind.Null
                             ? ax.GetInt32() : (int?)null));
 
+                // The surface tier (gen_surface_oracle.py, OpRegistry.Surface.cs) owns the remaining keys; it throws
+                // the same "not registered" NotSupportedException for a key it does not know either.
                 default:
-                    throw new NotSupportedException($"op '{op}' is not registered in OpRegistry");
+                    return ApplySurface(op, p, ops);
             }
         }
 
@@ -180,8 +194,58 @@ namespace NumSharp.Tests.Fuzz
         /// </summary>
         public static NDArray[] ApplyTuple(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
+            // ndarray.* tuple keys — a.nonzero() plus the IN-PLACE mutators whose two slots are
+            // [post-call view, post-call whole base buffer] (OpRegistry.Instance.cs).
+            if (op.StartsWith("ndarray.", StringComparison.Ordinal))
+                return ApplyInstanceTuple(op.Substring("ndarray.".Length), p, ops);
+            if (IsMatrixOp(op))
+                return ApplyMatrixTuple(op, p, ops);
+            // numpy.polynomial's series classes (OpRegistry.PolyClass.cs): a series result is four slots.
+            if (IsPolyClassOp(op))
+                return PolyClassTuple(op, p, ops);
+            // numpy.polynomial's tuple results: polyutils' as_series / mapparms (OpRegistry.PolySeries.cs) and the six
+            // {p}div (quo, rem) of the series algebra (OpRegistry.PolyAlgebra.cs).
+            if (IsPolynomialOp(op))
+                return ApplyPolySeriesTuple(op, p, ops);
+
             switch (op)
             {
+                // The tuple-result axis functions of the axis_args tier (OpRegistry.AxisArgs.cs).
+                case "axis_arg":
+                    return AxisArgTupleFromCorpus(p, ops);
+
+                // np.evaluate(expr, out=): [returned view, whole out base buffer] — the out_where shape.
+                case "evaluate":
+                    return EvaluateOutFromCorpus(p, ops);
+
+                // The array-OBJECT oracle's tuple results (OpRegistry.ViewFlags.cs): a view-flags API returning a
+                // tuple, an out= call ([returned, whole out base buffer]), and np.indices(sparse=True) by shape form.
+                case "viewflags":
+                    return ApplyViewFlagsTuple(p, ops);
+                case "outflags":
+                    return ApplyOutFlags(p, ops);
+                case "shapearg":
+                    return ApplyShapeArgTuple(p, ops);
+
+                // np.clip as a ufunc call: [returned] or [returned, whole out base buffer] (OpRegistry.ClipUfunc.cs).
+                case "clip_ufunc":
+                    return ClipUfuncFromCorpus(p, ops);
+
+                // A reduction through its NumPy-shaped overload: [returned] or [returned, out base buffer,
+                // returned-is-out] (OpRegistry.ReduceKwargs.cs).
+                case "reduce_kwargs":
+                    return ReduceKwargsFromCorpus(p, ops);
+
+                // The max / min family with out= / initial= / where=: [returned] or [returned, out base buffer,
+                // returned-is-out] (OpRegistry.MinMaxKwargs.cs).
+                case "minmax_kwargs":
+                    return MinMaxKwargsFromCorpus(p, ops);
+
+                // np.nditer's descriptor construction: per operand [values, operand after construction, array after
+                // close] (OpRegistry.Nditer.cs).
+                case "nditer_construct":
+                    return NditerConstructFromCorpus(p, ops);
+
                 // (index, value) for every element, in flatiter C-order whatever the layout.
                 case "ndenumerate":
                 {
@@ -317,6 +381,28 @@ namespace NumSharp.Tests.Fuzz
                     var (fractional, integral) = np.modf(ops[0]);
                     return new[] { fractional, integral };
                 }
+                case "frexp":
+                {
+                    // (mantissa in [0.5,1) in x's float tier, int32 exponent); the tuple comparator
+                    // bit-checks BOTH slots (mantissa dtype and the always-int32 exponent).
+                    var (mantissa, exponent) = np.frexp(ops[0]);
+                    return new[] { mantissa, exponent };
+                }
+                case "divmod":
+                {
+                    var (quotient, remainder) = np.divmod(ops[0], ops[1]);
+                    return new[] { quotient, remainder };
+                }
+                // Numerical gradient — one component per requested axis (a bare array for a single
+                // axis, a tuple otherwise). Recorded as a tuple so arity is asserted; the corpus uses
+                // unit spacing (x=None), so only edge_order/axis vary.
+                case "gradient":
+                {
+                    int eo = p.ContainsKey("edge_order") ? p["edge_order"].GetInt32() : 1;
+                    return p.ContainsKey("axis")
+                        ? (NDArray[])np.gradient(ops[0], null, p["axis"].GetInt32(), eo)
+                        : (NDArray[])np.gradient(ops[0], edge_order: eo);
+                }
                 case "average_returned":
                 {
                     int? axis = p["axis"].ValueKind == JsonValueKind.Null
@@ -361,6 +447,46 @@ namespace NumSharp.Tests.Fuzz
                         ? ApplyBinaryOut(ufunc, ops[0], ops[1], target, mask)
                         : ApplyUnaryOut(ufunc, ops[0], target, mask);
 
+                    return new[] { returned, BaseBuffer(target) };
+                }
+
+                // ---- out= beyond the elementwise ufuncs (coverage plan §B2) ---------------
+                //
+                // Same two-slot contract, over the non-ufunc APIs that DO expose out= in
+                // NumSharp: the scans (cumsum/cumprod), round_, clip, and nanargmax/nanargmin.
+                // The out operand is always the LAST slot; its prior contents were recorded by
+                // the generator, so out-of-window writes into a strided/offset/transposed out
+                // view are caught exactly as for the ufuncs.
+                case "out_scan":
+                {
+                    var target = ops[1];
+                    int? axis = p["axis"].ValueKind == JsonValueKind.Null ? (int?)null : p["axis"].GetInt32();
+                    var returned = p["ufunc"].GetString() == "cumsum"
+                        ? np.cumsum(ops[0], axis, null, target)
+                        : np.cumprod(ops[0], axis, null, target);
+                    return new[] { returned, BaseBuffer(target) };
+                }
+                case "out_round":
+                {
+                    var target = ops[1];
+                    var returned = np.round_(ops[0], p["decimals"].GetInt32(), target);
+                    return new[] { returned, BaseBuffer(target) };
+                }
+                case "out_clip":
+                {
+                    // operands: [a, lo(0-d), hi(0-d), out] — the scalar bounds ride as 0-d
+                    // operands so their dtype travels with the case (the registry clip shape).
+                    var target = ops[3];
+                    var returned = np.clip(ops[0], ops[1], ops[2], target);
+                    return new[] { returned, BaseBuffer(target) };
+                }
+                case "out_nanarg":
+                {
+                    var target = ops[1];
+                    int axis = p["axis"].GetInt32();
+                    var returned = p["ufunc"].GetString() == "nanargmax"
+                        ? np.nanargmax(ops[0], axis, target)
+                        : np.nanargmin(ops[0], axis, target);
                     return new[] { returned, BaseBuffer(target) };
                 }
 
@@ -422,8 +548,9 @@ namespace NumSharp.Tests.Fuzz
                     return new[] { q, r };
                 }
 
+                // The surface tier's tuple keys (the histogram family); unknown keys still throw there.
                 default:
-                    throw new NotSupportedException($"tuple op '{op}' is not registered in OpRegistry");
+                    return ApplySurfaceTuple(op, p, ops);
             }
         }
 
@@ -448,11 +575,15 @@ namespace NumSharp.Tests.Fuzz
                 case "min_scalar_type":
                     return np.min_scalar_type(ParseScalar(p["value"]));
                 case "dtype":
+                    // np.dtype of a scalar CLASS (the surface tier's scalar-type section) rather than of a string.
+                    if (IsScalarTypeDtypeCase(p))
+                        return ScalarTypeDtype("dtype", p);
                     return np.dtype(p["dtype"].GetString()).typecode;
                 case "common_type":
                     return np.common_type_code(ops);
+                // The surface tier's dtype-valued attributes (ndarray.dtype, finfo.dtype, iinfo.dtype).
                 default:
-                    throw new NotSupportedException($"dtype op '{op}' is not registered in OpRegistry");
+                    return ApplySurfaceDtype(op, p, ops);
             }
         }
 
@@ -464,11 +595,23 @@ namespace NumSharp.Tests.Fuzz
         /// </summary>
         public static string ApplyText(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
+            if (IsMatrixOp(op))
+                return ApplyMatrixText(op, p, ops);
+            // The series classes' printers and str attributes (OpRegistry.PolyClass.cs).
+            if (IsPolyClassOp(op))
+                return PolyClassText(op, p, ops);
             switch (op)
             {
+                // np.nditer's state contract between construction and close (OpRegistry.Nditer.cs).
+                case "nditer_protocol": return NditerProtocolFromCorpus(p, ops);
                 case "array_str": return np.array_str(ops[0]);
+                // numpy.polynomial's printing helpers (OpRegistry.PolySeries.cs).
+                case "polyutils.format_float": return PolyFormatFloat(p, ops);
+                case "set_default_printstyle": return PolySetDefaultPrintstyle(p, ops);
                 case "array_repr": return np.array_repr(ops[0]);
                 case "mintypecode": return np.mintypecode(p["typechars"].GetString()).ToString();
+                // np.mintypecode(x) of an ARRAY: its elements along the first axis (a 0-d array raises NumPy's TypeError).
+                case "mintypecode_array": return np.mintypecode(ops[0]).ToString();
                 // einsum_path returns the contraction planner's info STRING (shape-derived, so
                 // the operand values are irrelevant). Byte-identical to NumPy for non-ellipsis
                 // subscripts; the tuple's path structure is encoded in this same string.
@@ -497,8 +640,9 @@ namespace NumSharp.Tests.Fuzz
                            bits.ToString("x16", CultureInfo.InvariantCulture) + "|" +
                            string.Join(",", state.Key.Select(x => x.ToString(CultureInfo.InvariantCulture)));
                 }
+                // The surface tier's text keys (formatters, tolist / tofile text, str-valued attributes).
                 default:
-                    throw new NotSupportedException($"text op '{op}' is not registered in OpRegistry");
+                    return ApplySurfaceText(op, p, ops);
             }
         }
 
@@ -526,12 +670,25 @@ namespace NumSharp.Tests.Fuzz
                 "multiply" => np.multiply(a, b, o, w),
                 "divide" => np.divide(a, b, o, w),
                 "power" => np.power(a, b, o, w),
+                "float_power" => np.float_power(a, b, o, w),
                 "mod" => np.mod(a, b, o, w),
                 "floor_divide" => np.floor_divide(a, b, o, w),
+                "fmod" => np.fmod(a, b, o, w),
                 "arctan2" => np.arctan2(a, b, o, w),
                 "bitwise_and" => np.bitwise_and(a, b, o, w),
                 "bitwise_or" => np.bitwise_or(a, b, o, w),
                 "bitwise_xor" => np.bitwise_xor(a, b, o, w),
+                // min/max family — the np.* overloads gained out=/where= (2026-09-18); the third
+                // positional slot is `out`, the fourth `where`, exactly as the arithmetic ufuncs above.
+                "maximum" => np.maximum(a, b, o, w),
+                "minimum" => np.minimum(a, b, o, w),
+                "fmax" => np.fmax(a, b, o, w),
+                "fmin" => np.fmin(a, b, o, w),
+                "gcd" => np.gcd(a, b, o, w),
+                "lcm" => np.lcm(a, b, o, w),
+                "copysign" => np.copysign(a, b, o, w),
+                "nextafter" => np.nextafter(a, b, o, w),
+                "heaviside" => np.heaviside(a, b, o, w),
                 "less" => np.less(a, b, o, w),
                 "greater_equal" => np.greater_equal(a, b, o, w),
                 "equal" => np.equal(a, b, o, w),
@@ -544,17 +701,24 @@ namespace NumSharp.Tests.Fuzz
                 "sqrt" => np.sqrt(x, o, w),
                 "negative" => np.negative(x, o, w),
                 "abs" => np.abs(x, o, w),
+                "fabs" => np.fabs(x, o, w),
                 "square" => np.square(x, o, w),
+                "positive" => np.positive(x, o, w),
                 "exp" => np.exp(x, o, w),
                 "log" => np.log(x, o, w),
                 "sin" => np.sin(x, o, w),
                 "floor" => np.floor(x, o, w),
                 "ceil" => np.ceil(x, o, w),
+                "trunc" => np.trunc(x, o, w),
                 "rint" => np.rint(x, o, w),
                 "sign" => np.sign(x, o, w),
                 "reciprocal" => np.reciprocal(x, o, w),
+                "conjugate" => np.conjugate(x, o, w),
                 "invert" => np.invert(x, o, w),
                 "isnan" => np.isnan(x, o, w),
+                "isinf" => np.isinf(x, o, w),
+                "isfinite" => np.isfinite(x, o, w),
+                "signbit" => np.signbit(x, o, w),
                 _ => throw new NotSupportedException($"out_unary ufunc '{ufunc}'")
             };
 

@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Backends.Unmanaged.Pooling;
 using Python.Runtime;
 
 namespace NumSharp.Interop.PythonNet
@@ -187,14 +188,15 @@ namespace NumSharp.Interop.PythonNet
         // GIL); winners are owned by the session and swept by OnEngineShutdown.
 
         private static PyObject _npEmpty, _npFrombuffer, _npArray, _npAsarray, _npAsStrided,
-                                _npSharesMemory, _torchFromNumpy;
-        private static PyObject _ctypesCCharMul, _weakrefFinalize, _builtinsMemoryview;
-        private static PyObject _trueLiteral, _falseLiteral, _strC, _strB;
+                                _npSharesMemory, _torchFromNumpy, _npStringDType, _npNdarray;
+        private static PyObject _ctypesCCharMul, _weakrefFinalize, _builtinsMemoryview, _tryMemoryview;
+        private static PyObject _trueLiteral, _falseLiteral, _noneLiteral, _strC, _strB;
         private static PyObject _nameFromAddress, _nameReshape, _nameSetflags, _nameCast, _nameTobytes,
                                 _nameFormat, _nameItemsize, _nameShape, _nameCContiguous, _nameReadonly,
                                 _nameArrayInterface, _nameTypestr, _nameData, _nameStrides,
                                 _nameDetach, _nameCpu, _nameResolveConj, _nameResolveNeg, _nameNumpy,
-                                _nameToNumpy, _nameSize;
+                                _nameToNumpy, _nameSize, _nameDtype, _nameChar, _nameNaObject, _nameCoerce,
+                                _nameAstype, _nameReal, _nameImag;
         private static readonly PyObject[] _dtypeStrings = new PyObject[129]; // indexed by (int)NPTypeCode; max = Complex (128)
 
         /// <summary>Cached <c>numpy.empty</c>. Call under the GIL.</summary>
@@ -240,14 +242,64 @@ namespace NumSharp.Interop.PythonNet
         /// <summary>Cached <c>builtins.memoryview</c>. Call under the GIL.</summary>
         internal static PyObject BuiltinsMemoryview => GetCached(ref _builtinsMemoryview, static () => Builtins.GetAttr("memoryview"));
 
+        /// <summary>
+        ///     Cached Python helper <c>f(o)</c> that returns <c>memoryview(o)</c>, or <c>None</c> when <c>o</c> exports no
+        ///     buffer. Call under the GIL.
+        /// </summary>
+        /// <remarks>
+        ///     The import paths open a memoryview first and need to know when that fails, because an object without a
+        ///     buffer can still cross: a NEP 55 <c>StringDType</c> array (copied through numpy's <c>NpyString</c> C API) or
+        ///     a numpy array whose dtype only <c>__array_interface__</c> describes. Calling <c>memoryview</c> directly
+        ///     surfaces that failure as a pythonnet <see cref="PythonException"/>, and the .NET throw and catch cost about
+        ///     ten microseconds, three times the whole copy of a thousand short strings. Inside Python the failure costs
+        ///     about 0.7 microseconds and arrives as <c>None</c>; a buffer exporter pays one Python frame (about 40 ns).
+        ///     The caller re-runs the plain <c>memoryview</c> when it still needs the exporter's own error text.
+        /// </remarks>
+        internal static PyObject TryMemoryview => GetCached(ref _tryMemoryview, static () =>
+        {
+            using var globals = new PyDict();
+            PythonEngine.Exec(
+                "def _numsharp_try_memoryview(o, _memoryview=memoryview):\n" +
+                "    try:\n" +
+                "        return _memoryview(o)\n" +
+                "    except Exception:\n" +
+                "        return None\n",
+                globals);
+            return globals.GetItem("_numsharp_try_memoryview");
+        });
+
+        /// <summary>
+        ///     Cached <c>numpy.ndarray</c> — the class the <c>StringDType</c> detection tests an object against (a cheap
+        ///     <c>isinstance</c>, so an object that merely carries a <c>dtype</c> attribute is never read as an array).
+        ///     Call under the GIL.
+        /// </summary>
+        internal static PyObject NpNdarray => GetCached(ref _npNdarray, static () => Numpy.GetAttr("ndarray"));
+
         /// <summary>Cached optional <c>torch.from_numpy</c>. Call under the GIL.</summary>
         internal static PyObject TorchFromNumpy => GetCached(ref _torchFromNumpy, static () => Torch.GetAttr("from_numpy"));
+
+        /// <summary>
+        ///     Cached <c>numpy.dtypes.StringDType</c> — the NEP 55 class the <c>StringDType</c> export instantiates
+        ///     (NumPy 2.0+; the caller checks availability first through <see cref="NumpyStringApi.EnsureAvailable"/>).
+        ///     Call under the GIL.
+        /// </summary>
+        internal static PyObject NpStringDType => GetCached(ref _npStringDType, static () =>
+        {
+            using var dtypes = Numpy.GetAttr("dtypes");
+            return dtypes.GetAttr("StringDType");
+        });
 
         /// <summary>Cached Python <c>True</c> (counterpart of <see cref="FalseLiteral"/> for <c>setflags</c>).</summary>
         internal static PyObject TrueLiteral => GetCached(ref _trueLiteral, static () => true.ToPython());
 
         /// <summary>Cached Python <c>False</c> (first positional of <c>ndarray.setflags</c> is <c>write</c>).</summary>
         internal static PyObject FalseLiteral => GetCached(ref _falseLiteral, static () => false.ToPython());
+
+        /// <summary>
+        ///     Cached Python <c>None</c> — the <c>na_object</c> of a <c>StringDType(na_object=None)</c> the export builds.
+        ///     Session-owned like the other literals: callers never dispose it.
+        /// </summary>
+        internal static PyObject NoneLiteral => GetCached(ref _noneLiteral, static () => PythonEngine.Eval("None"));
 
         /// <summary>Cached <c>'C'</c> (memoryview.tobytes order).</summary>
         internal static PyObject StrC => GetCached(ref _strC, static () => new PyString("C"));
@@ -282,6 +334,30 @@ namespace NumSharp.Interop.PythonNet
         internal static PyObject NameNumpy => GetCached(ref _nameNumpy, static () => new PyString("numpy"));
         internal static PyObject NameToNumpy => GetCached(ref _nameToNumpy, static () => new PyString("to_numpy"));
         internal static PyObject NameSize => GetCached(ref _nameSize, static () => new PyString("size"));
+
+        // The text bridge's attribute names: an ndarray's descriptor and its NEP 55 parameters, the object-array conversion,
+        // and a complex missing-data object's parts.
+
+        /// <summary><c>'dtype'</c> — an ndarray's descriptor (the text bridge tells <c>StringDType</c> arrays apart by it).</summary>
+        internal static PyObject NameDtype => GetCached(ref _nameDtype, static () => new PyString("dtype"));
+
+        /// <summary><c>'char'</c> — a descriptor's type character (<c>'T'</c> for <c>StringDType</c>).</summary>
+        internal static PyObject NameChar => GetCached(ref _nameChar, static () => new PyString("char"));
+
+        /// <summary><c>'na_object'</c> — a <c>StringDType</c>'s missing-data object (absent when none was given).</summary>
+        internal static PyObject NameNaObject => GetCached(ref _nameNaObject, static () => new PyString("na_object"));
+
+        /// <summary><c>'coerce'</c> — whether a <c>StringDType</c> stores <c>str(value)</c> for a non-<c>str</c> value.</summary>
+        internal static PyObject NameCoerce => GetCached(ref _nameCoerce, static () => new PyString("coerce"));
+
+        /// <summary><c>'astype'</c> — the conversion an object array of <c>str</c> takes into <c>StringDType</c>.</summary>
+        internal static PyObject NameAstype => GetCached(ref _nameAstype, static () => new PyString("astype"));
+
+        /// <summary><c>'real'</c> — the real part of a complex missing-data object.</summary>
+        internal static PyObject NameReal => GetCached(ref _nameReal, static () => new PyString("real"));
+
+        /// <summary><c>'imag'</c> — the imaginary part of a complex missing-data object.</summary>
+        internal static PyObject NameImag => GetCached(ref _nameImag, static () => new PyString("imag"));
 
         /// <summary>
         ///     Cached PyString of <see cref="NDArrayPythonInterop.ToNumpyDtypeStr"/> for <paramref name="tc"/>
@@ -325,8 +401,11 @@ namespace NumSharp.Interop.PythonNet
             DisposeModule(ref _ctypesCCharMul);
             DisposeModule(ref _weakrefFinalize);
             DisposeModule(ref _builtinsMemoryview);
+            DisposeModule(ref _tryMemoryview);
+            DisposeModule(ref _npNdarray);
             DisposeModule(ref _trueLiteral);
             DisposeModule(ref _falseLiteral);
+            DisposeModule(ref _noneLiteral);
             DisposeModule(ref _strC);
             DisposeModule(ref _strB);
             DisposeModule(ref _nameFromAddress);
@@ -350,8 +429,18 @@ namespace NumSharp.Interop.PythonNet
             DisposeModule(ref _nameNumpy);
             DisposeModule(ref _nameToNumpy);
             DisposeModule(ref _nameSize);
+            DisposeModule(ref _npStringDType);
+            DisposeModule(ref _nameDtype);
+            DisposeModule(ref _nameChar);
+            DisposeModule(ref _nameNaObject);
+            DisposeModule(ref _nameCoerce);
+            DisposeModule(ref _nameAstype);
+            DisposeModule(ref _nameReal);
+            DisposeModule(ref _nameImag);
             for (int i = 0; i < _dtypeStrings.Length; i++)
                 DisposeModule(ref _dtypeStrings[i]);
+            // NumPy's C-API table belongs to this session's numpy module; a new session resolves its own.
+            NumpyStringApi.SessionEnded();
         }
 
         // ---- live-conversion registries (lock-free) --------------------------------------------
@@ -716,17 +805,30 @@ namespace NumSharp.Interop.PythonNet
     {
         private readonly PyBuffer _buffer;  // PEP 3118 lease (null on the array-interface path)
         private readonly PyObject _holder;  // strong-ref container (null on the PyBuffer path)
-        private readonly long _bytes;       // GC memory-pressure registered for this lease
+        private readonly long _bytes;       // the Python-owned bytes this lease keeps alive, booked with the pool
         private int _released;              // NumSharp-side handoff happened (enqueue exactly once)
         private int _disposed;              // Python-side resources actually released
 
+        /// <summary>
+        ///     Opens a lease over a Python-owned buffer and books its bytes with NumSharp's memory accounting
+        ///     (<see cref="SizeBucketedBufferPool.BookForeign"/>) until the Python side is released.
+        /// </summary>
+        /// <remarks>
+        ///     The bytes are BOOKED, not reported with <see cref="GC.AddMemoryPressure"/>: the GC counts every addition toward
+        ///     its next full collection even after the matching removal, so 5,000 views of one 602 KB numpy array, each
+        ///     disposed at once, ran 8 / 15 gen-2 collections; booked, none (measured 2026-11-06, P8 of the bridge QA). A view
+        ///     dropped undisposed still gets collected: a growing booking paces a gen-0 collection, whose finalizers queue the
+        ///     lease's release.
+        /// </remarks>
+        /// <param name="buffer">The locked PEP 3118 buffer, or null on the array-interface path.</param>
+        /// <param name="holder">The strong reference that keeps the exporter alive, or null on the PyBuffer path.</param>
+        /// <param name="bytes">The bytes of Python memory the view addresses (nothing booked for zero or less).</param>
         internal ImportLease(PyBuffer buffer, PyObject holder, long bytes)
         {
             _buffer = buffer;
             _holder = holder;
             _bytes = bytes;
-            if (_bytes > 0)
-                GC.AddMemoryPressure(_bytes);
+            SizeBucketedBufferPool.BookForeign(_bytes);
         }
 
         /// <summary>
@@ -788,10 +890,13 @@ namespace NumSharp.Interop.PythonNet
             DisposeUnderGil();
         }
 
+        /// <summary>
+        ///     The lease's last step on every path (released under the GIL, or defused after engine death): gives the
+        ///     booking back and uncounts the lease. Counters only, so any thread and any engine phase is safe.
+        /// </summary>
         private void Complete()
         {
-            if (_bytes > 0)
-                GC.RemoveMemoryPressure(_bytes);
+            SizeBucketedBufferPool.ReturnForeign(_bytes);
             PythonRuntimeInterop.OnImportReleased(this);
         }
     }

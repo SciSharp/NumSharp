@@ -1,6 +1,7 @@
+using System;
+using System.Globalization;
 using System.IO;
-using System.Text;
-using NumSharp.Backends.Printing;
+using NumSharp.IO;
 
 namespace NumSharp
 {
@@ -11,24 +12,48 @@ namespace NumSharp
         ///     <para>
         ///     Data is always written in C (row-major) order, independent of the array's own layout —
         ///     a sliced / strided / transposed / broadcast view writes its logical elements, NOT the raw
-        ///     underlying buffer. The data produced can be recovered with <see cref="np.fromfile(string,System.Type)"/>.
+        ///     underlying buffer. The data produced can be recovered with <see cref="np.fromfile(string, DType, long, string, long, NDArray)"/>.
         ///     </para>
         /// </summary>
         /// <param name="fid">A filename. The file is created (truncated if it exists).</param>
         /// <param name="sep">
         ///     Separator between items for text output. If "" (empty, the default) a binary file is
-        ///     written, equivalent to <c>stream.Write(a.tobytes('C'))</c>.
+        ///     written, equivalent to <c>stream.Write(a.tobytes('C'))</c>. Null is Python's <c>None</c>, which NumPy
+        ///     refuses.
         /// </param>
         /// <param name="format">
         ///     Python-style <c>%</c> format string for text output (ignored in binary mode). Each entry
-        ///     is written as <c>format % item</c>. The default <c>"%s"</c> uses the element's NumPy
-        ///     scalar string (e.g. <c>1.5</c>, <c>(1+2j)</c>, <c>True</c>).
+        ///     is written as <c>format % (item,)</c>, where <c>item</c> is the Python object NumPy's <c>getitem</c>
+        ///     returns (a <c>float</c> for every float dtype, an <c>int</c>, a <c>bool</c>, a <c>complex</c>, a
+        ///     <c>str</c>), with CPython's rules and errors. <c>"%s"</c> (the default) and <c>""</c> write
+        ///     <c>str(item)</c> (e.g. <c>1.5</c>, <c>(1+2j)</c>, <c>True</c>). Null is Python's <c>None</c>, which NumPy
+        ///     refuses.
         /// </param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.tofile.html</remarks>
+        /// <remarks>
+        ///     <para>
+        ///     <paramref name="sep"/> and <paramref name="format"/> are checked before the file is opened, as NumPy's
+        ///     argument parsing checks them: neither may be null (<c>None</c>) or hold a NUL or a lone surrogate, so a bad one
+        ///     creates no file and leaves an existing one as it is.
+        ///     </para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.tofile.html</para>
+        /// </remarks>
+        /// <exception cref="ValueError"><paramref name="sep"/> or <paramref name="format"/> holds a NUL (<c>embedded null
+        ///     character</c>), or a malformed format / a NaN under an integer conversion (see the stream overload).</exception>
+        /// <exception cref="UnicodeEncodeError"><paramref name="sep"/> or <paramref name="format"/> holds a lone surrogate,
+        ///     or an element's text is not ASCII (see the stream overload).</exception>
+        /// <exception cref="TypeError">A null <paramref name="sep"/> or <paramref name="format"/> (NumPy's <c>"s"</c>
+        ///     converter: <c>tofile() argument 2 must be str, not None</c>, argument 3 for the format), or a conversion the
+        ///     elements do not take (see the stream overload).</exception>
+        /// <exception cref="OverflowException">See the stream overload.</exception>
+        /// <exception cref="OSError">Binary mode over a <c>StringDType</c> array.</exception>
         public void tofile(string fid, string sep = "", string format = "%s")
         {
-            // NumPy opens the filename with mode "wb" (create + truncate).
-            using var fs = new FileStream(fid, FileMode.Create, FileAccess.Write);
+            // NumPy parses sep and format ("O|ss": tofile's arguments 2 and 3) before it opens the file: a bad one creates
+            // no file.
+            CheckToFileArgument(sep, 2);
+            CheckToFileArgument(format, 3);
+            // NumPy opens the filename with mode "wb" (create + truncate), shared as Python's open() shares it.
+            using var fs = NumSharp.IO.NDFileShare.Create(fid);
             tofile(fs, sep, format);
         }
 
@@ -38,90 +63,72 @@ namespace NumSharp
         ///     file-object <c>tofile</c>. Data is always in C (row-major) order.
         /// </summary>
         /// <param name="stream">An open, writeable stream.</param>
-        /// <param name="sep">Separator between items for text output; "" (default) writes binary.</param>
-        /// <param name="format">Python-style <c>%</c> format for text output (default <c>"%s"</c>).</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.tofile.html</remarks>
+        /// <param name="sep">Separator between items for text output; "" (default) writes binary. It is written as its
+        ///     UTF-8 bytes, as NumPy writes the C string. Null is Python's <c>None</c>, which NumPy refuses.</param>
+        /// <param name="format">Python-style <c>%</c> format for text output (default <c>"%s"</c>): each element is written
+        ///     as <c>format % (item,)</c> with the Python object NumPy's <c>getitem</c> returns. Null is Python's
+        ///     <c>None</c>, which NumPy refuses.</param>
+        /// <remarks>
+        ///     <para>
+        ///     Text mode is NumPy's <c>PyArray_ToFile</c>: for each element in C order, <c>str(item)</c> (format <c>""</c> or
+        ///     <c>"%s"</c>) or <c>format % (item,)</c>, then the separator except after the last. <c>item</c> is a Python
+        ///     <c>float</c> for every float dtype (a <c>float32</c> 0.1 writes <c>0.10000000149011612</c>), an <c>int</c>,
+        ///     a <c>bool</c> (an <c>int</c> to Python's <c>%</c>: <c>'%x'</c> of <c>True</c> is <c>1</c>), a
+        ///     <c>complex</c>, a <c>str</c> / <c>bytes</c>, or a <c>StringDType</c> element (a <c>str</c>, or the NA
+        ///     object). NumSharp's <c>Char</c> elements are <c>int</c>s (a <c>uint16</c>) and its <c>Decimal</c> elements
+        ///     <c>float</c>s.
+        ///     </para>
+        ///     <para>
+        ///     Each element's text is written as ASCII (NumPy's <c>PyUnicode_AsASCIIString</c>); a non-ASCII text — a
+        ///     string element, a <c>%c</c> past 127, non-ASCII literal text in the format — raises CPython's
+        ///     <see cref="UnicodeEncodeError"/>, after the elements before it are written. (NumPy 2.4.2 does not check that
+        ///     encode's result and crashes the process there.)
+        ///     </para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.tofile.html</para>
+        /// </remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is null (after the checks of
+        ///     <paramref name="sep"/> and <paramref name="format"/>, which NumPy's argument parsing makes first).</exception>
+        /// <exception cref="ValueError"><paramref name="sep"/> or <paramref name="format"/> holds a NUL (<c>embedded null
+        ///     character</c>); a malformed format (<c>incomplete format</c>, <c>unsupported format character 'y' (0x79) at
+        ///     index 1</c>); a NaN under an integer conversion.</exception>
+        /// <exception cref="UnicodeEncodeError"><paramref name="sep"/> or <paramref name="format"/> holds a lone surrogate
+        ///     (CPython's UTF-8 error); an element's text is not ASCII.</exception>
+        /// <exception cref="TypeError">A null <paramref name="sep"/> or <paramref name="format"/> (<c>tofile() argument 2 must
+        ///     be str, not None</c>, argument 3 for the format), checked before anything is written; or CPython's
+        ///     <c>TypeError</c> of <c>format % (item,)</c>, unwrapped as NumPy leaves it: <c>not enough arguments for format
+        ///     string</c>, <c>%x format: an integer is required, not float</c>, <c>* wants int</c>.</exception>
+        /// <exception cref="OverflowException">CPython's <c>OverflowError</c>: an infinity under an integer conversion, a
+        ///     <c>%c</c> code point out of range, a <c>*</c> width past a C <c>ssize_t</c>.</exception>
+        /// <exception cref="OSError">Binary mode over a <c>StringDType</c> array.</exception>
         public void tofile(Stream stream, string sep = "", string format = "%s")
         {
+            // NumPy's argument parsing ("O|ss") converts sep and format before tofile looks at its file object.
+            CheckToFileArgument(sep, 2);
+            CheckToFileArgument(format, 3);
             if (stream is null) throw new System.ArgumentNullException(nameof(stream));
 
-            if (string.IsNullOrEmpty(sep))
-                WriteBinary(stream);
-            else
-                WriteText(stream, sep, format);
+            ArrayFileIO.ToFile(this, stream, sep, format);
         }
 
-        // Binary: raw item bytes in C-order. Contiguous offset-0 views stream straight from their
-        // buffer (no managed copy); every other layout is materialized C-contiguous first — mirroring
-        // NumPy's PyArray_ToFile (whole-buffer fwrite when ISCONTIGUOUS, else a C-order element walk).
-        private void WriteBinary(Stream stream)
+        /// <summary>
+        ///     <c>PyArg_ParseTupleAndKeywords</c>' <c>"s"</c> converter, which <c>tofile</c> applies to <c>sep</c> (its
+        ///     argument 2) and <c>format</c> (argument 3): <c>None</c> is not a <c>str</c>, the text must encode to UTF-8
+        ///     (CPython refuses a lone surrogate) and hold no NUL (the C string would end there).
+        /// </summary>
+        /// <param name="s">The argument; null is Python's <c>None</c>, empty has nothing to check.</param>
+        /// <param name="position">The argument's position in NumPy's <c>tofile(fid, sep, format)</c>, which the
+        ///     <c>None</c> text names.</param>
+        /// <exception cref="TypeError">A null argument: <c>tofile() argument 2 must be str, not None</c> (CPython's text for
+        ///     a <c>"s"</c> argument given <c>None</c>).</exception>
+        /// <exception cref="UnicodeEncodeError">A lone surrogate: <c>'utf-8' codec can't encode character '\ud800' in
+        ///     position 0: surrogates not allowed</c>, checked first as CPython encodes before it looks for a NUL.</exception>
+        /// <exception cref="ValueError"><c>embedded null character</c>.</exception>
+        internal static void CheckToFileArgument(string s, int position)
         {
-            if (size == 0 || dtypesize == 0)
-                return;
-
-            bool directable = Shape.IsContiguous && Shape.offset == 0;
-            NDArray src = directable ? this : this.copy('C');
-
-            unsafe
-            {
-                long len = checked((long)src.size * src.dtypesize);
-                using (var ums = new UnmanagedMemoryStream((byte*)src.Storage.Address, len))
-                    ums.CopyTo(stream);
-            }
-
-            // Keep the (possibly freshly-copied) source alive until the unmanaged read completes.
-            System.GC.KeepAlive(src);
-        }
-
-        // Text: each element in C-order is rendered via `format % item` (default "%s" == the NumPy scalar
-        // string) and joined by `sep` — no trailing separator. GetAtIndex walks logical C-order through
-        // the shape's strides, so any layout is honored without a prior materialization.
-        private void WriteText(Stream stream, string sep, string format)
-        {
-            if (size == 0)
-                return;
-
-            NPTypeCode tc = typecode;
-            bool useScalarStr = string.IsNullOrEmpty(format) || format == "%s";
-            long n = size;
-
-            // ASCII-compatible, no BOM; leave the caller's stream open.
-            using var sw = new StreamWriter(stream, new UTF8Encoding(false), 1 << 16, leaveOpen: true);
-
-            // Batch elements into a StringBuilder and flush in ~32 KB chunks — one encoded Write per
-            // chunk instead of two per element keeps the writer overhead off the hot path while bounding
-            // memory (matters for very large arrays; a per-element StreamWriter.Write is otherwise a
-            // measurable tax on top of the per-element scalar formatting).
-            // NumPy's tofile pulls each element through getitem, which returns a Python float (double)
-            // for float16/float32 — so the emitted text is that widened double's, not the value rendered
-            // at the array's narrower native precision (e.g. float32 0.1 -> "0.10000000149011612", not
-            // "0.1"). Widen Half/Single to double here to match; every other dtype already renders at the
-            // width getitem hands back (int, bool, complex128, char).
-            bool widenToDouble = tc == NPTypeCode.Half || tc == NPTypeCode.Single;
-            NPTypeCode renderTc = widenToDouble ? NPTypeCode.Double : tc;
-
-            var sb = new StringBuilder(1 << 16);
-            for (long i = 0; i < n; i++)
-            {
-                object v = GetAtIndex(i);
-                if (widenToDouble)
-                    v = tc == NPTypeCode.Half ? (double)(System.Half)v : (double)(float)v;
-                sb.Append(useScalarStr
-                    ? Backends.Printing.ArrayFormatter.ScalarStr(v, renderTc)
-                    : PrintfFormatter.Format(format, v, renderTc));
-
-                if (i != n - 1)
-                    sb.Append(sep);
-
-                if (sb.Length >= (1 << 15))
-                {
-                    sw.Write(sb);
-                    sb.Clear();
-                }
-            }
-
-            if (sb.Length > 0)
-                sw.Write(sb);
+            if (s is null)
+                throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"tofile() argument {position} must be str, not None"));
+            // The encode, then the NUL test (the bytes themselves are written by the text mode later, encoded again).
+            ArrayFileIO.CStringArgument(s);
         }
     }
 }

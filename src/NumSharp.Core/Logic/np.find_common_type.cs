@@ -2,8 +2,10 @@
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -89,10 +91,24 @@ namespace NumSharp
     {
         #region Privates
 
+        /// <summary>The length of <see cref="__test_types"/> (NumPy's <c>__len_test_types</c>).</summary>
         const int __len_test_types = 19;
+
+        /// <summary>
+        ///     NumPy 1.26.4's <c>__test_types = '?' + typecodes['AllInteger'][:-2] + typecodes['AllFloat'] + 'O'</c>, with 1.26's
+        ///     <c>AllInteger</c> = <c>'bBhHiIlLqQpP'</c>. <see cref="_can_coerce_all(NPTypeCode[], int)"/> walks it in this order
+        ///     and returns the FIRST type every input casts to safely, so the order is the algorithm.
+        /// </summary>
+        /// <remarks>
+        ///     Pinned to 1.26.4, the last NumPy with <c>find_common_type</c>: NumPy 2's <c>AllInteger</c> inserts <c>'nN'</c>,
+        ///     but 2.0 removed the function, so no NumPy 2 list exists. The characters are NumPy's, so their storage codes
+        ///     depend on the host (<c>'l'</c> is int32 on Windows): <see cref="FindCommonTypeCandidates"/> resolves them.
+        /// </remarks>
         const string __test_types = "?bBhHiIlLqQefdgFDGO";
 
         /// <summary>
+        ///  NumPy 1.26.4's <c>_kind_list</c>, the kind order <c>find_common_type</c> compares an array type's kind with a
+        ///  scalar type's kind in:<br></br>
         ///  b -> boolean<br></br>
         ///  u -> unsigned integer<br></br>
         ///  i -> signed integer<br></br>
@@ -106,6 +122,44 @@ namespace NumSharp
         ///  O -> Python object
         /// </summary>
         private static readonly char[] _kind_list = {'b', 'u', 'i', 'f', 'c', 'S', 'U', 'V', 'O', 'M', 'm'};
+
+        /// <summary>
+        ///     The storage code each <see cref="__test_types"/> character names on this host, index for index, or
+        ///     <see cref="NPTypeCode.Empty"/> where NumSharp has no such dtype (<c>'F'</c> complex64, <c>'O'</c> object).
+        /// </summary>
+        /// <remarks>
+        ///     Resolved once through <see cref="NPTypeCodeExtensions.ToTypeCode(NPY_TYPECHAR)"/>, the parser, so <c>'l'</c>/<c>'L'</c>
+        ///     follow C <c>long</c> and <c>'g'</c>/<c>'G'</c> land on the float64/complex128 lanes. A nested class with an explicit
+        ///     static constructor, so the table is built on the first search and never during <see cref="np"/>'s own static
+        ///     initialization: a field initializer of <see cref="np"/> could run before the parser's tables (another partial
+        ///     file) exist. Skipping the two absent dtypes never changes an answer for NumSharp's inputs: none of them casts
+        ///     safely to complex64 without also casting to float64, and every numeric type reaches complex128 before object.
+        /// </remarks>
+        private static class FindCommonTypeCandidates
+        {
+            /// <summary>The candidate storage codes, aligned with <see cref="__test_types"/>.</summary>
+            internal static readonly NPTypeCode[] Codes;
+
+            /// <summary>Builds <see cref="Codes"/> on first use.</summary>
+            static FindCommonTypeCandidates()
+            {
+                var codes = new NPTypeCode[__len_test_types];
+                for (int i = 0; i < codes.Length; i++)
+                {
+                    try
+                    {
+                        codes[i] = ((NPY_TYPECHAR)__test_types[i]).ToTypeCode();
+                    }
+                    catch (NotSupportedException)
+                    {
+                        // complex64 and object: NumPy's candidates that NumSharp cannot store. The search skips them.
+                        codes[i] = NPTypeCode.Empty;
+                    }
+                }
+
+                Codes = codes;
+            }
+        }
 
 	        // %foreach all_dtypes%
                 // {NPTypeCode.#1, 10000 },
@@ -768,12 +822,56 @@ namespace NumSharp
         // @formatter:on — enable formatter after this line
 
         /// <summary>
-        ///     Determine common type following standard coercion rules.
+        ///     Determine common type following standard coercion rules: NumPy 1.26.4's <c>np.find_common_type</c>, the last
+        ///     NumPy that has it (deprecated in 1.25, removed in 2.0). Kept on purpose, so code written against NumPy 1.x
+        ///     compiles and runs unchanged; new code writes <see cref="promote_types(DType, DType)"/> or
+        ///     <see cref="result_type(object[])"/>, passing the Python values <c>0</c>, <c>0.0</c> or <c>0j</c> for the scalar
+        ///     types.
         /// </summary>
-        /// <param name="array_types">A list of dtypes or dtype convertible objects representing arrays. Can be null.</param>
-        /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
-        /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <param name="array_types">The dtypes of the arrays. Null counts as none.</param>
+        /// <param name="scalar_types">The dtypes of the scalars. Null counts as none.</param>
+        /// <returns>
+        ///     The common data type, which is the maximum of <paramref name="array_types"/> ignoring
+        ///     <paramref name="scalar_types"/>, unless the maximum of <paramref name="scalar_types"/> is of a different, higher
+        ///     kind (<c>dtype.kind</c>): then the first type both maxima cast to safely. Null (NumPy's None) when nothing is
+        ///     given, or when no NumPy dtype NumSharp has holds the inputs (str with a number: NumPy's answer, object, is not a
+        ///     NumSharp dtype).
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        ///     NumPy 2 raises <c>AttributeError: `np.find_common_type` was removed in the NumPy 2.0 release. Use
+        ///     `numpy.promote_types` or `numpy.result_type` instead. To achieve semantics for the `scalar_types` argument, use
+        ///     `numpy.result_type` and pass the Python values `0`, `0.0`, or `0j`.</c>
+        /// </para>
+        /// <para>
+        ///     <b>The maximum is a search, not a promotion.</b> Each maximum is the first type of NumPy's candidate list
+        ///     <c>?bBhHiIlLqQefdgFDGO</c> that every input casts to safely, so <c>[int8, uint8, float16]</c> gives float16 where
+        ///     a pairwise <c>promote_types</c> chain gives float32. A higher-kind scalar can move the result:
+        ///     <c>find_common_type([uint8], [int16])</c> is int16 (NEP 50's weak-scalar rule, which NumSharp's arithmetic uses,
+        ///     keeps uint8).
+        /// </para>
+        /// <para>
+        ///     The rule is NumPy 1.x's, not NEP 50's: a scalar type counts only when its KIND is higher than every array
+        ///     type's, and then by its type, never by a value. <c>np.result_type</c> is the NumPy 2 rule, where a C#
+        ///     literal is a weak Python scalar (<c>np.result_type(int8_array, 300)</c> is int8) and a dtype is always
+        ///     strong (<c>np.result_type(np.int8, np.int64)</c> is int64, where <c>find_common_type([int8], [int64])</c> is int8).
+        /// </para>
+        /// <para>
+        ///     NumSharp's own dtypes (<see cref="NPTypeCode.Decimal"/>, <see cref="NPTypeCode.Char"/>) have no place in NumPy's
+        ///     candidate list: any list holding one is promoted with NumSharp's promotion table instead, the rule its arithmetic
+        ///     uses (decimal wins over the floats, char promotes as uint16).
+        /// </para>
+        /// <para>
+        ///     NumPy 1.26's page: https://numpy.org/doc/1.26/reference/generated/numpy.find_common_type.html; the
+        ///     replacement: https://numpy.org/doc/stable/reference/generated/numpy.result_type.html
+        /// </para>
+        /// </remarks>
+        /// <exception cref="ArgumentException">
+        ///     An entry is <see cref="NPTypeCode.Empty"/> (no dtype), which is also what a <see cref="Type"/> that is not a
+        ///     NumSharp element type converts to.
+        /// </exception>
+        /// <exception cref="NotSupportedException">A dtype string names a dtype NumSharp cannot store (the <see cref="string"/> overload).</exception>
+        /// <exception cref="TypeError">A dtype string NumPy cannot parse either (the <see cref="string"/> overload; NumPy's <c>data type 'x' not understood</c>).</exception>
         public static DType find_common_type(NPTypeCode[] array_types, NPTypeCode[] scalar_types)
         {
             return _FindCommonType(array_types ?? Array.Empty<NPTypeCode>(), scalar_types ?? Array.Empty<NPTypeCode>());
@@ -781,86 +879,60 @@ namespace NumSharp
 
         #region Overloads
 
-        /// <summary>
-        ///     Determine common type following standard coercion rules.
-        /// </summary>
-        /// <param name="array_types">A list of dtypes or dtype convertible objects representing arrays. Can be null.</param>
-        /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
-        /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <inheritdoc cref="find_common_type(NPTypeCode[], NPTypeCode[])"/>
         public static DType find_common_type(Type[] array_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), Array.Empty<NPTypeCode>());
         }
 
-        /// <summary>
-        ///     Determine common type following standard coercion rules.
-        /// </summary>
-        /// <param name="array_types">A list of dtypes or dtype convertible objects representing arrays. Can be null.</param>
-        /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
-        /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <inheritdoc cref="find_common_type(NPTypeCode[], NPTypeCode[])"/>
         public static DType find_common_type(Type[] array_types, Type[] scalar_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>());
         }
 
-        /// <summary>
-        ///     Determine common type following standard coercion rules.
-        /// </summary>
-        /// <param name="array_types">A list of dtypes or dtype convertible objects representing arrays. Can be null.</param>
-        /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
-        /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <inheritdoc cref="find_common_type(NPTypeCode[], NPTypeCode[])"/>
         public static DType find_common_type(string[] array_types, string[] scalar_types)
         {
-            return _FindCommonType(array_types?.Select(v => np.dtype(v).typecode).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => np.dtype(v).typecode).ToArray() ?? Array.Empty<NPTypeCode>());
+            // GetTypeCode, not typecode: a datetime string parses to a descriptor without storage, which should say so
+            // instead of turning into Empty and failing later as "no dtype".
+            return _FindCommonType(array_types?.Select(v => np.dtype(v).GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => np.dtype(v).GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>());
         }
 
-        /// <summary>
-        ///     Determine common type following standard coercion rules.
-        /// </summary>
-        /// <param name="array_types">A list of dtypes or dtype convertible objects representing arrays. Can be null.</param>
-        /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
-        /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <inheritdoc cref="find_common_type(NPTypeCode[], NPTypeCode[])"/>
         public static DType find_common_type(Type[] array_types, NPTypeCode[] scalar_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types ?? Array.Empty<NPTypeCode>());
         }
 
-        /// <summary>
-        ///     Determine common type following standard coercion rules.
-        /// </summary>
-        /// <param name="array_types">A list of dtypes or dtype convertible objects representing arrays. Can be null.</param>
-        /// <param name="scalar_types">A list of dtypes or dtype convertible objects representing scalars.Can be null.</param>
-        /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <inheritdoc cref="find_common_type(NPTypeCode[], NPTypeCode[])"/>
         public static DType find_common_type(NPTypeCode[] array_types, Type[] scalar_types)
         {
             return _FindCommonType(array_types ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>());
         }
 
         /// <summary>
-        ///     Determine common type following standard coercion rules — the <see cref="DType"/> form, which is what the
-        ///     <c>np.float32</c>/<c>np.int64</c> spellings are (<c>new[] { np.float32, np.int64 }</c> is a <c>DType[]</c>).
+        ///     <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/> with no scalar types, in the <see cref="DType"/> form
+        ///     the <c>np.float32</c>/<c>np.int64</c> spellings are (<c>new[] { np.float32, np.int64 }</c> is a <c>DType[]</c>).
         /// </summary>
-        /// <param name="array_types">A list of dtype descriptors representing arrays. Can be null.</param>
-        /// <returns>The common data type of <paramref name="array_types"/> (no scalar types).</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <param name="array_types">The dtypes of the arrays. Null counts as none.</param>
+        /// <returns>The first type of NumPy's candidate list every entry casts to safely, or null (NumPy's None) for none.</returns>
+        /// <inheritdoc cref="find_common_type(NPTypeCode[], NPTypeCode[])" path="/remarks"/>
+        /// <exception cref="NotSupportedException">An entry has no NumSharp storage yet (a datetime64 descriptor).</exception>
         public static DType find_common_type(DType[] array_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), Array.Empty<NPTypeCode>());
         }
 
         /// <summary>
-        ///     Determine common type following standard coercion rules — the <see cref="DType"/> form, which is what the
+        ///     <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/> in the <see cref="DType"/> form the
         ///     <c>np.float32</c>/<c>np.int64</c> spellings are (<c>new[] { np.float32, np.int64 }</c> is a <c>DType[]</c>).
         /// </summary>
-        /// <param name="array_types">A list of dtype descriptors representing arrays. Can be null.</param>
-        /// <param name="scalar_types">A list of dtype descriptors representing scalars. Can be null.</param>
-        /// <returns>The common data type, which is the maximum of array_types ignoring scalar_types, unless the maximum of scalar_types is of a different kind (dtype.kind). If the kind is not understood, then None is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.result_type.html</remarks>
+        /// <param name="array_types">The dtypes of the arrays. Null counts as none.</param>
+        /// <param name="scalar_types">The dtypes of the scalars. Null counts as none.</param>
+        /// <returns>See <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/>.</returns>
+        /// <inheritdoc cref="find_common_type(NPTypeCode[], NPTypeCode[])" path="/remarks"/>
+        /// <exception cref="NotSupportedException">An entry has no NumSharp storage yet (a datetime64 descriptor).</exception>
         public static DType find_common_type(DType[] array_types, DType[] scalar_types)
         {
             return _FindCommonType(array_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>(), scalar_types?.Select(v => v.GetTypeCode()).ToArray() ?? Array.Empty<NPTypeCode>());
@@ -868,40 +940,114 @@ namespace NumSharp
 
         #endregion
 
+        /// <summary>
+        ///     Reads NumSharp's frozen array-array promotion table, refusing the string lane by name. The table has no row
+        ///     for <see cref="NPTypeCode.String"/>: a string operand that reaches it came through a numeric path without a
+        ///     string guard, and the dictionary's own <see cref="KeyNotFoundException"/> would name no operation.
+        /// </summary>
+        /// <param name="key">The two type codes, in table order.</param>
+        /// <returns>The promoted type code.</returns>
+        /// <exception cref="NotSupportedException">Either code is the string lane.</exception>
+        /// <exception cref="KeyNotFoundException">Any other pair the table lacks (unchanged behavior).</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static NPTypeCode PromoteArrArr((NPTypeCode, NPTypeCode) key)
+        {
+            if (_nptypemap_arr_arr.TryGetValue(key, out var promoted))
+                return promoted;
+            throw PromotionTableMiss(key);
+        }
+
+        /// <summary>
+        ///     Reads NumSharp's frozen array-scalar promotion table; the string lane is refused as in
+        ///     <see cref="PromoteArrArr"/>.
+        /// </summary>
+        /// <param name="key">The array and scalar type codes.</param>
+        /// <returns>The promoted type code.</returns>
+        /// <exception cref="NotSupportedException">Either code is the string lane.</exception>
+        /// <exception cref="KeyNotFoundException">Any other pair the table lacks (unchanged behavior).</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static NPTypeCode PromoteArrScalar((NPTypeCode, NPTypeCode) key)
+        {
+            if (_nptypemap_arr_scalar.TryGetValue(key, out var promoted))
+                return promoted;
+            throw PromotionTableMiss(key);
+        }
+
+        /// <summary>
+        ///     The exception for a pair missing from a promotion table: a clear refusal when a string array reached a
+        ///     numeric operation, else the dictionary's own exception (the pre-existing behavior for any other miss).
+        /// </summary>
+        /// <param name="key">The missing pair.</param>
+        /// <returns>The exception (not thrown).</returns>
+        private static Exception PromotionTableMiss((NPTypeCode, NPTypeCode) key)
+            => key.Item1 == NPTypeCode.String || key.Item2 == NPTypeCode.String
+                ? new NotSupportedException(
+                    "A fixed-width string array reached a numeric promotion table: NumPy's numeric type rules have no entry " +
+                    "for text. Every np.* function answers text through its own route first (computing as NumPy does, or " +
+                    "raising NumPy's refusal), so this is a NumSharp wiring gap; please report the call that reached it.")
+                : new KeyNotFoundException($"The given key '({key.Item1}, {key.Item2})' was not present in the dictionary.");
+
         internal static NPTypeCode _FindCommonArrayType(Type dtype_left, Type dtype_right)
         {
-            return _nptypemap_arr_arr[(dtype_left.GetTypeCode(), dtype_right.GetTypeCode())];
+            return PromoteArrArr((dtype_left.GetTypeCode(), dtype_right.GetTypeCode()));
         }
 
         internal static NPTypeCode _FindCommonArrayType(NPTypeCode dtype_left, NPTypeCode dtype_right)
         {
-            return _nptypemap_arr_arr[(dtype_left, dtype_right)];
+            return PromoteArrArr((dtype_left, dtype_right));
         }
 
+        /// <inheritdoc cref="_FindCommonScalarType(NPTypeCode, NPTypeCode)"/>
         internal static NPTypeCode _FindCommonScalarType(Type dtype_left, Type dtype_right)
         {
-            return _FindCommonType(Array.Empty<NPTypeCode>(), new NPTypeCode[] {dtype_left.GetTypeCode(), dtype_right.GetTypeCode()});
+            return _FindCommonScalarType(dtype_left.GetTypeCode(), dtype_right.GetTypeCode());
         }
 
+        /// <summary>
+        ///     The result type of an operation between two 0-d arrays (<see cref="_FindCommonType(NDArray, NDArray)"/>): the
+        ///     array-array promotion table, the rule NumPy 2 applies to two strong operands.
+        /// </summary>
+        /// <param name="dtype_left">The left operand's storage code.</param>
+        /// <param name="dtype_right">The right operand's storage code.</param>
+        /// <returns>The promoted storage code.</returns>
+        /// <remarks>
+        ///     A direct table lookup, NOT <c>find_common_type</c>'s search: this is binary-operator promotion, and it reads the
+        ///     table with the same key order <c>(right, left)</c> the old two-entry fold did, so every 0-d result is unchanged.
+        /// </remarks>
+        /// <exception cref="System.Collections.Generic.KeyNotFoundException">A code the promotion table has no row for (<see cref="NPTypeCode.Empty"/>).</exception>
         internal static NPTypeCode _FindCommonScalarType(NPTypeCode dtype_left, NPTypeCode dtype_right)
         {
-            return _FindCommonType(Array.Empty<NPTypeCode>(), new NPTypeCode[] {dtype_left, dtype_right});
+            // The table with the (right, left) key the two-entry fold always used; PromoteArrArr refuses the String lane
+            // with the house text instead of a KeyNotFoundException.
+            return PromoteArrArr((dtype_right, dtype_left));
         }
 
         internal static NPTypeCode _FindCommonArrayScalarType(NPTypeCode dtypeArray, NPTypeCode dtypeScalar)
         {
-            return _nptypemap_arr_scalar[(dtypeArray, dtypeScalar)];
+            return PromoteArrScalar((dtypeArray, dtypeScalar));
         }
 
         internal static NPTypeCode _FindCommonArrayScalarType(Type dtypeArray, Type dtypeScalar)
         {
-            return _nptypemap_arr_scalar[(dtypeArray.GetTypeCode(), dtypeScalar.GetTypeCode())];
+            return PromoteArrScalar((dtypeArray.GetTypeCode(), dtypeScalar.GetTypeCode()));
         }
 
         /// <summary>
-        ///     Resolves to which type should the output be.
+        ///     NumPy 1.26.4's <c>find_common_type(array_types, scalar_types)</c> body over storage codes, the engine of
+        ///     <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/>: each list's maximum by <see cref="_can_coerce_all(NPTypeCode[], int)"/>,
+        ///     then the array maximum unless the scalar maximum is of a higher kind, when <see cref="_find_common_coerce"/>
+        ///     decides.
         /// </summary>
-        /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
+        /// <param name="array_types">The dtypes of the arrays.</param>
+        /// <param name="scalar_types">The dtypes of the scalars.</param>
+        /// <returns>The common storage code, or <see cref="NPTypeCode.Empty"/> where NumPy returns None.</returns>
+        /// <remarks>
+        ///     Kinds are ranked through <see cref="DType._kind_list_map"/>, NumSharp's frozen legacy kind map, in NumPy's
+        ///     <see cref="_kind_list"/>. It spells bool <c>'?'</c>, which <see cref="_kind_list"/> lacks, so bool ranks -1
+        ///     where NumPy's <c>'b'</c> ranks 0: both are the lowest rank, so every comparison agrees. Not a hot path: binary
+        ///     operators use <see cref="_FindCommonType(NDArray, NDArray)"/>, which never comes here.
+        /// </remarks>
+        /// <exception cref="ArgumentException">An entry is <see cref="NPTypeCode.Empty"/>.</exception>
         [MethodImpl(Optimize)]
         internal static NPTypeCode _FindCommonType(NPTypeCode[] array_types, NPTypeCode[] scalar_types)
         {
@@ -914,82 +1060,73 @@ namespace NumSharp
             if (maxsc == NPTypeCode.Empty)
                 return maxa;
 
-            int index_a;
-            int index_sc;
-            try
-            {
-                index_a = maxa != NPTypeCode.Empty ? Array.IndexOf(_kind_list, DType._kind_list_map[maxa]) : -1;
-                index_sc = maxsc != NPTypeCode.Empty ? Array.IndexOf(_kind_list, DType._kind_list_map[maxsc]) : -1;
-            }
-            catch (Exception)
-            {
+            // NumPy: `_kind_list.index(kind)`, whose ValueError means "return None".
+            if (!DType._kind_list_map.TryGetValue(maxa, out char kind_a) || !DType._kind_list_map.TryGetValue(maxsc, out char kind_sc))
                 return NPTypeCode.Empty;
-            }
+            int index_a = Array.IndexOf(_kind_list, kind_a);
+            int index_sc = Array.IndexOf(_kind_list, kind_sc);
 
+            // A scalar of a higher kind is NumPy's _find_common_coerce. (This branch used to read the NEP 50 array-scalar
+            // table, NumPy 2's weak-scalar arithmetic rule, which is not what find_common_type computes: it kept uint8 for
+            // ([uint8], [int16]) where NumPy 1.26.4 answers int16.)
             if (index_sc > index_a)
-                return _nptypemap_arr_scalar[(maxa, maxsc)];
-            else
-                return maxa;
+                return _find_common_coerce(maxsc, maxa);
+            return maxa;
         }
 
-        /// <summary>
-        ///     Resolves to which type should the output be.
-        /// </summary>
-        /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
+        /// <summary>The <see cref="List{T}"/> form of <see cref="_FindCommonType(NPTypeCode[], NPTypeCode[])"/>.</summary>
+        /// <param name="array_types">The dtypes of the arrays.</param>
+        /// <param name="scalar_types">The dtypes of the scalars.</param>
+        /// <returns>The common storage code, or <see cref="NPTypeCode.Empty"/> where NumPy returns None.</returns>
+        /// <remarks>One implementation for both forms: the two used to differ (this one alone reached <see cref="_find_common_coerce"/>).</remarks>
+        /// <exception cref="ArgumentException">An entry is <see cref="NPTypeCode.Empty"/>.</exception>
         [MethodImpl(Optimize)]
         internal static NPTypeCode _FindCommonType(List<NPTypeCode> array_types, List<NPTypeCode> scalar_types)
         {
-            NPTypeCode maxa = _can_coerce_all(array_types);
-            NPTypeCode maxsc = _can_coerce_all(scalar_types);
-
-            if (maxa == NPTypeCode.Empty)
-                return maxsc;
-
-            if (maxsc == NPTypeCode.Empty)
-                return maxa;
-
-            int index_a;
-            int index_sc;
-            try
-            {
-                index_a = maxa != NPTypeCode.Empty ? Array.IndexOf(_kind_list, DType._kind_list_map[maxa]) : -1;
-                index_sc = maxsc != NPTypeCode.Empty ? Array.IndexOf(_kind_list, DType._kind_list_map[maxsc]) : -1;
-            }
-            catch (Exception)
-            {
-                return NPTypeCode.Empty;
-            }
-
-            if (index_sc > index_a)
-                return _find_common_coerce(maxsc, maxa);
-            else
-                return maxa;
+            return _FindCommonType(array_types.ToArray(), scalar_types.ToArray());
         }
 
         /// <summary>
-        ///     Resolves to which type should the output be.
+        ///     The dtype of an array built from a sequence of scalars of the given dtypes, in their order (the caller is
+        ///     <c>np.asanyarray</c> over an <c>object[]</c>): NumPy's array-coercion promotion, <c>handle_promotion</c> in
+        ///     <c>array_coercion.c</c>, which promotes the running dtype with each new one.
         /// </summary>
-        /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
+        /// <param name="scalar_types">The dtypes, in element order (repeats may be dropped: a repeat cannot change the result).</param>
+        /// <returns>The promoted storage code, or <see cref="NPTypeCode.Empty"/> for no types.</returns>
+        /// <remarks>
+        ///     A left fold, ORDER-SENSITIVE as NumPy's is: <c>[int8, uint8, float16]</c> is float32 but
+        ///     <c>[float16, int8, uint8]</c> is float16 (NumPy 2.4.2, 18 such dtype sets). Not <c>find_common_type</c>'s
+        ///     search; the name is historical. The fold it replaces dropped every other pair from four types on.
+        /// </remarks>
+        /// <exception cref="System.Collections.Generic.KeyNotFoundException">A code the promotion table has no row for (<see cref="NPTypeCode.Empty"/>).</exception>
         [MethodImpl(Optimize)]
         internal static NPTypeCode _FindCommonType_Scalar(params NPTypeCode[] scalar_types)
         {
-            return _can_coerce_all(scalar_types);
+            return _promote_sequence(scalar_types);
         }
 
         /// <summary>
-        ///     Resolves to which type should the output be.
+        ///     <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/> of array types only: NumPy 1.26.4's
+        ///     <c>_can_coerce_all(array_types)</c>.
         /// </summary>
-        /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
+        /// <param name="array_types">The dtypes of the arrays.</param>
+        /// <returns>The first candidate every entry casts to safely, the entry itself for one, <see cref="NPTypeCode.Empty"/> for none.</returns>
+        /// <exception cref="ArgumentException">An entry is <see cref="NPTypeCode.Empty"/>.</exception>
         [MethodImpl(Optimize)]
         internal static NPTypeCode _FindCommonType_Array(params NPTypeCode[] array_types)
         {
-            return _can_coerce_all(array_types);
+            // NumPy 2's order-independent result_type over the set (NDIter's COMMON_DTYPE and its allocated operand), not
+            // np.find_common_type's NumPy 1.26.4 search: the two disagree, and NumPy's nditer promotes with the former.
+            return PromoteTypeSequence(array_types);
         }
 
         /// <summary>
-        ///     Resolves to which type should the output be.
+        ///     NumPy 1.26.4's <c>find_common_type</c> over arrays, splitting them as <c>np.find_common_type</c>'s two lists:
+        ///     0-d arrays are the scalar types, the rest the array types.
         /// </summary>
-        /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
+        /// <param name="involvedArrays">The arrays.</param>
+        /// <returns>The common storage code, or <see cref="NPTypeCode.Empty"/> where NumPy returns None.</returns>
+        /// <remarks>Two arrays bind <see cref="_FindCommonType(NDArray, NDArray)"/> (binary-operator promotion) instead.</remarks>
         [MethodImpl(Optimize)]
         internal static NPTypeCode _FindCommonType(params NDArray[] involvedArrays)
         {
@@ -1007,175 +1144,281 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Resolves to which type should the output be.
+        ///     <see cref="find_common_type(NPTypeCode[], NPTypeCode[])"/> of dtype strings that all describe arrays (no scalar
+        ///     types) — a NumSharp shorthand: NumPy's function always takes the two lists (<c>np.find_common_type("i4", "f8")</c>
+        ///     is float64).
         /// </summary>
+        /// <param name="involvedTypes">The dtype strings (<c>"int32"</c>, <c>"f8"</c>, <c>"&lt;u2"</c>).</param>
+        /// <returns>The first type of NumPy's candidate list every entry casts to safely, the entry itself for one, null for none.</returns>
+        /// <inheritdoc cref="find_common_type(NPTypeCode[], NPTypeCode[])" path="/remarks"/>
+        /// <exception cref="NotSupportedException">A string names a dtype NumSharp cannot store.</exception>
+        /// <exception cref="TypeError">A string NumPy cannot parse either (NumPy's <c>data type 'x' not understood</c>).</exception>
         [MethodImpl(Optimize)]
         public static DType find_common_type(params string[] involvedTypes)
         {
-            return _can_coerce_all(involvedTypes.Select(s => dtype(s).typecode).ToArray());
+            return _can_coerce_all(involvedTypes.Select(s => dtype(s).GetTypeCode()).ToArray());
         }
 
         /// <summary>
-        ///     Resolves to which type should the output be.
+        ///     The loop dtype of a binary ufunc over two operands, by NEP 50: a WEAK operand — the 0-d array a C# number
+        ///     literal became (<see cref="NDArray.WasPythonLiteral"/>, NumPy's Python <c>int</c> / <c>float</c> /
+        ///     <c>complex</c>) — adopts the other operand's dtype through the array-scalar table; every other operand, a
+        ///     0-d one included, is STRONG and promotes by its dtype like any array.
         /// </summary>
-        /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
+        /// <param name="firstNDArray">The left operand.</param>
+        /// <param name="secondNDArray">The right operand.</param>
+        /// <returns>The promoted storage code (before any op-specific rule, such as true division's float64).</returns>
+        /// <exception cref="NotSupportedException">A pair the promotion tables refuse (a text operand reaching the numeric
+        ///     tables).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     Strong 0-d operands are every NumPy scalar and 0-d array NumPy would see: an element read <c>a[i]</c>, a
+        ///     reduction result <c>a.sum()</c>, <c>np.array(x)</c>, <see cref="NDArray.Scalar{T}(T)"/>, a <see cref="Half"/>
+        ///     / <c>char</c> value (NumPy scalars in the boundary map). So <c>uint8 + a_int64[1]</c> is int64, as in NumPy,
+        ///     where it used to stay uint8 and wrap (parity QA-05); <c>uint8 + 100</c> (a literal) stays uint8.
+        ///     </para>
+        ///     <para>
+        ///     Library code that means a Python number must pass a literal-marked operand (a C# number through the implicit
+        ///     conversion, or <see cref="NDArray.PythonLiteral{T}(T)"/>), never <see cref="NDArray.Scalar{T}(T)"/>, which is
+        ///     a strong NumPy scalar. Two C# literals promote between their own C# dtypes (NumSharp's reading: NumPy would
+        ///     give its default int64 / float64 / complex128 for two Python scalars).
+        ///     </para>
+        /// </remarks>
         [MethodImpl(Optimize)]
         internal static NPTypeCode _FindCommonType(NDArray firstNDArray, NDArray secondNDArray)
         {
             var lscalar = firstNDArray.Shape.IsScalar;
             var rscalar = secondNDArray.Shape.IsScalar;
-            if (!lscalar && !rscalar)
-                return _FindCommonArrayType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
+            // NEP 50: only a Python scalar is weak. The literal mark is set on 0-d arrays only, by the implicit conversions
+            // of the C# number types; any other 0-d array is a NumPy scalar or 0-d array, which NumPy 2 promotes strongly.
+            var lweak = lscalar && firstNDArray.WasPythonLiteral;
+            var rweak = rscalar && secondNDArray.WasPythonLiteral;
 
-            if (lscalar && rscalar)
-                return _FindCommonScalarType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
-
-            if (lscalar)
-                return _FindCommonArrayScalarType(secondNDArray.GetTypeCode, firstNDArray.GetTypeCode);
-
-            //rscalar is true
-            return _FindCommonArrayScalarType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
+            NPTypeCode result;
+            if (lweak != rweak)
+                // One weak literal: it adopts the strong side's dtype (an array or a strong 0-d array alike).
+                result = lweak
+                    ? _FindCommonArrayScalarType(secondNDArray.GetTypeCode, firstNDArray.GetTypeCode)
+                    : _FindCommonArrayScalarType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
+            else if (lscalar && rscalar)
+                // Two strong 0-d arrays, or two C# literals: the strong table with the 0-d key order it always used.
+                result = _FindCommonScalarType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
+            else
+                result = _FindCommonArrayType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
+            return result;
         }
 
         #region Private of find_common_type
 
+        /// <summary>
+        ///     The common type of a set of array types for NumSharp's own engines - NDIter's <c>COMMON_DTYPE</c> and the
+        ///     dtype of its allocated operand, through <see cref="_FindCommonType_Array"/>: NumPy 2's <c>np.result_type</c>
+        ///     over them (<c>PyArray_PromoteDTypeSequence</c>), which does not depend on their order. Not
+        ///     <c>np.find_common_type</c>, which is NumPy 1.26.4's <see cref="_can_coerce_all(NPTypeCode[], int)"/> search
+        ///     (NumPy 2 removed that function).
+        /// </summary>
+        /// <param name="dtypelist">The types (any order).</param>
+        /// <returns>The promoted type; <see cref="NPTypeCode.Empty"/> for an empty list.</returns>
+        /// <exception cref="NotSupportedException">A type is the string lane (a numeric promotion cannot take text).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     Two types read the frozen array-array table (<see cref="_nptypemap_arr_arr"/>). Three or more run NumPy's
+        ///     sequence reduction (<see cref="DTypePromotion.PromoteDTypeSequence"/>): the DType class with the highest type
+        ///     number promotes every other one and the results are combined, so <c>int8, uint8, float16</c> is
+        ///     <c>float16</c> in every order, where a pairwise fold gives <c>float32</c> in this order
+        ///     (<c>int8 + uint8</c> is <c>int16</c>, then <c>int16 + float16</c> is <c>float32</c>) and <c>float16</c> in
+        ///     another. A builtin class's common class IS the table, so a pair gives the table's answer either way.
+        ///     </para>
+        ///     <para>
+        ///     A pairwise fold over the list is not this function: a fold that kept only the LAST pair's result lost every
+        ///     pair but one from four types on (<c>int8, int8, float64, int8</c> gave <c>int8</c>; NumPy gives
+        ///     <c>float64</c>), and folding three types in list order differs from NumPy on 10 of the 2,197 three-type
+        ///     combinations of NumPy's 13 dtypes.
+        ///     </para>
+        /// </remarks>
+        [MethodImpl(Optimize)]
+        private static NPTypeCode PromoteTypeSequence(ReadOnlySpan<NPTypeCode> dtypelist)
+        {
+            int n = dtypelist.Length;
+            if (n == 0)
+                return NPTypeCode.Empty;
+            if (n == 1)
+                return dtypelist[0];
+
+            // The numeric promotion refuses the string lane with the house text (PromotionTableMiss), before the DType
+            // engine, which would promote text and numbers to a string type that no numeric kernel takes.
+            for (int i = 0; i < n; i++)
+                if (dtypelist[i] == NPTypeCode.String)
+                    throw PromotionTableMiss((dtypelist[i], dtypelist[i == 0 ? 1 : 0]));
+
+            if (n == 2)
+                return PromoteArrArr((dtypelist[1], dtypelist[0]));
+
+            var metas = new DTypeMeta[n];
+            for (int i = 0; i < n; i++)
+                metas[i] = DTypeRegistry.FromTypeCode(dtypelist[i]);
+            return DTypePromotion.PromoteDTypeSequence(metas).TypeCode;
+        }
+
+        /// <summary>NumPy 1.26.4's <c>_can_coerce_all(dtypelist)</c>: the search of <see cref="_can_coerce_all(NPTypeCode[], int)"/> from the first candidate.</summary>
+        /// <param name="dtypelist">The dtypes.</param>
+        /// <returns>The first candidate every entry casts to safely, the entry itself for one, <see cref="NPTypeCode.Empty"/> for none.</returns>
+        /// <exception cref="ArgumentException">An entry is <see cref="NPTypeCode.Empty"/>.</exception>
         [MethodImpl(Optimize)]
         private static NPTypeCode _can_coerce_all(NPTypeCode[] dtypelist)
         {
-            int N = dtypelist.Length;
-
-            if (N == 0)
-                return NPTypeCode.Empty;
-            if (N == 1)
-                return dtypelist[0];
-            NPTypeCode ret = default;
-            while (N >= 2)
-            {
-                ret = _nptypemap_arr_arr[(dtypelist[N - 1], dtypelist[N - 2])];
-                N -= 2;
-            }
-
-            if (N == 1)
-            {
-                ret = _nptypemap_arr_arr[(ret, dtypelist[0])];
-            }
-
-            return ret;
+            return _can_coerce_all(dtypelist, 0);
         }
 
+        /// <summary>The <see cref="List{T}"/> form of <see cref="_can_coerce_all(NPTypeCode[])"/>.</summary>
+        /// <param name="dtypelist">The dtypes.</param>
+        /// <returns>The first candidate every entry casts to safely, the entry itself for one, <see cref="NPTypeCode.Empty"/> for none.</returns>
+        /// <exception cref="ArgumentException">An entry is <see cref="NPTypeCode.Empty"/>.</exception>
         [MethodImpl(Optimize)]
         private static NPTypeCode _can_coerce_all(List<NPTypeCode> dtypelist)
         {
-            int N = dtypelist.Count;
-
-            if (N == 0)
-                return NPTypeCode.Empty;
-            if (N == 1)
-                return dtypelist[0];
-            NPTypeCode ret = default;
-
-            while (N >= 2)
-            {
-                ret = _nptypemap_arr_arr[(dtypelist[N - 1], dtypelist[N - 2])];
-                N -= 2;
-            }
-
-            if (N == 1)
-            {
-                ret = _nptypemap_arr_arr[(ret, dtypelist[0])];
-            }
-
-            return ret;
+            return _can_coerce_all(dtypelist.ToArray(), 0);
         }
 
+        /// <summary>
+        ///     NumPy 1.26.4's <c>_can_coerce_all(dtypelist, start)</c>: walk <see cref="__test_types"/> from index
+        ///     <paramref name="start"/> and return the first type every entry of <paramref name="dtypelist"/> casts to safely
+        ///     (NumPy's <c>newdtype &gt;= x</c>, a safe-cast test, never the enum's numeric order).
+        /// </summary>
+        /// <param name="dtypelist">The dtypes.</param>
+        /// <param name="start">The candidate to start from: an index into <see cref="__test_types"/>, NOT into <paramref name="dtypelist"/>.</param>
+        /// <returns>
+        ///     <see cref="NPTypeCode.Empty"/> for no entries (NumPy's None); the entry itself for one; else the first candidate
+        ///     holding them all, or <see cref="NPTypeCode.Empty"/> when none does (NumPy's object, which NumSharp lacks).
+        /// </returns>
+        /// <remarks>
+        ///     A list holding one of NumSharp's own dtypes (decimal, char) leaves NumPy's candidates: NumPy has no such dtype,
+        ///     so it would answer None, and NumSharp promotes the list with its table (<see cref="_promote_sequence"/>), the rule
+        ///     its arithmetic uses. The fold this replaces read the table for every list and dropped every other pair from four
+        ///     dtypes on (<c>[int8, int8, float64, int8]</c> came back int8).
+        /// </remarks>
+        /// <exception cref="ArgumentException">An entry is <see cref="NPTypeCode.Empty"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="start"/> is negative.</exception>
         [MethodImpl(Optimize)]
         private static NPTypeCode _can_coerce_all(NPTypeCode[] dtypelist, int start)
         {
             int N = dtypelist.Length;
-            if (start > 0)
-            {
-                var len = N - start;
-                var sub = new NPTypeCode[len];
-                Array.Copy(dtypelist, start, sub, 0, len);
-                dtypelist = sub;
-                N = sub.Length;
-            }
-
             if (N == 0)
                 return NPTypeCode.Empty;
             if (N == 1)
                 return dtypelist[0];
-            NPTypeCode ret = default;
-            while (N >= 2)
+            if (start < 0)
+                throw new ArgumentOutOfRangeException(nameof(start), start.ToString(CultureInfo.InvariantCulture), "A candidate index into __test_types.");
+
+            // The descriptors are compared once per candidate; resolve them once.
+            var descrs = new DType[N];
+            for (int i = 0; i < N; i++)
             {
-                ret = _nptypemap_arr_arr[(dtypelist[N - 1], dtypelist[N - 2])];
-                N -= 2;
+                descrs[i] = DType.From(dtypelist[i]);
+                if (IsNumSharpOnly(descrs[i]))
+                    return _promote_sequence(dtypelist);
             }
 
-            if (N == 1)
+            var candidates = FindCommonTypeCandidates.Codes;
+            for (int thisind = start; thisind < __len_test_types; thisind++)
             {
-                ret = _nptypemap_arr_arr[(ret, dtypelist[0])];
+                var candidate = candidates[thisind];
+                if (candidate == NPTypeCode.Empty)
+                    continue; // complex64 or object: NumSharp has neither (see FindCommonTypeCandidates)
+                var newdtype = DType.From(candidate);
+                int numcoerce = 0;
+                for (int i = 0; i < N; i++)
+                    if (newdtype >= descrs[i])
+                        numcoerce++;
+                if (numcoerce == N)
+                    return candidate;
             }
 
-            return ret;
+            return NPTypeCode.Empty;
         }
 
+        /// <summary>The <see cref="List{T}"/> form of <see cref="_can_coerce_all(NPTypeCode[], int)"/>.</summary>
+        /// <param name="dtypelist">The dtypes.</param>
+        /// <param name="start">The candidate index into <see cref="__test_types"/> to start from.</param>
+        /// <returns>The first candidate every entry casts to safely, the entry itself for one, <see cref="NPTypeCode.Empty"/> for none.</returns>
+        /// <exception cref="ArgumentException">An entry is <see cref="NPTypeCode.Empty"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="start"/> is negative.</exception>
         [MethodImpl(Optimize)]
         private static NPTypeCode _can_coerce_all(List<NPTypeCode> dtypelist, int start)
         {
-            int N = dtypelist.Count;
-            if (start > 0)
-            {
-                var len = N - start;
-                var sub = new List<NPTypeCode>(len);
-                for (int i = start; i < N; i++)
-                    sub.Add(dtypelist[i]);
-                dtypelist = sub;
-                N = sub.Count;
-            }
-
-            if (N == 0)
-                return NPTypeCode.Empty;
-            if (N == 1)
-                return dtypelist[0];
-            NPTypeCode ret = default;
-
-            while (N >= 2)
-            {
-                ret = _nptypemap_arr_arr[(dtypelist[N - 1], dtypelist[N - 2])];
-                N -= 2;
-            }
-
-            if (N == 1)
-            {
-                ret = _nptypemap_arr_arr[(ret, dtypelist[0])];
-            }
-
-            return ret;
+            return _can_coerce_all(dtypelist.ToArray(), start);
         }
 
-        // Keep incrementing until a common type both can be coerced to
-        //  is found.  Otherwise, return None
+        /// <summary>
+        ///     NumPy 1.26.4's <c>_find_common_coerce(a, b)</c>: <paramref name="a"/> itself when <paramref name="b"/> casts to
+        ///     it safely, else the first candidate both cast to, searched from <paramref name="a"/>'s place in
+        ///     <see cref="__test_types"/>. <see cref="_FindCommonType(NPTypeCode[], NPTypeCode[])"/> calls it with the scalar
+        ///     maximum as <paramref name="a"/> when that is of a higher kind than the array maximum <paramref name="b"/>.
+        /// </summary>
+        /// <param name="a">The higher-kind maximum (the scalar types').</param>
+        /// <param name="b">The other maximum (the array types').</param>
+        /// <returns>The common storage code, or <see cref="NPTypeCode.Empty"/> where NumPy returns None.</returns>
+        /// <remarks>
+        /// <para>
+        ///     NumPy's <c>a &gt; b</c> is the dtype comparison: <paramref name="b"/> casts to <paramref name="a"/> safely and is
+        ///     not equivalent to it. It used to compare the ENUM values, so (int8 scalar, uint8 array) answered uint8 where NumPy
+        ///     answers int16, and (int16, uint16) crashed: the search then sliced the dtype list at the candidate index.
+        /// </para>
+        /// <para>
+        ///     <paramref name="a"/>'s place comes from its NumPy character (<see cref="NPTypeCodeExtensions.ToTYPECHAR"/>,
+        ///     platform-resolved: int32 is <c>'l'</c> on Windows, <c>'i'</c> elsewhere; both start at an equivalent type). NumSharp's
+        ///     own dtypes have no character (the old mapping read decimal as <c>'q'</c>, so it searched from int64), and are
+        ///     promoted with NumSharp's table instead, as in <see cref="_can_coerce_all(NPTypeCode[], int)"/>.
+        /// </para>
+        /// </remarks>
         private static NPTypeCode _find_common_coerce(NPTypeCode a, NPTypeCode b)
         {
-            if (a > b)
-                return a;
+            // find_common_type never passes None (it returns the other maximum first); a direct caller gets the present side.
             if (a == NPTypeCode.Empty)
                 return b;
             if (b == NPTypeCode.Empty)
                 return a;
 
-            int thisind;
-            try
-            {
-                thisind = __test_types.IndexOf((char)a.ToTYPECHAR());
-            }
-            catch
-            {
-                return NPTypeCode.Empty;
-            }
+            DType da = DType.From(a), db = DType.From(b);
+            if (da > db)
+                return a;
 
-            return _can_coerce_all(new NPTypeCode[] {a, b}, thisind);
+            if (IsNumSharpOnly(da) || IsNumSharpOnly(db))
+                return _promote_sequence(new[] { b, a });
+
+            // Python's str.index raises ValueError for a character outside the list (str, for one) and NumPy returns None;
+            // C#'s IndexOf answers -1 instead, which must not become a start index.
+            int thisind = __test_types.IndexOf((char)a.ToTYPECHAR());
+            if (thisind < 0)
+                return NPTypeCode.Empty;
+
+            return _can_coerce_all(new[] { a, b }, thisind);
+        }
+
+        /// <summary>
+        ///     Whether <paramref name="descr"/> is one of NumSharp's own dtypes (decimal, char): NumSharp numbers them in NumPy's
+        ///     user-defined range (<see cref="NPY_TYPES.NPY_USERDEF"/> and up), so no NumPy character or candidate names them.
+        /// </summary>
+        /// <param name="descr">The descriptor.</param>
+        /// <returns>True for a NumSharp-only dtype.</returns>
+        private static bool IsNumSharpOnly(DType descr) => descr.num >= (int)NPY_TYPES.NPY_USERDEF;
+
+        /// <summary>
+        ///     NumPy's sequential promotion (<c>handle_promotion</c>): the running dtype promoted with each next one through
+        ///     the array-array table, left to right. Order-sensitive exactly where NumPy's is.
+        /// </summary>
+        /// <param name="types">The dtypes, in order.</param>
+        /// <returns>The promoted storage code, or <see cref="NPTypeCode.Empty"/> for no types.</returns>
+        /// <exception cref="System.Collections.Generic.KeyNotFoundException">A code the promotion table has no row for (<see cref="NPTypeCode.Empty"/>).</exception>
+        private static NPTypeCode _promote_sequence(NPTypeCode[] types)
+        {
+            if (types.Length == 0)
+                return NPTypeCode.Empty;
+            var ret = types[0];
+            // NumPy calls PyArray_PromoteTypes(descr, *out_descr): the new dtype first, the running one second.
+            for (int i = 1; i < types.Length; i++)
+                ret = _nptypemap_arr_arr[(types[i], ret)];
+            return ret;
         }
 
         #endregion

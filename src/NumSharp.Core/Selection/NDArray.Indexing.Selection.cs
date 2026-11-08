@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using System.Linq;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -65,14 +66,21 @@ namespace NumSharp
         /// <summary>
         ///     Normalizes an index array for fancy indexing.
         ///     NumPy accepts all integer types (int8/16/32/64, uint8/16/32/64) for indexing.
-        ///     Non-integer types (float, decimal, char, bool) raise IndexError.
+        ///     Non-integer types (float, decimal, char, bool, the string classes) raise IndexError.
         ///     We keep Int32/Int64 as-is; other integer types are converted to Int64.
         /// </summary>
         /// <param name="indices">The index array to normalize.</param>
         /// <returns>The normalized index array (Int32 or Int64).</returns>
-        /// <exception cref="IndexOutOfRangeException">When the index array is not an integer type.</exception>
+        /// <exception cref="IndexError">When the index array is not an integer type: NumPy's IndexError and text
+        ///     (<c>arrays used as indices must be of integer (or boolean) type</c>). It used to be an
+        ///     <see cref="IndexOutOfRangeException"/> with that text; every other index path raises
+        ///     <see cref="IndexError"/>.</exception>
+        /// <remarks>An index-kind test (the INDEX's dtype, which NumPy's <c>prepare_index</c> tests too), so it stays with
+        ///     the indexers; <c>protected internal</c> since 2026-10-29 for the typed fetch and store
+        ///     (<see cref="Backends.UnmanagedStorage.MapIterGet(NDArray, NDArray[], NDArray, bool)"/> and
+        ///     <see cref="Backends.UnmanagedStorage.MapIterSet(NDArray, NDArray[], NDArray)"/>), which call it.</remarks>
         [MethodImpl(Inline)]
-        protected static NDArray NormalizeIndexArray(NDArray indices)
+        protected internal static NDArray NormalizeIndexArray(NDArray indices)
         {
             var tc = indices.typecode;
 
@@ -88,9 +96,9 @@ namespace NumSharp
                 tc == NPTypeCode.UInt32 || tc == NPTypeCode.UInt64)
                 return indices.astype(NPTypeCode.Int64, copy: true);
 
-            // Non-integer types are not valid for indexing (matches NumPy behavior)
-            throw new IndexOutOfRangeException(
-                $"arrays used as indices must be of integer type, got {indices.dtype.type.Name}");
+            // Non-integer types are not valid for indexing (matches NumPy behavior and NumPy's text; a string index
+            // array's dtype has no CLR element type to name, and NumPy names none).
+            throw new IndexError("arrays used as indices must be of integer (or boolean) type");
         }
 
         /// <summary>
@@ -98,7 +106,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="srcShape">The shape to get indice from</param>
         /// <param name="indices">The indices trying to index.</param>
-        protected static unsafe Func<long, long>[] PrepareIndexGetters(Shape srcShape, NDArray[] indices)
+        /// <returns>One getter per index array: the k-th selected position's coordinate along that array's axis, wrapped
+        ///     into <c>[0, dim)</c>.</returns>
+        /// <exception cref="IndexError">(From a getter, when called.) An index value outside <c>[-dim, dim)</c> for its
+        ///     axis, NumPy's text.</exception>
+        /// <remarks>Reads each index array through a raw pointer (int64, else int32 — the two dtypes
+        ///     <see cref="NormalizeIndexArray"/> leaves), so the arrays must stay alive while the getters run.
+        ///     <c>protected internal</c> since 2026-10-29 for the typed fetch and store in
+        ///     <c>Backends/Unmanaged/UnmanagedStorage.Mapping.cs</c>, which call it.</remarks>
+        protected internal static unsafe Func<long, long>[] PrepareIndexGetters(Shape srcShape, NDArray[] indices)
         {
             var indexGetters = new Func<long, long>[indices.Length];
             for (int i = 0; i < indices.Length; i++)
@@ -139,7 +155,7 @@ namespace NumSharp
                                 // leave a NEGATIVE offset that only the upper-bound check guarded,
                                 // so it read OUT-OF-BOUNDS memory. Validate both bounds here.
                                 if (val < -dimensionSize || val >= dimensionSize)
-                                    throw new IndexError($"index {val} is out of bounds for axis {axis} with size {dimensionSize}");
+                                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {val} is out of bounds for axis {axis} with size {dimensionSize}"));
                                 return val < 0 ? dimensionSize + val : val;
                             };
                         }
@@ -151,7 +167,7 @@ namespace NumSharp
                             {
                                 var val = idxAddr[idxShape.GetOffset_1D(idx)];
                                 if (val < -dimensionSize || val >= dimensionSize)
-                                    throw new IndexError($"index {val} is out of bounds for axis {axis} with size {dimensionSize}");
+                                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {val} is out of bounds for axis {axis} with size {dimensionSize}"));
                                 return val < 0 ? dimensionSize + val : val;
                             };
                         }
@@ -170,7 +186,7 @@ namespace NumSharp
                                 // leave a NEGATIVE offset that only the upper-bound check guarded,
                                 // so it read OUT-OF-BOUNDS memory. Validate both bounds here.
                                 if (val < -dimensionSize || val >= dimensionSize)
-                                    throw new IndexError($"index {val} is out of bounds for axis {axis} with size {dimensionSize}");
+                                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {val} is out of bounds for axis {axis} with size {dimensionSize}"));
                                 return val < 0 ? dimensionSize + val : val;
                             };
                         }
@@ -182,7 +198,7 @@ namespace NumSharp
                             {
                                 var val = idxAddr[idxShape.GetOffset_1D(idx)];
                                 if (val < -dimensionSize || val >= dimensionSize)
-                                    throw new IndexError($"index {val} is out of bounds for axis {axis} with size {dimensionSize}");
+                                    throw new IndexError(string.Create(CultureInfo.InvariantCulture, $"index {val} is out of bounds for axis {axis} with size {dimensionSize}"));
                                 return val < 0 ? dimensionSize + val : val;
                             };
                         }

@@ -21,10 +21,16 @@ namespace NumSharp.Backends
         /// </remarks>
         public override NDArray IsNan(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
-            NPTypeCode? typeCode = dtype?.GetTypeCode();
+            NPTypeCode? typeCode = UfuncLoopCode(dtype, "isnan", a, null, @out, where);
+            // StringDType has an isnan loop of its own (an NA cell of a NaN-like descriptor is True); its checks run in
+            // NumPy's order inside, a numeric dtype= other than bool being the dispatcher's refusal.
+            if (Strings.NDStringUfuncs.IsVString(a))
+                return Strings.NDStringUfuncs.VStringIsNaN(a, typeCode, @out, where);
             // typeCode is validate-only: isnan has bool-output loops only
             // (NumPy: dtype=bool is a no-op, anything else raises no-loop).
             ValidateBoolLoopDtype(typeCode, "isnan");
+            // isnan has no string loop; under dtype=bool the input cast to the bool loop is what fails (probed).
+            Strings.NDStringUfuncs.ThrowIfUnary("isnan", a, UfuncLoopCode(dtype));
 
             // Plain call: keep the typed NDArray<bool> instance (TensorEngine
             // contract). The IL kernel handles:
@@ -46,7 +52,7 @@ namespace NumSharp.Backends
 
             // ufunc out=/where=: rides the shared unary Into-path with a
             // Boolean loop dtype (the predicate body emits bool at the INPUT
-            // dtype); a non-bool out engages the windowed bool→X flush. Returns
+            // dtype); a non-bool out engages the buffered bool→X write-back. Returns
             // the provided out (no MakeGeneric — out may be any numeric dtype).
             return ExecuteUnaryOp(a, UnaryOp.IsNan, NPTypeCode.Boolean, @out, where);
         }

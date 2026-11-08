@@ -89,13 +89,17 @@ namespace NumSharp.Tests.NewDtypes
         }
 
         [TestMethod]
-        public void B33_Half_FloorDivide_FiniteOverZero_ReturnsNaN()
+        public void B33_Half_FloorDivide_FiniteOverZero_ReturnsInf()
         {
-            // 1 / 0 = inf, floor(inf) should become nan per NumPy.
-            var a = np.array(new Half[] { (Half)1 });
-            var b = np.array(new Half[] { (Half)0 });
-            var r = np.floor_divide(a, b).GetAtIndex<Half>(0);
-            Half.IsNaN(r).Should().BeTrue();
+            // NumPy 2.4.2: np.floor_divide(f16(1), f16(0)) → +inf, np.floor_divide(f16(-1), f16(0)) → -inf
+            // (npy_floor_divide's b==0 guard returns a/b directly). The former assertion (→ NaN) was the
+            // W1-A Half bug — EmitHalfOperation now computes in float32 like NumPy's HALF loop, so ÷0 is
+            // ±inf, matching float32/float64 floor_divide.
+            var a = np.array(new Half[] { (Half)1, (Half)(-1) });
+            var b = np.array(new Half[] { (Half)0, (Half)0 });
+            var r = np.floor_divide(a, b);
+            Half.IsPositiveInfinity(r.GetAtIndex<Half>(0)).Should().BeTrue();
+            Half.IsNegativeInfinity(r.GetAtIndex<Half>(1)).Should().BeTrue();
         }
 
         [TestMethod]

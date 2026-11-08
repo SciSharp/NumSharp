@@ -39,9 +39,54 @@ namespace NumSharp.Interop.PythonNet
         internal static PyObject empty(PyObject shape, NPTypeCode dtype)
             => PythonRuntimeInterop.NpEmpty.Invoke(shape, PythonRuntimeInterop.DtypeString(dtype));
 
+        /// <summary>
+        ///     <c>np.empty(shape, dtype)</c> for any descriptor the buffer path can express: a numeric dtype goes through the
+        ///     cached per-dtype PyString, a fixed-width string through its own typestr (<c>'|S5'</c>, <c>'&lt;U5'</c> — the
+        ///     width varies per array, so it is not cached).
+        /// </summary>
+        /// <param name="shape">The shape tuple.</param>
+        /// <param name="dtype">A numeric or <c>S</c> / <c>U</c> descriptor.</param>
+        /// <returns>The new numpy array (owned by the caller).</returns>
+        /// <exception cref="System.NotSupportedException">A descriptor with no numpy typestr (see
+        ///     <see cref="NDArrayPythonInterop.ToNumpyDtypeStr"/>).</exception>
+        internal static PyObject empty(PyObject shape, DType dtype)
+        {
+            if (dtype.Meta is not StringDTypeMeta)
+                return empty(shape, dtype.GetTypeCode());
+            using var typestr = new PyString(NDArrayPythonInterop.ToNumpyDtypeStr(dtype));
+            return PythonRuntimeInterop.NpEmpty.Invoke(shape, typestr);
+        }
+
+        /// <summary>
+        ///     <c>np.empty(shape, dtype)</c> with a numpy dtype OBJECT — the <c>StringDType</c> export allocates its result
+        ///     this way (numpy zero-fills the cells: every element starts as the empty string, which is what the copy's
+        ///     per-element rules assume).
+        /// </summary>
+        /// <param name="shape">The shape tuple.</param>
+        /// <param name="dtype">A numpy dtype object (a <c>StringDType(...)</c> instance).</param>
+        /// <returns>The new numpy array (owned by the caller). numpy gives it a descriptor instance of its own.</returns>
+        internal static PyObject empty(PyObject shape, PyObject dtype)
+            => PythonRuntimeInterop.NpEmpty.Invoke(shape, dtype);
+
         /// <summary><c>np.frombuffer(buffer, dtype)</c> — dtype routed through the cached per-dtype PyString.</summary>
         internal static PyObject frombuffer(PyObject buffer, NPTypeCode dtype)
             => PythonRuntimeInterop.NpFrombuffer.Invoke(buffer, PythonRuntimeInterop.DtypeString(dtype));
+
+        /// <summary>
+        ///     <c>np.frombuffer(buffer, dtype)</c> for any descriptor the buffer path can express (see
+        ///     <see cref="empty(PyObject, DType)"/>): numpy reads the buffer's bytes as elements of that dtype, sharing them.
+        /// </summary>
+        /// <param name="buffer">The buffer exporter (the export's ctypes window).</param>
+        /// <param name="dtype">A numeric or <c>S</c> / <c>U</c> descriptor.</param>
+        /// <returns>The 1-D numpy view (owned by the caller).</returns>
+        /// <exception cref="System.NotSupportedException">A descriptor with no numpy typestr.</exception>
+        internal static PyObject frombuffer(PyObject buffer, DType dtype)
+        {
+            if (dtype.Meta is not StringDTypeMeta)
+                return frombuffer(buffer, dtype.GetTypeCode());
+            using var typestr = new PyString(NDArrayPythonInterop.ToNumpyDtypeStr(dtype));
+            return PythonRuntimeInterop.NpFrombuffer.Invoke(buffer, typestr);
+        }
 
         /// <summary><c>np.array(obj)</c> — copies by default, exactly the property the copy path relies on.</summary>
         internal static PyObject array(PyObject obj)

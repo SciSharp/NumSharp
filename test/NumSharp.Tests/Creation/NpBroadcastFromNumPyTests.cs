@@ -1391,7 +1391,7 @@ namespace NumSharp.Tests.Creation
         ///     NumPy raises ValueError: assignment destination is read-only.
         ///
         ///     NumSharp now correctly enforces read-only semantics on broadcast views.
-        ///     Writing to the broadcast view throws NumSharpException.
+        ///     Writing to the broadcast view throws NumPy's ValueError.
         ///
         ///     >>> x = np.array([1, 2, 3, 4])
         ///     >>> y = np.broadcast_to(x, (2, 4))
@@ -1405,7 +1405,7 @@ namespace NumSharp.Tests.Creation
 
             // NumSharp correctly prevents writing to broadcast views (like NumPy).
             Action write = () => bx.SetInt32(999, 0, 0);
-            write.Should().Throw<NumSharpException>()
+            write.Should().Throw<ValueError>()
                 .WithMessage("assignment destination is read-only");
 
             // Verify original was not modified
@@ -2012,6 +2012,38 @@ namespace NumSharp.Tests.Creation
                     viaNarg[0].GetInt64(r, c).Should().Be(via2arg.GetInt64(r, c),
                         $"N-arg[{r},{c}] should equal 2-arg[{r},{c}]={via2arg.GetInt64(r, c)}");
         }
+
+        #region Negative target dimensions (parity QA-13)
+
+        /// <summary>
+        ///     np.broadcast_to refuses a negative target dimension before broadcasting, with NumPy's own text
+        ///     (<c>_broadcast_to</c>: <c>all elements of broadcast shape must be non-negative</c>), through every overload
+        ///     whose target is a caller's Shape; it built a stride-0 view of negative size before (parity QA-13).
+        ///     np.broadcast_shapes keeps NumPy's <c>negative dimensions are not allowed</c>, and a valid target still views.
+        /// </summary>
+        [TestMethod]
+        public void BroadcastTo_NegativeTargetDimension_RaisesNumPysValueError()
+        {
+            using var a = np.arange(3);
+            const string text = "all elements of broadcast shape must be non-negative";
+
+            foreach (Action act in new Action[]
+                     {
+                         () => np.broadcast_to(a, new Shape(-1, 3)).Dispose(),
+                         () => np.broadcast_to(a, new Shape(3, -2)).Dispose(),
+                         () => np.broadcast_to(a.Storage, new Shape(-1, 3)).Dispose(),
+                         () => np.broadcast_to(a.Shape, new Shape(-1, 3)),
+                         () => np.broadcast_to(np.ones(new Shape(2, 3)), new Shape(-1)).Dispose(),
+                     })
+                act.Should().Throw<ValueError>().WithMessage(text);
+
+            Action shapes = () => np.broadcast_shapes(new Shape(-1, 3), new Shape(3));
+            shapes.Should().Throw<ValueError>().WithMessage("negative dimensions are not allowed");
+            using var ok = np.broadcast_to(a, new Shape(2, 3));
+            ok.shape.Should().Equal(2L, 3L);
+        }
+
+        #endregion
 
         #endregion
     }

@@ -16,6 +16,7 @@ namespace NumSharp
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the computation runs at this precision; integer/bool requests raise NumPy's "No loop matching" error.</param>
         /// <returns>The tangent of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tan.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray tan(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => x.TensorEngine.Tan(x, dtype, @out, where);
 
@@ -27,6 +28,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tanh.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray tanh(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => x.TensorEngine.Tanh(x, dtype, @out, where);
 
@@ -38,6 +40,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>Return has the same shape as x. Its real part is in [-pi/2, pi/2] (arctan(+/-inf) returns +/-pi/2). This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctan.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray arctan(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => x.TensorEngine.ATan(x, dtype, @out, where);
 
@@ -45,11 +48,14 @@ namespace NumSharp
         ///     Compute Element-wise arc tangent of x1/x2 choosing the quadrant correctly. <br></br>
         ///     By IEEE convention, this function is defined for x2 = +/-0 and for either or both of x1 and x2 = +/-inf
         /// </summary>
-        /// <param name="x">Input array y-coordinates.</param>
-        /// <param name="x">x-coordinates. If x1.shape != x2.shape, they must be broadcastable to a common shape (which becomes the shape of the output).</param>
+        /// <param name="y">The y-coordinates (NumPy's <c>x1</c>).</param>
+        /// <param name="x">The x-coordinates (NumPy's <c>x2</c>). If <c>y.shape != x.shape</c>, they must be broadcastable to a common shape (which becomes the shape of the output).</param>
+        /// <param name="out">A location into which the result is stored (NumPy ufunc out=); <c>null</c> allocates the result.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The Array of angles in radians, in the range [-pi, pi]. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctan2.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray arctan2(NDArray y, NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => x.TensorEngine.ATan2(y, x, dtype, @out, where);
     }

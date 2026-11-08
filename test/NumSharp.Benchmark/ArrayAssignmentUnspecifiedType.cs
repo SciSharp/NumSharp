@@ -19,7 +19,7 @@ namespace NumSharp.Benchmark
         [GlobalSetup]
         public void Setup()
         {
-            var rnd = new MT19937(42);
+            var rnd = new System.Random(42);
             // first array
             randomCoinedDouble = new object[10000];
 

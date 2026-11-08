@@ -1,8 +1,11 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace NumSharp
 {
@@ -52,7 +55,7 @@ namespace NumSharp
     /// a[:, 1] returns the second column of that 2x2 matrix as a 1-D vector                                                                              <br></br>
     /// </summary>
     [DebuggerStepThrough]
-    public class Slice : IIndex
+    public partial class Slice : IIndex
     {
         /// <summary>
         /// return : for this dimension
@@ -145,10 +148,127 @@ namespace NumSharp
         /// <summary>
         /// Parses Python array slice notation and returns an array of Slice objects
         /// </summary>
+        /// <param name="multi_slice_notation">Comma-separated terms: <c>start:stop:step</c>, an integer, <c>...</c>,
+        ///     <c>newaxis</c>.</param>
+        /// <returns>New slice objects, one per term; the caller may modify them.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="multi_slice_notation"/> is null.</exception>
+        /// <exception cref="ArgumentException">A term is not slice notation.</exception>
+        /// <remarks>Recent notations are answered from a bounded parse cache (512 notations, emptied when full); the result
+        ///     is always a fresh copy, so modifying it never reaches the cache.</remarks>
         public static Slice[] ParseSlices(string multi_slice_notation)
         {
-            return Regex.Split(multi_slice_notation, @",\s*").Where(s => !string.IsNullOrWhiteSpace(s)).Select(token => new Slice(token)).ToArray();
+            // A notation seen before is answered from the parse cache with FRESH Slice objects (they are mutable, public
+            // classes: a caller that edits what it got must not edit the cached parse).
+            if (multi_slice_notation is not null && ParsedNotations.TryGetValue(multi_slice_notation, out var cached))
+                return CopyOf(cached);
+
+            var parsed = DimensionSeparatorRegex().Split(multi_slice_notation).Where(s => !string.IsNullOrWhiteSpace(s)).Select(token => new Slice(token)).ToArray();
+            // Bounded: past the capacity the cache is emptied and refilled, so notations built per call ($"{i}:{i + 2}")
+            // cost one insertion each and never grow it. A notation that fails to parse threw above and is never cached.
+            if (Interlocked.Increment(ref _parsedNotationCount) > ParsedNotationsCapacity)
+            {
+                ParsedNotations.Clear();
+                Interlocked.Exchange(ref _parsedNotationCount, 0);
+            }
+            ParsedNotations.TryAdd(multi_slice_notation, CopyOf(parsed));
+            return parsed;
         }
+
+        /// <summary>
+        ///     The parses of the slice notations used recently, by notation: <see cref="ParseSlices"/> runs three generated
+        ///     regexes, a split and a LINQ pipeline per call (~1.3 µs for <c>"1:"</c>), while a lookup and a copy of the parsed
+        ///     slices cost ~40 ns, and indexing code repeats the same few notations.
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, Slice[]> ParsedNotations = new(StringComparer.Ordinal);
+
+        /// <summary>The approximate number of insertions since <see cref="ParsedNotations"/> was last emptied.</summary>
+        private static int _parsedNotationCount;
+
+        /// <summary>The number of notations <see cref="ParsedNotations"/> holds before it is emptied.</summary>
+        private const int ParsedNotationsCapacity = 512;
+
+        /// <summary>A new array of new slices equal to <paramref name="slices"/>, field for field.</summary>
+        /// <param name="slices">The slices to copy.</param>
+        /// <returns>The copy; no object of it is shared with <paramref name="slices"/>.</returns>
+        private static Slice[] CopyOf(Slice[] slices)
+        {
+            var copy = new Slice[slices.Length];
+            for (int i = 0; i < slices.Length; i++)
+            {
+                var s = slices[i];
+                copy[i] = new Slice(s.Start, s.Stop, s.Step) { IsIndex = s.IsIndex, IsEllipsis = s.IsEllipsis, IsNewAxis = s.IsNewAxis };
+            }
+
+            return copy;
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Slice-notation grammar. Every pattern is a [GeneratedRegex] singleton, never a static
+        // Regex.Split/Match/Replace(input, pattern) call — see SliceNotationRegex's remarks for why.
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The separator between the per-dimension terms of a multi-dimensional slice string: a comma plus any
+        ///     whitespace after it (<c>,\s*</c>), as <see cref="ParseSlices"/> splits <c>"1:3, ::2"</c>.
+        /// </summary>
+        /// <returns>The process-wide source-generated <see cref="Regex"/> singleton for <c>,\s*</c>.</returns>
+        /// <remarks>Generated rather than cached for the reason given on <see cref="SliceNotationRegex"/>.</remarks>
+        [GeneratedRegex(@",\s*")]
+        private static partial Regex DimensionSeparatorRegex();
+
+        /// <summary>
+        ///     One dimension's slice term: <c>start:stop:step</c> with every part optional (each part a signed integer
+        ///     that may carry spaces after its sign, as Python allows <c>"- 1"</c>), a bare index, <c>...</c>, or
+        ///     <c>newaxis</c>/<c>np.newaxis</c> — captured into the <c>start</c>/<c>stop</c>/<c>step</c>/<c>index</c>/
+        ///     <c>ellipsis</c>/<c>newaxis</c> groups <see cref="Parse"/> reads.
+        /// </summary>
+        /// <returns>The process-wide source-generated <see cref="Regex"/> singleton for the notation pattern.</returns>
+        /// <remarks>
+        ///     <para>
+        ///     Why generated singletons and not the static <see cref="Regex"/> helpers: the static helpers resolve the
+        ///     pattern through the runtime's process-wide pattern cache (<see cref="Regex.CacheSize"/>, 15 entries),
+        ///     and on .NET 8 that cache THRASHES once it is full of stale entries. Its recency is a Lamport-style
+        ///     stamp — a hit sets the entry's stamp to the last-accessed entry's stamp + 1 — and a newly added entry
+        ///     starts at stamp 0, so when every resident entry carries a high stamp each miss evicts the PREVIOUS
+        ///     newcomer. Slice parsing cycles through three patterns, so from then on it misses on every call and
+        ///     re-parses this (large) pattern each time: measured on .NET 8.0.29, <see cref="ParseSlices"/> went from
+        ///     0.6–2.8 µs to 9–18 µs per call, and a 1,000-step training loop that slices with strings ran 4× slower
+        ///     (the Karpathy MicroGPT demo: 0.6 s → 2.5 s inside a full test run). Reaching that state needs only a
+        ///     long-lived process whose cache filled up and a key change — the cache key includes
+        ///     <c>CultureInfo.CurrentCulture</c>, so switching culture turns all three patterns into new keys.
+        ///     .NET 10's cache does not thrash, but the singletons are faster there too: no culture lookup, key build or
+        ///     dictionary probe per call, and generated matching code instead of the interpreter.
+        ///     </para>
+        ///     <para>
+        ///     Semantics are identical to the static helpers: <see cref="RegexOptions.None"/> (no IgnoreCase, so the
+        ///     construction culture never influenced matching) and the same default match timeout
+        ///     (<c>REGEX_DEFAULT_MATCH_TIMEOUT</c>, infinite unless the host sets it).
+        ///     </para>
+        /// </remarks>
+        [GeneratedRegex(@"^\s*((?'start'[+-]?\s*\d+)?\s*:\s*(?'stop'[+-]?\s*\d+)?\s*(:\s*(?'step'[+-]?\s*\d+)?)?|(?'index'[+-]?\s*\d+)|(?'ellipsis'\.\.\.)|(?'newaxis'(np\.)?newaxis))\s*$")]
+        private static partial Regex SliceNotationRegex();
+
+        /// <summary>
+        ///     Any run of whitespace (<c>\s+</c>) — stripped out of a captured number so Python-style spacing such as
+        ///     <c>"+ 1"</c> or <c>"-   9"</c> parses as a plain signed integer.
+        /// </summary>
+        /// <returns>The process-wide source-generated <see cref="Regex"/> singleton for <c>\s+</c>.</returns>
+        /// <remarks>Generated rather than cached for the reason given on <see cref="SliceNotationRegex"/>.</remarks>
+        [GeneratedRegex(@"\s+")]
+        private static partial Regex WhitespaceRunRegex();
+
+        /// <summary>
+        ///     The debug rendering of a <see cref="SliceDef"/>, <c>(start&gt;&gt;step*count)</c>, as the
+        ///     <see cref="SliceDef(string)"/> constructor parses it back.
+        /// </summary>
+        /// <returns>The process-wide source-generated <see cref="Regex"/> singleton for the rendering pattern.</returns>
+        /// <remarks>
+        ///     Lives on <see cref="Slice"/> (which is <c>partial</c>) because a generated regex needs a partial
+        ///     declaring type and <see cref="SliceDef"/> is a public struct whose declaration stays untouched. Generated
+        ///     rather than cached for the reason given on <see cref="SliceNotationRegex"/>.
+        /// </remarks>
+        [GeneratedRegex(@"\((\d+)>>(-?\d+)\*(\d+)\)")]
+        internal static partial Regex SliceDefRenderingRegex();
 
         /// <summary>
         /// Creates Python array slice notation out of an array of Slice objects (mainly used for tests)
@@ -162,7 +282,7 @@ namespace NumSharp
         {
             if (string.IsNullOrEmpty(slice_notation))
                 throw new ArgumentException("Slice notation expected, got empty string or null");
-            var match = Regex.Match(slice_notation, @"^\s*((?'start'[+-]?\s*\d+)?\s*:\s*(?'stop'[+-]?\s*\d+)?\s*(:\s*(?'step'[+-]?\s*\d+)?)?|(?'index'[+-]?\s*\d+)|(?'ellipsis'\.\.\.)|(?'newaxis'(np\.)?newaxis))\s*$");
+            var match = SliceNotationRegex().Match(slice_notation);
             if (!match.Success)
                 throw new ArgumentException($"Invalid slice notation: '{slice_notation}'");
             if (match.Groups["ellipsis"].Success)
@@ -183,7 +303,7 @@ namespace NumSharp
             }
             if (match.Groups["index"].Success)
             {
-                if (!long.TryParse(Regex.Replace(match.Groups["index"].Value ?? "", @"\s+", ""), out var start))
+                if (!long.TryParse(WhitespaceRunRegex().Replace(match.Groups["index"].Value ?? "", ""), out var start))
                     throw new ArgumentException($"Invalid value for index: '{match.Groups["index"].Value}'");
                 Start = start;
                 Stop = start + 1;
@@ -191,9 +311,9 @@ namespace NumSharp
                 IsIndex = true;
                 return;
             }
-            var start_string = Regex.Replace(match.Groups["start"].Value ?? "", @"\s+", ""); // removing spaces from match to be able to parse what python allows, like: "+ 1" or  "-   9";
-            var stop_string = Regex.Replace(match.Groups["stop"].Value ?? "", @"\s+", "");
-            var step_string = Regex.Replace(match.Groups["step"].Value ?? "", @"\s+", "");
+            var start_string = WhitespaceRunRegex().Replace(match.Groups["start"].Value ?? "", ""); // removing spaces from match to be able to parse what python allows, like: "+ 1" or  "-   9";
+            var stop_string = WhitespaceRunRegex().Replace(match.Groups["stop"].Value ?? "", "");
+            var step_string = WhitespaceRunRegex().Replace(match.Groups["step"].Value ?? "", "");
 
             if (string.IsNullOrWhiteSpace(start_string))
                 Start = null;
@@ -282,10 +402,15 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Converts the user Slice into an internal SliceDef which is easier to calculate with
+        /// Converts the user Slice into an internal SliceDef which is easier to calculate with: the start, step and
+        /// count resolved against one axis of length <paramref name="dim"/> (negative bounds counted from the end, bounds
+        /// clamped as Python's <c>slice.indices</c> does). Every indexing route (getters, setters, views) passes through
+        /// here, which is why a zero step is refused HERE and not when the Slice is built.
         /// </summary>
-        /// <param name="dim"></param>
-        /// <returns></returns>
+        /// <param name="dim">The length of the axis the slice indexes.</param>
+        /// <returns>The resolved slice; an empty one when the bounds select nothing; an index SliceDef for an integer.</returns>
+        /// <exception cref="ArgumentException">An integer index outside the axis.</exception>
+        /// <exception cref="ValueError">The step is 0: NumPy's <c>slice step cannot be zero</c>.</exception>
         [MethodImpl(OptimizeAndInline)]
         public SliceDef ToSliceDef(long dim)
         {
@@ -295,17 +420,20 @@ namespace NumSharp
                 if (index < 0)
                 {
                     if (Math.Abs(index) > dim)
-                        throw new ArgumentException($"Index {index} is out of bounds for the axis with size {dim}");
+                        throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Index {index} is out of bounds for the axis with size {dim}"));
                     return new SliceDef(dim + index);
                 }
 
                 if (index > 0 && index >= dim)
-                    throw new ArgumentException($"Index {index} is out of bounds for the axis with size {dim}");
+                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"Index {index} is out of bounds for the axis with size {dim}"));
                 return new SliceDef(index);
             }
 
+            // PySlice_Unpack: a zero step is refused when the slice is USED to index (a get, a set, a view) — building
+            // slice(0, 5, 0) / np.s_[::0] is legal Python, so the Slice constructor and the parser keep accepting it
+            // (parity QA-01; this returned an empty slice, so a[::0] was an empty view and a[::0] = v wrote nothing).
             if (Step == 0)
-                return new SliceDef() {Count = 0, Start = 0, Step = 0};
+                throw new ValueError("slice step cannot be zero");
             var astep = Math.Abs(Step);
             if (Step > 0)
             {
@@ -423,7 +551,7 @@ namespace NumSharp
                 return;
             }
 
-            var m = Regex.Match(def, @"\((\d+)>>(-?\d+)\*(\d+)\)");
+            var m = Slice.SliceDefRenderingRegex().Match(def);
             Start = long.Parse(m.Groups[1].Value);
             Step = long.Parse(m.Groups[2].Value);
             Count = long.Parse(m.Groups[3].Value);

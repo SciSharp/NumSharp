@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
@@ -32,26 +33,26 @@ namespace NumSharp.Backends
             Debug.Assert(left.Shape.NDim == 2);
             Debug.Assert(right.Shape.NDim == 2);
 
-            long M = left.shape[0];   // rows of A
-            long K = left.shape[1];   // cols of A = rows of B
-            long N = right.shape[1];  // cols of B
+            long M = left.Shape.dimensions[0];   // rows of A
+            long K = left.Shape.dimensions[1];   // cols of A = rows of B
+            long N = right.Shape.dimensions[1];  // cols of B
 
-            if (K != right.shape[0])
+            if (K != right.Shape.dimensions[0])
                 throw new IncorrectShapeException(
-                    $"shapes {left.Shape.ToPythonTuple()} and {right.Shape.ToPythonTuple()} not aligned: {K} (dim 1) != {right.shape[0]} (dim 0)");
+                    string.Create(CultureInfo.InvariantCulture, $"shapes {left.Shape.ToPythonTuple()} and {right.Shape.ToPythonTuple()} not aligned: {K} (dim 1) != {right.Shape.dimensions[0]} (dim 0)"));
 
             // fillZeros:false: every route below writes all M*N cells of C (the kernels clear C; an
             // installed BLAS runs gemm/gemv beta=0 or syrk), so pre-zeroing is wasted — and a fresh
             // zero buffer faults its demand-zero pages during the native write (~31us on 128x128 gemm).
             // (Default.MatMul.cs's batched path keeps fillZeros:true — its k==0 branch relies on it.)
             var resultType = np._FindCommonArrayType(left.GetTypeCode, right.GetTypeCode);
-            NDArray result = @out ?? new NDArray(resultType, Shape.Matrix(M, N), fillZeros: false);
+            NDArray result = @out ?? NewArray(resultType, Shape.Matrix(M, N), fillZeros: false);
 
             if (!(@out is null))
             {
-                if (@out.ndim != 2 || @out.shape[0] != M || @out.shape[1] != N)
+                if (@out.ndim != 2 || @out.Shape.dimensions[0] != M || @out.Shape.dimensions[1] != N)
                     throw new IncorrectShapeException(
-                        $"Output shape {@out.Shape} incompatible with matmul result shape ({M}, {N})");
+                        string.Create(CultureInfo.InvariantCulture, $"Output shape {@out.Shape} incompatible with matmul result shape ({M}, {N})"));
             }
 
             // An external BLAS, when one is installed (np is 100% managed by default — see

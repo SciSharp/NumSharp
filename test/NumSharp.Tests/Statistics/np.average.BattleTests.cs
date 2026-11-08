@@ -253,7 +253,7 @@ public class np_average_BattleTests
         // NumPy: TypeError: Axis must be specified when shapes of a and weights differ.
         var data = np.arange(6).reshape(3, 2);
         Action act = () => np.average(data, weights: np.array(new[] { 0.25, 0.75 }));
-        act.Should().Throw<ArgumentException>().WithMessage("*Axis must be specified*");
+        act.Should().ThrowExactly<TypeError>().WithMessage("Axis must be specified when shapes of a and weights differ.");
     }
 
     [TestMethod]
@@ -262,7 +262,7 @@ public class np_average_BattleTests
         // NumPy: ValueError: Shape of weights must be consistent with shape of a along specified axis.
         var data = np.arange(6).reshape(3, 2);
         Action act = () => np.average(data, axis: 0, weights: np.array(new[] { 0.25, 0.75 }));
-        act.Should().Throw<ArgumentException>().WithMessage("*Shape of weights*");
+        act.Should().ThrowExactly<ValueError>().WithMessage("Shape of weights must be consistent with shape of a along specified axis.");
     }
 
     [TestMethod]
@@ -305,7 +305,7 @@ public class np_average_BattleTests
         var data = np.arange(8).reshape(2, 2, 2);
         var w = np.array(new[,] { { 0.25, 0.75 }, { 1.0, 0.5 } });
         Action act = () => np.average(data, axis: new[] { 0 }, weights: w);
-        act.Should().Throw<ArgumentException>().WithMessage("*Shape of weights*");
+        act.Should().ThrowExactly<ValueError>().WithMessage("Shape of weights must be consistent with shape of a along specified axis.");
     }
 
     // ── view-layout variations ──────────────────────────────────────────

@@ -1,5 +1,4 @@
 using System;
-using NumSharp.Backends.Sorting;
 
 namespace NumSharp
 {
@@ -12,11 +11,14 @@ namespace NumSharp
         /// </summary>
         /// <param name="keys">The k sort keys, all the same shape. Keys are only read.</param>
         /// <param name="axis">Axis to sort along (default -1, the last axis).</param>
-        /// <returns>int64 index array of the keys' shape.</returns>
+        /// <returns>int64 index array of the keys' shape.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.lexsort.html<br></br>
-        ///     Port of <c>PyArray_LexSort</c> (item_selection.c): each key is run through a STABLE
-        ///     argsort from FIRST to LAST, every pass re-sorting the running permutation — NumSharp's
+        ///     Port of <c>PyArray_LexSort</c> (item_selection.c), the engine's
+        ///     <see cref="TensorEngine.LexSort(NDArray[], int)"/> (the np-layer dtype plan, phase PE, E5): each key is run
+        ///     through a STABLE argsort from FIRST to LAST, every pass re-sorting the running permutation — NumSharp's
         ///     radix argsort is stable, so the composition
         ///     <c>perm = take_along_axis(perm, argsort(take_along_axis(key, perm)))</c> reproduces
         ///     NumPy's mechanism pass for pass. Validation order is NumPy's: non-empty keys
@@ -26,51 +28,22 @@ namespace NumSharp
         ///     (a 0-filled int64 array of the keys' shape). NaN keys sort last (stable argsort policy);
         ///     ties across ALL keys keep ascending index order.
         /// </remarks>
+        /// <exception cref="TypeError">No key (<c>need sequence of keys with len &gt; 0 in lexsort</c>).</exception>
+        /// <exception cref="ArgumentNullException">A key is null (<c>lexsort key 1 is null</c>).</exception>
+        /// <exception cref="ValueError">Keys of different shapes (<c>all keys need to be the same shape</c>).</exception>
+        /// <exception cref="AxisError">The axis is out of bounds for the keys' rank.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> key line of two or more elements holding an NA whose NA object
+        ///     is neither NaN-like nor a string (<c>Cannot compare null that is not a nan-like value</c>). Text keys sort by
+        ///     their text: fixed-width ones (<c>S</c> / <c>U</c>) with the stable string argsort, <c>StringDType</c> ones with
+        ///     NumPy's timsort (two adjacent NaN-like NAs of a line come out reversed, as in NumPy).</exception>
         [NDScoped]
         public static NDArray lexsort(NDArray[] keys, int axis = -1)
         {
-            if (keys is null || keys.Length == 0)
-                throw new TypeError("need sequence of keys with len > 0 in lexsort");
-            for (int i = 0; i < keys.Length; i++)
-                if (keys[i] is null)
-                    throw new ArgumentNullException(nameof(keys), $"lexsort key {i} is null");
-
-            var first = keys[0];
-            for (int i = 1; i < keys.Length; i++)
-            {
-                if (keys[i].ndim != first.ndim)
-                    throw new ValueError("all keys need to be the same shape");
-                for (int d = 0; d < first.ndim; d++)
-                    if (keys[i].shape[d] != first.shape[d])
-                        throw new ValueError("all keys need to be the same shape");
-            }
-
-            int nd = first.ndim;
-            int ax = axis;
-            if (nd == 0 && (axis == 0 || axis == -1))
-            {
-                // NumPy lets axis={-1,0} slip through for 0-d keys (backwards compatibility).
-            }
-            else
-            {
-                ax = AxisSort.NormalizeAxis(axis, nd);
-            }
-
-            if (nd == 0)
-                return NDArray.Scalar(0L);
-            if (first.size <= 1)
-                return np.zeros(first.Shape.dimensions, NPTypeCode.Int64); // [0] for one element, [] for none
-
-            // First pass over an identity permutation IS the first key's stable argsort;
-            // every later key re-sorts the permutation it receives (stably), so the LAST
-            // key decides first and earlier keys only break its ties — NumPy's ordering.
-            var perm = np.argsort(keys[0], ax);
-            for (int j = 1; j < keys.Length; j++)
-            {
-                var g = np.argsort(np.take_along_axis(keys[j], perm, ax), ax);
-                perm = np.take_along_axis(perm, g, ax);
-            }
-            return perm;
+            // NumPy's lexsort is PyArray_LexSort, the engine's: TensorEngine.LexSort of the first key's engine. A null,
+            // empty or null-led list has no operand to decide, so TensorEngine.Default's member meets it and raises the
+            // body's error.
+            TensorEngine engine = keys is { Length: > 0 } && keys[0] is { } first ? first.TensorEngine : TensorEngine.Default;
+            return engine.LexSort(keys, axis);
         }
 
         /// <summary>
@@ -82,15 +55,25 @@ namespace NumSharp
         /// <param name="keys">Array whose first-axis sub-arrays are the sort keys.</param>
         /// <param name="axis">Axis to sort along (default -1).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.lexsort.html</remarks>
+        /// <exception cref="TypeError">A 0-d array or an empty first axis (<c>need sequence of keys with len &gt; 0 in
+        ///     lexsort</c>).</exception>
+        /// <exception cref="AxisError">The axis is out of bounds for a key's rank.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> key line holding a None-like NA (see
+        ///     <see cref="lexsort(NDArray[], int)"/>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        /// </remarks>
         public static NDArray lexsort(NDArray keys, int axis = -1)
         {
+            // A string array is a sequence of text keys, each sorted by its text (the key list below).
             if (keys is null)
                 throw new ArgumentNullException(nameof(keys));
             // a 0-d array is not a sequence; an empty first axis is a zero-length key sequence
-            if (keys.ndim == 0 || keys.shape[0] == 0)
+            if (keys.ndim == 0 || keys.Shape.dimensions[0] == 0)
                 throw new TypeError("need sequence of keys with len > 0 in lexsort");
 
-            var list = new NDArray[keys.shape[0]];
+            var list = new NDArray[keys.Shape.dimensions[0]];
             for (int i = 0; i < list.Length; i++)
                 list[i] = keys[i];
             return lexsort(list, axis);

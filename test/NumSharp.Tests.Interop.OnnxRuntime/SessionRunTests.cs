@@ -196,7 +196,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             using NDArray y1 = np.zeros(new Shape(2, 3), typeof(float));
             using NDArray y2 = np.zeros(new Shape(2, 3), typeof(float));
 
-            session.Run(new Dictionary<string, NDArray> { { "X", x } }, new Dictionary<string, NDArray> { { "Y1", y1 }, { "Y2", y2 } });
+            session.RunInto(new Dictionary<string, NDArray> { { "X", x } }, new Dictionary<string, NDArray> { { "Y1", y1 }, { "Y2", y2 } });
 
             BytesOf(y1).Should().Equal(BytesOf(x), "ORT wrote straight into y1");
             y2.GetSingle(1, 2).Should().Be(-5f);
@@ -205,7 +205,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
 
             // the same buffers again: the hot-loop pattern
             x[0, 0] = 100f;
-            session.Run(new Dictionary<string, NDArray> { { "X", x } }, new Dictionary<string, NDArray> { { "Y1", y1 } });
+            session.RunInto(new Dictionary<string, NDArray> { { "X", x } }, new Dictionary<string, NDArray> { { "Y1", y1 } });
             y1.GetSingle(0, 0).Should().Be(100f);
         }
 
@@ -217,34 +217,55 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             var inputs = new Dictionary<string, NDArray> { { "X", x } };
 
             using NDArray wrongDtype = np.zeros(new Shape(3), typeof(double));
-            new Action(() => session.Run(inputs, new Dictionary<string, NDArray> { { "Y1", wrongDtype } }))
+            new Action(() => session.RunInto(inputs, new Dictionary<string, NDArray> { { "Y1", wrongDtype } }))
                 .Should().Throw<InvalidOperationException>().WithMessage("*'Y1'*Float*Double*cannot be cast*");
 
             using NDArray readOnly = np.broadcast_to(NDArray.Scalar(0f), new Shape(3));
-            new Action(() => session.Run(inputs, new Dictionary<string, NDArray> { { "Y1", readOnly } }))
+            new Action(() => session.RunInto(inputs, new Dictionary<string, NDArray> { { "Y1", readOnly } }))
                 .Should().Throw<InvalidOperationException>().WithMessage("*'Y1'*read-only*");
 
             using NDArray fine = np.zeros(new Shape(3), typeof(float));
-            new Action(() => session.Run(inputs, new Dictionary<string, NDArray> { { "Nope", fine } }))
+            new Action(() => session.RunInto(inputs, new Dictionary<string, NDArray> { { "Nope", fine } }))
                 .Should().Throw<ArgumentException>().WithMessage("*'Nope'*[Y1, Y2]*");
 
             NDArrayOnnxInterop.LiveExports.Should().Be(0);
         }
 
+        /// <summary>
+        ///     Decimal and Char follow NumSharp's cast table like every other dtype. Decimal → float64 loses digits: the
+        ///     default <c>"safe"</c> refuses it (the bridge used to convert it under ANY rule, even <c>"no"</c>), and
+        ///     <c>"same_kind"</c> admits it. Char → UInt16 changes no bit: <c>"safe"</c> admits it and it stays zero-copy
+        ///     (also under <see cref="OnnxCodecMode.View"/>), while <c>"no"</c> and <c>"equiv"</c> refuse it.
+        /// </summary>
         [TestMethod]
-        public void Run_Decimal_And_Char_Inputs_TakeTheConversions()
+        public void Run_Decimal_And_Char_Inputs_FollowTheCastTable()
         {
             using InferenceSession session = OpenSession("identity_float64");
             using NDArray dec = np.array(new[] { 1.5m, 2.5m });
-            using NDArray y = session.Run(dec);
-            y.typecode.Should().Be(NPTypeCode.Double);
-            y.GetDouble(1).Should().Be(2.5);
+            foreach (string strict in new[] { "no", "equiv", "safe" })
+                new Action(() => session.Run(dec, casting: strict)).Should().Throw<InvalidCastException>(strict)
+                    .WithMessage($"*'X'*Decimal*Double*casting='{strict}'*same_kind*");
+            foreach (string relaxed in new[] { "same_kind", "unsafe" })
+            {
+                using NDArray y = session.Run(dec, casting: relaxed);
+                y.typecode.Should().Be(NPTypeCode.Double, relaxed);
+                y.GetDouble(1).Should().Be(2.5, relaxed);
+            }
+            new Action(() => session.Run(dec, casting: "same_kind", mode: OnnxCodecMode.View)).Should().Throw<InvalidOperationException>()
+                .WithMessage("*'X'*Decimal*Double*conversion is a copy*", "a conversion cannot be a view");
 
             using InferenceSession u16 = OpenSession("identity_uint16");
             using NDArray chars = np.array("ok".ToCharArray());
-            using NDArray units = u16.Run(chars);
-            units.typecode.Should().Be(NPTypeCode.UInt16);
-            units.GetUInt16(1).Should().Be((ushort)'k');
+            foreach (string admitted in new[] { "safe", "same_kind", "unsafe" })
+            {
+                using NDArray units = u16.Run(chars, casting: admitted, mode: OnnxCodecMode.View);   // View: proves no copy is made
+                units.typecode.Should().Be(NPTypeCode.UInt16, admitted);
+                units.GetUInt16(1).Should().Be((ushort)'k', admitted);
+            }
+            foreach (string strict in new[] { "no", "equiv" })
+                new Action(() => u16.Run(chars, casting: strict)).Should().Throw<InvalidCastException>(strict).WithMessage("*'X'*Char*UInt16*");
+
+            NDArrayOnnxInterop.LiveExports.Should().Be(0);
         }
 
         [TestMethod]

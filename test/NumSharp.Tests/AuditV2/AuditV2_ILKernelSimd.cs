@@ -140,12 +140,12 @@ public class AuditV2_ILKernelSimd
     }
 
     // ======================================================================
-    // T1.11 — np.fmax / np.fmin propagate NaN instead of skipping
+    // T1.11 — np.fmax / np.fmin propagated NaN instead of skipping (RESOLVED)
     //
     // File: src/NumSharp.Core/Math/np.maximum.cs (fmax)
     //       src/NumSharp.Core/Math/np.minimum.cs (fmin)
     //
-    // Root cause: fmax and fmin are implemented as thin wrappers that delegate
+    // Root cause (historical): fmax and fmin were thin wrappers that delegated
     // to np.clip with a_min=x2 / a_max=x2 respectively. clip propagates NaN
     // (matching np.maximum/np.minimum semantics), but the NumPy contract for
     // fmax/fmin is the OPPOSITE — they must IGNORE NaN where possible and
@@ -154,14 +154,19 @@ public class AuditV2_ILKernelSimd
     // NumPy 2.x semantics:
     //   np.maximum / np.minimum -> NaN propagates ("NaN wins")
     //   np.fmax    / np.fmin    -> NaN is skipped (returns the non-NaN side)
-    // Implemented identically in NumSharp ⇒ fmax/fmin are wrong.
     //
-    // Remediation: route fmax/fmin through a NaN-aware element kernel that
-    // chooses the non-NaN operand. Equivalent to NumPy's `npy_fmax` /
-    // `npy_fmin` core loops.
+    // Resolved by 25ba412f (direct binary maximum/minimum/fmax/fmin kernel, a
+    // NaN-aware element loop equivalent to NumPy's `npy_fmax` / `npy_fmin`).
+    // The four tests below were [OpenBugs] until the 2026-10-05 run of the
+    // whole OpenBugs category found them passing; they now guard the fix in CI.
     // ======================================================================
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.11")]
+    /// <summary>
+    ///     <c>np.fmax</c> takes the non-NaN operand position by position: <c>fmax([1, nan, 3], [nan, 2, nan])</c> is
+    ///     <c>[1, 2, 3]</c> in NumPy 2.4.2. A regression that lets NaN win (the <c>np.maximum</c> rule) turns a
+    ///     missing-value merge into a NaN result.
+    /// </summary>
+    [TestMethod] // RESOLVED: fmax skips NaN (was [OpenBugs] audit-v2-T1.11).
     public void T1_11_Fmax_SkipsNaN_ReturnsOtherOperand()
     {
         var a = np.array(new double[] { 1.0, double.NaN, 3.0 });
@@ -173,7 +178,12 @@ public class AuditV2_ILKernelSimd
         result.GetDouble(2).Should().Be(3.0);
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.11")]
+    /// <summary>
+    ///     <c>np.fmin</c> takes the non-NaN operand position by position: <c>fmin([1, nan, 3], [nan, 2, nan])</c> is
+    ///     <c>[1, 2, 3]</c> in NumPy 2.4.2. A regression that lets NaN win (the <c>np.minimum</c> rule) turns a
+    ///     missing-value merge into a NaN result.
+    /// </summary>
+    [TestMethod] // RESOLVED: fmin skips NaN (was [OpenBugs] audit-v2-T1.11).
     public void T1_11_Fmin_SkipsNaN_ReturnsOtherOperand()
     {
         var a = np.array(new double[] { 1.0, double.NaN, 3.0 });
@@ -185,7 +195,11 @@ public class AuditV2_ILKernelSimd
         result.GetDouble(2).Should().Be(3.0);
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.11")]
+    /// <summary>
+    ///     <c>np.fmax(nan, 5)</c> is <c>5</c>: the minimal case, one NaN in the FIRST operand against a number. A
+    ///     failure here with the three-element test passing points at the one-element (scalar-sized) dispatch.
+    /// </summary>
+    [TestMethod] // RESOLVED: fmax(NaN, x) is x (was [OpenBugs] audit-v2-T1.11).
     public void T1_11_Fmax_NaN_And_Number_ReturnsNumber()
     {
         var a = np.array(new double[] { double.NaN });
@@ -194,7 +208,11 @@ public class AuditV2_ILKernelSimd
         result.GetDouble(0).Should().Be(5.0, "fmax(NaN, 5) must return 5 per NumPy");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.11")]
+    /// <summary>
+    ///     <c>np.fmin(nan, 5)</c> is <c>5</c>: the minimal case, one NaN in the FIRST operand against a number. A
+    ///     failure here with the three-element test passing points at the one-element (scalar-sized) dispatch.
+    /// </summary>
+    [TestMethod] // RESOLVED: fmin(NaN, x) is x (was [OpenBugs] audit-v2-T1.11).
     public void T1_11_Fmin_NaN_And_Number_ReturnsNumber()
     {
         var a = np.array(new double[] { double.NaN });

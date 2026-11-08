@@ -1,5 +1,4 @@
 using System;
-using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -13,7 +12,15 @@ namespace NumSharp
         /// <param name="filt">Input array.</param>
         /// <param name="trim">'f' trims from the front, 'b' from the back; "fb" (default) trims both. Case-insensitive.</param>
         /// <param name="axis">The single dimension to trim; <c>null</c> trims the whole-array bounding box.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html</remarks>
+        /// <returns>A view of <paramref name="filt"/> (see the <c>int[]</c> overload).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
+        /// <exception cref="ValueError"><paramref name="trim"/> contains unexpected characters.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="filt"/> ("axis: axis … is
+        ///     out of bounds for array of dimension …", NumPy names the argument).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html. A string array is trimmed by its
+        ///     truth values (an empty string is a zero), as NumPy's <c>argwhere</c> reads them.</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray trim_zeros(NDArray filt, string trim = "fb", int? axis = null)
             => trim_zeros(filt, trim, axis.HasValue ? new[] {axis.Value} : null);
 
@@ -36,102 +43,22 @@ namespace NumSharp
         /// <returns>
         ///     A view of <paramref name="filt"/> with leading/trailing all-zero hyperplanes removed. The number
         ///     of dimensions and the input dtype are preserved.
-        /// </returns>
-        /// <exception cref="ArgumentException">If <paramref name="trim"/> contains unexpected characters, or an axis is repeated.</exception>
-        /// <exception cref="AxisOutOfRangeException">If an axis is out of bounds for <paramref name="filt"/>.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html</remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
+        /// <exception cref="ValueError">If <paramref name="trim"/> contains unexpected characters, or an axis is repeated
+        ///     (NumPy's ValueError texts).</exception>
+        /// <exception cref="AxisError">If an axis is out of bounds for <paramref name="filt"/> (checked for every axis before
+        ///     the repeat check).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html. A string array is trimmed by its
+        ///     truth values (an empty string — all NULs — is a zero): NumPy's <c>_arg_trim_zeros</c> runs <c>np.argwhere</c>,
+        ///     the dtype's nonzero route, which never raises; the result is a view of the text itself.</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="filt"/> is null.</exception>
         [NDScoped]
         public static NDArray trim_zeros(NDArray filt, string trim, int[] axis)
         {
-            // NumPy lower-cases and validates the trim spec against the four accepted spellings.
-            trim = (trim ?? string.Empty).ToLowerInvariant();
-            if (trim != "fb" && trim != "bf" && trim != "f" && trim != "b")
-                throw new ArgumentException($"unexpected character(s) in `trim`: '{trim}'");
-
-            int ndim = filt.ndim;
-
-            // Resolve the axis tuple. axis == null means "all axes" (bounding box over the whole array);
-            // an explicit list is normalized (negative wrap + out-of-range check) and must not repeat an axis.
-            var trimAxis = new bool[ndim];
-            bool anyAxis;
-            if (axis == null)
-            {
-                for (int i = 0; i < ndim; i++)
-                    trimAxis[i] = true;
-                anyAxis = ndim > 0;
-            }
-            else
-            {
-                anyAxis = axis.Length > 0;
-                foreach (var ax in axis)
-                {
-                    int a = DefaultEngine.check_and_adjust_axis(ndim, ax);
-                    if (trimAxis[a])
-                        throw new ArgumentException("repeated axis in `axis` argument");
-                    trimAxis[a] = true;
-                }
-            }
-
-            // No trimming requested (axis == () or a 0-d input) -> return the input unmodified, like NumPy.
-            if (!anyAxis)
-                return filt;
-
-            bool trimFront = trim.IndexOf('f') >= 0;
-            bool trimBack = trim.IndexOf('b') >= 0;
-
-            // The bounding box of the non-zero elements is SEPARABLE per dimension: the first/last non-zero
-            // coordinate along axis d equals the first/last index whose perpendicular hyperplane contains any
-            // non-zero value. So rather than materializing every non-zero coordinate (NumPy's argwhere.min/max
-            // over the whole array), reduce "any non-zero" over all OTHER axes down to a 1-D mask and take the
-            // first/last of its non-zero positions. Only the axes actually being trimmed are projected.
-            var start = new long?[ndim]; // null => open slice edge (Slice.All for untrimmed axes)
-            var stop = new long?[ndim];
-
-            var others = new int[ndim > 0 ? ndim - 1 : 0];
-            for (int d = 0; d < ndim; d++)
-            {
-                if (!trimAxis[d])
-                    continue; // untrimmed axis keeps null/null -> Slice.All
-
-                // positions: sorted indices of the non-zero hyperplanes along axis d.
-                //   1-D  -> the non-zero element indices directly (skip the projection).
-                //   N-D  -> np.any over every other axis gives a 1-D mask; its non-zero indices are the edges.
-                NDArray positions;
-                if (ndim == 1)
-                {
-                    positions = np.nonzero(filt)[0];
-                }
-                else
-                {
-                    int oi = 0;
-                    for (int k = 0; k < ndim; k++)
-                        if (k != d)
-                            others[oi++] = k;
-                    positions = np.nonzero(np.any(filt, others))[0];
-                }
-
-                long n = positions.size;
-                if (n == 0)
-                {
-                    // All-zero (or empty) along d -> empty slice; trim spec ignored, matching NumPy (start == stop).
-                    start[d] = 0L;
-                    stop[d] = 0L;
-                }
-                else
-                {
-                    long first = (long)positions[0];         // ascending -> ends are the first/last non-zero
-                    long last = (long)positions[(int)n - 1];
-                    start[d] = trimFront ? first : (long?)null; // 'f' absent -> keep the front (open start)
-                    stop[d] = trimBack ? last + 1 : (long?)null; // 'b' absent -> keep the back  (open stop)
-                }
-            }
-
-            // Trimmed axes are sliced to [start, stop); untouched axes span the full dimension.
-            var slices = new Slice[ndim];
-            for (int ax = 0; ax < ndim; ax++)
-                slices[ax] = trimAxis[ax] ? new Slice(start[ax], stop[ax]) : Slice.All;
-
-            return filt[slices];
+            if (filt is null) throw new ArgumentNullException(nameof(filt));
+            return filt.TensorEngine.TrimZeros(filt, trim, axis);
         }
     }
 }

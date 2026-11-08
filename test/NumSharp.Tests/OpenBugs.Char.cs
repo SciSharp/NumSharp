@@ -10,7 +10,7 @@ namespace NumSharp.Tests
     ///     NumPy 2.4.2 on 2026-06-30 and quoted per test.
     ///
     ///     These combinations are CARVED OUT of the green corpus (they would otherwise red the
-    ///     woven tiers) and reproduced here under [OpenBugs]. Each test asserts the CORRECT
+    ///     woven tiers) and reproduced here (under [OpenBugs] until 2026-10-05). Each test asserts the CORRECT
     ///     (uint16-equivalent) result, so it FAILS while the bug exists and PASSES when fixed —
     ///     at which point re-add the carved pair/op in gen_oracle.char_tier and delete the test.
     ///
@@ -26,6 +26,13 @@ namespace NumSharp.Tests
     ///       6. invert(Char) with N>=16 -> NotSupportedException — the SIMD Vector256&lt;ushort&gt;
     ///          bitwise-not path omits Char (N&lt;=15 scalar path works; size-dependent).
     /// </summary>
+    /// <remarks>
+    ///     All six bugs are FIXED, by 22589ad6 (2026-06-30, "make Char promote/compute as the uint16 masquerade"), which
+    ///     also added <c>Casting/CharUInt16MasqueradeTests.cs</c>. These seven pins stayed <c>[OpenBugs]</c> until the
+    ///     2026-10-05 run of the whole OpenBugs category found them passing; they are regression tests now. The combos
+    ///     are still carved out of <c>gen_oracle.char_tier</c>: re-adding them there needs a corpus regeneration with
+    ///     NumPy 2.4.2, after which these pins can go.
+    /// </remarks>
     [TestClass]
     public class OpenBugsCharTests : TestClass
     {
@@ -54,13 +61,18 @@ namespace NumSharp.Tests
         private static int Code(NDArray a, int i) => (char)a.GetValue(i);
 
         // ============================================================================
-        //  BUG 1: promote(Char, Byte) -> Byte (arithmetic) — silent data corruption.
+        //  BUG 1 (FIXED by 22589ad6): promote(Char, Byte) -> Byte (arithmetic) — silent data corruption.
         //
         //  np.array([321],u16) + np.array([65],u8) == [386], dtype uint16  (NumPy 2.4.2)
-        //  NumSharp: char[321] + uint8[65] -> dtype Byte, value 130 (321 truncated to 0x41=65,
-        //  then 65+65). Char ranks below uint8 so the wider operand "wins" downward.
+        //  NumSharp (before the fix): char[321] + uint8[65] -> dtype Byte, value 130 (321 truncated
+        //  to 0x41=65, then 65+65). Char ranked below uint8 so the wider operand "won" downward.
         // ============================================================================
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>char + uint8</c> promotes like <c>uint16 + uint8</c>: the result is Char (uint16) and
+        ///     <c>321 + 65 = 386</c>. Promoting to Byte would truncate the Char to its low byte and corrupt the sum
+        ///     silently.
+        /// </summary>
+        [TestMethod]
         public void Char_Add_Byte_TruncatesToByte()
         {
             var r = Chars(321) + Bytes(65);
@@ -72,13 +84,17 @@ namespace NumSharp.Tests
         }
 
         // ============================================================================
-        //  BUG 1b: the SAME promotion bug corrupts COMPARISONS (wrong booleans).
+        //  BUG 1b (FIXED by 22589ad6): the SAME promotion bug corrupted COMPARISONS (wrong booleans).
         //
         //  np.greater(u16 321, u8 65) == True ; np.equal(u16 321, u8 65) == False  (NumPy 2.4.2)
-        //  NumSharp compares at Byte precision after truncating 321 -> 65, so it reports
-        //  greater == False and equal == True. This is a wrong ANSWER, not just a wrong dtype.
+        //  NumSharp (before the fix) compared at Byte precision after truncating 321 -> 65, so it
+        //  reported greater == False and equal == True. This was a wrong ANSWER, not just a wrong dtype.
         // ============================================================================
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     Comparing a Char with a uint8 compares the full 16-bit values: <c>321 &gt; 65</c> is True and
+        ///     <c>321 == 65</c> is False. A comparison at Byte width would give the opposite answers.
+        /// </summary>
+        [TestMethod]
         public void Char_Compare_Byte_TruncatesHighByte()
         {
             ((bool)np.greater(Chars(321), Bytes(65)).GetValue(0)).Should().BeTrue(
@@ -88,12 +104,16 @@ namespace NumSharp.Tests
         }
 
         // ============================================================================
-        //  BUG 2: reciprocal(Char) -> Double instead of the integer reciprocal.
+        //  BUG 2 (FIXED by 22589ad6): reciprocal(Char) -> Double instead of the integer reciprocal.
         //
         //  np.reciprocal(np.array([2,3,4],u16)) == [0,0,0], dtype uint16  (integer 1//x).
-        //  NumSharp returns dtype Double — Char is not treated as an integer dtype here.
+        //  NumSharp (before the fix) returned dtype Double — Char was not treated as an integer dtype here.
         // ============================================================================
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.reciprocal</c> of Char takes NumPy's uint16 integer loop and keeps the Char dtype (<c>1 // x</c>),
+        ///     instead of switching to a float64 result.
+        /// </summary>
+        [TestMethod]
         public void Char_Reciprocal_ReturnsDouble()
         {
             var r = np.reciprocal(Chars(2, 3, 4));
@@ -103,13 +123,17 @@ namespace NumSharp.Tests
         }
 
         // ============================================================================
-        //  BUG 3: power(Char, Single) -> Double instead of Single.
+        //  BUG 3 (FIXED by 22589ad6): power(Char, Single) -> Double instead of Single.
         //
         //  np.power(u16[2,3], f32[2,2]) == [4.,9.], dtype float32.
-        //  NumSharp returns dtype Double — Char is mis-ranked ABOVE float32 (the opposite
-        //  direction from BUG 1, where it sits below Byte: the promotion table is simply wrong).
+        //  NumSharp (before the fix) returned dtype Double. The root cause was a NumPy-1.x
+        //  power-promotion override (int base ** float exponent -> float64) that NEP 50 removed.
         // ============================================================================
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.power(char, float32)</c> is float32, NumPy's <c>result_type(uint16, float32)</c> under NEP 50, not
+        ///     float64.
+        /// </summary>
+        [TestMethod]
         public void Char_Power_Single_ReturnsDouble()
         {
             var r = np.power(Chars(2, 3), new NDArray(new float[] { 2f, 2f }));
@@ -118,13 +142,17 @@ namespace NumSharp.Tests
         }
 
         // ============================================================================
-        //  BUG 4: power crashes on a Char operand in the scalar/broadcast path.
+        //  BUG 4 (FIXED by 22589ad6): power crashed on a Char operand in the scalar/broadcast path.
         //
         //  np.power(u16[2,3,4], u16(2)) == [4,9,16], dtype uint16.
-        //  NumSharp throws InvalidCastException: the scalar power kernel routes through
+        //  NumSharp (before the fix) threw InvalidCastException: the scalar power kernel routed through
         //  Convert.ToDouble(char)/Convert.ToInt32(char), neither of which supports System.Char.
         // ============================================================================
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.power</c> of a Char array by a 0-d Char exponent computes <c>[4, 9, 16]</c> in Char (uint16), without
+        ///     the InvalidCastException the scalar-exponent fast path used to throw.
+        /// </summary>
+        [TestMethod]
         public void Char_Power_ScalarChar_Crashes()
         {
             NDArray r = null;
@@ -138,12 +166,17 @@ namespace NumSharp.Tests
         }
 
         // ============================================================================
-        //  BUG 5: bitwise_and/or/xor(bool, Char) -> KeyNotFoundException '(Boolean, Char)'.
+        //  BUG 5 (FIXED by 22589ad6): bitwise_and/or/xor(bool, Char) -> KeyNotFoundException '(Boolean, Char)'.
         //
         //  np.bitwise_and([T,F,T], u16(5)) == [1,0,1], dtype uint16.
-        //  NumSharp's mixed-type kernel cache has no (Boolean, Char) entry and throws.
+        //  NumSharp's promotion table (before the fix) had no (Boolean, Char) entry and threw — for every
+        //  binary op of a bool array and a Char scalar, not only the bitwise ones.
         // ============================================================================
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.bitwise_and</c> of a bool array and a 0-d Char promotes to Char (uint16) and computes
+        ///     <c>[1, 0, 1]</c>, instead of throwing KeyNotFoundException for the missing (Boolean, Char) pair.
+        /// </summary>
+        [TestMethod]
         public void Char_BitwiseAnd_Bool_KeyNotFound()
         {
             var b = new NDArray(new bool[] { true, false, true });
@@ -158,13 +191,17 @@ namespace NumSharp.Tests
         }
 
         // ============================================================================
-        //  BUG 6: invert(Char) throws on the N>=16 SIMD path (size-dependent).
+        //  BUG 6 (FIXED by 22589ad6): invert(Char) threw on the N>=16 SIMD path (size-dependent).
         //
         //  np.invert(u16[1..20]) == [65534,65533,…,65515], dtype uint16.
-        //  NumSharp's Vector256<ushort> bitwise-not path omits Char and throws
-        //  NotSupportedException once N reaches the 16-lane SIMD width (N<=15 scalar path works).
+        //  NumSharp's bitwise-not SIMD path (before the fix) emitted Vector<char>, which the BCL lacks, and
+        //  threw NotSupportedException once N reached the SIMD width (the N<=15 scalar path worked).
         // ============================================================================
-        [TestMethod, OpenBugs]
+        /// <summary>
+        ///     <c>np.invert</c> of a 20-element Char array (past the SIMD width) computes the 16-bit complement
+        ///     (<c>~1 = 65534</c>, <c>~20 = 65515</c>) in Char, on the size where it used to throw.
+        /// </summary>
+        [TestMethod]
         public void Char_Invert_LargeN_NotSupported()
         {
             var c = Chars(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20); // N=20 -> SIMD

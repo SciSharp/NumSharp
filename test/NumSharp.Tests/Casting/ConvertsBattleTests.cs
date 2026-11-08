@@ -843,17 +843,19 @@ namespace NumSharp.Tests.Casting
         // Group A: String target for Half/Complex sources.
         // Previously ChangeType<string>(Half/Complex) and ChangeType(Half/Complex, NPTypeCode.String)
         // cast to IConvertible which fails since Half/Complex don't implement it.
+        // The text is NumPy's str() of the scalar (Converts.NumPyText.cs): str(np.float16(1)) is '1.0',
+        // str(np.complex128(3+4j)) is '(3+4j)' — not .NET's "1" / "<3; 4>".
 
         [TestMethod]
         public void ChangeTypeGeneric_HalfToString_Works()
         {
-            Converts.ChangeType<string>(Half.One).Should().Be("1");
+            Converts.ChangeType<string>(Half.One).Should().Be("1.0");
         }
 
         [TestMethod]
         public void ChangeTypeGeneric_ComplexToString_Works()
         {
-            Converts.ChangeType<string>(new Complex(3, 4)).Should().Be("<3; 4>");
+            Converts.ChangeType<string>(new Complex(3, 4)).Should().Be("(3+4j)");
         }
 
         [TestMethod]
@@ -865,7 +867,7 @@ namespace NumSharp.Tests.Casting
         [TestMethod]
         public void ChangeType_ComplexToNPTypeCodeString_Works()
         {
-            Converts.ChangeType((object)new Complex(3, 4), NPTypeCode.String).Should().Be("<3; 4>");
+            Converts.ChangeType((object)new Complex(3, 4), NPTypeCode.String).Should().Be("(3+4j)");
         }
 
         // Group B: FindConverter<Half/Complex, string> routes through
@@ -875,14 +877,14 @@ namespace NumSharp.Tests.Casting
         public void FindConverter_HalfToString_Works()
         {
             var conv = Converts.FindConverter<Half, string>();
-            conv(Half.One).Should().Be("1");
+            conv(Half.One).Should().Be("1.0");
         }
 
         [TestMethod]
         public void FindConverter_ComplexToString_Works()
         {
             var conv = Converts.FindConverter<Complex, string>();
-            conv(new Complex(3, 4)).Should().Be("<3; 4>");
+            conv(new Complex(3, 4)).Should().Be("(3+4j)");
         }
 
         // Group C: .NET-style ChangeType(Object, TypeCode) and (Object, TypeCode, IFormatProvider).
@@ -944,7 +946,7 @@ namespace NumSharp.Tests.Casting
         [TestMethod]
         public void ChangeTypeTypeCode_ComplexToString_Works()
         {
-            Converts.ChangeType((object)new Complex(3, 4), TypeCode.String).Should().Be("<3; 4>");
+            Converts.ChangeType((object)new Complex(3, 4), TypeCode.String).Should().Be("(3+4j)");
         }
 
         [TestMethod]
@@ -1361,24 +1363,31 @@ namespace NumSharp.Tests.Casting
         // two tests above are added in the Round 6 region below — they exercise the same
         // dispatch paths and lock in the same rejection.
 
-        // NumPy parity: non-integer indices raise IndexError. NumSharp now throws IndexError
-        // ("only integers, slices (':'), ellipsis ('...'), numpy.newaxis ('None') and integer
-        // or boolean arrays are valid indices") from the Getter/Setter validation switch.
+        // NumPy parity: non-integer indices raise IndexError with prepare_index's text, verbatim (probed 2.4.2:
+        // np.arange(5)[np.float16(2)] and np.arange(5)[2+0j]): backticks, and no type name (NumSharp's used to end with
+        // "(got 'Half')").
 
+        /// <summary>
+        ///     A float16 index is refused with NumPy's exact text: <c>PyArray_PyIntAsIntp</c> does not take a float, whatever its
+        ///     value.
+        /// </summary>
         [TestMethod]
         public void Indexing_HalfIndex_Getter_NotSupported()
         {
             var arr = np.array(new[] { 10, 20, 30, 40, 50 });
             var act = () => arr[(Half)2];
-            act.Should().Throw<IndexError>().WithMessage("*integers*slices*Half*");
+            act.Should().Throw<IndexError>().WithMessage(
+                "only integers, slices (`:`), ellipsis (`...`), numpy.newaxis (`None`) and integer or boolean arrays are valid indices");
         }
 
+        /// <summary>A complex index is refused with NumPy's exact text.</summary>
         [TestMethod]
         public void Indexing_ComplexIndex_Getter_NotSupported()
         {
             var arr = np.array(new[] { 10, 20, 30, 40, 50 });
             var act = () => arr[new Complex(2, 0)];
-            act.Should().Throw<IndexError>().WithMessage("*integers*slices*Complex*");
+            act.Should().Throw<IndexError>().WithMessage(
+                "only integers, slices (`:`), ellipsis (`...`), numpy.newaxis (`None`) and integer or boolean arrays are valid indices");
         }
 
         #endregion

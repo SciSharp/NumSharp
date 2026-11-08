@@ -20,7 +20,14 @@ namespace NumSharp
         ///     <paramref name="x"/> (shared memory, matching NumPy), each with
         ///     shape equal to <c>x.shape</c> with the <paramref name="axis"/>
         ///     entry removed.
-        /// </returns>
+        ///     An empty <paramref name="x"/> gives empty views too. A <c>numpy.char.chararray</c> operand of two or
+        ///     more dimensions gives chararray views (NumPy iterates the chararray); a 1-d one gives its elements as
+        ///     NumPy's iteration does, the read-only stand-ins of the Python <c>str</c> / <c>bytes</c> with the trailing
+        ///     whitespace stripped.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="x"/> is 0-d ("Input array must be at least 1-d.").</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range: moveaxis' "source: axis … is out of
+        ///     bounds for array of dimension …".</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.unstack.html
         ///     <br></br>
@@ -32,59 +39,15 @@ namespace NumSharp
         ///     by dropping <c>axis</c> from dims/strides and advancing the offset
         ///     by <c>i * strides[axis]</c>; no iterator or data movement anywhere.
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray[] unstack(NDArray x, int axis = 0)
         {
             if (x is null)
                 throw new ArgumentNullException(nameof(x));
 
-            // NumPy: ValueError("Input array must be at least 1-d.")
-            int ndim = x.ndim;
-            if (ndim == 0)
-                throw new ValueError("Input array must be at least 1-d.");
-
-            // AxisError parity (moveaxis would raise the same for a bad axis).
-            axis = DefaultEngine.check_and_adjust_axis(ndim, axis);
-
-            var shape = x.Shape;
-            var result = new NDArray[checked((int)shape.dimensions[axis])];
-            if (result.Length == 0)
-                return result;
-
-            // Every child shares the same dims/strides — x's with `axis` removed.
-            // Shape treats the arrays as immutable, so ONE pair serves all views.
-            var subDims = new long[ndim - 1];
-            var subStrides = new long[ndim - 1];
-            for (int j = 0, k = 0; j < ndim; j++)
-            {
-                if (j == axis) continue;
-                subDims[k] = shape.dimensions[j];
-                subStrides[k] = shape.strides[j];
-                k++;
-            }
-
-            if (x.size == 0)
-            {
-                // Some OTHER axis is zero-length (a zero `axis` yields an empty
-                // result array above). There is no data to alias — each entry is
-                // an empty array of the remaining shape.
-                for (int i = 0; i < result.Length; i++)
-                    result[i] = new NDArray(x.dtype, new Shape(subDims));
-                return result;
-            }
-
-            long axisStride = shape.strides[axis];
-            long baseOffset = shape.offset;
-            var storage = x.Storage;
-            var engine = x.TensorEngine;
-            for (int i = 0; i < result.Length; i++)
-            {
-                // Alias() inherits writeability, so unstacking a read-only array
-                // (broadcast view / 'r' memmap) yields read-only views.
-                var sub = new Shape(subDims, subStrides, baseOffset + i * axisStride, shape.bufferSize);
-                result[i] = new NDArray(storage.Alias(sub), engine, skipEngineResolve: true);
-            }
-
-            return result;
+            // NumPy's statements (the rank check, moveaxis' axis check, one view per index along the axis) are the
+            // array object's.
+            return NDArray.unstack(x, axis);
         }
     }
 }

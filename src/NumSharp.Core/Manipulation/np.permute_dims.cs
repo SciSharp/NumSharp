@@ -13,8 +13,11 @@ namespace NumSharp
         ///     will correspond to the axis numbered <c>axes[i]</c> of the input. If not specified, defaults to
         ///     reversing the order of the axes.
         /// </param>
-        /// <returns><paramref name="a"/> with its axes permuted. A view is returned whenever possible.</returns>
+        /// <returns><paramref name="a"/> with its axes permuted. A view is returned whenever possible.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.permute_dims.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray permute_dims(NDArray a, int[] axes = null)
             => a.TensorEngine.Transpose(a, axes);
     }

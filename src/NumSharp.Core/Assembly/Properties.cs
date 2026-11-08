@@ -51,7 +51,20 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NumSharp.Interop.System.Numerics.Tensors, PublicKey=" + NumSharpFriendKey.PublicKey)]
 [assembly: InternalsVisibleTo("NumSharp.Tests.Interop.System.Numerics.Tensors, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
+// The Parquet interop bridge loads Parquet columns straight into an NDArray's raw unmanaged buffer (it hands
+// Parquet.Net a Memory<T> window over the NDArray's UnmanagedMemoryBlock<T> so the decoder writes in place).
+// It currently builds on public NumSharp surface only, but is granted friend access for parity with the other
+// interop bridges (and any future reach into Storage) — and its test assembly signs with the same key.
+[assembly: InternalsVisibleTo("NumSharp.Interop.ParquetNet, PublicKey=" + NumSharpFriendKey.PublicKey)]
+[assembly: InternalsVisibleTo("NumSharp.Tests.Interop.ParquetNet, PublicKey=" + NumSharpFriendKey.PublicKey)]
+
 [assembly: InternalsVisibleTo("NumSharp.Benchmark, PublicKey=" + NumSharpFriendKey.PublicKey)]
+
+// The BenchmarkDotNet suite (benchmark/NumSharp.Benchmark.CSharp, signed through Directory.Build.props like every repo
+// project): ConcurrentOrderedDictionaryBenchmarks measures the vendored NumSharp.Collections.Concurrent.ConcurrentDictionary
+// clone against the BCL's, and that clone is internal since 0.80.0 (its public name clashed with the BCL type), so
+// the suite needs friend access to keep compiling. No shipped package references this assembly.
+[assembly: InternalsVisibleTo("NumSharp.Benchmark.CSharp, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
 // Cross-repo: TensorFlow.NET signs with the identical key, which is the reason NumSharp keeps using
 // Microsoft's open key rather than minting its own — a NumSharp-owned key would break this line.

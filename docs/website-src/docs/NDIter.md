@@ -105,6 +105,14 @@ That separation is intentional: index-only and boxed convenience APIs should not
 
 Like `NDIterRef`, `np.broadcast(...)` has **no explicit operand-count cap** - NumPy caps the multi-iterator at 64 (`NPY_MAXARGS`); NumSharp sizes per-operand structures dynamically (see [Divergences from NumPy](#divergences-from-numpy)).
 
+### String operands and buffers
+
+`np.nditer` supports `S`, `U` and `StringDType` (`T`) operands with their **full descriptors**, including fixed widths, byte order, NA objects and coercion. Use `op_dtypes: new DType[] { "U8" }` for a text iteration dtype, not an `NPTypeCode.String` entry. Text ↔ text and text ↔ number buffered casts run their descriptor-aware transfer loops.
+
+A `T` operand requires **`refs_ok`**, even when a buffer casts it to another dtype. Each `T` buffer owns an allocator, and fills, flushes and iterator copies duplicate strings rather than copying raw cells. Operand views use the allocator of the memory they actually reference. Dispose the iterator to flush pending writes and release those allocators. The unmanaged CLR `ref T` / `Span<T>` iteration extensions are not a `ref string` interface.
+
+The buffering used by these routes follows NumPy's core/outer schedule, including buffered reductions, `grow_inner`, buffer reuse and masked write-back. See [Iterating text](iterating-and-enumerating.md#iterating-text) for an application example and [StringDType iteration](fundamentals/strings-and-bytes.md#iterating-with-npnditer) for casts and write-back.
+
 ### Typed iteration - unboxed elements and Span chunks
 
 A NumSharp extension with no NumPy counterpart: Python has no unboxed generics, so `np.nditer`'s `it[0]` must hand back an array object. NumSharp's can hand back a **reference**.
@@ -181,7 +189,7 @@ NDIterState (unmanaged struct)                ← unmanaged state + dynamic bloc
     ├── Op arrays (size = NOp):   DataPtrs*, ResetDataPtrs*, BufStrides*,
     │                              InnerStrides*, BaseOffsets*, OpDTypes*, ...
     └── Reduction arrays:         ReduceOuterStrides*, ReduceOuterPtrs*,
-                                  ArrayWritebackPtrs*, CoreSize, CorePos, ...
+                                  ArrayWritebackPtrs*, CoreSize, CoreOffset, ...
 ```
 
 The handle is cheap to pass, but construction performs unmanaged allocation: one state object, one dimension-dependent block when `ndim > 0`, and one per-operand block. Buffering may add one aligned block per operand. `Dispose`/`FreeState` must release the matching ownership path.
@@ -238,7 +246,7 @@ Other deliberate differences:
 
 - **Flag bit layout.** NumSharp reserves low bits 0-7 for the compatibility flags (`SourceBroadcast`, `SourceContiguous`, `DestinationContiguous`). NumPy-parity flags (`IDENTPERM`, `HASINDEX`, `REDUCE`, ...) sit at bits 8-15. Transfer flags pack into the top byte at shift 24. Semantics match NumPy; positions do not.
 - **Two stride units.** NumPy's axis data is byte-strided. NumSharp keeps source-array axis strides in **elements** (`state.Strides`) and scales them with `SrcElementSizes`; `BufStrides` and the `NDInnerLoopFunc` contract are **bytes**. Whole-array DirectIL helpers receive element strides. Mixing these units is a correctness bug, not a performance detail.
-- **No Python object support.** `REFS_OK`, garbage collection hooks, and `NDIter_GetBufferNeedsAPI` are no-ops. All cast routines are written assuming the data is plain unmanaged bytes.
+- **No general Python-object dtype.** This does not make `REFS_OK` a no-op: `StringDType` holds references to text storage, requires the flag and uses allocator-aware transfers. Fixed-width text also needs descriptor-sized copies and casts; not every operand can be handled as a numeric CLR lane.
 - **Int64 indexing.** Iteration counters are `long`. This matches 64-bit NumPy's `npy_intp`; the difference appears on 32-bit hosts, where NumPy's index type is pointer-sized.
 - **NumSharp-only internal flag.** `PARALLEL_SAFE` records a construction-time range-splitting judgment. It is metadata for planned/selected parallel drivers, not automatic parallel execution by `ForEach`.
 - **Typed empty iteration.** `np.nditer<T>` and `np.nditer_chunks<T>` treat an empty array as an empty C# collection. The managed parity wrapper follows NumPy and requires `zerosize_ok`.
@@ -306,7 +314,7 @@ When buffering is active, an operand's `DataPtrs[op]` points into `Buffers[op]`,
 ```csharp
 public int  OuterDim;           // which internal axis is the reduce axis
 public long CoreSize;           // elements per output slot (inner-loop length)
-public long CorePos;            // position within core, 0..CoreSize
+public long CoreOffset;         // NumPy's coreoffset: iterindex % CoreSize at the last reposition
 public long ReduceOuterSize;    // number of output slots in current buffer
 public long ReducePos;          // position within outer loop
 
@@ -326,7 +334,7 @@ Creating an iterator looks like this:
 ```csharp
 using var iter = NDIterRef.MultiNew(
     nop: 3,
-    op: new[] { a, b, out },
+    op: new[] { a, b, @out },
     flags: NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.BUFFERED,
     order: NPY_ORDER.NPY_KEEPORDER,
     casting: NPY_CASTING.NPY_SAFE_CASTING,
@@ -383,6 +391,7 @@ There are four mostly-disjoint flag enums. A quick reference:
 | `C_INDEX`, `F_INDEX` | Track a flat index in C or F order |
 | `MULTI_INDEX` | Track per-dim coords (needed for `GetMultiIndex`) |
 | `EXTERNAL_LOOP` | Caller handles inner dim - iterator returns inner-dim-sized chunks |
+| `REFS_OK` | Permit reference-holding dtypes, required for `StringDType` even when the iteration dtype is numeric |
 | `COMMON_DTYPE` | Find common dtype across all operands and cast to it |
 | `REDUCE_OK` | Allow reduction operands (needed for axis reductions) |
 | `BUFFERED` | Enable operand buffering (required with cross-type casting) |
@@ -613,7 +622,7 @@ The bridge's `BufferedReduce` method drives this explicitly.
 
 ### IsFirstVisit
 
-Reduction kernels must initialize the output before accumulating. `iter.IsFirstVisit(op)` returns `true` only when every reduction-axis coordinate is zero *and* `CorePos == 0` in buffered mode. Kernels check this once at each output slot to emit identity-write semantics:
+Reduction kernels must initialize the output before accumulating. `iter.IsFirstVisit(op)` returns `true` only when every reduction-axis coordinate is zero *and*, in buffered mode, the reduce double loop is at its first outer step for an operand whose core repeats (`ReducePos == 0` when the operand's outer stride is 0). Kernels check this once at each output slot to emit identity-write semantics:
 
 ```csharp
 if (iter.IsFirstVisit(reduceOp)) *(double*)ptrs[reduceOp] = 0.0;
@@ -864,8 +873,8 @@ This section describes the bridge's **whole-array helper family**. It is useful,
 ```csharp
 public void ExecuteBinary(BinaryOp op);       // [in0, in1, out]
 public void ExecuteUnary(UnaryOp op);          // [in, out]
-public void ExecuteComparison(ComparisonOp);   // [in0, in1, bool out]
-public TResult ExecuteReduction<TResult>(ReductionOp op);  // [in] → T
+public void ExecuteComparison(ComparisonOp op); // [in0, in1, bool out]
+public TResult ExecuteReduction<TResult>(ReductionOp op, NPTypeCode? accumType = null);  // [in] → T
 public void ExecuteScan(ReductionOp op);       // [in, out]
 public void ExecuteCopy();                     // [src, dst]
 public void BufferedReduce<K, T>(K kernel);    // explicit BUFFER+REDUCE double-loop
@@ -1519,7 +1528,7 @@ Is the loop shape non-rectangular (gather/scatter, cross-element deps)?
 
 `DetectExecutionPath()` serves the whole-array mixed-type/comparison helper family. It looks at the iterator *after* coalescing and negative-stride flipping, and picks:
 
-```csharp
+```text
 if (CONTIGUOUS flag set)                                return SimdFull;
 if (NDim == 0)                                          return SimdFull;
 if (op1 is scalar AND op0 is contiguous)                return SimdScalarRight;
@@ -1553,7 +1562,7 @@ The iterator is broader than `np.nditer`, and production code does not enter thr
 | Reductions and scans | `DefaultEngine.ReductionOp.cs`, `Default.Reduction.{Add,CumAdd,Nan}.cs`, `Default.All.cs`, `Default.Any.cs` | `ExecuteReduction`, `ExecuteReducing`, `ForEach`, `NewReduce`, or dedicated axis iterators depending dtype/layout |
 | Selection/indexing/sorting | `np.where.cs`, `Default.BooleanMask.cs`, `Default.NonZero.cs`, `AxisSort.cs` | Chunk `ForEach`/reducing kernels where a direct whole-array kernel does not fit |
 | Copy/cast/fill/pad/concatenate | static `NDIter.Copy`/`CopyAs`, called by `np.copyto`, `NDArray.fill`, `np.pad`, `np.concatenate`, storage cloning/casting | Separate static copy-state core with contiguous, strided-IL, scalar-cast, broadcast, and overlap-temporary tiers |
-| Other focused consumers | `np.diff.cs`, `NDArray.byteswap.cs`, `np.average.cs`, `np.nan{mean,var,std}.cs` | Lean Tier 3B or chunk/reducing routes tailored to operation semantics |
+| Other focused consumers | `np.diff.cs`, `NDArray.byteswap.cs`, `np.nan{mean,var,std}.cs` | Lean Tier 3B or chunk/reducing routes tailored to operation semantics |
 
 Three older surfaces remain for compatibility or experiments:
 
@@ -1570,7 +1579,7 @@ Here, **fused** means that one kernel evaluates multiple array operations before
 There are two production shapes:
 
 1. **General expression fusion** through `np.evaluate`: an `NDExpr` tree is typed with NumPy rules and compiled to one cached `NDInnerLoopFunc`, then `NDIterRef` supplies its broadcast/layout-aware chunks.
-2. **Specialized fusion** inside an API such as weighted `np.average`, contiguous `np.diff`, or `np.asarray_chkfinite`: a purpose-built kernel combines the exact passes that operation needs. Some of these use `NDIterRef`; others are whole-array kernels whose own layout gate is cheaper.
+2. **Specialized fusion** inside an API such as contiguous `np.diff` or `np.asarray_chkfinite`: a purpose-built kernel combines the exact passes that operation needs. Some of these use `NDIterRef`; others are whole-array kernels whose own layout gate is cheaper.
 
 That distinction matters when reading benchmark results. The dedicated fusion benchmark compares the same NumSharp expression **with and without** fusion. The unified API benchmark compares NumSharp with NumPy and may include other differences besides fusion.
 
@@ -1586,6 +1595,8 @@ NDExpr tree
   → NDIterRef.MultiNew(EXTERNAL_LOOP | COPY_IF_OVERLAP, ...)
   → iter.ForEach(kernel)
 ```
+
+The result is laid out the way NumPy lays out its own statement's result. With the default `order='K'` a fresh elementwise result follows NpyIter's K order over the operands: C for C operands, F for F operands (a broadcast or 0-d operand beside them abstains), the shared permutation of a transposed operand set, C on a conflict. An axis reduction keeps its child's memory order for the remaining axes, and with `keepdims` its result owns its data, as `np.sum` does. `argmax` / `argmin` results are C-ordered.
 
 These are real expressions from `benchmark/fusion/evaluate_bench.cs`:
 
@@ -1610,6 +1621,26 @@ np.evaluate((NDExpr)a * b + c, @out: output);
 ```
 
 Elementwise fusion supports broadcasting, strided operands, overlap-safe `out=`, and buffered write-back when `out` needs a cast. A root `Sum`, `Prod`, `Min`, `Max`, or `Mean` fuses element evaluation with the reduction; reductions nested inside a larger elementwise expression are intentionally rejected and require two calls.
+
+Text operands (`S`, `U` and `StringDType` arrays, and a C# `string`, which is NumPy's `str`) take every node, as NumPy's own functions do: the six comparisons, the truth value (the logical nodes, `Where`'s condition, `Any` / `All` / `CountNonzero`), `IsNaN`, `Cast` to and from text, the `np.strings` functions (`NDExpr.StrLen`, `NDExpr.IsAlpha` … `NDExpr.IsNumeric`, `NDExpr.Find`, `NDExpr.RFind`, `NDExpr.Count`, `NDExpr.Index`, `NDExpr.RIndex`, `NDExpr.StartsWith`, `NDExpr.EndsWith`), the concatenation (`+`), the `StringDType` repeat (`*`), `Maximum` / `Minimum` over `StringDType`, `Where` with text branches (NumPy's promotion of the branches) and the root reductions (`ArgMax` / `ArgMin` over every class, `Sum` / `Max` / `Min` over `StringDType`). When the program is built, each node over text is cut out of the tree: per call it runs first as NumPy's own function over whole arrays (its kernels, its `StringDType` NA rules and its errors; a computed argument such as a search's `start` is evaluated first, into the temporary NumPy would hold). A numeric result is one more operand of the fused numeric pass; a text result is read by the later text nodes or is the answer itself, which `out=`, `where=`, `dtype=` and `order=` then shape. A text value is an input, not IL, so one compiled program serves every literal and every width:
+
+```csharp
+// A text filter and a numeric filter in one call; the program is shared by every city name.
+NDArray adults = np.evaluate(NDExpr.Equal(city, "paris") & ((NDExpr)age > 30));
+
+// A count over a text test: the reduction runs on its bool result.
+NDArray parisians = np.evaluate(NDExpr.CountNonzero(NDExpr.StartsWith(city, "par") & ((NDExpr)age > 30)));
+
+// The truth value of a string (non-empty is True) and a search, fused with numbers.
+NDArray named = np.evaluate(NDExpr.Where(nickname, price, price * 0.9));
+NDArray hasO = np.evaluate(NDExpr.Find(city, "o") >= 0);
+
+// A text result: NumPy's concatenation and np.where, and a reduction of text.
+NDArray labels = np.evaluate(NDExpr.Where((NDExpr)age > 30, NDExpr.Add(city, " (senior)"), city));
+NDArray first = np.evaluate(NDExpr.ArgMin(city));
+```
+
+Where NumPy has no loop for the operands (the square root of text, bytes with `str`, text with a number in `Add`, a Python number beside fixed-width text in `Where`), the node raises NumPy's own error when the call runs, in the order NumPy's statements would raise it. Only `NDExpr.Call` refuses text in its own words (`StringComputationNotSupportedException`): a delegate's parameters are numbers.
 
 ### Measured fused versus unfused performance
 
@@ -1645,11 +1676,12 @@ Several APIs use focused kernels because their loop shape is more specific than 
 
 | API / implementation | What is fused | Active boundary | Current benchmark evidence |
 |----------------------|---------------|-----------------|----------------------------|
-| Weighted `np.average` / `DirectILKernelGenerator.WeightedSum.cs` | Accumulates `sum(a * weights)` **and** `sum(weights)` into two outputs in one four-operand pass | Primitive numeric dtypes; a contiguous reduce-all case calls the kernel directly, while axis reductions use `NDIterRef` with pinned or scatter outputs. `Bool`, `Char`, `Half`, `Complex`, and `Decimal` fall back to multiply then sum. | The unified `np.average(a)` rows use `weights == null` and therefore dispatch to `mean`; they do **not** measure this fused kernel. An isolated weighted fusion benchmark is still needed. |
 | `np.diff` / `DirectILKernelGenerator.AdjacentDiff.cs` | Computes `out[i] = a[i+1] - a[i]` from overlapping loads in one whole-array pass, avoiding two slice views and generic binary iteration | `n == 1`, no prepend/append, C-contiguous non-broadcast input, innermost axis, non-Boolean dtype | The unified 100K `float64` case is **0.04747 ms** and **0.490× NumPy**; the 1K case is **0.00306 ms** and **1.343× NumPy**. It is a real fused route, but the larger current case remains a performance gap. |
 | `np.asarray_chkfinite` / `FiniteScan.cs` | Fuses `isfinite(a)` and `all(...)` into one NaN-poison scan with no Boolean temporary | Float-family dtypes; contiguous SIMD plus strided/transposed/negative-stride/broadcast handling | The unified 100K `float64` case is **0.01176 ms**, **1.814× faster than NumPy**. |
 
 The last column uses the [unified benchmark report](https://scisharp.github.io/NumSharp/docs/benchmark-matrix.html), where the ratio is **NumPy ÷ NumSharp**. Do not compare those ratios directly with the dedicated fusion table's unfused-NumSharp baseline.
+
+Weighted `np.average` used a fused weighted-sum kernel (`DirectILKernelGenerator.WeightedSum.cs`, both sums in one four-operand pass) until 2026-10-27. Its several SIMD partial sums are not NumPy's pairwise order, so its results were a few ULP off NumPy's; np.average now runs NumPy's composition (the weight sum, then `np.multiply(a, w, dtype=result_dtype).sum(axis)`), and where both operands share their dimensions and memory order it streams the products into that sum through `np.evaluate`, the general expression fusion above. The kernel remains public API.
 
 ---
 

@@ -1,32 +1,28 @@
 using System;
-using System.Numerics;
+using System.Globalization;
 using NumSharp.Backends;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp
 {
     /// <summary>
-    ///     The linear-algebra entry points beyond <c>dot</c>/<c>matmul</c>: the matrix products (managed
-    ///     fallback, backend optional), the LU-based factorisations <c>det</c>/<c>slogdet</c>/
-    ///     <c>solve</c>/<c>inv</c> (managed fallback via <see cref="Backends.ManagedLu"/>, backend
-    ///     optional), and the remaining factorisations (backend required, no fallback).
+    ///     The matrix products beyond <c>dot</c> / <c>matmul</c> - <c>inner</c>, <c>vdot</c>, <c>vecdot</c>, <c>matvec</c>,
+    ///     <c>vecmat</c> - NumPy's C core: each asks <see cref="Blas"/> first and falls back to NumSharp's managed kernels, so
+    ///     a backend changes which implementation runs and never whether an answer exists.
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     Every member reads <see cref="Blas"/> into a LOCAL before using it. That is not style —
+    ///     Every member reads <see cref="Blas"/> into a LOCAL before using it. That is not style -
     ///     the property is settable and a concurrent <c>OpenBlasEngine.Disable()</c> turns a test-then-call
-    ///     into a null dereference (measured at ~2 % of calls; see <c>docs/stale-docs/GEMM_PARITY.md</c> §9).
+    ///     into a null dereference (measured at ~2 % of calls; see <c>docs/stale-docs/GEMM_PARITY.md</c> section 9).
     ///     </para>
     ///     <para>
-    ///     <b>Two behaviours live here and the difference matters to callers.</b> The product family
-    ///     falls back to NumSharp's own managed kernels, so a backend changes which implementation
-    ///     runs and nothing else. The factorisation family splits: the LU-based four — <c>det</c>,
-    ///     <c>slogdet</c>, <c>solve</c>, <c>inv</c> — fall back to <see cref="Backends.ManagedLu"/>, a
-    ///     pure-managed unblocked LU that computes them (allclose to NumPy, since NumSharp.Core carries
-    ///     no BLOCKED LU to reproduce LAPACK's exact accumulation) rather than raising. The remaining
-    ///     factorisations — Cholesky, QR, SVD, the eigensolvers, <c>lstsq</c> — still have no managed
-    ///     numerics and raise <see cref="OpenBlasMissingBackendException"/> when no backend serves the
-    ///     operands. The members are <c>virtual</c> rather than <c>abstract</c> so an alternative
-    ///     engine overrides only what it actually implements.
+    ///     numpy.linalg's factorisations are not here: they are the <see cref="Linalg"/> sub-engine's
+    ///     (<see cref="LinalgEngine"/>), whose default, <see cref="DefaultLinalgEngine"/>, runs NumPy's
+    ///     <c>_linalg.py</c> statements over ten kernels that ask the same <see cref="Blas"/> property. The ten
+    ///     <c>_umath_linalg</c> members this class shipped in 0.70.0 (Cholesky, Det, Slogdet, Eig, Eigh, Inv, Solve,
+    ///     Lstsq, Qr, Svd) moved there in 0.80.0 (the np-layer dtype plan's phase PE, E2) as
+    ///     <c>DefaultLinalgEngine.CholeskyKernel</c> ... <c>SvdKernel</c>.
     ///     </para>
     /// </remarks>
     public abstract partial class TensorEngine
@@ -41,14 +37,36 @@ namespace NumSharp
         ///     (when <c>a.ndim >= 1</c> and <c>b.ndim >= 2</c>) and hands the pair to the very same
         ///     <c>PyArray_MatrixProduct2</c> that backs <c>np.dot</c> — which is why an unaligned
         ///     <c>inner</c> reports <paramref name="b"/>'s shape ALREADY TRANSPOSED.
+        ///     <para><see cref="NDAnchoredAttribute"/>: the managed product reads both operands' raw addresses in
+        ///     <c>Dot</c>, an engine method that opens no scope, so the weaver roots <paramref name="a"/> and
+        ///     <paramref name="b"/> here until the product returns — a caller's temporary operand
+        ///     (<c>np.inner(a, np.arange(n))</c>) cannot be collected under the kernel. An override does not inherit
+        ///     the mark.</para>
         /// </remarks>
+        /// <param name="a">The first operand.</param>
+        /// <param name="b">The second operand; its last two axes are swapped (a view) before the product.</param>
+        /// <returns>The inner product, shape <c>a.shape[:-1] + b.shape[:-1]</c>.</returns>
+        /// <exception cref="IncorrectShapeException">The last axes do not align (NumPy's "shapes ... not aligned" text,
+        ///     with <paramref name="b"/>'s shape transposed).</exception>
+        /// <exception cref="ArgumentException">The same misalignment on the vector-times-matrix path of <c>Dot</c>, which
+        ///     raises the house type of that path with the same NumPy text.</exception>
+        /// <exception cref="TypeError">A fixed-width string operand beside a 0-d one: NumPy's no-loop refusal of the
+        ///     <c>multiply</c> it computes.</exception>
+        /// <exception cref="ValueError">A fixed-width string operand otherwise: "data type must provide an itemsize" (the
+        ///     string product has no item size to allocate).</exception>
+        [NDAnchored]
+        [ArrayWrap("a", "b")]
         public virtual NDArray Inner(NDArray a, NDArray b)
         {
+            // inner of a 0-d operand is a multiply (its string loops answer); otherwise NumPy's dot checks run on the
+            // TRANSPOSED b it builds first (so an alignment error names b's shape transposed), and the result allocation
+            // needs a fixed item size. Before the BLAS hook, which never takes text.
+            var right = (a.ndim >= 1 && b.ndim >= 2) ? SwapAxes(b, -1, -2) : b;
+            Backends.Strings.NDStringUfuncs.ThrowIfProduct(a, right);
             var blas = Blas;
             if (blas != null && blas.TryInner(a, b, out var accelerated))
                 return accelerated;
 
-            var right = (a.ndim >= 1 && b.ndim >= 2) ? SwapAxes(b, -1, -2) : b;
             return Dot(a, right);
         }
 
@@ -57,8 +75,22 @@ namespace NumSharp
         ///     complex, then a vector dot product. Always 0-d.
         /// </summary>
         [NDScoped] // engine boundary (also called directly, not only via np.vdot): the ravel/reshape/conjugate temps are reclaimed
+        [AsArray]
         public virtual NDArray Vdot(NDArray a, NDArray b)
         {
+            // A StringDType operand: NumPy's legacy descriptor lookup refuses it, or falls back to an OBJECT product that
+            // NumSharp cannot hold; VStringVdotAnswer gives NumPy's answer in NumPy's order.
+            if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsVString(b))
+                throw Backends.Strings.NDStringUfuncs.VStringVdotAnswer(a, b);
+            // vdot flattens both operands first (one reused dims buffer: a length mismatch is b's reshape error), so even
+            // a 0-d string then fails NumPy's result allocation for want of an item size.
+            if (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(b))
+            {
+                long n = a.size;
+                if (b.size != n)
+                    b.reshape(new long[] {n});
+                throw Backends.Strings.NDStringUfuncs.NoItemsize();
+            }
             var blas = Blas;
             if (blas != null && blas.TryVdot(a, b, out var accelerated))
                 return accelerated;
@@ -68,10 +100,104 @@ namespace NumSharp
             // that buffer, so the second reshape no longer asks for (-1,) but for (a.size,) — which
             // is why a length mismatch surfaces as a reshape error and never as the
             // "vectors have different lengths" the C code below it still carries.
-            var left = np.ravel(a);
-            var right = np.reshape(b, new long[] {left.size});
-            return Dot(LinAlgHelper.Conjugate(left), right);
+            // The first reshape is a view wherever _attempt_nocopy_reshape finds one: a reversed, broadcast or stepped
+            // run keeps its stride, and the dot function reads it there (its own loop / cblas' strided loop), not a
+            // copy (probed 2.4.2: np.vdot(a[::-1], b) is the own loop's sum for float32, float64 and complex128). Where no
+            // view exists both make the same C-ordered copy, and ravel's is the cheaper one. An engine may copy a view
+            // it reads slower in place (VdotReadsFirstInPlace): decided here, before the view is built.
+            bool view = a.Shape.IsContiguous;
+            long flatStride = 1;
+            if (!view && a.Shape.TryNocopyReshape(new[] {a.size}, false, out var flatStrides))
+            {
+                view = true;
+                flatStride = flatStrides[0];
+            }
+
+            bool engineCopy = view && flatStride != 1 && !VdotReadsFirstInPlace(a.typecode, flatStride, a.size);
+            var left = !view || engineCopy
+                ? NDArray.ravel(a, 'C')
+                : a.reshape(new long[] {-1});
+            var right = b.reshape(new long[] {left.size});
+            // array_vdot then calls the dtype's dot function itself - CDOUBLE_vdot for complex, which conjugates inside
+            // its sums - not np.dot's 1-D route, whose cblas_matrixproduct takes a length-1 pair as a plain product and
+            // copies a reversed operand.
+            var result = VdotFunction1D(left, right);
+            // The engine's copy sums in another order than NumPy's in-place read: within rounding for a number, but a NaN
+            // result is whichever NaN that order kept. Only the in-place read gives NumPy's NaN, so a NaN result (rare:
+            // one compare per call otherwise) is computed again there; the first result is the scope's to reclaim.
+            if (engineCopy && HasNaNScalar(result))
+                return VdotFunction1D(a.reshape(new long[] {-1}), right);
+            return result;
         }
+
+        /// <summary>Whether a 0-d result of np.vdot holds a NaN (either part of a complex one).</summary>
+        /// <param name="r">The 0-d result.</param>
+        /// <returns>True for a NaN float32 / float64 value or a complex128 value with a NaN part; false for every other
+        ///     dtype, which has no NaN.</returns>
+        private static bool HasNaNScalar(NDArray r)
+        {
+            switch (r.typecode)
+            {
+                case NPTypeCode.Single:
+                    return float.IsNaN(r.GetAtIndex<float>(0));
+                case NPTypeCode.Double:
+                    return double.IsNaN(r.GetAtIndex<double>(0));
+                case NPTypeCode.Complex:
+                    return NumSharp.Utilities.NDDot.HasNaN(r.GetAtIndex<System.Numerics.Complex>(0));
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        ///     np.vdot's last step over its two flattened operands of one length: NumPy's <c>array_vdot</c> runs
+        ///     <c>CDOUBLE_vdot</c> (<c>cblas_zdotc_sub</c> / its conjugating own loop) for a complex128 common dtype and the
+        ///     dtype's dot function for every other. The default conjugates <paramref name="left"/> and runs
+        ///     <see cref="DotFunction1D"/>: the same values, but the copy flips the sign of a NaN imaginary part and costs a
+        ///     pass and an allocation; <see cref="DefaultEngine"/> runs zdotc itself.
+        /// </summary>
+        /// <param name="left">The first vector (<c>ip1</c>), the one np.vdot conjugates, as the caller flattened it.</param>
+        /// <param name="right">The second vector (<c>ip2</c>), the same length.</param>
+        /// <returns>A fresh 0-d result of the operands' common dtype.</returns>
+        /// <exception cref="IncorrectShapeException">The vectors' lengths differ (np.vdot's reshape has already refused
+        ///     that: a direct call only).</exception>
+        /// <exception cref="DTypePromotionError">The operands have no common dtype.</exception>
+        /// <remarks>An engine overrides it to run its own conjugating dot (NumPy's <c>zdotc</c>) instead of the conjugated
+        ///     copy; np.vdot reaches it after flattening and checking its operands.</remarks>
+        public virtual NDArray VdotFunction1D(NDArray left, NDArray right)
+            => DotFunction1D(LinAlgHelper.Conjugate(left), right);
+
+        /// <summary>
+        ///     Whether np.vdot reads its first operand in place when NumPy's flattening keeps it a view at a stride other
+        ///     than 1 (a reversed, broadcast or stepped run), as NumPy does: true by default, NumPy's arithmetic. An engine
+        ///     whose dot function is slower over such a run than over a contiguous copy may answer false: the operand is
+        ///     then copied (C order) and the result is the dot function's over the copy, within the usual reordering bound
+        ///     of NumPy's.
+        /// </summary>
+        /// <param name="dtype">The first operand's dtype (the dot function's when it is the operands' common dtype).</param>
+        /// <param name="stride">The flattened view's element stride (not 1).</param>
+        /// <param name="n">The number of elements.</param>
+        /// <returns>True to read the view in place (NumPy's bits), false to copy it first.</returns>
+        /// <remarks>Footgun: answering false gives up NumPy's exact bits for that operand - the result is the dot function's
+        ///     over the copy, which can differ from NumPy's in the last bits.</remarks>
+        public virtual bool VdotReadsFirstInPlace(NPTypeCode dtype, long stride, long n) => true;
+
+        /// <summary>
+        ///     The dtype's dot function over two 1-D operands of one length: np.vdot's last step (NumPy's
+        ///     <c>array_vdot</c> calls <c>PyArray_ArrFuncs.dotfunc</c> directly). The default computes np.dot of the two
+        ///     vectors; <see cref="DefaultEngine"/> runs the dot function itself, which differs from np.dot's 1-D route for
+        ///     a length-1 pair (summed from +0, not the plain product) and a reversed or broadcast operand (its own loop,
+        ///     not a copy).
+        /// </summary>
+        /// <param name="left">The first vector (conjugated by np.vdot when complex).</param>
+        /// <param name="right">The second vector, the same length.</param>
+        /// <returns>A fresh 0-d result.</returns>
+        /// <exception cref="IncorrectShapeException">The vectors' lengths differ (NumPy's <c>shapes (…) and (…) not
+        ///     aligned</c> text).</exception>
+        /// <exception cref="DTypePromotionError">The operands have no common dtype.</exception>
+        /// <remarks>An engine overrides it to run its own 1-D dot (a BLAS <c>dot</c>); the default's np.dot route stays correct
+        ///     for every dtype, so overriding is only for speed or NumPy's exact summation order.</remarks>
+        public virtual NDArray DotFunction1D(NDArray left, NDArray right) => Dot(left, right);
 
         /// <summary>
         ///     The <c>np.vecdot</c> gufunc <c>(n),(n)->()</c> — <paramref name="x1"/> conjugated when
@@ -83,6 +209,18 @@ namespace NumSharp
             var blas = Blas;
             if (blas != null && blas.TryVecdot(x1, x2, out var accelerated))
                 return accelerated;
+
+            // NumPy's float16 loop is HALF_dot (arraytypes.c.src, no BLAS): each pair widened to float32 and multiplied
+            // there, the products summed in float32 in order, the sum narrowed to float16 once. The elementwise product
+            // below would round every product to float16 first (probed 2.4.2: np.vecdot of random float16 rows differs
+            // from it for 3 terms already). The matmul kernel's float16 path is that same sum (HALF matmul_inner_noblas
+            // narrows once too), so each output is a (…,1,n) row times an (…,n,1) column.
+            if (x1.typecode == NPTypeCode.Half && x2.typecode == NPTypeCode.Half)
+            {
+                var halfProduct = Matmul(LinAlgHelper.UnitAxisView(x1, x1.ndim - 1), LinAlgHelper.UnitAxisView(x2, x2.ndim));
+                halfProduct = LinAlgHelper.DropAxis(halfProduct, halfProduct.ndim - 1);
+                return LinAlgHelper.DropAxis(halfProduct, halfProduct.ndim - 1);
+            }
 
             // The reduction dtype is the LOOP dtype, not NEP50's accumulator: np.vecdot's registered
             // loops are 'ii->i', so an int32 pair reduces to int32 where np.sum would give int64.
@@ -102,7 +240,7 @@ namespace NumSharp
 
             // (…,m,n) @ (…,n,1) -> (…,m,1), then drop the trailing length-1 axis. Promoting x2 to a
             // column first is what keeps matmul out of its own 1-D special case.
-            var product = Matmul(x1, np.expand_dims(x2, -1));
+            var product = Matmul(x1, NDArray.expand_dims(x2, -1));
             return LinAlgHelper.DropAxis(product, product.ndim - 1);
         }
 
@@ -118,127 +256,8 @@ namespace NumSharp
                 return accelerated;
 
             // (…,1,n) @ (…,n,m) -> (…,1,m), then drop the length-1 axis at -2.
-            var product = Matmul(np.expand_dims(LinAlgHelper.Conjugate(x1), -2), x2);
+            var product = Matmul(NDArray.expand_dims(LinAlgHelper.Conjugate(x1), -2), x2);
             return LinAlgHelper.DropAxis(product, product.ndim - 2);
-        }
-
-        #endregion
-
-        #region Factorisations — LU family has a managed fallback; the rest need a backend
-
-        /// <summary><c>np.linalg.cholesky</c> — OpenBLAS <c>potrf</c>.</summary>
-        public virtual NDArray Cholesky(NDArray a, bool upper)
-        {
-            var blas = Blas;
-            if (blas != null && blas.TryCholesky(a, upper, out var result))
-                return result;
-            throw MissingBackend("np.linalg.cholesky", nameof(Backends.IBlasBackend.TryCholesky));
-        }
-
-        /// <summary>
-        ///     <c>np.linalg.det</c> — OpenBLAS <c>getrf</c>, or NumSharp's managed LU
-        ///     (<see cref="Backends.ManagedLu"/>) when no backend serves the operand.
-        /// </summary>
-        public virtual NDArray Det(NDArray a)
-        {
-            var blas = Blas;
-            if (blas != null && blas.TryDet(a, out var result))
-                return result;
-            return Backends.ManagedLu.Det(a);
-        }
-
-        /// <summary>
-        ///     <c>np.linalg.slogdet</c> — OpenBLAS <c>getrf</c>, or NumSharp's managed LU
-        ///     (<see cref="Backends.ManagedLu"/>) when no backend serves the operand.
-        /// </summary>
-        public virtual (NDArray sign, NDArray logabsdet) Slogdet(NDArray a)
-        {
-            var blas = Blas;
-            if (blas != null && blas.TrySlogdet(a, out var sign, out var logabsdet))
-                return (sign, logabsdet);
-            return Backends.ManagedLu.Slogdet(a);
-        }
-
-        /// <summary><c>np.linalg.eig</c> / <c>np.linalg.eigvals</c> — OpenBLAS <c>geev</c>.</summary>
-        public virtual (NDArray eigenvalues, NDArray eigenvectors) Eig(NDArray a, bool computeVectors)
-        {
-            var blas = Blas;
-            if (blas != null && blas.TryEig(a, computeVectors, out var w, out var v))
-                return (w, v);
-            throw MissingBackend(computeVectors ? "np.linalg.eig" : "np.linalg.eigvals",
-                nameof(Backends.IBlasBackend.TryEig));
-        }
-
-        /// <summary>
-        ///     <c>np.linalg.eigh</c> / <c>np.linalg.eigvalsh</c> — OpenBLAS <c>syevd</c> (real
-        ///     symmetric) or <c>heevd</c> (complex Hermitian).
-        /// </summary>
-        public virtual (NDArray eigenvalues, NDArray eigenvectors) Eigh(NDArray a, char uplo, bool computeVectors)
-        {
-            var blas = Blas;
-            if (blas != null && blas.TryEigh(a, uplo, computeVectors, out var w, out var v))
-                return (w, v);
-            throw MissingBackend(computeVectors ? "np.linalg.eigh" : "np.linalg.eigvalsh",
-                nameof(Backends.IBlasBackend.TryEigh));
-        }
-
-        /// <summary>
-        ///     <c>np.linalg.inv</c> — OpenBLAS <c>gesv</c> against the identity, or NumSharp's managed
-        ///     LU (<see cref="Backends.ManagedLu"/>) when no backend serves the operand. A singular
-        ///     operand surfaces as <c>LinAlgError("Singular matrix")</c> from the factorisation either
-        ///     way, exactly as NumPy's does.
-        /// </summary>
-        public virtual NDArray Inv(NDArray a)
-        {
-            var blas = Blas;
-            if (blas != null && blas.TryInv(a, out var result))
-                return result;
-            return Backends.ManagedLu.Inv(a);
-        }
-
-        /// <summary><c>np.linalg.lstsq</c> — OpenBLAS <c>gelsd</c>.</summary>
-        public virtual (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) Lstsq(
-            NDArray a, NDArray b, double rcond)
-        {
-            var blas = Blas;
-            if (blas != null && blas.TryLstsq(a, b, rcond, out var x, out var res, out var rank, out var s))
-                return (x, res, rank, s);
-            throw MissingBackend("np.linalg.lstsq", nameof(Backends.IBlasBackend.TryLstsq));
-        }
-
-        /// <summary>
-        ///     <c>np.linalg.qr</c> — OpenBLAS <c>geqrf</c> plus <c>orgqr</c>/<c>ungqr</c>.
-        /// </summary>
-        public virtual (NDArray Q, NDArray R) Qr(NDArray a, string mode)
-        {
-            var blas = Blas;
-            if (blas != null && blas.TryQr(a, mode, out var q, out var r))
-                return (q, r);
-            throw MissingBackend("np.linalg.qr", nameof(Backends.IBlasBackend.TryQr));
-        }
-
-        /// <summary>
-        ///     <c>np.linalg.solve</c> — OpenBLAS <c>gesv</c>, or NumSharp's managed LU
-        ///     (<see cref="Backends.ManagedLu"/>) when no backend serves the operands.
-        /// </summary>
-        public virtual NDArray Solve(NDArray a, NDArray b, bool oneDimensionalRhs)
-        {
-            var blas = Blas;
-            if (blas != null && blas.TrySolve(a, b, oneDimensionalRhs, out var result))
-                return result;
-            return Backends.ManagedLu.Solve(a, b, oneDimensionalRhs);
-        }
-
-        /// <summary>
-        ///     <c>np.linalg.svd</c> / <c>np.linalg.svdvals</c> — OpenBLAS <c>gesdd</c>. Also the engine
-        ///     behind <c>pinv</c>, <c>matrix_rank</c>, <c>cond</c> and the spectral/nuclear norms.
-        /// </summary>
-        public virtual (NDArray U, NDArray S, NDArray Vh) Svd(NDArray a, bool fullMatrices, bool computeUv)
-        {
-            var blas = Blas;
-            if (blas != null && blas.TrySvd(a, fullMatrices, computeUv, out var u, out var s, out var vh))
-                return (u, s, vh);
-            throw MissingBackend("np.linalg.svd", nameof(Backends.IBlasBackend.TrySvd));
         }
 
         #endregion
@@ -248,26 +267,6 @@ namespace NumSharp
         // to np.tensordot and np.linalg.multi_dot (LinearAlgebra/np.einsum.Contract.cs). It inherits
         // Blas routing the same indirect way they do, through np.matmul, exactly as NumPy's
         // einsumfunc.py composes over c_einsum + matmul rather than adding a low-level kernel.
-
-        /// <summary>
-        ///     The one message every unserved factorisation raises. It names the NumPy API, the seam
-        ///     member a backend has to implement, and the package that supplies one — so the exception
-        ///     says what to install rather than merely that something is missing.
-        /// </summary>
-        /// <remarks>
-        ///     There is no separate seam for the factorisations in NumSharp: they ride the very same
-        ///     <see cref="Blas"/> property as the matrix products, filled by a single
-        ///     <c>NumSharp.Interop.OpenBLAS</c> reference — so the message points at that package rather
-        ///     than at "a backend" in the abstract.
-        /// </remarks>
-        private OpenBlasMissingBackendException MissingBackend(string api, string seamMember)
-            => new OpenBlasMissingBackendException(
-                $"{api} requires a matrix backend, and {GetType().Name} has none installed or the " +
-                $"installed one declined these operands. NumSharp.Core is 100 % managed C# and ships " +
-                $"no matrix factorisation of its own, so — unlike the matrix products, which always " +
-                $"have a managed kernel to fall back to — there is nothing to compute this with. " +
-                $"{OpenBlasMissingBackendException.HowToFix} The backend serves this operation through " +
-                $"its IBlasBackend.{seamMember}.");
     }
 }
 
@@ -284,38 +283,92 @@ namespace NumSharp.Backends
         ///     operand" step is a no-op for real loops.
         /// </summary>
         /// <remarks>
-        ///     Kept internal: <c>np.conj</c>/<c>np.conjugate</c> is a NumPy function in its own right
-        ///     and adding it belongs to its own pass, not to this one.
+        ///     <para>Kept internal: <c>np.conj</c>/<c>np.conjugate</c> is a NumPy function in its own right
+        ///     and adding it belongs to its own pass, not to this one.</para>
+        ///     <para>The conjugates go into a fresh C-ordered array: the products this feeds see the layout the former
+        ///     <c>a.copy()</c> gave them (a product's reduction order follows its operands' layout, so the layout is part of
+        ///     the answer). One pass, through the engine's own conjugate kernel: a C-contiguous operand is read linearly by
+        ///     the unary kernel itself (no ufunc argument handling); any other layout goes through the engine member, which
+        ///     routes it through the iterator (the unary kernel's own strided walk is the engine's slow fallback, about four
+        ///     times slower on an F-ordered operand).</para>
         /// </remarks>
+        /// <param name="a">The operand.</param>
+        /// <returns><paramref name="a"/> itself for a dtype other than complex128; otherwise a fresh C-ordered array of
+        ///     the conjugates.</returns>
+        /// <exception cref="InvalidOperationException">IL generation is disabled (the engine's conjugate kernel, as for
+        ///     np.conjugate).</exception>
         internal static NDArray Conjugate(NDArray a)
         {
             if (a.typecode != NPTypeCode.Complex)
                 return a;
 
-            var result = a.copy();
-            foreach (ref Complex z in np.nditer<Complex>(result, writeable: true))
-                z = Complex.Conjugate(z);
-
-            return result;
+            var result = new NDArray(NPTypeCode.Complex, a.Shape.Clean(), false);
+            try
+            {
+                if (!a.Shape.IsContiguous)
+                    return a.TensorEngine.Conjugate(a, null, result);
+                var kernel = DirectILKernelGenerator.GetUnaryKernel(
+                    new UnaryKernelKey(NPTypeCode.Complex, NPTypeCode.Complex, UnaryOp.Conjugate, IsContiguous: true));
+                DefaultEngine.ExecuteUnaryKernel(kernel, a, result);
+                return result;
+            }
+            catch
+            {
+                // The result never reaches a caller: its buffer goes back now, not at finalization.
+                result.Dispose();
+                throw;
+            }
         }
 
         /// <summary>
-        ///     Drops a length-1 axis from a freshly computed C-contiguous product — the step that
+        ///     Drops a length-1 axis from a freshly computed product — the step that
         ///     turns matmul's <c>(…,m,1)</c> back into <c>matvec</c>'s <c>(…,m)</c> and its
         ///     <c>(…,1,m)</c> back into <c>vecmat</c>'s <c>(…,m)</c>.
         /// </summary>
-        internal static NDArray DropAxis(NDArray a, int axis)
+        /// <param name="a">The product: consumed (it is returned relabelled, or disposed after a copy).</param>
+        /// <param name="axis">The length-1 axis to drop.</param>
+        /// <returns>The product without the axis, owning its buffer and keeping its other strides: relabelled in place
+        ///     (<see cref="NDArray.AdoptDroppedAxis"/>), as NumPy's gufunc output owns its data (probed 2.4.2:
+        ///     <c>np.matvec(a, v).flags.owndata</c> is True); a product that is not a fresh owner of its elements is
+        ///     copied in K order first.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is not a length-1 axis of
+        ///     <paramref name="a"/>.</exception>
+        internal static NDArray DropAxis(NDArray a, int axis) => NDArray.AdoptDroppedAxis(a, axis);
+
+        /// <summary>
+        ///     A view of <paramref name="x"/> with a length-1 axis inserted at <paramref name="axis"/> — what
+        ///     <c>np.expand_dims</c> returns, built here without the public function (an engine kernel calls no np.*
+        ///     layer). The view reads the same memory; the new axis's stride is 0, which an extent-1 axis never uses.
+        /// </summary>
+        /// <param name="x">The array.</param>
+        /// <param name="axis">The position of the new axis: 0 to <c>x.ndim</c>.</param>
+        /// <returns>A view of <c>x.ndim + 1</c> dimensions (the caller's scope reclaims it).</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is outside 0 to <c>x.ndim</c> (a
+        ///     caller's bug).</exception>
+        internal static NDArray UnitAxisView(NDArray x, int axis)
         {
-            var source = a.Shape.dimensions;
-            var dims = new long[source.Length - 1];
-            for (int i = 0, j = 0; i < source.Length; i++)
+            if ((uint)axis > (uint)x.ndim)
+                throw new ArgumentOutOfRangeException(nameof(axis), axis.ToString(CultureInfo.InvariantCulture), "the new axis must lie between 0 and ndim");
+
+            var src = x.Shape;
+            var dims = new long[src.NDim + 1];
+            var strides = new long[src.NDim + 1];
+            for (int i = 0, j = 0; i < dims.Length; i++)
             {
                 if (i == axis)
-                    continue;
-                dims[j++] = source[i];
+                {
+                    dims[i] = 1;
+                    continue;   // stride 0
+                }
+
+                dims[i] = src.dimensions[j];
+                strides[i] = src.strides[j++];
             }
 
-            return np.reshape(a, dims);
+            return new NDArray(x.Storage.Alias(new Shape(dims, strides, src.offset, src.bufferSize)))
+            {
+                TensorEngine = x.TensorEngine
+            };
         }
     }
 }

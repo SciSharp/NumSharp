@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -123,82 +124,97 @@ namespace NumSharp.Backends.Iteration
         ///   • EXTERNAL_LOOP → 1 call per outer index, count = inner dim size.
         ///   • Buffered → 1 call per buffer fill, count = BufIterEnd.
         ///   • Otherwise → 1 call per element, count = 1.
+        ///   • Empty (IterSize 0) → no call at all, as NumPy's callers never enter the loop: a kernel can rely on every
+        ///     call covering elements that exist. Outputs keep whatever the caller seeded (a reduction's identity).
         /// </summary>
+        /// <param name="kernel">The inner-loop kernel.</param>
+        /// <param name="auxdata">The kernel's extra argument, passed through to every call.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="kernel"/> is null.</exception>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void ForEach(NDInnerLoopFunc kernel, void* auxdata = null)
         {
-            if (kernel is null) throw new ArgumentNullException(nameof(kernel));
-
-            EnsureBuffersReady();   // DELAY_BUFALLOC: materialize + prime first window
-
-            void** dataptrs = GetDataPtrArray();
-            long* byteStrides = GetInnerLoopByteStrides();
-            long innerSize = ResolveInnerLoopCount();
-
-            // Masked inner loop (NumPy ufunc where= machinery): when a
-            // WRITEMASKED operand is present, each inner chunk is decomposed
-            // into mask-true runs and the unmasked kernel runs per run —
-            // NumPy's execute_ufunc_loop(masked=1) wrapper structure. The mask
-            // is the trailing ARRAYMASK operand (1-byte dtype required; other
-            // mask dtypes fall back to the plain nditer kernel contract, where
-            // masking is the kernel's own responsibility).
-            int maskOp = ResolveForEachMaskOp();
-            int nop = _state->NOp;
-
-            if (IsSingleInnerLoop())
+            try
             {
-                InvokeInner(kernel, dataptrs, byteStrides, innerSize, auxdata, maskOp, nop);
-                // Windowed buffered single-fill: no iternext runs, so flush here.
-                FlushIfBuffered();
-                return;
-            }
+                if (kernel is null) throw new ArgumentNullException(nameof(kernel));
 
-            // Windowed buffered (non-reduce): the kernel consumes one whole
-            // fill per call, so advance by WINDOW regardless of EXLOOP (the
-            // per-element protocol is only for user-facing Iternext walks).
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0 &&
-                (_state->ItFlags & (uint)NDIterFlags.REDUCE) == 0)
-            {
-                long* bufSize = GetInnerLoopSizePtr();
-                do
+                // An empty iteration runs no inner loop. NumPy's callers test NpyIter_GetIterSize(iter) != 0 before
+                // their `do { inner(...) } while (iternext(iter))` loop, and this driver is that caller. The inner
+                // count of an empty iteration is still the innermost axis' extent when an OUTER axis is the empty one
+                // (an (11, 0, 14) operand reduced along its last axis hands the kernel 14), so a call would read and
+                // write that many elements of operands that hold none: np.average's fused weighted sum wrote past its
+                // empty outputs and corrupted the heap.
+                if (_state->IterSize == 0)
+                    return;
+
+                EnsureBuffersReady();   // DELAY_BUFALLOC: materialize + prime first window
+
+                void** dataptrs = GetDataPtrArray();
+                long* byteStrides = GetInnerLoopByteStrides();
+                long innerSize = ResolveInnerLoopCount();
+
+                // Masked inner loop (NumPy ufunc where= machinery): when a
+                // WRITEMASKED operand is present, each inner chunk is decomposed
+                // into mask-true runs and the unmasked kernel runs per run —
+                // NumPy's execute_ufunc_loop(masked=1) wrapper structure. The mask
+                // is the trailing ARRAYMASK operand (1-byte dtype required; other
+                // mask dtypes fall back to the plain nditer kernel contract, where
+                // masking is the kernel's own responsibility).
+                int maskOp = ResolveForEachMaskOp();
+                int nop = _state->NOp;
+
+                if (IsSingleInnerLoop())
                 {
-                    InvokeInner(kernel, dataptrs, byteStrides, *bufSize, auxdata, maskOp, nop);
-                } while (BufferedWindowAdvance());
-                return;
-            }
+                    InvokeInner(kernel, dataptrs, byteStrides, innerSize, auxdata, maskOp, nop);
+                    // Buffered single fill: no iternext runs, so the buffer is written back (and released) here.
+                    FlushIfBuffered();
+                    return;
+                }
 
-            // Unbuffered EXTERNAL_LOOP — the production ufunc configuration and the
-            // per-chunk hot path (a strided-row op pays this loop once per row): call the
-            // advancer directly so it inlines here, instead of one delegate indirection per
-            // chunk on top of the kernel's own. Measured ~1 ns/chunk of the ~5.6 ns/chunk
-            // driver overhead (iternext + dispatch) on 4-element rows.
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) == 0 && IsPlainExternalLoopAdvance())
-            {
+                // Buffered: the kernel consumes one whole inner loop per call (a fill, or one core of the reduce double loop),
+                // so the driver advances by INNER LOOP regardless of EXLOOP (the per-element protocol is only for user-facing
+                // Iternext walks). The inner loop's size is re-read per call: the last fill is shorter.
+                if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
+                {
+                    long* bufSize = GetInnerLoopSizePtr();
+                    do
+                    {
+                        InvokeInner(kernel, dataptrs, byteStrides, *bufSize, auxdata, maskOp, nop);
+                    } while (BufferedWindowAdvance());
+                    return;
+                }
+
+                // Unbuffered EXTERNAL_LOOP — the production ufunc configuration and the
+                // per-chunk hot path (a strided-row op pays this loop once per row): call the
+                // advancer directly so it inlines here, instead of one delegate indirection per
+                // chunk on top of the kernel's own. Measured ~1 ns/chunk of the ~5.6 ns/chunk
+                // driver overhead (iternext + dispatch) on 4-element rows.
+                if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) == 0 && IsPlainExternalLoopAdvance())
+                {
+                    do
+                    {
+                        InvokeInner(kernel, dataptrs, byteStrides, innerSize, auxdata, maskOp, nop);
+                    } while (ExternalLoopNext(ref *_state));
+                    return;
+                }
+
+                var iternext = GetIterNext();
+
+                // Unbuffered: EXLOOP and non-EXLOOP both have a stable innerSize across iterations (every buffered iterator took
+                // the inner-loop driver above).
                 do
                 {
                     InvokeInner(kernel, dataptrs, byteStrides, innerSize, auxdata, maskOp, nop);
-                } while (ExternalLoopNext(ref *_state));
-                return;
-            }
-
-            var iternext = GetIterNext();
-
-            // Buffered (reduce) fills can change size at the tail, so re-read per call.
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
-            {
-                long* bufSize = GetInnerLoopSizePtr();
-                do
-                {
-                    InvokeInner(kernel, dataptrs, byteStrides, *bufSize, auxdata, maskOp, nop);
                 } while (iternext(ref *_state));
-                return;
             }
-
-            // EXLOOP and non-EXLOOP both have a stable innerSize across iterations.
-            do
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
             {
-                InvokeInner(kernel, dataptrs, byteStrides, innerSize, auxdata, maskOp, nop);
-            } while (iternext(ref *_state));
+                throw;
+            }
         }
 
         /// <summary>
@@ -443,9 +459,7 @@ namespace NumSharp.Backends.Iteration
         {
             uint f = _state->ItFlags;
             if ((f & (uint)NDIterFlags.BUFFER) != 0)
-                return (f & (uint)NDIterFlags.REDUCE) != 0
-                    ? _state->BufIterEnd          // legacy reduce double-loop semantics
-                    : _state->BufTransferSize;    // windowed fill size (NumPy NBF_SIZE)
+                return _state->BufTransferSize;   // the inner loop's size (NumPy's NBF_SIZE; one core in the reduce loop)
             // 0-d (scalar) iteration has no inner axis — Shape[NDim-1] would read
             // Shape[-1] (AV). One element, one call. Previously unreachable: the
             // scalar×scalar engine bypass kept 0-d out of ForEach until the ufunc
@@ -463,16 +477,36 @@ namespace NumSharp.Backends.Iteration
         ///
         /// Performance note: the single-iteration fast path (coalesced + EXLOOP
         /// or ONEITERATION) avoids the do/while + delegate call so the JIT can
-        /// autovectorize the kernel body.
+        /// autovectorize the kernel body. An empty iteration (IterSize 0) makes no
+        /// call, as in <see cref="ForEach"/>.
         /// </summary>
+        /// <typeparam name="TKernel">The inner-loop kernel type.</typeparam>
+        /// <param name="kernel">The kernel.</param>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void ExecuteGeneric<TKernel>(TKernel kernel) where TKernel : struct, INDInnerLoop
         {
-            EnsureBuffersReady();   // DELAY_BUFALLOC: materialize + prime first window
-            if (IsSingleInnerLoop())
-                ExecuteGenericSingle(kernel);
-            else
-                ExecuteGenericMulti(kernel);
+            try
+            {
+                // An empty iteration runs no inner loop (see ForEach: the inner count would be an outer-empty
+                // iteration's innermost extent).
+                if (_state->IterSize == 0)
+                    return;
+
+                EnsureBuffersReady();   // DELAY_BUFALLOC: materialize + prime first window
+                if (IsSingleInnerLoop())
+                    ExecuteGenericSingle(kernel);
+                else
+                    ExecuteGenericMulti(kernel);
+            }
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
+            {
+                throw;
+            }
         }
 
         /// <summary>
@@ -484,7 +518,7 @@ namespace NumSharp.Backends.Iteration
         private void ExecuteGenericSingle<TKernel>(TKernel kernel) where TKernel : struct, INDInnerLoop
         {
             kernel.Execute(GetDataPtrArray(), GetInnerLoopByteStrides(), ResolveInnerLoopCount());
-            // Windowed buffered single-fill: no iternext runs, so flush here.
+            // A buffered iteration consumed in one fill: no iternext runs, so it is written back here.
             FlushIfBuffered();
         }
 
@@ -495,8 +529,8 @@ namespace NumSharp.Backends.Iteration
             void** dataptrs = GetDataPtrArray();
             long* byteStrides = GetInnerLoopByteStrides();
 
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0 &&
-                (_state->ItFlags & (uint)NDIterFlags.REDUCE) == 0)
+            // Buffered: one kernel call per inner loop (a fill, or one core of the reduce double loop).
+            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
             {
                 long* winSize = GetInnerLoopSizePtr();
                 do
@@ -507,7 +541,7 @@ namespace NumSharp.Backends.Iteration
             }
 
             // Unbuffered EXTERNAL_LOOP: direct (inlined) advance, no delegate per chunk.
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) == 0 && IsPlainExternalLoopAdvance())
+            if (IsPlainExternalLoopAdvance())
             {
                 long exlInnerSize = ResolveInnerLoopCount();
                 do
@@ -518,16 +552,6 @@ namespace NumSharp.Backends.Iteration
             }
 
             var iternext = GetIterNext();
-
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
-            {
-                long* bufSize = GetInnerLoopSizePtr();
-                do
-                {
-                    kernel.Execute(dataptrs, byteStrides, *bufSize);
-                } while (iternext(ref *_state));
-                return;
-            }
 
             long innerSize = ResolveInnerLoopCount();
             do
@@ -544,18 +568,16 @@ namespace NumSharp.Backends.Iteration
         private bool IsSingleInnerLoop()
         {
             uint f = _state->ItFlags;
-            // Windowed buffered iteration overrides the EXLOOP/coalesce shortcut:
-            // even a fully-coalesced 1-D iterator needs one kernel call PER
-            // WINDOW when the iteration is larger than the buffer. Single only
-            // when the first window already covers the whole range.
-            if ((f & (uint)NDIterFlags.BUFFER) != 0 && (f & (uint)NDIterFlags.REDUCE) == 0)
+            // Buffered iteration overrides the EXLOOP/coalesce shortcut: even a fully-coalesced 1-D iterator needs one
+            // kernel call PER INNER LOOP when the iteration is larger than a fill. Single only when the first inner loop
+            // already reaches the range end — in the reduce double loop that means the whole range is one core, since
+            // BufIterEnd then marks the end of the first core.
+            if ((f & (uint)NDIterFlags.BUFFER) != 0)
                 return _state->BufIterEnd >= _state->IterEnd;
             // ONEITERATION: iter size <= 1.
             if ((f & (uint)NDIterFlags.ONEITERATION) != 0) return true;
             // Fully coalesced to one axis + EXLOOP: whole iteration is one inner loop.
             if ((f & (uint)NDIterFlags.EXLOOP) != 0 && _state->NDim <= 1) return true;
-            // Buffered (reduce) and whole iteration fits in one buffer fill.
-            if ((f & (uint)NDIterFlags.BUFFER) != 0 && _state->BufIterEnd >= _state->IterEnd) return true;
             return false;
         }
 
@@ -563,68 +585,81 @@ namespace NumSharp.Backends.Iteration
         /// Reducing variant. The accumulator is passed by reference; return
         /// <c>false</c> from the kernel to abort (used by All/Any early exit).
         /// </summary>
+        /// <typeparam name="TKernel">The inner-loop kernel type.</typeparam>
+        /// <typeparam name="TAccum">The accumulator type.</typeparam>
+        /// <param name="kernel">The kernel.</param>
+        /// <param name="init">The accumulator's starting value.</param>
+        /// <returns>The accumulator after the last call: <paramref name="init"/> itself for an empty iteration, which makes
+        ///     no call (see <see cref="ForEach"/>).</returns>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public TAccum ExecuteReducing<TKernel, TAccum>(TKernel kernel, TAccum init)
             where TKernel : struct, INDReducingInnerLoop<TAccum>
             where TAccum : unmanaged
         {
-            EnsureBuffersReady();   // DELAY_BUFALLOC: materialize + prime first window
-
-            void** dataptrs = GetDataPtrArray();
-            long* byteStrides = GetInnerLoopByteStrides();
-            TAccum accum = init;
-
-            if (IsSingleInnerLoop())
+            try
             {
-                kernel.Execute(dataptrs, byteStrides, ResolveInnerLoopCount(), ref accum);
-                FlushIfBuffered();
-                return accum;
-            }
+                // An empty iteration runs no inner loop (see ForEach): the accumulator is the reduction over no
+                // element.
+                if (_state->IterSize == 0)
+                    return init;
 
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0 &&
-                (_state->ItFlags & (uint)NDIterFlags.REDUCE) == 0)
-            {
-                long* winSize = GetInnerLoopSizePtr();
+                EnsureBuffersReady();   // DELAY_BUFALLOC: materialize + prime first window
+
+                void** dataptrs = GetDataPtrArray();
+                long* byteStrides = GetInnerLoopByteStrides();
+                TAccum accum = init;
+
+                if (IsSingleInnerLoop())
+                {
+                    kernel.Execute(dataptrs, byteStrides, ResolveInnerLoopCount(), ref accum);
+                    FlushIfBuffered();
+                    return accum;
+                }
+
+                // Buffered: one kernel call per inner loop. An early exit leaves the current buffer held — Dispose writes it back,
+                // as NumPy's deallocation does.
+                if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
+                {
+                    long* winSize = GetInnerLoopSizePtr();
+                    do
+                    {
+                        if (!kernel.Execute(dataptrs, byteStrides, *winSize, ref accum))
+                            break;
+                    } while (BufferedWindowAdvance());
+                    return accum;
+                }
+
+                // Unbuffered EXTERNAL_LOOP: direct (inlined) advance, no delegate per chunk.
+                if (IsPlainExternalLoopAdvance())
+                {
+                    long exlInnerSize = ResolveInnerLoopCount();
+                    do
+                    {
+                        if (!kernel.Execute(dataptrs, byteStrides, exlInnerSize, ref accum))
+                            break;
+                    } while (ExternalLoopNext(ref *_state));
+                    return accum;
+                }
+
+                var iternext = GetIterNext();
+
+                long innerSize = ResolveInnerLoopCount();
                 do
                 {
-                    if (!kernel.Execute(dataptrs, byteStrides, *winSize, ref accum))
-                        break;
-                } while (BufferedWindowAdvance());
-                return accum;
-            }
-
-            // Unbuffered EXTERNAL_LOOP: direct (inlined) advance, no delegate per chunk.
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) == 0 && IsPlainExternalLoopAdvance())
-            {
-                long exlInnerSize = ResolveInnerLoopCount();
-                do
-                {
-                    if (!kernel.Execute(dataptrs, byteStrides, exlInnerSize, ref accum))
-                        break;
-                } while (ExternalLoopNext(ref *_state));
-                return accum;
-            }
-
-            var iternext = GetIterNext();
-
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
-            {
-                long* bufSize = GetInnerLoopSizePtr();
-                do
-                {
-                    if (!kernel.Execute(dataptrs, byteStrides, *bufSize, ref accum))
+                    if (!kernel.Execute(dataptrs, byteStrides, innerSize, ref accum))
                         break;
                 } while (iternext(ref *_state));
                 return accum;
             }
-
-            long innerSize = ResolveInnerLoopCount();
-            do
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
             {
-                if (!kernel.Execute(dataptrs, byteStrides, innerSize, ref accum))
-                    break;
-            } while (iternext(ref *_state));
-            return accum;
+                throw;
+            }
         }
 
         // =====================================================================
@@ -664,7 +699,7 @@ namespace NumSharp.Backends.Iteration
         {
             if (!IsOperandIterContiguous(iop))
                 throw new InvalidOperationException(
-                    $"{method} requires a C-contiguous output operand (operand {iop}): the legacy " +
+                    string.Create(CultureInfo.InvariantCulture, $"{method} requires a C-contiguous output operand (operand {iop}): the legacy ") +
                     "whole-array kernel it bridges to ignores output strides and would write the " +
                     "result contiguously. Use ExecuteElementWise*/ForEach (per-chunk kernels honor " +
                     "operand strides) or provide a contiguous output.");
@@ -675,180 +710,261 @@ namespace NumSharp.Backends.Iteration
         /// Picks SimdFull / SimdScalarRight / SimdScalarLeft / SimdChunk /
         /// General based on the iterator's stride picture after coalescing.
         /// </summary>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
         public void ExecuteBinary(BinaryOp op)
         {
-            if (_state->NOp != 3)
-                throw new InvalidOperationException(
-                    $"ExecuteBinary requires 3 operands (in0, in1, out); got {_state->NOp}.");
-
-            // Buffered path first: a buffered (possibly strided/cast) output is
-            // legal there — the windowed write-back honors the array's true
-            // strides, so the contiguous-output guard below must not apply.
-            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
+            try
             {
-                EnsureBuffersReady();
-                RunBufferedBinary(op);
-                return;
+                if (_state->NOp != 3)
+                    throw new InvalidOperationException(
+                        string.Create(CultureInfo.InvariantCulture, $"ExecuteBinary requires 3 operands (in0, in1, out); got {_state->NOp}."));
+
+                // Buffered path first: a buffered (possibly strided/cast) output is
+                // legal there — the buffer write-back honors the array's true
+                // strides, so the contiguous-output guard below must not apply.
+                if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
+                {
+                    EnsureBuffersReady();
+                    RunBufferedBinary(op);
+                    return;
+                }
+
+                RequireContiguousOutput(2, nameof(ExecuteBinary));
+
+                var key = new MixedTypeKernelKey(
+                    _state->GetOpDType(0),
+                    _state->GetOpDType(1),
+                    _state->GetOpDType(2),
+                    op,
+                    DetectExecutionPath());
+
+                var kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);
+
+                // Gather byte-stride arrays per operand, sized NDim.
+                int ndim = _state->NDim;
+                long* lhsStrides = stackalloc long[Math.Max(1, ndim)];
+                long* rhsStrides = stackalloc long[Math.Max(1, ndim)];
+                FillElementStrides(0, lhsStrides, ndim);
+                FillElementStrides(1, rhsStrides, ndim);
+
+                kernel(
+                    _state->GetDataPtr(0),
+                    _state->GetDataPtr(1),
+                    _state->GetDataPtr(2),
+                    lhsStrides,
+                    rhsStrides,
+                    _state->Shape,
+                    ndim,
+                    _state->IterSize);
             }
-
-            RequireContiguousOutput(2, nameof(ExecuteBinary));
-
-            var key = new MixedTypeKernelKey(
-                _state->GetOpDType(0),
-                _state->GetOpDType(1),
-                _state->GetOpDType(2),
-                op,
-                DetectExecutionPath());
-
-            var kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);
-
-            // Gather byte-stride arrays per operand, sized NDim.
-            int ndim = _state->NDim;
-            long* lhsStrides = stackalloc long[Math.Max(1, ndim)];
-            long* rhsStrides = stackalloc long[Math.Max(1, ndim)];
-            FillElementStrides(0, lhsStrides, ndim);
-            FillElementStrides(1, rhsStrides, ndim);
-
-            kernel(
-                _state->GetDataPtr(0),
-                _state->GetDataPtr(1),
-                _state->GetDataPtr(2),
-                lhsStrides,
-                rhsStrides,
-                _state->Shape,
-                ndim,
-                _state->IterSize);
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
+            {
+                throw;
+            }
         }
 
         /// <summary>
         /// Run a unary op over [in, out].
         /// </summary>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
         public void ExecuteUnary(UnaryOp op)
         {
-            if (_state->NOp != 2)
-                throw new InvalidOperationException(
-                    $"ExecuteUnary requires 2 operands (in, out); got {_state->NOp}.");
-            RequireContiguousOutput(1, nameof(ExecuteUnary));
+            try
+            {
+                if (_state->NOp != 2)
+                    throw new InvalidOperationException(
+                        string.Create(CultureInfo.InvariantCulture, $"ExecuteUnary requires 2 operands (in, out); got {_state->NOp}."));
+                RequireContiguousOutput(1, nameof(ExecuteUnary));
 
-            int ndim = _state->NDim;
-            bool isContig = (_state->ItFlags & (uint)NDIterFlags.CONTIGUOUS) != 0;
+                int ndim = _state->NDim;
+                bool isContig = (_state->ItFlags & (uint)NDIterFlags.CONTIGUOUS) != 0;
 
-            var key = new UnaryKernelKey(
-                _state->GetOpDType(0),
-                _state->GetOpDType(1),
-                op,
-                isContig);
+                var key = new UnaryKernelKey(
+                    _state->GetOpDType(0),
+                    _state->GetOpDType(1),
+                    op,
+                    isContig);
 
-            var kernel = DirectILKernelGenerator.GetUnaryKernel(key);
+                var kernel = DirectILKernelGenerator.GetUnaryKernel(key);
 
-            long* strides = stackalloc long[Math.Max(1, ndim)];
-            FillElementStrides(0, strides, ndim);
+                long* strides = stackalloc long[Math.Max(1, ndim)];
+                FillElementStrides(0, strides, ndim);
 
-            kernel(
-                _state->GetDataPtr(0),
-                _state->GetDataPtr(1),
-                strides,
-                _state->Shape,
-                ndim,
-                _state->IterSize);
+                kernel(
+                    _state->GetDataPtr(0),
+                    _state->GetDataPtr(1),
+                    strides,
+                    _state->Shape,
+                    ndim,
+                    _state->IterSize);
+            }
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
+            {
+                throw;
+            }
         }
 
         /// <summary>
-        /// Reduce a single operand to a scalar of type <typeparamref name="TResult"/>.
-        /// If the iterator has BUFFER + REDUCE set, the double-loop reduction
-        /// schedule is used via <see cref="BufferedReduce{TResult}"/>. Otherwise
-        /// we let the IL kernel iterate the array directly.
+        /// Reduce a single operand to a scalar of type <typeparamref name="TResult"/>: one typed element-reduction IL
+        /// kernel walks the whole operand by its strides (the iterator's buffering flags are not consulted). For NumPy's
+        /// double-loop reduction schedule over a BUFFER + REDUCE iterator, call
+        /// <see cref="BufferedReduce{TKernel, TAccum}(TKernel)"/> instead.
         /// </summary>
-        public TResult ExecuteReduction<TResult>(ReductionOp op) where TResult : unmanaged
+        /// <typeparam name="TResult">The CLR type of the result — the accumulator's own type.</typeparam>
+        /// <param name="op">The reduction.</param>
+        /// <param name="accumType">The accumulator (loop) dtype the caller resolved, which must be
+        /// <typeparamref name="TResult"/>'s dtype; null derives the op's default (the NEP 50 accumulator for
+        /// sum / prod). The caller's dtype matters: <c>np.sum(int8, dtype=int8)</c> over an F-contiguous view
+        /// asked for an int8 result, and the derived int64 accumulator generated an int8-typed kernel under the
+        /// (int8, int64) cache key — a wrong sum, and every later default int8 sum found that kernel and failed
+        /// its delegate cast ("IL kernel not available for Sum(SByte) -> Int64").</param>
+        /// <returns>The reduced value.</returns>
+        /// <exception cref="InvalidOperationException">The iterator does not hold exactly one operand.</exception>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
+        public TResult ExecuteReduction<TResult>(ReductionOp op, NPTypeCode? accumType = null) where TResult : unmanaged
         {
-            if (_state->NOp != 1)
-                throw new InvalidOperationException(
-                    $"ExecuteReduction requires 1 operand; got {_state->NOp}.");
+            try
+            {
+                if (_state->NOp != 1)
+                    throw new InvalidOperationException(
+                        string.Create(CultureInfo.InvariantCulture, $"ExecuteReduction requires 1 operand; got {_state->NOp}."));
 
-            uint f = _state->ItFlags;
-            bool isContig = (f & (uint)NDIterFlags.CONTIGUOUS) != 0;
+                uint f = _state->ItFlags;
+                bool isContig = (f & (uint)NDIterFlags.CONTIGUOUS) != 0;
 
-            var srcType = _state->GetOpSrcDType(0);
-            var accumType = DetermineAccumulatorType(srcType, op, typeof(TResult));
+                var srcType = _state->GetOpSrcDType(0);
+                var resolvedAccumType = accumType ?? DetermineAccumulatorType(srcType, op, typeof(TResult));
 
-            var key = new ElementReductionKernelKey(srcType, accumType, op, isContig);
-            var kernel = DirectILKernelGenerator.GetTypedElementReductionKernel<TResult>(key);
+                var key = new ElementReductionKernelKey(srcType, resolvedAccumType, op, isContig);
+                var kernel = DirectILKernelGenerator.GetTypedElementReductionKernel<TResult>(key);
 
-            int ndim = _state->NDim;
-            long* strides = stackalloc long[Math.Max(1, ndim)];
-            FillElementStrides(0, strides, ndim);
+                int ndim = _state->NDim;
+                long* strides = stackalloc long[Math.Max(1, ndim)];
+                FillElementStrides(0, strides, ndim);
 
-            return kernel(_state->GetDataPtr(0), strides, _state->Shape, ndim, _state->IterSize);
+                return kernel(_state->GetDataPtr(0), strides, _state->Shape, ndim, _state->IterSize);
+            }
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
+            {
+                throw;
+            }
         }
 
         /// <summary>
-        /// Reduction variant that honors REDUCE + BUFFER: uses
-        /// <see cref="NDIterState.BufferedReduceAdvance"/> and
-        /// <see cref="IsFirstVisit"/> to initialize the accumulator once per
-        /// output slot. This is the NumPy-parity path for axis reductions that
-        /// span multiple output elements.
+        ///     Reduction variant over a BUFFER + REDUCE iterator: one kernel call per inner loop — a core of NumPy's reduce
+        ///     double loop when the buffering setup chose it (the reduce operand's element repeats along the core, or its core
+        ///     repeats per outer step), else a plain fill — with <see cref="IsFirstVisit"/> telling the kernel when an output
+        ///     slot starts. The NumPy-parity path for axis reductions that span multiple output elements. An empty iteration
+        ///     makes no call (see <see cref="ForEach"/>).
         /// </summary>
+        /// <typeparam name="TKernel">The inner-loop kernel.</typeparam>
+        /// <typeparam name="TAccum">The kernel's accumulator type (threaded through every call).</typeparam>
+        /// <param name="kernel">The kernel; returning false ends the walk early (the held buffer is written back at Dispose).</param>
+        /// <exception cref="InvalidOperationException">The iterator is not buffered or has no reduction operand.</exception>
+        /// <exception cref="ValueError">A string operand's conversion fails during a buffer transfer.</exception>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
         public void BufferedReduce<TKernel, TAccum>(TKernel kernel)
             where TKernel : struct, INDReducingInnerLoop<TAccum>
             where TAccum : unmanaged
         {
-            if ((_state->ItFlags & ((uint)NDIterFlags.BUFFER | (uint)NDIterFlags.REDUCE))
-                != ((uint)NDIterFlags.BUFFER | (uint)NDIterFlags.REDUCE))
+            try
             {
-                throw new InvalidOperationException(
-                    "BufferedReduce requires BUFFER + REDUCE flags on the iterator.");
+                if ((_state->ItFlags & ((uint)NDIterFlags.BUFFER | (uint)NDIterFlags.REDUCE))
+                    != ((uint)NDIterFlags.BUFFER | (uint)NDIterFlags.REDUCE))
+                {
+                    throw new InvalidOperationException(
+                        "BufferedReduce requires BUFFER + REDUCE flags on the iterator.");
+                }
+
+                // An empty iteration runs no inner loop (see ForEach): there is no fill to hand the kernel.
+                if (_state->IterSize == 0)
+                    return;
+
+                EnsureBuffersReady();   // DELAY_BUFALLOC: allocate + fill the first buffer
+
+                void** dataptrs = GetDataPtrArray();
+                long* strides = GetInnerLoopByteStrides();
+                long* innerSize = GetInnerLoopSizePtr();
+
+                // The reduce-accumulator operand's pointer stays pinned (inner stride 0) or steps per outer step, so
+                // *dataptrs[reduce_op] is the accumulator slot; the caller sees the current output slot via
+                // IsFirstVisit.
+                TAccum accum = default;
+                do
+                {
+                    // Kernel decides whether to re-init (IsFirstVisit) or continue.
+                    if (!kernel.Execute(dataptrs, strides, *innerSize, ref accum))
+                        break;
+                } while (BufferedWindowAdvance());   // a whole inner loop per call, EXLOOP or not
             }
-
-            void** dataptrs = GetDataPtrArray();
-            long* strides = GetInnerLoopByteStrides();
-            long* innerSize = GetInnerLoopSizePtr();
-
-            // The reduce-accumulator operand's pointer stays pinned while input
-            // advances, so *dataptrs[reduce_op] is the accumulator slot.
-            // Caller sees current output slot via IsFirstVisit(reduce_op).
-            TAccum accum = default;
-            do
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
             {
-                // Kernel decides whether to re-init (IsFirstVisit) or continue.
-                if (!kernel.Execute(dataptrs, strides, *innerSize, ref accum))
-                    break;
-            } while (Iternext());  // Iternext picks BufferedReduceIternext internally.
+                throw;
+            }
         }
 
         /// <summary>
         /// Element-wise comparison → bool output. Same 3-operand shape as
         /// ExecuteBinary but the output is always Boolean.
         /// </summary>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
         public void ExecuteComparison(ComparisonOp op)
         {
-            if (_state->NOp != 3)
-                throw new InvalidOperationException(
-                    $"ExecuteComparison requires 3 operands; got {_state->NOp}.");
-            RequireContiguousOutput(2, nameof(ExecuteComparison));
+            try
+            {
+                if (_state->NOp != 3)
+                    throw new InvalidOperationException(
+                        string.Create(CultureInfo.InvariantCulture, $"ExecuteComparison requires 3 operands; got {_state->NOp}."));
+                RequireContiguousOutput(2, nameof(ExecuteComparison));
 
-            var key = new ComparisonKernelKey(
-                _state->GetOpDType(0),
-                _state->GetOpDType(1),
-                op,
-                DetectExecutionPath());
+                var key = new ComparisonKernelKey(
+                    _state->GetOpDType(0),
+                    _state->GetOpDType(1),
+                    op,
+                    DetectExecutionPath());
 
-            var kernel = DirectILKernelGenerator.GetComparisonKernel(key);
+                var kernel = DirectILKernelGenerator.GetComparisonKernel(key);
 
-            int ndim = _state->NDim;
-            long* lhsStrides = stackalloc long[Math.Max(1, ndim)];
-            long* rhsStrides = stackalloc long[Math.Max(1, ndim)];
-            FillElementStrides(0, lhsStrides, ndim);
-            FillElementStrides(1, rhsStrides, ndim);
+                int ndim = _state->NDim;
+                long* lhsStrides = stackalloc long[Math.Max(1, ndim)];
+                long* rhsStrides = stackalloc long[Math.Max(1, ndim)];
+                FillElementStrides(0, lhsStrides, ndim);
+                FillElementStrides(1, rhsStrides, ndim);
 
-            kernel(
-                _state->GetDataPtr(0),
-                _state->GetDataPtr(1),
-                (bool*)_state->GetDataPtr(2),
-                lhsStrides,
-                rhsStrides,
-                _state->Shape,
-                ndim,
-                _state->IterSize);
+                kernel(
+                    _state->GetDataPtr(0),
+                    _state->GetDataPtr(1),
+                    (bool*)_state->GetDataPtr(2),
+                    lhsStrides,
+                    rhsStrides,
+                    _state->Shape,
+                    ndim,
+                    _state->IterSize);
+            }
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
+            {
+                throw;
+            }
         }
 
         /// <summary>
@@ -882,65 +998,89 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// Cumulative scan (CumSum, CumProd) over [in, out].
         /// </summary>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
         public void ExecuteScan(ReductionOp op)
         {
-            if (_state->NOp != 2)
-                throw new InvalidOperationException(
-                    $"ExecuteScan requires 2 operands (in, out); got {_state->NOp}.");
-            RequireContiguousOutput(1, nameof(ExecuteScan));
+            try
+            {
+                if (_state->NOp != 2)
+                    throw new InvalidOperationException(
+                        string.Create(CultureInfo.InvariantCulture, $"ExecuteScan requires 2 operands (in, out); got {_state->NOp}."));
+                RequireContiguousOutput(1, nameof(ExecuteScan));
 
-            int ndim = _state->NDim;
-            bool isContig = (_state->ItFlags & (uint)NDIterFlags.CONTIGUOUS) != 0;
+                int ndim = _state->NDim;
+                bool isContig = (_state->ItFlags & (uint)NDIterFlags.CONTIGUOUS) != 0;
 
-            var key = new CumulativeKernelKey(
-                _state->GetOpDType(0),
-                _state->GetOpDType(1),
-                op,
-                isContig);
+                var key = new CumulativeKernelKey(
+                    _state->GetOpDType(0),
+                    _state->GetOpDType(1),
+                    op,
+                    isContig);
 
-            var kernel = DirectILKernelGenerator.GetCumulativeKernel(key);
+                var kernel = DirectILKernelGenerator.GetCumulativeKernel(key);
 
-            long* strides = stackalloc long[Math.Max(1, ndim)];
-            FillElementStrides(0, strides, ndim);
+                long* strides = stackalloc long[Math.Max(1, ndim)];
+                FillElementStrides(0, strides, ndim);
 
-            kernel(
-                _state->GetDataPtr(0),
-                _state->GetDataPtr(1),
-                strides,
-                _state->Shape,
-                ndim,
-                _state->IterSize);
+                kernel(
+                    _state->GetDataPtr(0),
+                    _state->GetDataPtr(1),
+                    strides,
+                    _state->Shape,
+                    ndim,
+                    _state->IterSize);
+            }
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
+            {
+                throw;
+            }
         }
 
         /// <summary>
         /// Same-type copy with broadcast. When both operands are contiguous
         /// the kernel collapses to <c>cpblk</c>.
         /// </summary>
+        /// <remarks>
+        ///     An exception that leaves it marks the iteration failed (<see cref="MarkFailed"/>), so
+        ///     <see cref="Dispose"/> clears the held buffers and discards the COPY_IF_OVERLAP write-backs instead of
+        ///     writing them into the operands, as NumPy's <c>NpyIter_Deallocate</c> does when an error is set.
+        /// </remarks>
         public void ExecuteCopy()
         {
-            if (_state->NOp != 2)
-                throw new InvalidOperationException(
-                    $"ExecuteCopy requires 2 operands; got {_state->NOp}.");
+            try
+            {
+                if (_state->NOp != 2)
+                    throw new InvalidOperationException(
+                        string.Create(CultureInfo.InvariantCulture, $"ExecuteCopy requires 2 operands; got {_state->NOp}."));
 
-            var dtype = _state->GetOpDType(1);  // target dtype
-            bool bothContig = (_state->ItFlags & (uint)NDIterFlags.CONTIGUOUS) != 0;
-            var path = bothContig ? CopyExecutionPath.Contiguous : CopyExecutionPath.General;
-            var kernel = DirectILKernelGenerator.GetCopyKernel(new CopyKernelKey(dtype, path));
+                var dtype = _state->GetOpDType(1);  // target dtype
+                bool bothContig = (_state->ItFlags & (uint)NDIterFlags.CONTIGUOUS) != 0;
+                var path = bothContig ? CopyExecutionPath.Contiguous : CopyExecutionPath.General;
+                var kernel = DirectILKernelGenerator.GetCopyKernel(new CopyKernelKey(dtype, path));
 
-            int ndim = _state->NDim;
-            long* srcStrides = stackalloc long[Math.Max(1, ndim)];
-            long* dstStrides = stackalloc long[Math.Max(1, ndim)];
-            FillElementStrides(0, srcStrides, ndim);
-            FillElementStrides(1, dstStrides, ndim);
+                int ndim = _state->NDim;
+                long* srcStrides = stackalloc long[Math.Max(1, ndim)];
+                long* dstStrides = stackalloc long[Math.Max(1, ndim)];
+                FillElementStrides(0, srcStrides, ndim);
+                FillElementStrides(1, dstStrides, ndim);
 
-            kernel(
-                _state->GetDataPtr(0),
-                _state->GetDataPtr(1),
-                srcStrides,
-                dstStrides,
-                _state->Shape,
-                ndim,
-                _state->IterSize);
+                kernel(
+                    _state->GetDataPtr(0),
+                    _state->GetDataPtr(1),
+                    srcStrides,
+                    dstStrides,
+                    _state->Shape,
+                    ndim,
+                    _state->IterSize);
+            }
+            catch (Exception) when (MarkFailed())   // never entered: the filter only records the failure
+            {
+                throw;
+            }
         }
 
         // =====================================================================
@@ -1081,7 +1221,7 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         private void RunBufferedBinary(BinaryOp op)
         {
-            // Windowed contract: DataPtrs point at tight buffers for buffered
+            // Buffered contract: DataPtrs point at tight buffers for buffered
             // operands and at the array position for unbuffered (linear) ones;
             // BufStrides holds each operand's effective inner byte stride.
             // The whole-array MixedType kernel needs dense (elemSize) or
@@ -1143,39 +1283,27 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Flush the pending windowed-buffer write-backs (no-op for unbuffered,
-        /// reduce-buffered, or already-flushed iterators).
+        ///     Advances a buffered iterator past the inner loop the kernel just consumed, regardless of EXTERNAL_LOOP — used by
+        ///     the kernel drivers, whose kernels always consume whole inner loops: the reduce double loop's next outer step, or
+        ///     the write-back, the move to the next fill and the fill (<see cref="NDIterBufferManager.BufferedNextInnerLoop"/>).
         /// </summary>
-        /// <summary>
-        /// Advance the windowed buffered iterator by one whole fill (flush →
-        /// jump → refill), regardless of EXTERNAL_LOOP — used by the kernel
-        /// drivers, whose kernels always consume entire windows.
-        /// </summary>
+        /// <returns>True while the iteration continues; false at its end (the last buffer written back).</returns>
+        /// <exception cref="ValueError">A string operand's conversion fails during a buffer transfer.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private bool BufferedWindowAdvance()
-        {
-            NDIterBufferManager.FlushBufferWindow(ref *_state);
+        private bool BufferedWindowAdvance() => NDIterBufferManager.BufferedNextInnerLoop(ref *_state);
 
-            _state->IterIndex = _state->BufIterEnd;
-            if (_state->IterIndex >= _state->IterEnd)
-                return false;
-
-            _state->GotoIterIndex(_state->IterIndex);
-            long count = NDIterBufferManager.ComputeTransferSize(ref *_state);
-            NDIterBufferManager.FillBufferWindow(ref *_state, count);
-            return true;
-        }
-
+        /// <summary>
+        ///     Ends a buffered iteration a kernel consumed in one inner loop: the buffers are written back and released, the
+        ///     state NumPy's last iternext leaves (a no-op for an unbuffered iterator, delayed buffers, or a buffered iteration
+        ///     that already ended).
+        /// </summary>
+        /// <exception cref="ValueError">A string operand's conversion fails during the write-back.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private void FlushIfBuffered()
         {
             uint f = _state->ItFlags;
-            if ((f & (uint)NDIterFlags.BUFFER) != 0 &&
-                (f & (uint)NDIterFlags.REDUCE) == 0 &&
-                (f & (uint)NDIterFlags.DELAYBUF) == 0)
-            {
-                NDIterBufferManager.FlushBufferWindow(ref *_state);
-            }
+            if ((f & (uint)NDIterFlags.BUFFER) != 0 && (f & (uint)NDIterFlags.DELAYBUF) == 0)
+                NDIterBufferManager.FinishBufferedLoop(ref *_state);
         }
 
         // =====================================================================

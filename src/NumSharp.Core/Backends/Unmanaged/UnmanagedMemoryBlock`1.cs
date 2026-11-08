@@ -68,6 +68,28 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <summary>
+        ///     Construct an ALIAS over memory another array owns, reinterpreted as <typeparamref name="T"/> (a complex
+        ///     array's real / imaginary lane, <c>view(dtype)</c>, <c>getfield</c>), whose reference counting is the
+        ///     owner's: an <see cref="NDArray"/> over it holds a counted reference on <paramref name="arcOwner"/>'s block,
+        ///     so disposing the owner while the alias lives does not free the buffer under it.
+        /// </summary>
+        /// <param name="ptr">The first aliased element (inside the owner's buffer).</param>
+        /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        /// <param name="arcOwner">The owner's slice (the storage's <c>InternalArray</c> the alias is carved from).</param>
+        /// <remarks>Does NOT claim ownership — this block never frees; the owner's last release does.</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="arcOwner"/> is null.</exception>
+        [MethodImpl(Optimize)]
+        internal UnmanagedMemoryBlock(T* ptr, long count, IArraySlice arcOwner)
+        {
+            if (arcOwner is null)
+                throw new ArgumentNullException(nameof(arcOwner));
+            _disposer = new Disposer(arcOwner);
+            Address = ptr;
+            Count = count;
+            BytesCount = count * InfoOf<T>.Size;
+        }
+
+        /// <summary>
         ///     Construct with externally allocated memory and a custom <paramref name="dispose"/> function.
         /// </summary>
         /// <param name="start">Pointer to externally allocated unmanaged memory.</param>
@@ -1086,7 +1108,8 @@ namespace NumSharp.Backends.Unmanaged
                 GCHandle,
                 External,
                 Wrap,
-                Virtual
+                Virtual,
+                Forward
             }
 
             // -----------------------------------------------------------------
@@ -1126,6 +1149,10 @@ namespace NumSharp.Backends.Unmanaged
             private readonly Action _dispose;
             private readonly long _bytesCount;
 
+            // AllocationType.Forward: the slice whose block owns the memory this block aliases; every ARC operation is
+            // delegated to it (and the reference keeps that block's Disposer reachable while the alias is).
+            private readonly IArraySlice _forward;
+
 
             /// <summary>
             ///     Construct a AllocationType.Native (NativeMemory.Alloc)
@@ -1154,21 +1181,26 @@ namespace NumSharp.Backends.Unmanaged
             ///     <see cref="AllocationType.Native"/> these buffers are NOT
             ///     pooled — they are released straight back to the OS via
             ///     <see cref="OsVirtualMemory.Free"/> (instant for the pages
-            ///     never faulted in), so this disposer OWNS its GC pressure
-            ///     (registered here, released on free) the same way the
-            ///     External path does.
+            ///     never faulted in). The memory is reported the way the pool reports
+            ///     its own hand-outs, through
+            ///     <see cref="Pooling.SizeBucketedBufferPool.AccountForeignAllocation"/>
+            ///     (coarse pressure chunks while it is outstanding, and the pacing window),
+            ///     registered here and released on free.
             /// </summary>
             /// <param name="address">Base address from <see cref="OsVirtualMemory.Alloc"/>.</param>
-            /// <param name="bytesCount">Allocation size in bytes (GC pressure).</param>
+            /// <param name="bytesCount">Allocation size in bytes (accounted as outstanding memory).</param>
             /// <param name="virtualAlloc">Discriminates this ctor from the Native one; always true.</param>
+            /// <remarks>A <see cref="GC.AddMemoryPressure"/> per block (the former accounting) counted every short-lived
+            ///     block toward the GC's pressure trigger even after its <see cref="GC.RemoveMemoryPressure"/>: a loop of
+            ///     <c>np.zeros(400_000)</c> (3.2 MB each, disposed at once) ran a gen-2 collection about every 150
+            ///     allocations, which in a process with a large managed heap is the whole cost of the loop.</remarks>
             public Disposer(IntPtr address, long bytesCount, bool virtualAlloc)
             {
                 Address = address;
                 _bytesCount = bytesCount;
                 _type = AllocationType.Virtual;
 
-                if (bytesCount > 0)
-                    GC.AddMemoryPressure(bytesCount);
+                Pooling.SizeBucketedBufferPool.AccountForeignAllocation(bytesCount);
             }
 
             /// <summary>
@@ -1209,6 +1241,29 @@ namespace NumSharp.Backends.Unmanaged
                 _type = AllocationType.Wrap;
             }
 
+            /// <summary>
+            ///     Construct a AllocationType.Forward: the disposer of a block that ALIASES another array's memory under a
+            ///     different element type (a complex array's real / imaginary lane, a <c>view(dtype)</c> reinterpretation,
+            ///     a <c>getfield</c> field). It owns nothing and frees nothing; every reference it is asked to count is
+            ///     counted on <paramref name="forward"/>'s block instead — so an <see cref="NDArray"/> over the alias keeps
+            ///     the owner's buffer alive exactly as an ordinary view (which shares the owner's slice) does, and the
+            ///     owner's last <c>Release</c> (whoever drops it) frees the buffer once.
+            /// </summary>
+            /// <param name="forward">The owner's slice (itself possibly a forwarding alias: the chain reaches the
+            ///     block that owns the memory).</param>
+            /// <remarks>
+            ///     A plain non-owning wrap here counted the alias on an immortal marker: disposing the owner returned its
+            ///     buffer to the pool while the alias still read it — <c>np.real(z)</c> after <c>z.Dispose()</c>, and
+            ///     <c>np.linalg.eigvals</c>' real result (a lane view of the complex result its scope disposes) read the
+            ///     NEXT same-size allocation. Nothing to finalize: the forwarding target's own Disposer frees.
+            /// </remarks>
+            public Disposer(IArraySlice forward)
+            {
+                _forward = forward;
+                _type = AllocationType.Forward;
+                GC.SuppressFinalize(this);
+            }
+
             [MethodImpl(OptimizeAndInline), SuppressMessage("ReSharper", "PossibleInvalidOperationException")]
             private void ReleaseUnmanagedResources()
             {
@@ -1239,14 +1294,15 @@ namespace NumSharp.Backends.Unmanaged
                         Pooling.SizeBucketedBufferPool.Return(Address, _bytesCount);
                         return;
                     case AllocationType.Wrap:
+                    case AllocationType.Forward:
+                        // A Forward alias never owned the memory: its owner's Disposer frees it.
                         return;
                     case AllocationType.Virtual:
                         // Return the reservation straight to the OS (no pool):
                         // VirtualFree is instant for pages that were never
                         // faulted in — the common np.zeros-then-drop case.
                         Pooling.OsVirtualMemory.Free(Address);
-                        if (_bytesCount > 0)
-                            GC.RemoveMemoryPressure(_bytesCount);
+                        Pooling.SizeBucketedBufferPool.AccountForeignRelease(_bytesCount);
                         return;
                     case AllocationType.External:
                         _dispose();
@@ -1273,6 +1329,8 @@ namespace NumSharp.Backends.Unmanaged
             {
                 // Non-owning wraps are immortal — refcount is meaningless.
                 if (_type == AllocationType.Wrap) return true;
+                // An alias counts its references on the block that owns the memory.
+                if (_type == AllocationType.Forward) return _forward.TryAddRef();
 
                 long c;
                 do
@@ -1290,6 +1348,11 @@ namespace NumSharp.Backends.Unmanaged
             public void Release()
             {
                 if (_type == AllocationType.Wrap) return;
+                if (_type == AllocationType.Forward)
+                {
+                    _forward.Release();
+                    return;
+                }
 
                 long n = Interlocked.Decrement(ref _refCount);
                 if (n == 0)
@@ -1333,6 +1396,11 @@ namespace NumSharp.Backends.Unmanaged
             public void Abandon()
             {
                 if (_type == AllocationType.Wrap) return;
+                if (_type == AllocationType.Forward)
+                {
+                    _forward.Abandon();
+                    return;
+                }
 
                 long n = Interlocked.Decrement(ref _refCount);
                 if (n < 0)
@@ -1347,7 +1415,7 @@ namespace NumSharp.Backends.Unmanaged
             public bool IsReleased
             {
                 [MethodImpl(OptimizeAndInline)]
-                get => Volatile.Read(ref _freed) != 0;
+                get => _type == AllocationType.Forward ? _forward.IsReleased : Volatile.Read(ref _freed) != 0;
             }
 
             /// <summary>
@@ -1358,7 +1426,8 @@ namespace NumSharp.Backends.Unmanaged
             public bool IsUniquelyReferenced
             {
                 [MethodImpl(OptimizeAndInline)]
-                get => _type == AllocationType.Wrap || Interlocked.Read(ref _refCount) <= 1;
+                get => _type == AllocationType.Forward ? _forward.IsUniquelyReferenced
+                    : _type == AllocationType.Wrap || Interlocked.Read(ref _refCount) <= 1;
             }
 
             /// <summary>

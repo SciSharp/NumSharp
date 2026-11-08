@@ -81,8 +81,8 @@ public class NDArrayMethodBenchmarks : OfficialBenchmarkBase
     [Benchmark(Description = "a.argmin() [ndarray]")] public long ArgMin() => _a.argmin();
     [Benchmark(Description = "a.cumprod() [ndarray]")] public NDArray CumProd() => _productInput.cumprod();
     [Benchmark(Description = "a.cumsum() [ndarray]")] public NDArray CumSum() => _a.cumsum();
-    [Benchmark(Description = "a.max() [ndarray]")] public NDArray Max() => _a.max(dtype: null);
-    [Benchmark(Description = "a.min() [ndarray]")] public NDArray Min() => _a.min(dtype: null);
+    [Benchmark(Description = "a.max() [ndarray]")] public NDArray Max() => _a.max();
+    [Benchmark(Description = "a.min() [ndarray]")] public NDArray Min() => _a.min();
     [Benchmark(Description = "a.prod() [ndarray]")] public NDArray Prod() => _productInput.prod();
     [Benchmark(Description = "a.choose(choices) [ndarray]")] public NDArray Choose() => _selector.choose(new[] { _a, _b });
     [Benchmark(Description = "a.clip(min, max) [ndarray]")] public NDArray Clip() => _a.clip(_clipMin, _clipMax);

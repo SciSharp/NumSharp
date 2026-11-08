@@ -167,37 +167,43 @@ namespace NumSharp.Tests.RandomSampling
         [TestMethod]
         public void NegativeBinomial_NZero_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.negative_binomial(0, 0.5, 5L));
+            Assert.ThrowsException<ValueError>(() => np.random.negative_binomial(0, 0.5, 5L));
         }
 
         [TestMethod]
         public void NegativeBinomial_NNegative_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.negative_binomial(-1, 0.5, 5L));
+            Assert.ThrowsException<ValueError>(() => np.random.negative_binomial(-1, 0.5, 5L));
         }
 
         [TestMethod]
-        public void NegativeBinomial_PZero_ThrowsArgumentException()
+        [Misaligned]
+        public void NegativeBinomial_PZero_IsAccepted_AsNumPy()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.negative_binomial(10, 0, 5L));
+            // NumPy accepts p = 0 (CONS_BOUNDED_0_1): the gamma mean is infinite and PTRS converts the infinite floor
+            // through C's integer cast — INT64_MIN under NumSharp's 64-bit C long (NumPy on Linux; win-amd64's 32-bit
+            // long gives -2147483648).
+            var r = np.random.RandomState(42).negative_binomial(10, 0, new Shape(5));
+            for (long i = 0; i < r.size; i++)
+                r.GetAtIndex(i).Should().Be(long.MinValue);
         }
 
         [TestMethod]
         public void NegativeBinomial_PNegative_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.negative_binomial(10, -0.1, 5L));
+            Assert.ThrowsException<ValueError>(() => np.random.negative_binomial(10, -0.1, 5L));
         }
 
         [TestMethod]
         public void NegativeBinomial_PGreaterThanOne_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.negative_binomial(10, 1.5, 5L));
+            Assert.ThrowsException<ValueError>(() => np.random.negative_binomial(10, 1.5, 5L));
         }
 
         [TestMethod]
         public void NegativeBinomial_PNaN_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.negative_binomial(10, double.NaN, 5L));
+            Assert.ThrowsException<ValueError>(() => np.random.negative_binomial(10, double.NaN, 5L));
         }
 
         // ========== Tests migrated from NumPy ==========

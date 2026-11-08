@@ -94,6 +94,22 @@ namespace NumSharp.Backends.Iteration
         /// <summary>Reduce loops don't need recalculation.</summary>
         REUSE_REDUCE_LOOPS = 0x1000 << 8,
 
+        /// <summary>
+        ///     The buffered iteration runs NumPy's reduce DOUBLE LOOP: <c>npyiter_find_buffering_setup</c> chose the outer
+        ///     reduce dimension as the core / outer split, so each buffer fill is walked as up to
+        ///     <see cref="NDIterState.ReduceOuterSize"/> inner loops of <see cref="NDIterState.CoreSize"/> elements, the
+        ///     pointers stepping by <see cref="NDIterState.ReduceOuterStrides"/> between them
+        ///     (<c>npyiter_buffered_reduce_iternext</c>).
+        /// </summary>
+        /// <remarks>
+        ///     This is what NumPy's <c>NPY_ITFLAG_REDUCE</c> means AFTER the buffering setup, which clears that flag when
+        ///     the chosen split does not use the reduce loop. NumSharp keeps <see cref="REDUCE"/> as the construction's
+        ///     answer ("an operand is reduced") because <see cref="NDIterRef.IsReduction"/>, the parallel-safety decision
+        ///     and <see cref="NDIterRef.IsFirstVisit"/> read it, and records the setup's answer here. Set only together with
+        ///     <see cref="BUFFER"/>.
+        /// </remarks>
+        BUFREDUCE = 0x2000 << 8,
+
         // =========================================================================
         // NumSharp Extensions (bits 3-6 of the legacy byte)
         //
@@ -191,6 +207,19 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>User requested contiguous operand.</summary>
         CONTIG = 0x0800,
+
+        /// <summary>
+        ///     The buffered double loop iterates this operand as a REDUCE operand: one of its two buffered strides is 0 — the
+        ///     inner one (its element repeats along the core, and the pointer steps per outer iteration) or the outer one
+        ///     (the core repeats per outer iteration) — and its buffer holds the core or the outer column only.
+        /// </summary>
+        /// <remarks>
+        ///     NumPy's <c>NPY_OP_ITFLAG_REDUCE</c> as <c>npyiter_find_buffering_setup</c> leaves it: set only under
+        ///     <see cref="NDIterFlags.BUFREDUCE"/>, and possibly on an operand that is not reduced at all (an unbuffered input
+        ///     whose strides make the reduce walk cheaper). <see cref="REDUCE"/> keeps the construction's meaning (the
+        ///     operand is written along a broadcast axis) for the iterator's public queries.
+        /// </remarks>
+        BUF_REDUCE = 0x1000,
     }
 
     /// <summary>

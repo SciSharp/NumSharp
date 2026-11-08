@@ -1,0 +1,145 @@
+using System;
+using System.Numerics;
+using NumSharp.Tests.Utilities;
+
+namespace NumSharp.Tests
+{
+    // =====================================================================
+    // OPEN BUGS — the array library below numpy.matrix
+    // =====================================================================
+    //
+    // Found 2026-10-09 by the matrix tier (test/oracle/gen_matrix_oracle.py, replayed by
+    // NumSharp.Tests.Oracle/Fuzz/FuzzCorpusTests.Matrix.cs): numpy.matrix as NDMatrix, every member over 14 source
+    // layouts and the dtypes, with the result's class and memory facet compared besides its values. The matrix class
+    // itself is held to NumPy without exception. The 172 cases that still differ are carved into
+    // NumSharp.Tests.Oracle/Fuzz/corpus/gaps/matrix_gaps.jsonl under the gap ids MX01-MX11 (the GAPS table of the
+    // generator) and replayed by Matrix_KnownGaps: each one is an NDArray member or an np.* function that NDMatrix
+    // delegates to, differing from NumPy for the layout or dtype of the case.
+    //
+    // This file reproduces the gaps through PUBLIC calls on plain arrays, so each can be fixed where it lives:
+    //
+    //   * A crash: fancy assignment with two index entries into a C-contiguous view at an offset (MX07).
+    //
+    // FIXED 2026-11-05 (parity QA-36): the result LAYOUT gaps — np.cumsum / np.cumprod (MX02), ndarray.round of a
+    // broadcast operand (MX04), np.conjugate of a transposed strided view (MX05) — take NumPy's layouts (NpyIter's K
+    // order, PyArray_Round's complex KEEPORDER copy); their pins stay below as regression tests, untagged, their summaries
+    // opening with "FIXED", and the gaps' 43 cases are back in matrix.jsonl.
+    //
+    // FIXED 2026-10-15 (the numpy.char phase-2 work): ndarray.imag of a real F array is F-ordered (MX03); its pin stays
+    // below as a regression test, untagged, its summary opening with "FIXED".
+    //
+    // FIXED 2026-10-24 (the np-layer dtype plan's P1d): np.prod in a cast loop casts the input first (MX08: the flat form
+    // read a narrower input as its float16 / complex128 loop, past the end of the buffer). Its pin moved to
+    // Math/np.prod.CastLoop.Test.cs with the probes of the fix, and the gap's cases are back in matrix.jsonl.
+    //
+    // FIXED 2026-10-26 (the np-layer dtype plan's P2): np.dot of an N-D operand with an M-D one calls the result dtype's
+    // dot function once per output element (MX10: the route computed every dtype in float64, so a complex128 product
+    // lost its imaginary parts and an integer sum did not wrap). Its pin moved to LinearAlgebra/np.dot.Test.cs, and the
+    // gap's cases are back in matrix.jsonl.
+    //
+    // Not repeated here, because an older file already pins the same root cause: the fancy getter's result layout
+    // (MX01: OpenBugs.FancyIndex.cs, group 2), reshape(-1) of a broadcast view (MX06: OpenBugs.ViewFlags.cs, VF24),
+    // complex128 np.prod's zero sign (MX09: OpenBugs.Reductions.cs), np.repeat of an offset view (MX11:
+    // OpenBugs.ViewFlags.cs, VF39).
+    //
+    // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
+    // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so
+    // the cases return to the gate.
+    // =====================================================================
+    public partial class OpenBugs
+    {
+        /// <summary>
+        ///     <c>view[[0, 2], [1, 3]] = -1</c> where <c>view</c> is the middle <c>np.unstack</c> child of a
+        ///     (3, 4, 4) array (a C-contiguous (4, 4) view at offset 16): NumPy stores the two elements. NumSharp
+        ///     throws IndexOutOfRangeException: the computed offsets include the view's offset and the bound they
+        ///     are tested against is the view's own size (gap MX07). A view near the start of its buffer hides the
+        ///     bug, because its offsets stay below that bound.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "matrix-MX07")]
+        public void Matrix_FancySetOnAnOffsetView_ShouldStore()
+        {
+            using var owner = np.arange(48).reshape(3, 4, 4);
+            NDArray[] children = np.unstack(owner);
+            NDArray view = children[1];
+
+            view[new object[] { new long[] { 0, 2 }, new long[] { 1, 3 } }] = -1L;
+
+            view.ToArray<long>().Should().Equal(16L, -1L, 18L, 19L, 20L, 21L, 22L, 23L, 24L, 25L, 26L, -1L, 28L, 29L, 30L, 31L);
+        }
+
+        /// <summary>
+        ///     FIXED by parity QA-36 (2026-11-05: np.cumsum / np.cumprod allocate in the accumulate iterator's K order):
+        ///     NumSharp gives NumPy's answer now, and this test pins it; the matrix tier's 36 MX02 cells are back in the
+        ///     gate. <c>np.cumprod(a, 0)</c> of an F-contiguous (2, 3) int64 array is F-contiguous (strides (8, 16)), as
+        ///     NumPy's accumulate allocates it in the operand's order; before the fix it came back C-ordered (gap MX02).
+        /// </summary>
+        [TestMethod]
+        public void Matrix_Cumprod_OfAnFOrderedOperand_ShouldKeepTheOrder()
+        {
+            using var c = np.arange(1, 7).reshape(2, 3);
+            using var f = np.asfortranarray(c);
+            using var r = np.cumprod(f, 0);
+
+            r.ToArray<long>().Should().Equal(1L, 2L, 3L, 4L, 10L, 18L);
+            r.flags.f_contiguous.Should().BeTrue();
+            r.flags.c_contiguous.Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     FIXED by the numpy.char phase-2 work (2026-10-15: <c>np.imag</c> of a non-complex array allocates in
+        ///     <c>PyArray_ISFORTRAN(self)</c>'s order): NumSharp gives NumPy's answer now, and this test pins it; the matrix
+        ///     tier's 15 MX03 cells are back in the gate. Before the fix: <c>a.imag</c> of a real F-contiguous array came back
+        ///     C-ordered, where NumPy allocates the zeros in Fortran order (gap MX03).
+        /// </summary>
+        [TestMethod]
+        public void Matrix_ImagOfARealFArray_ShouldBeFOrdered()
+        {
+            using var c = np.arange(1, 7).reshape(2, 3);
+            using var f = np.asfortranarray(c);
+            using var r = f.imag;
+
+            r.flags.writeable.Should().BeFalse();
+            r.flags.f_contiguous.Should().BeTrue();
+            r.flags.c_contiguous.Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     FIXED by parity QA-36 (2026-11-05: np.round of a complex input is PyArray_Round's KEEPORDER copy whatever
+        ///     the decimals): NumSharp gives NumPy's answer now, and this test pins it; the matrix tier's 5 MX04 cells are
+        ///     back in the gate. <c>a.round()</c> of a complex128 array broadcast from one row to (3, 2) is F-contiguous
+        ///     (the K copy puts the stride-0 axis innermost); before the fix it came back C-ordered (gap MX04).
+        /// </summary>
+        [TestMethod]
+        public void Matrix_RoundOfABroadcastComplexOperand_ShouldKeepTheOrder()
+        {
+            using var row = np.array(new[] { new Complex(1.5, 2.5), new Complex(2.5, -0.5) });
+            using var b = np.broadcast_to(row, new Shape(3, 2));
+            using var r = b.round();
+
+            r.GetAtIndex<Complex>(0).Should().Be(new Complex(2, 2));
+            r.flags.f_contiguous.Should().BeTrue();
+            r.flags.c_contiguous.Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     FIXED by parity QA-36 (2026-11-05: a fresh unary ufunc result takes NpyIter's K layout of its operand):
+        ///     NumSharp gives NumPy's answer now, and this test pins it; the matrix tier's 2 MX05 cells are back in the
+        ///     gate. <c>np.conjugate(v)</c> where <c>v</c> is the transpose of a stepped (2, 3) view of a (4, 6) complex128
+        ///     array keeps the operand's memory order (F-contiguous, strides (16, 48)); before the fix it was written in C
+        ///     order (gap MX05, reached through <c>matrix.H</c>).
+        /// </summary>
+        [TestMethod]
+        public void Matrix_ConjugateOfATransposedSteppedView_ShouldKeepTheOrder()
+        {
+            using var owner = np.arange(24).reshape(4, 6).astype(np.complex128) * new Complex(1, 1);
+            using var stepped = owner["::2, ::2"];
+            using var v = stepped.T;
+            using var r = np.conjugate(v);
+
+            r.shape.Should().Equal(3L, 2L);
+            r.GetAtIndex<Complex>(1).Should().Be(new Complex(12, -12));
+            r.flags.f_contiguous.Should().BeTrue();
+            r.flags.c_contiguous.Should().BeFalse();
+        }
+    }
+}

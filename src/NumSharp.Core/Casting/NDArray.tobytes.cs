@@ -24,53 +24,9 @@ namespace NumSharp
         ///     </list>
         /// </param>
         /// <returns>A fresh, detached <see cref="byte"/> array of length <c>size * dtypesize</c>.</returns>
-        /// <exception cref="ArgumentException">Thrown when <paramref name="order"/> is not one of C/F/A/K.</exception>
+        /// <exception cref="ValueError"><paramref name="order"/> is not one of C/F/A/K, either case (<c>order must be one of
+        ///     'C', 'F', 'A', or 'K' (got 'Z')</c>): checked first, so an empty array refuses it too.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.tobytes.html</remarks>
-        public byte[] tobytes(char order = 'C')
-        {
-            if (size == 0)
-                return System.Array.Empty<byte>();
-
-            // Resolve the NumPy order char to a physical layout ('C' or 'F').
-            //   C/F/A -> OrderResolver (A picks F only when this view is F-contiguous-and-not-C-contiguous,
-            //            exactly NumPy's PyArray_ISFORTRAN test). Invalid chars raise here.
-            //   K     -> 'C'. NumPy's tobytes routes the (non-reference) numeric dtypes through CopyInto
-            //            into a C-contiguous destination, so tobytes('K') == tobytes('C') for every dtype
-            //            NumSharp supports. This deliberately differs from OrderResolver's 'K' (which keeps
-            //            an F-contiguous source as 'F') because tobytes never preserves F for 'K'.
-            char physical = (order == 'K' || order == 'k')
-                ? 'C'
-                : OrderResolver.Resolve(order, this.Shape);
-
-            // Fast path: read the logical bytes straight from this view's buffer when its memory already
-            // lays elements out in the requested order AND its data starts at Storage.Address. The
-            // offset==0 guard matters: simple contiguous slices are re-based (offset folded into Address),
-            // but strided/negative-stride/F-sliced views keep their start in Shape.offset, so Address would
-            // point at the wrong first element (e.g. a reversed [::-1] view, or an F-contiguous T[...,1:]).
-            bool directable = physical == 'C'
-                ? (Shape.IsContiguous && Shape.offset == 0)
-                : (Shape.IsFContiguous && Shape.offset == 0);
-
-            // Otherwise materialize a fresh contiguous copy in the target order. copy() drives the layout
-            // resolution + fill through the NDIter copy primitive (handles scalar/(1,)/strided/broadcast/
-            // transposed); copy('F') leaves a buffer whose linear bytes are exactly the column-major readout.
-            NDArray src = directable ? this : this.copy(physical);
-
-            unsafe
-            {
-                var addr = src.Storage.Address;
-                long len = checked((long)src.size * src.dtypesize);
-
-                // Allocate uninitialized: every byte is overwritten by the copy below, so the CLR's
-                // default zero-fill would be pure waste (a redundant 2nd write over the whole buffer).
-                // This mirrors NumPy's PyBytes_FromStringAndSize(NULL, n) — uninitialized then memcpy'd.
-                // A byte[] is capped at int.MaxValue length anyway, so the checked (int) cast is the
-                // real allocatable bound (a >2GB result throws OverflowException, as new byte[len] would).
-                byte[] bytes = GC.AllocateUninitializedArray<byte>(checked((int)len));
-                fixed (byte* @out = bytes)
-                    Buffer.MemoryCopy(addr, @out, len, len);
-                return bytes;
-            }
-        }
+        public byte[] tobytes(char order = 'C') => Backends.UnmanagedStorage.ToBytes(this, order);
     }
 }

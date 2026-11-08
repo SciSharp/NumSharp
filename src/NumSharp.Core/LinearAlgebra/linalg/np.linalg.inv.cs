@@ -17,23 +17,31 @@ namespace NumSharp
             ///     <c>LinAlgError("Singular matrix")</c> from the factorisation rather than from a
             ///     determinant test.
             ///     </para>
+            ///     <para>
+            ///     No matrix backend is needed: without one, NumSharp's managed LU computes the inverse (allclose to
+            ///     NumPy's LAPACK result, bit for bit for small matrices); an installed backend is used first.
+            ///     </para>
             /// </remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
-            // Scope: ToCommon mints a dtype-cast temp when `a` is not already the common type
-            // (a.typecode == common ? a : Cast(...)) — a leftover otherwise dropped to the finalizer.
-            // [NDScoped] reclaims it while leaving a passthrough input untouched (rule R2); the
-            // engine's fresh inverse is yielded. Matches the scoped siblings pinv/tensorinv.
+            /// <param name="a">The square matrix, or a stack of them.</param>
+            /// <returns>The inverse, a fresh array (float64 for bool / integer operands).</returns>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+            /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or a singular matrix.</exception>
+            /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
+            /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+            // Scope: what the call leaves (the woven subclass path scopes its plain views); the Linalg member reclaims the
+            // ToCommon dtype-cast temp. Matches the scoped siblings pinv/tensorinv.
             [NDScoped]
             public static NDArray inv(NDArray a)
             {
-                AssertStackedSquare(a);
-                var common = CommonType(a);
-                return a.TensorEngine.Inv(ToCommon(a, common));
+                if (a is null) throw new ArgumentNullException(nameof(a));
+                return a.TensorEngine.Linalg.Inv(a);
             }
 
             /// <summary>
             ///     Moore-Penrose pseudo-inverse, computed from the singular value decomposition.
             /// </summary>
+            /// <param name="a">The matrix, or a stack of them.</param>
             /// <param name="rcond">
             ///     Singular values below <c>rcond * largest</c> are treated as zero. NumPy's default
             ///     is <c>1e-15</c>.
@@ -45,79 +53,51 @@ namespace NumSharp
             ///     The Array-API spelling of <paramref name="rcond"/>. Supplying both is an error, as
             ///     upstream.
             /// </param>
+            /// <returns>The pseudo-inverse, shape <c>(..., N, M)</c>.</returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.pinv.html</remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
-            [NDScoped]
+            /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
+            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>);
+            ///     both <paramref name="rcond"/> and <paramref name="rtol"/> set.</exception>
+            /// <exception cref="TypeError">A text operand, or a float16, decimal or char operand.</exception>
+            /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand with <paramref name="hermitian"/>.</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+            [NDScoped] // what the call leaves (the Linalg member and the woven subclass path scope their own)
             public static NDArray pinv(NDArray a, double? rcond = null, bool hermitian = false, double? rtol = null)
             {
-                if (rcond is not null && rtol is not null)
-                    throw new ValueError("`rtol` and `rcond` can't be both set.");
-
-                AssertStacked2d(a);
-
-                // C# cannot tell NumPy's rtol=_NoValue (default → 1e-15) apart from rtol=None
-                // (Array-API default → max(M,N)*eps), so an explicit rcond or rtol is honoured and with
-                // neither set NumPy's 1e-15 default applies.
-                double rc = rcond ?? rtol ?? 1e-15;
-
-                int nd = a.ndim;
-                long m = a.Shape.dimensions[nd - 2];
-                long n = a.Shape.dimensions[nd - 1];
-
-                // Empty matrix: NumPy returns an uninitialised (…, N, M) WITHOUT decomposing, keeping the
-                // ORIGINAL dtype (unlike the SVD path, which is always floating).
-                if (m == 0 || n == 0)
-                {
-                    var emptyDims = (long[]) a.Shape.dimensions.Clone();
-                    emptyDims[nd - 2] = n;
-                    emptyDims[nd - 1] = m;
-                    return np.zeros(new Shape(emptyDims), a.typecode);
-                }
-
-                var common = CommonType(a);
-                var aConj = np.conjugate(ToCommon(a, common));
-                var (u, s, vt) = aConj.TensorEngine.Svd(aConj, fullMatrices: false, computeUv: true);
-
-                // Discard singular values at or below rcond * largest, reciprocate the rest, and recombine
-                // with the (plain, since `a` was conjugated) transposed factors — NumPy's exact sequence.
-                var cutoff = np.multiply(np.amax(s, -1, keepdims: true), NDArray.Scalar(rc));
-                var large = np.greater(s, cutoff);
-                var sInv = np.where(large, np.reciprocal(s), np.zeros_like(s));
-                return np.matmul(np.swapaxes(vt, -1, -2),
-                    np.multiply(np.expand_dims(sInv, -1), np.swapaxes(u, -1, -2)));
+                if (a is null) throw new ArgumentNullException(nameof(a));
+                return a.TensorEngine.Linalg.Pinv(a, rcond, hermitian, rtol);
             }
 
             /// <summary>
-            ///     Inverse of an N-dimensional array with respect to a <see cref="tensordot"/>
+            ///     Inverse of an N-dimensional array with respect to a <see cref="tensordot(NDArray, NDArray, int)"/>
             ///     contraction over its last <c>a.ndim - ind</c> axes.
             /// </summary>
+            /// <param name="a">The tensor to invert.</param>
             /// <param name="ind">
             ///     How many LEADING axes form the "row" side. Must be positive.
             /// </param>
-            /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.tensorinv.html</remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
-            [NDScoped]
+            /// <returns>The inverse, shape <c>a.shape[ind:] + a.shape[:ind]</c>: a view of the inverse of the square
+            ///     matrix (NumPy's <c>ia.reshape(*invshape)</c>).</returns>
+            /// <remarks>
+            ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.tensorinv.html
+            ///     <para>
+            ///     The inverse needs no matrix backend (the managed LU computes it). A 0-d operand is inverted as a 1x1
+            ///     matrix and then refused, as in NumPy: its <c>invshape</c> is empty, and <c>ia.reshape(*invshape)</c> calls
+            ///     <c>reshape()</c> with no argument.
+            ///     </para>
+            /// </remarks>
+            /// <exception cref="ValueError"><paramref name="ind"/> is not positive, or the reshape to a square matrix is
+            ///     impossible.</exception>
+            /// <exception cref="LinAlgError">The reshaped matrix is not square, or is singular.</exception>
+            /// <exception cref="TypeError">A float16, decimal or char operand (inv's <c>_commonType</c>), or a 0-d operand
+            ///     whose 1x1 inverse succeeded (<c>reshape() takes exactly 1 argument (0 given)</c>).</exception>
+            /// <exception cref="TypeError">A text operand (inv's gufunc input cast, NumPy's UFuncTypeError).</exception>
+            /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+            [NDScoped] // the facade keeps its scope over the call; the Linalg member scopes the computation's own
             public static NDArray tensorinv(NDArray a, int ind = 2)
             {
-                if (ind <= 0)
-                    throw new ValueError("Invalid ind argument.");
-
-                var dims = a.Shape.dimensions;
-                long leading = 1;
-                for (int i = 0; i < ind && i < a.ndim; i++)
-                    leading *= dims[i];
-                long trailing = 1;
-                for (int i = ind; i < a.ndim; i++)
-                    trailing *= dims[i];
-
-                var invertedShape = new long[a.ndim - ind + ind];
-                for (int i = ind, j = 0; i < a.ndim; i++, j++)
-                    invertedShape[j] = dims[i];
-                for (int i = 0, j = a.ndim - ind; i < ind; i++, j++)
-                    invertedShape[j] = dims[i];
-
-                var square = np.reshape(a, new[] {leading, trailing});
-                return np.reshape(inv(square), invertedShape);
+                if (a is null) throw new ArgumentNullException(nameof(a));
+                return a.TensorEngine.Linalg.Tensorinv(a, ind);
             }
         }
     }

@@ -56,7 +56,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>_get_cast_safety_from_castingimpl</c>: run <see cref="ArrayMethod.ResolveDescriptors"/> and, when the
+        ///     NumPy's <c>_get_cast_safety_from_castingimpl</c>: run <see cref="ArrayMethod.resolve_descriptors"/> and, when the
         ///     loop descriptors it picked differ from the given ones (a byte swap folded in, a canonicalisation), fold the
         ///     safety of THOSE adaptations in too, so a multi-step cast reports its weakest step.
         /// </summary>
@@ -67,7 +67,7 @@ namespace NumSharp
             NPY_CASTING casting;
             try
             {
-                casting = impl.ResolveDescriptors(given, loop, out viewOffset);
+                casting = impl.resolve_descriptors(given, loop, out viewOffset);
             }
             catch (TypeError)
             {
@@ -100,6 +100,67 @@ namespace NumSharp
         private static bool SameDescr(DType a, DType b) => ReferenceEquals(a, b) || (a is not null && a.Equals(b));
 
         /// <summary>
+        ///     NumPy's <c>PyArray_GetDTypeTransferFunction</c> (<c>dtype_transfer.c</c>: <c>define_cast_for_descrs</c> over
+        ///     <c>init_cast_info</c>): the strided loop that casts <paramref name="srcDtype"/> into <paramref name="dstDtype"/>,
+        ///     from the casting implementation registered for the CLASS pair - its <see cref="ArrayMethod.resolve_descriptors"/>
+        ///     and its <see cref="ArrayMethod.get_strided_loop"/>. Every route that converts element by element over its own walk
+        ///     asks this instead of choosing a converter by the dtypes' names: the raw assignment, the iterator's buffer
+        ///     transfers, the reductions over text.
+        /// </summary>
+        /// <param name="aligned">True when both operands are aligned (NumSharp's loops read and write unaligned elements
+        ///     too, so NumPy's wrapping of a method without <c>SUPPORTS_UNALIGNED</c> is never needed).</param>
+        /// <param name="srcStride">The source's byte stride (of the first call; a loop may assume it fixed).</param>
+        /// <param name="dstStride">The destination's byte stride.</param>
+        /// <param name="srcDtype">The source descriptor.</param>
+        /// <param name="dstDtype">The destination descriptor.</param>
+        /// <param name="moveReferences">NumPy's <c>move_references</c> (the source's references may be moved, not copied);
+        ///     NumSharp's <c>StringDType</c> loops always duplicate, so it is accepted and has no effect.</param>
+        /// <param name="outFlags">Receives the loop's flags (NumPy's <c>out_flags</c>).</param>
+        /// <param name="srcAllocator">The string allocator of a <c>StringDType</c> source's cells, else null (NumPy keeps it
+        ///     on the descriptor; NumSharp on the cells' buffer, so the caller passes it).</param>
+        /// <param name="dstAllocator">The string allocator of a <c>StringDType</c> destination's cells, else null.</param>
+        /// <returns>The resolved cast (NumPy's <c>NPY_cast_info</c>).</returns>
+        /// <exception cref="ArgumentNullException">A descriptor is null.</exception>
+        /// <exception cref="TypeError">No cast is registered for the class pair (NumPy's <c>Cannot cast data from X to
+        ///     Y.</c>), or the impl's descriptor resolution refuses the pair.</exception>
+        /// <exception cref="NotSupportedException">The resolved descriptors differ from the given ones (a byte swap or another
+        ///     wrapping step NumPy would chain: NumSharp's storage is native, so no storage reaches it), or the impl has no
+        ///     loop (a datetime cast before Stage C).</exception>
+        internal static NDCastInfo GetDTypeTransferFunction(bool aligned, long srcStride, long dstStride, DType srcDtype,
+            DType dstDtype, bool moveReferences, out NDArrayMethodFlags outFlags,
+            Backends.Strings.VStringAllocator srcAllocator = null, Backends.Strings.VStringAllocator dstAllocator = null)
+        {
+            if (srcDtype == null) throw new ArgumentNullException(nameof(srcDtype));
+            if (dstDtype == null) throw new ArgumentNullException(nameof(dstDtype));
+
+            // init_cast_info: the class pair's implementation, or NumPy's TypeError for a pair without one.
+            var impl = srcDtype.Meta.GetCastingImpl(dstDtype.Meta)
+                       ?? throw new TypeError($"Cannot cast data from {srcDtype} to {dstDtype}.");
+            var given = new[] { srcDtype, dstDtype };
+            var loopDescrs = new DType[2];
+            // A refusing resolver raises its own TypeError; it is NumPy's error too (init_cast_info passes it on).
+            impl.resolve_descriptors(given, loopDescrs, out _);
+
+            // define_cast_for_descrs: a loop descriptor other than the given one needs a wrapping cast into or out of it (a
+            // byte swap, a canonicalisation), which NumPy chains as a multi-step cast. Every storage descriptor is native and
+            // every storage class's resolver returns the given descriptors, so NumSharp never needs one: refuse loudly
+            // instead of running a loop on the wrong descriptor.
+            if (!SameDescr(loopDescrs[0], srcDtype) || !SameDescr(loopDescrs[1], dstDtype))
+                throw new NotSupportedException(
+                    $"The cast from {srcDtype.ToString(true)} to {dstDtype.ToString(true)} resolves to {loopDescrs[0].ToString(true)} -> " +
+                    $"{loopDescrs[1].ToString(true)}: a multi-step cast, which NumSharp's native storage never needs.");
+
+            // The allocators ride on the context only when a StringDType operand has one (NumSharp's addition to NumPy's
+            // context, see ArrayMethodContext.Allocators).
+            var allocators = srcAllocator is null && dstAllocator is null
+                ? null
+                : new[] { srcAllocator, dstAllocator };
+            var context = new ArrayMethodContext(impl, loopDescrs, allocators);
+            var func = impl.get_strided_loop(context, aligned, new[] { srcStride, dstStride }, out outFlags);
+            return new NDCastInfo(func, context);
+        }
+
+        /// <summary>
         ///     NumPy's <c>PyArray_CheckCastSafety</c>: whether casting <paramref name="from"/> to <paramref name="to"/> (or to
         ///     the class <paramref name="toMeta"/> when <paramref name="to"/> is null) satisfies <paramref name="casting"/>.
         ///     Short-circuits on the implementation's own minimal safety and only resolves descriptors when the request is
@@ -116,7 +177,7 @@ namespace NumSharp
             if (impl == null)
                 return false;
 
-            if (MinCastSafety(impl.Casting, casting) == casting)
+            if (MinCastSafety(impl.casting, casting) == casting)
                 return true; /* No need to check using `castingimpl.resolve_descriptors()` */
 
             var safety = GetCastSafetyFromCastingImpl(impl, from, to, out _);
@@ -128,13 +189,28 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>PyArray_CanCastTypeTo</c> — the engine behind <c>np.can_cast(from, to, casting)</c> for two
-        ///     descriptors. An impossible cast is False, never an error.
+        ///     descriptors. An impossible cast is False, never an error. An UNSIZED string target (<c>S0</c>/<c>U0</c>, i.e.
+        ///     <c>np.dtype('U')</c>) stands for its CLASS — "cast to whatever length you need" — so
+        ///     <c>can_cast('i4', 'U', 'safe')</c> is True although <c>can_cast('i4', 'U10', 'safe')</c> is False, and
+        ///     <c>can_cast('U5', 'U', 'no')</c> is True.
         /// </summary>
+        /// <param name="from">The source descriptor.</param>
+        /// <param name="to">The target descriptor (an unsized string descriptor means its class).</param>
+        /// <param name="casting">The rule the cast must satisfy.</param>
+        /// <returns>True when the cast satisfies <paramref name="casting"/>.</returns>
+        /// <exception cref="ArgumentNullException">Either descriptor is null.</exception>
         public static bool CanCastTypeTo(DType from, DType to, NPY_CASTING casting)
         {
             if (from == null) throw new ArgumentNullException(nameof(from));
             if (to == null) throw new ArgumentNullException(nameof(to));
-            return CheckCastSafety(casting, from, to, to.Meta);
+            var toMeta = to.Meta;
+            /*
+             * The `to = NULL` branch, which considers "S0" to be "flexible"
+             * should probably be deprecated.
+             */
+            if (to.itemsize == 0 && toMeta is StringDTypeMeta)
+                to = null; /* consider mainly S0 and U0 as S and U */
+            return CheckCastSafety(casting, from, to, toMeta);
         }
 
         /// <summary>
@@ -157,9 +233,16 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>PyArray_CastingConverter</c>: the case-sensitive casting strings.
+        ///     NumPy's <c>PyArray_CastingConverter</c> (<c>string_converter_helper</c> + <c>casting_parser</c>): the
+        ///     case-sensitive casting strings.
         /// </summary>
-        /// <exception cref="ValueError"><c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '…')</c>.</exception>
+        /// <param name="casting">The casting name.</param>
+        /// <returns>The casting level.</returns>
+        /// <exception cref="TypeError"><paramref name="casting"/> is null: NumPy's <c>casting must be str, not NoneType</c>.</exception>
+        /// <exception cref="ValueError">
+        ///     Another string: <c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got …)</c>, the string
+        ///     quoted by Python's <c>repr</c> (NumPy's <c>%R</c>), so <c>"it's"</c> shows as <c>(got "it's")</c>.
+        /// </exception>
         public static NPY_CASTING ParseCasting(string casting)
         {
             switch (casting)
@@ -169,10 +252,66 @@ namespace NumSharp
                 case "safe": return NPY_CASTING.NPY_SAFE_CASTING;
                 case "same_kind": return NPY_CASTING.NPY_SAME_KIND_CASTING;
                 case "unsafe": return NPY_CASTING.NPY_UNSAFE_CASTING;
+                case null:
+                    // string_converter_helper's non-str branch: "%s must be str, not %s" with the object's type name.
+                    throw new TypeError("casting must be str, not NoneType");
                 default:
-                    throw new ValueError($"casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '{casting}')");
+                    throw new ValueError($"casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got {NumSharp.IO.PyLiteral.Repr(casting)})");
             }
         }
+
+        /// <summary>NumPy 2.4's value-preserving casting rule: a name only <c>ndarray.astype</c>'s converter accepts.</summary>
+        internal const string SameValueName = "same_value";
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_CastingConverterSameValue</c> (<c>conversion_utils.c</c>), <c>ndarray.astype</c>'s casting
+        ///     converter: <see cref="ParseCasting"/>'s five names plus NumPy 2.4's <c>'same_value'</c>, whose error text lists
+        ///     it too. <c>npy_parse_arguments</c> runs it right after the order converter, before astype adapts the dtype,
+        ///     takes the <c>copy=False</c> shortcut or checks the rule — so an unknown name raises even for a cast that needs
+        ///     nothing.
+        /// </summary>
+        /// <param name="casting">The caller's casting name; null or empty is NumSharp's astype default, <c>'unsafe'</c>.</param>
+        /// <param name="sameValue">True when the name is <c>'same_value'</c>. NumSharp's <see cref="NPY_CASTING"/> has no
+        ///     member for it (its value carries NumPy's <c>NPY_SAME_VALUE_CASTING_FLAG</c>), so the caller reads this flag
+        ///     and the returned level is <see cref="NPY_CASTING.NPY_UNSAFE_CASTING"/>, the rule NumPy's flag rides on.</param>
+        /// <returns>The casting level.</returns>
+        /// <exception cref="ValueError"><c>casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe',
+        ///     'same_value' (got '…')</c>.</exception>
+        internal static NPY_CASTING ParseCastingSameValue(string casting, out bool sameValue)
+        {
+            sameValue = casting == SameValueName;
+            if (string.IsNullOrEmpty(casting) || sameValue)
+                return NPY_CASTING.NPY_UNSAFE_CASTING;
+            switch (casting)
+            {
+                case "no":
+                case "equiv":
+                case "safe":
+                case "same_kind":
+                case "unsafe":
+                    return ParseCasting(casting);
+                default:
+                    throw new ValueError(
+                        $"casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe', '{SameValueName}' (got '{casting}')");
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>npy_set_invalid_cast_error</c> (<c>convert_datatype.c</c>), the error of a cast the rule refuses:
+        ///     <c>Cannot cast array data from dtype('&lt;U5') to dtype('&lt;U3') according to the rule 'safe'</c>, or
+        ///     <c>Cannot cast scalar from …</c> for a 0-d source, as the house <see cref="InvalidCastException"/> (NumPy's
+        ///     TypeError). Every route that checks a descriptor-level rule before it casts raises it: astype, the assignment,
+        ///     the item-selection values, np.concatenate's string route.
+        /// </summary>
+        /// <param name="from">The source descriptor.</param>
+        /// <param name="to">The target descriptor.</param>
+        /// <param name="casting">The rule that refused the cast.</param>
+        /// <param name="scalar">True for a 0-d source (NumPy's "scalar" wording).</param>
+        /// <returns>The exception (not thrown: the caller throws it, so the compiler sees the control flow end).</returns>
+        internal static InvalidCastException InvalidCastError(DType from, DType to, NPY_CASTING casting, bool scalar)
+            => new InvalidCastException(
+                $"Cannot cast {(scalar ? "scalar" : "array data")} from {from.ToString(true)} to {to.ToString(true)} " +
+                $"according to the rule '{CastingToString(casting)}'");
 
         /// <summary>NumPy's <c>npy_casting_to_string</c>: the casting string of a level.</summary>
         public static string CastingToString(NPY_CASTING casting)
