@@ -420,5 +420,144 @@ namespace NumSharp.Tests
             hyp.GetInt64(0).Should().Be(0x7ff8000000000789L);
             next.GetInt64(0).Should().Be(0x7ff0000000000789L);
         }
+
+        // ------------------------------------------------------------------
+        // QB-15 — np.median / np.nanmedian / np.ma.median of ONE element return (x + x) / 2, which overflows
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's median of a one-element slice is <c>np.mean</c> of that element, the element itself:
+        ///     <c>np.median(np.array([1e308]))</c> is <c>1e308</c> and <c>np.median(np.array([40000], np.float16))</c> is
+        ///     <c>40000</c>. NumSharp returns <c>(x + x) / 2</c>, so every |x| above half the dtype's maximum (float64
+        ///     8.99e307, float32 1.7e38, float16 32752) comes back as ±inf, on every route that reaches a one-element line:
+        ///     a 0-d input, a one-element array, keepdims, <c>out=</c>, <c>overwrite_input</c>, a length-1 axis,
+        ///     <c>np.nanmedian</c> of a slice with one non-NaN value, and <c>np.ma.median</c> of one unmasked value.
+        ///     Root cause: <c>DirectILKernelGenerator.WriteCell</c> takes np.median's two-sample mean when
+        ///     <c>gamma &gt;= 0.5</c>, and for a one-element line the plan's gamma is 1 (NumPy's <c>_get_indexes</c> moves an
+        ///     index at the upper bound to -1, so <c>gamma = 0 - (-1)</c>): the "two central samples" are the same element
+        ///     twice. np.percentile / np.quantile of one element take the lerp and are already right. A fix must keep
+        ///     QB-17 in view: NumPy's nanmedian along a short axis DOES overflow a lone element (numpy.ma's median).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB15")]
+        public void ParityQb_QB15_MedianOfOneElement_IsTheElement()
+        {
+            using var big = np.array(new[] { 1e308 });
+            using var bigWithNaN = np.array(new[] { 1e308, double.NaN });
+            using var half = np.array(new[] { (Half)40000 });
+            var maskedPair = np.ma.masked_array(np.array(new[] { 1e308, 5.0 }), np.array(new[] { false, true }));
+
+            using var median = np.median(big);
+            using var nanmedian = np.nanmedian(bigWithNaN);
+            using var medianHalf = np.median(half);
+            var maMedian = np.ma.median(maskedPair);
+
+            // NumPy 2.4.2: the element itself, never inf
+            median.GetDouble().Should().Be(1e308);
+            nanmedian.GetDouble().Should().Be(1e308);
+            medianHalf.GetHalf().Should().Be((Half)40000);
+            maMedian.data.GetDouble().Should().Be(1e308);
+        }
+
+        // ------------------------------------------------------------------
+        // QB-16 — np.median's middle mean is not np.mean's: float16 sums in float16, complex skips Smith's division
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>np.median</c> is <c>np.mean(part[indexer])</c> of the middle element(s). For float16,
+        ///     <c>_mean</c> sums in the float32 loop and narrows once, so <c>np.median(np.array([40000, 40000], np.float16))</c>
+        ///     is <c>40000</c> (and the flat <c>np.nanmedian</c> of <c>[30000, 40000]</c> is <c>35008</c>); NumSharp's
+        ///     <c>WriteCell</c> rounds the pair's sum to float16 first (its comment calls that NumPy's rule), so any pair
+        ///     summing past 65504 is <c>inf</c>. For complex128, <c>_mean</c> divides the sum by <c>n + 0j</c> with
+        ///     <c>CDOUBLE_divide</c>'s Smith algorithm, whose <c>in1i * 0</c> / <c>in1r * 0</c> terms turn the other part
+        ///     NaN whenever a part is infinite: <c>np.median([1+infj])</c> is <c>nan+infj</c>,
+        ///     <c>np.median([inf+1j, inf+0j, -1+0j])</c> is <c>inf+nanj</c>, and <c>np.median([1.7e308+0j, 1.7e308+1j])</c>
+        ///     (an overflowing sum) is <c>inf+nanj</c>. NumSharp's complex route returns the middle element, or
+        ///     <c>0.5·a + 0.5·b</c>, which never overflows. Same root cause as
+        ///     <c>OpenBugsReductionTests.Median_OfNegativeZeros_IsPositiveZero</c> (the median is not np.mean of its middle),
+        ///     whose remarks say the values differ only in a zero's sign; these are value differences.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB16")]
+        public void ParityQb_QB16_MedianMiddleMean_IsNpMean()
+        {
+            using var half = np.array(new[] { (Half)40000, (Half)40000 });
+            using var infImag = np.array(new[] { new Complex(1, double.PositiveInfinity) });
+            using var overflowPair = np.array(new[] { new Complex(1.7e308, 0), new Complex(1.7e308, 1) });
+
+            using var medianHalf = np.median(half);
+            using var medianInfImag = np.median(infImag);
+            using var medianOverflow = np.median(overflowPair);
+
+            // NumPy 2.4.2: 40000, nan+infj, inf+nanj
+            medianHalf.GetHalf().Should().Be((Half)40000);
+            double.IsNaN(medianInfImag.GetComplex().Real).Should().BeTrue();
+            double.IsPositiveInfinity(medianInfImag.GetComplex().Imaginary).Should().BeTrue();
+            double.IsPositiveInfinity(medianOverflow.GetComplex().Real).Should().BeTrue();
+            double.IsNaN(medianOverflow.GetComplex().Imaginary).Should().BeTrue();
+        }
+
+        // ------------------------------------------------------------------
+        // QB-17 — np.nanmedian / np.ma.median along an axis: NumPy's numpy.ma median sums the duplicated middle
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>np.nanmedian</c> along an axis shorter than 600 is <c>_nanmedian_small</c>, i.e.
+        ///     <c>np.ma.median</c>, whose N-D <c>_median</c> takes <c>low_high</c> (the middle element TWICE for an odd
+        ///     count), sums it with <c>np.ma.sum</c> and halves it. So an odd-count slice whose middle exceeds half the
+        ///     dtype's maximum is <c>inf</c>: <c>np.nanmedian(np.array([[1e308, 1e308, 1e308]]), axis=1)</c> is
+        ///     <c>[inf]</c>, and so is <c>np.ma.median(..., axis=1)</c>. NumSharp returns the middle element. (NumPy's flat
+        ///     nanmedian, and its axis form at 600 or more elements, go through <c>np.median</c> and stay finite, as
+        ///     NumSharp does.) The quirk is NumPy's own, but it is its behavior: the axis route of both functions has to
+        ///     add the middle to itself, where NumSharp's QB-15 fix must stop doing exactly that on the other routes.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB17")]
+        public void ParityQb_QB17_NanmedianAlongAShortAxis_SumsTheDuplicatedMiddle()
+        {
+            using var rows = np.array(new double[,] { { 1e308, 1e308, 1e308 } });
+
+            using var nanmedian = np.nanmedian(rows, 1);
+            var maMedian = np.ma.median(np.ma.masked_array(rows), 1);
+
+            // NumPy 2.4.2: [inf] for both
+            double.IsPositiveInfinity(nanmedian.GetDouble(0)).Should().BeTrue();
+            double.IsPositiveInfinity(maMedian.data.GetDouble(0)).Should().BeTrue();
+        }
+
+        // ------------------------------------------------------------------
+        // QB-18 — signalling NaNs through the quantile family, one-element products and scans: the quiet bit differs
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     Three places where NumPy 2.4.2 and NumSharp disagree only on a signalling NaN's quiet bit (sign and payload
+        ///     survive):
+        ///     <list type="bullet">
+        ///         <item>float32 / float16 <c>np.median</c>, <c>np.percentile</c> and <c>np.quantile</c> (every method, the
+        ///         selecting <c>lower</c> / <c>nearest</c> included, flat and per axis) return a slice's NaN quieted; NumPy
+        ///         returns it untouched (<c>_median_nancheck</c>'s <c>data.take(-1)</c>, <c>_quantile</c>'s <c>arr[-1]</c>).
+        ///         float64 already keeps it.</item>
+        ///         <item><c>np.prod</c> of one element (flat, or along a length-1 axis) copies a signalling NaN; NumPy's
+        ///         reduction multiplies it by the identity 1, which quiets it (the real-dtype face of
+        ///         <c>OpenBugsReductionTests.Prod_OneComplexElement_IsTheIdentityTimesTheElement</c>).</item>
+        ///         <item><c>np.cumsum</c> / <c>np.cumprod</c> quiet a signalling NaN in the first position; NumPy's accumulate
+        ///         copies the first element (the root cause of
+        ///         <c>OpenBugsReductionTests.CumSum_Flat_KeepsFirstNegativeZero_LikeNumPysAccumulate</c> and
+        ///         <c>CumProd_Complex_CopiesTheFirstElement</c>, visible for real cumprod only through a signalling NaN).</item>
+        ///     </list>
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB18")]
+        public void ParityQb_QB18_SignallingNaN_ThroughQuantilesProductsAndScans()
+        {
+            using var f32 = np.array(new[] { unchecked((int)0xff800789) }).view(np.float32);
+            using var f64 = np.array(new[] { unchecked((long)0xfff0000000000789UL) }).view(np.float64);
+            using var lead = np.array(new[] { unchecked((long)0xfff0000000000789UL), 0x3ff0000000000000L, 0x4000000000000000L }).view(np.float64);
+
+            using var median = np.median(f32).view(np.int32);
+            using var prod = np.prod(f64).view(np.int64);
+            using var cumsum = np.cumsum(lead).view(np.int64);
+
+            // NumPy 2.4.2: the median keeps it signalling, the product quiets it, cumsum's first element is a copy
+            median.GetInt32().Should().Be(unchecked((int)0xff800789));
+            prod.GetInt64().Should().Be(unchecked((long)0xfff8000000000789UL));
+            cumsum.GetInt64(0).Should().Be(unchecked((long)0xfff0000000000789UL));
+        }
     }
 }
