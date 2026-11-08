@@ -17,7 +17,9 @@ using System.Threading;
 
 namespace NumSharp.Collections.Concurrent
 {
-    public partial class ConcurrentDictionary<TKey, TValue>
+    // `internal` must match the vendored declaration in ConcurrentDictionary.cs (partial parts agree on accessibility):
+    // the copy is internal because its name clashes with the BCL's ConcurrentDictionary<TKey, TValue> (see its remarks).
+    internal partial class ConcurrentDictionary<TKey, TValue>
     {
         /// <summary>
         ///     A handle to one live hash-table node, resolved by <see cref="FindNode" />. It lets an owner that

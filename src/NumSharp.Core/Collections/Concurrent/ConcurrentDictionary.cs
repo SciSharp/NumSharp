@@ -17,7 +17,9 @@
 //   * the class is `partial`: NumSharp-only members live in ConcurrentDictionary.RefAccessors.cs — the PUBLIC ref
 //     accessor GetValueRefOrNullRef, an addition to the upstream public surface that bypasses its tear-free
 //     discipline (the caller obligations are documented on the member), and the INTERNAL node-handle trio
-//     NodeHandle / FindNode / TryRemoveNode (look up a node once, then write or unlink it without the comparer).
+//     NodeHandle / FindNode / TryRemoveNode (look up a node once, then write or unlink it without the comparer);
+//   * the class is `internal`, not `public`: a public copy would clash with the BCL type's name (CS0104) in every
+//     consumer file that imports both namespaces, so only NumSharp itself (and its friend assemblies) use it.
 // Concurrency logic, locking, growth and the upstream members' public key-API behavior are otherwise unchanged.
 // </auto-generated>
 #nullable enable
@@ -39,11 +41,19 @@ namespace NumSharp.Collections.Concurrent
     /// <remarks>
     /// All public and protected members of <see cref="ConcurrentDictionary{TKey,TValue}"/> are thread-safe and may be used
     /// concurrently from multiple threads.
+    /// <para>
+    /// Internal, not public: this vendored copy shares its simple name with the BCL's
+    /// <c>System.Collections.Concurrent.ConcurrentDictionary&lt;TKey, TValue&gt;</c>, so a public copy would make every
+    /// consumer file that imports both namespaces fail with <c>CS0104</c>, while adding only the by-ref
+    /// <c>GetValueRefOrNullRef</c> over the BCL type. The owner kept it internal for 0.80.0 (2026-11-08), the release that
+    /// would have introduced it; it stays the key path of <see cref="ConcurrentOrderedDictionary{TKey,TValue}"/>.
+    /// </para>
     /// </remarks>
     [DebuggerDisplay("Count = {Count}")]
-    // NumSharp deviation from the verbatim dotnet/runtime source: `partial`, so NumSharp-only members can live in
-    // ConcurrentDictionary.RefAccessors.cs without touching this vendored body (see ConcurrentOrderedDictionary.TODO.md).
-    public partial class ConcurrentDictionary<TKey, TValue> : IDictionary<TKey, TValue>, IDictionary, IReadOnlyDictionary<TKey, TValue> where TKey : notnull
+    // NumSharp deviations from the verbatim dotnet/runtime source: `partial`, so NumSharp-only members can live in
+    // ConcurrentDictionary.RefAccessors.cs without touching this vendored body (see ConcurrentOrderedDictionary.TODO.md),
+    // and `internal` instead of `public` (the BCL name clash above; ConcurrentDictionary.RefAccessors.cs repeats it).
+    internal partial class ConcurrentDictionary<TKey, TValue> : IDictionary<TKey, TValue>, IDictionary, IReadOnlyDictionary<TKey, TValue> where TKey : notnull
     {
         /// <summary>Internal tables of the dictionary.</summary>
         /// <remarks>

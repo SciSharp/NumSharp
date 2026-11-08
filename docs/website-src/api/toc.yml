@@ -1388,19 +1388,6 @@ items:
   - uid: NumSharp.Collections.ConcurrentOrderedDictionary`2.ValuesView
     name: ConcurrentOrderedDictionary<TKey, TValue>.ValuesView
     type: Struct
-  - uid: NumSharp.Collections.OrderedDictionary`2
-    name: OrderedDictionary<TKey, TValue>
-    type: Class
-  - uid: NumSharp.Collections.OrderedDictionary`2.Enumerator
-    name: OrderedDictionary<TKey, TValue>.Enumerator
-    type: Struct
-- uid: NumSharp.Collections.Concurrent
-  name: NumSharp.Collections.Concurrent
-  type: Namespace
-  items:
-  - uid: NumSharp.Collections.Concurrent.ConcurrentDictionary`2
-    name: ConcurrentDictionary<TKey, TValue>
-    type: Class
 - uid: NumSharp.Fourier
   name: NumSharp.Fourier
   type: Namespace

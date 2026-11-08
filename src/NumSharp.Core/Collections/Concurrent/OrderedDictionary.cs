@@ -121,10 +121,17 @@ namespace NumSharp.Collections;
 ///         resize flag is lowered in a <c>finally</c>, so the collection and its lock-free replace are both left
 ///         exactly as they were.
 ///     </para>
+///     <para>
+///         <b>Internal, not public.</b> The simple name is the BCL's <c>System.Collections.Generic.OrderedDictionary&lt;TKey, TValue&gt;</c>
+///         (.NET 9 and later), so a public type would make every consumer file that imports <c>NumSharp.Collections</c>
+///         beside the implicit <c>System.Collections.Generic</c> fail with <c>CS0104</c> at its first unqualified use.
+///         The owner kept it internal for 0.80.0 (2026-11-08), the release that would have introduced it; making it
+///         public later (under a name of its own) breaks nobody, while hiding a shipped type would.
+///     </para>
 /// </remarks>
 /// <typeparam name="TKey">The non-null key type; uniqueness and lookups use the configured comparer.</typeparam>
 /// <typeparam name="TValue">The value type stored once per key and yielded, in index order, by enumeration.</typeparam>
-public sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
+internal sealed class OrderedDictionary<TKey, TValue> : IReadOnlyList<TValue>
     where TKey : notnull
 {
     /// <summary>The initial ordered-array capacity and the size the arrays first grow to from empty. Small on purpose — many ordered maps stay tiny.</summary>
