@@ -178,7 +178,9 @@ Every operand layout and dtype pair runs the vector kernels, for the operators a
   matrix against one short row, several rows per kernel call).
 - The bool result takes NumPy's ufunc output layout first (parity QA-36, `ufuncs.md` "The result layout"): a permuted
   operand pair is compared transposed into its K order (C-contiguous views) and the C result relabelled, so the callers
-  below see C-ordered or all-F operands.
+  below see C-ordered or all-F operands. The trivial-loop test reads the comparison dtype
+  (`ComparisonTrivialLoopLaysOut`: an operand of another dtype is cast, except that an int64 / uint64 pair is an exact
+  loop), so an F pair with a cast operand takes NpyIter's extent-1 strides instead of plain F.
 - Three callers:
   - `TryTrivialContiguousComparisonOp` → `Run`: two contiguous arrays of one shape, or an array and one value, of any two
     dtypes; also two one-element operands of different rank.

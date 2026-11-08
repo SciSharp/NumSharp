@@ -196,7 +196,7 @@ namespace NumSharp.Backends
             // ---- Empty iteration — nothing to compute. Every check above still ran, as in NumPy, where
             //      clip(empty int8, 1000, 2000) raises the OverflowError.
             if (DimsSize(dims) == 0)
-                return @out ?? NewArray(outType, ClipResultLayout(dims, lhs, min, max, where), false);
+                return @out ?? NewArray(outType, ClipResultLayout(dims, lhs, min, max, where, outType), false);
 
             if (where is null && TryClipFlat(lhs, min, max, @out, outType, mode, dims, out NDArray flat))
                 return flat;
@@ -233,14 +233,14 @@ namespace NumSharp.Backends
 
             long[] dims = ClipIterationDims(lhs, null, null, @out, where);
 
-            // A plain copy of a non-broadcast input: Cast keeps the input's memory order (K), which is the layout
-            // positive's iterator allocates for a single non-broadcast operand. A broadcast input is NOT handled here:
-            // K order sorts its stride-0 axis innermost, where the ufunc's layout vote ignores it (C order).
+            // A plain copy of a non-broadcast input: positive's own fresh result (IdentityLoopResult: the trivial loop's C or
+            // F, NpyIter's order for a permuted or cast operand). A broadcast input is NOT handled here: it takes the
+            // iterator route below, whose layout vote ignores a stride-0 axis (C order).
             if (where is null && @out is null && !lhs.Shape.IsBroadcasted && SameLongs(lhs.Shape.dimensions, dims))
-                return Cast(lhs, copyType, copy: true);
+                return IdentityLoopResult(lhs, copyType, inputCast: copyType != lhs.GetTypeCode);
 
             if (DimsSize(dims) == 0)
-                return @out ?? NewArray(copyType, ClipResultLayout(dims, lhs, null, null, where), false);
+                return @out ?? NewArray(copyType, ClipResultLayout(dims, lhs, null, null, where, copyType), false);
 
             return ClipViaIterator(lhs, null, null, @out, where, copyType, mode: null, dims);
         }
@@ -345,17 +345,24 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// The layout NumPy's ufunc allocates the result in (<see cref="Shape.NpyIterOutputShape"/>): its iterator sorts
-        /// the axes by the INPUT operands' strides (the mask votes too; 0-d operands and broadcast axes abstain), so an
-        /// F-ordered or permuted array keeps its memory order and C order wins any disagreement.
+        /// The layout NumPy's ufunc allocates the result in (<see cref="Shape.UfuncOutputShape"/>): clip is a ufunc, so
+        /// <c>try_trivial_single_output_loop</c> allocates plain C or F when the call qualifies (no mask, no input of two
+        /// or more dimensions cast to the loop or unaligned, every such input contiguous with one flag pair), and the
+        /// iterator otherwise sorts the axes by the INPUT operands' strides (the mask votes too; 0-d operands and
+        /// broadcast axes abstain), so an F-ordered or permuted array keeps its memory order and C order wins any
+        /// disagreement. The two allocators differ only in extent-1 strides: <c>np.clip</c> of an F (2, 1, 3) float64
+        /// array with scalar bounds has NumPy's byte strides (8, 16, 16), the iterator's would be (8, 48, 16).
         /// </summary>
         /// <param name="dims">The broadcast result dimensions.</param>
         /// <param name="lhs">The array being clipped.</param>
         /// <param name="min">The kept lower bound, or null.</param>
         /// <param name="max">The kept upper bound, or null.</param>
         /// <param name="where">The where= mask, or null.</param>
+        /// <param name="loop">The loop dtype: an input of two or more dimensions of another dtype is cast, which refuses
+        ///     the trivial loop.</param>
         /// <returns>A fresh dense shape of <paramref name="dims"/>.</returns>
-        private static Shape ClipResultLayout(long[] dims, NDArray lhs, NDArray min, NDArray max, NDArray where)
+        private static Shape ClipResultLayout(long[] dims, NDArray lhs, NDArray min, NDArray max, NDArray where,
+                                              NPTypeCode loop)
         {
             int n = 1 + (min is null ? 0 : 1) + (max is null ? 0 : 1) + (where is null ? 0 : 1);
             var votes = new Shape[n];
@@ -364,8 +371,21 @@ namespace NumSharp.Backends
             if (min is not null) votes[k++] = min.Shape;
             if (max is not null) votes[k++] = max.Shape;
             if (where is not null) votes[k] = where.Shape;
-            return Shape.NpyIterOutputShape((long[])dims.Clone(), votes);
+            bool trivialLoopEligible = where is null && TrivialLoopOperand(lhs, loop)
+                                       && (min is null || TrivialLoopOperand(min, loop))
+                                       && (max is null || TrivialLoopOperand(max, loop));
+            return Shape.UfuncOutputShape((long[])dims.Clone(), votes, trivialLoopEligible);
         }
+
+        /// <summary>
+        /// NumPy's <c>check_for_trivial_loop</c> per input: a 0-d or 1-D input is copied when it needs a cast (it never
+        /// refuses the loop), one of two or more dimensions must already be the loop dtype and aligned.
+        /// </summary>
+        /// <param name="x">The input.</param>
+        /// <param name="loop">The loop dtype.</param>
+        /// <returns>False when this input keeps the call off the trivial loop.</returns>
+        private static bool TrivialLoopOperand(NDArray x, NPTypeCode loop)
+            => x.ndim < 2 || (x.GetTypeCode == loop && UfuncLoopOperand.IsAligned(x));
 
         // =============================================================================
         // The flat route
@@ -423,7 +443,7 @@ namespace NumSharp.Backends
                 return false;
 
             // The result's memory order: NumPy's allocation layout, or out's own.
-            Shape layout = @out is not null ? @out.Shape : ClipResultLayout(dims, lhs, min, max, null);
+            Shape layout = @out is not null ? @out.Shape : ClipResultLayout(dims, lhs, min, max, null, outType);
             bool identity = layout.IsContiguous;
             int[] perm = identity ? null : layout.DenseAxisOrder();
 

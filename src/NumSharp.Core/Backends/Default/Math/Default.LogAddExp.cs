@@ -100,8 +100,11 @@ namespace NumSharp.Backends
 
             // NumPy's ufunc output layout (parity QA-36): the route writes C, so a permuted or F operand is computed in its
             // K order and relabelled.
+            // An input of another dtype than the loop's is cast, which keeps an N-D input off NumPy's trivial loop.
+            var tierLoop = typeCode ?? PromoteATan2Binary(x1, x2);
             return KOrderBinary(x1, x2, (engine: this, op, typeCode),
-                static (s, a, b) => s.engine.ExecuteFloatTierBinaryPlain(a, b, s.op, s.typeCode));
+                static (s, a, b) => s.engine.ExecuteFloatTierBinaryPlain(a, b, s.op, s.typeCode),
+                x1.GetTypeCode != tierLoop, x2.GetTypeCode != tierLoop);
         }
 
         /// <summary>

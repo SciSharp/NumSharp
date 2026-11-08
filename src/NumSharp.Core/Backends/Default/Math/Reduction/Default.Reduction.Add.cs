@@ -418,8 +418,9 @@ namespace NumSharp.Backends
 
             if (keepdims)
             {
-                // ExpandDimension relabels the owning counts in place: their order (C for C, F for F) and OWNDATA stay.
-                counts.Storage.ExpandDimension(axis);
+                // ExpandReducedAxis relabels the owning counts in place (the kept axis at NumPy's sorted place): their
+                // order (C for C, F for F) and OWNDATA stay.
+                ExpandReducedAxis(counts, arr.Shape, axis);
                 return counts;
             }
             return counts.ndim == 0 ? counts.MarkReductionScalar() : counts;
@@ -487,7 +488,7 @@ namespace NumSharp.Backends
             }
 
             if (keepdims)
-                result.Storage.ExpandDimension(axis);
+                ExpandReducedAxis(result, arr.Shape, axis);
             // A fresh 0-d result (1-D input reduced over its only axis) is a numpy SCALAR at the
             // boundary — read-only; an out= operand returns writeable (PyArray_Return semantics).
             return @out is not null ? result : result.MarkReductionScalar();
@@ -522,6 +523,85 @@ namespace NumSharp.Backends
             if (outputDims.Length == 1 || inputShape.IsContiguous)
                 return NewArray(outputType, new Shape(outputDims, copy: false), false);
             return NewArray(outputType, Shape.ReductionOutputShape(outputDims, inputShape, axis), false);
+        }
+
+        /// <summary>
+        ///     keepdims' re-insertion of the reduced axis into a fresh axis-reduction result, with the stride NumPy gives
+        ///     it. NumPy's reduction iterator allocates its out WITH the reduced axis, kept at extent 1 in the input's
+        ///     memory order (<c>npyiter_new_temp_array</c>: the axis takes the running stride at its sorted place without
+        ///     growing it - <see cref="Shape.ReductionOutputShape(long[], Shape, int)"/>'s keepdims form), so an F input's
+        ///     <c>np.sum(a, axis=1, keepdims=True)</c> has element strides (1, 2, 2) for (2, 1, 4) (probed 2.4.2), where
+        ///     inserting the axis C-style before its neighbour gives (1, 8, 2). Only <c>.strides</c> shows it: the flags
+        ///     never read an extent-1 axis.
+        /// </summary>
+        /// <param name="result">The reduction's fresh result, without the reduced axis (relabelled in place).</param>
+        /// <param name="input">The shape the result's layout was taken from (the reduced array's, or the K-order copy's
+        ///     the reduction walked).</param>
+        /// <param name="axis">The reduced axis, normalized.</param>
+        /// <remarks>The relabel needs the result to be a fresh owner (offset 0, exactly its elements) whose kept axes
+        ///     already have the keepdims layout's strides - what <see cref="AllocateReductionResult"/> (or a C allocation
+        ///     for a C input) gives. Any other result keeps <see cref="UnmanagedStorage.ExpandDimension"/>'s C-style
+        ///     insert, as before. A zero-size result gets NumPy's all-zero strides (a fresh zero-size allocation).</remarks>
+        internal static void ExpandReducedAxis(NDArray result, in Shape input, int axis)
+        {
+            int nd = input.dimensions.Length;
+            if (result.ndim != nd - 1 || (uint)axis >= (uint)nd)
+            {
+                result.Storage.ExpandDimension(axis);
+                return;
+            }
+
+            var keptDims = (long[])input.dimensions.Clone();
+            keptDims[axis] = 1;
+            // ForFreshAllocation: a zero-size result is a fresh zero-size allocation in NumPy, whose strides are all zero
+            // (np.sum(np.zeros((0, 3)), axis=1, keepdims=True).strides == (0, 0)); a dense layout passes unchanged.
+            var layout = Shape.ReductionOutputShape(keptDims, input, axis).ForFreshAllocation();
+
+            // Valid only over a fresh buffer whose kept axes are already where the keepdims layout puts them (an
+            // extent-1 kept axis addresses nothing, so its stride may differ).
+            var rs = result.Shape;
+            bool match = rs.offset == 0 && result.Storage.Count == result.size;
+            for (int d = 0, k = 0; d < nd && match; d++)
+            {
+                if (d == axis)
+                    continue;
+                if (rs.dimensions[k] > 1 && rs.strides[k] != layout.strides[d])
+                    match = false;
+                k++;
+            }
+
+            if (match)
+                result.Storage.SetShapeUnsafe(layout);
+            else
+                result.Storage.ExpandDimension(axis);
+        }
+
+        /// <summary>
+        ///     Gives a keepdims result that already carries its reduced axes (extent 1, from a chain of single-axis
+        ///     reductions) NumPy's layout for them: each kept axis takes the running stride at its sorted place
+        ///     (<see cref="Shape.ReductionOutputShape(long[], Shape, int)"/>'s keepdims form, which serves any set of reduced
+        ///     axes), so <c>np.any(f, axis=(0, 2), keepdims=True)</c> of an F (2, 3, 4) bool array has strides (1, 1, 3) as
+        ///     in NumPy 2.4.2, where the chain leaves the last reduced axis whatever stride its step gave it.
+        /// </summary>
+        /// <param name="result">The chain's fresh result, of <paramref name="input"/>'s rank (relabelled in place).</param>
+        /// <param name="input">The reduced array's shape (its memory order is NumPy's vote).</param>
+        /// <param name="anyReducedAxis">One of the reduced axes, normalized (the keepdims form ignores which).</param>
+        /// <remarks>Only <c>.strides</c> changes: the relabel runs only over a fresh owner (offset 0, exactly its elements)
+        ///     whose axes longer than 1 already have the layout's strides, so no element moves. Any other result is left
+        ///     as it is.</remarks>
+        internal static void RelabelKeptAxes(NDArray result, in Shape input, int anyReducedAxis)
+        {
+            int nd = input.dimensions.Length;
+            var rs = result.Shape;
+            if (rs.dimensions.Length != nd || rs.offset != 0 || result.Storage.Count != result.size)
+                return;
+
+            var layout = Shape.ReductionOutputShape((long[])rs.dimensions.Clone(), input, anyReducedAxis).ForFreshAllocation();
+            for (int d = 0; d < nd; d++)
+                if (rs.dimensions[d] > 1 && rs.strides[d] != layout.strides[d])
+                    return;
+
+            result.Storage.SetShapeUnsafe(layout);
         }
 
         /// <summary>
@@ -655,7 +735,7 @@ namespace NumSharp.Backends
                 ILKernelGenerator.MeanDivideByCount(result, shape.dimensions[axis]);
 
             if (keepdims)
-                result.Storage.ExpandDimension(axis);
+                ExpandReducedAxis(result, arr.Shape, axis);
             // Same PyArray_Return rule as ExecuteAxisReduction's exit; the output was already
             // allocated in KEEPORDER (F for an F-contig input), so there is nothing to reorder.
             return @out is not null ? result : result.MarkReductionScalar();
@@ -690,13 +770,10 @@ namespace NumSharp.Backends
             var outputType = typeCode ?? arr.GetTypeCode;
             var result = NewArray(outputType, new Shape(resultShape, copy: false), false);
 
+            // The kept axis at NumPy's keepdims place: all-zero strides for an empty result, the running stride for a reduced
+            // axis of length 0 (np.sum(np.zeros((2, 0, 3)), axis=1, keepdims=True).strides == (24, 24, 8)).
             if (keepdims)
-            {
-                var ks = new long[arr.ndim];
-                for (int d = 0, sd = 0; d < arr.ndim; d++)
-                    ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                result.Storage.Reshape(new Shape(ks, copy: false));
-            }
+                ExpandReducedAxis(result, shape, axis);
             return result;
         }
 
@@ -734,12 +811,10 @@ namespace NumSharp.Backends
             var resultShape = Shape.GetAxis(shape, axis);
             var outputType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
             var result = NewArray(outputType, new Shape(resultShape, copy: false), true);
+            // The kept axis at NumPy's keepdims place: all-zero strides for an empty result, the running stride for a reduced
+            // axis of length 0 (np.sum(np.zeros((2, 0, 3)), axis=1, keepdims=True).strides == (24, 24, 8)).
             if (keepdims)
-            {
-                var ks = new long[arr.ndim];
-                for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                result.Storage.Reshape(new Shape(ks, copy: false));
-            }
+                ExpandReducedAxis(result, shape, axis);
             if (@out is not null) { UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_SAME_KIND_CASTING); return @out; }
             // A 1-D input reduced along its only axis leaves a 0-d result, which NumPy hands back as a scalar
             // (PyArray_Return) exactly as it does for a non-empty input; this exit returned it writeable

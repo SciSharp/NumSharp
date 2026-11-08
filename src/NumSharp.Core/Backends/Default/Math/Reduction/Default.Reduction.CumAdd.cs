@@ -155,8 +155,9 @@ namespace NumSharp.Backends
 
             if (shape[axis] == 1)
                 // axis of length 1: values unchanged, but promoted to the accumulator dtype + copied
-                // (NumPy: cumsum([[5]], axis=0) -> int64). Was an un-promoted view-copy (NEP50 skip).
-                return Cast(arr, retTypeCode, copy: true);
+                // (NumPy: cumsum([[5]], axis=0) -> int64). Was an un-promoted view-copy (NEP50 skip). Laid out as the
+                // accumulate's iterator allocates it (LengthOneAxisScan), not as astype's K copy.
+                return LengthOneAxisScan(arr, retTypeCode);
 
             // NumPy-aligned accumulate: np.cumsum IS np.add.accumulate. NumPy allocates the
             // output through the iterator with KEEPORDER, so its memory layout follows the
@@ -230,6 +231,34 @@ namespace NumSharp.Backends
             => TryKOrderPlan(input.dimensions, new[] { input }, out var layout, out _)
                 ? layout
                 : new Shape(input.dimensions, copy: false);
+
+        /// <summary>
+        ///     A scan along an axis of length 1: the values unchanged in the accumulator dtype, in a fresh array laid out as
+        ///     NumPy's accumulate allocates its output (<see cref="AccumulateOutputLayout"/>: the iterator's K order of the
+        ///     operand, where an extent-1 axis abstains and lands outermost), not as astype's K copy, which keeps a plain
+        ///     F array's strides.
+        /// </summary>
+        /// <param name="arr">The operand (any layout, at least one element).</param>
+        /// <param name="accumulator">The scan's accumulator dtype (NEP 50: narrow signed integers int64, unsigned uint64,
+        ///     floats kept; or <c>dtype=</c>'s).</param>
+        /// <returns>A fresh array the caller owns.</returns>
+        /// <remarks>The cast is unsafe, as astype's: every accumulator is reachable from the input by NumPy's own scan
+        ///     loop, which validated it before this shortcut.</remarks>
+        private NDArray LengthOneAxisScan(NDArray arr, NPTypeCode accumulator)
+        {
+            var result = NewArray(accumulator, AccumulateOutputLayout(arr.Shape), false);
+            try
+            {
+                UnmanagedStorage.Copyto(result, arr, NPY_CASTING.NPY_UNSAFE_CASTING);
+            }
+            catch
+            {
+                // The copy failed: the fresh array must not outlive the call.
+                result.Dispose();
+                throw;
+            }
+            return result;
+        }
 
         /// <summary>
         ///     Moves a C-ordered scan result into <paramref name="layout"/> when that is not C: the defensive fallbacks of

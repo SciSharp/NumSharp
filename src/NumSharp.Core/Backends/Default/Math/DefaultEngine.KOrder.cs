@@ -56,22 +56,86 @@ namespace NumSharp.Backends
             => (a.NDim > 1 || b.NDim > 1) && !(IsKOrderCVoter(a) && IsKOrderCVoter(b));
 
         /// <summary>
-        ///     Whether every operand is strictly F-contiguous or a 0-d / one-element array, with at least one F: the main
-        ///     binary and comparison routes lay such a set out F themselves (<see cref="AreAllOperandsStrictFContig"/>), which
-        ///     is NpyIter's K layout of it, so their K-order step has nothing to add. The common case is a transposed C
-        ///     matrix (<c>a.T</c>) with a scalar or another transpose; skipping the plan keeps it on the direct F route.
+        ///     Whether NumPy's <c>try_trivial_single_output_loop</c> lays out the fresh result of this two-input,
+        ///     one-output call (no <c>out=</c>, no <c>where=</c>) instead of NpyIter. The trivial loop allocates plain C or
+        ///     plain F (<see cref="Shape.UfuncOutputShape"/>); NpyIter allocates in K order, and the two differ only in the
+        ///     strides of extent-1 axes (np.negative of an F (2, 1, 3) int32 array: (4, 8, 8) through the trivial loop;
+        ///     np.sqrt of it, a cast input: (8, 48, 16) through NpyIter, probed 2.4.2).
         /// </summary>
-        /// <param name="a">The first operand's shape.</param>
-        /// <param name="b">The second operand's shape.</param>
-        /// <returns>True when the route's own F layout already is NumPy's.</returns>
-        /// <remarks>Only for routes that produce F for such a set; the others (the float-tier family, divmod, ldexp) take
-        ///     the K-order step, whose transposed C pass and relabel cost no copy.</remarks>
-        internal static bool IsAllStrictF(in Shape a, in Shape b)
+        /// <param name="a">The first input.</param>
+        /// <param name="b">The second input.</param>
+        /// <param name="aCasts">True when the loop reads another dtype than <paramref name="a"/>'s (the int32 operand of
+        ///     <c>int32 + float64</c>): <c>check_for_trivial_loop</c> then refuses the trivial loop when that input has two
+        ///     or more dimensions (0-d and short 1-D inputs are copied, which keeps it).</param>
+        /// <param name="bCasts">The same for <paramref name="b"/>.</param>
+        /// <param name="fortran">When this returns true: whether the trivial loop allocates F (else C).</param>
+        /// <returns>True when the trivial loop runs: no N-D input is cast or unaligned, every non-0-d input has one shape,
+        ///     and every N-D input is C- or F-contiguous with the same (C, F) flag pair (<see cref="Shape.TrivialLoopIsFortran"/>).</returns>
+        /// <remarks>
+        ///     The main binary and comparison routes lay a trivial F set out F themselves (plain F strides, as the trivial
+        ///     loop's allocation), so their K-order step skips exactly these sets; every other non-C set - a broadcast F
+        ///     set, an F set with a cast input - is NpyIter's, whose extent-1 strides only the plan reproduces.
+        /// </remarks>
+        internal static bool TrivialLoopLaysOut(NDArray a, NDArray b, bool aCasts, bool bCasts, out bool fortran)
         {
-            bool aOne = a.IsScalar || a.size <= 1, bOne = b.IsScalar || b.size <= 1;
-            bool aF = !aOne && a.IsFContiguous && !a.IsContiguous;
-            bool bF = !bOne && b.IsFContiguous && !b.IsContiguous;
-            return (aOne || aF) && (bOne || bF) && (aF || bF);
+            fortran = false;
+            var sa = a.Shape;
+            var sb = b.Shape;
+            // check_for_trivial_loop: a cast or unaligned input of two or more dimensions needs the iterator's buffers.
+            if ((sa.dimensions.Length >= 2 && (aCasts || !UfuncLoopOperand.IsAligned(a)))
+                || (sb.dimensions.Length >= 2 && (bCasts || !UfuncLoopOperand.IsAligned(b))))
+                return false;
+            return Shape.TrivialLoopIsFortran(new[] { sa, sb }, out fortran);
+        }
+
+        /// <summary>
+        ///     The one-input form of <see cref="TrivialLoopLaysOut(NDArray, NDArray, bool, bool, out bool)"/>: whether NumPy's
+        ///     trivial loop lays out the fresh result of a one-input, one-output ufunc call.
+        /// </summary>
+        /// <param name="x">The input.</param>
+        /// <param name="xCasts">True when the loop reads another dtype than <paramref name="x"/>'s (np.sqrt of int32 runs the
+        ///     float64 loop), which refuses the trivial loop for an input of two or more dimensions.</param>
+        /// <param name="fortran">When this returns true: whether the trivial loop allocates F (else C).</param>
+        /// <returns>True when the trivial loop runs: a 0-d or 1-D input, or a C- or F-contiguous, aligned input read in its
+        ///     own dtype.</returns>
+        internal static bool TrivialLoopLaysOut(NDArray x, bool xCasts, out bool fortran)
+        {
+            fortran = false;
+            var s = x.Shape;
+            if (s.dimensions.Length >= 2 && (xCasts || !UfuncLoopOperand.IsAligned(x)))
+                return false;
+            return Shape.TrivialLoopIsFortran(new ReadOnlySpan<Shape>(in s), out fortran);
+        }
+
+        /// <summary>
+        ///     The layout plan of a fresh one-output ufunc result for a route that writes only C order: NumPy's trivial loop
+        ///     when it runs (plain C, answered as "no plan", or plain F), else NpyIter's K order (<see cref="TryKOrderPlan"/>).
+        /// </summary>
+        /// <param name="dims">The broadcast result dims (read, never kept).</param>
+        /// <param name="inputs">The inputs, in operand order.</param>
+        /// <param name="trivial">Whether <see cref="TrivialLoopLaysOut(NDArray, NDArray, bool, bool, out bool)"/> said the
+        ///     trivial loop runs.</param>
+        /// <param name="fortran">The trivial loop's order when <paramref name="trivial"/> is true.</param>
+        /// <param name="layout">When this returns true: the layout to relabel the C result into.</param>
+        /// <param name="perm">When this returns true: the axis order that makes a dense operand of the layout C-contiguous.</param>
+        /// <returns>False when the result is plain C (the route's own layout); true when the route must run over the
+        ///     operands transposed by <paramref name="perm"/> and its result be relabelled.</returns>
+        private static bool TryUfuncLayoutPlan(long[] dims, ReadOnlySpan<Shape> inputs, bool trivial, bool fortran,
+            out Shape layout, out int[] perm)
+        {
+            if (trivial)
+            {
+                layout = default;
+                perm = null;
+                if (!fortran || dims.Length < 2)
+                    return false;
+                // The trivial loop's F result: plain F strides, extent-1 axes included (NumPy allocates it with
+                // PyArray_NewFromDescr and the F flag, not through NpyIter's sort).
+                layout = new Shape((long[])dims.Clone(), 'F', copy: false);
+                perm = layout.DenseAxisOrder();
+                return true;
+            }
+            return TryKOrderPlan(dims, inputs, out layout, out perm);
         }
 
         /// <summary>
@@ -267,15 +331,21 @@ namespace NumSharp.Backends
         /// <param name="state">The route's arguments.</param>
         /// <param name="compute">The route: (state, first, second) → a fresh C-ordered (or, for an all-F pair, F-ordered)
         ///     result of the broadcast shape. It must not return one of its operands.</param>
-        /// <returns>The route's result in NumPy's layout.</returns>
+        /// <param name="aCasts">True when the route's loop reads another dtype than <paramref name="a"/>'s: an N-D cast
+        ///     input refuses NumPy's trivial loop, so the result takes NpyIter's layout (see
+        ///     <see cref="TrivialLoopLaysOut(NDArray, NDArray, bool, bool, out bool)"/>).</param>
+        /// <param name="bCasts">The same for <paramref name="b"/>.</param>
+        /// <returns>The route's result in NumPy's layout: the trivial loop's plain C / F when it runs, else NpyIter's.</returns>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast (raised before the route runs, with the
         ///     broadcast's text, only when the K order has to be computed).</exception>
-        internal NDArray KOrderBinary<TState>(NDArray a, NDArray b, TState state, Func<TState, NDArray, NDArray, NDArray> compute)
+        internal NDArray KOrderBinary<TState>(NDArray a, NDArray b, TState state, Func<TState, NDArray, NDArray, NDArray> compute,
+            bool aCasts, bool bCasts)
         {
             if (MayNeedKOrder(a.Shape, b.Shape))
             {
                 var (kl, _) = Broadcast(a.Shape, b.Shape);
-                if (TryKOrderPlan(kl.dimensions, new[] { a.Shape, b.Shape }, out var layout, out var perm))
+                bool trivial = TrivialLoopLaysOut(a, b, aCasts, bCasts, out bool fortran);
+                if (TryUfuncLayoutPlan(kl.dimensions, new[] { a.Shape, b.Shape }, trivial, fortran, out var layout, out var perm))
                 {
                     int nd = kl.NDim;
                     NDArray at = IntoKOrder(a, nd, perm), bt = IntoKOrder(b, nd, perm);

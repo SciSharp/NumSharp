@@ -1833,17 +1833,24 @@ _ARRAY_JOB_NUMPY = {
 # offset) converged before it, with batch 10's np.where and the reduction work that landed after it (the snapshot before
 # QA-48 already matches both). Their GAPS entries and rules are dropped and their 105 cases (VF36 78, VF37 23, VA03 1 +
 # 3) moved back into view_flags.jsonl / array_args.jsonl the same way (no regeneration).
+# 2026-11-08 (the ufunc result-layout port, branch qa/ufunc-keeporder re-ported onto the 0.80.0 release): a fresh
+# elementwise result takes NumPy's ufunc layout (try_trivial_single_output_loop's plain C / F allocation when every N-D
+# input is aligned, uncast and C- or F-contiguous alike, NpyIter's K order otherwise), so np.positive of a read-only
+# owner or a same-shape broadcast is a fresh writeable array (VF14); np.median along an axis takes its mean's layout
+# over the partitioned K-order copy (VF08's np.median half); np.ldexp's operand materialization copies a C-contiguous
+# view at a non-zero offset (VA05). VF14's and VA05's GAPS entries and rules are dropped, VF08's narrowed to
+# np.nanmedian (whose numpy.ma chain is still open), and their 17 cases (VF14 2, VF08 14, VA05 1) moved back into
+# view_flags.jsonl / array_args.jsonl the same way (no regeneration).
 GAPS = {
     "VF01": "a NumPy SCALAR result (ufuncs, clip, round, nan_to_num, conj, dot / inner / kron of 0-d or 1-D pairs) "
             "comes back as a WRITEABLE 0-d array",
     "VF02": "element access that NumPy answers with a scalar COPY (a[i, j], z[()], np.flip(z), np.nan_to_num(z, "
             "copy=False) of a 0-d z) returns a writeable 0-d VIEW of the operand",
     "VF04": "np.squeeze / ndarray.squeeze with no length-1 axis return a new view where NumPy returns the operand itself",
-    "VF08": "np.median / np.nanmedian along an axis of an F or permuted 3-D input return a C-ordered result; NumPy "
-            "keeps the input's axis order",
+    "VF08": "np.nanmedian along an axis of an F or permuted 3-D input returns a C-ordered result that owns its data; "
+            "NumPy's (numpy.ma's median of the sorted K-order copy, then MaskedArray.filled's _data view) keeps the "
+            "input's axis order and is a view",
     "VF13": "np.array(a, copy=False) returns a new view where NumPy returns the operand itself",
-    "VF14": "np.positive(ro) of a read-only owner or a same-shape broadcast stays READ-ONLY (np.array's copy is "
-            "writeable since parity QA-35)",
     "VF16": "ndarray.astype(same dtype, copy=False, order='C' or 'F') of a strided 1-D view returns the operand; "
             "NumPy copies to satisfy the requested order",
     "VF19": "np.dot / np.inner of a 0-d with an F 2-D array: -0.0 where NumPy's scalar daxpy gives +0.0, and an F "
@@ -1863,7 +1870,6 @@ GAPS = {
     "VA02": "np.take_along_axis with F-ordered indices returns a C-ordered result; NumPy's follows the indices (F)",
     "VA04": "np.cov / np.corrcoef results do not own their data (OWNDATA false): both end with ndarray.squeeze, which "
             "in NumSharp returns a new view where NumPy returns the array itself (VF04)",
-    "VA05": "np.ldexp reads a C-contiguous exponent array x2 at a non-zero offset (an np.split child) WRONG",
 }
 
 # The ufuncs of the tier (unary and binary), for the rules keyed on "a ufunc".
@@ -1913,13 +1919,11 @@ def _gap_of(tier, case):
             return "VF02"
         if fn in ("squeeze", "ndarray.squeeze") and "axis" not in p and e["mem"]["same"][0]:
             return "VF04"
-        if fn in ("median", "nanmedian") and axis is not None and (
+        if fn == "nanmedian" and axis is not None and (
                 lay == "own_f_3d" or (lay == "view_perm_3d" and axis != 0)):
             return "VF08"
         if fn == "array" and p.get("copy") is False:
             return "VF13"
-        if lay in ("own_ro_2d", "view_bsame_2d") and fn == "positive":
-            return "VF14"
         if (fn == "ndarray.astype" and p.get("copy") is False and p.get("dtype") == "int64"
                 and p.get("order") in ("C", "F") and lay in ("view_step_1d", "view_rev_1d")):
             return "VF16"
@@ -1948,8 +1952,6 @@ def _gap_of(tier, case):
             return "VA02"
         if fn in ("cov", "corrcoef"):
             return "VA04"
-        if fn == "ldexp" and lay == "x2=off":
-            return "VA05"
         return None
     return None
 

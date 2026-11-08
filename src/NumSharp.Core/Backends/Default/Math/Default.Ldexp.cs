@@ -48,7 +48,11 @@ namespace NumSharp.Backends
             // NumPy's error order holds; a caller's out keeps its own layout.
             if (@out is null)
                 return KOrderBinary(x1, x2, (engine: this, floatType, where),
-                    static (s, a, b) => s.engine.LdexpCompute(a, b, s.floatType, null, s.where));
+                    static (s, a, b) => s.engine.LdexpCompute(a, b, s.floatType, null, s.where),
+                    // NumPy's ldexp loops read the float dtype and an int32 / int64 exponent ('fi->f', 'fl->f', ...): any
+                    // other operand dtype is cast, which keeps an N-D operand off the trivial loop.
+                    x1.GetTypeCode != floatType,
+                    x2.GetTypeCode != NPTypeCode.Int32 && x2.GetTypeCode != NPTypeCode.Int64);
             return LdexpCompute(x1, x2, floatType, @out, where);
         }
 

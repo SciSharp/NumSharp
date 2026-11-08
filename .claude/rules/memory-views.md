@@ -111,6 +111,12 @@ dimensions, so `np.empty(x.Shape)` must not hand the allocator the view's addres
   callers allocate exactly such shapes. Any view layout (a step, an offset, a negative stride, a broadcast, a contiguous
   slice reporting its parent's buffer) is laid out again in C order, NumPy's answer for a dims-only request. The result
   is always writeable.
+- A zero-size allocation gets ALL-ZERO strides, whatever layout was asked for (`PyArray_NewFromDescr_int`: "Make sure all
+  the strides are 0"): `np.zeros((2, 0, 3))`, an empty ufunc result, an empty keepdims reduction. A VIEW of extent 0
+  is not an allocation and keeps the strides its slicing computed in NumPy (`a[:0]` of a (4, 3) int64 array has
+  `(24, 8)`; NumSharp zeroes the empty axis's stride there, `OpenBugs.EmptyStrides.cs`). The buffer export recomputes
+  strides for every contiguous array (`MemoryView.strides`, NumPy's `_buffer_info_new`), so
+  `np.empty((0, 3)).data.strides` is `(24, 8)`.
 - A shape used only for its dimensions (NumPy's `size` tuple, every `np.random` sampler) goes through the stricter
   `Shape.AsClean()`, which also re-lays out a dense F or permuted view (a sampler fills in memory order, so `x.T.Shape`
   would transpose the draws) and returns its input unchanged when it already is the C layout.

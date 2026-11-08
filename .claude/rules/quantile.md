@@ -60,6 +60,14 @@ one builder per precision (`DirectILKernelGenerator.QuantilePlan`, cached per dt
 - All-NaN data answers `np.full(q.shape, nan)` in the data's dtype, and an all-NaN FIRST slice makes the result the data's
   dtype. `np.nanquantile` takes the element for an integer `q` and reads an array `q` as a strong float64 weight. Empty data
   raises NumPy's IndexError (`index -1 ...`; `index 0 ...` for integer data).
+- Result layout: np.median along ONE axis is `np.mean(part[indexer], axis=axis)` of `part = partition(a, kth, axis)`,
+  whose copy is `order='K'`, so its result is the mean's allocation in that copy's axis order (`MedianMeanLayout`:
+  `Shape.ReductionOutputShape` over `Shape.NewLikeLayout(a, 'K')`): an F input's median is F, a transposed input's keeps
+  its memory order, a broadcast input's follows its K copy (`np.median(np.broadcast_to(row, (2, 3, 4)), axis=1)` is
+  F-contiguous). np.nanmedian's numpy.ma route keeps its C result (the array-object oracle's VF08). keepdims, for every
+  form, is `_ureduce`'s `r[(Ellipsis,) + index_r]` with `np.newaxis` at each reduced axis (`ApplyKeepdims`): a VIEW of
+  the result, stride 0 on the new axes, OWNDATA false (`np.median(F (2,3,4), axis=1, keepdims=True)` has strides
+  (8, 0, 16); `axis=None` gives (0, 0, 0)).
 - The nan forms along an axis return `np.apply_along_axis`'s object: a view of its C buffer with `q`'s axes moved first
   (F-ordered, OWNDATA false). An all-NaN slice is Python's `np.nan` (`0x7FF8...`), a plain form's NaN slice copies the
   data's own NaN. The nan forms' q-axis order over merged axes follows NumPy, which moves q's axes from the UNnormalized

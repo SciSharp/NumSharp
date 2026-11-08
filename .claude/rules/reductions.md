@@ -23,6 +23,14 @@ reduced axis of `out=` must be 1 long, and an `out=` axis of length 1 cannot bro
 or `where=` is given), the max/min family and the sum family's keyword paths run it. Gates: the `reduce_kwargs` tier
 (zero excuses) and `Logic/np.all_any.tuple_out_where.Test.cs`.
 
+A keepdims result is NumPy's allocation, not a reshape: the reduction iterator sorts the kept axes AND the length-1
+reduced axes into memory order, so each reduced axis returns at its sorted place with the running stride
+(`DefaultEngine.ExpandReducedAxis` / `RelabelKeptAxes`, the keepdims form of `Shape.ReductionOutputShape`; an
+F (2, 3, 4) float64 input's `sum(axis=1, keepdims=True)` has NumPy's byte strides (8, 16, 16)).
+Every engine reduction that re-inserts axes goes through them (sum / prod / mean / var / std, the max / min family, the
+NaN-aware forms, any / all / count_nonzero, the empty-input handlers); a zero-size result has all-zero strides
+(`memory-views.md`).
+
 ## `np.sum` / `np.prod` / `np.mean` / `np.var` / `np.std`: one signature, NumPy's keywords
 
 One overload each, NumPy's whole signature, and the `ndarray` methods likewise (`var` / `std` without `correction`,
@@ -92,7 +100,9 @@ makes is part of the answer:
   bool → int64 cast of a bool input is laid out as NumPy's ufunc would lay out the bool operand
   (`DefaultEngine.CastInUfuncLayout`: NumPy casts in the iterator's buffers, which never vote, so a broadcast bool input
   still accumulates into C, where astype's K copy would rank its stride-0 axes innermost). The NaN scans inherit the
-  layout from NumPy's `_replace_nan` statements (a K copy, then a masked copyto of the fill).
+  layout from NumPy's `_replace_nan` statements (a K copy, then a masked copyto of the fill). A length-1 scan axis
+  copies the input into that layout at the accumulator dtype (`LengthOneAxisScan`, cumsum and cumprod), not astype's K
+  copy, which keeps a plain F array's strides on the extent-1 axis.
 - The row route (`Default.Reduction.ScanRows.cs`, `TryScanRows`): a scan axis that is not innermost in memory, over an
   operand dense in the output's memory order and of the accumulator's own dtype (the eight integer widths, float32,
   float64), runs by whole rows: the first block copied (accumulate copies element 0: a -0.0 or a signalling NaN arrives as
@@ -251,7 +261,8 @@ engine's exact pieces:
 Laid out like NumPy's reduction: NumPy allocates the result with `npyiter_new_temp_array` over the reduce iterator, so an
 F input gives an F result and a permuted one keeps its memory order. The logical reductions allocate with
 `Shape.ReductionOutputShape` (`DefaultEngine.LogicalReductionShape`), `NDAxisIter.ReduceBool` writes each output through
-the result's own strides, keepdims re-inserts the axis with `ExpandDimension`, and the tuple-axis chain drops its kept
+the result's own strides, keepdims re-inserts the axis at its sorted place (`ExpandReducedAxis`; the tuple-axis chain's
+result is relabelled once, `RelabelKeptAxes`), and the tuple-axis chain drops its kept
 axes with their strides. `np.count_nonzero(a, axis)` is NumPy's own `a.astype(bool, copy=False).sum(axis, dtype=intp)`;
 np.sum's bool count route (`TryCountBoolAxisSum`) returns an owning result (never np.evaluate's reshaped keepdims view).
 A bool C/F operand of at least 16K elements reduced to rank >= 1 runs np.evaluate's Any / All axis stream

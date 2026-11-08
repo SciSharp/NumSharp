@@ -129,7 +129,7 @@ namespace NumSharp.Backends
                 if (exact is not null)
                 {
                     if (keepdims)
-                        exact.Storage.ExpandDimension(axis);
+                        ExpandReducedAxis(exact, arr.Shape, axis);
                     // Same PyArray_Return rule as ExecuteAxisReduction: a fresh 0-d result is a read-only scalar.
                     return exact.MarkReductionScalar();
                 }

@@ -189,9 +189,14 @@ cached C-contiguous, F-contiguous, ownership, alignment, writeability, and broad
   is required.
 - Broadcast views use zero strides and are read-only, matching NumPy's protection against writing
   one physical element through many logical coordinates.
-- Order-aware creation and conversion paths resolve the relevant `C`, `F`, `A`, or `K` mode to
-  physical C or F storage. Arbitrary non-contiguous stride patterns remain views; they are not a
-  third allocation order.
+- Order-aware creation and conversion paths resolve the relevant `C`, `F`, `A`, or `K` mode as NumPy
+  does: `K` keeps the operand's memory order, so a copy of a permuted view is a dense array with the
+  same axis permutation.
+- Fresh results are laid out as NumPy lays them out. An elementwise ufunc result follows NumPy's
+  trivial loop (C, or F for F-contiguous operands) or its iterator's K order (the operands' memory
+  order, C winning a conflict), so `np.negative(a.transpose(1, 0, 2))` keeps the transpose's strides;
+  reductions place their axes (and a kept `keepdims` axis) the same way, and a zero-size array NumPy
+  allocates has all-zero strides. `.strides` of a fresh result therefore match NumPy's.
 
 Kernel paths distinguish contiguous, strided, broadcast, and offset views. Correctness tests cover
 C- and F-contiguous arrays, transposes, positive and negative strides, sliced offsets, and broadcast

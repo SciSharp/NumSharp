@@ -138,8 +138,9 @@ mapped memory ends. Two tools make it fail:
   three `mapping.c` routes: an N-D index array that is not C-contiguous beside a slice / ellipsis / integer is read in
   memory order, and the result LAYOUT: NumPy's transposed MapIter view for an index behind a slice, the index arrays'
   order for a lone index or arrays on every axis, the source's order for the other axes of a non-C source, including
-  `Generator.permutation` of a non-C 3-D source), `OpenBugs.EmptyStrides.cs` (a zero-size array NumPy allocates has
-  all-zero strides, and a slice keeps its parent's strides on an extent-0 axis), `OpenBugs.PolynomialNaN.cs` (the
+  `Generator.permutation` of a non-C 3-D source), `OpenBugs.EmptyStrides.cs` (a slice keeps its parent's strides on an
+  extent-0 axis; the allocation half, all-zero strides for a zero-size array NumPy allocates, is fixed and pinned in
+  `View/Shape.ForFreshAllocation.Tests.cs`), `OpenBugs.PolynomialNaN.cs` (the
   polynomial step-table integral kernels keep the wrong NaN per statement: `lagint` float16 overflow, `hermeint` float16
   NaN in `k`, `lagint` float64 `scl=+inf`; raw-bit asserts, win-amd64), `OpenBugs.SortUniqueNaN.cs` (regression pins
   only: the unique family's value routes write NumPy's sort NaN, the positive quiet NaN, for float32 / float64, and
@@ -148,7 +149,7 @@ mapped memory ends. Two tools make it fail:
   of a transposed strided view, imag of a real F array — are regression tests), `OpenBugs.ErrorParity.cs`
   (regression pins only: the stacking family's empty-list texts, the moveaxis / rollaxis / swapaxes / squeeze AxisError
   texts, moveaxis' length mismatch as NumPy's ValueError), `OpenBugs.NaNOperandOrder.cs`, `OpenBugs.Surface.cs`,
-  `OpenBugs.MaSurface.cs`, `OpenBugs.Relayout.cs`, `OpenBugs.ViewFlags.cs`.
+  `OpenBugs.MaSurface.cs`, `OpenBugs.Relayout.cs` (regression pins only: RL01–RL07 are fixed), `OpenBugs.ViewFlags.cs`.
 - The LIFETIME OpenBugs (lost GC anchors) live in the Oracle project, because the bug exists only in optimized code and
   needs the lifetime child process (`oracle.md`): none is open; a new open gap gets a `Lifetime_LT<nn>_*` test beside the
   aggregate `Lifetime_KnownGaps` (and `LifetimeOracleTests.Scaled.cs`'s `LifetimeScaled_KnownGaps`).

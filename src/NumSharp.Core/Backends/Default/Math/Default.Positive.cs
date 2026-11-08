@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
@@ -15,8 +16,8 @@ namespace NumSharp.Backends
         /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null for the input's own.</param>
         /// <param name="out">NumPy's <c>out=</c>, or null for a fresh result.</param>
         /// <param name="where">NumPy's <c>where=</c> mask, or null.</param>
-        /// <returns><paramref name="out"/> when given; else a fresh copy in NumPy's ufunc output layout (the input's K
-        ///     order; parity QA-36).</returns>
+        /// <returns><paramref name="out"/> when given; else a fresh, writeable array in NumPy's ufunc output layout
+        ///     (<see cref="IdentityLoopResult"/>; parity QA-36 and the view-flags tier's VF14).</returns>
         /// <exception cref="TypeError">A bool loop (positive has none), or text.</exception>
         /// <exception cref="TypeError">A <paramref name="dtype"/> the input cannot reach by a same_kind cast, or an out
         ///     that cannot take the loop dtype.</exception>
@@ -36,29 +37,58 @@ namespace NumSharp.Backends
                 return ExecuteUnaryOp(nd, UnaryOp.Positive, typeCode ?? nd.GetTypeCode, @out, where);
 
             // dtype-only: the identity loop at the requested dtype IS a cast-copy
-            // (positive(i32, dtype=f64) ≡ astype(f64), probed).
+            // (positive(i32, dtype=f64) ≡ astype(f64), probed); the operand is cast, so NumPy's
+            // iterator, not its trivial loop, lays the result out.
             if (typeCode.HasValue && typeCode.Value != nd.GetTypeCode)
-                return Cast(nd, typeCode.Value, copy: true);
+                return IdentityLoopResult(nd, typeCode.Value, inputCast: true);
 
-            // Plain +x: identity copy in NumPy's ufunc output layout, the K order of the input (parity QA-36: a permuted
-            // input keeps its memory order, a reversed axis is laid out forwards). The layout-preserving bulk clone
-            // already is that layout for C, F and broadcast inputs; any other K order clones the input transposed into
-            // it (a C-contiguous view for a dense permuted input, so the clone is one block copy) and relabels the copy.
-            if (!IsKOrderCVoter(nd.Shape) && !nd.Shape.IsFContiguous
-                && TryKOrderPlan(nd.Shape.dimensions, new[] { nd.Shape }, out var kLayout, out var kPerm))
+            // Plain +x: the identity loop into a fresh array.
+            return IdentityLoopResult(nd, nd.GetTypeCode, inputCast: false);
+        }
+
+        /// <summary>
+        ///     The fresh result of positive's identity loop: the operand's values in the loop dtype, laid out as NumPy's ufunc
+        ///     machinery allocates a fresh output (the trivial loop's plain C or F, else NpyIter's K order:
+        ///     <see cref="TrivialLoopLaysOut(NDArray, bool, out bool)"/>, <see cref="TryKOrderPlan"/>) and always writeable.
+        /// </summary>
+        /// <param name="nd">The operand, any layout.</param>
+        /// <param name="loop">The loop dtype (the operand's own, or <c>dtype=</c>'s).</param>
+        /// <param name="inputCast">Whether the loop casts the operand (<paramref name="loop"/> is not its dtype): a cast
+        ///     operand of two or more dimensions keeps NumPy off its trivial loop, which changes extent-1 strides.</param>
+        /// <returns>A fresh array of <paramref name="loop"/> the caller owns.</returns>
+        /// <exception cref="TypeError">Never for a validated loop: the copy is the loop's unsafe cast, and
+        ///     <see cref="ValidatePositiveLoop"/> already refused every cast NumPy refuses.</exception>
+        /// <remarks>
+        ///     A storage clone is not this result: it keeps a read-only operand's flag (np.positive of a read-only owner or a
+        ///     broadcast view is writeable in NumPy) and keeps a view's own strides. A K-order copy is not it either: it sorts
+        ///     a broadcast axis innermost, where the ufunc's iterator lets a stride-0 axis abstain
+        ///     (np.positive(np.broadcast_to(row, (3, 4))) is C). A zero-size operand gets NumPy's all-zero strides from the
+        ///     allocator (<see cref="Shape.ForFreshAllocation"/>).
+        /// </remarks>
+        private NDArray IdentityLoopResult(NDArray nd, NPTypeCode loop, bool inputCast)
+        {
+            var dims = nd.Shape.dimensions;
+            Shape layout;
+            if (TrivialLoopLaysOut(nd, inputCast, out bool fortran))
+                // The trivial loop's plain C / F; copy: false shares the operand's dims array, as every elementwise result
+                // does (nothing writes into a Shape's arrays).
+                layout = fortran ? new Shape(dims, 'F', copy: false) : new Shape(dims, copy: false);
+            else if (!TryKOrderPlan(dims, new[] { nd.Shape }, out layout, out _))
+                layout = new Shape(dims, copy: false);
+
+            var result = NewArray(loop, layout, false);
+            try
             {
-                NDArray t = IntoKOrder(nd, nd.ndim, kPerm);
-                try
-                {
-                    return NDArray.AdoptLayout(t.Clone(), kLayout);
-                }
-                finally
-                {
-                    // The transposed view only fed the clone; the clone is a fresh array.
-                    t.Dispose();
-                }
+                // The cast was validated same_kind by ValidatePositiveLoop; the copy itself is the loop's unsafe cast.
+                UnmanagedStorage.Copyto(result, nd, NPY_CASTING.NPY_UNSAFE_CASTING);
             }
-            return nd.Clone();
+            catch
+            {
+                // The copy failed: the fresh array must not outlive the call.
+                result.Dispose();
+                throw;
+            }
+            return result;
         }
 
         /// <summary>

@@ -149,7 +149,7 @@ namespace NumSharp.Backends
                 }
 
                 if (keepdims)
-                    result.Storage.ExpandDimension(axis);
+                    ExpandReducedAxis(result, arr.Shape, axis);
                 return DeliverReduction(result, @out);
             }
             finally

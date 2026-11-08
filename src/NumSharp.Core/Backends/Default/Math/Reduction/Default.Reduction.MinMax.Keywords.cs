@@ -1607,7 +1607,7 @@ namespace NumSharp.Backends
                 {
                     r = engine.TryExactAxisMinMax(a, ax, op, seed);
                     if (r is not null && keepdims)
-                        r.Storage.ExpandDimension(ax);
+                        ExpandReducedAxis(r, a.Shape, ax);
                 }
 
                 return r;

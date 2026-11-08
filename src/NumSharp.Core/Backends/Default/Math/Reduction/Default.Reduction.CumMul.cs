@@ -162,8 +162,11 @@ namespace NumSharp.Backends
                 // An axis of length 1: the values are unchanged, but multiply.accumulate still has its NEP 50 accumulator
                 // dtype (signed integers narrower than int64 -> int64, unsigned -> uint64) whatever the axis length, and the
                 // result is a fresh copy. It returned an un-promoted copy (cumprod(int32 (2, 1, 3), axis=1) int32 where NumPy
-                // gives int64; parity QA-09), np.cumsum's twin branch was already fixed the same way.
-                return Cast(arr, typeCode ?? arr.GetTypeCode.GetAccumulatingType(), copy: true);
+                // gives int64; parity QA-09), np.cumsum's twin branch was already fixed the same way. The copy is laid out
+                // as the accumulate's iterator allocates it (AccumulateOutputLayout), not as astype's K copy: an F input's
+                // extent-1 axis lands outermost (np.cumprod(np.asfortranarray(np.ones((1, 3, 2))), axis=0).strides ==
+                // (48, 8, 24) in NumPy 2.4.2, where the K copy has (8, 8, 24)).
+                return LengthOneAxisScan(arr, typeCode ?? arr.GetTypeCode.GetAccumulatingType());
             }
 
             var retTypeCode = typeCode ?? arr.GetTypeCode.GetAccumulatingType();

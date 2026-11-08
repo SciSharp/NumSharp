@@ -170,5 +170,36 @@ namespace NumSharp.Tests.Creation
             arr[0][2] = 0;
             nd[0, 2].Should().BeOfValues(3);
         }
+
+        /// <summary>
+        ///     Parity QA-35 (fixed 2026-11-05; this pin came with the ufunc result-layout port, 2026-11-08):
+        ///     <c>np.array(a)</c> is a copy in NumPy's defaults <c>copy=True, order='K'</c>, and a copy NumPy allocates is
+        ///     always writeable — so
+        ///     <c>np.array(ro)[0, 0] = 99</c> works on a read-only <c>ro</c>, and the copy of
+        ///     <c>broadcast_to(arange(4.), (3, 4))</c> (strides <c>(0, 8)</c>) is F-contiguous (the stride-0 axis sorts
+        ///     fastest). The storage clone used to keep a read-only source's flag and lay a broadcast out in C order.
+        /// </summary>
+        [TestMethod]
+        public void ArrayOfNDArray_IsAWriteableKOrderCopy()
+        {
+            using var ro = np.arange(6.0).reshape(2, 3);
+            ro.setflags(write: false);
+            using var bcast = np.broadcast_to(np.arange(4.0), new Shape(3, 4));
+            using var permuted = np.arange(24.0).reshape(3, 2, 4).transpose(new[] { 1, 0, 2 });
+
+            using var copy = np.array(ro);
+            using var bcastCopy = np.array(bcast);
+            using var permutedCopy = np.array(permuted);
+            Action write = () => copy[0, 0] = (NDArray)99.0;
+
+            copy.flags.writeable.Should().BeTrue("a copy NumPy allocates is writeable");
+            write.Should().NotThrow();
+            ro.GetDouble(0, 0).Should().Be(0.0);
+            bcastCopy.flags.f_contiguous.Should().BeTrue("order='K' keeps the stride-0 axis fastest");
+            bcastCopy.flags.c_contiguous.Should().BeFalse();
+            // np.array(a.transpose(1, 0, 2)).strides == (32, 64, 8) in NumPy 2.4.2: the K copy keeps the transpose.
+            permutedCopy.strides.Should().Equal(32L, 64L, 8L);
+            permutedCopy.flags.owndata.Should().BeTrue();
+        }
     }
 }

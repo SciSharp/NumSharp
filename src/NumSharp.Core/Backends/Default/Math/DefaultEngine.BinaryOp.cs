@@ -235,9 +235,11 @@ namespace NumSharp.Backends
             // NumPy's ufunc output layout (parity QA-36): a fresh result follows the operands' K order, so a permuted or F
             // operand keeps its memory order. The routes below write C (or F for an all-F set), so when the K layout is
             // something else the operands are transposed into it (views: a dense permuted operand becomes C-contiguous) and
-            // the C result is relabelled. C-ordered operands (MayNeedKOrder) and an all-F pair, which the routes lay out F
-            // themselves (IsAllStrictF), skip it without a broadcast or a plan.
-            if (!kOrderResolved && MayNeedKOrder(lhs.Shape, rhs.Shape) && !IsAllStrictF(lhs.Shape, rhs.Shape))
+            // the C result is relabelled. C-ordered operands (MayNeedKOrder) and a set NumPy's trivial loop lays out F,
+            // which the routes lay out F themselves (plain F strides, TrivialLoopLaysOut), skip it without a broadcast or a
+            // plan; an F set with a cast N-D input or a broadcast is NpyIter's, whose extent-1 strides only the plan gives.
+            if (!kOrderResolved && MayNeedKOrder(lhs.Shape, rhs.Shape)
+                && !TrivialLoopLaysOut(lhs, rhs, lhsType != resultType, rhsType != resultType, out _))
             {
                 var (kl, _) = Broadcast(lhs.Shape, rhs.Shape);
                 if (TryKOrderPlan(kl.dimensions, new[] { lhs.Shape, rhs.Shape }, out var kLayout, out var kPerm))

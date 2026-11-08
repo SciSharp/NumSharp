@@ -98,7 +98,7 @@ namespace NumSharp.Backends
                     if (typeCode.HasValue && typeCode.Value != np._FindCommonType(lhs, rhs))
                         ValidateBinaryInputCasts(lhs.GetTypeCode, rhs.GetTypeCode, typeCode.Value, UfuncName(BinaryOp.Power));
                     return fastOp == PowerStrideZeroOp.One
-                        ? NDArray.ones(PowerPlainResultShape(lhs, rhs, lhs.Shape.Clean()), loop)
+                        ? NDArray.ones(PowerPlainResultShape(lhs, rhs, lhs.Shape.Clean(), loop), loop)
                         : ExecuteUnaryOp(lhs, StrideZeroUnaryOp(fastOp), loop);
                 }
             }
@@ -214,13 +214,13 @@ namespace NumSharp.Backends
             {
                 // A plain call: NumPy writes 1.0 for exponent 0 without reading the bases.
                 if (fastOp == PowerStrideZeroOp.One)
-                    return NDArray.ones(PowerPlainResultShape(lhs, rhs, iterShape), loop);
+                    return NDArray.ones(PowerPlainResultShape(lhs, rhs, iterShape, loop), loop);
                 // The result has the bases' shape: the unary op's own allocation (C, or F for a strictly F base — the
                 // binary route's choice for a one-element exponent) is the result.
                 if (SameDims(lhs.Shape, iterShape))
                     return ExecuteUnaryOp(lhs, StrideZeroUnaryOp(fastOp), loop);
                 // The exponent adds leading axes ((3,) ** (1,1) is (1,3)): compute into a result of the broadcast shape.
-                var result = NewArray(loop, PowerPlainResultShape(lhs, rhs, iterShape), false);
+                var result = NewArray(loop, PowerPlainResultShape(lhs, rhs, iterShape, loop), false);
                 ExecuteUnaryOp(lhs, StrideZeroUnaryOp(fastOp), loop, result, null);
                 return result;
             }
@@ -285,7 +285,7 @@ namespace NumSharp.Backends
                                                           NDArray @out, NDArray where)
         {
             // A fresh result: the plain call's layout without a mask, NumPy's where= layout with one (WhereResultShape).
-            NDArray target = @out ?? NewArray(loop, where is null ? PowerPlainResultShape(lhs, rhs, iterShape) : WhereResultShape(iterShape, lhs.Shape, rhs.Shape, where), false);
+            NDArray target = @out ?? NewArray(loop, where is null ? PowerPlainResultShape(lhs, rhs, iterShape, loop) : WhereResultShape(iterShape, lhs.Shape, rhs.Shape, where), false);
 
             NPTypeCode lhsType = lhs.GetTypeCode, rhsType = rhs.GetTypeCode;
             Action<ILGenerator> scalarBody = il => DirectILKernelGenerator.EmitPowerStrideZeroBody(il, lhsType, rhsType, loop);
@@ -331,18 +331,26 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// The layout of a fresh plain power result: the binary route's choice (<see cref="ExecuteBinaryOp"/>) — F when
-        /// the operands vote F (<see cref="ShouldProduceFContigOutput(NDArray, NDArray, Shape)"/>), C otherwise — so the
-        /// fast and general paths of one call lay their results out alike.
+        /// The layout of a fresh plain power result: NumPy's ufunc layout, the binary route's choice
+        /// (<see cref="ExecuteBinaryOp"/>) - the trivial loop's plain C / F when the call qualifies
+        /// (<see cref="TrivialLoopLaysOut(NDArray, NDArray, bool, bool, out bool)"/>), NpyIter's K order otherwise
+        /// (<see cref="TryKOrderPlan"/>) - so the fast and general paths of one call lay their results out alike (np.power of
+        /// a transposed array to the 0 keeps its memory order, as NumPy's iterator allocates it).
         /// </summary>
         /// <param name="lhs">The bases.</param>
         /// <param name="rhs">The exponents.</param>
         /// <param name="iterShape">The clean iteration shape.</param>
-        /// <returns>An offset-0 shape of <paramref name="iterShape"/>'s dims, C or F ordered.</returns>
-        private static Shape PowerPlainResultShape(NDArray lhs, NDArray rhs, Shape iterShape)
-            => ShouldProduceFContigOutput(lhs, rhs, iterShape)
-                ? new Shape(iterShape.dimensions, 'F', copy: false)
+        /// <param name="loop">The loop dtype: an operand of two or more dimensions of another dtype is cast, which keeps
+        ///     the call off the trivial loop.</param>
+        /// <returns>An offset-0, dense shape of <paramref name="iterShape"/>'s dims.</returns>
+        private static Shape PowerPlainResultShape(NDArray lhs, NDArray rhs, Shape iterShape, NPTypeCode loop)
+        {
+            if (TrivialLoopLaysOut(lhs, rhs, lhs.GetTypeCode != loop, rhs.GetTypeCode != loop, out bool fortran))
+                return fortran ? new Shape(iterShape.dimensions, 'F', copy: false) : iterShape;
+            return TryKOrderPlan(iterShape.dimensions, new[] { lhs.Shape, rhs.Shape }, out var layout, out _)
+                ? layout
                 : iterShape;
+        }
 
         /// <summary>
         /// True when every axis of <paramref name="s"/> longer than 1 has stride 0, i.e. the array repeats one element

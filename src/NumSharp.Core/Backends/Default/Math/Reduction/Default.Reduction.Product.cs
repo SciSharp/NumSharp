@@ -129,12 +129,9 @@ namespace NumSharp.Backends
                 var axis = NormalizeAxis(axis_.Value, arr.ndim);
                 var resultShape = Shape.GetAxis(shape, axis);
                 var result = NDArray.ones(new Shape(resultShape, copy: false), typeCode ?? arr.GetTypeCode.GetAccumulatingType());
+                // The kept axis at NumPy's keepdims place (all-zero strides for an empty result).
                 if (keepdims)
-                {
-                    var ks = new long[arr.ndim];
-                    for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                    result.Storage.Reshape(new Shape(ks, copy: false));
-                }
+                    ExpandReducedAxis(result, arr.Shape, axis);
                 // A 1-D input along its only axis gives the 0-d identity, NumPy's scalar as for a non-empty input (this
                 // exit returned it writeable); a no-op for an array result.
                 return result.MarkReductionScalar();
