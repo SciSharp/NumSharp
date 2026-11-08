@@ -1209,13 +1209,22 @@ jobs:
     needs: [validate-release, build-nuget]
     if: needs.validate-release.outputs.is_valid == 'true'
     runs-on: ubuntu-latest
+    # The `nuget` environment holds this irreversible push until a required reviewer approves it on the
+    # run ("Review deployments"; GitHub notifies the reviewer). Configured in Settings -> Environments ->
+    # nuget: the one reviewer is Nucs (self-review allowed, so a tag the owner pushes is approved by the
+    # owner), only `v*` tags may deploy to it, and admins cannot bypass the review. It is also named by the
+    # Trusted Publishing policy below, so only a job running in this environment can obtain a publish key:
+    # a workflow edited on any branch, or this job without the environment, is refused by nuget.org. The
+    # tests, build-nuget and create-release run unattended; only this job waits (a pending review expires
+    # after 30 days, and "Re-run failed jobs" on the run asks for the review again).
+    environment: nuget
 
     # Trusted Publishing (OIDC) - no long-lived API key. GitHub mints a short-lived, signed OIDC
     # token for this job (id-token: write); NuGet/login POSTs it to nuget.org's token endpoint, which
-    # validates the token's repository-owner / repository / workflow-file claims against the Trusted
-    # Publishing policy registered under the SciSharp owner (workflow file build-and-release.yml - nuget.org
-    # takes the file name only - no environment, scope "Push new packages and package versions", glob
-    # *NumSharp*) and returns a temporary API key valid for 1 hour. The push then uses that key.
+    # validates the token's repository-owner / repository / workflow-file / environment claims against the
+    # Trusted Publishing policy registered under the SciSharp owner (workflow file build-and-release.yml -
+    # nuget.org takes the file name only - environment `nuget`, scope "Push new packages and package
+    # versions", glob *NumSharp*) and returns a temporary API key valid for 1 hour. The push then uses that key.
     #
     # A job-level permissions block REPLACES the top-level `write-all` for THIS job, so id-token is
     # granted explicitly (write-all's coverage of id-token is not something to rely on) and the rest
@@ -1243,7 +1252,9 @@ jobs:
     # Exchange the GitHub OIDC token for a short-lived nuget.org API key. `user` is the nuget.org USERNAME
     # (profile name, NOT an email) of the account that CREATED the Trusted Publishing policy - not the SciSharp
     # organization that owns it (NuGet/login's own error text says so) - read from the NUGET_USER repository
-    # secret: without it the login fails and nothing is pushed. Requested here, immediately before the push, so
+    # secret (`elibelash`, the policy's owner): without it the login fails and nothing is pushed. A wrong name
+    # fails as "Token exchange failed (HTTP 401) ... No matching trust policy owned by user" (0.80.0's first
+    # attempt); fix the secret and re-run the failed job - build-nuget's artifact is reused. Requested here, immediately before the push, so
     # the 1-hour key cannot expire before use. NuGet/login masks the key (core.setSecret) before it becomes
     # steps.nuget-login.outputs.NUGET_API_KEY, so the rendered push script never prints it.
     - name: NuGet login (OIDC trusted publishing)

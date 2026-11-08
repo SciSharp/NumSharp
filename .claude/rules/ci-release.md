@@ -16,14 +16,26 @@ paths:
   tag push, creates the GitHub Release and publishes to nuget.org. The `FuzzMatrix` gate runs here (it replays the
   committed corpora; no Python). The `interop-test` job builds and tests the interop packages, the unreleased ones
   included (`interop-packages.md`), with its "Package consumer:" steps last (`openblas.md`).
+- A release is a `v*` tag on master (`git tag -a v<version> -m "NumSharp <version>" <master commit>`, then push the
+  tag). The tests, `validate-release` (the tag is on master), `build-nuget` and `create-release` (the GitHub Release with
+  the install header, the notes file and every package with its checksum) run unattended; the run then PAUSES at
+  `publish-nuget` with "Waiting for review" and GitHub notifies the reviewer. Nothing reaches nuget.org until the
+  reviewer opens the run, clicks "Review deployments", ticks `nuget` and approves.
+- `publish-nuget` runs in the `nuget` environment (Settings > Environments > nuget): the one required reviewer is Nucs,
+  self-review is allowed (the owner approves the owner's own tag), admins cannot bypass the review, and only `v*` tags
+  may deploy to it. A pending review fails after 30 days; "Re-run failed jobs" asks for the review again and reuses
+  `build-nuget`'s artifact.
 - `publish-nuget` publishes through nuget.org Trusted Publishing, so no API key is stored: `NuGet/login@v1` trades the
   job's GitHub OIDC token (`id-token: write`) for a one-hour key under the policy registered on nuget.org (Account >
-  Trusted Publishing: owner SciSharp, workflow file `build-and-release.yml`, no environment). Its `user` is the
-  `NUGET_USER` repository secret: the nuget.org profile name of the account that created the policy (not an email, not
-  the SciSharp organization); without it the login fails and nothing is pushed. The job pushes EVERY package even when
-  nuget.org refuses one, then fails naming each refusal. The policy's scope decides whether a NEW id may be pushed, so
-  before tagging a release that adds a package id (an unreleased bridge made packable), check that the policy is active,
-  its scope is "Push new packages and package versions" and its glob (`*NumSharp*`) matches the id.
+  Trusted Publishing: package owner SciSharp, repository SciSharp/NumSharp, workflow file `build-and-release.yml`,
+  environment `nuget`), so only a job running in the gated environment can get a key. Its `user` is the `NUGET_USER`
+  repository secret: the nuget.org profile name of the account that OWNS the policy (`elibelash`; not an email, not the
+  SciSharp organization). A wrong name fails the login with "Token exchange failed (HTTP 401) ... No matching trust
+  policy owned by user" and pushes nothing (0.80.0's first attempt): fix the secret and re-run the failed job. The job
+  pushes EVERY package even when nuget.org refuses one, then fails naming each refusal. The policy's scope decides
+  whether a NEW id may be pushed, so before tagging a release that adds a package id (an unreleased bridge made
+  packable), check that the policy is active, its scope is "Push new packages and package versions" and its glob
+  (`*NumSharp*`) matches the id.
 - The packages embed NO README: the "No embedded package README" guard in `Directory.Build.props` fails `dotnet pack` if
   a project sets `PackageReadmeFile`, because an embedded readme would lock each version's nuget.org README tab. After a
   release publishes, the owner pastes the GitHub release markdown into every package version's README by hand
