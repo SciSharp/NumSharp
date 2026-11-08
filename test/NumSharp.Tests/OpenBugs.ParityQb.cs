@@ -805,5 +805,30 @@ namespace NumSharp.Tests
             ReferenceEquals(noCopy, a).Should().BeTrue();
             ReferenceEquals(squeezed, a).Should().BeTrue();
         }
+
+        // ------------------------------------------------------------------
+        // QB-28 — a C# multi-dimensional integer array (long[,] / int[,]) is refused as an index
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2 reads a nested integer list as an N-D integer index array: <c>np.arange(10)[[[1, 2], [3, 4]]]</c>
+        ///     is the (2, 2) array <c>[[1, 2], [3, 4]]</c>, and <c>a[[[0], [1], [2]], [0, 1, 2]] = [2, 3, 4]</c> broadcasts
+        ///     the (3, 1) and (3,) index arrays (NumPy's own <c>test_indexing.py::test_index_is_larger</c>). The C# spelling of
+        ///     that nested list, a <c>long[,]</c> or <c>int[,]</c>, raises <c>IndexError: only integers, slices (`:`), ellipsis
+        ///     (`...`), numpy.newaxis (`None`) and integer or boolean arrays are valid indices</c>, alone or inside an
+        ///     <c>object[]</c> tuple, while a <c>bool[,]</c> is accepted as a 2-D mask and a <c>long[]</c> as a 1-D index
+        ///     array (wrapping the same values in <c>np.array(...)</c> works).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB28")]
+        public void ParityQb_QB28_MultiDimensionalIntegerArray_IsAnIndexArray()
+        {
+            using var a = np.arange(10);
+
+            using var picked = a[new long[,] { { 1, 2 }, { 3, 4 } }];
+
+            // NumPy 2.4.2: shape (2, 2), [[1, 2], [3, 4]]
+            picked.shape.Should().Equal(2L, 2L);
+            picked.ToArray<long>().Should().Equal(1L, 2L, 3L, 4L);
+        }
     }
 }
