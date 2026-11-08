@@ -287,5 +287,138 @@ namespace NumSharp.Tests
             np.signbit(mm).GetBoolean().Should().BeTrue();
             np.signbit(rowColumn).GetBoolean(0, 0).Should().BeTrue();
         }
+
+        // ------------------------------------------------------------------
+        // QB-10 — real np.median / percentile / quantile / nanmedian return another NaN than NumPy
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>_median_nancheck</c> answers a slice holding a NaN with <c>data.take(-1)</c>, the LAST
+        ///     element after its partition (the NaNs gather at the end in input order), and <c>_nanmedian1d</c> answers an
+        ///     all-NaN slice with <c>arr1d[-1]</c>. So <c>np.median([-nan, 1, nan])</c> is <c>+nan</c> (as are
+        ///     <c>np.percentile(…, 50)</c> and <c>np.quantile(…, 0.2)</c>), and <c>np.nanmedian([-nan])</c> is <c>-nan</c>.
+        ///     NumSharp returns the FIRST NaN (<c>-nan</c>, so <c>np.signbit</c> differs) and, for nanmedian's all-NaN slice,
+        ///     the canonical <c>+nan</c>. With distinct payloads the median family returns element 0's NaN where NumPy returns
+        ///     the last NaN's. The complex median already follows NumPy's last-element rule (<c>c39a29bc</c>).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB10")]
+        public void ParityQb_QB10_MedianFamily_ReturnsNumPysNaN()
+        {
+            using var mixed = np.array(new long[] { unchecked((long)0xfff8000000000000UL), 0x3ff0000000000000L, 0x7ff8000000000000L }).view(np.float64);
+            using var negOnly = np.array(new long[] { unchecked((long)0xfff8000000000000UL) }).view(np.float64);
+
+            using var median = np.median(mixed);
+            using var percentile = np.percentile(mixed, 50);
+            using var nanmedian = np.nanmedian(negOnly);
+
+            // NumPy 2.4.2: np.signbit -> False, False, True
+            np.signbit(median).GetBoolean().Should().BeFalse();
+            np.signbit(percentile).GetBoolean().Should().BeFalse();
+            np.signbit(nanmedian).GetBoolean().Should().BeTrue();
+        }
+
+        // ------------------------------------------------------------------
+        // QB-11 — real np.correlate / np.convolve (small-kernel regime) keep another NaN than NumPy
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     float-math.md calls the small-kernel regime of the real np.correlate / np.convolve byte-identical to NumPy
+        ///     (each output's <c>Σ a[i+t]·k[t]</c> in t order, as NumPy's <c>small_correlate</c>). Where two NaNs meet the
+        ///     bytes differ: <c>np.correlate([-nan, 1], [1, nan])</c> is <c>-nan</c> in NumPy 2.4.2 and <c>+nan</c> in
+        ///     NumSharp, and <c>np.convolve([-nan, 1], [1, nan])</c> has signbits <c>[True, False, False]</c> in NumPy against
+        ///     <c>[True, True, False]</c> (<c>np.convolve([1, nan], [-nan, 1])</c>: NumPy <c>[True, True, False]</c>, NumSharp
+        ///     <c>[True, False, False]</c>). With distinct payloads 8 of 9 full-mode outputs keep another NaN for length 5,
+        ///     63 of 65 for length 33. The complex path already follows NumPy's NaN choice (PA3b, <c>95191628</c>).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB11")]
+        public void ParityQb_QB11_RealCorrelateConvolve_KeepNumPysNaN()
+        {
+            using var a = np.array(new long[] { unchecked((long)0xfff8000000000000UL), 0x3ff0000000000000L }).view(np.float64);
+            using var v = np.array(new long[] { 0x3ff0000000000000L, 0x7ff8000000000000L }).view(np.float64);
+
+            using var corr = np.correlate(a, v);
+            using var conv = np.convolve(a, v);
+
+            // NumPy 2.4.2: signbit(correlate) = [True]; signbit(convolve) = [True, False, False]
+            np.signbit(corr).GetBoolean(0).Should().BeTrue();
+            np.signbit(conv).GetBoolean(1).Should().BeFalse();
+        }
+
+        // ------------------------------------------------------------------
+        // QB-12 — float32 np.exp2 turns every NaN into the canonical +NaN
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's win-amd64 wheel has no vector float32 exp2 (float-math.md), so <c>np.exp2</c> of a float32 is the
+        ///     CRT's <c>exp2f</c>, which returns its NaN argument: <c>np.exp2(np.float32 0xffc00456)</c> is <c>0xffc00456</c>
+        ///     (negative, payload kept; a signalling NaN comes back quiet with its payload). NumSharp's
+        ///     <c>NDFloatMath.Exp2</c> sends every NaN to <c>Exp2NonFinite</c>, which answers the canonical
+        ///     <c>0x7fc00000</c> (the rule of NumPy's SIMD exp / log / sin / cos kernels, which do blank NaN lanes, applied
+        ///     to the one float32 function that has no such kernel), so the sign flips: <c>np.signbit</c> answers False
+        ///     where NumPy answers True. float64 and float16 exp2 already propagate the input NaN.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB12")]
+        public void ParityQb_QB12_Float32Exp2_PropagatesTheInputNaN()
+        {
+            using var x = np.array(new[] { unchecked((int)0xffc00456), 0x7f800789 }).view(np.float32);
+            using var r = np.exp2(x);
+            using var bits = r.view(np.int32);
+
+            // NumPy 2.4.2: [0xffc00456, 0x7fc00789] (the signalling NaN quieted)
+            bits.GetInt32(0).Should().Be(unchecked((int)0xffc00456));
+            bits.GetInt32(1).Should().Be(0x7fc00789);
+        }
+
+        // ------------------------------------------------------------------
+        // QB-13 — np.spacing of a NaN changes the NaN (float64 payload + 1, float32 sNaN left signalling)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>npy_spacing</c> is <c>_next(x, 1) - x</c> after an infinity test, so a NaN propagates through
+        ///     <c>nextafter</c> and the subtraction and comes back as the input NaN, quieted: <c>np.spacing</c> of float64
+        ///     <c>0x7ff8000000000123</c> is <c>0x7ff8000000000123</c>, of float32 <c>0x7f800789</c> (signalling) is
+        ///     <c>0x7fc00789</c>. NumSharp's SIMD body (every full vector: 4 float64 / 8 float32 lanes) treats the NaN's bits
+        ///     as a finite magnitude and returns payload + 1 (<c>0x…124</c>; a signalling <c>0x7ff0…789</c> becomes
+        ///     <c>0x7ff8…78a</c>), while its scalar tail returns a float64 quiet NaN unchanged (so an array's last elements
+        ///     and its first ones disagree) but leaves a float32 signalling NaN signalling (<c>0x7f800789</c>). The sign
+        ///     survives; only the payload / quiet bit differ. The registry holds spacing "bit-exact at every width", which the
+        ///     corpus (NaN tokens) cannot see.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB13")]
+        public void ParityQb_QB13_SpacingOfANaN_ReturnsTheInputNaNQuieted()
+        {
+            using var d = np.array(new[] { 0x7ff8000000000123L, 0x7ff8000000000123L, 0x7ff8000000000123L, 0x7ff8000000000123L }).view(np.float64);
+            using var f = np.array(new[] { 0x7f800789 }).view(np.float32);
+            using var sd = np.spacing(d).view(np.int64);
+            using var sf = np.spacing(f).view(np.int32);
+
+            // NumPy 2.4.2: every element 0x7ff8000000000123; the float32 signalling NaN quieted to 0x7fc00789
+            sd.GetInt64(0).Should().Be(0x7ff8000000000123L);
+            sf.GetInt32(0).Should().Be(0x7fc00789);
+        }
+
+        // ------------------------------------------------------------------
+        // QB-14 — a signalling NaN through np.hypot stays signalling, through np.nextafter becomes quiet (NumPy: the reverse)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2 quiets a signalling NaN in <c>np.hypot</c> (<c>hypot(0x7ff0000000000789, 1.5)</c> is
+        ///     <c>0x7ff8000000000789</c>) and returns it UNQUIETED from <c>np.nextafter</c> (the CRT's <c>nextafter</c> hands a
+        ///     NaN argument back as it is: <c>0x7ff0000000000789</c>; float32 <c>0x7f800789</c> likewise). NumSharp does the
+        ///     opposite in both: its hypot (<c>NDHypotMath</c>'s UCRT model) returns the signalling NaN unchanged and its
+        ///     nextafter quiets it. Only the quiet bit differs (payload and sign survive); quiet NaNs match.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB14")]
+        public void ParityQb_QB14_SignallingNaN_ThroughHypotAndNextafter()
+        {
+            using var snan = np.array(new[] { 0x7ff0000000000789L }).view(np.float64);
+            using var one = np.array(new[] { 1.5 });
+            using var hyp = np.hypot(snan, one).view(np.int64);
+            using var next = np.nextafter(snan, one).view(np.int64);
+
+            // NumPy 2.4.2: hypot quiets it, nextafter returns it signalling
+            hyp.GetInt64(0).Should().Be(0x7ff8000000000789L);
+            next.GetInt64(0).Should().Be(0x7ff0000000000789L);
+        }
     }
 }
