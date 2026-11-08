@@ -18,6 +18,15 @@
 - **1,119,305 NumPy 2.4.2 oracle test cases** (0.70.0: 119,517) and 20,478 test methods (0.70.0: 14,416).
 
 ### 📦 New NuGet Packages
+- **NumSharp.Interop.System.Numerics.Tensors** - zero-copy interop between `NDArray` and the BCL's `Tensor<T>` / `TensorSpan<T>` ([System.Numerics.Tensors](https://www.nuget.org/packages/System.Numerics.Tensors)), all 15 dtypes.
+- **NumSharp.Interop.OnnxRuntime** - run [ONNX Runtime](https://onnxruntime.ai) models on `NDArray`s, fed from the arrays' own memory, with the outputs read back as `NDArray`s.
+- **NumSharp.Interop.MLNet** - an `NDArray` as an [ML.NET](https://dotnet.microsoft.com/apps/machinelearning-ai/ml-dotnet) `IDataView`, and a transformer's output column back as an `NDArray`.
+
+## Detailed Breakdown
+<details>
+  <summary>Show All</summary>
+
+### 📦 New NuGet Packages
 
 Three optional companion packages ship for the first time, co-versioned with **NumSharp** (each depends on **NumSharp**). None computes NumSharp operations: each converts arrays between NumSharp and another library, with no engine backend and no native asset of its own, so Core stays 100% managed without them.
 
@@ -43,10 +52,6 @@ Three optional companion packages ship for the first time, co-versioned with **N
   - Post-processing - the ONNX Runtime bridge's `Postprocess` (`Softmax`, `LogSoftmax`, `Sigmoid`, `Argmax`, `TopK`), which this package references, so an app that uses both bridges has one.
   - Dtypes - 11 column types directly, `char` one way as uint16, float16 as float32 and `decimal` as float64 through a copy the view owns; complex and text arrays are refused, and a text, time or ragged column's refusal names the ML.NET route that reads it (`GetColumn<string>`, int64 ticks, `GetColumn<T[]>`).
   - Depends - [Microsoft.ML.DataView](https://www.nuget.org/packages/Microsoft.ML.DataView) 2.0.0 or later, and NumSharp.Interop.OnnxRuntime for `Postprocess` (bringing ONNX Runtime's C# API, which `Postprocess` never loads); the `Microsoft.ML` you reference brings the trainers and transforms. Verified on ML.NET 2.0.1 and 5.0.1.
-
-## Detailed Breakdown
-<details>
-  <summary>Show All</summary>
 
 ### 📊 Dashboards & Docs
 

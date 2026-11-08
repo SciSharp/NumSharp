@@ -31,10 +31,11 @@ so past decisions stay traceable.
   `*Deduplicated highlights from journey3.*` - prefer this over a hard commit count, which drifts
   as sections dedup.
 - No date required in the POC; add `- YYYY-MM-DD` on the real release.
-- Layout under the H1: the owner's intro paragraph, then `### 🧭 Overview` and `### 📦 New NuGet
-  Packages` - both visible - then `## Detailed Breakdown` with every other section of §3 inside one
-  `<details>` / `<summary>Show All</summary>` block. A reader sees what the release is and which
-  packages are new without expanding anything.
+- Layout under the H1: the owner's intro paragraph, then `### 🧭 Overview` and a `### 📦 New NuGet
+  Packages` list with one line per new package (bold name - what it connects NumSharp to) - both
+  visible - then `## Detailed Breakdown` with every section of §3 inside one `<details>` /
+  `<summary>Show All</summary>` block, the packages' §7A elaboration first. A reader sees what the
+  release is and which packages are new without expanding anything; the elaboration is one click away.
 - One document per published version. A version that was never released is not named anywhere in the
   notes: its work belongs to the release that ships it, in the same sections, and every fix and breaking
   change is judged against the last *published* version (a later change to a feature that is new in
@@ -60,8 +61,9 @@ Fixed order. Omit a section if it has no entries. Each is an H3 with a leading e
 Rationale for the split: a reader scans for a *kind* of change. Keep the buckets stable across
 releases so diffs between changelogs are meaningful.
 
-`### 📦 New NuGet Packages` sits outside the `<details>` block, right after the Overview (§2); sections
-2-8 sit inside it, in this order.
+Sections 1-8 sit inside the `<details>` block, in this order. Above it, right after the Overview, a
+visible `### 📦 New NuGet Packages` list names each new package in one line (§2); section 1 inside the
+block is that list's §7A elaboration.
 
 ---
 
@@ -342,3 +344,4 @@ dashboards (§7B), a sub-list feature (§7), and the performance explainer (§8)
 | 2026-08-23 | **Separator / charset:** the bullet separator is a **space-hyphen-space (` - `)**, and the changelog uses the **ASCII hyphen `-` only - never em-dash (U+2014) or en-dash (U+2013)** anywhere (separators, ranges, parentheticals, dates), for greppability + clean diffs (§4). |
 | 2026-11-06 | **Layout (the owner):** `### 📦 New NuGet Packages` sits **outside** the `<details>` block, right after the Overview; every other section of §3 stays inside `## Detailed Breakdown` (§2, §3 note). |
 | 2026-11-06 | **One document per published version (the owner, for 0.80.0):** a version that was never released (0.71.0) is not named in the notes; its work is merged into the release that ships it, section by section, and fixes / breaking changes are judged against the last published version (§2). |
+| 2026-11-08 | **Layout (the owner, for 0.80.0: "Move the nuget releases to the detailed area and where they are now leave a one-liner per nuget"):** the §7A elaboration moves back inside the `<details>` block as section 1 (as 0.70.0 had it); where it stood, after the Overview, a visible `### 📦 New NuGet Packages` list keeps one line per package (§2, §3 note). Supersedes the 2026-11-06 layout row above. |
