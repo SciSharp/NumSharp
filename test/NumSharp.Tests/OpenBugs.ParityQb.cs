@@ -778,5 +778,32 @@ namespace NumSharp.Tests
             real.strides.Should().Equal(1L, 3L);
             poly.strides.Should().Equal(8L, 32L);
         }
+
+        // ------------------------------------------------------------------
+        // QB-27 — np.array(a, copy=False) and squeeze() without a length-1 axis return a new object, not the input
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2 returns the INPUT OBJECT itself from <c>np.array(a, copy=False)</c> when no conversion is needed
+        ///     (<c>PyArray_CheckFromAny</c> hands the array back) and from <c>np.squeeze(a)</c> / <c>a.squeeze()</c> when there
+        ///     is no length-1 axis to remove (<c>PyArray_Squeeze</c>: <c>if (unit_dims == 0) return self</c>), so
+        ///     <c>r is a</c> holds and <c>r.flags.owndata</c> is <c>a</c>'s own flag. NumSharp returns a NEW object in both:
+        ///     np.array's shares the storage AND reports <c>owndata</c> True (two objects claiming one buffer), squeeze's is a
+        ///     view reporting <c>owndata</c> False where NumPy's True (an owning input). <c>np.asarray</c>,
+        ///     <c>np.asanyarray</c>, <c>np.require</c>, <c>np.atleast_Nd</c>, <c>np.ascontiguousarray</c> /
+        ///     <c>asfortranarray</c> and <c>astype(copy=False)</c> already return the input itself, as NumPy does.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB27")]
+        public void ParityQb_QB27_ArrayCopyFalseAndSqueeze_ReturnTheInputItself()
+        {
+            using var a = np.arange(6.0).reshape(2, 3).copy();
+
+            var noCopy = np.array(a, copy: false);
+            var squeezed = np.squeeze(a);
+
+            // NumPy 2.4.2: np.array(a, copy=False) is a -> True; np.squeeze(a) is a -> True
+            ReferenceEquals(noCopy, a).Should().BeTrue();
+            ReferenceEquals(squeezed, a).Should().BeTrue();
+        }
     }
 }
