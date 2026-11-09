@@ -1464,5 +1464,40 @@ namespace NumSharp.Tests
             // NumPy 2.4.2: np.histogram(a, bins=[0, 1.5, 1.7, 3], weights=w)[0] is [0., 0., 3.00000000000003e+15]
             hist.GetDouble(0).Should().Be(0.0);
         }
+
+        // ------------------------------------------------------------------
+        // QB-53 — mixed-dtype integer GEMM-shaped products accumulate in double
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy casts both operands of a product to their common dtype and runs that dtype's loop, so an integer product is
+        ///     exact and wraps modulo the dtype. NumSharp's mixed-dtype GEMM route (<c>MatMulStridedMixed&lt;TResult&gt;</c>,
+        ///     <c>Default.MatMul.Strided.cs</c>: "Accumulator is double (NumPy's promotion rule for cross-type matmul)") reads
+        ///     both operands as double, accumulates in double and converts back, so an integer result loses every bit past 2^53
+        ///     and SATURATES to the dtype's minimum on overflow instead of wrapping (x86's integer-indefinite conversion). It is
+        ///     reached by every product of two DIFFERENT integer or bool dtypes that becomes a GEMM: np.matmul (2-D, batched and
+        ///     1-D·1-D), 2-D np.dot, np.tensordot (axes 0 and 1 included), np.matvec, np.vecmat, np.linalg.multi_dot. Same-dtype
+        ///     products, 1-D np.dot, np.inner, np.vdot, np.outer, np.kron, np.einsum and np.vecdot are exact. Found by a random
+        ///     exact-product fuzz (q148: 8 of 260 calls wrong, every one mixed-dtype).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB53")]
+        public void ParityQb_QB53_MixedDtypeIntegerProducts_AccumulateInDouble()
+        {
+            using var big = np.array(new long[] { 9007199254740993L, 1L }).reshape(1, 2);
+            using var pick = np.array(new int[] { 1, 0 }).reshape(2, 1);
+            using var product = np.matmul(big, pick);
+            using var dotted = np.dot(big, pick);
+
+            // NumPy 2.4.2: int64 [[2**53 + 1, 1]] @ int32 [[1], [0]] is [[9007199254740993]] (int64), by matmul and dot
+            product.GetInt64(0, 0).Should().Be(9007199254740993L);
+            dotted.GetInt64(0, 0).Should().Be(9007199254740993L);
+
+            using var shorts = np.array(new short[] { 30000, 30000 }).reshape(1, 2);
+            using var ints = np.array(new int[] { 100000, 100000 }).reshape(2, 1);
+            using var wrapped = np.matmul(shorts, ints);
+
+            // NumPy 2.4.2: int16 [[30000, 30000]] @ int32 [[100000], [100000]] is [[1705032704]] (6e9 wrapped in int32)
+            wrapped.GetInt32(0, 0).Should().Be(1705032704);
+        }
     }
 }
