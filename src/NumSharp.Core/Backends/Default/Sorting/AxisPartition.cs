@@ -553,6 +553,10 @@ namespace NumSharp.Backends.Sorting
             long s = c->inStride;
             if (s == sizeof(T))
             {
+                // A single kth near an end of a long line: one read finds that side's elements and O(m) writes place them
+                // (QuickSelect.TryEdgePartition); every other line, or one it declines, takes the quickselect.
+                if (c->nKth == 1 && QuickSelect.TryEdgePartition((T*)line, n, c->kth[0]))
+                    return;
                 QuickSelect.PartitionAtMany((T*)line, n, c->kth, c->nKth);
                 return;
             }
@@ -569,6 +573,10 @@ namespace NumSharp.Backends.Sorting
         private static void PartLineF32(byte* line, PartCtx* c)
         {
             long n = c->n; long s = c->inStride;
+            // A contiguous line around a single kth near an end skips the compaction and the quickselect; the edge
+            // selection declines a line holding a NaN before it moves anything, and the compaction below handles it.
+            if (s == sizeof(float) && c->nKth == 1 && QuickSelect.TryEdgePartition((float*)line, n, c->kth[0]))
+                return;
             float* buf = (float*)c->scratch; float* nans = (float*)c->nanTail;
             long m = 0, q = 0;
             for (long i = 0; i < n; i++) { float v = *(float*)(line + i * s); if (float.IsNaN(v)) nans[q++] = v; else buf[m++] = v; }
@@ -580,6 +588,9 @@ namespace NumSharp.Backends.Sorting
         private static void PartLineF64(byte* line, PartCtx* c)
         {
             long n = c->n; long s = c->inStride;
+            // The edge selection first, as in PartLineF32 (a NaN line falls through to the compaction).
+            if (s == sizeof(double) && c->nKth == 1 && QuickSelect.TryEdgePartition((double*)line, n, c->kth[0]))
+                return;
             double* buf = (double*)c->scratch; double* nans = (double*)c->nanTail;
             long m = 0, q = 0;
             for (long i = 0; i < n; i++) { double v = *(double*)(line + i * s); if (double.IsNaN(v)) nans[q++] = v; else buf[m++] = v; }
@@ -621,6 +632,11 @@ namespace NumSharp.Backends.Sorting
         private static void ArgPartLine<T>(byte* inLine, byte* outLine, PartCtx* c) where T : unmanaged, IComparable<T>
         {
             long n = c->n; long si = c->inStride, so = c->outStride;
+            // A single kth near an end of a long contiguous line: one read selects that side and the permutation is written
+            // straight to the output (QuickSelect.TryEdgeArgPartition), with no gather, index column or scatter; every
+            // other line, or one it declines, takes the quickselect.
+            if (si == sizeof(T) && c->nKth == 1 && QuickSelect.TryEdgeArgPartition((T*)inLine, n, c->kth[0], outLine, so))
+                return;
             T* buf = (T*)c->scratch; long* idx = c->idx;
             for (long i = 0; i < n; i++) { buf[i] = *(T*)(inLine + i * si); idx[i] = i; }
             QuickSelect.PartitionAtMany(buf, idx, n, c->kth, c->nKth);
@@ -632,6 +648,10 @@ namespace NumSharp.Backends.Sorting
         private static void ArgPartLineF32(byte* inLine, byte* outLine, PartCtx* c)
         {
             long n = c->n; long si = c->inStride, so = c->outStride;
+            // The edge selection first (see ArgPartLine); it declines a line holding a NaN before writing anything, so the
+            // NaN tail below keeps its encounter order.
+            if (si == sizeof(float) && c->nKth == 1 && QuickSelect.TryEdgeArgPartition((float*)inLine, n, c->kth[0], outLine, so))
+                return;
             float* buf = (float*)c->scratch; long* idx = c->idx;
             long m = 0;
             for (long i = 0; i < n; i++) { float v = *(float*)(inLine + i * si); if (!float.IsNaN(v)) { buf[m] = v; idx[m] = i; m++; } }
@@ -644,6 +664,9 @@ namespace NumSharp.Backends.Sorting
         private static void ArgPartLineF64(byte* inLine, byte* outLine, PartCtx* c)
         {
             long n = c->n; long si = c->inStride, so = c->outStride;
+            // The edge selection first, as in ArgPartLineF32.
+            if (si == sizeof(double) && c->nKth == 1 && QuickSelect.TryEdgeArgPartition((double*)inLine, n, c->kth[0], outLine, so))
+                return;
             double* buf = (double*)c->scratch; long* idx = c->idx;
             long m = 0;
             for (long i = 0; i < n; i++) { double v = *(double*)(inLine + i * si); if (!double.IsNaN(v)) { buf[m] = v; idx[m] = i; m++; } }

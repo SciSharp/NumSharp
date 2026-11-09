@@ -120,6 +120,16 @@ sort_complex}.Test.cs` and the `sort`/`nanreduce` tiers. Sources:
   raises AxisError. Float NaN indices go to the tail in encounter order (argsort's policy). The tier pins the DERIVED kth
   values (`take(partition(a, ks), ks)` / the take_along_axis gather at ks): the arrangement between kth anchors is
   implementation-specific on both sides, so the two-sided ≤/≥ invariant is unit-test-pinned instead.
+- The edge selection (`Utilities/QuickSelect.EdgeSelect.cs`, called first by the contiguous-line kernels of both
+  functions): a single kth with m ≤ 64 positions on its side (the top-k idiom `argpartition(x, -k)`, or a kth near 0) of
+  a contiguous line of at least max(256, 32·m, m²) elements, for the ten dtypes with `Vector<T>` lanes. One read keeps
+  the m best sorted and rejects whole vectors against the worst kept; argpartition then writes every other index
+  ascending (a vector iota with holes) and the kept ones from kth outwards, partition moves only the kept values that
+  were outside the kth's block. Among equal values it keeps the lower index. It declines, leaving the line untouched for
+  the quickselect: any NaN (the compaction's tail policy), more than m·(log2 n + 8) admissions (a line sorted the wrong
+  way for its side), and the lines NumPy's own linear shortcuts serve with NumPy's tie choice (kth < 3, a float
+  kth = n − 1). `NS_EDGE_SELECT_MAX` (0..64; 0 turns it off) is read once. 51,200 float32, kth = n − 5: argpartition
+  206 → 23 µs (NumPy 91–96), partition 170 → 17 µs. Gate: `Sorting/np.partition.EdgeSelect.Test.cs`.
 - `lexsort(keys, axis=-1)` (`TensorEngine.LexSort`): an indirect stable sort, the LAST key primary, reproducing
   `PyArray_LexSort` pass for pass:
   successive stable argsorts first → last key, each re-sorting the running permutation through `take_along_axis`

@@ -208,7 +208,7 @@ the verbs so those stay conversion-only:
 |---|---|
 | `Postprocess.Softmax(logits, axis = -1)` (max-shifted, rows sum to 1), `LogSoftmax`, `Sigmoid` | the `Math.Exp` / `Sum` / `Select` loop |
 | `Postprocess.Argmax(scores, axis = -1)` → int64, first occurrence | `GetMaxValueIndex` |
-| `Postprocess.TopK(scores, k, axis = -1, largest = true)` → `(values, indices)` | `OrderByDescending().Take(k)` — ONNX `TopK` semantics, ties lower-index-first |
+| `Postprocess.TopK(scores, k, axis = -1, largest = true)` → `(values, indices)` | `OrderByDescending().Take(k)` — ONNX `TopK` semantics, ties lower-index-first; `k = 1` is `np.argmax`, a `k` up to half the axis (4,096+ elements) is selected with `np.argpartition` and only the `k` are sorted |
 
 They agree with ORT's own `Softmax` / `ArgMax` / `TopK` operators run on the same data (the tests do exactly
 that). Float32 in gives float32 out. A bool or integer input is promoted to NumPy's float tier before the

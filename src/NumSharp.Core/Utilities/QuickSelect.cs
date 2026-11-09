@@ -25,7 +25,7 @@ namespace NumSharp.Utilities
     ///     <see cref="int"/> — all bounded by small constants. A thin int-taking overload forwards the
     ///     &lt;=int.MaxValue quantile-kernel callers to the long core.
     /// </remarks>
-    internal static class QuickSelect
+    internal static partial class QuickSelect
     {
         // ── IComparable<T> path (used for int dtypes + ones where NaN is impossible) ──
 

@@ -29,6 +29,14 @@ namespace NumSharp.Interop.OnnxRuntime
     public static class Postprocess
     {
         /// <summary>
+        ///     The smallest array <see cref="TopK"/> selects in rather than sorting the whole axis: the selection is a dozen
+        ///     np.* calls, about 25-35 µs of fixed cost, against roughly 13-16 ns per element for the sort, so the sort
+        ///     stays cheaper below a few thousand elements (a (256, 10) top-3 measured 37 µs sorted against 74 µs
+        ///     selected; (64, 1000) top-5 823 µs sorted against 112 µs selected).
+        /// </summary>
+        private const long SelectionMinSize = 4096;
+
+        /// <summary>
         ///     Numerically stable softmax along <paramref name="axis"/>: <c>exp(x - max) / sum(exp(x - max))</c>.
         ///     Subtracting the maximum cannot change the result and keeps <c>exp</c> from overflowing, so each slice
         ///     along the axis sums to 1 even for very large logits.
@@ -192,6 +200,15 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="ArgumentNullException"><paramref name="scores"/> is null.</exception>
         /// <exception cref="ArgumentException"><paramref name="scores"/> is 0-d.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is out of range, or <paramref name="k"/> is not in <c>[1, scores.shape[axis]]</c>.</exception>
+        /// <remarks>
+        ///     The largest single entry is <c>np.argmax</c>'s. When <paramref name="k"/> is at most half the axis and the
+        ///     array holds at least 4,096 elements, the k entries of each slice are selected first (<c>np.argpartition</c>;
+        ///     where equal values straddle the k-th one, the lower indices among them are chosen from the k-th values)
+        ///     and only they are sorted, so a top-5 over a 51,200-entry vocabulary row costs a selection pass instead of a
+        ///     sort of the whole row. A NaN among the scores of a <paramref name="largest"/> call, a complex input, a
+        ///     larger <paramref name="k"/> and a smaller array sort the whole axis. Every route returns the same values
+        ///     and indices.
+        /// </remarks>
         public static (NDArray values, NDArray indices) TopK(NDArray scores, int k, int axis = -1, bool largest = true, bool sorted = true)
         {
             if (scores is null)
@@ -205,6 +222,29 @@ namespace NumSharp.Interop.OnnxRuntime
             long n = scores.shape[ax];
             if (k < 1 || k > n)
                 throw new ArgumentOutOfRangeException(nameof(k), $"k must be in [1, {n}] for an axis of length {n}, got {k}.");
+
+            // The largest one entry is the first maximum, np.argmax's single vector pass (a NaN included: argmax returns the
+            // first NaN, which TopK ranks above every number).
+            if (k == 1 && largest && IsRealDtype(scores.typecode))
+            {
+                NDArray first = np.argmax(scores, ax, keepdims: true);
+                try
+                {
+                    return (np.take_along_axis(scores, first, ax), first);
+                }
+                catch
+                {
+                    first.Dispose();   // the gather failed: the indices never reach the caller
+                    throw;
+                }
+            }
+
+            // Select, then sort the k, when k is well below the axis length (np.argpartition takes an int kth, hence the
+            // length bound) and the array is large enough for the selection's dozen np.* calls to undercut one sort; the
+            // whole-axis sort below serves the rest, and every input the selection cannot settle.
+            if (2L * k <= n && n <= int.MaxValue && scores.size >= SelectionMinSize
+                && TrySelectTopK(scores, k, ax, largest, out NDArray selectedValues, out NDArray selectedIndices))
+                return (selectedValues, selectedIndices);
 
             NDArray order;
             if (largest)
@@ -232,6 +272,189 @@ namespace NumSharp.Interop.OnnxRuntime
                 NDArray indices = topView.copy();   // an owning, C-contiguous int64 array (not a view into `order`)
                 NDArray values = np.take_along_axis(scores, indices, ax);
                 return (values, indices);
+            }
+        }
+
+        /// <summary>
+        ///     <see cref="TopK"/> by selection: <c>np.argpartition</c> puts a k-element set at one end of every slice in
+        ///     one pass (one read and a vector index fill for a contiguous slice and a small k), and only those k are
+        ///     sorted. Returns false, keeping nothing it allocated, for the inputs the selection cannot rank (a NaN where
+        ///     it could hide a tie, a complex or text dtype); the caller then sorts the whole axis.
+        /// </summary>
+        /// <param name="scores">The scores (validated by the caller).</param>
+        /// <param name="k">How many entries per slice, at most half the axis.</param>
+        /// <param name="ax">The axis, non-negative.</param>
+        /// <param name="largest"><c>true</c> for the k largest, <c>false</c> for the k smallest.</param>
+        /// <param name="values">Receives the values, in the input's dtype, on success; null otherwise.</param>
+        /// <param name="indices">Receives the int64 indices on success; null otherwise.</param>
+        /// <returns>True with both results set; false when the whole-axis sort has to answer.</returns>
+        /// <remarks>
+        ///     np.argpartition's set holds the k best values, but among values equal to the k-th one it may pick any,
+        ///     while TopK must keep the lower indices. The set is used as it is when it is certain: every slice holds
+        ///     exactly k elements at or beyond its k-th value (counted over the whole array: each slice holds at least k,
+        ///     so the total is k per slice only when no slice has more). Otherwise <see cref="TiedSet"/> rebuilds it from
+        ///     the k-th values. A NaN orders above every number in both contracts but fails every comparison, which
+        ///     would hide such a tie, so a NaN in a largest-first call declines (the k smallest never include a NaN while
+        ///     k numbers exist, and a slice without k numbers has a NaN k-th value, which declines). Complex inputs
+        ///     decline: their order is lexicographic in the sort but not in the comparison operators. The k are then
+        ///     ordered with the whole-axis route's rule, a stable sort of the values over the indices ascending, so equal
+        ///     values keep the lower index first.
+        /// </remarks>
+        private static bool TrySelectTopK(NDArray scores, int k, int ax, bool largest, out NDArray values, out NDArray indices)
+        {
+            values = null;
+            indices = null;
+            NPTypeCode code = scores.typecode;
+            if (!IsRealDtype(code))
+                return false;
+            if (largest && HasNonFiniteValues(code))
+            {
+                using NDArray nan = np.isnan(scores);
+                if (np.any(nan))
+                    return false;
+            }
+
+            // Work along the last axis (a view; np.argpartition copies a non-contiguous operand itself).
+            int last = scores.ndim - 1;
+            using NDArray moved = ax == last ? null : np.moveaxis(scores, ax, last);
+            NDArray line = moved ?? scores;
+            long n = line.shape[last];
+            int kth = largest ? (int)(n - k) : k - 1;
+            using NDArray part = np.argpartition(line, kth, last);
+
+            // The selected set (the slice's last k positions, or its first k) and, inside it, the k-th value's own index.
+            var setWindow = new Slice[line.ndim];
+            var kthWindow = new Slice[line.ndim];
+            for (int i = 0; i < last; i++)
+                setWindow[i] = kthWindow[i] = Slice.All;
+            setWindow[last] = largest ? new Slice(n - k, n) : new Slice(0, k);
+            kthWindow[last] = new Slice(kth, kth + 1);
+            using NDArray set = part[setWindow];
+            using NDArray kthIndex = part[kthWindow];
+            using NDArray kthValue = np.take_along_axis(line, kthIndex, last);
+            long atOrBeyondCount;
+            using (NDArray atOrBeyond = largest ? line >= kthValue : line <= kthValue)
+                atOrBeyondCount = np.count_nonzero(atOrBeyond);
+
+            // The set's indices ascending: argpartition's own set when no tie straddles a k-th value, else the set rebuilt
+            // with the lower indices among the ties.
+            NDArray setAscending;
+            if (atOrBeyondCount == k * (line.size / n))
+            {
+                setAscending = np.sort(set, last);
+            }
+            else
+            {
+                // A slice whose k-th value is NaN has fewer than k numbers (only the smallest-first call gets here with a
+                // NaN): every comparison with it is false, so the whole-axis sort ranks it instead.
+                if (HasNonFiniteValues(code))
+                {
+                    using NDArray kthIsNaN = np.isnan(kthValue);
+                    if (np.any(kthIsNaN))
+                        return false;
+                }
+                setAscending = TiedSet(line, kthValue, k, largest, last);
+            }
+
+            // Their values, and a stable order of those values (descending for the largest by the whole-axis route's
+            // reversal: a stable ascending sort of the reversed values, mapped back), so equal values keep the lower
+            // index first.
+            using (setAscending)
+            using (NDArray setValues = np.take_along_axis(line, setAscending, last))
+                return OrderSelected(setAscending, setValues, k, ax, largest, last, moved is not null, out values, out indices);
+        }
+
+        /// <summary>
+        ///     The TopK set of every slice when ties straddle a slice's k-th value: each element strictly beyond the k-th
+        ///     value, then the elements equal to it in index order until the slice has k, which is the lower-index-first
+        ///     rule. Compositions over the whole array (no per-slice loop): the rank of each equal element is a cumulative
+        ///     count along the axis.
+        /// </summary>
+        /// <param name="line">The scores with the ranked axis last.</param>
+        /// <param name="kthValue">Each slice's k-th value, the axis kept with length 1 (no NaN).</param>
+        /// <param name="k">How many per slice.</param>
+        /// <param name="largest"><c>true</c> when beyond means larger.</param>
+        /// <param name="last">The last axis.</param>
+        /// <returns>A new int64 array of <paramref name="line"/>'s shape with the last axis reduced to
+        ///     <paramref name="k"/>: each slice's chosen indices, ascending.</returns>
+        private static NDArray TiedSet(NDArray line, NDArray kthValue, int k, bool largest, int last)
+        {
+            using NDArray beyond = largest ? line > kthValue : line < kthValue;
+            using NDArray equal = line == kthValue;
+            using NDArray beyondCount = np.count_nonzero(beyond, last, keepdims: true);
+            using NDArray need = k - beyondCount;
+            using NDArray equalRank = np.cumsum(equal, last);
+            using NDArray withinNeed = equalRank <= need;
+            using NDArray keptEqual = equal & withinNeed;
+            using NDArray chosen = beyond | keptEqual;
+            // Exactly k per slice (fewer than k elements are strictly beyond the k-th value, and enough equal it), and
+            // np.nonzero walks C order, so the last coordinate array is every slice's chosen indices, ascending, slice
+            // after slice.
+            NDArray[] coordinates = np.nonzero(chosen);
+            try
+            {
+                long[] dims = line.shape;
+                dims[last] = k;
+                using NDArray shaped = coordinates[last].reshape(new Shape(dims));
+                return shaped.copy();   // owns its buffer, independent of the coordinate arrays disposed below
+            }
+            finally
+            {
+                foreach (NDArray coordinate in coordinates)
+                    coordinate.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     Orders each slice's selected entries by the TopK rule and returns them in the caller's axis order: a stable
+        ///     sort of <paramref name="setValues"/> (descending for the largest, through a reversal), which keeps equal
+        ///     values in <paramref name="setAscending"/>'s index order.
+        /// </summary>
+        /// <param name="setAscending">Each slice's selected indices, ascending (the ranked axis last).</param>
+        /// <param name="setValues">Their values.</param>
+        /// <param name="k">How many per slice.</param>
+        /// <param name="ax">The caller's axis.</param>
+        /// <param name="largest"><c>true</c> for descending.</param>
+        /// <param name="last">The last axis.</param>
+        /// <param name="moved">Whether the ranked axis was moved last, so the results move back to <paramref name="ax"/>.</param>
+        /// <param name="values">Receives the values, a fresh C-contiguous array.</param>
+        /// <param name="indices">Receives the int64 indices, a fresh C-contiguous array.</param>
+        /// <returns>Always true (the caller's success value).</returns>
+        private static bool OrderSelected(NDArray setAscending, NDArray setValues, int k, int ax, bool largest, int last, bool moved,
+            out NDArray values, out NDArray indices)
+        {
+            NDArray order;
+            if (largest)
+            {
+                using NDArray reversed = np.flip(setValues, last);
+                using NDArray ascendingOverReversed = np.argsort(reversed, last, kind: "stable");
+                using NDArray mapped = (k - 1) - ascendingOverReversed;
+                order = np.flip(mapped, last);
+            }
+            else
+            {
+                order = np.argsort(setValues, last, kind: "stable");
+            }
+
+            using (order)
+            {
+                NDArray topIndices = np.take_along_axis(setAscending, order, last);
+                NDArray topValues = np.take_along_axis(setValues, order, last);
+                if (moved)
+                {
+                    // Back to the caller's axis order, as fresh C-contiguous arrays (a moved-back view would not own them).
+                    using (NDArray movedIndices = topIndices)
+                    using (NDArray movedValues = topValues)
+                    using (NDArray indexView = np.moveaxis(movedIndices, last, ax))
+                    using (NDArray valueView = np.moveaxis(movedValues, last, ax))
+                    {
+                        topIndices = indexView.copy();
+                        topValues = valueView.copy();
+                    }
+                }
+                indices = topIndices;
+                values = topValues;
+                return true;
             }
         }
 
@@ -287,5 +510,14 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <returns><c>true</c> for float16, float32 and float64.</returns>
         private static bool HasNonFiniteValues(NPTypeCode code) =>
             code == NPTypeCode.Half || code == NPTypeCode.Single || code == NPTypeCode.Double;
+
+        /// <summary>
+        ///     Is the dtype one whose comparison operators order its values as np.sort / np.argpartition / np.argmax do
+        ///     (bool, char, the integers, float16 / float32 / float64, decimal)? <see cref="TopK"/>'s argmax and selection
+        ///     routes rest on that; complex (lexicographic in the sort only) and text arrays keep the whole-axis sort.
+        /// </summary>
+        /// <param name="code">The scores' dtype.</param>
+        /// <returns><c>true</c> for the real numeric dtypes, bool and char.</returns>
+        private static bool IsRealDtype(NPTypeCode code) => code != NPTypeCode.Complex && code.IsNumerical();
     }
 }
