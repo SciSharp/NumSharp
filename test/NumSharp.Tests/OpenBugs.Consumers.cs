@@ -6,9 +6,10 @@ using System.Reflection;
 namespace NumSharp.Tests
 {
     /// <summary>
-    ///     Open bugs found by upgrading NumSharp's consumers to 0.80.0 (SciSharp/Bigtree.Algorithm, 2026-11-08/09), pinned
-    ///     and deferred by the owner on the consumer PR's design pages ("Defer all", 2026-11-09). The consumer works around
-    ///     each one today; every test asserts the behavior a fix must give, and fails until then.
+    ///     Open bugs found by upgrading NumSharp's consumers to 0.80.0 (SciSharp/Bigtree.Algorithm, 2026-11-08/09, and
+    ///     SciSharp/SharpCV, 2026-11-09), pinned and deferred by the owner on the consumer PRs' design pages ("Defer all"
+    ///     and "Create an openbug on journey5", 2026-11-09). The consumer works around each one today; every test asserts
+    ///     the behavior a fix must give, and fails until then.
     /// </summary>
     /// <remarks>
     ///     The third finding of that round, <c>[NDScoped]</c> refusing a <c>double[]</c> / <c>int[]</c> / <c>string[]</c>
@@ -131,6 +132,87 @@ namespace NumSharp.Tests
             string[] withoutTuple = reductions.Where(name => !HasMultiAxisForm(name)).ToArray();
             withoutTuple.Should().BeEmpty(
                 $"NumPy 2.4.2 takes a tuple of axes for every one of them; one axis only: {string.Join(", ", withoutTuple)}");
+        }
+
+        // ============================================================================
+        //  BUG: copy() of a view with a reversed axis gathers element by element.
+        //
+        //  Found upgrading SciSharp/SharpCV (2026-11-09): cv2 copies a reversed image view before OpenCV sees it (a
+        //  cv::Mat holds no negative stride), and SharpCV made that copy with copy('C'). A 1080p uint8 frame, journey5
+        //  against NumPy 2.4.2, both pinned to the same two CPUs, best of 7 batches:
+        //      contiguous                      NumSharp  0.34 ms    NumPy  1.48 ms
+        //      a[::-1]        rows reversed    NumSharp 10.03 ms    NumPy  1.73 ms
+        //      a[:, ::-1]     columns          NumSharp  9.90 ms    NumPy  9.56 ms
+        //      a[..., ::-1]   channels         NumSharp  9.48 ms    NumPy 17.50 ms
+        //  The reversed rows are a NumPy-parity gap: every row is contiguous, and NumPy copies the view as one block per
+        //  row. The reversed inner axes are a speed target beyond NumPy (the SharpCV owner asked for the pin): OpenCV
+        //  makes the same copies with flip and its channel swap in 0.25-0.5 ms, which SharpCV now calls instead
+        //  (its ReversedLayoutCopy).
+        //  The fix: walk a negative-stride outer axis backwards over its contiguous inner blocks, and give a short
+        //  reversed inner axis (3 or 4 channels, reversed columns) a reversal kernel instead of the element gather.
+        // ============================================================================
+
+        /// <summary>
+        ///     Copying a view whose ROWS are reversed (<c>a[::-1]</c>, every row contiguous) costs about a contiguous copy,
+        ///     as in NumPy (1.73 ms against 1.48 ms for a 1080p uint8 frame). Today it is an element gather: 10.03 ms
+        ///     against 0.34 ms, 29 times NumSharp's own contiguous copy and 5.8 times NumPy's copy of the same view.
+        /// </summary>
+        /// <remarks>
+        ///     Two routes over the same bytes, timed in one process (as <see cref="ArrayOfStrings_CostsAboutASizedRequest"/>
+        ///     does), so the host's speed cancels out; the 3x limit leaves the row loop the room NumPy needs (1.17x). The copy
+        ///     is checked first, so a fast but wrong fix cannot pass.
+        /// </remarks>
+        [TestMethod, DoNotParallelize, OpenBugs(IssueUrl = "consumer-sharpcv-reversed-rows-copy")]
+        public void CopyOfReversedRows_CostsAboutAContiguousCopy()
+        {
+            using var frame = Frame1080();
+            using var reversed = frame["::-1"];
+            using (var copy = reversed.copy('C'))
+                np.array_equal(copy, reversed).Should().BeTrue("the copy is right; only its speed is pinned");
+
+            double contiguous = BestOfBatches(() => { using var c = frame.copy('C'); });
+            double rows = BestOfBatches(() => { using var c = reversed.copy('C'); });
+            (rows / contiguous).Should().BeLessThan(3.0,
+                $"a[::-1].copy() should cost about a contiguous copy ({contiguous:F3} ms), as in NumPy; it took {rows:F3} ms " +
+                "because a negative-stride view is copied element by element");
+        }
+
+        /// <summary>
+        ///     Copying a view whose COLUMNS or CHANNELS are reversed (<c>a[:, ::-1]</c>, and <c>a[..., ::-1]</c>, the BGR /
+        ///     RGB idiom) stays within a few contiguous copies, as OpenCV's flip and channel swap do (0.25-0.5 ms for a
+        ///     1080p uint8 frame). Today both gather element by element: 9.90 ms and 9.48 ms against 0.34 ms. NumPy is no
+        ///     faster (9.56 ms and 17.50 ms), so this pins a speed target beyond parity.
+        /// </summary>
+        /// <remarks>The same two-route ratio as <see cref="CopyOfReversedRows_CostsAboutAContiguousCopy"/>; the limit is
+        ///     4x a contiguous copy, which a reversal kernel meets with room to spare (OpenCV's are 0.7-1.5x).</remarks>
+        [TestMethod, DoNotParallelize, OpenBugs(IssueUrl = "consumer-sharpcv-reversed-inner-copy")]
+        public void CopyOfReversedColumnsOrChannels_CostsAFewContiguousCopies()
+        {
+            using var frame = Frame1080();
+            using var columns = frame[":, ::-1"];
+            using var channels = frame["..., ::-1"];
+            foreach (var view in new[] { columns, channels })
+            {
+                using var copy = view.copy('C');
+                np.array_equal(copy, view).Should().BeTrue("the copy is right; only its speed is pinned");
+            }
+
+            double contiguous = BestOfBatches(() => { using var c = frame.copy('C'); });
+            double reversedColumns = BestOfBatches(() => { using var c = columns.copy('C'); });
+            double reversedChannels = BestOfBatches(() => { using var c = channels.copy('C'); });
+            System.Math.Max(reversedColumns, reversedChannels).Should().BeLessThan(4 * contiguous,
+                $"a[:, ::-1] took {reversedColumns:F3} ms and a[..., ::-1] {reversedChannels:F3} ms against a contiguous " +
+                $"copy's {contiguous:F3} ms: a short reversed inner axis is copied element by element");
+        }
+
+        /// <summary>A 1080 x 1920 x 3 uint8 frame of varied values: the image these copies were measured on.</summary>
+        /// <returns>A new C-contiguous array the caller owns.</returns>
+        private static NDArray Frame1080()
+        {
+            using var values = np.arange(1080L * 1920 * 3);
+            using var wrapped = values % 251;
+            using var shaped = wrapped.reshape(1080, 1920, 3);
+            return shaped.astype(np.uint8);
         }
 
         /// <summary>Whether a public static <see cref="np"/> method of this name takes more than one axis.</summary>
