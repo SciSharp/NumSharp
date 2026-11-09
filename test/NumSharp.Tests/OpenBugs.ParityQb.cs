@@ -1392,5 +1392,35 @@ namespace NumSharp.Tests
             // NumPy 2.4.2: np.cumprod(t)[1].imag is +3.473028842108373e-17
             ((Complex)scan[1]).Imaginary.Should().Be(3.473028842108373e-17);
         }
+
+        // ------------------------------------------------------------------
+        // QB-51 — complex np.multiply over a single-element NpyIter iteration runs loop_scalar in NumPy
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>CDOUBLE_multiply</c> skips its <c>simd_cmul</c> body when the destination stride is 0, which
+        ///     NpyIter gives every operand of a single-element iteration (<c>nditer_constr.c</c>: <c>if (bshape == 1)
+        ///     strides[iop] = 0</c>), reached when the non-0-d operands differ in ndim (<c>try_trivial_single_output_loop</c>
+        ///     refuses) or an out of another shape is given: <c>np.multiply(t[0:1].reshape(1, 1), t[1:2])</c>,
+        ///     <c>(1,) * (1, 1, 1)</c>, a <c>(1, 1)</c> <c>out=</c>, and <c>np.multiply(a[0:1], a[1:2], out=a[1:2])</c> run the
+        ///     contracted <c>loop_scalar</c> (<c>im = fma(a.im, b.re, a.re*b.im)</c>): with <c>t = 2·sign([3-1j, 3+1j])</c> the
+        ///     product is <c>4-3.473028842108373e-17j</c>. NumSharp's <c>NDComplexMath.Multiply</c> is always the simd form
+        ///     and gives <c>4+3.47e-17j</c>. This confirms the open step 10 of docs/plans/numpy-polynomial-review.md ("probe
+        ///     NumSharp np.multiply on complex128 for (1,1) x (1,), (1,) x (1,1,1) and an in-place overlap … if they differ,
+        ///     it is a core fix"); QB-50 is the mirror case in cumprod. Equal-ndim one-element operands, a 0-d operand and
+        ///     broadcast-to-3 operands already match.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB51")]
+        public void ParityQb_QB51_ComplexMultiplyOfOneElementIteration_RunsLoopScalar()
+        {
+            using var signs = np.sign(np.array(new[] { new Complex(3, -1), new Complex(3, 1) }));
+            using var t = signs + signs;
+            using var left = t["0:1"].reshape(1, 1);
+            using var right = t["1:2"];
+            using var product = np.multiply(left, right);
+
+            // NumPy 2.4.2: np.multiply(t[0:1].reshape(1, 1), t[1:2]) is [[4-3.473028842108373e-17j]]
+            ((Complex)product[0, 0]).Imaginary.Should().Be(-3.473028842108373e-17);
+        }
     }
 }
