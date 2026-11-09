@@ -149,7 +149,11 @@ mapped memory ends. Two tools make it fail:
   of a transposed strided view, imag of a real F array — are regression tests), `OpenBugs.ErrorParity.cs`
   (regression pins only: the stacking family's empty-list texts, the moveaxis / rollaxis / swapaxes / squeeze AxisError
   texts, moveaxis' length mismatch as NumPy's ValueError), `OpenBugs.NaNOperandOrder.cs`, `OpenBugs.Surface.cs`,
-  `OpenBugs.MaSurface.cs`, `OpenBugs.Relayout.cs` (regression pins only: RL01–RL07 are fixed), `OpenBugs.ViewFlags.cs`.
+  `OpenBugs.MaSurface.cs`, `OpenBugs.Relayout.cs` (regression pins only: RL01–RL07 are fixed), `OpenBugs.ViewFlags.cs`,
+  `OpenBugs.Consumers.cs` (found by upgrading consumers to 0.80.0, deferred: `np.array(string[])` discovers its dtype per
+  value, about 10x a sized `<U` request, a same-process wall-clock ratio; 17 reductions take no tuple of axes, a
+  reflection probe). Their third finding, NDW003 on a `double[]` / `int[]` / `string[]` return, is
+  `GateAnalyzerTests.ManagedArrayReturns_AreNotGated` in `NumSharp.Tests.Build.Analyzer`.
 - The LIFETIME OpenBugs (lost GC anchors) live in the Oracle project, because the bug exists only in optimized code and
   needs the lifetime child process (`oracle.md`): none is open; a new open gap gets a `Lifetime_LT<nn>_*` test beside the
   aggregate `Lifetime_KnownGaps` (and `LifetimeOracleTests.Scaled.cs`'s `LifetimeScaled_KnownGaps`).
