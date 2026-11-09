@@ -1,6 +1,6 @@
 # NumPy ↔ NumSharp API coverage
 
-This directory is the reproducible source for NumSharp's public API coverage artifact. It compares the public exports of pinned NumPy **2.4.2** with the public surface of the compiled NumSharp assembly.
+This directory is the reproducible source for NumSharp's public API coverage artifact. It compares the public exports of pinned NumPy **2.5.4** (`numpy-version.txt` at the repository root, the one place the release is written) with the public surface of the compiled NumSharp assembly.
 
 The NumSharp surfaces are **discovered, not hardcoded**: `NumSharp.Tools.ApiInventory` reflects every public type in `NumSharp.Core` annotated with `[ModuleName("...")]` — `np` itself, `NDArray` (`"ndarray"`), and each function-namespace facade (`"np.random"` on `NumPyRandom`, `"np.fft"` on `FourierModule`, `"np.linalg"` on the nested `np.linalg` class). A new module facade joins the artifact by annotation alone; the generator fails loudly if a compared NumPy surface has no annotated host. Single-object DSL exports (`np.r_`, `np.s_`, `np.mgrid`, …) take no attribute — NumPy exports each as one object, so the property on `np` is already the whole coverage row.
 
@@ -64,9 +64,9 @@ A protocol NumPy fills only to refuse every call (`REFUSED_PROTOCOLS`: `del a[i]
 
 ### NumPy 1.x compatibility APIs
 
-APIs NumPy 2.4.2 still ships but has itself deprecated, kept only so NumPy 1.x code keeps working, are left out (`COMPAT_EXCLUDED_APIS`): `numpy.matlib` (PendingDeprecationWarning on import since 1.19; a scanned family in generator 1.13.0) and `numpy.typing.NBitBase` (deprecated in 2.3). NumSharp's port of such an API (`np.typing.NBitBase`, kept `[Obsolete]` like NumPy's) is NumPy's API, not a NumSharp-only extension, so it gets no row of either kind (`lists_as_numsharp_only`). Two guards hold every row to the pin:
-- `test_every_catalogued_row_names_an_api_of_the_pinned_numpy` resolves every NumPy row on NumPy 2.4.2 (an instance-only member on its object surface's sample instance);
-- `test_no_catalogued_row_is_an_api_numpy_deprecated` fails on a row that warns when reached or whose documentation deprecates the API as a whole (`deprecation_scope`: a `.. deprecated::` directive before the first section; one under a parameter, as for `numpy.fft.fft2`'s `s`, deprecates a use). The rows kept anyway are listed with reasons in `KEPT_DEPRECATED_APIS`: `numpy.random.random_integers` and `RandomState.random_integers` (deprecated since 1.11, headline rows NumSharp implements) and two hidden `numpy.testing` helpers.
+APIs NumPy 2.5.4 still ships but has itself deprecated, kept only so NumPy 1.x code keeps working, are left out (`COMPAT_EXCLUDED_APIS`): `numpy.matlib` (PendingDeprecationWarning on import since 1.19; a scanned family in generator 1.13.0) and `numpy.typing.NBitBase` (deprecated in 2.3). NumSharp's port of such an API (`np.typing.NBitBase`, kept `[Obsolete]` like NumPy's) is NumPy's API, not a NumSharp-only extension, so it gets no row of either kind (`lists_as_numsharp_only`). Two guards hold every row to the pin:
+- `test_every_catalogued_row_names_an_api_of_the_pinned_numpy` resolves every NumPy row on the pinned NumPy (an instance-only member on its object surface's sample instance);
+- `test_no_catalogued_row_is_an_api_numpy_deprecated` fails on a row that warns when reached or whose documentation deprecates the API as a whole (`deprecation_scope`: a `.. deprecated::` directive before the first section; one under a parameter, as for `numpy.fft.fft2`'s `s`, deprecates a use). The rows kept anyway are listed with reasons in `KEPT_DEPRECATED_APIS`: `numpy.random.random_integers` and `RandomState.random_integers` (deprecated since 1.11, headline rows NumSharp implements), two hidden `numpy.testing` helpers, and the APIs NumPy 2.5 deprecated that NumSharp implements, so the pin does not move the headline denominator: `numpy.fix`, `numpy.typename`, `numpy.ma.round_`, `numpy.char.array` / `asarray`, and `numpy.char.chararray` (an entry keeps every row under it, the class's members included).
 
 Generator 1.14.0 added 1,904 shown rows this way (1,793 Python protocols, 158 of them provided; 923 scalar-type members; 26 members of other classes) and left out 10 compatibility rows; the expanded scope is 1,449 of 4,844 APIs (29.9%; 1,291 of 2,952 before), the headline unchanged.
 
@@ -158,12 +158,12 @@ At generator 1.16.0: headline **243 / 560** APIs have NumPy's exact signature (4
 
 The 8 unprobed rows are rows the gap map does not compare, for three reasons: an alias credit whose NumPy name has no C# spelling (`numpy.cumulative_sum`, `cumulative_prod`, `round`, `row_stack`: mark N already says the call does not compile); a member NumPy's class defines itself while the C# type inherits it (`numpy.char.chararray.argsort`, `numpy.matrix.tolist`: the gap map compares the inherited member under its base group only); and two `numpy.random.RandomState` methods the gap map has no group for (`seed`, whose `numpy.random.seed` is another function, and `tomaxint`, which `numpy.random` does not export).
 
-Gates: `test_signature_parity.py` (31 tests: the comparison rules against NumPy 2.4.2's real signatures, the gap-map join on synthetic maps, and the committed `docs/plans/numpy-signature-diff.csv`, whose groups must map and whose probe findings must split; planted bugs: 20 of 20 in the comparison and 20 of 20 in the join fail it), `test_object_surfaces.py` (schema 7 lists every overload of every method, with its parameters) and the signature cases of `test_dashboard.cjs` (21 of 22 planted bugs fail them; the survivor removes an early return whose result the fall-through produces anyway).
+Gates: `test_signature_parity.py` (31 tests: the comparison rules against the pinned NumPy's real signatures, the gap-map join on synthetic maps, and the committed `docs/plans/numpy-signature-diff.csv`, whose groups must map and whose probe findings must split; planted bugs: 20 of 20 in the comparison and 20 of 20 in the join fail it), `test_object_surfaces.py` (schema 7 lists every overload of every method, with its parameters) and the signature cases of `test_dashboard.cjs` (21 of 22 planted bugs fail them; the survivor removes an early return whose result the fall-through produces anyway).
 
 ## Generate or verify
 
 ```bash
-python -m pip install numpy==2.4.2
+python -m pip install "numpy==$(cat numpy-version.txt)"
 python coverage/generate_coverage.py
 python coverage/generate_coverage.py --check
 python coverage/audit_documentation.py
@@ -171,7 +171,7 @@ python -m unittest discover -s coverage -p 'test_*.py'
 node --test coverage/test_dashboard.cjs
 ```
 
-The generator builds the reflection inventory tool and, for signature parity, runs the gap map's tools on the same tree (a `NumSharp.Core` Debug build and two compile-probe builds, about 80 seconds): it needs the .NET 10 SDK besides NumPy 2.4.2, as the docs workflow provides.
+The generator builds the reflection inventory tool and, for signature parity, runs the gap map's tools on the same tree (a `NumSharp.Core` Debug build and two compile-probe builds, about 80 seconds): it needs the .NET 10 SDK besides the pinned NumPy, as the docs workflow provides.
 
 Generated, reviewable outputs live in gitignored `coverage/generated/`:
 

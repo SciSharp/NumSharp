@@ -30,7 +30,9 @@ from object_surfaces import (OBJECT_SURFACE_PATHS, OBJECT_SURFACES, SIGNATURE_UN
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PINNED_NUMPY_VERSION = "2.4.2"
+# The NumPy release the inventory is generated with: the repository's one pin (numpy-version.txt), which the corpus
+# generators (test/oracle/numpy_pin.py), the workflows and the C# tests read too.
+PINNED_NUMPY_VERSION = (ROOT / "numpy-version.txt").read_text(encoding="utf-8").strip()
 GENERATOR_VERSION = "1.16.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
@@ -52,7 +54,7 @@ MANIPULATION = {
     "atleast_3d", "block", "broadcast_arrays", "broadcast_to", "column_stack", "concat",
     "concatenate", "delete", "dsplit", "dstack", "expand_dims", "flip", "fliplr", "flipud",
     "hsplit", "hstack", "insert", "matrix_transpose", "moveaxis", "pad", "permute_dims",
-    "ravel", "repeat", "reshape", "resize", "roll", "rollaxis", "rot90", "row_stack",
+    "ravel", "repeat", "reshape", "resize", "roll", "rollaxis", "rot90",
     "split", "squeeze", "stack", "swapaxes", "tile", "transpose", "trim_zeros", "unstack",
     "vsplit", "vstack"
 }
@@ -202,6 +204,9 @@ COMPAT_EXCLUDED_APIS = {
 
 # Catalogued APIs NumPy documents as deprecated as a whole, kept in the catalog on purpose, each with the
 # reason. The deprecation guard (test_catalog) accepts exactly these; every other deprecated row fails it.
+# An entry keeps everything under it too (kept_deprecated), as a COMPAT_EXCLUDED_APIS entry leaves out
+# everything under it: numpy.char.chararray stands for the class and each of its member rows, which NumPy 2.5
+# deprecates together (reaching any of them warns).
 KEPT_DEPRECATED_APIS = {
     "numpy.random.random_integers": ("Deprecated since NumPy 1.11 (use randint), but a numpy.random headline "
                                      "export that NumSharp implements and the oracle verifies; removing it "
@@ -212,6 +217,21 @@ KEPT_DEPRECATED_APIS = {
                                    "(IGNORED_DASHBOARD_ROOTS)."),
     "numpy.testing.suppress_warnings": ("Deprecated in NumPy 2.4; numpy.testing is catalogued but never "
                                         "shown (IGNORED_DASHBOARD_ROOTS)."),
+    "numpy.fix": ("Deprecated in NumPy 2.5 (gh-30644: use numpy.trunc, which rounds the same way), but a "
+                  "headline export NumSharp implements (Math/np.fix.cs); kept as random_integers is, so the "
+                  "NumPy 2.5.4 pin does not move the headline denominator. Owner's call to leave it out."),
+    "numpy.typename": ("Deprecated in NumPy 2.5 (gh-30774: use numpy.dtype.name); a headline export NumSharp "
+                       "implements (Creation/np.typename.cs), kept with numpy.fix."),
+    "numpy.ma.round_": ("Deprecated in NumPy 2.5 (gh-30738: use numpy.ma.round); NumSharp's np.ma.round_ is "
+                        "np.ma.round's other spelling, kept with numpy.fix."),
+    "numpy.char.array": ("Deprecated in NumPy 2.5 (gh-30802: use numpy.array with a string or bytes dtype); "
+                         "NumSharp's np.char.array builds an NDCharArray, kept with numpy.char.chararray."),
+    "numpy.char.asarray": ("Deprecated in NumPy 2.5 (gh-30802: use numpy.asarray with a string or bytes "
+                           "dtype); kept with numpy.char.array."),
+    "numpy.char.chararray": ("Deprecated in NumPy 2.5 (gh-30605: use an ndarray with a string or bytes dtype), "
+                             "but ported whole as NumSharp's NDCharArray; the entry keeps the class and every "
+                             "member row, so the NumPy 2.5.4 pin does not drop the rows it credits. Owner's "
+                             "call to leave it out."),
 }
 
 
@@ -222,6 +242,19 @@ def compat_excluded(api_id: str) -> bool:
     :returns: True when the id is a COMPAT_EXCLUDED_APIS entry or a member of one.
     """
     return any(within_namespace(api_id, excluded) for excluded in COMPAT_EXCLUDED_APIS)
+
+
+def kept_deprecated(api_id: str) -> bool:
+    """Tell whether a catalog id lies in a deprecated NumPy API the catalog keeps on purpose.
+
+    The deprecation guard (test_catalog) reads it: a row NumPy deprecates fails the guard unless an entry of
+    KEPT_DEPRECATED_APIS is the row itself or a namespace above it, so one class entry keeps the member rows its
+    deprecation warns on too.
+
+    :param api_id: a catalog id (``numpy.char.chararray.upper``).
+    :returns: True when the id is a KEPT_DEPRECATED_APIS entry or a member of one.
+    """
+    return any(within_namespace(api_id, kept) for kept in KEPT_DEPRECATED_APIS)
 
 
 _SECTION_UNDERLINE = re.compile(r"^\s*([-=~^])\1{2,}\s*$")
@@ -1996,7 +2029,7 @@ def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]
             "object_members": "Object members match only their explicit NumSharp owner type. Inherited members and ufunc protocols are catalogued per owner; NumPy's scalar types and the other public classes list each member once, at the class that defines it. A Python protocol is credited by a NumSharp member of its own name, the C# operator, indexer or cast of the same meaning, or a reviewed adapter. Namespace namesakes never confer support. Protocol existence does not imply applicability to every ufunc or object.",
             "availability_note": "Compiled API availability is distinct from fully verified behavioral parity.",
             "case_sensitivity": "NumPy API names are matched case-sensitively for parity. Case-insensitive near-misses are detected and reported (row field 'case_insensitive_matches'; the 'Case-insensitive near-misses' section of summary.md) but never counted as available.",
-            "oracle": "Behavioral parity evidence: committed NumPy 2.4.2 oracle contracts (the differential-fuzz corpus plus the .npy, flags and layout oracles), each replayed against NumSharp in CI and required to be bit-exact or a documented, registry-excused divergence. Contracts resolve to rows through coverage/oracle_map.json; a row is oracle-verified when it is credited and has direct contracts, an identity alias (same NumPy object, same NumSharp member) or a reviewed pure-delegation alias. Host-pinned contracts are hard-gated only on the pinned host.",
+            "oracle": f"Behavioral parity evidence: committed NumPy {PINNED_NUMPY_VERSION} oracle contracts (the differential-fuzz corpus plus the .npy, flags and layout oracles), each replayed against NumSharp in CI and required to be bit-exact or a documented, registry-excused divergence. Contracts resolve to rows through coverage/oracle_map.json; a row is oracle-verified when it is credited and has direct contracts, an identity alias (same NumPy object, same NumSharp member) or a reviewed pure-delegation alias. Host-pinned contracts are hard-gated only on the pinned host.",
             "signature": "Signature parity (row field 'signature', coverage/signature_parity.py + coverage/signature_gap.py): every credited API's NumPy signature against every C# spelling of it, joined from the API diff gap map of tools/api-parameter-parity (docs/plans/API_DIFF_GAP.md), which the generator runs on the tree: a reflection dump of every module facade and exported type, NumPy's runtime signatures completed from its .pyi stubs and numpydoc sections, and a compile probe of NumPy-style calls at C# 12 and C# 14. Identical = no mark. Marks: M a NumPy parameter no overload offers (a rename counts; M-weak: only parameters the parity plan excludes, which is not a difference), X a parameter NumPy does not have, O more than one overload, T a dtype as NPTypeCode / Type or picked by a generic type argument, B a NumPy-style call that does not compile, L null refused where NumPy's default is None (weak: only Shape refuses null and default binds), Q an integer sequence refused where NumPy's stubs allow one, N credited through another name. Spellings: module functions, members, constructors (NumPy's class call), extension methods and the typed NDArray<T>. A credited row the gap map does not compare keeps the inventory's own reflection comparison (source 'inventory', not compile-probed). Python protocols spelled as operators, indexers or casts are not compared.",
         },
         "oracle": oracle,

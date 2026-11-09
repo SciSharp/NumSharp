@@ -1,4 +1,4 @@
-"""Regression gate for object-member inventory (NumPy 2.4.2 + built inventory tool).
+"""Regression gate for object-member inventory (the pinned NumPy of numpy-version.txt + built inventory tool).
 
 Run after building NumSharp.Tools.ApiInventory:
     python -m unittest discover -s coverage -p test_object_surfaces.py
@@ -19,6 +19,7 @@ from pathlib import Path
 import numpy as np
 
 import generate_coverage as coverage
+from generate_coverage import PINNED_NUMPY_VERSION
 from numpy_documentation import documentation_url
 from object_surfaces import (REFUSED_PROTOCOLS, REVIEWED_PROTOCOL_ADAPTERS, class_member_rows,
                              enrich_object_classes, object_surface_rows, protocol_credit, ufunc_method_rejection,
@@ -38,8 +39,8 @@ def signature(obj, name):
 class ObjectSurfaceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if np.__version__ != "2.4.2":
-            raise RuntimeError("Object inventory tests require NumPy 2.4.2.")
+        if np.__version__ != PINNED_NUMPY_VERSION:
+            raise RuntimeError(f"Object inventory tests require NumPy {PINNED_NUMPY_VERSION} (numpy-version.txt).")
         completed = subprocess.run(
             ["dotnet", "run", "--project", str(ROOT / "coverage/NumSharp.Tools.ApiInventory"),
              "--configuration", "Release", "--framework", "net8.0", "--no-build", "--no-restore"],

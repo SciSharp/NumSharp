@@ -167,7 +167,7 @@ class CatalogTests(unittest.TestCase):
         """The catalog covers every name NumPy's documentation index lists and the pin defines.
 
         The reverse of audit_documentation.py, which only proves that each row's link exists: here every
-        ``numpy.*`` name in the offline documentation snapshot that resolves on NumPy 2.4.2 must have a
+        ``numpy.*`` name in the offline documentation snapshot that resolves on the pinned NumPy (2.5.4) must have a
         row, its documented alias (numpy_documentation.API_ALIASES), or a row for the same object under
         another spelling (numpy.lib.scimath.sqrt IS numpy.emath.sqrt; numpy.ma.masked_array.T is the
         MaskedArray member). Names the documentation lists only for a newer NumPy do not resolve and are
@@ -374,7 +374,7 @@ class CatalogTests(unittest.TestCase):
 
 
     def test_every_catalogued_row_names_an_api_of_the_pinned_numpy(self):
-        """Every NumPy row resolves on NumPy 2.4.2: each catalogued API exists on the pin.
+        """Every NumPy row resolves on the pinned NumPy (2.5.4): each catalogued API exists on the pin.
 
         A member set in __init__ (finfo.bits, Polynomial.coef, format_parser.dtype) exists only on an instance,
         so an id whose owner is an object surface is also looked up on that surface's sample instance.
@@ -403,7 +403,9 @@ class CatalogTests(unittest.TestCase):
         reached, and a whole-API ``.. deprecated::`` directive in its documentation (deprecation_scope). A
         directive about one parameter (numpy.fft.fft2's ``s`` without ``axes``) deprecates a use, not the API.
         A row added for a deprecated API fails here until it is left out (COMPAT_EXCLUDED_APIS) or kept with
-        a reason; a kept entry that is no longer deprecated (or no longer catalogued) fails too.
+        a reason; a kept entry that is no longer deprecated (or no longer catalogued) fails too. A kept entry
+        covers the rows under it (coverage.kept_deprecated: numpy.char.chararray keeps its member rows, which
+        NumPy 2.5 deprecates with the class), and is itself flagged or stands above a flagged row.
         """
         flagged = {}
         for row in self.catalog:
@@ -415,7 +417,13 @@ class CatalogTests(unittest.TestCase):
             elif found and has_own_documentation(self.np, obj) and \
                     coverage.deprecation_scope(inspect.getdoc(obj)) == "api":
                 flagged[row["id"]] = "documented as deprecated"
-        self.assertEqual(sorted(coverage.KEPT_DEPRECATED_APIS), sorted(flagged), flagged)
+        # Both directions: every deprecated row lies in a kept entry, and every kept entry still keeps a
+        # deprecated row (an entry NumPy no longer deprecates, or no row stands for any more, is stale).
+        uncovered = {api_id: why for api_id, why in flagged.items() if not coverage.kept_deprecated(api_id)}
+        stale = sorted(kept for kept in coverage.KEPT_DEPRECATED_APIS
+                       if not any(coverage.within_namespace(api_id, kept) for api_id in flagged))
+        self.assertEqual({}, uncovered, "deprecated rows neither left out nor kept with a reason")
+        self.assertEqual([], stale, "kept entries that no longer keep a deprecated row")
 
     def test_compat_excluded_apis_are_numpy_deprecations_on_the_pin(self):
         """Each API the catalog leaves out exists on the pin and is deprecated by NumPy itself.

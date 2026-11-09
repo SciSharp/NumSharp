@@ -551,7 +551,7 @@ def ufunc_protocol_methods(np: Any) -> tuple[str, ...]:
     catalogued once as a ``numpy.ufunc.<name>`` object member.
 
     :param np: the imported, version-pinned ``numpy`` module.
-    :returns: the method names, sorted; at NumPy 2.4.2 ``("accumulate", "at", "outer",
+    :returns: the method names, sorted; at NumPy 2.5.4 (as at 2.4.2) ``("accumulate", "at", "outer",
         "reduce", "reduceat", "resolve_dtypes")``.
     """
     # getattr_static reads the descriptor on the type: a method descriptor is callable,

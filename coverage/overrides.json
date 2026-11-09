@@ -49,10 +49,6 @@
       "target": "NumSharp.np.round_",
       "notes": "NumSharp names it round_, NumPy 1.x's spelling (NumPy 2.0 removed np.round_); nothing named round exists on np to collide with, so np.round(x) simply does not compile yet (signature mark N)."
     },
-    "numpy.row_stack": {
-      "target": "NumSharp.np.vstack",
-      "notes": "NumPy documents row_stack as an alias of vstack."
-    },
     "numpy.shape": {
       "target": "NumSharp.NDArray.Shape",
       "notes": "NumSharp exposes shape as an NDArray Shape property rather than the top-level NumPy tuple-returning helper."
