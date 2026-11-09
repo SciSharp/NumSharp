@@ -1796,5 +1796,68 @@ namespace NumSharp.Tests
             using var chain = np.linalg.multi_dot(stack);
             chain.GetDouble(1, 1).Should().Be(31.0);
         }
+
+        // ------------------------------------------------------------------
+        // QB-62 — count parameters declared int refuse NumPy's a.shape[i] / a.size, which are long here
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's commonest size idiom passes an array's extent or size as a count: <c>np.eye(a.shape[0])</c>,
+        ///     <c>np.identity(a.shape[0])</c>, <c>np.tri(a.shape[0])</c>, <c>np.tril_indices(a.shape[0])</c>,
+        ///     <c>np.diag_indices(a.shape[0])</c>, <c>np.array_split(a, a.shape[0])</c>, <c>np.split(a, a.shape[0])</c>,
+        ///     <c>np.bincount(x, minlength=a.size)</c>, <c>np.vander(x, a.shape[0])</c>, <c>np.tile(a, a.shape[0])</c>,
+        ///     <c>np.fft.fft(x, a.size)</c>. NumSharp's <c>a.shape</c> is <c>long[]</c> and <c>a.size</c> a <c>long</c>,
+        ///     while these count parameters are declared <c>int</c> (<c>int?</c> for fft's <c>n</c>, <c>params int[]</c> for
+        ///     tile's reps), and <c>long</c> has no implicit conversion to <c>int</c>: every one of these idioms is a
+        ///     compile error (CS1503) where NumPy computes, and the port needs an <c>(int)</c> cast at each site. The
+        ///     count-taking functions that already declare a <c>long</c> (np.zeros / ones / full / arange / linspace /
+        ///     logspace / geomspace / histogram_bin_edges' bins / partition / argpartition / take / roll, and np.random's
+        ///     permutation / rand / randn / choice / randint) bind the same idiom (q228). The runtime binder
+        ///     (<c>dynamic</c>) repeats the compile-time overload resolution, so each missing binding is asserted at run
+        ///     time; the test stops at the first function that still refuses.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB62")]
+        public void ParityQb_QB62_CountParameters_BindALongExtent()
+        {
+            using var a = np.arange(6.0).reshape(2, 3);
+            using var x = np.arange(3.0);
+            using var labels = np.array(new long[] { 0, 1 });
+            // NumPy's a.shape[0] and a.size are Python ints; NumSharp's are long (2 and 6 here). dynamic routes each call
+            // through the same overload resolution the compiler runs on the typed long.
+            dynamic rows = a.shape[0];
+            dynamic size = a.size;
+
+            // NumPy 2.4.2: np.eye(a.shape[0]).shape, np.identity(a.shape[0]).shape and np.tri(a.shape[0]).shape are (2, 2)
+            using NDArray eye = np.eye(rows);
+            eye.shape.Should().Equal(2L, 2L);
+            using NDArray identity = np.identity(rows);
+            identity.shape.Should().Equal(2L, 2L);
+            using NDArray tri = np.tri(rows);
+            tri.shape.Should().Equal(2L, 2L);
+
+            // NumPy 2.4.2: np.tril_indices(a.shape[0])[0] is [0, 1, 1]; np.diag_indices(a.shape[0])[0] is [0, 1]
+            NDArray[] tril = np.tril_indices(rows);
+            tril[0].size.Should().Be(3L);
+            NDArray[] diag = np.diag_indices(rows);
+            diag[0].size.Should().Be(2L);
+
+            // NumPy 2.4.2: np.array_split(a, a.shape[0]) and np.split(a, a.shape[0]) give two (1, 3) pieces
+            NDArray[] pieces = np.array_split(a, rows);
+            pieces.Length.Should().Be(2);
+            NDArray[] halves = np.split(a, rows);
+            halves.Length.Should().Be(2);
+
+            // NumPy 2.4.2: np.bincount([0, 1], minlength=a.size) has 6 bins; np.vander(x, a.shape[0]).shape is (3, 2);
+            // np.tile(a, a.shape[0]).shape is (2, 6); np.fft.fft(a.ravel(), a.size).shape is (6,)
+            using NDArray counts = np.bincount(labels, minlength: size);
+            counts.size.Should().Be(6L);
+            using NDArray vander = np.vander(x, rows);
+            vander.shape.Should().Equal(3L, 2L);
+            using NDArray tiled = np.tile(a, rows);
+            tiled.shape.Should().Equal(2L, 6L);
+            using var flat = a.ravel();
+            using NDArray spectrum = np.fft.fft(flat, size);
+            spectrum.shape.Should().Equal(6L);
+        }
     }
 }
