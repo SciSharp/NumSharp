@@ -905,5 +905,29 @@ namespace NumSharp.Tests
             power.dtype.Should().Be(np.int8);
             floor.dtype.Should().Be(np.int8);
         }
+
+        // ------------------------------------------------------------------
+        // QB-31 — iterating an empty array whose FIRST axis is not empty yields nothing
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2 iterates an ndarray along its first axis whatever its size: <c>list(np.zeros((3, 0)))</c> holds
+        ///     three empty (0,) rows and <c>len(list(np.zeros((2, 0, 4))))</c> is 2. NumSharp's <c>NDArray.GetEnumerator</c>
+        ///     returns an empty enumerator for any array of size 0 (<c>if (... Shape.size == 0) return _empty()</c>), so a
+        ///     <c>foreach</c> over a (3, 0) array never runs its body and LINQ's <c>Cast&lt;object&gt;().Count()</c> is 0. Only
+        ///     a first axis of length 0 (<c>(0, 3)</c>, <c>(0,)</c>) iterates zero times in NumPy.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB31")]
+        public void ParityQb_QB31_IteratingAnEmptyArray_YieldsItsFirstAxisRows()
+        {
+            using var a = np.zeros(new Shape(3, 0));
+
+            int rows = 0;
+            foreach (var row in a)
+                rows++;
+
+            // NumPy 2.4.2: len(list(np.zeros((3, 0)))) == 3
+            rows.Should().Be(3);
+        }
     }
 }
