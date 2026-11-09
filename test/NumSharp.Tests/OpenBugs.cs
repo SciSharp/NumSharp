@@ -2636,5 +2636,30 @@ namespace NumSharp.Tests
             Action act = () => np.mintypecode(new object[] { explicitZeroDim }, "Ud");
             act.Should().Throw<ValueError>().WithMessage("substring not found");
         }
+
+        /// <summary>
+        ///     A text → <c>np.longdouble</c> cast runs NumPy's own long-double parser, not Python's <c>float()</c>: every string
+        ///     class (<c>S</c>, <c>U</c>, <c>StringDType</c>) goes through <c>NumPyOS_ascii_strtold</c> and requires the WHOLE
+        ///     text to parse, so surrounding whitespace and digit-group underscores are refused, and a refusal is
+        ///     <c>ValueError: invalid literal for long double: &lt;text&gt;</c> (<c>StringDType</c>'s loop appends
+        ///     <c>strerror(errno)</c>: <c>" (No error)"</c> on Windows). NumSharp's <c>longdouble</c> class shares the float64
+        ///     lane and casts text through the float64 route, so <c>' 1.5 '</c> is 1.5, <c>'1_0'</c> is 10.0 and <c>'abc'</c>
+        ///     raises <c>could not convert string to float</c>. NumPy 2.4.2 and 2.5.4 agree (probed 2026-11-09 during the 2.5.4
+        ///     bump, which found it); not a 2.5 change.
+        /// </summary>
+        [TestMethod]
+        [OpenBugs]
+        public void TextToLongDouble_RunsNumPysStrtoldParser()
+        {
+            var T = np.dtypes.StringDType();
+            Action uAbc = () => np.array(new[] { "abc" }).astype(np.longdouble);
+            uAbc.Should().Throw<ValueError>().WithMessage("invalid literal for long double: abc");
+            Action tAbc = () => np.array(new[] { "abc" }, T).astype(np.longdouble);
+            tAbc.Should().Throw<ValueError>().WithMessage("invalid literal for long double: abc (No error)");
+            Action uSpaced = () => np.array(new[] { " 1.5 " }).astype(np.longdouble);
+            uSpaced.Should().Throw<ValueError>().WithMessage("invalid literal for long double:  1.5 ");
+            Action uGrouped = () => np.array(new[] { "1_0" }).astype(np.longdouble);
+            uGrouped.Should().Throw<ValueError>().WithMessage("invalid literal for long double: 1_0");
+        }
     }
 }

@@ -324,10 +324,8 @@ public class SelectionTests
     [TestMethod]
     public void Take_OutParam_DtypeCast_FillsWithCastedValues()
     {
-        // NumPy out= permits unsafe writeback IF the source's dtype can be safely
-        // cast back from out's dtype (i.e. can_cast(out, src, "safe") = True).
-        // src=float64, out=int32 satisfies that direction (int32→float64 is safe),
-        // so the writeback truncates values into int32.
+        // NumPy's take writes into any out dtype through an unsafe writeback (NumPy 2.5's FORCECAST; a float source into
+        // an int out only warns that the kinds differ), so the writeback truncates values into int32.
         var a = np.array(new double[] { 10.7, 20.5, 30.0 });
         var outInt = np.zeros<int>(new int[] { 2 });
         np.take(a, np.array(new int[] { 0, 2 }), @out: outInt);
@@ -1007,16 +1005,19 @@ public class SelectionTests
         np.ravel(r).ToArray<int>().Should().Equal(1, 2, 5, 6);
     }
 
+    /// <summary>
+    ///     compress rides take's out: since NumPy 2.5 an out of a wider dtype is written through the writeback (NumPy 2.4
+    ///     checked the wrong direction, out → source under 'safe', and raised <c>Cannot cast array data from
+    ///     dtype('int64') to dtype('int32') according to the rule 'safe'</c> here).
+    /// </summary>
     [TestMethod]
-    public void Compress_OutDispatch_UnsafeCastDirection_Raises()
+    public void Compress_OutDispatch_WiderOut_IsWritten()
     {
-        // out.dtype int64 cannot be safely cast to src.dtype int32 — NumPy
-        // raises TypeError with this exact message.
         var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
         var outArr = np.zeros(new Shape(2, 2), NPTypeCode.Int64);
-        var action = () => np.compress(np.array(new bool[] { true, false, true }), a, axis: 0, @out: outArr);
-        action.Should().Throw<TypeError>()
-            .WithMessage("Cannot cast array data from dtype('int64') to dtype('int32') according to the rule 'safe'");
+        var r = np.compress(np.array(new bool[] { true, false, true }), a, axis: 0, @out: outArr);
+        ReferenceEquals(r, outArr).Should().BeTrue("NumPy returns the out itself");
+        outArr.ToArray<long>().Should().Equal(1L, 2L, 5L, 6L);
     }
 
     [TestMethod]

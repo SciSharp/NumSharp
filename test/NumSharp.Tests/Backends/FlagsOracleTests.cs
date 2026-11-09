@@ -1208,14 +1208,15 @@ namespace NumSharp.Tests.Backends
             ((Action)(() => np.matmul(m, m, @out: Ro(new Shape(4, 4)))))
                 .Should().Throw<ValueError>().WithMessage("output array is read-only");
 
-            // take — shape error FIRST, castability second, read-only LAST with take's own text.
+            // take — shape error FIRST, read-only LAST with take's own text. NumPy 2.5 dropped the cast check between them
+            // (FORCECAST: a complex out of float data is copied, then refused as read-only).
             var idx = np.array(new long[] { 0, 1, 2, 3, 4, 5 });
             ((Action)(() => np.take(a, idx, @out: Ro(new Shape(6)))))
                 .Should().Throw<ValueError>().WithMessage("WRITEBACKIFCOPY base is read-only");
             ((Action)(() => np.take(a, idx, @out: Ro(new Shape(9)))))
                 .Should().Throw<ArgumentException>().WithMessage("*output array does not match result of ndarray.take*");
             ((Action)(() => np.take(a, idx, @out: Ro(new Shape(6), NPTypeCode.Complex))))
-                .Should().Throw<TypeError>().WithMessage("*Cannot cast array data from dtype('complex128')*");
+                .Should().Throw<ValueError>().WithMessage("WRITEBACKIFCOPY base is read-only");
 
             // compress rides take's out dispatch — same writeback wording.
             var cond = np.array(new[] { true, true, true, true, true, true });
