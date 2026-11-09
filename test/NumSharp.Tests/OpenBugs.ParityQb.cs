@@ -1809,7 +1809,9 @@ namespace NumSharp.Tests
         ///     <c>np.fft.fft(x, a.size)</c>. NumSharp's <c>a.shape</c> is <c>long[]</c> and <c>a.size</c> a <c>long</c>,
         ///     while these count parameters are declared <c>int</c> (<c>int?</c> for fft's <c>n</c>, <c>params int[]</c> for
         ///     tile's reps), and <c>long</c> has no implicit conversion to <c>int</c>: every one of these idioms is a
-        ///     compile error (CS1503) where NumPy computes, and the port needs an <c>(int)</c> cast at each site. The
+        ///     compile error (CS1503) where NumPy computes, and the port needs an <c>(int)</c> cast at each site; so are
+        ///     <c>np.hsplit</c> / <c>np.vsplit</c> / <c>np.dsplit</c> with an extent count or a <c>long[]</c> of split points,
+        ///     <c>np.linalg.matrix_power(m, m.shape[0])</c> and <c>np.diff(x, a.shape[0])</c> (q230). The
         ///     count-taking functions that already declare a <c>long</c> (np.zeros / ones / full / arange / linspace /
         ///     logspace / geomspace / histogram_bin_edges' bins / partition / argpartition / take / roll, and np.random's
         ///     permutation / rand / randn / choice / randint) bind the same idiom (q228). The runtime binder
