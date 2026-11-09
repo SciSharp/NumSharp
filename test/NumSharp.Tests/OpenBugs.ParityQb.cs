@@ -929,5 +929,35 @@ namespace NumSharp.Tests
             // NumPy 2.4.2: len(list(np.zeros((3, 0)))) == 3
             rows.Should().Be(3);
         }
+
+        // ------------------------------------------------------------------
+        // QB-32 — a Python list spelled as a C# object[] is refused by every array_like parameter but np.array / asanyarray
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2 accepts a Python list wherever it takes an array_like: <c>np.asarray([1, 2.5])</c>,
+        ///     <c>np.sum([1, 2.5])</c>, <c>np.add([1, 2], [0.5, 1])</c>, <c>np.sort([3, 1.5, 2])</c>, …. NumSharp's spelling of
+        ///     a Python list is an <c>object[]</c> (the library-wide trap: "an object[] (a Python list) needs its own
+        ///     overload"), and only <c>np.array</c> / <c>np.asanyarray</c> read it as one. Every other function receives it
+        ///     through the implicit <c>Array → NDArray</c> conversion (<c>UnmanagedStorage.FromManagedArray</c>), which runs
+        ///     the list walk for an <c>NDArray[]</c> but not for an <c>object[]</c>, and throws
+        ///     <c>NotSupportedException: Cannot interpret 'System.Object' as a data type</c>: np.asarray, ascontiguousarray,
+        ///     asfortranarray, asarray_chkfinite, copy, require, sum, mean, max, argmax, sort, unique, isin, diff, cumsum,
+        ///     clip, where, add, dot, reshape, transpose, ravel and size all refuse <c>new object[] { 1, 2.5 }</c>.
+        ///     (Through a <c>params</c> parameter, np.atleast_1d / atleast_2d, the lone <c>object[]</c> IS the params
+        ///     array — a separate, documented C# trap.)
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB32")]
+        public void ParityQb_QB32_ObjectArrayList_IsAnArrayLikeEverywhere()
+        {
+            var list = new object[] { 1, 2.5 };
+
+            using var asarray = np.asarray(list);
+            using var sum = np.sum(list);
+
+            // NumPy 2.4.2: np.asarray([1, 2.5]) is float64 [1., 2.5]; np.sum([1, 2.5]) is 3.5
+            asarray.ToArray<double>().Should().Equal(1.0, 2.5);
+            sum.GetDouble().Should().Be(3.5);
+        }
     }
 }
