@@ -1313,5 +1313,31 @@ namespace NumSharp.Tests
             // NumPy 2.4.2: str(np.ma.array(np.array(np.float32(0.1)), mask=False))
             masked32.ToString().Should().Be("0.10000000149011612");
         }
+
+        // ------------------------------------------------------------------
+        // QB-48 — np.empty_like(a, dtype, 'F') binds the order char to Shape: a (70,) array
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's third positional parameter of <c>np.empty_like(prototype, dtype=None, order='K', ...)</c> is <c>order</c>,
+        ///     so <c>np.empty_like(a, None, 'F')</c> is an F-ordered array of <c>a</c>'s shape. NumSharp's first overload is
+        ///     <c>empty_like(NDArray prototype, DType dtype = null, Shape shape = default, string device = null)</c>, and C#
+        ///     converts a <see cref="char"/> to <see cref="int"/> and the <see cref="int"/> to <c>Shape</c> implicitly, so the
+        ///     ported call <c>np.empty_like(a, null, 'F')</c> compiles and allocates a 1-D array of 70 elements ('F' is
+        ///     U+0046); <c>'C'</c> gives 67, <c>'K'</c> 75, <c>'A'</c> 65. The order overload needs an explicit shape
+        ///     (<c>np.empty_like(a, null, default, 'F')</c>). zeros_like / ones_like / full_like take the char as their order,
+        ///     and np.empty / zeros / ones / full refuse it at compile time; the library already guards the same trap on
+        ///     <c>np.ndarray(shape, dtype, buffer, 'F')</c> with an <c>[Obsolete(error: true)]</c> overload.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB48")]
+        public void ParityQb_QB48_EmptyLikeOrderChar_IsNotAShape()
+        {
+            using var a = np.zeros(new Shape(2, 3));
+            using var e = np.empty_like(a, null, 'F');
+
+            // NumPy 2.4.2: np.empty_like(np.zeros((2, 3)), None, 'F') has shape (2, 3) and is F-ordered
+            e.shape.Should().Equal(2L, 3L);
+            e.Shape.IsFContiguous.Should().BeTrue();
+        }
     }
 }
