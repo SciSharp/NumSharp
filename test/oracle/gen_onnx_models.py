@@ -29,6 +29,10 @@ int64_input.onnx        ids [1,'seq'] int64 -> Identity -> out. The BERT case: T
                         of an int32 NDArray into an int64 input.
 matmul_f32.onnx         A ['M','K'], B ['K','N'] float32 -> MatMul -> C. Real arithmetic to compare
                         against np.matmul.
+matmul_const_f32.onnx   X ['N',4] float32 -> MatMul by a CONSTANT W [4,3] (an initializer, not a graph input,
+                        W[k][j] = k*3 + j + 1) -> Y ['N',3]. The one MatMul form XNNPACK takes (its B must be a
+                        constant initializer), so on a mobile ONNX Runtime with XNNPACK the output Y lives in
+                        XNNPACK's own allocator: NumSharp.Tests.Interop.OnnxRuntime.Android imports it end to end.
 postprocess_f32.onnx    X ['N','C'] float32 -> Softmax(axis=-1) -> probs ; ArgMax(axis=-1,
                         keepdims=0) -> argmax (int64). The ORACLE for Postprocess.Softmax/Argmax.
 topk_f32.onnx           X ['N','C'] float32, K [1] int64 -> TopK(axis=-1) -> Values, Indices.
@@ -197,6 +201,16 @@ def build_all():
         [helper.make_node("MatMul", ["A", "B"], ["C"])],
         [_tensor("A", TensorProto.FLOAT, ["M", "K"]), _tensor("B", TensorProto.FLOAT, ["K", "N"])],
         [_tensor("C", TensorProto.FLOAT, ["M", "N"])])
+
+    # A constant B: XNNPACK's MatMul requires graph.IsConstantInitializer(B), so W is an initializer that is NOT
+    # listed as a graph input (an overridable initializer would not be constant).
+    const_w = helper.make_tensor("W", TensorProto.FLOAT, [4, 3], [float(i + 1) for i in range(12)])
+    models["matmul_const_f32"] = _model(
+        "matmul_const_f32",
+        [helper.make_node("MatMul", ["X", "W"], ["Y"])],
+        [_tensor("X", TensorProto.FLOAT, ["N", 4])],
+        [_tensor("Y", TensorProto.FLOAT, ["N", 3])],
+        initializer=[const_w])
 
     models["postprocess_f32"] = _model(
         "postprocess_f32",
@@ -451,6 +465,12 @@ def self_check(path: str, name: str) -> None:
         b = np.arange(12, dtype=np.float32).reshape(3, 4)
         c, = sess.run(None, {"A": a, "B": b})
         assert np.allclose(c, a @ b), name
+    elif name == "matmul_const_f32":
+        x = np.arange(8, dtype=np.float32).reshape(2, 4)
+        w = np.arange(1, 13, dtype=np.float32).reshape(4, 3)
+        y, = sess.run(None, {"X": x})
+        assert y.shape == (2, 3) and np.array_equal(y, x @ w), name
+        assert [i.name for i in sess.get_inputs()] == ["X"], name   # W is a constant, not an input
     elif name == "postprocess_f32":
         x = np.random.default_rng(0).standard_normal((3, 5)).astype(np.float32)
         p, am = sess.run(None, {"X": x})
