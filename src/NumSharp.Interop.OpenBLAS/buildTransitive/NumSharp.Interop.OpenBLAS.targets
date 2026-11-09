@@ -572,6 +572,79 @@ public class NumSharpOpenBlasFetchTask : Task
         return dot < 0 ? tags : tags.Substring(0, dot);
     }
 
+    /// <summary>
+    /// The components of a <c>py3-none</c> wheel's compound platform tag
+    /// (<c>manylinux_2_27_x86_64.manylinux_2_28_x86_64</c> → two components), the only wheel shape
+    /// openblas-libs publishes. Mirrors fetch_openblas.py's <c>wheel_platform_tags</c>.
+    /// </summary>
+    /// <param name="wheelFileName">A file name from the PyPI JSON index.</param>
+    /// <returns>The tag components in file-name order, or null when the file is not a <c>py3-none</c>
+    /// wheel (an sdist, say), which is never a staging candidate.</returns>
+    private static List<string> WheelPlatformTags(string wheelFileName)
+    {
+        const string sep = "-py3-none-";
+        int i = wheelFileName.IndexOf(sep, StringComparison.Ordinal);
+        if (i < 0 || !wheelFileName.EndsWith(".whl", StringComparison.Ordinal))
+            return null;
+        string tags = wheelFileName.Substring(i + sep.Length, wheelFileName.Length - 4 - (i + sep.Length));
+        return new List<string>(tags.Split('.'));
+    }
+
+    /// <summary>
+    /// The CPU architecture a glibc (manylinux) platform tag names: PEP 513/571/599's aliases
+    /// (<c>manylinux1_</c>, <c>manylinux2010_</c>, <c>manylinux2014_</c>) and PEP 600's perennial
+    /// <c>manylinux_&lt;major&gt;_&lt;minor&gt;_&lt;arch&gt;</c>. Mirrors fetch_openblas.py's <c>glibc_arch</c>.
+    /// </summary>
+    /// <param name="tag">One platform tag component.</param>
+    /// <returns>The architecture (<c>x86_64</c>, <c>aarch64</c>, …), or null for any other tag (Windows, macOS
+    /// and musllinux tags match exactly, never by family).</returns>
+    private static string GlibcArch(string tag)
+    {
+        foreach (string alias in new[] { "manylinux1_", "manylinux2010_", "manylinux2014_" })
+            if (tag.StartsWith(alias, StringComparison.Ordinal) && tag.Length > alias.Length)
+                return tag.Substring(alias.Length);
+        const string perennial = "manylinux_";
+        if (!tag.StartsWith(perennial, StringComparison.Ordinal))
+            return null;
+        // manylinux_<digits>_<digits>_<arch>: skip the two version numbers, the rest is the arch.
+        string[] parts = tag.Substring(perennial.Length).Split(new[] { '_' }, 3);
+        if (parts.Length != 3 || parts[2].Length == 0)
+            return null;
+        foreach (string number in new[] { parts[0], parts[1] })
+        {
+            if (number.Length == 0)
+                return null;
+            foreach (char c in number)
+                if (c < '0' || c > '9')
+                    return null;
+        }
+        return parts[2];
+    }
+
+    /// <summary>
+    /// Whether a wheel serves the platform <paramref name="anchor"/> names: one of its tag components IS
+    /// the anchor, or, for glibc Linux only, one of them is a manylinux tag of the anchor's architecture.
+    /// openblas-libs retagged its Linux wheels from <c>manylinux2014_&lt;arch&gt;</c> (glibc 2.17) to
+    /// <c>manylinux_2_27_&lt;arch&gt;.manylinux_2_28_&lt;arch&gt;</c> with 0.3.33.0.0; the RID is the same glibc
+    /// platform either way, and an exact match found no wheel for any release NumPy 2.5 pins.
+    /// Mirrors fetch_openblas.py's <c>wheel_matches</c>.
+    /// </summary>
+    /// <param name="tags">The candidate wheel's platform tag components (<see cref="WheelPlatformTags"/>).</param>
+    /// <param name="anchor">The manifest wheel's anchor tag (<see cref="PlatformTagAnchor"/>).</param>
+    /// <returns>True when the wheel is built for the anchor's platform.</returns>
+    private static bool WheelMatches(List<string> tags, string anchor)
+    {
+        if (tags.Contains(anchor))
+            return true;
+        string arch = GlibcArch(anchor);
+        if (arch == null)
+            return false;
+        foreach (string t in tags)
+            if (GlibcArch(t) == arch)
+                return true;
+        return false;
+    }
+
     /// <summary>Copies <paramref name="source"/> to <paramref name="dest"/> unless an identical file is already there; true when it copied.</summary>
     private static bool StageOne(string source, string dest, string expectedSha)
     {
@@ -735,16 +808,26 @@ public class NumSharpOpenBlasFetchTask : Task
             string wheelUrl = null, wheelSha = null, wheelName = null;
             object indexRoot = MiniJson.Parse(indexJson);
             var urls = (List<object>)((Dictionary<string, object>)indexRoot)["urls"];
+            // The same selection as fetch_openblas.py's select_wheel: an exact platform-tag match wins
+            // when there is exactly one, otherwise glibc Linux matches by family. The family rule is
+            // what lets a manifest pinned to a manylinux_2_27/2_28 wheel (scipy-openblas >= 0.3.33,
+            // NumPy 2.5's) override to a manylinux2014 release, and the reverse.
             var matches = new List<Dictionary<string, object>>();
+            var familyMatches = new List<Dictionary<string, object>>();
             foreach (object u in urls)
             {
                 var file = (Dictionary<string, object>)u;
                 string name = (string)file["filename"];
-                // Compound platform tags ("…-manylinux2014_x86_64.manylinux_2_17_x86_64.whl")
-                // anchor on "-<tag>." exactly like fetch_openblas.py.
-                if (name.Contains("-" + tag + "."))
+                List<string> tags = WheelPlatformTags(name);
+                if (tags == null)
+                    continue; // an sdist or a wheel of another shape: never a candidate
+                if (tags.Contains(tag))
                     matches.Add(file);
+                if (WheelMatches(tags, tag))
+                    familyMatches.Add(file);
             }
+            if (matches.Count != 1)
+                matches = familyMatches;
 
             if (matches.Count != 1)
             {

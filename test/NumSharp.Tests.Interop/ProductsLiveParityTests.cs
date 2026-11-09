@@ -11,7 +11,7 @@ namespace NumSharp.Tests.Interop
 {
     /// <summary>
     ///     <b>Live byte-for-byte parity of the CBLAS product family against real NumPy.</b> Every
-    ///     product NumPy 2.4.2 routes through cblas — <c>np.dot</c>/<c>np.matmul</c> and the five
+    ///     product NumPy 2.5.4 routes through cblas — <c>np.dot</c>/<c>np.matmul</c> and the five
     ///     product gufuncs <c>inner</c>/<c>vdot</c>/<c>vecdot</c>/<c>matvec</c>/<c>vecmat</c> — is
     ///     computed twice over the SAME zero-copy exported memory (once by NumSharp's OpenBLAS backend,
     ///     once by the embedded CPython's numpy) and asserted byte-identical

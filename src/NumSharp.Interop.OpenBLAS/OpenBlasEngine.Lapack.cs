@@ -10,7 +10,7 @@ namespace NumSharp.Interop.OpenBLAS
 {
     /// <summary>
     ///     The LU-based <c>np.linalg</c> factorisations (<c>solve</c>/<c>inv</c>/<c>det</c>/
-    ///     <c>slogdet</c>), a route-for-route port of NumPy 2.4.2's <c>umath_linalg.cpp</c> gufuncs
+    ///     <c>slogdet</c>), a route-for-route port of NumPy 2.5.4's <c>umath_linalg.cpp</c> gufuncs
     ///     calling the SAME LAPACK the bundled scipy-openblas ships.
     /// </summary>
     /// <remarks>

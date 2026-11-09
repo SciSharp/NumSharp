@@ -18,7 +18,7 @@ extending the seam and troubleshooting.
 [How it computes](#how-it-computes) · [Writing your own backend](#writing-your-own-backend) ·
 [Environment](#environment) · [Troubleshooting](#troubleshooting)
 
-> Bundles scipy-openblas 0.3.31.22.0 (OpenBLAS 0.3.31.dev - the build numpy 2.4.2 ships) · net8.0/net10.0.
+> Bundles scipy-openblas 0.3.34.106.0 (OpenBLAS 0.3.34 - the build numpy 2.5.4 ships) · net8.0/net10.0.
 > Behaviour is covered by gates: [`MatmulParityBackendTests`][gate-backend] (30 tests),
 > [`OpenBlasDeliveryTests`][gate-delivery] (20), the macOS vendored-runtime loader tests
 > (`OpenBlasMacOsVendoredRuntimeTests`, 21, on every OS), the 15-step scripted build gate
@@ -63,7 +63,7 @@ var c = np.dot(a, b);            // float32/float64 products now go through Open
 
 Console.WriteLine(OpenBlasEngine.Info);
 // …\runtimes\win-x64\native\libscipy_openblas64_.dll [symbols scipy_*64_, ILP64, threads 24]
-// OpenBLAS 0.3.31.dev  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=24
+// OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=24
 
 OpenBlasEngine.Disable();                  // back to NumSharp's own managed SIMD GEMM
 ```
@@ -79,8 +79,8 @@ This package bundles those same artifacts at the same pinned version - the ident
 its SHA-256 checked against the manifest at pack time - so what you load is a widely-deployed,
 battle-tested build, with no Python installed and no loader-race guesswork about which BLAS won.
 
-Bundled version: **scipy-openblas 0.3.31.22.0** (OpenBLAS 0.3.31.dev), as `runtimes/<rid>/native/`
-NuGet assets for 8 RIDs (62 MB packed), which NuGet resolves per machine so a RID-specific publish
+Bundled version: **scipy-openblas 0.3.34.106.0** (OpenBLAS 0.3.34), as `runtimes/<rid>/native/`
+NuGet assets for 8 RIDs (63 MB packed), which NuGet resolves per machine so a RID-specific publish
 carries only the one binary:
 
 | RID | distribution | RID | distribution |
@@ -138,12 +138,12 @@ build that cannot satisfy it fails, a runtime that cannot load it throws:
 
 ```xml
 <PackageReference Include="NumSharp.Interop.OpenBLAS" Version="0.60.0">
-  <OpenBlasVersion>0.3.34.106.0</OpenBlasVersion>
+  <OpenBlasVersion>0.3.31.188.0</OpenBlasVersion>
 </PackageReference>
 ```
 
 ```bash
-NUMSHARP_OPENBLAS_VERSION=0.3.34.106.0 dotnet build   # same thing - env beats metadata
+NUMSHARP_OPENBLAS_VERSION=0.3.31.188.0 dotnet build   # same thing - env beats metadata
 ```
 
 **3 · Read from a directory you manage - build-time, soft.** No download, no enforcement: "look
@@ -162,12 +162,12 @@ package - and it can bake a pinned version into its own nupkg so they download n
 ```xml
 <!-- a consumer of MyPackage (which depends on NumSharp.Interop.OpenBLAS): -->
 <PackageReference Include="MyPackage" Version="1.0.0">
-  <OpenBlasVersion>0.3.34.106.0</OpenBlasVersion>       <!-- honoured as if direct -->
+  <OpenBlasVersion>0.3.31.188.0</OpenBlasVersion>       <!-- honoured as if direct -->
 </PackageReference>
 
 <!-- or in MyPackage.csproj itself - bakes all 8 RIDs into MyPackage.nupkg: -->
 <PackageReference Include="NumSharp.Interop.OpenBLAS" Version="0.60.0">
-  <OpenBlasVersion>0.3.34.106.0</OpenBlasVersion>
+  <OpenBlasVersion>0.3.31.188.0</OpenBlasVersion>
   <OpenBlasDelivery>package</OpenBlasDelivery>
 </PackageReference>
 ```
@@ -326,7 +326,7 @@ transitive bundle. Two boundaries: it contradicts a bare `OpenBlasPath` (the com
 rejected), and it is **not** needed merely to expose the *default* version - the bundle already
 flows transitively for free. `package` is for a dependent that wants a *different, pinned*
 version baked into its own nupkg - which is also what keeps every dependent nupkg from gaining
-62 MB by default.
+63 MB by default.
 
 <!-- Tests: verify_build_override.sh - the transitive, two-reference-conflict and delivery=package steps -->
 
