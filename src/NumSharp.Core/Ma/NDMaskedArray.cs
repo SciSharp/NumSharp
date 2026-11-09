@@ -169,12 +169,20 @@ namespace NumSharp
         ///     it for every derived array (its <see cref="real"/>/<see cref="imag"/>/<see cref="mT"/>/take/reductions come
         ///     back soft with the default fill value), and a new array or view OF a masked array runs
         ///     <see cref="FinalizeFrom"/> instead (a converted copy of the fill).
+        ///     <para>
+        ///     <b>A dtype change (NumPy 2.5.3 / 2.5.4).</b> The fill is shared only between arrays of ONE dtype. When this
+        ///     array's dtype differs from <paramref name="source"/>'s (<c>ma.sqrt</c> of int8 data is float16, a comparison is
+        ///     bool, <c>ma.cumsum</c> of int8 is int64), it stores the fill CONVERTED to its own dtype, or nothing when the
+        ///     conversion fails (<see cref="MaskedArrayModule.CheckFillValueOrDefault"/>: the default is then materialized
+        ///     on read) — NumPy 2.4 shared the stale fill of the old dtype (<c>fill_value=np.int8(7)</c> on a float16
+        ///     result).
+        ///     </para>
         /// </remarks>
         internal NDMaskedArray UpdateFrom(NDMaskedArray source)
         {
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
-            _fill_value = source._fill_value;
+            _fill_value = MaskedArrayModule.InheritFill(source._fill_value, source._data.dtype, _data.dtype);
             _hardmask = source._hardmask;
             return this;
         }
@@ -192,15 +200,17 @@ namespace NumSharp
         /// <param name="source">The masked array this one derives from.</param>
         /// <returns>This array, so the call chains onto its <c>new</c> expression.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
-        /// <exception cref="TypeError">The inherited fill cannot be converted to this array's dtype: a text fill this
-        ///     array's string class cannot encode / decode, or one a numeric array cannot parse (numpy.ma's <c>Cannot convert
-        ///     fill_value … to dtype …</c>, see <see cref="MaskedArrayModule.CheckFillValue"/>; a number formats into a text
-        ///     array, which cannot fail).</exception>
+        /// <exception cref="TypeError">The inherited fill of the SAME dtype cannot be stored (numpy.ma's <c>Cannot convert
+        ///     fill_value … to dtype …</c>, see <see cref="MaskedArrayModule.CheckFillValue"/>); a fill of another dtype never
+        ///     raises: one that does not convert is dropped instead (NumPy 2.5).</exception>
         /// <remarks>
-        ///     The conversion is an ARRAY cast (unsafe), so a numeric fill never raises: the default 1e20 a float64 source
-        ///     materialized becomes <c>long.MinValue</c> in an int64 result and 0 in an int8 one (MSVC's out-of-range casts,
-        ///     as in NumPy), 7.5 becomes 7. A text fill follows a width change: the default NumPy materializes at its own
-        ///     width (<c>'N/A'</c>) is truncated (<c>'N'</c> for <c>&lt;U1</c>), so <c>ma.masked_inside</c> of a
+        ///     Since NumPy 2.5.3 / 2.5.4 a fill of ANOTHER dtype is converted with the conversion's errors caught
+        ///     (<see cref="MaskedArrayModule.CheckFillValueOrDefault"/>): 7.5 becomes 7 in an int64 result, but the default
+        ///     1e20 a float64 source materialized is DROPPED in an int64 / int8 result (the cast raises FE_INVALID, which
+        ///     NumPy runs under <c>errstate(invalid='raise')</c>), so the result reads its own default (999999) where NumPy
+        ///     2.4 kept MSVC's out-of-range cast (<c>long.MinValue</c>, 0); a text fill a numeric result cannot parse is
+        ///     dropped the same way instead of raising. A text fill follows a width change: the default NumPy materializes at
+        ///     its own width (<c>'N/A'</c>) is truncated (<c>'N'</c> for <c>&lt;U1</c>), so <c>ma.masked_inside</c> of a
         ///     <c>&lt;U1</c> array (whose <c>filled()</c> read the source's fill and so materialized it) comes back with the
         ///     fill <c>'N'</c>, as NumPy's does.
         /// </remarks>
@@ -208,8 +218,13 @@ namespace NumSharp
         {
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
-            // `_update_from(obj)`, then `if self._fill_value is not None: self._fill_value = _check_fill_value(...)`.
-            _fill_value = source._fill_value is null ? null : MaskedArrayModule.StoreFill(source._fill_value, _data.dtype);
+            // `_update_from(obj)` — the fill shared within a dtype, converted (or dropped) across one — then
+            // `if self._fill_value is not None: self._fill_value = _check_fill_value(self._fill_value, self.dtype)`: a COPY.
+            // A converted fill already is a fresh array of this dtype, so only a shared one is copied.
+            var inherited = MaskedArrayModule.InheritFill(source._fill_value, source._data.dtype, _data.dtype);
+            _fill_value = inherited is null || !ReferenceEquals(inherited, source._fill_value)
+                ? inherited
+                : MaskedArrayModule.StoreFill(inherited, _data.dtype);
             _hardmask = source._hardmask;
             return this;
         }
@@ -283,10 +298,12 @@ namespace NumSharp
         ///     singleton: its getter cannot materialize a default (NumPy's <c>attributes of masked are not
         ///     writeable</c>).</exception>
         /// <exception cref="NotSupportedException">The stored fill cannot reach the data under NumPy's <c>same_kind</c>
-        ///     rule — a fill of another kind SHARED with a derived array (an int64 fill on the bool result of
-        ///     <c>ma.logical_not</c> / <c>ma.equal</c>, a complex fill on the float result of <c>ma.absolute</c>): NumPy's
-        ///     <c>np.copyto</c> raises and NumPy then returns an OBJECT array (<c>np.choose</c> over the data as objects),
-        ///     a dtype NumSharp lacks.</exception>
+        ///     rule: NumPy's <c>np.copyto</c> raises and NumPy then returns an OBJECT array (<c>np.choose</c> over the data
+        ///     as objects), a dtype NumSharp lacks. Since NumPy 2.5.4 a derived array never inherits such a fill
+        ///     (<c>_update_from</c> converts a fill across a dtype change, or drops it: <c>ma.absolute</c> of a complex
+        ///     array stores the float 1.0 where NumPy 2.4 shared the complex fill), and a given fill is converted first, so
+        ///     only a stale stored fill reaches this — in NumPy through the deprecated <c>dtype</c> setter, which NumSharp
+        ///     does not have.</exception>
         /// <remarks>
         ///     NumPy's order: <c>if m is nomask: return self._data</c>; resolve the fill (<c>self.fill_value</c> or
         ///     <c>_check_fill_value(fill_value, self.dtype)</c>); <c>elif not m.any(): return self._data</c>; else
@@ -659,29 +676,28 @@ namespace NumSharp
         /// <param name="dtype">Target element dtype.</param>
         /// <param name="copy">Copy the data even when the dtype already matches (NumPy default true).</param>
         /// <returns>A masked array of the new dtype with the same mask.</returns>
-        /// <exception cref="TypeError">The stored fill does not convert to the new dtype (<c>Cannot convert fill_value zz to
-        ///     dtype float64</c>; checked BEFORE the data is cast, see the remarks).</exception>
         /// <exception cref="ValueError">A text element of the data that does not parse into a numeric <paramref name="dtype"/>
         ///     (<c>could not convert string to float: np.str_('ab')</c>).</exception>
         /// <exception cref="OverflowException">An integer text of the data outside an integer <paramref name="dtype"/>.</exception>
         /// <exception cref="UnicodeError">A text cast between the string classes that cannot encode or decode a character.</exception>
         /// <remarks>
-        ///     NumPy's <c>__array_finalize__</c> re-checks a stored fill against the new dtype
-        ///     (<c>_check_fill_value(self._fill_value, self.dtype)</c>): the result stores a converted COPY (an array cast,
-        ///     unsafe, never raising for numbers). A fill of 7.5 reads back <see cref="long"/> 7 after <c>astype(int64)</c>;
-        ///     a text fill follows a width change (<c>'qrs'</c> becomes <c>'q'</c> after <c>astype('U1')</c>, <c>b'qr'</c>
-        ///     after <c>astype('S2')</c>) and a number fill becomes its <c>str()</c> after a text cast. A fill that was never
-        ///     set or read is not stored, so the result reads ITS OWN default — but a default that was READ is stored and
-        ///     converted: the float64 default 1e20 becomes <c>long.MinValue</c> after <c>astype(int64)</c> (MSVC's
-        ///     out-of-range float-to-int cast) and 0 after <c>astype(int8)</c>, and a text array's read default <c>'N/A'</c>
-        ///     raises <c>Cannot convert fill_value N/A to dtype float64</c>, exactly as in NumPy.
+        ///     NumPy's <c>__array_finalize__</c> runs <c>_update_from</c>, which since NumPy 2.5.3 / 2.5.4 converts a stored fill
+        ///     of another dtype with the conversion's errors caught (<see cref="MaskedArrayModule.CheckFillValueOrDefault"/>):
+        ///     the result stores a converted COPY, or NOTHING when the conversion fails, and then reads its own default. A fill
+        ///     of 7.5 reads back <see cref="long"/> 7 after <c>astype(int64)</c>; a text fill follows a width change
+        ///     (<c>'qrs'</c> becomes <c>'q'</c> after <c>astype('U1')</c>, <c>b'qr'</c> after <c>astype('S2')</c>) and a number
+        ///     fill becomes its <c>str()</c> after a text cast. A fill that was never set or read is not stored, so the result
+        ///     reads ITS OWN default — and a default that was READ but does not convert is dropped the same way: the float64
+        ///     default 1e20 into int64 / int8 (an FE_INVALID cast, which NumPy runs under <c>errstate(invalid='raise')</c>)
+        ///     and a text array's read default <c>'N/A'</c> into float64 both leave the result reading its own default, where
+        ///     NumPy 2.4 stored <c>long.MinValue</c> / 0 and raised <c>Cannot convert fill_value N/A to dtype float64</c>.
         ///     <para>
         ///     <b>Order.</b> <c>ndarray.astype</c> allocates the result (<c>PyArray_NewLikeArray</c>, whose
-        ///     <c>__array_finalize__</c> converts the fill) BEFORE it copies the data into it, so a fill that does not convert
-        ///     is reported even when the data would not convert either (probed: <c>['ab', '1']</c> with fill <c>'zz'</c> raises
-        ///     the fill's TypeError; with fill <c>'3'</c> the data's ValueError). The result's mask is a COPY of this array's
-        ///     and its hard-mask flag is this array's; with <paramref name="copy"/> false and an equivalent dtype the array
-        ///     itself is returned (no new array, so no fill conversion).
+        ///     <c>__array_finalize__</c> converts the fill) BEFORE it copies the data into it; since the conversion no longer
+        ///     raises, a text array whose data does not parse reports the data's ValueError (probed: <c>['ab', '1']</c> with
+        ///     fill <c>'zz'</c> into float64 is <c>could not convert string to float</c>). The result's mask is a COPY of this
+        ///     array's and its hard-mask flag is this array's; with <paramref name="copy"/> false and an equivalent dtype the
+        ///     array itself is returned (no new array, so no fill conversion).
         ///     </para>
         /// </remarks>
         public NDMaskedArray astype(DType dtype, bool copy = true)
@@ -692,11 +708,15 @@ namespace NumSharp
             // ndarray.astype(copy=False) of an equivalent dtype returns the array ITSELF: no new array, no `__array_finalize__`.
             bool sameArray = !copy && DTypeCasting.GetCastInfo(to, _data.dtype, null, out long viewOffset) == NPY_CASTING.NPY_NO_CASTING
                              && viewOffset != ArrayMethod.NoView;
-            // `__array_finalize__`: `_check_fill_value(self._fill_value, self.dtype)` converts a stored fill to the new dtype
-            // (a copy: 7.5 becomes int64 7, the read default 1e20 becomes long.MinValue, 'qrs' becomes 'q' in <U1); an
-            // array with nothing stored passes None on, so the result materializes ITS default when read. It runs before
-            // the data is cast, so its refusal wins over the data's.
-            var fill = sameArray || _fill_value is null ? null : MaskedArrayModule.StoreFill(_fill_value, to);
+            // `__array_finalize__`: `_update_from` converts a stored fill to the new dtype, catching the conversion's errors
+            // (a copy: 7.5 becomes int64 7, 'qrs' becomes 'q' in <U1; the read default 1e20 into int64 is dropped), then
+            // `_check_fill_value` copies it; an array with nothing stored passes None on, so the result materializes ITS
+            // default when read. Same dtype (a copy=True astype): the shared fill, re-checked into a copy.
+            var fill = sameArray || _fill_value is null
+                ? null
+                : to != _data.dtype
+                    ? MaskedArrayModule.CheckFillValueOrDefault(_fill_value, to)
+                    : MaskedArrayModule.StoreFill(_fill_value, to);
             NDArray data;
             try
             {
@@ -1083,24 +1103,47 @@ namespace NumSharp
         /// <param name="axis">Sort axis (default last).</param>
         /// <param name="endwith">True (default) pushes masked to the END; false pushes them to the FRONT.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
+        /// <param name="stable">NumPy's keyword-only <c>stable</c>: a masked array refuses true (<c>`stable` parameter is not
+        ///     supported for masked arrays.</c>); null and false sort as usual.</param>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending</c>: a masked array refuses true (<c>`descending`
+        ///     parameter is not supported for masked arrays.</c>); null and false sort as usual.</param>
         /// <returns>The sorted masked array.</returns>
-        public NDMaskedArray sort(int axis = -1, bool endwith = true, object fill_value = null) => np.ma.sort(this, axis, endwith, fill_value);
+        /// <exception cref="ValueError"><paramref name="stable"/> or <paramref name="descending"/> true (MaskedArray's
+        ///     refusal, stable first).</exception>
+        public NDMaskedArray sort(int axis = -1, bool endwith = true, object fill_value = null, bool? stable = null,
+            bool? descending = null)
+            => np.ma.sort(this, axis, endwith, fill_value, stable, descending);
 
         /// <summary>Indices that would sort the array with masked entries at the end (or front), with NumPy's DEFAULT axis
         /// (<c>MaskedArray.argsort(axis=np._NoValue)</c>: the last axis of a 0-d / 1-D array, the FLATTENED array —
         /// NumPy's deprecated default — from two dimensions on).</summary>
         /// <param name="endwith">True (default) sorts masked LAST; false sorts them FIRST.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
+        /// <param name="stable">NumPy's keyword-only <c>stable</c>: a masked array refuses true (<c>`stable` parameter is not
+        ///     supported for masked arrays.</c>); null and false sort as usual.</param>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending</c>: a masked array refuses true (<c>`descending`
+        ///     parameter is not supported for masked arrays.</c>); null and false sort as usual.</param>
         /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
-        public NDArray argsort(bool endwith = true, object fill_value = null) => np.ma.argsort(this, endwith, fill_value);
+        /// <exception cref="ValueError"><paramref name="stable"/> or <paramref name="descending"/> true (MaskedArray's
+        ///     refusal, stable first).</exception>
+        public NDArray argsort(bool endwith = true, object fill_value = null, bool? stable = null, bool? descending = null)
+            => np.ma.argsort(this, endwith, fill_value, stable, descending);
 
         /// <summary>Indices that would sort the array along <paramref name="axis"/> with masked entries at the end (or
         /// front).</summary>
         /// <param name="axis">Sort axis (negative counts from the end), or null for the flattened array.</param>
         /// <param name="endwith">True (default) sorts masked LAST; false sorts them FIRST.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
+        /// <param name="stable">NumPy's keyword-only <c>stable</c>: a masked array refuses true (<c>`stable` parameter is not
+        ///     supported for masked arrays.</c>); null and false sort as usual.</param>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending</c>: a masked array refuses true (<c>`descending`
+        ///     parameter is not supported for masked arrays.</c>); null and false sort as usual.</param>
         /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
-        public NDArray argsort(int? axis, bool endwith = true, object fill_value = null) => np.ma.argsort(this, axis, endwith, fill_value);
+        /// <exception cref="ValueError"><paramref name="stable"/> or <paramref name="descending"/> true (MaskedArray's
+        ///     refusal, stable first).</exception>
+        public NDArray argsort(int? axis, bool endwith = true, object fill_value = null, bool? stable = null,
+            bool? descending = null)
+            => np.ma.argsort(this, axis, endwith, fill_value, stable, descending);
 
         /// <summary>Clamps each element into <c>[a_min, a_max]</c>, preserving the mask (NumPy's <c>clip</c>).</summary>
         /// <param name="a_min">Lower bound (array-like/scalar), or null for no lower clip.</param>
@@ -2296,8 +2339,17 @@ namespace NumSharp
                 var given = MaskArgument(mask, d, copy);
                 m = existing is null || !keep_mask ? given : np.logical_or(given, existing);
             }
-            // `if fill_value is None: fill_value = getattr(data, '_fill_value', None)`, then _check_fill_value.
-            var result = new NDMaskedArray(d, m, StoreFill(fill_value ?? source?._fill_value, d.dtype));
+            // NumPy 2.5.4's `__new__`: a given fill_value is checked (and may raise); an inherited one
+            // (`getattr(data, '_fill_value', None)`) is checked when the dtype is the data's, and converted with its errors
+            // caught — dropped when it does not convert — when the requested dtype changed it.
+            NDArray storedFill = fill_value is not null
+                ? StoreFill(fill_value, d.dtype)
+                : source?._fill_value is null
+                    ? null
+                    : source._data.dtype != d.dtype
+                        ? CheckFillValueOrDefault(source._fill_value, d.dtype)
+                        : StoreFill(source._fill_value, d.dtype);
+            var result = new NDMaskedArray(d, m, storedFill);
             // hard_mask=None inherits the data's hardness (`getattr(data, '_hardmask', False)`); true bakes the hardness in at
             // construction, so the very first assignment already refuses to unmask.
             result._hardmask = hard_mask ?? source?._hardmask ?? false;
@@ -2703,6 +2755,122 @@ namespace NumSharp
         ///     intermediate's fill to the finalizer (the leak gate counted <c>ma.trace</c>'s <c>astype</c> copy).</remarks>
         internal static NDArray StoreFill(object fill_value, DType ndtype)
             => fill_value is null ? null : CheckFillValue(fill_value, ndtype);
+
+        /// <summary>
+        ///     NumPy 2.5's <c>_check_fill_value_or_default(fill_value, ndtype)</c>: <c>_check_fill_value</c> under
+        ///     <c>np.errstate(invalid='raise')</c>, with <c>TypeError</c> / <c>ValueError</c> / <c>OverflowError</c> /
+        ///     <c>FloatingPointError</c> caught — the stored fill converted to <paramref name="ndtype"/>, or null (NumPy's None:
+        ///     the array then reads its own default) when the conversion fails. The rule of a fill a masked array inherits
+        ///     ACROSS a dtype change (<c>_update_from</c>, <c>__new__</c>).
+        /// </summary>
+        /// <param name="fill">A stored fill array (0-d, or N-d for NumPy's deprecated non-scalar fill); never modified.</param>
+        /// <param name="ndtype">The new array's dtype.</param>
+        /// <returns>A fresh fill array of <paramref name="ndtype"/>, tracked by the ambient scope as <see cref="StoreFill"/>'s
+        ///     is, or null.</returns>
+        /// <remarks>
+        ///     What fails: a text fill a numeric dtype cannot parse (or the string class cannot encode / decode), and a float
+        ///     or complex fill whose cast into an integer dtype raises FE_INVALID (<see cref="FillCastRaisesInvalid"/>) — NaN,
+        ///     an infinity, or a value past the conversion's range, such as the default 1e20. An overflow into a narrower float
+        ///     (1e20 into float16 is inf) and a complex into a real dtype (the real part) are not errors: they convert.
+        /// </remarks>
+        internal static NDArray CheckFillValueOrDefault(NDArray fill, DType ndtype)
+        {
+            if (FillCastRaisesInvalid(fill, ndtype))
+                return null;
+            try
+            {
+                return StoreFill(fill, ndtype);
+            }
+            catch (Exception e) when (e is TypeError or ValueError or OverflowException)
+            {
+                // `except (TypeError, ValueError, OverflowError, FloatingPointError): return None`.
+                return null;
+            }
+        }
+
+        /// <summary>
+        ///     The fill a masked array derived from another inherits (NumPy 2.5's <c>_update_from</c>): the source's stored
+        ///     fill itself when the two dtypes are equal (SHARED: a set through either array reaches the other), otherwise
+        ///     <see cref="CheckFillValueOrDefault"/>'s conversion — a fresh array of the new dtype, or null.
+        /// </summary>
+        /// <param name="fill">The source's stored fill, or null (nothing stored: null is passed on).</param>
+        /// <param name="sourceDtype">The source's data dtype.</param>
+        /// <param name="targetDtype">The derived array's data dtype.</param>
+        /// <returns><paramref name="fill"/> itself, a converted fresh array, or null.</returns>
+        internal static NDArray InheritFill(NDArray fill, DType sourceDtype, DType targetDtype)
+        {
+            if (fill is null)
+                return null;
+            // `getattr(obj, 'dtype', None) != self.dtype`: dtype equality (equivalent descriptors are equal).
+            return sourceDtype == targetDtype ? fill : CheckFillValueOrDefault(fill, targetDtype);
+        }
+
+        /// <summary>
+        ///     Whether <c>np.asarray(fill, dtype=ndtype)</c> raises FE_INVALID — the FloatingPointError NumPy's
+        ///     <c>errstate(invalid='raise')</c> turns it into: a float, decimal or complex fill (its real part) cast into an
+        ///     integer dtype where an element is NaN, an infinity, or truncates outside the range of the conversion NumPy's
+        ///     Windows build compiles (MSVC x64: a 32-bit <c>cvttsd2si</c> for the 8-, 16- and 32-bit signed targets and the
+        ///     8- and 16-bit unsigned ones, a 64-bit one for int64 and uint32, and for uint64 a 64-bit one over
+        ///     <c>[-2^63, 2^64)</c>).
+        /// </summary>
+        /// <param name="fill">The fill array.</param>
+        /// <param name="ndtype">The target dtype.</param>
+        /// <returns>True when the cast would raise; false for every other pair (no float-to-integer cast, or every element
+        ///     in range).</returns>
+        /// <remarks>
+        ///     A narrowing float cast (1e20 into float16) raises FE_OVERFLOW, not FE_INVALID, so it converts (to inf); a float
+        ///     into bool compares with zero and raises nothing. The 32-bit conversion is why 300.0 into int8 is a valid cast
+        ///     (it wraps to 44) while 1e10 into int8 is not.
+        /// </remarks>
+        private static bool FillCastRaisesInvalid(NDArray fill, DType ndtype)
+        {
+            NPTypeCode source = fill.typecode;
+            if (source is not (NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal or NPTypeCode.Complex))
+                return false;
+            // The conversion's register range, as doubles: [low, highExclusive).
+            double low, highExclusive;
+            switch (ndtype.Meta.TypeCode)
+            {
+                case NPTypeCode.SByte:
+                case NPTypeCode.Byte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:
+                case NPTypeCode.Int32:
+                    low = int.MinValue;
+                    highExclusive = 2147483648.0;
+                    break;
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Int64:
+                    low = -9223372036854775808.0;
+                    highExclusive = 9223372036854775808.0;
+                    break;
+                case NPTypeCode.UInt64:
+                    low = -9223372036854775808.0;
+                    highExclusive = 18446744073709551616.0;
+                    break;
+                default:
+                    return false;
+            }
+            for (long i = 0; i < fill.size; i++)
+            {
+                object element = fill.GetAtIndex(i);
+                double v = element switch
+                {
+                    System.Numerics.Complex c => c.Real,
+                    Half h => (double)h,
+                    float f => f,
+                    decimal m => (double)m,
+                    _ => (double)element,
+                };
+                if (double.IsNaN(v) || double.IsInfinity(v))
+                    return true;
+                double truncated = Math.Truncate(v);
+                if (truncated < low || truncated >= highExclusive)
+                    return true;
+            }
+            return false;
+        }
 
         /// <summary>
         ///     The text ↔ number half of <see cref="CheckFillValue"/>: <c>np.asarray(fill, dtype=ndtype)</c> for a text array
@@ -4769,7 +4937,7 @@ namespace NumSharp
         ///     <c>self.filled(1).cumprod()</c>, <c>np.dot(filled(a, 0), filled(b, 0))</c>, <c>np.inner(...)</c>). Over TEXT data
         ///     NumPy writes the number into the masked text slots as its <c>str()</c> (<c>'0'</c>) — a step that cannot fail
         ///     and keeps the dtype and the shape — and the operation then decides the call: over text it refuses by dtype or
-        ///     shape (no string loop, <c>data type must provide an itemsize</c>, a misaligned product, a rank error), or it
+        ///     shape (no string loop, <c>dot not available for this type</c>, a misaligned product, a rank error), or it
         ///     computes on the text.
         /// </summary>
         /// <param name="a">The operand: a masked array, a plain array or an array-like.</param>
@@ -6629,14 +6797,17 @@ namespace NumSharp
         ///     Unlike <see cref="masked_equal"/>, NumPy compares with <c>umath.equal(x._data, value)</c> — the RAW value, a
         ///     weak Python scalar — so float16/float32 data compare at their own width (<c>masked_object(float32 [1.1],
         ///     1.1)</c> masks the element, <c>masked_equal</c> does not). Then <c>mask_or(x._mask, make_mask(condition,
-        ///     shrink=shrink))</c> and <c>masked_array(x, mask=mask, copy=copy, fill_value=value)</c>.
+        ///     shrink=shrink), shrink=shrink)</c> and <c>masked_array(x, mask=mask, copy=copy, fill_value=value)</c>.
+        ///     <para>NumPy 2.5 passes <paramref name="shrink"/> to <c>mask_or</c> too: with <c>shrink=False</c> an all-False
+        ///     (or empty) condition stays a full mask, where NumPy 2.4's <c>mask_or</c> shrank it back to nomask with its own
+        ///     default.</para>
         ///     <para>Scoped by hand: the comparison and the combined mask only feed the constructor.</para>
         /// </remarks>
         public NDMaskedArray masked_object(object a, object value, bool copy = true, bool shrink = true)
         {
             using var scope = NDScope.Open();
             var condition = WithBoundMasks(CompareWithPythonValue("equal", AsData(a), value), value, null);
-            var mask = mask_or((a as NDMaskedArray)?._mask, make_mask(condition, shrink));
+            var mask = mask_or((a as NDMaskedArray)?._mask, make_mask(condition, shrink), shrink);
             // `masked_array(x, mask=mask, copy=copy, fill_value=value)`: the class constructor, so x's hardness rides along.
             return Yield(scope, masked_array(a, mask, fill_value: value, copy: copy));
         }
@@ -7963,7 +8134,7 @@ namespace NumSharp
         ///     (all-False when every slot has a valid pair); a 0-d result is unmasked or carries a 0-d True mask.</returns>
         /// <remarks>Scoped by hand: the propagated operands, the zero-filled copies, the validity indicators and
         /// their product are reclaimed; only the product and its mask leave. Over text NumPy's product refuses by dtype
-        /// (<c>data type must provide an itemsize</c>, or a scalar operand's multiply loop) after formatting the fill, and
+        /// (<c>dot not available for this type</c>, or a scalar operand's multiply loop) after formatting the fill, and
         /// that refusal is raised over the unfilled data.</remarks>
         public NDMaskedArray dot(object a, object b, bool strict = false)
         {
@@ -8006,7 +8177,7 @@ namespace NumSharp
         /// <returns>The masked inner product (mask dropped — result treats masked as 0).</returns>
         /// <exception cref="IncorrectShapeException">The last axes differ (<c>shapes (3,) and (1,) not aligned: ...</c>);
         ///     a 0-d operand counts as one element.</exception>
-        /// <exception cref="ValueError">A text operand (<c>data type must provide an itemsize</c>).</exception>
+        /// <exception cref="ValueError">A text operand (<c>dot not available for this type</c>).</exception>
         /// <remarks>NumPy's statements: <c>fa = filled(a, 0); fb = filled(b, 0)</c>; a 0-d one is reshaped to <c>(1,)</c>
         /// (so a scalar operand is a one-element vector, not np.inner's scalar product); then <c>np.inner(fa, fb)</c>
         /// viewed as a masked array with no mask. Scoped by hand: the zero-filled operand copies only feed the
@@ -8537,9 +8708,10 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Under a hard mask, <c>ndarray.resize</c>'s errors for an
         ///     <see cref="NDArray"/> <paramref name="values"/> of another size than <paramref name="indices"/> (the caller
         ///     holds it, so NumPy's reference check refuses: <c>cannot resize an array that references or is referenced by
-        ///     another array in this way. Use the np.resize function or refcheck=False</c>; a view: <c>cannot resize this
-        ///     array: it does not own its data</c>) or of a non-contiguous layout (<c>resize only works on single-segment
-        ///     arrays</c>). The house type of NumSharp's <c>ndarray.resize</c> errors; NumPy raises ValueError.</exception>
+        ///     another object in this way. Use the np.resize function to get a new resized copy or set refcheck=False to
+        ///     disable this check</c>; a view: <c>cannot resize this array: it does not own its data</c>) or of a
+        ///     non-contiguous layout (<c>resize only works on single-segment arrays</c>). The house type of NumSharp's
+        ///     <c>ndarray.resize</c> errors; NumPy raises ValueError.</exception>
         /// <exception cref="TypeError">A float or complex index array (<c>ndarray.put</c>'s safe cast).</exception>
         /// <exception cref="OverflowException">Without a hard mask: a C# literal out of the target's range (NumPy's
         ///     <c>PyArray_Pack</c>); under a hard mask the literal becomes an int64 / float64 array first and is cast.</exception>
@@ -8720,8 +8892,9 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException"><c>resize only works on single-segment arrays</c> (neither C- nor
         ///     F-contiguous; checked first, so even a same-size strided view raises), <c>cannot resize this array: it does
         ///     not own its data</c> (a view of another size), or <c>cannot resize an array that references or is referenced
-        ///     by another array in this way. Use the np.resize function or refcheck=False</c> (an owning array of another
-        ///     size) — NumPy's texts, NumSharp's resize error type.</exception>
+        ///     by another object in this way. Use the np.resize function to get a new resized copy or set refcheck=False to
+        ///     disable this check</c> (an owning array of another size; NumPy 2.5's text, line breaks included) — NumPy's
+        ///     texts, NumSharp's resize error type.</exception>
         /// <remarks>
         ///     NumPy relabels the caller's array itself when the size matches (its C strides, or F strides for an F-only
         ///     contiguous array: the memory order, which is the order its elements are then read). NumSharp relabels an
@@ -8748,8 +8921,8 @@ namespace NumSharp
                 if (!nd.Storage.OwnsData)
                     throw new IncorrectShapeException("cannot resize this array: it does not own its data");
                 throw new IncorrectShapeException(
-                    "cannot resize an array that references or is referenced\nby another array in this way.\n" +
-                    "Use the np.resize function or refcheck=False");
+                    "cannot resize an array that references or is referenced\nby another object in this way.\n" +
+                    "Use the np.resize function to get a new resized copy or\n set refcheck=False to disable this check");
             }
 
             // Same size: the relabel keeps the memory order (C, or F for an F-only contiguous array).
@@ -9033,8 +9206,15 @@ namespace NumSharp
         /// <param name="endwith">True (default) pushes masked entries to the END; false to the FRONT.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default (see
         /// <see cref="SortFill"/>).</param>
+        /// <param name="stable">NumPy's keyword-only <c>stable</c>: a masked operand refuses true; a plain operand sorts
+        ///     through <c>ndarray.sort</c>, which takes it.</param>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending</c>: a masked operand refuses true; a plain operand
+        ///     sorts through <c>ndarray.sort</c>, which sorts descending.</param>
         /// <returns>The sorted masked array — a copy finalized from <paramref name="a"/>: its hard-mask flag and fill value.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <exception cref="ValueError">A masked operand with <paramref name="stable"/> or <paramref name="descending"/>
+        ///     true (<c>`stable` parameter is not supported for masked arrays.</c> / <c>`descending` parameter is not
+        ///     supported for masked arrays.</c>).</exception>
         /// <remarks>
         ///     NumPy's statements: <c>a = np.array(a, copy=True, subok=True)</c> (a copy that keeps the subclass, so it
         ///     finalizes from the operand), <c>a = a.flatten(); axis = 0</c> for <c>axis=None</c>, then
@@ -9045,10 +9225,15 @@ namespace NumSharp
         ///     <para>Scoped by hand: the filled sort keys, the permutation and the gathered values are reclaimed (as is an
         ///     array-like operand this method had to materialize); only the sorted copy leaves.</para>
         /// </remarks>
-        public NDMaskedArray sort(object a, int? axis = -1, bool endwith = true, object fill_value = null)
+        public NDMaskedArray sort(object a, int? axis = -1, bool endwith = true, object fill_value = null, bool? stable = null,
+            bool? descending = null)
         {
             using var scope = NDScope.Open();
             var source = a as NDMaskedArray;
+            // MaskedArray.sort refuses the keywords before it reads anything (a plain operand's copy is an ndarray, whose
+            // sort takes them).
+            if (source is not null)
+                RefuseSortKeywords(stable, descending);
             // `a = np.array(a, copy=True, subok=True)`: the data and mask copied, the attributes finalized from the operand.
             var x = new NDMaskedArray(AsData(a).copy(), source?._mask?.copy());
             if (source is not null)
@@ -9062,9 +9247,11 @@ namespace NumSharp
             }
             else
                 ax = axis.Value;
-            // MaskedArray.sort: `if self._mask is nomask: ndarray.sort(self, axis=axis); return`.
+            // MaskedArray.sort: `if self._mask is nomask: ndarray.sort(self, axis=axis); return` — without the keywords; a
+            // plain operand's ndarray.sort receives them.
             if (x._mask is null)
-                return Yield(scope, new NDMaskedArray(np.sort(x._data, ax), null).UpdateFrom(x));
+                return Yield(scope, new NDMaskedArray(source is null ? np.sort(x._data, ax, stable: stable, descending: descending)
+                    : np.sort(x._data, ax), null).UpdateFrom(x));
             // `sidx = self.argsort(...)`; `self[...] = np.take_along_axis(self, sidx, axis=axis)` through __setitem__.
             var sidx = argsort(x, ax, endwith, fill_value);
             var taken = new NDMaskedArray(np.take_along_axis(x._data, sidx, ax), np.take_along_axis(x._mask, sidx, ax));
@@ -9079,15 +9266,31 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Operand.</param>
         /// <param name="axis">Sort axis (negative counts from the end), or null for the flattened array (NumPy's
-        ///     <c>axis=None</c>). Omitting it is NumPy's default (see <see cref="argsort(object,bool,object)"/>).</param>
+        ///     <c>axis=None</c>). Omitting it is NumPy's default (see <see cref="argsort(object,bool,object,bool?,bool?)"/>).</param>
         /// <param name="endwith">True (default) sends masked entries to the END; false to the FRONT.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
+        /// <param name="stable">NumPy's keyword-only <c>stable</c>: a masked operand refuses true; a plain operand's
+        ///     <c>ndarray.argsort</c> takes it.</param>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending</c>: a masked operand refuses true; a plain
+        ///     operand's <c>ndarray.argsort</c> orders descending.</param>
         /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
+        /// <exception cref="ValueError">A masked operand with <paramref name="stable"/> or <paramref name="descending"/>
+        ///     true.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>): the filled sort keys (and an array-like operand this method had to
         /// materialize) are reclaimed; only the index array leaves.</remarks>
         [NDScoped]
-        public NDArray argsort(object a, int? axis, bool endwith = true, object fill_value = null)
+        public NDArray argsort(object a, int? axis, bool endwith = true, object fill_value = null, bool? stable = null,
+            bool? descending = null)
         {
+            // MaskedArray.argsort refuses the keywords first; a plain operand goes to ndarray.argsort with them.
+            if (a is NDMaskedArray)
+                RefuseSortKeywords(stable, descending);
+            else
+            {
+                var plain = AsData(a);
+                return axis is null ? np.argsort(np.ravel(plain), -1, stable: stable, descending: descending)
+                    : np.argsort(plain, axis.Value, stable: stable, descending: descending);
+            }
             // `if fill_value is None: fill_value = minimum_fill_value(self)` runs before `self.filled(fill_value)` reads the
             // mask: a StringDType masked array refuses there (Unsuitable type), with a mask or without one.
             if (fill_value is null && a is NDMaskedArray { _data.Storage.IsVString: true })
@@ -9098,20 +9301,39 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <see cref="argsort(object,int?,bool,object)"/> with NumPy's DEFAULT axis (<c>ma.argsort(a,
+        ///     <see cref="argsort(object,int?,bool,object,bool?,bool?)"/> with NumPy's DEFAULT axis (<c>ma.argsort(a,
         ///     axis=np._NoValue)</c>): <c>_deprecate_argsort_axis</c> picks the last axis for a 0-d or 1-D operand and None
         ///     (the FLATTENED array, with NumPy's FutureWarning) from two dimensions on.
         /// </summary>
         /// <param name="a">Operand.</param>
         /// <param name="endwith">True (default) sends masked entries to the END; false to the FRONT.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
+        /// <param name="stable">See <see cref="argsort(object,int?,bool,object,bool?,bool?)"/>.</param>
+        /// <param name="descending">See <see cref="argsort(object,int?,bool,object,bool?,bool?)"/>.</param>
         /// <returns>An int64 <see cref="NDArray"/> of sort indices (1-D for an operand of two or more dimensions).</returns>
+        /// <exception cref="ValueError">A masked operand with <paramref name="stable"/> or <paramref name="descending"/>
+        ///     true.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>): an array-like operand materialized to read its rank is reclaimed.</remarks>
         [NDScoped]
-        public NDArray argsort(object a, bool endwith = true, object fill_value = null)
-            => argsort(a, AsData(a).ndim <= 1 ? -1 : (int?)null, endwith, fill_value);
+        public NDArray argsort(object a, bool endwith = true, object fill_value = null, bool? stable = null, bool? descending = null)
+            => argsort(a, AsData(a).ndim <= 1 ? -1 : (int?)null, endwith, fill_value, stable, descending);
 
-        /// <summary>The masked-slot sort key for <see cref="sort"/>/<see cref="argsort(object,int?,bool,object)"/>, NumPy's
+        /// <summary>
+        ///     <c>MaskedArray.sort</c> / <c>MaskedArray.argsort</c>'s refusal of the keyword-only sort options, in NumPy's
+        ///     order: <c>if stable: raise</c>, then <c>if descending: raise</c> (a false or absent one passes).
+        /// </summary>
+        /// <param name="stable">The <c>stable=</c> argument.</param>
+        /// <param name="descending">The <c>descending=</c> argument.</param>
+        /// <exception cref="ValueError">Either is true.</exception>
+        private static void RefuseSortKeywords(bool? stable, bool? descending)
+        {
+            if (stable == true)
+                throw new ValueError("`stable` parameter is not supported for masked arrays.");
+            if (descending == true)
+                throw new ValueError("`descending` parameter is not supported for masked arrays.");
+        }
+
+        /// <summary>The masked-slot sort key for <see cref="sort"/>/<see cref="argsort(object,int?,bool,object,bool?,bool?)"/>, NumPy's
         /// <c>MaskedArray.argsort</c>: with endwith a FLOATING dtype (float16 / float32 / float64) uses NaN ("nan &gt;
         /// inf": a masked slot sorts after a +inf element) and every other dtype its largest value
         /// (<see cref="minimum_fill_value"/>); without endwith the dtype's smallest value (masked sorts first).</summary>

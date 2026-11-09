@@ -212,7 +212,7 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void HardMask_CallerArrayValues_FollowNdarrayResize()
         {
-            const string refcount = "cannot resize an array that references or is referenced\nby another array in this way.\nUse the np.resize function or refcheck=False";
+            const string refcount = "cannot resize an array that references or is referenced\nby another object in this way.\nUse the np.resize function to get a new resized copy or\n set refcheck=False to disable this check";
             Hard1D().Invoking(v => v.put(np.array(new[] { 0, 2, 3 }), np.array(new long[] { 7, 8 })))
                 .Should().Throw<IncorrectShapeException>().Where(e => e.Message == refcount);
             Hard1D().Invoking(v => v.put(np.array(new[] { 0, 2 }), NDArray.Scalar(5L)))
