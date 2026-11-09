@@ -43,7 +43,7 @@ flowchart LR
     Python["optional NumSharp.Interop.pythonnet"] <--> Model
     Bitmap["optional NumSharp.Bitmap"] <--> Model
     Weaver["optional NumSharp.Build (build-time)"] -. "weaves [NDScoped] scopes into the compile" .-> App
-    Oracle["NumPy 2.4.2 submodule + committed corpora"] -. "reference and tests" .-> API
+    Oracle["NumPy 2.5.4 submodule + committed corpora"] -. "reference and tests" .-> API
 ```
 
 There is no server, persistence tier, or background service. Process-local state matters instead: the default engine is cached as a singleton, `np.random` is a shared `NumPyRandom` instance, emitted delegates are cached, the optional OpenBLAS backend is installed on the cached engine, and embedded CPython is process-global.
@@ -61,7 +61,7 @@ There is no server, persistence tier, or background service. Process-local state
 | [`NumSharp.Tests`](test/NumSharp.Tests/NumSharp.Tests.csproj) | Main parity, kernel, layout, lifetime, IO, OpenBLAS, and corpus gates | Core, Bitmap, OpenBLAS | Runs managed-by-default; enables OpenBLAS only in scoped tests |
 | [`NumSharp.Tests.Interop`](test/NumSharp.Tests.Interop/NumSharp.Tests.Interop.csproj) | Live Python/NumPy interop and lifetime gates | Core, pythonnet, Python, NumPy | Sequential because CPython and lifetime counters are process-global |
 
-The repositories under [`refs/numpy`](refs/numpy/), [`refs/pocketfft`](refs/pocketfft/), and [`refs/OpenBLAS`](refs/OpenBLAS/) are pinned source-reference submodules, not Core runtime dependencies. NumPy is the behavioral authority; pocketfft and OpenBLAS are implementation references. The currently pinned NumPy submodule is v2.4.2.
+The repositories under [`refs/numpy`](refs/numpy/), [`refs/pocketfft`](refs/pocketfft/), and [`refs/OpenBLAS`](refs/OpenBLAS/) are pinned source-reference submodules, not Core runtime dependencies. NumPy is the behavioral authority; pocketfft and OpenBLAS are implementation references. The currently pinned NumPy submodule is v2.5.4, the release `numpy-version.txt` names (the oracle and the coverage inventory are generated with it).
 
 ## 3. Stable architecture areas
 

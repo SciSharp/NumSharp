@@ -10,8 +10,9 @@ paths:
 
 The legacy API and `Generator` match NumPy 1-to-1: MT19937 (NumPy's Mersenne Twister, `RandomSampling/MT19937.cs`) with
 the Marsaglia-polar Gaussian and its cached-Gaussian carry, NumPy's state-tuple `get_state`/`set_state` format, and
-PCG64/`default_rng`, so a seed produces NumPy 2.4.2's byte-identical sequences. Oracles: the `random_parity` tiers and
-the random-API oracle (`oracle.md`).
+PCG64/`default_rng`, so a seed produces NumPy 2.5.4's byte-identical sequences. The BTPE binomial has two copies, as in
+NumPy: `Generator`'s with NumPy 2.5's corrected Stirling error terms, the legacy samplers' (`binomial`, `multinomial`)
+frozen with the original ones. Oracles: the `random_parity` tiers and the random-API oracle (`oracle.md`).
 
 ## Integer types
 
@@ -28,8 +29,8 @@ Gate `RandomSampling/RandomTypeParity.Test.cs`.
   `uint`, `pool`/`generate_state(long n_words, …)` NDArrays) and NumPy's string rule (`"0x…"` hex, a leading digit
   DECIMAL, no octal: `"012"` is 12). `Seed` is a `uint`.
 - After `set_bit_generator` swaps the singleton to a non-MT19937 engine, `np.random.seed(x)` re-seeds it as NumPy's MODULE
-  function does (`engine.state = type(engine)(x).state`, the cached Gaussian kept), only for `np.random` itself; another
-  `RandomState` over such an engine refuses (the method rule).
+  function does (`set_state(type(engine)(x).state)`, which also discards the cached Gaussian), only for `np.random`
+  itself; another `RandomState` over such an engine refuses (the method rule).
 
 ## Call spellings port verbatim
 

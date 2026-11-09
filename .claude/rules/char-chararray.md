@@ -10,7 +10,7 @@ paths:
 
 # `numpy.char` and `chararray`
 
-The module, the class and the object path, byte-identical to NumPy 2.4.2 (the string classes and the computing rule:
+The module, the class and the object path, byte-identical to NumPy 2.5.4 (the string classes and the computing rule:
 `strings.md`; the functions numpy.char re-exports: `strings-methods.md`).
 
 ## The module
@@ -156,8 +156,8 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
   array (NumPy: the list itself, which `item()` gives; `[Misaligned]`).
 - Every member is ONE NumPy signature with all its parameters: `dtype=` of `sum` / `prod` / `cumsum` / `cumprod` / `trace`
   / `mean` / `var` / `std` / `clip` (NumPy's ufunc dtype checks, then the object loop's conversion error per class),
-  `out=` of `cumsum` / `cumprod` (both `PyUFunc_Accumulate` routes' texts; NumPy 2.4.2 segfaults on a 0-d out, NumSharp
-  raises the wrong-size text, `[Misaligned]`), `trace`, `conj`, `mean` / `var` / `std` (ndarray outs, `_mean` / `_var`'s
+  `out=` of `cumsum` / `cumprod` (both `PyUFunc_Accumulate` routes' texts, a 0-d out included: NumPy 2.5's wrong-size
+  text, where NumPy 2.4.2 segfaulted), `trace`, `conj`, `mean` / `var` / `std` (ndarray outs, `_mean` / `_var`'s
   statements), `where=` of `clip` and of `mean` in a `dtype=` loop, `mean=` of `var` / `std`, `view(dtype, type)`
   (`[Optional]` parameters, so an omitted argument and an explicit null are told apart), `reshape(shape, order, copy)`,
   `tofile(fid, sep, format)`. A NumPy result holding a non-list object (an int identity, `imag`'s zeros) is
@@ -168,7 +168,7 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
   append); the builders create their heap once at the counted size (`NDListHeap.Reserved`, whose appends THROW past the
   reservation: the pool's size-bucket slack would hide an under-sized heap completely); a member that selects lists
   (`max` / `min` / `clip`) shares the array's heap.
-- `join` takes `seq`'s class, as wide as the longest result; over an `NDListArray` it raises NumPy 2.4.2's own
+- `join` takes `seq`'s class, as wide as the longest result; over an `NDListArray` it raises NumPy 2.5.4's own
   `TypeError: currently only the no-argument instantiation is supported; use np.dtype instead.` (NumPy cannot finish
   `np.char.join(' ', np.char.split(a))`); over an EMPTY one NumPy returns an empty object array, which the one
   `join(object sep, object seq)` (an `NDArray` result) cannot hold: `NotSupportedException`.

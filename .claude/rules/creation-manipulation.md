@@ -163,7 +163,7 @@ a copy) in `Backends/Unmanaged/UnmanagedStorage.Buffer.cs`.
 
 ## `np.linspace` / `np.logspace` / `np.geomspace`
 
-NumPy 2.4.2's `numpy/_core/function_base.py`: `Creation/np.{linspace,logspace,geomspace}.cs` are the facades,
+NumPy 2.5.4's `numpy/_core/function_base.py`: `Creation/np.{linspace,logspace,geomspace}.cs` are the facades,
 `TensorEngine.Linspace` / `Logspace` / `Geomspace` (`Backends/TensorEngine.CoreFunctionBase.cs`) the members,
 DefaultEngine's fills in `Backends/Default/Creation/Default.CoreFunctionBase.cs`. `start`, `stop` and `base` are scalars
 (`double`); array-like values are not supported. Otherwise full parameter parity: `num=50`, `endpoint=true`,
@@ -355,7 +355,7 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   The axis errors of this family (`split(..., axis=oob)`'s leaked `IndexError`, `squeeze`) are NumPy's
   (`axis-arguments.md`).
 - No `NPY_MAXDIMS` (a documented divergence, `[Misaligned]`): an array may have more than NumPy's 64 dimensions. Where
-  NumPy 2.4.2 refuses the 65th (`maximum supported dimension for an ndarray is currently 64, found 65` from
+  NumPy 2.5.4 refuses the 65th (`maximum supported dimension for an ndarray is currently 64, found 65` from
   `np.zeros` / `np.ones` / `reshape` / `np.expand_dims` / `np.broadcast_to`; `number of dimensions must be within [0, 64],
   indexing result would have 65` from `[np.newaxis]` and a 64-d × 65-d broadcast; `ndmin must be <= ndmax (64)`),
   NumSharp builds the array, and creation, `expand_dims`, new axes, reductions, elementwise ops, indexing, reshape,

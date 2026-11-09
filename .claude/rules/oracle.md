@@ -8,13 +8,13 @@ paths:
 
 # The differential-fuzz pipeline (NumPy oracle)
 
-Every NDIter-backed op is proven bit-identical to NumPy 2.4.2 across the input space. NumPy is the oracle: Python
+Every NDIter-backed op is proven bit-identical to NumPy 2.5.4 across the input space. NumPy is the oracle: Python
 generates a committed, bytes-exact corpus; the C# harness replays the operand bytes and bit-compares, with no Python at
 test time or in CI. Playbooks (adding an op, regenerating, triage): the `oracle` skill. The divergence ledger:
 `test/NumSharp.Tests.Oracle/Fuzz/README.md`.
 
 ```
-test/oracle/                          corpus generators (NumPy 2.4.2; run by hand and by the nightly soak)
+test/oracle/                          corpus generators (NumPy 2.5.4; run by hand and by the nightly soak)
   layout_catalog.py                   memory-layout builders (single-operand, pair and where= layouts)
   gen_oracle.py                       deterministic op matrices across value/error/kind/artifact tiers; Char woven
                                       into the tiers through the uint16 proxy (char_tier, relabelled uint16 -> char)
@@ -58,7 +58,8 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
 - Dtype coverage: the per-mode dtype axes span `ALL_DTYPES`; Char (no NumPy dtype) through uint16-proxy rows; Decimal
   through the independent C# scalar oracle. Real product bugs are carved and pinned (`[OpenBugs]`) or fixed, never
   excused in the registry.
-- Regenerate (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes include `conversion
+- Regenerate (deterministic; needs `numpy==2.5.4`, the release in `numpy-version.txt`, and no `python -I`: the
+  generators import their sibling `numpy_pin.py`): `python test/oracle/gen_oracle.py <mode>` (modes include `conversion
   creation multioutput iter dtype_text out_where errors_full smoke astype_full binary divmod_power comparison unary
   reduce where place matmul rounding bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing
   copyto copyto_full power_fast weak_scalar errors groupa numpy_f32 matmul_parity linalg_parity poly einsum specials
@@ -119,9 +120,9 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   literal STORED at every store entry point (the indexer routes, fill, full, full_like, put, putmask, place,
   put_along_axis, insert, fill_diagonal, pad, the flat iterator, asarray, copyto), Python scalars and the NumPy scalars
   Half / char. Every other tier passes arrays, which NumPy treats as strong. Zero excuses. Generator drops: a where=
-  comparison of an integer array with an out-of-range Python int (NumPy 2.4.2 segfaults there), a bool array against an
-  int past int64, a store error naming the platform C long (the unit tests pin the LP64 texts), np.copyto's complex64
-  cast text.
+  comparison of an integer array with an out-of-range Python int (NumPy 2.5.4 segfaults there, as 2.4.2 did), a bool
+  array against an int past int64, a store error naming the platform C long (the unit tests pin the LP64 texts),
+  np.copyto's complex64 cast text.
 - `precision.jsonl`: each case carries `expected.truth`, the correctly rounded mathematical reference (exact `Fraction` /
   200-bit mpmath, generator-side), over precision-adversarial inputs (wide-magnitude and cancellation sums, large-mean
   variance, near-1 products, expm1/log1p at small |x|). Bit-exact to NumPy passes without truth being read; truth only
@@ -250,8 +251,9 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   (MO01–MO05, carved exactly; `MatrixOperand*_KnownGaps`). The CLASS is compared without a registry call, and
   `MisalignedRegistry` returns null for a shape / threw / error-text / expected-error divergence of a `matrix@` case (the
   source tier's value excuses stay). The registry calls the function form for operator
-  keys (`OpRegistry.MatrixOperand.cs`). NumPy 2.4.2's `np.stack` / `np.dstack` with a matrix operand raise and corrupt
-  NumPy's heap, so the generator makes every matrix call in a worker process it retires after such an error.
+  keys (`OpRegistry.MatrixOperand.cs`). NumPy's `np.stack` / `np.dstack` with a matrix operand raise and corrupt
+  NumPy's heap (2.5.4's `dstack` of a matrix beside an array crashes outright), so the generator makes every matrix call
+  in a worker process it retires after such an error, and drops the variant a worker died on.
 - `products.jsonl`: the CBLAS family, tensor products, cross/cov/corrcoef and the Array-API vector/matrix norms.
   `random_parity.jsonl` (portable) and `random_parity_host.jsonl` (host libm) pin the stream methods and distributions;
   managed `multivariate_normal` (no LAPACK backend) stays carved and `[OpenBugs]`-pinned.
@@ -287,7 +289,7 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
 ## The `.npy` / `.npz` format oracle
 
 The same philosophy, a separate corpus, and a stronger claim: NumSharp's writer must be byte-identical to `np.save`.
-- Regenerate: `python test/oracle/gen_npy_oracle.py` (deterministic; `numpy==2.4.2`), then `dotnet build`.
+- Regenerate: `python test/oracle/gen_npy_oracle.py` (deterministic; `numpy==2.5.4`), then `dotnet build`.
 - Run: `dotnet test --filter "TestCategory=NpyOracle"`: every dtype × {0-d, empty, 1-D, 2-D, 3-D, unit, empty 2-D/3-D}
   × {C, F, strided, reversed, offset, broadcast, transposed} × versions {1.0, 2.0, 3.0} × {little, big, native} endian,
   value fidelity (NaN payloads including sNaN, subnormals, signed zero, integer extremes, BMP seams) and malformed /
@@ -310,7 +312,7 @@ The same philosophy, a separate corpus, and a stronger claim: NumSharp's writer 
   0x80), `loadtxt` (every option and source), `ltfields` (numeric fields, every refused one alone), `lttokens` (tokenizer
   edges), `savetxt`, `tofile`.
 - Regenerate with LINUX NumPy (the host check refuses anything else: NumSharp pins a 64-bit C `long` and glibc's
-  `fscanf`): `wsl -e bash -lc 'cd ~ && ~/np242/bin/python /mnt/k/source/NumSharp/test/oracle/gen_textio_oracle.py'` (from
+  `fscanf`): `wsl -e bash -lc 'cd ~ && ~/np254/bin/python /mnt/k/source/NumSharp/test/oracle/gen_textio_oracle.py'` (from
   `~`: `refs/numpy`'s sources would shadow the package), `--sections a,b` for a subset, then `dotnet build`.
   Deterministic (one seed per section).
 - Newlines: a file NAME written by `np.savetxt` goes through Python's text mode (`\n` → `os.linesep`), and so does
@@ -319,8 +321,8 @@ The same philosophy, a separate corpus, and a stronger claim: NumSharp's writer 
   Windows AND Linux (WSL: `~/.dotnet/dotnet test <copied output>/NumSharp.Tests.Oracle.dll --filter
   TestCategory=TextIOOracle`), both TFMs.
 - Left out on purpose (documented divergences, unit-tested): results NumPy builds with zero-width string elements; a
-  non-native dtype's TEXT read (the case records NumPy's answer for the native dtype); `tofile` of a non-ASCII element
-  (crashes NumPy 2.4.2).
+  non-native dtype's TEXT read (the case records NumPy's answer for the native dtype). `tofile` of a non-ASCII element
+  crashed NumPy 2.4.2 and is recorded since the 2.5.4 pin (the `UnicodeEncodeError` and the partial file).
 - The `fromedges` grid exists because a random text fails on an early token before an overflowing value is read, so two
   planted scanner bugs (fromfile's saturation by sign, the `0xFF` a signed `char` loses) survived the random sections.
   Error classes: only `OverflowError` → `OverflowException` is aliased; every other error the corpus records is raised
@@ -333,6 +335,13 @@ The same philosophy, a separate corpus, and a stronger claim: NumSharp's writer 
 
 ## Traps
 
+- NumPy 2.5.4 crashes now and then (an access violation) on a text product of a `U` / `S` operand beside StringDType,
+  on its 'safe'-cast `TypeError` path: the strings generator meets it in section tma (`ma.inner(MU, MT)`) about every
+  other run. A run that completes records the same corpus, so rerun a crashed regeneration, and do not bisect a later
+  crash while this one is in play.
+- A NumPy fix that returns the right values can still corrupt the heap (a raw StringDType cell copy does): before a
+  generator records a call NumPy once crashed on, run it a few thousand times in fresh processes beside a known-bad
+  control and a do-nothing baseline; a single call followed by exit proves nothing.
 - `describe()` serializes an operand's BASE in C order, so a layout is a C-contiguous base plus a view (an F series is the
   `.T` of a C buffer holding `base.T`).
 - A facet case (flags, layout) REPLACES the result, so the registry must dispose the result it drops, or the leak gate

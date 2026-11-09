@@ -10,7 +10,7 @@ paths:
 
 # The `np.strings` functions
 
-`np.strings` has all 46 of NumPy's names, over `S`, `U` and `StringDType`, byte-identical to NumPy 2.4.2. The ufuncs take
+`np.strings` has all 46 of NumPy's names, over `S`, `U` and `StringDType`, byte-identical to NumPy 2.5.4. The ufuncs take
 `out=` / `where=` / `dtype=` in NumPy's stage order; the `_vec_string` functions run CPython 3.12's `str` / `bytes` method
 per element in C order, the first element that raises ending the call. The storage and the refuse-or-compute rule:
 `strings.md`; the comparisons, arithmetic and ordering: `strings-compute.md`; the numpy.char re-exports and the
@@ -38,10 +38,13 @@ chararray members: `char-chararray.md`.
   (`NDTextElements.TailMatchWholeRange`), and the 1-D text kernels prefetch 4 KB ahead for elements of 32 bytes or more.
 - `partition` over `S` / `U` returns three arrays (NumPy: field views of one structured array; a NumPy `'U0'` part is
   `U1`, `[Misaligned]`).
-- NumPy defects NOT reproduced (pinned in `StringFunctionsPinsTests`): `zfill('')` reads past its output (NumPy 2.4.2
-  reads uninitialized memory for an empty element's sign: oracle receivers of zfill hold no empty element); a `T`
-  `replace` with a negative count other than -1 and a longer replacement writes past its buffer; a `T` `slice` with a
-  step past int's range never returns; the `T` tailmatch reads past the haystack.
+- NumPy 2.4.2 defects NumPy 2.5 fixed, pinned in `StringFunctionsPinsTests` and recorded by the oracle since the 2.5.4
+  pin (`gen_strings_oracle._NUMPY_2_5`): `zfill('')` read past its output for an empty element's sign; a `T` `replace`
+  with a negative count other than -1 and a longer replacement wrote past its buffer (2.5 reads every negative count as
+  "all"); a `T` `slice` with a step past int's range never returned. NumPy 2.5 also added `T` zfill's `Overflow
+  encountered in zfill` for a padded size past int64, which NumSharp raises (`OverflowException`). Still in NumPy 2.5.4
+  and not reproduced: the `T` tailmatch compares a needle's full bytes, so a needle with trailing NULs reads past the
+  haystack's text (NumSharp reads zeros there).
 - Gates: oracle `strfn` / `tfn`, zero excuses; `StringMethodsLanesTests` (every lane body against its scalar body over
   every width, `FencedMemory`, short cells against the general cores, IL against managed kernels) and
   `StringFunctionsPinsTests`.

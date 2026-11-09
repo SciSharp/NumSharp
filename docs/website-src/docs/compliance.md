@@ -1,7 +1,7 @@
 # NumPy Compliance & Compatibility
 
 NumSharp's compatibility target is NumPy **2.x**, with the implementation and differential-test
-oracle currently pinned to **NumPy 2.4.2**. The target is both API compatibility and behavioral
+oracle currently pinned to **NumPy 2.5.4**. The target is both API compatibility and behavioral
 compatibility: dtype promotion, shape, strides, views, broadcasting, exceptions, special values,
 and output bytes all matter.
 
@@ -16,7 +16,7 @@ proves exact behavior. This page separates three questions that used to be confl
    factorizations do; the distinction is documented below.
 
 The authoritative NumPy implementation is the pinned clone at `refs/numpy/`. Documentation and
-tests are derived from that source and from running NumPy 2.4.2, rather than from memory or from
+tests are derived from that source and from running NumPy 2.5.4, rather than from memory or from
 older NumSharp behavior.
 
 ---
@@ -44,7 +44,7 @@ np.result_type(np.int8, 255)  # int16: the value does not fit in int8
 
 NumPy 2.x treats Python `int`, `float`, and `complex` values as weakly typed. Precision is chosen
 from the strongly typed array or NumPy scalar, subject to kind promotion and an in-range check.
-For example, NumPy 2.4.2 and NumSharp both keep this operation at `uint8`:
+For example, NumPy 2.5.4 and NumSharp both keep this operation at `uint8`:
 
 ```csharp
 var a = np.array(new byte[] { 1, 2, 3 });
@@ -91,7 +91,7 @@ Some reviewed mappings deliberately use an established NumSharp or C# spelling. 
 `np.power`; and NumSharp's `np.round_` maps to current NumPy's `np.round`. The coverage dashboard
 labels these as aliases instead of pretending that their names are exact.
 
-Removed NumPy 1.x aliases are not counted as current NumPy 2.4.2 requirements. Ported code should
+Removed NumPy 1.x aliases are not counted as current NumPy 2.5.4 requirements. Ported code should
 prefer the current names such as `prod`, `any`, and `all`.
 
 A C# `null` stored as a VALUE is Python's `None`: `a[i] = null`, `a.fill(null)`,
@@ -231,8 +231,9 @@ NumSharp implements both NumPy random APIs:
   dtype, modelled as int64 — see below).
   An unseeded `RandomState()` draws OS entropy through `SeedSequence`, as NumPy's does.
 - Every legacy distribution is a line-by-line port of NumPy's frozen `legacy-distributions.c` (and
-  the shared `distributions.c` samplers it calls: Poisson PTRS, BTPE binomial, HRUA hypergeometric,
-  `random_loggam`, …), so `RandomState(seed).<method>(...)` is byte-identical to NumPy for every
+  the shared `distributions.c` samplers it calls: Poisson PTRS, HRUA hypergeometric, `random_loggam`,
+  …; its BTPE binomial is the legacy copy that keeps the original Stirling error terms, which NumPy
+  2.5 corrected for `Generator` only), so `RandomState(seed).<method>(...)` is byte-identical to NumPy for every
   sampler, including `gamma` with `shape < 1`, `binomial`, `negative_binomial`, `f`, `pareto`,
   `standard_cauchy`, `multinomial` (which shares `binomial`'s setup cache, as NumPy's does) and
   `dirichlet`. Parameters are validated with NumPy's constraints and messages (`ValueError: scale < 0`,
@@ -259,7 +260,7 @@ NumSharp implements both NumPy random APIs:
   as NumPy's `legacy_gauss` does. `get_bit_generator()` and `set_bit_generator(bitgen)` read and
   hot-swap the `np.random` singleton's engine (the swap discards the cached Gaussian), and after a swap
   the module's `np.random.seed(x)` re-seeds the new engine as NumPy's module function does
-  (`engine.state = type(engine)(x).state`, the cached Gaussian kept) — only that singleton: any other
+  (`set_state` of `type(engine)(x)`'s state, which also discards the cached Gaussian) — only that singleton: any other
   `RandomState` over a non-MT19937 engine refuses to re-seed, NumPy's method behaviour. `Seed` records
   the last legacy seed as a `uint`, NumPy's `[0, 2**32 - 1]`. `tomaxint`, `ranf` and `sample` (each also
   taking the size as one `Shape`, as NumPy's `random_sample(size)` does) complete the legacy surface. Two
@@ -276,7 +277,7 @@ NumSharp implements both NumPy random APIs:
   - **BTPE-sized `binomial`, and `multinomial` with such categories: ~1.4–1.5×.**
   - **CRT-bound samplers: 1.2–1.5×.** This covers `weibull`, `power`, `vonmises` and gamma with shape < 1 (Johnk's algorithm), plus what builds on that gamma: `beta` with a shape ≤ 1, `standard_t` with `df < 2`, `negative_binomial` with `n < 1` and `dirichlet` with `alpha < 1`. Their remaining work is the same MSVC `pow`/`log`/`exp`/`cos` call NumPy makes per value, and a bit-identical faster one does not exist.
 - `np.random.default_rng(seed)` returns a `Generator` backed by `PCG64` and `SeedSequence`, with the
-  modern ziggurat and bounded-integer algorithms used by NumPy 2.4.2.
+  modern ziggurat and bounded-integer algorithms used by NumPy 2.5.4.
 - The `Generator` has NumPy's whole distribution surface, on NumPy's modern algorithms rather than the
   legacy ones. That covers `beta`, `binomial`, `chisquare`, `dirichlet`, `f`, `geometric`, `gumbel`,
   `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`,
@@ -284,6 +285,7 @@ NumSharp implements both NumPy random APIs:
   `noncentral_f`, `pareto`, `poisson`, `power`, `rayleigh`, `standard_cauchy`, `standard_t`,
   `triangular`, `vonmises`, `wald`, `weibull` and `zipf`. The modern details are reproduced:
   - Ziggurat normals and exponentials under the gamma family.
+  - The BTPE binomial with NumPy 2.5's corrected Stirling error terms (the legacy samplers keep the old ones).
   - beta's tiny-shape and log-space paths.
   - The HRUA hypergeometric with its `logfactorial` table, and an int64 zipf with its acceptance window.
   - vonmises' wrapped-normal fallback above `kappa = 1e6`.
@@ -417,7 +419,7 @@ NumSharp implements both NumPy random APIs:
 - **The whole random surface is oracle-checked, overload by overload.** Every public member — each
   overload of `RandomState`, `Generator`, the five bit generators and their `State` classes,
   `SeedSequence`, `SeedlessSeedSequence` and `default_rng`, 493 in all (four NumSharp-only members
-  exempt) — is replayed against NumPy 2.4.2 by its exact C# signature: every legacy sampler on the legacy
+  exempt) — is replayed against NumPy 2.5.4 by its exact C# signature: every legacy sampler on the legacy
   MT19937 and on `RandomState(engine)` for each engine, every `Generator` member on all five engines,
   under 10 fixed seeds, comparing NumPy's result AND the generator's full state after the call (so drawing
   one value too many or too few fails, not only a wrong value). CI gates prove the coverage itself —
@@ -450,7 +452,7 @@ bits on every operating system.
 
 ## `.npy` and `.npz` Interoperability
 
-The `.npy` implementation is a port of NumPy 2.4.2's format code and is tested against files written
+The `.npy` implementation is a port of NumPy 2.5.4's format code and is tested against files written
 by real NumPy. For supported dtypes and layouts, NumSharp's writer produces the same header and data
 bytes as NumPy's writer.
 
@@ -527,7 +529,7 @@ dtypes, delivery, parity, and configuration details.
 
 The complete 18-callable `np.fft` inventory is implemented in Core: complex, real, Hermitian, 1-D,
 2-D, and N-D transforms, frequency helpers, and shift helpers. Compute runs through a managed port
-of NumPy 2.4.2's vendored pocketfft engine; it does not require OpenBLAS.
+of NumPy 2.5.4's vendored pocketfft engine; it does not require OpenBLAS.
 
 The double/`complex128` path preserves pocketfft's operation order and is covered by byte-parity
 oracles across contiguous, transposed, strided, negative-stride, and broadcast-read inputs. NumSharp
@@ -585,7 +587,7 @@ from this summary alone.
 
 A useful report includes:
 
-1. The NumPy 2.4.2 code and observed output or exception.
+1. The NumPy 2.5.4 code and observed output or exception.
 2. The equivalent NumSharp code and observed output or exception.
 3. Input dtype, shape, strides/layout, and whether the input is a view or broadcast array.
 4. Raw floating-point or complex bytes when the difference is below display precision.
@@ -606,4 +608,4 @@ scalar, and dtype edge cases.
 - [NEP 52: Python API cleanup for NumPy 2.0](https://numpy.org/neps/nep-0052-python-api-cleanup.html)
 - [NEP 56: Array API compatible functions in the main namespace](https://numpy.org/neps/nep-0056-array-api-main-namespace.html)
 - [NEP 1: A simple file format for NumPy arrays](https://numpy.org/neps/nep-0001-npy-format.html)
-- [NumPy source v2.4.2](https://github.com/numpy/numpy/tree/v2.4.2)
+- [NumPy source v2.5.4](https://github.com/numpy/numpy/tree/v2.5.4)

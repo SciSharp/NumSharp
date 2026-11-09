@@ -1,7 +1,7 @@
 # NumSharp Project Instructions
 
 NumSharp is a .NET port of Python's NumPy targeting 1-to-1 API and behavioral compatibility with NumPy 2.x; the oracle
-pins NumPy 2.4.2. `refs/numpy/` is a full clone of NumPy: the authority on API behavior, edge cases and implementation.
+pins NumPy 2.5.4. `refs/numpy/` is a full clone of NumPy: the authority on API behavior, edge cases and implementation.
 
 Area rules live in `.claude/rules/*.md` and load when Claude reads or edits a file in their area. The API index below
 names the rule for each area: read it before answering a question about that area without opening its files.
@@ -135,7 +135,7 @@ np                Static API class (like `import numpy as np`)
 
 ## API index
 
-Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that holds the area's details.
+Tested against NumPy 2.5.4. Each line: the `np.*` names, then the rule that holds the area's details.
 - Array creation: `arange`, `array`, `asanyarray`, `asarray`, `asarray_chkfinite`, `ascontiguousarray`, `asfortranarray`,
   `asmatrix`, `bmat`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `geomspace`, `identity`,
   `linspace`, `logspace`, `matrix`, `meshgrid`, `mgrid`, `ndarray`, `ogrid`, `ones`, `ones_like`, `require`, `tri`,

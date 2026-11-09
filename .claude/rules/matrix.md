@@ -23,7 +23,7 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
   that code for a caller who passed a matrix in. `NDMatrix.Clone()` hides `NDArray.Clone()` rather than overriding it for
   the same reason.
 - The `np.*` functions follow the object. A public function that receives an `NDMatrix` object through its `NDArray`
-  parameter returns the class and shape NumPy 2.4.2 returns for a `numpy.matrix` operand; the result is an `NDMatrix`
+  parameter returns the class and shape NumPy 2.5.4 returns for a `numpy.matrix` operand; the result is an `NDMatrix`
   typed `NDArray` (cast it for the matrix members, no copy). NumPy's mechanism is declared once, on the computation the
   function calls (`Backends/Subclass/NDSubclassAttributes.cs`), and NumSharp.Build weaves it into the function
   (`tools/NumSharp.Build/SubclassWeaver.cs`): a one-branch prologue sends a call with a subclass operand to a generated

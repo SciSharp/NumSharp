@@ -24,7 +24,7 @@ below.)
 - Kernels `Backends/Kernels/ILKernelGenerator.Polynomial{,.Typing,.Emitter,.Lanes,.ConstPool,.Eval}.cs`: per-chunk IL over
   `NDIterRef.ForEach`, emitted by one typed emitter from per-basis STEP TABLES (NumPy's source-order expression trees,
   never re-associated, each node typed by NEP 50), so there is no per-basis or per-dtype C#.
-- Bit-exact with NumPy 2.4.2 on every dtype pair and layout, the result LAYOUT included: the tier `polyeval.jsonl` (zero
+- Bit-exact with NumPy 2.5.4 on every dtype pair and layout, the result LAYOUT included: the tier `polyeval.jsonl` (zero
   excused; section L is a "strides" facet over every x × series layout; section J a Python-sequence x (tuples, nested
   lists, empty, ragged, NumPy-scalar items, coerced by `UnmanagedStorage.FromSequence`) and a Python int x past int64 (a
   C# `BigInteger`,
@@ -124,7 +124,7 @@ below.)
 (the functions) + the facade `Polynomial/Package/np.polynomial.polyutils.cs` (`[ModuleName("np.polynomial.polyutils")]`);
 every element loop is an IL kernel in `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs` (the trim scan, the
 in-place combine, the tolerance scan, casts, and one-element scalarmath kernels behind flat slot arrays). Bit-exact with
-NumPy 2.4.2: `polyseries.jsonl` (zero excused: long series, block boundaries, getdomain window crossings, complex64
+NumPy 2.5.4: `polyseries.jsonl` (zero excused: long series, block boundaries, getdomain window crossings, complex64
 results value-compared, tuple / nested-sequence cases (section O), `trimseq` over Python sequences (P), the deferred
 object/str refusal (Q), `mapdomain` result layouts with a "strides" facet (R)), `Polynomial/PolynomialSeriesTests.cs`,
 `PolynomialResultLayoutTests.cs`.
@@ -241,7 +241,7 @@ For the six bases, with every parameter (`m`, `k`, `lbnd`, `scl`, `axis`). Drive
 NumPy's Python prologue in NumPy's statement order, which is also its error order. Kernel
 `Backends/Kernels/Direct/DirectILKernelGenerator.PolyCalculus.cs`: the six recurrences are DATA (`PolyCalcRoutines`:
 head steps, a j loop, tail steps; each statement is NumPy's source expression token for token), and ONE whole-array
-kernel is emitted per (basis, der/int, dtype, source dtype, 1-D, fused scale). Bit-exact with NumPy 2.4.2:
+kernel is emitted per (basis, der/int, dtype, source dtype, 1-D, fused scale). Bit-exact with NumPy 2.5.4:
 `polycalc.jsonl` (zero excused; argument kinds (M), zero-size / 5-D / extreme-int series (N), widened scale (O)),
 `Polynomial/PolynomialCalculusTests.cs` (NumPy's `TestIntegral`/`TestDerivative` ported, bitwise where NumPy's statement
 sequence makes them exact; byte dumps per dtype family; kernel structure), `Polynomial/PolynomialArgumentKindsTests.cs`.

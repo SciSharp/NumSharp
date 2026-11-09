@@ -1,4 +1,4 @@
-"""numpy_twins.py — the NumPy 2.4.2 side of benchmark/fusion/probes/expr_probe.cs.
+"""numpy_twins.py — the NumPy side (the pinned release, numpy-version.txt) of benchmark/fusion/probes/expr_probe.cs.
 
     NS_PROBE_AFFINITY=4 OPENBLAS_NUM_THREADS=1 python benchmark/fusion/probes/numpy_twins.py [ACD]
 

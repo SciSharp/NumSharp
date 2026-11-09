@@ -12,7 +12,7 @@ changes.
 **On this page:** [The contract](#the-contract) · [The bridges](#the-bridges) ·
 [Claims](#claims-ledger)
 
-> Verified on CPython 3.12.12 · numpy 2.4.2 · pythonnet 3.0.5 · net8.0/net10.0.
+> Verified on CPython 3.12.12 · numpy 2.5.4 · pythonnet 3.0.5 · net8.0/net10.0.
 > Every claim below is reproduced by a test in `NumSharp.Tests.Interop` - this page's own
 > gates run without Python, because the contract is NumSharp's alone.
 
@@ -119,7 +119,7 @@ should see a deterministic `Dispose`, with collection as the backstop.
 
 The same references feed NumSharp's resize guard: while a second view (or an export to Python)
 holds the block, `nd.resize(...)` refuses with NumPy's own wording - `cannot resize an array that
-references or is referenced by another array in this way`.
+references or is referenced by another object in this way`.
 
 <sub>See here [`Contract_ReleaseHook_FiresOnTheLastReference_IncludingDerivedViews`][gate], [`Contract_ReleaseHook_AlsoFiresByGarbageCollection`][gate], [`Contract_RefcheckGuard_SeesOtherReferencesToTheBlock`][gate]</sub>
 

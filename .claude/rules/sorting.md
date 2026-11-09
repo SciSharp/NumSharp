@@ -45,7 +45,7 @@ sort):
 
 ## `np.nonzero` of a 0-d array
 
-`np.nonzero` / `ndarray.nonzero` / single-argument `np.where` of a 0-d array raise NumPy 2.4.2's `ValueError: Calling
+`np.nonzero` / `ndarray.nonzero` / single-argument `np.where` of a 0-d array raise NumPy 2.5.4's `ValueError: Calling
 nonzero on 0d arrays is not allowed. Use np.atleast_1d(scalar).nonzero() instead.` for every dtype, before reading the
 element (`DefaultEngine.NonZero`; parity QA-02, breaking: the numeric dtypes answered like `atleast_1d(a).nonzero()`).
 A BOOL operand gets NumPy's longer text, the same words followed by ``If the context of this error is of the form

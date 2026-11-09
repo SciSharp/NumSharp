@@ -107,7 +107,7 @@ are `long` (intp), and every step yields a fresh index array.
     `operand_different_than_broadcast` ValueError, an explicit reduction axis of extent other than 1, the reduction rule);
     the wrapper hands its shape to the engine (`AdvancedNew(..., shapeValidated: true)`), which then skips its own
     broadcast computation.
-  - Buffered iteration is a statement-for-statement port of NumPy 2.4.2's buffering
+  - Buffered iteration is a statement-for-statement port of NumPy 2.5.4's buffering
     (`Backends/Iterators/NDIterBufferManager.Buffering.cs`), for `np.nditer` and every internal buffered iterator (the
     ufunc `out=` / `where=` routes, the clip / power iterator routes, buffered casts): `npyiter_find_buffering_setup` (the
     core / outer split by the cost model `(1 + buffered operands) / elements per fill`, per-operand BUFNEVER /

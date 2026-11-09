@@ -543,7 +543,7 @@ Three ways to get a typed wrapper:
 
 ## Saving, Loading, and Interop
 
-NumSharp reads **and** writes NumPy's `.npy` / `.npz` formats and raw binary. The `.npy`/`.npz` stack is a port of NumPy 2.4.2's format code (NEP-01), so a file written by `np.save` is **byte-for-byte identical** to what NumPy itself writes - data moves between Python and C# in both directions, losslessly. To wrap an existing in-memory byte buffer (file bytes, a network packet, a native pointer) see [`np.frombuffer`](#wrapping-existing-buffers---npfrombuffer) above.
+NumSharp reads **and** writes NumPy's `.npy` / `.npz` formats and raw binary. The `.npy`/`.npz` stack is a port of NumPy 2.5.4's format code (NEP-01), so a file written by `np.save` is **byte-for-byte identical** to what NumPy itself writes - data moves between Python and C# in both directions, losslessly. To wrap an existing in-memory byte buffer (file bytes, a network packet, a native pointer) see [`np.frombuffer`](#wrapping-existing-buffers---npfrombuffer) above.
 
 ```csharp
 // .npy - a single array (byte-identical to NumPy's np.save)

@@ -16,7 +16,7 @@
 //   D. fixed cost per call at n=8 (ns + managed bytes), kernel compile time
 //   E. cache behaviour (kernel count vs distinct NDArray instances / constants)
 //
-// Twin: benchmark/fusion/probes/numpy_twins.py (same shapes, same data, NumPy 2.4.2).
+// Twin: benchmark/fusion/probes/numpy_twins.py (same shapes, same data, the pinned NumPy of numpy-version.txt).
 // =============================================================================
 using System.Diagnostics;
 using System.Numerics;

@@ -176,7 +176,7 @@ parser).
   - Every diagonal is validated BEFORE any cross-operand extent (NumPy collapses all diagonals first).
   - The implicit output is ASCII-ordered, so an upper-case label sorts before a lower-case one (`einsum("zA", a)`
     transposes a `(2,3)`; `einsum("Az", a)` does not).
-  - The sublist alphabet is `'ABC…Zabc…z'`, upper case first (NumPy 2.4.2's `einsum_symbols`), so index order equals
+  - The sublist alphabet is `'ABC…Zabc…z'`, upper case first (NumPy 2.5.4's `einsum_symbols`), so index order equals
     ASCII order (`einsum(a, [0,26])` on `(2,3)` keeps `(2,3)`).
   - Spaces are legal anywhere; a `>` without its `-` is scanned as a label and rejected as an invalid subscript; a lone
     `-` gets the missing-arrow message.
@@ -188,7 +188,7 @@ parser).
 - `np.einsum_path` (the statements: `TensorEngine.EinsumPath`, `Backends/Default/LinearAlgebra/Default.EinsumPath.cs`,
   on the first operand's engine; the facades, the planner and the path type:
   `LinearAlgebra/{np.einsum_path,EinsumPathPlanner,EinsumPath}.cs`), a route-for-route port of NumPy
-  2.4.2's `einsumfunc.py`: `_parse_einsum_input`, the `_greedy_path`/`_optimal_path` searches with the `_flop_count` cost
+  2.5.4's `einsumfunc.py`: `_parse_einsum_input`, the `_greedy_path`/`_optimal_path` searches with the `_flop_count` cost
   model, and the info-string builder. `np.einsum_path(subscripts, operands, optimize)` returns `(EinsumPath path, string
   repr)`; `EinsumPath` is a `readonly struct` (Deconstruct, indexer, `Steps`/`Count`, `ToList()` for NumPy's raw list,
   NumPy-format `ToString`). The path and every metric are byte-identical to NumPy. `optimize=` takes NumPy's whole
@@ -206,7 +206,7 @@ parser).
   (.NET's `"0.000e+00"` rounds half away). Ellipsis placeholder letters are drawn deterministically (NumPy's come from a
   hash-randomized set; only those display letters differ). `einsum_call=True` is not ported (NumPy-internal).
 - Gates: `LinearAlgebra/EinsumPathTests.cs`, `EinsumSubscriptParityTests.cs` (the grammar), `EinsumContractionTests.cs`
-  (the values against NumPy 2.4.2), and the `einsum` tier.
+  (the values against NumPy 2.5.4), and the `einsum` tier.
 
 ## Gates of the linear-algebra surface
 

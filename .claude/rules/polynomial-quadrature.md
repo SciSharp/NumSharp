@@ -8,7 +8,7 @@ paths:
 
 # The polynomial package (3/4): weights, nodes, quadrature, interpolation and fits
 
-Every function here is bit-exact with NumPy 2.4.2, zero excuses. The LAPACK-bound ones (the Gauss quadratures, the
+Every function here is bit-exact with NumPy 2.5.4, zero excuses. The LAPACK-bound ones (the Gauss quadratures, the
 interpolation and the fits) are exact with the OpenBLAS NumPy loads, at one thread, and their value tiers are host-pinned
 like `polyroots_parity` (the BLAS identity in the tier's `.host.jsonl`); without a LAPACK backend a valid call raises
 `MissingBackendException` after NumPy-exact validation.

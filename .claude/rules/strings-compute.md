@@ -9,7 +9,7 @@ paths:
 
 # Computing on text: comparisons, arithmetic, reductions, ordering
 
-Over `S`, `U` and `StringDType`, byte-identical to NumPy 2.4.2 (the storage and the refuse-or-compute rule:
+Over `S`, `U` and `StringDType`, byte-identical to NumPy 2.5.4 (the storage and the refuse-or-compute rule:
 `strings.md`; the named `np.strings` functions: `strings-methods.md`).
 
 ## The text kernels and their drivers
@@ -169,15 +169,17 @@ text, a `None`-like NA raising at the first comparison that meets it (a line of 
   (`RemoveNaN1D`: the partition keeps tied texts in arrival order). A masked `T` reduction's result layout lets the
   `where=` mask vote (`Shape.ReductionOutputShape(dims, input, axis, where)`); a `T` comparison with `where=` into an
   out of another dtype computes its bool temporary under the mask.
-- NumPy 2.4.2 defects the generator avoids and the unit tests pin with NumSharp's answers (`StringDTypeOrderTests`,
-  `[Misaligned]`): it CRASHES in `np.lexsort` over a non-contiguous `T` key and in the default-kind sort when its
-  introsort spends the depth budget (the heapsort fallback reads the method context as an array: `np.intersect1d` of two
-  unique outputs reaches it); it misorders arena texts in the argsort of a non-contiguous view (`axis=None`); it loads
-  `searchsorted`'s haystack and `np.histogram`'s search with the keys' allocator (an arena haystack text raises
-  `MemoryError`); an empty text times a negative count hangs. A `None` NA row result of `np.apply_along_axis` is an object
-  array in NumPy, `NotSupportedException` here. NumPy's values-only `np.unique` hashes the FULL bytes and sorts
-  unstably, so two strncmp-equal texts survive in an order the C++ library picks: the soak's `TieExcuse` accepts an
-  element that compares EQUAL to NumPy's.
+- NumPy 2.5.4 defects the generator avoids and the unit tests pin with NumSharp's answers (`StringDTypeOrderTests`,
+  `[Misaligned]`): it CRASHES in `np.lexsort` over a non-contiguous `T` key; its default-kind `np.sort` / `ndarray.sort`
+  never return when the introsort spends the depth budget (the heapsort fallback reads the method context as an array;
+  NumPy 2.4.2 crashed there, and `np.intersect1d` of two unique outputs reached it), while `np.argsort` answers; it
+  misorders arena texts in the argsort of a non-contiguous view (`axis=None`). NumPy 2.5 fixed two more, which the
+  corpus records since the 2.5.4 pin: `searchsorted`'s haystack and `np.histogram`'s search read with the KEYS'
+  allocator (an arena haystack text raised `MemoryError`), and an empty text times a negative count (it hung). A `None`
+  NA row result of `np.apply_along_axis` is an object array in NumPy, `NotSupportedException` here. NumPy's values-only
+  `np.unique` hashes the FULL bytes and sorts unstably; under NumPy 2.4.2's strncmp comparison two different texts could
+  tie and survive in an order the C++ library picked, which the soak's `TieExcuse` accepts. NumPy 2.5 compares the full
+  bytes (memcmp), so different texts no longer tie and the excuse has nothing left to accept.
 
 ## Gates
 

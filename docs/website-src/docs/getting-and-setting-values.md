@@ -273,7 +273,7 @@ When a scalar is written to an array (`fill`, `flatiter` set, scalar indexer ass
 - **A C# primitive is a *weak* scalar** (NumSharp's analog of a Python literal).
   - Into an **integer** dtype it is **range-checked**: an out-of-range value **raises** `OverflowException` (`"Python integer 300 out of bounds for int8"`) rather than wrapping. A float source truncates toward zero first, then the truncated value is checked; `NaN` raises `ValueError`, `±inf` raises `OverflowException`, a complex source raises `TypeError`.
   - Into a **float/complex** dtype it casts, saturating to `±inf` on overflow (`float32.fill(1e300)` → `inf`).
-- **A 0-d `NDArray` is a *strong* scalar** - it **wraps** on cast, as NumPy's 0-d array does (`a.fill(np.array(300, np.int32))` stores 44). Use `NDArray.Scalar<T>(v)` when you need the wrapping cast. NumPy 2.4.2 range-checks its scalar objects (`np.int32(300)`) like Python ints here; NumSharp has no scalar objects, and its C# primitive takes that role.
+- **A 0-d `NDArray` is a *strong* scalar** - it **wraps** on cast, as NumPy's 0-d array does (`a.fill(np.array(300, np.int32))` stores 44). Use `NDArray.Scalar<T>(v)` when you need the wrapping cast. NumPy 2.5.4 range-checks its scalar objects (`np.int32(300)`) like Python ints here; NumSharp has no scalar objects, and its C# primitive takes that role.
 - A **higher-rank array** assigned as a scalar is a sequence → `ValueError("setting an array element with a sequence.")`.
 
 ```csharp

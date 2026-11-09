@@ -31,7 +31,7 @@ has no operand to choose another) and keep the cephes `BesselI0` port behind kai
   too (`TensorEngine.I0`, `Backends/Default/Math/Default.I0.cs`, one cephes kernel per float width; facade
   `Math/np.i0.cs`). kaiser's member applies np.i0's float64 kernel delegate (`np._i0Double`) per element in its fused pass
   and takes `i0(beta)` from the engine's own `I0` (NumPy's statement `i0(float(beta))`).
-- Bit-identical to NumPy 2.4.2: the transform is one `np.evaluate` fused expression in NumPy's exact operation order (so
+- Bit-identical to NumPy 2.5.4: the transform is one `np.evaluate` fused expression in NumPy's exact operation order (so
   `(π·n)/(M-1)` rounds the same two steps), float64 add/sub/mul/div are IEEE-exact, and float64 `cos` is the `ucrtbase`
   `Math.Cos` NumPy also calls (`i0` rides `Math.Exp`/`Math.Sqrt`). Because those are host libm, the `windows` tier is
   host-pinned (`RunHostLibmCorpus`: strict on win-amd64, Inconclusive elsewhere); bartlett is pure arithmetic and
@@ -43,7 +43,7 @@ has no operand to choose another) and keep the cephes `BesselI0` port behind kai
 `fftfreq`, `rfftfreq`, `fftshift`, `ifftshift`, plus the complex accessors `conjugate`/`conj`, `real`, `imag`, `angle`
 (np.real / np.imag's statements are `NDArray.real_` / `imag_` in `Backends/NDArray.TypeCheck.cs`).
 - A pure-managed C# port of pocketfft, NumPy's own FFT engine (`src/NumSharp.Core/Fourier/`, no native dependency). The
-  double/complex128 path is bit-for-bit identical to NumPy 2.4.2: the port is a faithful scalar transcription, NumPy's
+  double/complex128 path is bit-for-bit identical to NumPy 2.5.4: the port is a faithful scalar transcription, NumPy's
   win-amd64 wheel is itself scalar (`POCKETFFT_NO_VECTORS` under MSVC), and the twiddles come from the same CRT
   (`Math.Cos`/`Sin` = MSVC `ucrtbase`). No explicit FMA is needed, which is why `fft.jsonl` is a portable tier.
 - arm64 NumPy differs, not NumSharp: NumPy's arm64 wheels compile pocketfft with the default FP contraction on an FMA

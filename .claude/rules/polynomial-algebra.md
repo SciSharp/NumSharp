@@ -31,7 +31,7 @@ bases.
   - scalarmath: the one-element kernels (the naive complex product, NumPy's scalar division).
 
   So the only C# is NumPy's own Python: its loops are over SERIES, never elements.
-- Bit-exact with NumPy 2.4.2, except the convolution bases' BLAS-bound products without the backend (below). Oracle:
+- Bit-exact with NumPy 2.5.4, except the convolution bases' BLAS-bound products without the backend (below). Oracle:
   `polyalgebra.jsonl` (portable, zero excused) and the host-pinned `polyalgebra_parity.jsonl` (the BLAS-bound products,
   byte-exact with `NumSharp.Interop.OpenBLAS` at threads = 1, Inconclusive off the pinned host). Unit tests
   `Polynomial/PolynomialAlgebraTests.cs` (NumPy's `TestArithmetic`/`TestMisc` ported, dtype-quirk byte dumps, decimal and
@@ -135,7 +135,7 @@ bases.
 
 ## Vandermonde matrices: `{p}vander`, `{p}vander2d`, `{p}vander3d`
 
-Bit-exact with NumPy 2.4.2: `polyvander.jsonl` (zero excused), `Polynomial/PolynomialVanderTests.cs`,
+Bit-exact with NumPy 2.5.4: `polyvander.jsonl` (zero excused), `Polynomial/PolynomialVanderTests.cs`,
 `PolynomialVanderArgumentKindsTests.cs`.
 - Driver (`Polynomial/Package/NDPolyVander.cs`), NumPy's statements in NumPy's order, which is also its error order:
   - 1-D: `_as_int(deg)` → `deg must be non-negative` → `np.array(x, ndmin=1)` → `np.empty`'s dimension conversion
@@ -194,7 +194,7 @@ Bit-exact with NumPy 2.4.2: `polyvander.jsonl` (zero excused), `Polynomial/Polyn
 
 ## Companion matrices and roots: `{p}companion`, `{p}roots`
 
-Bit-exact with NumPy 2.4.2: `polyroots.jsonl` (portable: every companion, plus the roots that never reach LAPACK) and the
+Bit-exact with NumPy 2.5.4: `polyroots.jsonl` (portable: every companion, plus the roots that never reach LAPACK) and the
 host-pinned `polyroots_parity.jsonl` (the roots that run geev; byte-exact with `NumSharp.Interop.OpenBLAS` at threads = 1,
 Inconclusive off the pinned host), zero excused; `Polynomial/PolynomialRootsTests.cs`.
 - Engine (`Polynomial/Package/NDPolyAlgebra.Roots.cs`, on the series-algebra arena), NumPy's statements in NumPy's order:
