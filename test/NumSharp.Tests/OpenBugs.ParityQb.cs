@@ -1236,5 +1236,43 @@ namespace NumSharp.Tests
             using (var isin = np.isin(mask, trueOnly))
                 isin.ToArray<bool>().Should().Equal(false, true, true, true, true, false, true, true);
         }
+
+        // ------------------------------------------------------------------
+        // QB-43 — a partition at SEVERAL kth is NumPy's scalar introselect_: its choice among equal values is defined
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2 dispatches a partition to x86-simd-sort only for ONE kth (<c>introselect_noarg</c>:
+        ///     <c>nkth == 1 &amp;&amp; quickselect_dispatch(...)</c>); several kth — every np.median / np.quantile call
+        ///     (<c>kth + [-1]</c>, <c>[0, -1, prev, next]</c>) and an explicit kth list — run the scalar <c>introselect_</c> on
+        ///     every host, whose swaps decide which of several EQUAL values lands at a kth: <c>np.partition([0., -0., -2.],
+        ///     [1, 2])</c> is <c>[-2., -0., 0.]</c> (dumb_select swaps the minimum to the front),
+        ///     <c>np.argpartition([0., -0., -2.], [1, 2])</c> is <c>[2, 1, 0]</c>, and
+        ///     <c>np.quantile([0., -0., 3., 0., 3., -2.], 0.6, method='lower')</c> is <c>-0.0</c>. NumSharp's
+        ///     <c>Utilities/QuickSelect.cs</c> insertion-sorts a window of up to 16 elements before its dumb_select / maximum
+        ///     shortcuts (a stable order, not dumb_select's swaps) and partitions longer lines its own way, so the tied
+        ///     element differs: <c>[-2., 0., -0.]</c>, <c>[2, 0, 1]</c>, <c>0.0</c>. Visible as the SIGN of a zero result of
+        ///     np.partition / the discontinuous quantile methods / np.median, and as argpartition's tied indices (in
+        ///     <c>q104</c> 57 of 300 random lines of 3–64 elements; the kth VALUES always compare equal). quantile.md's "keep
+        ///     NumPy's choice among ties" claim for the shortcuts does not survive the window sort.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB43")]
+        public void ParityQb_QB43_MultiKthPartition_KeepsIntroselectsChoiceAmongTies()
+        {
+            using var zeros = np.array(new double[] { 0.0, -0.0, -2.0 });
+            using var data = np.array(new double[] { 0.0, -0.0, 3.0, 0.0, 3.0, -2.0 });
+
+            // NumPy 2.4.2: np.argpartition([0., -0., -2.], [1, 2]) is [2, 1, 0]
+            using (var order = np.argpartition(zeros, new[] { 1, 2 }))
+                order.ToArray<long>().Should().Equal(2L, 1L, 0L);
+
+            // NumPy 2.4.2: np.partition([0., -0., -2.], [1, 2])[1] is -0.0
+            using (var parted = np.partition(zeros, new[] { 1, 2 }))
+                BitConverter.DoubleToInt64Bits(parted.GetDouble(1)).Should().Be(BitConverter.DoubleToInt64Bits(-0.0));
+
+            // NumPy 2.4.2: np.quantile([0., -0., 3., 0., 3., -2.], 0.6, method='lower') is -0.0
+            using (var lower = np.quantile(data, 0.6, method: "lower"))
+                BitConverter.DoubleToInt64Bits(lower.GetDouble()).Should().Be(BitConverter.DoubleToInt64Bits(-0.0));
+        }
     }
 }
