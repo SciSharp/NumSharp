@@ -1746,5 +1746,39 @@ namespace NumSharp.Tests
 
             return false;
         }
+
+        // ------------------------------------------------------------------
+        // QB-61 — a single ndarray passed to vstack / hstack / column_stack / dstack is NumPy's SEQUENCE of its rows
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's stackers take a sequence of arrays, and an ndarray IS a sequence (of its first-axis slices), so
+        ///     <c>np.hstack(M)</c> of a <c>(3, 2)</c> array concatenates its three rows into <c>(6,)</c>,
+        ///     <c>np.column_stack(M)</c> turns the rows into columns <c>(2, 3)</c>, <c>np.dstack(M)</c> gives
+        ///     <c>(1, 2, 3)</c>, and <c>np.vstack(v)</c> of a 1-D <c>(3,)</c> array stacks its three 0-d elements into
+        ///     <c>(3, 1)</c> (<c>np.column_stack(v)</c> <c>(1, 3)</c>, <c>np.dstack(v)</c> <c>(1, 1, 3)</c>). NumSharp's
+        ///     <c>params NDArray[] tup</c> wraps a single array into a ONE-element sequence, so each returns the array's
+        ///     own stacking instead: <c>(3, 2)</c>, <c>(3, 2)</c>, <c>(3, 2, 1)</c>, <c>(1, 3)</c> - silently, with the same
+        ///     values in another shape and order. <c>np.vstack(M)</c> of a 2-D array happens to agree. np.concatenate and
+        ///     np.stack take <c>NDArray[]</c> without <c>params</c>, so the same NumPy idiom (<c>np.concatenate(M)</c>, the
+        ///     row-flatten; <c>np.stack(M)</c>) does not compile there (q168).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB61")]
+        public void ParityQb_QB61_SingleArrayToTheStackers_IsASequenceOfRows()
+        {
+            using var m = np.array(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }).reshape(3, 2);
+            using var v = np.array(new[] { 1.0, 2.0, 3.0 });
+            using var h = np.hstack(m);
+            using var c = np.column_stack(m);
+            using var d = np.dstack(m);
+            using var vv = np.vstack(v);
+
+            // NumPy 2.4.2: np.hstack(M).shape (6,), np.column_stack(M).shape (2, 3), np.dstack(M).shape (1, 2, 3),
+            // np.vstack(v).shape (3, 1)
+            h.shape.Should().Equal(6L);
+            c.shape.Should().Equal(2L, 3L);
+            d.shape.Should().Equal(1L, 2L, 3L);
+            vv.shape.Should().Equal(3L, 1L);
+        }
     }
 }
