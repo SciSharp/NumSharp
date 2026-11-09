@@ -545,7 +545,8 @@ jobs:
     # package brings for every runner RID. It runs against the package's FLOOR (1.16.0 — the ORT a bare
     # consumer resolves, and the version the package compiles against) on both TFMs, then against the
     # CURRENT release, so both ends of the dependency range are exercised. Its build needs nothing the
-    # pythonnet suite set up, so it only waits for cancellation; NumSharp.Core is already built.
+    # pythonnet suite set up, so it only waits for cancellation; NumSharp.Core is already built. Every
+    # step excludes the OpenBugs category (known-failing reproductions), as the unit-suite steps do.
     - name: "ONNX Runtime: Build (floor)"
       id: ort_build
       if: ${{ !cancelled() }}
@@ -557,7 +558,8 @@ jobs:
       shell: bash
       run: |
         dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
-          --configuration Release --no-build --framework net8.0 --logger "trx;LogFileName=onnxruntime-floor-net8.0.trx"
+          --configuration Release --no-build --framework net8.0 --logger "trx;LogFileName=onnxruntime-floor-net8.0.trx" \
+          --filter "TestCategory!=OpenBugs"
 
     - name: "ONNX Runtime: Test floor (net10.0)"
       if: ${{ !cancelled() && steps.ort_build.outcome == 'success' }}
@@ -565,7 +567,8 @@ jobs:
       shell: bash
       run: |
         dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
-          --configuration Release --no-build --framework net10.0 --logger "trx;LogFileName=onnxruntime-floor-net10.0.trx"
+          --configuration Release --no-build --framework net10.0 --logger "trx;LogFileName=onnxruntime-floor-net10.0.trx" \
+          --filter "TestCategory!=OpenBugs"
 
     # The current ORT release. Keep the version in lockstep with the one the README's "Verified against"
     # banner names; bumping it here is the whole of "support a newer ORT". The -p: global property
@@ -584,7 +587,7 @@ jobs:
       run: |
         dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
           --configuration Release --framework net10.0 --logger "trx;LogFileName=onnxruntime-current-net10.0.trx" \
-          -p:OnnxRuntimeVersion=1.31.1 -p:NoWarn=${{ env.DOTNET_NOWARN }}
+          --filter "TestCategory!=OpenBugs" -p:OnnxRuntimeVersion=1.31.1 -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # The NEWEST ONNX Runtime on nuget.org, whatever it is - the floating version `*-*` resolves the highest
     # release, prereleases included. The package depends on Microsoft.ML.OnnxRuntime.Managed 1.16.0 or later
@@ -599,7 +602,7 @@ jobs:
       run: |
         dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
           --configuration Release --framework net10.0 --logger "trx;LogFileName=onnxruntime-newest-net10.0.trx" \
-          "-p:OnnxRuntimeVersion=*-*" -p:NoWarn=${{ env.DOTNET_NOWARN }}
+          --filter "TestCategory!=OpenBugs" "-p:OnnxRuntimeVersion=*-*" -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # ── ML.NET interop (NumSharp.Interop.MLNet) ────────────────────────────────────────────────────
     #
