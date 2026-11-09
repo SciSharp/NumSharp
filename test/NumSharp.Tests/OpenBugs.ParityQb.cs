@@ -1783,6 +1783,12 @@ namespace NumSharp.Tests
             // numpy.ma's stackers (params object[]) inherit it: NumPy 2.4.2's np.ma.hstack(masked (3, 2)).shape is (6,)
             var masked = np.ma.masked_array(m, np.zeros(new Shape(3, 2), np.@bool));
             np.ma.hstack(masked).shape.Should().Equal(6L);
+
+            // So does np.linalg.multi_dot (NumPy: multi_dot(arrays), a sequence): a (2, 2, 2) stack is the chain of its two
+            // matrices in NumPy 2.4.2, [[6, 7], [26, 31]], where NumSharp raises "Expecting at least two arrays."
+            using var stack = np.arange(8.0).reshape(2, 2, 2);
+            using var chain = np.linalg.multi_dot(stack);
+            chain.GetDouble(1, 1).Should().Be(31.0);
         }
     }
 }
