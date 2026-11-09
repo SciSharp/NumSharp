@@ -891,36 +891,43 @@ namespace NumSharp
         public abstract NDArray Ptp(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false);
 
         /// <summary>
-        ///     NumPy's <c>np.sort(a, axis, kind, order, stable)</c> (<c>fromnumeric.sort</c> over <c>PyArray_Sort</c>), the
-        ///     whole call: a sorted copy of <paramref name="a"/>, which is only read. Use <see cref="SortInPlace"/> for
-        ///     <c>ndarray.sort</c>.
+        ///     NumPy's <c>np.sort(a, axis, kind, order, stable, descending)</c> (<c>fromnumeric.sort</c> over
+        ///     <c>PyArray_Sort</c>), the whole call: a sorted copy of <paramref name="a"/>, which is only read. Use
+        ///     <see cref="SortInPlace"/> for <c>ndarray.sort</c>.
         /// </summary>
         /// <param name="a">The array (any dtype: text sorts by code points, <c>StringDType</c> in NumPy's NA order).</param>
         /// <param name="axis">The sorted axis (negative counts from the end), or null for the C-order flattening.</param>
         /// <param name="kind">NumPy's <c>kind=</c>, read from its first character (<c>q</c>uicksort, <c>h</c>eapsort,
         ///     <c>m</c>ergesort or <c>s</c>table, any case), or null for the default. It changes the answer only where NumPy's
-        ///     does: the stable kind's float value sort keeps every NaN's bits, and StringDType refuses the heapsort kind.</param>
+        ///     does: the heapsort kind is the default kind, the default kind's float value sort leaves the NaNs in the order
+        ///     NumPy's x86-simd-sort moves them to the end (the stable kind's in input order, every NaN's bits kept either
+        ///     way), and the default kind's descending sorts follow NumPy's introsort.</param>
         /// <param name="order">NumPy's <c>order=</c>, a field name or a list of them, or null: every NumSharp dtype has no
         ///     fields, so any value is refused.</param>
         /// <param name="stable">NumPy's keyword-only <c>stable=</c>: true asks for the stable kind; any non-null value is
         ///     refused together with <paramref name="kind"/>.</param>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending=</c>: true sorts the largest value first, NaN
+        ///     still last (complex: the NaN classes last, each in descending order); any non-null value is refused together
+        ///     with <paramref name="kind"/>. <c>StringDType</c> refuses it.</param>
         /// <returns>A fresh array of <paramref name="a"/>'s dtype laid out as <c>copy(order='K')</c> lays out
         ///     <paramref name="a"/> (an F input stays F), or the sorted flattening for a null axis.</returns>
         /// <exception cref="ValueError">An unknown <paramref name="kind"/> (<c>sort kind must be one of 'quick', 'heap', or
-        ///     'stable' (got 'x')</c>), <paramref name="kind"/> together with <paramref name="stable"/>, or an
-        ///     <paramref name="order"/>, all before the array is read; a <c>StringDType</c> line of two or more elements
-        ///     holding an NA whose NA object is neither NaN-like nor a string.</exception>
-        /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort
-        ///     kind</c>).</exception>
+        ///     'stable' (got 'x')</c>), <paramref name="kind"/> together with <paramref name="stable"/> or
+        ///     <paramref name="descending"/>, or an <paramref name="order"/>, all before the array is read; a
+        ///     <c>StringDType</c> line of two or more elements holding an NA whose NA object is neither NaN-like nor a
+        ///     string.</exception>
+        /// <exception cref="RuntimeError">A <c>StringDType</c> array sorted descending (<c>unsupported sort kind</c>), after
+        ///     the axis check.</exception>
         /// <exception cref="AxisError">The axis is out of range (a 0-d array refuses every axis: NumPy's sort does not ravel
         ///     it first).</exception>
         /// <remarks>New in 0.80.0 (the np-layer dtype plan, phase PE, E5): the public <c>np.sort</c> applies its class
         ///     boundaries and calls this; DefaultEngine sorts with its AxisSort kernels.</remarks>
         [NewSubtype("a")]
-        public abstract NDArray Sort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null);
+        public abstract NDArray Sort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null,
+            bool? descending = null);
 
         /// <summary>
-        ///     NumPy's <c>ndarray.sort(axis, kind, order, stable)</c> (<c>array_sort</c> over <c>PyArray_Sort</c>), the whole
+        ///     NumPy's <c>ndarray.sort(axis, kind, order, stable, descending)</c> (<c>array_sort</c> over <c>PyArray_Sort</c>), the whole
         ///     call: sorts <paramref name="a"/> IN PLACE along the axis, in NumPy's order of checks (the arguments, the axis,
         ///     writeability, then the sort). Use <see cref="Sort"/> for a sorted copy.
         /// </summary>
@@ -929,24 +936,30 @@ namespace NumSharp
         ///     contiguous array's flattening in place.</param>
         /// <param name="kind">NumPy's <c>kind=</c>, read from its first character (<c>q</c>uicksort, <c>h</c>eapsort,
         ///     <c>m</c>ergesort or <c>s</c>table, any case), or null for the default. It changes the answer only where NumPy's
-        ///     does: the stable kind's float value sort keeps every NaN's bits, and StringDType refuses the heapsort kind.</param>
+        ///     does: the heapsort kind is the default kind, the default kind's float value sort leaves the NaNs in the order
+        ///     NumPy's x86-simd-sort moves them to the end (the stable kind's in input order, every NaN's bits kept either
+        ///     way), and the default kind's descending sorts follow NumPy's introsort.</param>
         /// <param name="order">NumPy's <c>order=</c>, a field name or a list of them, or null: every NumSharp dtype has no
         ///     fields, so any value is refused.</param>
         /// <param name="stable">NumPy's keyword-only <c>stable=</c>: true asks for the stable kind; any non-null value is
         ///     refused together with <paramref name="kind"/>.</param>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending=</c>: true sorts the largest value first, NaN
+        ///     still last (complex: the NaN classes last, each in descending order); any non-null value is refused together
+        ///     with <paramref name="kind"/>. <c>StringDType</c> refuses it.</param>
         /// <exception cref="ValueError">An unknown <paramref name="kind"/> (<c>sort kind must be one of 'quick', 'heap', or
-        ///     'stable' (got 'x')</c>), <paramref name="kind"/> together with <paramref name="stable"/>, or an
-        ///     <paramref name="order"/>, all before the array is read; a read-only
+        ///     'stable' (got 'x')</c>), <paramref name="kind"/> together with <paramref name="stable"/> or
+        ///     <paramref name="descending"/>, or an <paramref name="order"/>, all before the array is read; a read-only
         ///     array (<c>sort array is read-only</c>); a <c>StringDType</c> line of two or more elements
         ///     holding an NA whose NA object is neither NaN-like nor a string.</exception>
-        /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort
-        ///     kind</c>).</exception>
+        /// <exception cref="RuntimeError">A <c>StringDType</c> array sorted descending (<c>unsupported sort
+        ///     kind</c>), after the axis and writeability checks.</exception>
         /// <exception cref="AxisError">The axis is out of range.</exception>
         /// <remarks>New in 0.80.0 (the np-layer dtype plan, phase PE, E5): <c>NDArray.sort</c> calls this.</remarks>
-        public abstract void SortInPlace(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null);
+        public abstract void SortInPlace(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null,
+            bool? descending = null);
 
         /// <summary>
-        ///     NumPy's <c>np.argsort(a, axis, kind, order, stable)</c> and <c>ndarray.argsort</c> (<c>PyArray_ArgSort</c>),
+        ///     NumPy's <c>np.argsort(a, axis, kind, order, stable, descending)</c> and <c>ndarray.argsort</c> (<c>PyArray_ArgSort</c>),
         ///     the whole call: the int64 indices that sort <paramref name="a"/> along the axis.
         /// </summary>
         /// <param name="a">The array (only read). A 0-d array ravels to one element first, as NumPy's
@@ -954,24 +967,31 @@ namespace NumSharp
         /// <param name="axis">The sorted axis (negative counts from the end), or null for the C-order flattening.</param>
         /// <param name="kind">NumPy's <c>kind=</c>, read from its first character (<c>q</c>uicksort, <c>h</c>eapsort,
         ///     <c>m</c>ergesort or <c>s</c>table, any case), or null for the default. It changes the answer only where NumPy's
-        ///     does: the stable kind's float value sort keeps every NaN's bits, and StringDType refuses the heapsort kind.</param>
+        ///     does: the heapsort kind is the default kind, the default kind's float value sort leaves the NaNs in the order
+        ///     NumPy's x86-simd-sort moves them to the end (the stable kind's in input order, every NaN's bits kept either
+        ///     way), and the default kind's descending sorts follow NumPy's introsort.</param>
         /// <param name="order">NumPy's <c>order=</c>, a field name or a list of them, or null: every NumSharp dtype has no
         ///     fields, so any value is refused.</param>
         /// <param name="stable">NumPy's keyword-only <c>stable=</c>: true asks for the stable kind; any non-null value is
         ///     refused together with <paramref name="kind"/>.</param>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending=</c>: true sorts the largest value first, NaN
+        ///     still last (complex: the NaN classes last, each in descending order); any non-null value is refused together
+        ///     with <paramref name="kind"/>. <c>StringDType</c> refuses it.</param>
         /// <returns>A fresh, C-contiguous int64 array of <paramref name="a"/>'s shape (one-dimensional for a null axis).
-        ///     Ties keep their order for every numeric kind (NumSharp's numeric argsort is one stable order); text follows
-        ///     NumPy's introsort for the default kind.</returns>
+        ///     Ascending ties keep their order for every numeric kind (NumSharp's numeric ascending argsort is one stable
+        ///     order); text, and every descending default-kind argsort, follow NumPy's introsort.</returns>
         /// <exception cref="ValueError">An unknown <paramref name="kind"/> (<c>sort kind must be one of 'quick', 'heap', or
-        ///     'stable' (got 'x')</c>), <paramref name="kind"/> together with <paramref name="stable"/>, or an
-        ///     <paramref name="order"/>, all before the array is read; a <c>StringDType</c> line of two or more elements
-        ///     holding an NA whose NA object is neither NaN-like nor a string.</exception>
-        /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort
-        ///     kind</c>), before the axis: NumPy resolves the argsort loop first.</exception>
+        ///     'stable' (got 'x')</c>), <paramref name="kind"/> together with <paramref name="stable"/> or
+        ///     <paramref name="descending"/>, or an <paramref name="order"/>, all before the array is read; a
+        ///     <c>StringDType</c> line of two or more elements holding an NA whose NA object is neither NaN-like nor a
+        ///     string.</exception>
+        /// <exception cref="RuntimeError">A <c>StringDType</c> array sorted descending (<c>unsupported sort kind</c>), before
+        ///     the axis: NumPy resolves the argsort loop first.</exception>
         /// <exception cref="AxisError">The axis is out of range.</exception>
         /// <remarks>New in 0.80.0 (the np-layer dtype plan, phase PE, E5): <c>np.argsort</c> and <c>NDArray.argsort</c>
         ///     call this.</remarks>
-        public abstract NDArray ArgSort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null);
+        public abstract NDArray ArgSort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null,
+            bool? descending = null);
 
         /// <summary>
         ///     NumPy's <c>np.partition(a, kth, axis, kind, order)</c> (<c>fromnumeric.partition</c> over

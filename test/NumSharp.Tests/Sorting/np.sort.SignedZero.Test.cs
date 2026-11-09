@@ -62,8 +62,10 @@ namespace NumSharp.Tests.Sorting
         }
 
         /// <summary>
-        ///     The zero run sits between the negatives and the positives with each zero's own sign in input order, NaNs last:
-        ///     the stable kind keeps every NaN's bits, the default kind writes NumPy's canonical positive quiet NaN.
+        ///     The zero run sits between the negatives and the positives with each zero's own sign in input order, NaNs last
+        ///     with their bits: the stable kind in input order, the default kind in x86-simd-sort's order (NumPy 2.5; 2.4
+        ///     wrote the positive quiet NaN). NumPy's default kind writes this zero run as three <c>-0.0</c> on an AVX2 host,
+        ///     not even a permutation of the signs — the input order is NumSharp's deterministic answer for it.
         /// </summary>
         [TestMethod]
         public void ZeroRun_SitsBetweenNegativesAndPositives_NaNsStayLast()
@@ -82,7 +84,7 @@ namespace NumSharp.Tests.Sorting
             using var quick = np.sort(a);
             var q = quick.ToArray<double>();
             Signs64(quick).Substring(1, 3).Should().Be("-+-");
-            BitConverter.DoubleToInt64Bits(q[6]).Should().Be(0x7FF8000000000000L, "the default kind writes NumPy's canonical NaN");
+            BitConverter.DoubleToInt64Bits(q[6]).Should().Be(unchecked((long)0xFFF8000000000001UL), "the default kind keeps the NaN's bits too");
         }
 
         /// <summary>

@@ -7,11 +7,14 @@ namespace NumSharp.Backends.Kernels
 {
     // =============================================================================
     // DirectILKernelGenerator.Search.cs
-    //   OWNERSHIP: searchsorted binary-search kernels with NumPy-style monotonic optimization.
+    //   OWNERSHIP: searchsorted binary-search kernels, NumPy 2.5's batched bisection.
     //   RESPONSIBILITY:
     //     - Typed inner loop per (NPTypeCode, side, has_sorter), no boxing / no double conversion.
-    //     - Monotonic key bound tracking: when consecutive keys ascend (per the side's cmp), the
-    //       lower bound L carries from the previous iteration — same trick NumPy uses (binsearch.cpp).
+    //     - Batched bisection (NumPy 2.5, gh-30517): every key shares one interval length, halved once
+    //       per pass, and each key's base lives in the result array between passes. The first pass
+    //       compares every key with the same pivot (the median), the next with the quartiles, so
+    //       pivots stay in cache and the keys' comparisons are independent (out-of-order friendly).
+    //       It replaced 2.4's per-key bisection with the monotonic carry of the previous key's bound.
     //     - Caller must materialize v (keyPtr) to contiguous before calling; sorter must be int64
     //       and contiguous. a (arrPtr) may be strided via arrStrideBytes.
     //   PARITY WITH NUMPY:
@@ -19,9 +22,17 @@ namespace NumSharp.Backends.Kernels
     //       argbinsearch<Tag, side> for a sorter: every sorter entry the bisection reaches is checked
     //       against [0, arrLen) before it addresses a (argbinsearch returns -1, which
     //       PyArray_SearchSorted raises as "Sorter index out of range."); an entry it never reaches is
-    //       never read, so it is never checked.
+    //       never read, so it is never checked. The middle entry sorter[arrLen >> 1] is reached
+    //       before any key is read, so it is checked even when there is no key.
     //     - side='left'  cmp = (val <  target)  -> bisect_left  (returns first i with a[i] >= target)
     //     - side='right' cmp = (val <= target)  -> bisect_right (returns first i with a[i] >  target)
+    //     - A sorted haystack has one answer per key, which both algorithms find. An UNSORTED one
+    //       (np.unique's NaN probe over a masked array's raw data, a user's mistake) is answered by
+    //       whichever pivots the algorithm visits, so the batched schedule is what makes the answer
+    //       NumPy 2.5's. NumPy's generic search (text, object) keeps the 2.4 algorithm:
+    //       Sorting.TextSearch / Sorting.VStringSearch.
+    //     - Decimal (no NumPy dtype) and Char (NumPy's uint16 in the oracle) run the same numeric
+    //       schedule as every other fixed-size dtype.
     // =============================================================================
     public static partial class DirectILKernelGenerator
     {
@@ -31,14 +42,17 @@ namespace NumSharp.Backends.Kernels
         /// <param name="arrPtr">Pointer to a's data, already at a.Shape.offset.</param>
         /// <param name="arrLen">Number of elements in a.</param>
         /// <param name="arrStrideBytes">a's stride in bytes (= elemSize when contiguous).</param>
-        /// <param name="keyPtr">Pointer to v's data; v MUST be contiguous (elemSize stride implicit).</param>
-        /// <param name="keyLen">Number of elements in v.</param>
+        /// <param name="keyPtr">Pointer to v's data; v MUST be contiguous (elemSize stride implicit). Not read when
+        ///     <paramref name="keyLen"/> is 0.</param>
+        /// <param name="keyLen">Number of elements in v; 0 is legal (only the sorter's middle entry is checked).</param>
         /// <param name="sorterPtr">Pointer to int64 sorter array (contiguous), or null for no sorter.</param>
-        /// <param name="retPtr">Output int64* (contiguous, keyLen elements).</param>
+        /// <param name="retPtr">Output int64* (contiguous, keyLen elements). It also holds each key's running base between
+        ///     the bisection's passes, so it must not alias the keys or the haystack.</param>
         /// <returns>0 when every key was searched; -1 (NumPy's argbinsearch) when the bisection reached a sorter entry outside
         ///     <c>[0, arrLen)</c>: the search stops there, before that entry addresses <paramref name="arrPtr"/>, and the caller
-        ///     raises NumPy's <c>ValueError: Sorter index out of range.</c> (the keys already written are discarded with the
-        ///     result, as NumPy's are). Always 0 without a sorter.</returns>
+        ///     raises NumPy's <c>ValueError: Sorter index out of range.</c> (the bases already written are discarded with the
+        ///     result, as NumPy's are). The middle entry is reached before any key, so -1 can come with no key at all. Always 0
+        ///     without a sorter.</returns>
         public unsafe delegate long SearchSortedKernel(
             void* arrPtr,
             long arrLen,
@@ -130,13 +144,40 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit the searchsorted inner loop in IL.
-        /// Mirrors NumPy's binsearch.cpp template:
-        ///   while keys remain:
-        ///     compute key bounds via monotonic check
-        ///     bisect using cmp(midVal, key)
-        ///     write result, carry L/R to next iteration
+        ///     Emit NumPy 2.5's batched binary search in IL: <c>binsearch&lt;Tag, side&gt;</c> (no sorter) or
+        ///     <c>argbinsearch&lt;Tag, side&gt;</c> (a sorter) of numpy/_core/src/npysort/binsearch.cpp, statement for
+        ///     statement (gh-30517).
         /// </summary>
+        /// <param name="il">The kernel's IL generator (the <see cref="SearchSortedKernel"/> signature).</param>
+        /// <param name="key">The dtype, side, sorter and haystack-contiguity the kernel is specialized for.</param>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's statements, the candidates of key j being <c>[base_j, base_j + interval_length]</c>:
+        ///     <code>
+        ///     if (arr_len &lt;= 0) { every ret[i] = 0; return; }
+        ///     interval_length = arr_len; half = interval_length &gt;&gt; 1; interval_length -= half;
+        ///     mid_val = arr[sort ? sort[half] : half];                      // base is 0 for every key
+        ///     for i: ret[i] = cmp(mid_val, key[i]) * half;
+        ///     while (interval_length &gt; 1) {
+        ///         half = interval_length &gt;&gt; 1; interval_length -= half;
+        ///         for i: base = ret[i]; ret[i] = base + cmp(arr[sort ? sort[base + half] : base + half], key[i]) * half;
+        ///     }
+        ///     for i: base = ret[i]; ret[i] = base + cmp(arr[sort ? sort[base] : base], key[i]);
+        ///     </code>
+        ///     <c>cmp</c> is <c>Tag::less</c> for <c>side='left'</c> and <c>Tag::less_equal</c> for <c>'right'</c>
+        ///     (<see cref="EmitCmpForSide"/>), and every sorter entry is range-checked before it addresses the haystack.
+        ///     </para>
+        ///     <para>
+        ///     The pass order is what decides an UNSORTED haystack's answers (which pivots each key meets), so it is kept
+        ///     exactly: a per-key bisection — NumPy 2.4's, which also carried the previous key's bound — finds the same index
+        ///     only when the haystack is sorted. The first pivot is read, and with a sorter range-checked, before the first
+        ///     key: with no key a bad middle entry still returns -1, NumPy 2.5's <c>Sorter index out of range.</c>.
+        ///     </para>
+        ///     <para>
+        ///     The comparison feeds the base arithmetically (<c>cmp * half</c>, no branch), as NumPy's does: the keys of a
+        ///     pass are independent, so the processor overlaps them instead of waiting on mispredicted branches.
+        ///     </para>
+        /// </remarks>
         private static void EmitSearchSortedLoop(ILGenerator il, SearchKernelKey key)
         {
             int elemSize = GetTypeSize(key.Type);
@@ -150,208 +191,209 @@ namespace NumSharp.Backends.Kernels
             var compareClrType = GetClrType(key.Type);
 
             // ---- locals ----
-            var locI       = il.DeclareLocal(typeof(long));   // outer key index
-            var locL       = il.DeclareLocal(typeof(long));   // bisect lower bound (current iteration)
-            var locR       = il.DeclareLocal(typeof(long));   // bisect upper bound
-            var locPrevL   = il.DeclareLocal(typeof(long));   // carried lower bound from prev iteration
-            var locPrevR   = il.DeclareLocal(typeof(long));   // carried upper bound
-            var locM       = il.DeclareLocal(typeof(long));   // bisect midpoint
-            var locMidIdx  = il.DeclareLocal(typeof(long));   // post-sorter midpoint
-            var locKey     = il.DeclareLocal(compareClrType); // current key value
-            var locLastKey = il.DeclareLocal(compareClrType); // previous key value (for monotonic check)
-            var locMidVal  = il.DeclareLocal(compareClrType); // value at midpoint
+            var locI      = il.DeclareLocal(typeof(long));   // key index of the current pass
+            var locLen    = il.DeclareLocal(typeof(long));   // interval_length: key j's candidates are [base_j, base_j + length]
+            var locHalf   = il.DeclareLocal(typeof(long));   // half = length >> 1, the pivot's distance from a base
+            var locBase   = il.DeclareLocal(typeof(long));   // one key's base, read from ret[i] and written back to it
+            var locMidIdx = il.DeclareLocal(typeof(long));   // the pivot's haystack index (after the sorter's indirection)
+            var locKey    = il.DeclareLocal(compareClrType); // key[i]
+            var locMidVal = il.DeclareLocal(compareClrType); // the pivot's value
 
             // ---- labels ----
-            var lblReturn      = il.DefineLabel();
-            var lblBadSorter   = il.DefineLabel();
-            var lblOuter       = il.DefineLabel();
-            var lblOuterBody   = il.DefineLabel();
-            var lblBisect      = il.DefineLabel();
-            var lblBisectDone  = il.DefineLabel();
-            var lblAscending   = il.DefineLabel();
-            var lblBoundsReady = il.DefineLabel();
-            var lblMoveLeft    = il.DefineLabel();
+            var lblReturn     = il.DefineLabel();
+            var lblBadSorter  = il.DefineLabel();
+            var lblNonEmpty   = il.DefineLabel();
+            var lblPassCheck  = il.DefineLabel();
+            var lblPassBody   = il.DefineLabel();
 
-            // ---- early-out: if (keyLen == 0) return ----
-            il.Emit(OpCodes.Ldarg, 4);             // keyLen
-            il.Emit(OpCodes.Ldc_I8, 0L);
-            il.Emit(OpCodes.Ble, lblReturn);       // keyLen <= 0 ? return
-
-            // ---- init: prevL = 0; prevR = arrLen; lastKey = *(T*)keyPtr; i = 0; ----
-            il.Emit(OpCodes.Ldc_I8, 0L);
-            il.Emit(OpCodes.Stloc, locPrevL);
-
-            il.Emit(OpCodes.Ldarg, 1);             // arrLen
-            il.Emit(OpCodes.Stloc, locPrevR);
-
-            il.Emit(OpCodes.Ldarg, 3);             // keyPtr
-            EmitLoadIndirect(il, compareType);     // Complex -> r8 (Real), others -> typed load
-            il.Emit(OpCodes.Stloc, locLastKey);
-
-            il.Emit(OpCodes.Ldc_I8, 0L);
-            il.Emit(OpCodes.Stloc, locI);
-
-            // ---- outer loop ----
-            il.MarkLabel(lblOuter);
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldarg, 4);             // keyLen
-            il.Emit(OpCodes.Blt, lblOuterBody);
-            il.Emit(OpCodes.Br, lblReturn);
-
-            il.MarkLabel(lblOuterBody);
-
-            // ---- load key[i] ----
-            // ptr = keyPtr + i * elemSize
-            il.Emit(OpCodes.Ldarg, 3);             // keyPtr
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, (long)elemSize);
-            il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Conv_I);               // long -> native int
-            il.Emit(OpCodes.Add);
-            EmitLoadIndirect(il, compareType);
-            il.Emit(OpCodes.Stloc, locKey);
-
-            // ---- monotonic bound update ----
-            // bool ascending = cmp(lastKey, key)
-            //   side='left':  cmp = less(a, b)
-            //   side='right': cmp = less_equal(a, b) = !less(b, a)
-            // less is NaN-aware for float tags (NaN sorts last), so a NaN key never reports
-            // "ascending" against a following finite key — it resets the carried bound (numpy parity).
-            EmitCmpForSide(il, compareType, key.LeftSide, locLastKey, locKey);   // ascending? -> int 0/1
-            il.Emit(OpCodes.Brtrue, lblAscending);
-
-            // descending branch: L = 0; R = min(prevR + 1, arrLen)
-            il.Emit(OpCodes.Ldc_I8, 0L);
-            il.Emit(OpCodes.Stloc, locL);
-
-            il.Emit(OpCodes.Ldloc, locPrevR);
-            il.Emit(OpCodes.Ldc_I8, 1L);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locR);
-            // if (R > arrLen) R = arrLen
-            il.Emit(OpCodes.Ldloc, locR);
-            il.Emit(OpCodes.Ldarg, 1);             // arrLen
-            il.Emit(OpCodes.Ble, lblBoundsReady);
-            il.Emit(OpCodes.Ldarg, 1);
-            il.Emit(OpCodes.Stloc, locR);
-            il.Emit(OpCodes.Br, lblBoundsReady);
-
-            // ascending branch: L = prevL; R = arrLen
-            il.MarkLabel(lblAscending);
-            il.Emit(OpCodes.Ldloc, locPrevL);
-            il.Emit(OpCodes.Stloc, locL);
-            il.Emit(OpCodes.Ldarg, 1);             // arrLen
-            il.Emit(OpCodes.Stloc, locR);
-
-            il.MarkLabel(lblBoundsReady);
-
-            // lastKey = key
-            il.Emit(OpCodes.Ldloc, locKey);
-            il.Emit(OpCodes.Stloc, locLastKey);
-
-            // ---- bisect loop: while (L < R) { ... } ----
-            il.MarkLabel(lblBisect);
-            il.Emit(OpCodes.Ldloc, locL);
-            il.Emit(OpCodes.Ldloc, locR);
-            il.Emit(OpCodes.Bge, lblBisectDone);
-
-            // m = L + ((R - L) >> 1)
-            il.Emit(OpCodes.Ldloc, locL);
-            il.Emit(OpCodes.Ldloc, locR);
-            il.Emit(OpCodes.Ldloc, locL);
-            il.Emit(OpCodes.Sub);
-            il.Emit(OpCodes.Ldc_I4_1);
-            il.Emit(OpCodes.Shr);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locM);
-
-            // midIdx = sorter ? sorter[m] : m
-            if (key.HasSorter)
+            // Pushes &ret[i] (the result doubles as the per-key base store between passes).
+            void EmitRetAddress()
             {
-                il.Emit(OpCodes.Ldarg, 5);         // sorterPtr
-                il.Emit(OpCodes.Ldloc, locM);
+                il.Emit(OpCodes.Ldarg, 6);             // retPtr
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldc_I8, 8L);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+            }
+
+            // locKey = key[i]: the keys are contiguous, elemSize apart (the caller materializes them).
+            void EmitLoadKey()
+            {
+                il.Emit(OpCodes.Ldarg, 3);             // keyPtr
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldc_I8, (long)elemSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                EmitLoadIndirect(il, compareType);
+                il.Emit(OpCodes.Stloc, locKey);
+            }
+
+            // locMidIdx holds a position in the sorted order; a sorter maps it to sorter[position]. argbinsearch's
+            // `if (mid_idx < 0 || mid_idx >= arr_len) return -1;` runs before the entry addresses a: the caller's sorter
+            // checks cover its rank, dtype and size, not its values. As unsigned numbers a negative index is above every
+            // length, so one compare covers both ends.
+            void EmitSorterIndirection()
+            {
+                if (!key.HasSorter)
+                    return;
+                il.Emit(OpCodes.Ldarg, 5);             // sorterPtr
+                il.Emit(OpCodes.Ldloc, locMidIdx);
                 il.Emit(OpCodes.Ldc_I8, 8L);
                 il.Emit(OpCodes.Mul);
                 il.Emit(OpCodes.Conv_I);
                 il.Emit(OpCodes.Add);
                 il.Emit(OpCodes.Ldind_I8);
                 il.Emit(OpCodes.Stloc, locMidIdx);
-
-                // argbinsearch's `if (sort_idx < 0 || sort_idx >= arr_len) return -1;`, before the entry addresses a: the
-                // caller's sorter checks cover its rank, dtype and size, not its values. As unsigned numbers a negative
-                // index is above every length, so one compare covers both ends.
                 il.Emit(OpCodes.Ldloc, locMidIdx);
-                il.Emit(OpCodes.Ldarg, 1);         // arrLen
+                il.Emit(OpCodes.Ldarg_1);              // arrLen
                 il.Emit(OpCodes.Bge_Un, lblBadSorter);
             }
-            else
+
+            // locMidVal = a[locMidIdx]. For a contiguous a the element size is baked in as a constant so the JIT can use
+            // scaled-index addressing instead of a runtime imul (Complex's 16-byte struct included); a strided a reads its
+            // byte stride from the arguments.
+            void EmitLoadPivot()
             {
-                il.Emit(OpCodes.Ldloc, locM);
+                il.Emit(OpCodes.Ldarg_0);              // arrPtr
+                il.Emit(OpCodes.Ldloc, locMidIdx);
+                if (key.ContiguousA)
+                    il.Emit(OpCodes.Ldc_I8, (long)elemSize);
+                else
+                    il.Emit(OpCodes.Ldarg_2);          // arrStrideBytes (runtime)
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                EmitLoadIndirect(il, compareType);
+                il.Emit(OpCodes.Stloc, locMidVal);
+            }
+
+            // for (i = 0; i < keyLen; i++) body(); — every pass visits the keys in order.
+            void EmitKeyLoop(Action body)
+            {
+                var lblCheck = il.DefineLabel();
+                var lblBody = il.DefineLabel();
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Stloc, locI);
+                il.Emit(OpCodes.Br, lblCheck);
+                il.MarkLabel(lblBody);
+                body();
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldc_I8, 1L);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locI);
+                il.MarkLabel(lblCheck);
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldarg, 4);             // keyLen
+                il.Emit(OpCodes.Blt, lblBody);
+            }
+
+            // ---- if (arr_len <= 0): every insertion point is 0, and no sorter entry exists to check ----
+            il.Emit(OpCodes.Ldarg_1);                  // arrLen
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Bgt, lblNonEmpty);
+            EmitKeyLoop(() =>
+            {
+                EmitRetAddress();
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Stind_I8);
+            });
+            il.Emit(OpCodes.Br, lblReturn);
+
+            il.MarkLabel(lblNonEmpty);
+
+            // ---- interval_length = arr_len; half = interval_length >> 1; interval_length -= half (ceil(length / 2)) ----
+            il.Emit(OpCodes.Ldarg_1);                  // arrLen
+            il.Emit(OpCodes.Stloc, locLen);
+            il.Emit(OpCodes.Ldloc, locLen);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Shr);
+            il.Emit(OpCodes.Stloc, locHalf);
+            il.Emit(OpCodes.Ldloc, locLen);
+            il.Emit(OpCodes.Ldloc, locHalf);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locLen);
+
+            // ---- the unrolled first pass: every base is 0, so one pivot a[half] (read once) serves every key, and ret is
+            //      written without being read (NumPy's saving of |keys| writes and reads). Its sorter entry is checked
+            //      here, before any key: an empty key set can still fail. ----
+            il.Emit(OpCodes.Ldloc, locHalf);
+            il.Emit(OpCodes.Stloc, locMidIdx);
+            EmitSorterIndirection();
+            EmitLoadPivot();
+            EmitKeyLoop(() =>
+            {
+                // ret[i] = cmp(mid_val, key[i]) * half
+                EmitLoadKey();
+                EmitRetAddress();
+                EmitCmpForSide(il, compareType, key.LeftSide, locMidVal, locKey);
+                il.Emit(OpCodes.Conv_I8);
+                il.Emit(OpCodes.Ldloc, locHalf);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Stind_I8);
+            });
+
+            // ---- while (interval_length > 1): halve the shared length, then move every key's base ----
+            il.Emit(OpCodes.Br, lblPassCheck);
+            il.MarkLabel(lblPassBody);
+            il.Emit(OpCodes.Ldloc, locLen);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Shr);
+            il.Emit(OpCodes.Stloc, locHalf);
+            il.Emit(OpCodes.Ldloc, locLen);
+            il.Emit(OpCodes.Ldloc, locHalf);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locLen);
+            EmitKeyLoop(() =>
+            {
+                // base = ret[i]; mid = a[sorter ? sorter[base + half] : base + half]; ret[i] = base + cmp(mid, key[i]) * half
+                EmitRetAddress();
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Stloc, locBase);
+                il.Emit(OpCodes.Ldloc, locBase);
+                il.Emit(OpCodes.Ldloc, locHalf);
+                il.Emit(OpCodes.Add);
                 il.Emit(OpCodes.Stloc, locMidIdx);
-            }
-
-            // midVal = *(T*)(arrPtr + midIdx * arrStrideBytes)
-            // For contiguous a: bake elemSize as a constant so the JIT can use scaled-index addressing
-            // and avoid the runtime imul. (Complex stride remains 16 because the struct is 16 bytes.)
-            il.Emit(OpCodes.Ldarg_0);              // arrPtr
-            il.Emit(OpCodes.Ldloc, locMidIdx);
-            if (key.ContiguousA)
-            {
-                il.Emit(OpCodes.Ldc_I8, (long)elemSize);
-            }
-            else
-            {
-                il.Emit(OpCodes.Ldarg_2);          // arrStrideBytes (runtime)
-            }
-            il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Add);
-            EmitLoadIndirect(il, compareType);
-            il.Emit(OpCodes.Stloc, locMidVal);
-
-            // if (cmp(midVal, key)) L = m + 1; else R = m;
-            EmitCmpForSide(il, compareType, key.LeftSide, locMidVal, locKey);
-            il.Emit(OpCodes.Brfalse, lblMoveLeft);
-
-            // L = m + 1
-            il.Emit(OpCodes.Ldloc, locM);
+                EmitSorterIndirection();
+                EmitLoadPivot();
+                EmitLoadKey();
+                EmitRetAddress();
+                il.Emit(OpCodes.Ldloc, locBase);
+                EmitCmpForSide(il, compareType, key.LeftSide, locMidVal, locKey);
+                il.Emit(OpCodes.Conv_I8);
+                il.Emit(OpCodes.Ldloc, locHalf);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stind_I8);
+            });
+            il.MarkLabel(lblPassCheck);
+            il.Emit(OpCodes.Ldloc, locLen);
             il.Emit(OpCodes.Ldc_I8, 1L);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locL);
-            il.Emit(OpCodes.Br, lblBisect);
+            il.Emit(OpCodes.Bgt, lblPassBody);
 
-            il.MarkLabel(lblMoveLeft);
-            // R = m
-            il.Emit(OpCodes.Ldloc, locM);
-            il.Emit(OpCodes.Stloc, locR);
-            il.Emit(OpCodes.Br, lblBisect);
-
-            il.MarkLabel(lblBisectDone);
-
-            // *(retPtr + i*8) = L
-            il.Emit(OpCodes.Ldarg, 6);             // retPtr
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, 8L);
-            il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldloc, locL);
-            il.Emit(OpCodes.Stind_I8);
-
-            // prevL = L; prevR = R; i++
-            il.Emit(OpCodes.Ldloc, locL);
-            il.Emit(OpCodes.Stloc, locPrevL);
-            il.Emit(OpCodes.Ldloc, locR);
-            il.Emit(OpCodes.Stloc, locPrevR);
-
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, 1L);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locI);
-            il.Emit(OpCodes.Br, lblOuter);
+            // ---- interval_length == 1: key j's insertion point is base_j or base_j + 1, decided by a[base_j] ----
+            EmitKeyLoop(() =>
+            {
+                // base = ret[i]; ret[i] = base + cmp(a[sorter ? sorter[base] : base], key[i])
+                EmitRetAddress();
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Stloc, locBase);
+                il.Emit(OpCodes.Ldloc, locBase);
+                il.Emit(OpCodes.Stloc, locMidIdx);
+                EmitSorterIndirection();
+                EmitLoadPivot();
+                EmitLoadKey();
+                EmitRetAddress();
+                il.Emit(OpCodes.Ldloc, locBase);
+                EmitCmpForSide(il, compareType, key.LeftSide, locMidVal, locKey);
+                il.Emit(OpCodes.Conv_I8);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stind_I8);
+            });
 
             il.MarkLabel(lblReturn);
-            il.Emit(OpCodes.Ldc_I8, 0L);           // every key searched
+            il.Emit(OpCodes.Ldc_I8, 0L);               // every key searched
             il.Emit(OpCodes.Ret);
 
             // A sorter entry outside the haystack was reached (only a sorter kernel branches here).
@@ -361,18 +403,24 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit the comparison that drives bisect direction / carry for the requested side,
-        /// reading the two operands from <paramref name="a"/> and <paramref name="b"/> locals
-        /// (they are reloaded, which the NaN-aware form requires). Pushes int32 (0 or 1).
+        /// Emit the comparison that moves a key's base for the requested side, reading the two operands
+        /// from <paramref name="a"/> and <paramref name="b"/> locals (they are reloaded, which the
+        /// NaN-aware form requires). Pushes int32 (0 or 1), which the caller multiplies by the half
+        /// interval, as NumPy's <c>cmp(mid_val, key_val) * half</c> does.
         ///
         /// Mirrors NumPy binsearch.cpp + numpy_tag.h: both side comparators derive from a single
         /// <c>less</c> functor —
         ///   side='left'  cmp(a,b) = less(a, b)
         ///   side='right' cmp(a,b) = less_equal(a, b) = !less(b, a)
         /// For the float tags <c>less</c> is NaN-aware ("NaN sorts last"): finite &lt; NaN is true,
-        /// NaN &lt; finite / NaN &lt; NaN are false. So a NaN key bisects to the end and never carries
-        /// a stale bound into a following key. Integer/char/bool have no NaN and collapse to ordered '&lt;'.
+        /// NaN &lt; finite / NaN &lt; NaN are false. So a NaN key bisects to the end of a sorted haystack.
+        /// Integer/char/bool have no NaN and collapse to ordered '&lt;'.
         /// </summary>
+        /// <param name="il">The kernel's IL generator.</param>
+        /// <param name="type">The compared dtype.</param>
+        /// <param name="leftSide">True for <c>side='left'</c>.</param>
+        /// <param name="a">The first operand's local (the haystack pivot).</param>
+        /// <param name="b">The second operand's local (the key).</param>
         private static void EmitCmpForSide(ILGenerator il, NPTypeCode type, bool leftSide, LocalBuilder a, LocalBuilder b)
         {
             if (leftSide)

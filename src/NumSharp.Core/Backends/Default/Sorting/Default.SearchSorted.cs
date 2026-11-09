@@ -44,7 +44,7 @@ namespace NumSharp.Backends
         /// <remarks>
         ///     NumPy's <c>PyArray_SearchSorted</c> for a Python float key: the routes of the int member, the numeric search in
         ///     <c>promote_types(a, float64)</c> (NumPy searches a float32 haystack for a Python float in float64 too, probed
-        ///     2.4.2). Moved from the public <c>np.searchsorted</c> by the np-layer dtype plan's P2.
+        ///     2.5.4). Moved from the public <c>np.searchsorted</c> by the np-layer dtype plan's P2.
         /// </remarks>
         public override long SearchSorted(NDArray a, double v, string side = "left", NDArray sorter = null)
         {
@@ -64,7 +64,7 @@ namespace NumSharp.Backends
             }
             ValidateSearchSorted(a, side, sorter);
             // A C# double is a strong float64 scalar; NumPy searches a float32 array for a
-            // Python float in float64 too (probed 2.4.2), so promote_types(a, Double) matches.
+            // Python float in float64 too (probed 2.5.4), so promote_types(a, Double) matches.
             NPTypeCode common = SearchSortedCommonType(a.typecode, NPTypeCode.Double);
             NDArray aP = a.typecode == common ? a : a.astype(common);
             return SearchSortedScalar(aP, Converts.ChangeType(v, common), side == "left", sorter);
@@ -74,11 +74,10 @@ namespace NumSharp.Backends
         /// <remarks>
         ///     NumPy's <c>PyArray_SearchSorted</c>: the StringDType and fixed-width text routes first (each runs NumPy's checks
         ///     in NumPy's order), then the numeric search — both operands promoted to their common dtype (the keys are never
-        ///     cast DOWN to the haystack's), a 0-d key searched from the stack, and the typed IL kernel over the haystack's
-        ///     stride with the keys and the sorter read where their views start. Moved from the public <c>np.searchsorted</c>
-        ///     by the np-layer dtype plan's P2, statement for statement; the public function hands a subclass operand
-        ///     in as its
-        ///     plain view.
+        ///     cast DOWN to the haystack's), a 0-d key searched from the stack, and the typed IL kernel (NumPy 2.5's batched
+        ///     bisection, <see cref="DirectILKernelGenerator.GetSearchSortedKernel"/>) over the haystack's stride with the
+        ///     keys and the sorter read where their views start. Moved from the public <c>np.searchsorted</c> by the np-layer
+        ///     dtype plan's P2, statement for statement; the public function hands a subclass operand in as its plain view.
         /// </remarks>
         [NDScoped] // reclaims the promoted haystack, the contiguous keys and the int64 sorter (the result is returned)
         public override NDArray SearchSorted(NDArray a, NDArray v, string side = "left", NDArray sorter = null)
@@ -110,7 +109,10 @@ namespace NumSharp.Backends
 
             Shape outShape = new Shape(v.Shape.dimensions, copy: false);
 
-            if (v.size == 0)
+            // No key: nothing is searched, except that NumPy 2.5's argbinsearch reads (and range-checks) the sorter's middle
+            // entry before the first key, so a sorter over a non-empty haystack still goes through the kernel, which can
+            // raise "Sorter index out of range." with no key at all (an empty haystack has no entry to read).
+            if (v.size == 0 && (sorter is null || aP.size == 0))
                 return NewArray(NPTypeCode.Int64, outShape, false);
 
             // Promote v to the common dtype and force contiguous (NumPy: PyArray_CARRAY_RO).
