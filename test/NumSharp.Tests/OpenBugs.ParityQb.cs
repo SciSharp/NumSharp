@@ -1115,5 +1115,88 @@ namespace NumSharp.Tests
             zeroD.ToString(true).Should().Be("array(0.0001, dtype=float32)");
             np.array2string(steps).Should().Be("[0.0001 0.001  0.01  ]");
         }
+
+        // ------------------------------------------------------------------
+        // QB-39 — the printer's rstrip trims spaces only, Python's str.rstrip() every whitespace character
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>_formatArray</c> ends a row with <c>separator.rstrip()</c> (its <c>line_sep</c>), sizes an element
+        ///     with <c>max(len(separator.rstrip()), len(']'))</c>, and breaks a wrapped line with <c>line.rstrip()</c>; Python's
+        ///     <c>str.rstrip()</c> removes EVERY whitespace character (<c>\t \n \v \f \r</c>, U+001C–U+001F, U+0085, U+00A0, the
+        ///     Unicode space separators, U+2028 / U+2029). NumSharp's <c>ArrayFormatter.RStrip</c> is <c>TrimEnd(' ')</c>, so a
+        ///     tab, newline, carriage-return, vertical-tab, NBSP or ideographic-space separator stays at the end of each row of a
+        ///     2-D+ array (<c>np.array2string(a2d, separator='\t')</c> is <c>[[0.\t1.\t2.]\t\n …</c> where NumPy prints
+        ///     <c>[[0.\t1.\t2.]\n …</c>), and a wrapped 1-D line keeps its trailing tab and loses an element of width
+        ///     (<c>separator=',\t', max_line_width=30</c> fits 5 elements per line where NumPy fits 6).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB39")]
+        public void ParityQb_QB39_PrintingRStrip_StripsEveryWhitespaceCharacter()
+        {
+            using var grid = np.arange(6.0).reshape(2, 3);
+            using var line = np.arange(12.0);
+
+            // NumPy 2.4.2: np.array2string(np.arange(6.).reshape(2, 3), separator='\t')
+            np.array2string(grid, separator: "\t").Should().Be("[[0.\t1.\t2.]\n [3.\t4.\t5.]]");
+            // NumPy 2.4.2: np.array2string(np.arange(12.), separator=',\t', max_line_width=30)
+            np.array2string(line, separator: ",\t", max_line_width: 30)
+                .Should().Be("[ 0.,\t 1.,\t 2.,\t 3.,\t 4.,\t 5.,\n  6.,\t 7.,\t 8.,\t 9.,\t10.,\t11.]");
+        }
+
+        // ------------------------------------------------------------------
+        // QB-40 — a negative precision is refused by the options instead of by the float formatter
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2 checks <c>precision &gt;= 0</c> only where a FLOAT formatter is built (<c>FloatingFormat.__init__</c>'s
+        ///     <c>_none_or_positive_arg</c>): <c>np.array2string(np.array([1.5]), precision=-1)</c> and <c>np.array_repr</c> /
+        ///     <c>np.array_str</c> of a float or complex array raise <c>ValueError: precision must be &gt;= 0</c>, while
+        ///     <c>np.set_printoptions(precision=-1)</c> and <c>np.printoptions(precision=-1)</c> are accepted (an integer or bool
+        ///     array then prints normally; a float array raises when printed). NumSharp has it backwards:
+        ///     <c>np.array2string</c> / <c>array_repr</c> / <c>array_str</c> never check, so a float array prints as if the
+        ///     precision were valid, and <c>set_printoptions</c> / <c>printoptions</c> raise <c>ArgumentException</c> up front.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB40")]
+        public void ParityQb_QB40_NegativePrecision_IsRefusedByTheFloatFormatter()
+        {
+            using var floats = np.array(new double[] { 1.5, 2.25 });
+            using var ints = np.arange(3);
+
+            // NumPy 2.4.2: ValueError: precision must be >= 0
+            Action floatString = () => np.array2string(floats, precision: -1);
+            floatString.Should().Throw<Exception>().WithMessage("precision must be >= 0");
+
+            // NumPy 2.4.2: the option is accepted and an integer array prints under it
+            string printed = null;
+            Action scoped = () =>
+            {
+                using (np.printoptions(precision: -1))
+                    printed = ints.ToString();
+            };
+            scoped.Should().NotThrow();
+            printed.Should().Be("[0 1 2]");
+        }
+
+        // ------------------------------------------------------------------
+        // QB-41 — a negative edgeitems drops the summary marker
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2 does not validate <c>edgeitems</c>; a negative value goes through <c>_formatArray</c>'s arithmetic:
+        ///     <c>2*edge_items &lt; a_len</c> keeps the summary, <c>range(edge_items)</c> and <c>range(edge_items, 1, -1)</c> are
+        ///     empty, and the always-printed last child follows the marker, so <c>np.array2string(np.array([1.5, 2.25]),
+        ///     edgeitems=-1, threshold=1)</c> is <c>[... 2.25]</c> (and a 3-D array prints <c>[...\n\n [...\n  [... 23]]]</c>).
+        ///     NumSharp's <c>ArrayFormatter.Pieces</c> counts <c>leading + 1 + max(edgeItems, 1)</c> pieces with a negative
+        ///     <c>leading</c>, which drops the marker: <c>[2.25]</c> and <c>[[[23]]]</c>. A degenerate option, but NumPy's text is
+        ///     well-defined.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB41")]
+        public void ParityQb_QB41_NegativeEdgeitems_KeepsTheSummaryMarker()
+        {
+            using var pair = np.array(new double[] { 1.5, 2.25 });
+
+            // NumPy 2.4.2: np.array2string(np.array([1.5, 2.25]), edgeitems=-1, threshold=1)
+            np.array2string(pair, edgeitems: -1, threshold: 1).Should().Be("[... 2.25]");
+        }
     }
 }
