@@ -1198,5 +1198,43 @@ namespace NumSharp.Tests
             // NumPy 2.4.2: np.array2string(np.array([1.5, 2.25]), edgeitems=-1, threshold=1)
             np.array2string(pair, edgeitems: -1, threshold: 1).Should().Be("[... 2.25]");
         }
+
+        // ------------------------------------------------------------------
+        // QB-42 — bool storage bytes other than 0 / 1: the hash / compare routes read the raw byte
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     A bool array can hold bytes other than 0 and 1 when it is a view of other data
+        ///     (<c>np.array([0, 2, 1, 255], dtype=np.uint8).view(np.bool_)</c>, <c>np.frombuffer(..., np.bool_)</c>); NumPy 2.4.2
+        ///     reads every such byte as True (its loops test <c>byte != 0</c>), so <c>np.unique</c> of it is <c>[False, True]</c>,
+        ///     <c>np.array_equal</c> with the canonical <c>[False, True, True, True]</c> is True, and <c>np.isin(b, [True])</c> is
+        ///     True wherever the byte is nonzero. NumSharp's ufuncs, casts, reductions, masks and sorts already agree (79 + 62
+        ///     probes), but the routes that hash or compare the RAW byte do not: the unique family and the set routines built
+        ///     on it (<c>unique</c> with every return, <c>unique_values</c> / <c>unique_counts</c>, the axis form,
+        ///     <c>intersect1d</c> / <c>union1d</c> / <c>setdiff1d</c>) count each distinct nonzero byte as its own True,
+        ///     <c>isin</c> (every <c>kind</c>, <c>invert</c>) matches bytes, <c>array_equal</c> / <c>array_equiv</c> compare
+        ///     bytes, and <c>bitwise_count</c> counts the byte's bits (255 → 8 where NumPy's bool loop gives 1). Two producers
+        ///     also leak such bytes into their results where NumPy writes 1: the 2-D bool <c>dot</c> / <c>matmul</c> and
+        ///     <c>np.min</c> along an axis.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB42")]
+        public void ParityQb_QB42_NonCanonicalBoolBytes_ReadAsTrue()
+        {
+            using var bytes = np.array(new byte[] { 0, 2, 1, 255, 4, 0, 1, 128 });
+            using var mask = bytes.view(np.@bool);
+            using var canonical = np.array(new bool[] { false, true, true, true, true, false, true, true });
+            using var trueOnly = np.array(new bool[] { true });
+
+            // NumPy 2.4.2: np.unique(b) is [False, True]
+            using (var unique = np.unique(mask).values)
+                unique.size.Should().Be(2);
+
+            // NumPy 2.4.2: np.array_equal(b, [F, T, T, T, T, F, T, T]) is True
+            np.array_equal(mask, canonical).Should().BeTrue();
+
+            // NumPy 2.4.2: np.isin(b, [True]) is True wherever the byte is nonzero
+            using (var isin = np.isin(mask, trueOnly))
+                isin.ToArray<bool>().Should().Equal(false, true, true, true, true, false, true, true);
+        }
     }
 }
