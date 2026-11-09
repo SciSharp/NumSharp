@@ -1087,5 +1087,33 @@ namespace NumSharp.Tests
             r.dtype.Should().Be(np.int64);
             r.GetInt64(0).Should().Be(3L);
         }
+
+        // ------------------------------------------------------------------
+        // QB-38 — the printer's `min_val < 0.0001` exponential test runs in float64
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>FloatingFormat.fillFormat</c> switches to exponential notation when <c>min_val &lt; 0.0001</c>,
+        ///     where <c>min_val</c> is the array's own scalar type (<c>np.min</c> of the absolute nonzero finite values) and the
+        ///     Python float <c>0.0001</c> is a weak operand (NEP 50), so the test runs in the ARRAY'S dtype: for float32 it is
+        ///     <c>float32(1e-4) &lt; float32(1e-4)</c>, false, and <c>np.array([1e-4, 1e-3, 1e-2], dtype=np.float32)</c> prints
+        ///     <c>array([0.0001, 0.001 , 0.01  ], dtype=float32)</c>. NumSharp's <c>ElementFormatters.FillFormat</c> compares the
+        ///     value widened to double with the double <c>0.0001</c>; float32's 1e-4 is 9.99999974737875e-05 there, below the
+        ///     cutoff, so it prints <c>array([1.e-04, 1.e-03, 1.e-02], dtype=float32)</c> — every <c>str</c> / <c>repr</c> /
+        ///     <c>array2string</c> of a float32 array whose smallest nonzero magnitude is exactly <c>float32(1e-4)</c>, the 0-d
+        ///     repr included (the float32 just below prints exponential in both; float16 and float64 already match, their 1e-4
+        ///     is not below the double cutoff; the max/min ratio test beside it already runs natively).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB38")]
+        public void ParityQb_QB38_FloatPrinting_ExponentialCutoffComparesInTheArraysDtype()
+        {
+            using var steps = np.array(new float[] { 0.0001f, 0.001f, 0.01f });
+            using var zeroD = NDArray.Scalar(0.0001f);
+
+            // NumPy 2.4.2: repr(np.array([1e-4, 1e-3, 1e-2], dtype=np.float32)) and repr(np.array(np.float32(1e-4)))
+            steps.ToString(true).Should().Be("array([0.0001, 0.001 , 0.01  ], dtype=float32)");
+            zeroD.ToString(true).Should().Be("array(0.0001, dtype=float32)");
+            np.array2string(steps).Should().Be("[0.0001 0.001  0.01  ]");
+        }
     }
 }
