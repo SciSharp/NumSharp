@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-gen_matrix_oracle.py -- the numpy.matrix oracle: NumPy 2.4.2's answers for the matrix class (NumSharp's NDMatrix).
+gen_matrix_oracle.py -- the numpy.matrix oracle: NumPy 2.5.4's answers for the matrix class (NumSharp's NDMatrix).
 
 numpy.matrix is an ndarray SUBCLASS, so a result here is more than (dtype, shape, bytes): the replay also holds
 NumSharp to the CLASS of the returned object (a matrix, a plain ndarray, or a scalar), to its memory facet (view /
@@ -50,7 +50,7 @@ Carving (house rule: real product bugs are carved + pinned, never registry-excus
 case pins (GAPS); carved cases go to gaps/matrix_gaps.jsonl and are replayed by the [OpenBugs] test
 FuzzCorpusTests.Matrix_KnownGaps. ``--uncarved DIR`` writes the whole matrix.
 
-Run (needs numpy==2.4.2):
+Run (needs the pinned NumPy (numpy-version.txt, 2.5.4)):
     python test/oracle/gen_matrix_oracle.py [--uncarved DIR]
 """
 import argparse
@@ -58,6 +58,7 @@ import os
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 from gen_viewflags_oracle import (ALL_DTYPES, CORPUS, GAP_DIR, _desc, _exc, _mem, _off_view, _owner, _vals, _value,
                                   write_jsonl)
@@ -65,7 +66,7 @@ from gen_viewflags_oracle import (ALL_DTYPES, CORPUS, GAP_DIR, _desc, _exc, _mem
 np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
-assert np.__version__ == "2.4.2", f"corpus must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_matrix_oracle.py")
 
 # The dtype subsets the sections iterate: everything, and small sets that still cross every dtype kind.
 KINDS4 = ["bool", "int64", "float64", "complex128"]

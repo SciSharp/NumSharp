@@ -30,7 +30,7 @@ Output (../NumSharp.Tests.Oracle/Fuzz/corpus/):
   gaps/surface_gaps.jsonl       the cases a carve rule (_gap_of) names: NumSharp is known to differ there; replayed by
                                 an [OpenBugs] test that names each gap
 
-Run (needs numpy==2.4.2; deterministic: a rerun is byte-identical):
+Run (needs the pinned NumPy (numpy-version.txt, 2.5.4); deterministic: a rerun is byte-identical):
     python test/oracle/gen_surface_oracle.py [--uncarved DIR]
 """
 import argparse
@@ -45,11 +45,12 @@ import tempfile
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
-assert np.__version__ == "2.4.2", f"corpus must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_surface_oracle.py")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -1533,11 +1534,12 @@ def _with_bufsize(n, fn):
 # SU35 (the dtype name 'cdouble') matches NumPy since branch strings merged journey4 (f87de210, 2026-10-31): journey4's
 # np.dtype reads a name by the whole string, as NumPy's typeDict (0a96ddba), so 'cdouble' is complex128. Its rule is
 # dropped: the 'cdouble' cell of finfo.minexp falls to SU12 (complex128's minexp), the other twelve attributes are kept.
+# SU11 (np.finfo's refusal of a dtype that is not inexact) matches NumPy since the NumPy 2.5.4 bump: NumPy 2.5 rewrote the
+# text to name the descriptor ("data type dtype('int32') not compatible with finfo", a ValueError) and NumSharp's finfo
+# raises exactly that. Its rule is dropped.
 GAPS = {
     "SU10": "ndarray.setfield with a Python int outside the field dtype's range wraps it (-1 into a uint8 field is "
             "255); NumPy raises OverflowError 'Python integer -1 out of bounds for uint8'",
-    "SU11": "np.finfo of a non-inexact dtype raises 'data type 'int32' not inexact'; NumPy's text names the scalar "
-            "class: \"data type <class 'numpy.int32'> not inexact\"",
     "SU12": "np.finfo(float32 / float64 / complex128).minexp is one too high (-125 / -1021); NumPy's is -126 / -1022",
     "SU13": "np.finfo(float16 / float32).resolution is the decimal 10**-precision as a double; NumPy's is that value "
             "rounded to the dtype (np.float32(1e-06) == 9.99999997e-07)",
@@ -1593,8 +1595,6 @@ def _gap_of(case):
     if op == "ndarray.setfield" and err and err["type"] == "OverflowError":
         return "SU10"
     if op.startswith("finfo."):
-        if err:
-            return "SU11"
         if op == "finfo.minexp" and dt in ("float32", "float64", "complex128"):
             return "SU12"
         if op == "finfo.resolution" and dt in ("float16", "float32"):

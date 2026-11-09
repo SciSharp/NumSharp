@@ -59,7 +59,7 @@ which re-emit other tiers' cases), np.evaluate trees and iterator traces (no sin
 np.frombuffer (its operand stands for Python bytes), and every operand of dtype char or decimal (no NumPy analog).
 Run it after every other generator: its sources are their files.
 
-Run (needs numpy==2.4.2; deterministic: a rerun is byte-identical):
+Run (needs the pinned NumPy (numpy-version.txt, 2.5.4); deterministic: a rerun is byte-identical):
     python test/oracle/gen_relayout_oracle.py [--uncarved DIR] [--report]
 """
 import argparse
@@ -72,11 +72,12 @@ import sys
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
-assert np.__version__ == "2.4.2", f"corpus must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_relayout_oracle.py")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -540,7 +541,14 @@ def reproduces(c):
         return bool(c.get("expects_throw")) and err.get("type") == type(e).__name__ and err.get("text") == str(e)
     if c.get("expects_throw"):
         return False
-    s = serialize(r)
+    try:
+        s = serialize(r)
+    except ValueError:
+        # A tuple of differently shaped results (qr's (Q, R) or svd's (U, S, Vh) of an empty operand) is not one array,
+        # so it cannot reproduce a single-array case. NumPy 2.4.2's array coercion collapsed such a tuple of empty
+        # factors into a (k, 0) array, whose shape then failed the comparison below; NumPy 2.5 refuses the ragged
+        # sequence ("inhomogeneous shape after 2 dimensions") instead, which means the same thing here.
+        return False
     return s["dtype"] == exp.get("dtype") and s["shape"] == exp.get("shape") and s["buffer"] == exp.get("buffer")
 
 

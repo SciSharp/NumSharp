@@ -69,8 +69,8 @@ namespace NumSharp.Tests.Strings
                     return np.frombuffer(Convert.FromHexString(Str(p, "buffer")), np.dtype(Str(p, "dtype")),
                                          p["count"].GetInt64(), p["offset"].GetInt64());
                 case "frombuffer_str":
-                    // The dtype-STRING overload: its own parser must route every string spelling ('c', 'a3', '|S2') to the
-                    // descriptor route, exactly as np.dtype reads it.
+                    // The dtype-STRING overload: its own parser must route every string spelling ('c', '|S2') to the
+                    // descriptor route, exactly as np.dtype reads it (and refuse 'a3' as np.dtype does since NumPy 2.5).
                     return np.frombuffer(Convert.FromHexString(Str(p, "buffer")), Str(p, "dtype"),
                                          p["count"].GetInt64(), p["offset"].GetInt64());
                 case "ndarray":

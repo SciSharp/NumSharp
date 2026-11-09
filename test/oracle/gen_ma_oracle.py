@@ -1,5 +1,5 @@
 """
-gen_ma_oracle.py — emit the committed, bytes-exact NumPy 2.4.2 oracle corpus for numpy.ma
+gen_ma_oracle.py — emit the committed, bytes-exact NumPy 2.5.4 (the pin) oracle corpus for numpy.ma
 (masked arrays). Standalone, like gen_nan_oracle.py / gen_index_oracle.py: it owns its own
 numbering and writes ma_*.jsonl into ../NumSharp.Tests.Oracle/Fuzz/corpus/.
 
@@ -14,7 +14,7 @@ runs the ma.* op, and compares filled(0) bytes (NaN-tokenized) + getmaskarray by
 Op keys are prefixed "ma." so they never collide with the np.* key of the same name.
 
 Run: python gen_ma_oracle.py [all|unary|binary|reduce|scan|manip|construct|select|sortsetops|extras|meanvar|setops|put|fill]
-Requires numpy==2.4.2.
+Requires the pinned NumPy (numpy-version.txt, 2.5.4).
 """
 import json
 import os
@@ -22,6 +22,7 @@ import sys
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 np.seterr(all="ignore")
 warnings.simplefilter("ignore")
@@ -631,7 +632,7 @@ def gen_ma_sortsetops():
                     except Exception:
                         skipped += 1
                     # KNOWN GAP (documented): np.ma.argsort's CURRENT default axis is None (flatten), but
-                    # numpy 2.4.2 emits a FutureWarning that it WILL become -1 to match np.argsort; NumSharp
+                    # numpy 2.5.4 (as 2.4.2) emits a FutureWarning that it WILL become -1 to match np.argsort; NumSharp
                     # has no axis=None flatten and uses -1 (numpy's documented FUTURE default). They agree
                     # for 1-D (axis -1 == None), so restrict argsort to 1-D. See docs/MA_ORACLE_DESIGN.md.
                     # KNOWN GAP (documented): masked argsort's tie-break / masked-slot INDEX ordering
@@ -1666,7 +1667,7 @@ def gen_ma_put():
         a = np.asarray(a)
         return ("array", _put_array_values(a.ravel(), layout) if a.ndim <= 1 else (a, a, a, True))
 
-    # Section H: the rundown's cases and the probes behind the port (numpy 2.4.2 outputs, every one).
+    # Section H: the rundown's cases and the probes behind the port (the pinned numpy's outputs, every one).
     t = np.array([1, 2, 3, 4], dtype=np.int64)
     m1 = np.array([False, True, False, False])
     m0 = np.array([True, False, False, False])
@@ -2146,6 +2147,7 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
     mode = sys.argv[1] if len(sys.argv) > 1 else "all"
+    numpy_pin.require(np, f"gen_ma_oracle.py {mode}")      # another NumPy's answers must never become the contract
     tiers = TIERS.keys() if mode == "all" else [mode]
     for t in tiers:
         if t not in TIERS:

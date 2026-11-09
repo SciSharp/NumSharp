@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""NumPy 2.4.2 oracle for NumSharp's string dtypes: the fixed-width 'S' (bytes) and 'U' (str), and NEP 55 StringDType ('T').
+"""NumPy 2.5.4 (the pin) oracle for NumSharp's string dtypes: the fixed-width 'S' (bytes) and 'U' (str), and NEP 55 StringDType ('T').
 
 Writes ``test/NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl``, one file per section (the id's first
 component), one case per line, replayed byte for byte by ``StringOracleTests`` (no Python at test time). One file per
 section keeps every file far below GitHub's 100 MiB limit (the single ``strings.jsonl`` had reached 96.6 MiB); a full
 run rewrites every section file and removes the files of sections that no longer exist.
 
-Each case records what NumPy 2.4.2 returns for one call:
+Each case records what the pinned NumPy returns for one call:
 
 * ``operands`` -- the arrays the call reads, serialized EXACTLY: dtype ``str`` ('<U3', '|S5', '|b1', '<i8'), shape,
   element strides, element offset and the whole base buffer, so a reversed / strided / transposed / broadcast / 0-d /
@@ -31,7 +31,10 @@ Each case records what NumPy 2.4.2 returns for one call:
   rest of phase 2). The field no longer changes the verdict: the replay holds every case to NumPy's answer (strings phase
   2, P2.7, retired the deferred outcome).
 
-Deterministic: no randomness; regenerate with ``python test/oracle/gen_strings_oracle.py`` (needs numpy==2.4.2).
+Deterministic: no randomness; regenerate with ``python test/oracle/gen_strings_oracle.py`` (needs the pinned NumPy,
+numpy-version.txt). NumPy 2.5.4 itself crashes now and then (an access violation) on a text product of a ``U`` or ``S``
+operand beside StringDType, the 'safe'-cast TypeError's path (section tma's ``ma.inner(MU, MT)`` meets it about every
+other run); a run that completes records the same corpus, so rerun a crashed one.
 """
 import codecs
 import concurrent.futures
@@ -46,8 +49,15 @@ import warnings
 from pathlib import Path
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
-assert np.__version__ == "2.4.2", f"the string oracle is pinned to numpy 2.4.2, found {np.__version__}"
+numpy_pin.require(np, "gen_strings_oracle.py")
+
+#: Whether the running NumPy is 2.5 or later: the release that fixed the StringDType defects the corpus used to step
+#: around (raw cell copies, the unchecked bytes -> StringDType cast, the complex cast's imaginary part, the zfill sign
+#: read past an empty element, the slice-step and replace-count overflows, the byteswap / place / tofile crashes). Each
+#: guard that reads it records those cases under the 2.5.4 pin and keeps its 2.4 exclusion otherwise.
+_NUMPY_2_5 = tuple(int(p) for p in np.__version__.split(".")[:2]) >= (2, 5)
 
 HERE = Path(__file__).resolve().parent
 CORPUS_DIR = HERE.parent / "NumSharp.Tests.Oracle" / "Strings" / "corpus"
@@ -308,6 +318,31 @@ def expect_of(r, operands):
     raise TypeError(f"unexpected result type {type(r)}")
 
 
+# The StringDType sections and the products whose descriptor discovery (NumPy 2.5's PyArray_DTypeFromObject) falls back
+# to OBJECT when a StringDType operand has no common descriptor with the other one: NumPy then multiplies and sums Python
+# objects (an int repeats the text) and returns an object array or a Python object, which NumSharp cannot hold — it
+# refuses with NotSupportedException by design (unit-tested), so such an outcome is not a case (``_object_product_result``).
+_OBJECT_PRODUCT_SECTIONS = {"tsurface", "tma"}
+_OBJECT_PRODUCT_NAMES = {"dot", "vdot", "inner", "innerproduct", "tensordot", "multi_dot", "convolve", "correlate",
+                         "polymul"}
+
+
+def _object_product_result(params, r):
+    """Whether ``r`` is a product NumPy computed over Python objects: a product of ``_OBJECT_PRODUCT_NAMES`` whose result
+    is an object array (a masked one included) or a plain Python object (the element of a 0-d object result, which
+    ``PyArray_Return`` hands out: a ``str`` when an int repeated the text) — NumPy's numeric products return NumPy scalars.
+
+    :param params: the case's params (``name`` is the product).
+    :param r: NumPy's result.
+    :returns: True for an outcome NumSharp refuses by design.
+    """
+    if (params or {}).get("name") not in _OBJECT_PRODUCT_NAMES:
+        return False
+    if isinstance(r, np.ndarray):
+        return r.dtype == object
+    return type(r) in (str, bytes, int, float, complex, bool, type(None))
+
+
 def add(section, op, *, params=None, operands=(), call, phase=1, layout="", mutate=None, note=""):
     """Run one NumPy call and record its outcome.
 
@@ -316,6 +351,9 @@ def add(section, op, *, params=None, operands=(), call, phase=1, layout="", muta
     ``"compute"`` for a call NumPy may answer by computing on text: phase 2 when NumPy returns a result, phase 1 when it
     raises (NumPy's error is then final, so NumSharp must raise the same) -- a PARSE error (NumPy converting text to a
     number, ``could not convert string to float``) included: text -> number conversion is phase 1 since P1.1.
+
+    :returns: True when the case was recorded, False when NumPy's outcome is not a case (a StringDType product computed
+        over Python objects, ``_object_product_result``).
     """
     views = [v for _, v in operands]
     prefix = f"{section}/{op}/"
@@ -330,6 +368,11 @@ def add(section, op, *, params=None, operands=(), call, phase=1, layout="", muta
         case["note"] = note
     try:
         r = call(*views)
+        if section in _OBJECT_PRODUCT_SECTIONS and _object_product_result(params, r):
+            # An object product NumSharp refuses by design: not a case (its id is given back to the next case).
+            _IDS.discard(cid)
+            _OP_COUNT[prefix] = n - 1
+            return False
         if mutate is not None:
             base, view = operands[mutate]
             case["expected"] = {"kind": "mutated", "operand": mutate, "view": array_expect(view, None)}
@@ -347,6 +390,7 @@ def add(section, op, *, params=None, operands=(), call, phase=1, layout="", muta
         if phase == "compute":
             case["phase"] = 2 if _is_parse_error(e) and not _parses_in_phase1(op) else 1
     CASES.append(case)
+    return True
 
 
 # Calls whose parse runs only after a computation of the later phase: np.sort_complex sorts the text, THEN casts it
@@ -2650,8 +2694,9 @@ def add_ma(op, *, args, params=None, call, phase="compute", layout="", section="
                 objs.append(a)
         return call(*objs)
 
-    add(section, op, params=p, operands=operands, call=wrapped, phase=phase, layout=layout)
-    if trace_t and phase == "compute":
+    # A case the outcome dropped (an object product) has no record to classify.
+    if add(section, op, params=p, operands=operands, call=wrapped, phase=phase, layout=layout) and trace_t \
+            and phase == "compute":
         _t_trace_phase(CASES[-1], build, wrapped)
 
 
@@ -4651,9 +4696,10 @@ def gen_tdtype():
 # them, unlike 'U'), quotes, tabs and supplementary-plane characters.
 T_POOL = ["a", "m" * 16, "", "bc", "é" * 8, "def", "q" * 20, "Ü", "\U0001F600" * 5, "x y", "n" * 15, "中文",
           "p" * 255, "a\x00b", "r" * 256, "it's", "s" * 300, "\t", "長い文字列です" * 2, "ab\x00"]
-# Short texts only: NumPy 2.4.2's put / putmask / choose copy StringDType cells RAW (no dup), which is correct only for
-# short strings (an arena or heap cell then points into another array's allocator: garbage or a crash), so those calls
-# get short values only; NumSharp's correct duplicate of every string is pinned by the unit tests for long ones.
+# Texts that live in their cell (at most 15 UTF-8 bytes). NumPy 2.4.2's put / putmask / choose copied StringDType cells
+# RAW, correct only for such texts (an arena or heap cell then pointed into another array's allocator: garbage or a
+# crash), so the original sweep of those calls keeps to them; NumPy 2.5 duplicates every text, and gen_tmove records
+# its long-text cases beside them.
 T_SHORT = ["a", "bc", "", "def", "Ü", "x y", "it's", "\t", "中文", "a\x00b", "\U0001F600", "zz", "é", "ab\x00", "~", "Q"]
 
 TD = TSpec()
@@ -5084,13 +5130,13 @@ def gen_tcreate():
             call=lambda a, l=lw: np.array_str(a, max_line_width=l))
 
     # view: the array's own descriptor is a view sharing its allocator; any other dtype is NumPy's reference refusal (both
-    # directions). A DIFFERENT-but-equal StringDType instance is left out: NumPy 2.4.2 returns a view that reads its cells
-    # through the NEW instance's empty allocator, so every arena string reads '' (NumSharp keeps the array's allocator and
-    # reads the texts; unit-tested).
+    # directions), an equal but separate StringDType instance included since NumPy 2.5 (the cells point into the array's
+    # own allocator; NumPy 2.4.2 returned a view reading them through the NEW instance's empty allocator, every arena
+    # string as ''), recorded since the 2.5.4 pin: senc(spec) is a fresh instance of the array's own spec.
     for spec in (TD, TDN):
         for lay in ("c1", "f2", "s1", "bc", "z0"):
             add("tcreate", "t_view_same", operands=[t_operand(spec, lay)], layout=lay, call=lambda a: a.view(a.dtype))
-            for t in (senc(TD if spec is TDN else TDN), "<U4", "|S16", "<i8", "<c16"):
+            for t in (senc(spec), senc(TD if spec is TDN else TDN), "<U4", "|S16", "<i8", "<c16"):
                 add("tcreate", "view", params={"dtype": t}, operands=[t_operand(spec, lay)], layout=lay,
                     call=lambda a, t=t: a.view(sbuild(t) if isinstance(t, str) else TSpec(**_tspec_kw(t)).build()))
     for t in (senc(TD), senc(TDN)):
@@ -5137,8 +5183,8 @@ def gen_tmove():
     delete, insert, append, tril / triu, take_along_axis, split, diag / diagflat, pad, concatenate and the stack family
     (StringDType with StringDType / U / S / numbers: NumPy's promotion and its common-instance error), where, choose,
     select, extract, meshgrid, broadcast_arrays, unstack; and the in-place writes: setitem of arrays, put, putmask,
-    copyto (every casting rule, masks), put_along_axis, fill_diagonal, ndarray.resize. put / putmask / choose get short
-    texts only (``T_SHORT``: NumPy 2.4.2 copies their cells raw).
+    copyto (every casting rule, masks), put_along_axis, fill_diagonal, ndarray.resize. put / putmask / choose run over
+    short texts (``T_SHORT``: NumPy 2.4.2 copied their cells raw) and, since the 2.5.4 pin, over arena and heap texts.
     """
     specs = [TD, TDN]
     for spec in specs:
@@ -5323,6 +5369,22 @@ def gen_tmove():
             add("tmove", "putmask", params={"mask": mask.tolist(), "values": enc(vals)},
                 operands=[t_operand(spec, lay, pool=T_SHORT)], layout=lay, mutate=0,
                 call=lambda t, m=mask, v=vals: np.putmask(t, m, v))
+        # Arena and heap texts (T_POOL: 16 to 300 UTF-8 bytes beside the short ones) through choose / put / putmask, as
+        # targets, choices and values: NumPy 2.5 moves each text through StringDType's copy into the destination's
+        # allocator; NumPy 2.4.2 copied the cells raw (garbage or a crash for any text outside its cell), so the cases
+        # above keep to T_SHORT and these are recorded since the 2.5.4 pin.
+        la, lb = t_operand(spec, "c2", seed=8), t_operand(spec, "r2", seed=13)
+        add("tmove", "choose", params={"index": [[0, 1, 0, 1], [1, 1, 0, 0], [0, 0, 0, 1]]}, operands=[la, lb],
+            layout="c2+r2:long", call=lambda x, y: np.choose(np.array([[0, 1, 0, 1], [1, 1, 0, 0], [0, 0, 0, 1]]), [x, y]))
+        long_vals = ["P" * 20, "QQ", "R" * 300]
+        for lay in ("c2", "f2", "r2"):
+            add("tmove", "put", params={"indices": [0, 4, -1, 9], "values": enc(long_vals), "mode": "wrap"},
+                operands=[t_operand(spec, lay, seed=10)], layout=f"{lay}:long", mutate=0,
+                call=lambda t, v=long_vals: np.put(t, [0, 4, -1, 9], v, mode="wrap"))
+            mask = (np.arange(t_operand(spec, lay)[1].size) % 3 == 0).reshape(t_operand(spec, lay)[1].shape)
+            add("tmove", "putmask", params={"mask": mask.tolist(), "values": enc(long_vals)},
+                operands=[t_operand(spec, lay, seed=10)], layout=f"{lay}:long", mutate=0,
+                call=lambda t, m=mask, v=long_vals: np.putmask(t, m, v))
         for src_name, src in (("T", t_operand(spec, "c2", seed=6)), ("Tf", t_operand(spec, "f2", seed=6)),
                               ("Tother", t_operand(TDN if spec is TD else TD, "c2", seed=6)),
                               ("Ubc", operand("<U5", "bc", seed=6)), ("U", operand("<U1", "f2", seed=6)),
@@ -5412,10 +5474,8 @@ def gen_tcast():
                         call=lambda a, t=t: a.astype(t))
                     _drop_platform_int_text()
         for t in ("?", "i8", "u1", "f8", "f4", "c16"):
-            # StringDType -> complex succeeds wrongly in NumPy 2.4.2 (the real part is written into the imaginary part too:
-            # ['1', '2'] -> [1+1j, 2+2j]); only its NA refusal is NumPy's answer, the values are unit-tested.
-            if t == "c16" and spec is not TDN:
-                continue
+            # StringDType -> complex: NumPy 2.5 parses both parts (['1', '2'] -> [1+0j, 2+0j]); NumPy 2.4.2 wrote the real
+            # part into the imaginary part too ([1+1j, 2+2j]), so this cast's values are recorded since the 2.5.4 pin.
             add("tcast", "astype", params={"dtype": t, "casting": "unsafe", "order": "K", "copy": True},
                 operands=[plain(np.array(["1", None] if spec is TDN else ["1", "2"], dtype=spec.build()))],
                 layout="c1", call=lambda a, t=t: a.astype(t))
@@ -5447,12 +5507,16 @@ def gen_tcast():
     for spec in (TD, TDN):
         for src in ("<U1", "<U3", "<U5", "|S1", "|S3", "|S5"):
             for lay in CORE_LAYOUTS + ["c3", "r1", "e1"]:
-                # An S source holds valid UTF-8 only: NumPy 2.4.2's bytes -> StringDType cast copies the bytes WITHOUT
-                # validating them (casts.cpp bytes_to_string), so invalid UTF-8 is stored and raises on every later read;
-                # NumSharp raises the same UnicodeDecodeError at the cast (unit-tested divergence).
+                # The layout sweep's S sources hold ASCII only; invalid UTF-8 has its own cases below.
                 add("tcast", "astype", params={"dtype": senc(spec), "casting": "unsafe", "order": "K", "copy": True},
                     operands=[operand(src, lay, seed=3, ascii_only=src[1] == "S")], layout=lay,
                     call=lambda a, s=spec: a.astype(s.build()))
+        # Invalid UTF-8 in an S source: NumPy 2.5's bytes -> StringDType cast validates it and raises "Invalid UTF-8 bytes
+        # found, cannot convert to StringDType" (a lone 0xFF, a truncated two-byte sequence); NumPy 2.4.2 stored the bytes
+        # unchecked and raised on every later read, so these cases are recorded since the 2.5.4 pin.
+        for vals in ([bytes([0xFF, 0x61]), b"a"], [b"a", bytes([0x61, 0x62, 0xC3])]):
+            add("tcast", "astype", params={"dtype": senc(spec), "casting": "unsafe", "order": "K", "copy": True},
+                operands=[plain(np.array(vals))], layout="c1:invalid-utf8", call=lambda a, s=spec: a.astype(s.build()))
         for vals in ([b"\xc3\xa9", b"\xe2\x82\xac"], ["\ud800"], ["a", "\U0010FFFF"]):
             add("tcast", "astype", params={"dtype": senc(spec), "casting": "unsafe", "order": "K", "copy": True},
                 operands=[plain(np.array(vals))], layout="c1", call=lambda a, s=spec: a.astype(s.build()))
@@ -5494,21 +5558,23 @@ class _TProps:
 # ----------------------------------------------------------------------------------------------------------------------
 #
 # The striter trace (_it_trace) over StringDType operands: a T base travels by value (_describe_t), an NA element is
-# traced as "N" (a NaN NA object as "fnan"), and a StringDType request is an encoded TSpec. NumPy 2.4.2 raises MemoryError
+# traced as "N" (a NaN NA object as "fnan"), and a StringDType request is an encoded TSpec. NumPy 2.4.2 raised MemoryError
 # ("Failed to load string in StringDType getitem", then "String deallocation failed in clear loop" at close) for a
-# buffered iteration with a StringDType input and an ALLOCATED StringDType output; those cases are not recorded (a NumPy
-# bug: NumSharp's values are pinned by StringDTypeIterationTests).
+# buffered iteration with a StringDType input and an ALLOCATED StringDType output, and such a case is dropped when the
+# running NumPy still raises it (_titer_add; main reports the count). NumPy 2.5 gives the allocated operand its
+# finalized descriptor (nditer_constr.c's npyiter_sync_finalized_op_dtype) and answers, so under the 2.5.4 pin none is
+# dropped.
 
 # Short texts (in the cell), arena texts (16+ UTF-8 bytes: the shortest ones, to keep the traces small), the empty
 # string, non-ASCII and supplementary-plane text.
 T_ITER_POOL = ["a", "bb", "abcdefghijklmnop", "", "é" * 8, "\U0001F600", "q" * 17, "x y"]
 # Texts NumPy parses as numbers (CPython int(): spaces, underscores and a sign allowed).
 T_NUM_POOL = ["12", "-7", "3", " 4 ", "1_0", "+5"]
-# The same numbers as complex texts whose two parts are equal, for a complex128 request: NumPy 2.4.2's StringDType ->
-# complex loop writes the REAL part into the imaginary part too (casts.cpp: npy_csetimagfunc(out, complex_value.real)),
-# so only a text with real == imag gives the value complex() parses — the value NumSharp writes (NDTextParse's
-# ParseVStringElement; the bug itself is pinned by unit tests, never recorded).
-T_CNUM_POOL = ["12+12j", "-7-7j", "(3+3j)", " 4+4j ", "1_0+1_0j", "+5+5j"]
+# Complex texts for a complex128 request, whose parts differ (and one with no imaginary part): NumPy 2.5's StringDType
+# -> complex loop stores both parts complex() parses, as NumSharp does (NDTextParse's ParseVStringElement). NumPy
+# 2.4.2 wrote the REAL part into the imaginary part too (casts.cpp: npy_csetimagfunc(out, complex_value.real)), so the
+# pool held equal parts until the 2.5.4 pin.
+T_CNUM_POOL = ["12+3j", "-7-1j", "(3+0.5j)", " 4-4j ", "1_0+2_0j", "+5"]
 # The titer cases NumPy's allocated-output MemoryError removed (reported by main()).
 _TITER_DROPPED = []
 
@@ -5597,8 +5663,8 @@ def gen_titer():
     requests = [TD, TDN, TDNAN, TDC, "<U5", "<U30", "|S5", "<i8", "<f8", "?", "<c16"]
     for sname, spec, pool in sources:
         for req in requests:
-            # A number source cast to complex128 reads complex texts with equal parts (T_CNUM_POOL: NumPy's bug is
-            # invisible there); the other texts raise complex()'s ValueError at their first element in both libraries.
+            # A number source cast to complex128 reads the complex texts of T_CNUM_POOL; the other texts raise
+            # complex()'s ValueError at their first element in both libraries.
             rpool = T_CNUM_POOL if pool is T_NUM_POOL and req == "<c16" else pool
             for casting in ("no", "safe", "same_kind", "unsafe"):
                 op = _t_op(spec, "c1", seed=1, pool=rpool)
@@ -5998,7 +6064,7 @@ def gen_storenone():
                 add("storenone", "setitem_method", params={"key": key, "value": enc(v)}, operands=[op], layout=tname,
                     mutate=0, call=lambda a, k=k, v=v: a.__setitem__(k, v))
 
-    # A store through a sub-array of a writeable broadcast (np.broadcast_arrays' results are writeable in NumPy 2.4.2,
+    # A store through a sub-array of a writeable broadcast (np.broadcast_arrays' results are writeable in NumPy 2.5.4,
     # with a DeprecationWarning, and their views inherit WRITEABLE even where the stride is 0).
     for which in ("a", "b"):
         for row in (0, 1, 2):
@@ -6105,9 +6171,9 @@ def _gen_none_routes():
     """None through every store route NumPy has, into numbers and text: the index forms (numeric targets: the text ones
     are above), ``fill``, ``np.full`` / ``np.full_like``, ``np.copyto`` (every casting rule; ``'unsafe'`` with each mask form
     and destination size, which decide whether the object cast runs up front, per selected element, or not at all),
-    ``np.put`` (in-bounds, negative, out-of-bounds, empty), ``np.putmask``, ``np.place`` (not StringDType: NumPy 2.4.2 crashes
-    there), ``np.insert`` (scalar, sequence, empty, slice, array and mask positions, axes, an out-of-bounds index), the flat
-    iterator (an integer index rewords any failure as "Error setting single item of array.", a slice or index list does
+    ``np.put`` (in-bounds, negative, out-of-bounds, empty), ``np.putmask``, ``np.place`` (StringDType only under NumPy
+    2.5: NumPy 2.4.2 crashed there), ``np.insert`` (scalar, sequence, empty, slice, array and mask positions, axes, an
+    out-of-bounds index), the flat iterator (an integer index rewords any failure as "Error setting single item of array.", a slice or index list does
     not), ``np.fill_diagonal`` (2-D, tall with wrap, 3-D, empty), ``np.put_along_axis``, ``ndarray.setfield``,
     ``np.asanyarray`` / ``np.asarray`` with a dtype, and ``np.array`` of a list holding None. Every case records NumPy's
     outcome: the mutated operand (bytes, so NaN's sign is compared) or the result, or NumPy's error and its order against
@@ -6183,7 +6249,8 @@ def _gen_none_routes():
                             ("c2", [[True, False, False, True], [False] * 4, [True] * 4]), ("s1", [True] * 6),
                             ("bc", [True] * 12)):
             ns("putmask", spec, lname, [_none_op(spec, lname)], lambda a, m=mask: np.putmask(a, np.array(m), None), mask=mask)
-            if not isinstance(spec, TSpec):
+            # np.place over StringDType crashed NumPy 2.4.2 (PyArray_Place's buffer handling); NumPy 2.5 answers.
+            if not isinstance(spec, TSpec) or _NUMPY_2_5:
                 ns("place", spec, lname, [_none_op(spec, lname)], lambda a, m=mask: np.place(a, np.array(m), None), mask=mask)
 
         # np.insert: a scalar position is bounds-checked before the values are converted; a sequence's values are
@@ -6265,8 +6332,9 @@ def _gen_none_routes():
 # (io.BytesIO: bytes lines decoded one by one, Latin-1 by default) and "file" (a temporary file read by NAME: universal
 # newlines, decoded with the given encoding; always an explicit encoding here, because NumPy's default is the locale's,
 # which NumSharp pins to UTF-8). np.savetxt writes to "writer" (io.StringIO) or "stream" (io.BytesIO, Latin-1 by
-# default), never to a file name, whose newline translation is the host's. ndarray.tofile writes ASCII-only arrays:
-# NumPy 2.4.2 crashes (an access violation) on the error path of a non-ASCII StringDType element in text mode.
+# default), never to a file name, whose newline translation is the host's. ndarray.tofile's layout sweep writes ASCII-only
+# arrays (NumPy 2.4.2 crashed, an access violation, on the error path of a non-ASCII StringDType element in text mode);
+# the non-ASCII texts have their own cases since the 2.5.4 pin, where NumPy raises the UnicodeEncodeError.
 
 # Texts for ndarray.tofile: ASCII only (see above), across the cell kinds (short, medium, long) and the reprs that differ
 # from the text (quotes, NUL, tab).
@@ -6726,6 +6794,15 @@ def gen_tio():
                              (",", "%d"), (",", "%c")):
                 _tio_tofile(op, tmpdir, sep=sep, fmt=fmt)
                 _tio_tofile(op, tmpdir, sep=sep, fmt=fmt, written=True)
+    # Non-ASCII texts in text mode: NumPy 2.5 raises PyUnicode_AsASCIIString's UnicodeEncodeError at the first element
+    # whose text is not ASCII, after writing the ones before it (the _written form records that partial file); NumPy
+    # 2.4.2 crashed the process there, so these cases are recorded since the 2.5.4 pin.
+    for spec in (TD, TDN):
+        for vals in (["a", "é", "b"], ["\U0001F600"], ["x y", "长" * 9, "z"]):
+            op = own(np.array(vals, dtype=spec.build()))
+            for sep, fmt in ((",", "%s"), (" ", "%r"), ("\n", "%5s"), (",", "")):
+                _tio_tofile(op, tmpdir, sep=sep, fmt=fmt)
+                _tio_tofile(op, tmpdir, sep=sep, fmt=fmt, written=True)
     # ---- the refusals of the readers ------------------------------------------------------------------------------------
     for spec in (TD, TDN, TDC):
         for sep, count, offset in (("", -1, 0), (" ", -1, 0), (" ", 0, 0), (" ", -1, 1), ("", -1, 1), (",", 2, 0)):
@@ -6793,8 +6870,9 @@ def gen_tio():
     # '%(key)' without a mapping, an incomplete or unsupported spec and its code-point index, the argument taken before
     # the conversion is checked, a leftover argument — and every conversion against every element type: a NumPy scalar's
     # repr names its type, a TypeError quotes it, a NumPy bool is not an int where a Python bool is. tofile's sep and
-    # format pass CPython's "s" converter (no NUL, no lone surrogate) before the file is opened. NumPy 2.4.2's tofile
-    # crashes on non-ASCII text (it does not check PyUnicode_AsASCIIString's NULL), so no tofile case reaches one.
+    # format pass CPython's "s" converter (no NUL, no lone surrogate) before the file is opened. No tofile case here
+    # reaches non-ASCII text (NumPy 2.4.2 crashed there: it did not check PyUnicode_AsASCIIString's NULL); gen_tio's
+    # non-ASCII cases record NumPy 2.5's UnicodeEncodeError.
     pct_fmts = ["%y", "%5y", "%", "a%", "%5", "%.", "%-", "%(x)s", "%*d", "%.*f", "%ld", "%lld", "%hd", "%Ld", "%5%",
                 "%-5%", "%é", "%5.2l", "%#", "%l", "%x", "%c", "%d", "%s", "%r", "%a", "%e", "%5.1f", "%%", "%o", "%X",
                 "%#x", "%+d", "%-6.2s|", "%.*s", "%*s", "%10.3e", "%#o", "% d", "%+.2g", "%G", "%i", "%u", "%.0f",
@@ -6948,7 +7026,7 @@ _SORT_KWS = [{}, {"kind": "quicksort"}, {"kind": "heapsort"}, {"kind": "stable"}
              {"kind": "h"}, {"stable": True}, {"stable": False}]
 
 # The keywords whose argsort answers differ over text: the default introsort, the heapsort kind (the same answer in
-# NumPy 2.4.2) and the stable sort.
+# NumPy 2.5.4) and the stable sort.
 _SORT_KWS_CORE = [{}, {"kind": "heapsort"}, {"kind": "stable"}]
 
 # NumPy's SMALL_QUICKSORT (npysort/npysort_common.h): a range of at most 16 elements is insertion-sorted.
@@ -8297,7 +8375,8 @@ def _cha_run(call, views, value_kind=False, uninit=False):
         return {"error": err_info(e)}
 
 
-# The cases whose outcome a fresh process records (``add_cha(..., isolate=payload)``): NumPy 2.4.2 corrupts its heap when
+# The cases whose outcome a fresh process records (``add_cha(..., isolate=payload)``): NumPy (seen on 2.4.2; the cases
+# stay isolated under 2.5.4) corrupts its heap when
 # a chararray's __array_finalize__ raises on a path that ALLOCATED the result first (astype / copy / flatten / byteswap /
 # imag / a flat slice of a chararray over numbers): the failure frees the buffer through a bad handler capsule
 # ("Exception ignored in: 'PyDataMem_UserFREE'") and a later call crashes the process.
@@ -8899,7 +8978,7 @@ def gen_strchararray():
 CHO = "strcharops"
 CHF = "strcharfn"
 
-# __array_finalize__'s ValueError. NumPy 2.4.2 may corrupt its heap freeing an array whose finalize raised (the
+# __array_finalize__'s ValueError. NumPy (seen on 2.4.2) may corrupt its heap freeing an array whose finalize raised (the
 # strchararray section's note), so a worker process that recorded this error is replaced before the next case.
 FINALIZE_TEXT = "Can only create a chararray from string data."
 
@@ -8960,8 +9039,8 @@ def _chx_build(recipe):
 
     Args:
         recipe: ``{"pool": [spec, layout, seed]}`` (``_cha_operand``), ``{"nonempty": [spec, layout, seed]}``
-            (``_cha_operand`` over the pool without its empty string: NumPy 2.4.2's zfill of an empty element reads
-            uninitialized memory, see ``_fn_nonempty``), ``{"fmt": [spec, layout, pool, seed]}`` (``_cha_operand``'s
+            (``_cha_operand`` over ``_fn_nonempty``'s pool: whole under NumPy 2.5; NumPy 2.4.2's zfill of an
+            empty element read uninitialized memory), ``{"fmt": [spec, layout, pool, seed]}`` (``_cha_operand``'s
             layout over the % format pool ``CHM_FMT_POOLS[pool]``, latin-1 bytes for an S spec),
             ``{"values": enc, "dtype": spec}`` (``np.array(values, dtype)``) or ``{"T": enc}`` (a StringDType array of
             the values).
@@ -10606,7 +10685,8 @@ def gen_treduce():
     # iterator's op_axes / remapped-broadcast / non-broadcastable texts, accepts an out with more dimensions (its
     # trailing axes stay at index 0), broadcasts the input on the other axes and writes only the input's extent along
     # the axis. A U out casts the default StringDType() result: an NA first element is the input's na_name, a later NA
-    # reads as ''. (A 0-d StringDType out over a 1-D input crashes NumPy 2.4.2 on its direct path: not generated.)
+    # reads as ''. A 0-d StringDType out over a 1-D input is NumPy 2.5's wrong-size error on the direct path (NumPy 2.4.2
+    # crashed there, so the case runs only under 2.5).
     m2 = np.array([["a", "b"], ["c", "d"]], dtype=TD.build())
     col = np.array([["a"], ["bb"]], dtype=TD.build())
     row = np.array([["x", "yy", "z"]], dtype=TD.build())
@@ -10628,6 +10708,10 @@ def gen_treduce():
             (v3, None, np.array("k", dtype="U5"), "acc:1d:U:0d"), (v3, 0, kfill((3, 2), "U5"), "acc:1d:U:extra")]:
         ab, av = t_plain(arr)
         _t_red_case("cumsum", [(ab, av), target(out_arr)], axis=axis, out_index=1, layout=f"T:{label}")
+    if _NUMPY_2_5:
+        ab, av = t_plain(v3)
+        _t_red_case("cumsum", [(ab, av), target(np.array("k", dtype=TD.build()))], axis=None, out_index=1,
+                    layout="T:acc:1d:0d")
     for spec in [TDNAN, TDN, TDS]:
         for vals in [[spec.na, "a", "b"], ["a", spec.na, "b"], [spec.na, spec.na]]:
             base = np.array(vals, dtype=spec.build())
@@ -10714,9 +10798,10 @@ T_SORT_POOL = ["", "a", "a\x00", "ab", "abc", "b", "bb", "c", "x" * 15, "x" * 14
 T_SORT_SHORT = [v for v in T_SORT_POOL if len(v) < 100]
 # The layouts whose sorts also get the heap-sized text.
 T_SORT_LONG_LAYOUTS = ("c1", "c2", "t3")
-# Haystack texts of the searches stay in their cells (at most 15 UTF-8 bytes): NumPy 2.4.2's searchsorted loads haystack
-# cells with the KEYS' allocator, so an arena or heap haystack text raises MemoryError or reads another array's arena — a
-# NumPy bug NumSharp does not reproduce. Keys may be any length.
+# Haystack texts of the random searches stay in their cells (at most 15 UTF-8 bytes): NumPy 2.4.2's searchsorted loaded
+# haystack cells with the KEYS' allocator, so an arena or heap haystack text raised MemoryError or read another array's
+# arena. NumPy 2.5 fixed it; gen_tsort's fixed "arena" haystacks cover those texts since the 2.5.4 pin. Keys may be any
+# length.
 T_SEARCH_POOL = ["", "a", "a\x00", "ab", "abc", "b", "bb", "c", "x" * 15, "x" * 14, "é", "NB", "中文"]
 T_SET_POOL = ["pear", "fig", "apple", "", "fi", "fig\x00x", "kiwi", "m" * 20, "é"]
 T_ORDER_SPECS = [TD, TDN, TDNAN, TDS, TDC]
@@ -10760,8 +10845,8 @@ def gen_tsort():
       ``np.digitize``;
     * ``np.unique`` (every flag, ``equal_nan``, ``sorted``), the Array-API family (``unique_values`` is NumPy's hash order:
       an excused order), ``np.isin`` and the four set routines between StringDType, ``U``, bytes and numbers;
-    * ``np.sort_complex`` (its parse errors and missing data; NumPy 2.4.2's StringDType-to-complex cast stores the real part
-      in both parts, so only zeros are compared as values);
+    * ``np.sort_complex`` (its parse errors and missing data, over zeros, and since the 2.5.4 pin the values: NumPy
+      2.4.2's StringDType-to-complex cast stored the real part in both parts);
     * ``np.histogram`` / ``histogram_bin_edges`` / ``histogram2d`` / ``histogramdd`` over StringDType data, edges and weights;
     * ``np.quantile`` / ``np.percentile`` / ``np.nanquantile`` / ``np.nanpercentile`` (every method, q forms, axes,
       keepdims, ``out=``, a StringDType q), ``np.median`` / ``np.nanmedian``;
@@ -10777,8 +10862,8 @@ def gen_tsort():
     for spec in T_ORDER_SPECS:
         for na_every in ([5, 0] if spec is TDN else [5]):
             for lay in sort_layouts:
-                # A broadcast layout holds texts of at most 15 bytes: NumPy 2.4.2's argsort of a broadcast StringDType view
-                # misorders arena texts (np.argsort(np.broadcast_to(b, (3, 4)), axis=None) puts a 16-byte text before
+                # A broadcast layout holds texts of at most 15 bytes: NumPy's (2.4.2 and 2.5.4) argsort of a broadcast
+                # StringDType view misorders arena texts (np.argsort(np.broadcast_to(b, (3, 4)), axis=None) puts a 16-byte text before
                 # shorter, smaller ones; the same array copied sorts right) — a NumPy bug NumSharp does not reproduce.
                 def make(s=spec, l=lay, ne=na_every):
                     pool = T_SEARCH_POOL if l in ("bc", "bcol") else T_SORT_POOL if l in T_SORT_LONG_LAYOUTS else T_SORT_SHORT
@@ -10867,8 +10952,8 @@ def gen_tsort():
         k = own(np.array(vals, dtype=TDNAN.build()))
         lexsort_case(f"T-NaN:{len(vals)}runs", [k])
         lexsort_case(f"T-NaN:{len(vals)}runs:sec", [own(np.arange(len(vals))[::-1].copy()), k])
-    # Keys contiguous along the axis only: NumPy 2.4.2 CRASHES (access violation) in np.lexsort when a StringDType key is
-    # not — axis 0 of a C-ordered 2-D key, a stepped or reversed 1-D view — on its copy-to-buffer path (a NumPy bug;
+    # Keys contiguous along the axis only: NumPy (2.4.2 and 2.5.4) CRASHES (access violation) in np.lexsort when a
+    # StringDType key is not — axis 0 of a C-ordered 2-D key, a stepped or reversed 1-D view — on its copy-to-buffer path (a NumPy bug;
     # NumSharp's answer is pinned by the unit tests).
     m1 = t_plain(np.array(_pick(rng, 12, ["b", "a", "c", "ab"]), dtype=TD.build()).reshape(3, 4))
     m2 = t_plain(np.array(_pick(rng, 12, ["x", "y", np.nan]), dtype=TDNAN.build()).reshape(3, 4))
@@ -10919,6 +11004,18 @@ def gen_tsort():
                           (np.array([b"a", b"b"]), np.array(["a"], dtype=TD.build())),
                           (np.array([], dtype=float), np.array(["a"], dtype=TD.build()))):
         search(f"{haystack.dtype.str}-in-T", own(haystack), own(key))
+    # Arena and heap haystack texts (16 or more UTF-8 bytes): NumPy 2.5 loads each haystack cell with the haystack's own
+    # allocator; NumPy 2.4.2 used the KEYS' (a MemoryError, or another array's arena), which is why the haystacks above keep
+    # to T_SEARCH_POOL's in-cell texts. Fixed values, no rng draw, so the cases above keep their operands; recorded since
+    # the 2.5.4 pin.
+    for hspec in (TD, TDN):
+        hay_arr = _ts_sorted(_ts_array(["", "a", "a" * 16, "a" * 17, "ab", "b" * 20, "é" * 9, "y" * 300, "z"], hspec))
+        for kspec in (TD, TDNAN):
+            keys = own(_ts_array(["a" * 16, "b", "y" * 300, "zz", "é" * 9, "a" * 18, ""], kspec))
+            for side in ("left", "right"):
+                search(f"{_t_label(hspec)}arena:{_t_label(kspec)}", own(hay_arr), keys, side)
+        search(f"{_t_label(hspec)}arena:method", own(hay_arr), own(np.array(["b" * 20, "c"], dtype=TD.build())),
+               method=True)
     for xspec in (TD, TDN, TDNAN):
         for n in (0, 1, 4):
             x = own(_ts_array(_ts_values(rng, n, T_SEARCH_POOL, xspec, 0.3), xspec))
@@ -11024,8 +11121,9 @@ def gen_tsort():
         setop(key, "intersect1d", x, y, return_indices=True)
 
     # ---- np.sort_complex -----------------------------------------------------------------------------------------------
-    # NumPy 2.4.2's StringDType-to-complex cast stores the REAL part in both parts ('3' becomes 3+3j), a bug NumSharp does
-    # not reproduce: the values compared are zeros; everything else is an error NumPy raises before or in the cast.
+    # The parse errors and missing data, over zeros: NumPy 2.4.2's StringDType-to-complex cast stored the REAL part in both
+    # parts ('3' became 3+3j), so these cases compare zeros; everything else is an error NumPy raises before or in the
+    # cast. The values follow below.
     for spec in (TD, TDN, TDNAN, TDS):
         for vals in (["0", "0", "+0"], ["0"], [], ["1+2j", "j1"], ["x"], ["0", spec.na] if spec.na is not _ABSENT else
                      ["0", "0x1"], ["0", "1e1e1"], [spec.na] if spec.na is not _ABSENT else ["  "]):
@@ -11036,6 +11134,13 @@ def gen_tsort():
         add("tsort", "sort_complex", operands=[t_plain(arr2)], layout=f"{_t_label(spec)}:2d", call=lambda a: np.sort_complex(a))
         add("tsort", "sort_complex", operands=[t_plain(np.array("0", dtype=spec.build()))], layout=f"{_t_label(spec)}:0d",
             call=lambda a: np.sort_complex(a))
+    # NumPy 2.5 parses both parts of each text, so the values are recorded since the 2.5.4 pin (the loop above compares
+    # only zeros, all NumPy 2.4.2 got right): real and imaginary parts that differ, signs, parentheses and padding, an
+    # infinite part and a NaN part.
+    for spec in (TD, TDN):
+        for vals in (["2", "1"], ["1+2j", "3", "-1.5-2j", "2j"], ["inf", "-1+nanj", "0.5"], ["(1-1j)", " 2+0j "]):
+            add("tsort", "sort_complex", operands=[own(_ts_array(vals, spec))],
+                layout=f"{_t_label(spec)}:values{len(vals)}", call=lambda a: np.sort_complex(a))
 
     # ---- histograms ----------------------------------------------------------------------------------------------------
     def hist(layout, fn, data, bins, *, weights=None, density=False, rng_=None, second=None):
@@ -11238,7 +11343,7 @@ def gen_tsort():
 # methods in CPython's order (the descriptor check, maxsplit's __index__, keepends' truth, the separator's type, the empty
 # separator, the pieces), the first failing element (C order) ending the call; the object results recorded piece by
 # piece with every np.str_ piece (unicodeobject.c's [self] shortcut) marked; join's _to_bytes_or_str_array results and
-# NumPy 2.4.2's ObjectDType(n) failure over an object seq.
+# NumPy's ObjectDType(n) failure over an object seq (2.4.2 and 2.5.4).
 # ----------------------------------------------------------------------------------------------------------------------
 
 COBJ = "strcharobj"
@@ -11421,7 +11526,7 @@ def add_cobj(op, params, operands=(), layout=""):
     try:
         r = _cobj_call(params, views)
         if "join" in (params.get("fn"), params.get("member")) and isinstance(r, np.ndarray) and r.dtype == object:
-            # NumPy 2.4.2's join over an object array that holds no list returns an empty OBJECT array; NumSharp's join
+            # NumPy's join over an object array that holds no list returns an empty OBJECT array; NumSharp's join
             # returns an NDArray, which cannot hold one (a NotSupportedException naming the composition, pinned by
             # CharObjectPathTests.Join_OverListArrays_NumPys2_4_2Failure): not a case.
             _IDS.discard(cid)
@@ -11630,7 +11735,7 @@ def gen_strcharobj():
         add_cobj("cobj_fn", {"fn": "split", "args": [{"cha": 0}]}, [cb], layout=f"cha:{kind}")
         add_cobj("cobj_fn", {"fn": "join", "args": [_cobj_v("-"), {"cha": 0}]}, [cb], layout=f"cha:{kind}")
         add_cobj("cobj_fn", {"fn": "join", "args": [{"cha": 0}, _cobj_v("ab")]}, [cb], layout=f"cha:{kind}")
-    # 9. The object result: its views, printing, and join over it (NumPy 2.4.2's ObjectDType(n) failure; an empty
+    # 9. The object result: its views, printing, and join over it (NumPy's ObjectDType(n) failure; an empty
     # broadcast is an empty object array).
     mb = plain(np.array([["a b", "c"], ["d e f", ""], ["g", "h i"]]))
     for index in ("1:", "::-1", "1, ::-1", "::2, 1", "0", "-1, -1", "1:1", "2:, 1:"):
@@ -12808,8 +12913,8 @@ def _chm_transform():
                     _chm_member([cha], name, [_chx_v(widths)], layout=f"{label}:widths")
                     fills = [word(f) for f in ["*", "-", ".", "#"] * 3][:row]
                     _chm_member([cha], name, [_chx_v(7), _chx_v(fills)], layout=f"{label}:fills")
-            # ---- zfill -> asarray(zfill(self, width)), over a receiver without an empty element (NumPy 2.4.2's
-            # zfill of an empty element reads uninitialized memory: _fn_nonempty) ----
+            # ---- zfill -> asarray(zfill(self, width)), over _fn_nonempty's receiver (an empty element only under
+            # NumPy 2.5: NumPy 2.4.2's zfill of one read uninitialized memory) ----
             zcha = {"nonempty": [spec, layout, 3]}
             for width in [0, 3, 7]:
                 _chm_member([zcha], "zfill", [_chx_v(width)], layout=f"{label}:w{width}")
@@ -12868,7 +12973,7 @@ def _chm_transform():
                 _chm_fn([base, fill], "center", [_chx_arr(0), _chx_v(9), _chx_cha(1)], layout=f"{label}:chararray_fill")
                 _chm_fn([base, sep], "partition", [_chx_arr(0), _chx_cha(1)], layout=f"{label}:chararray_sep")
                 _chm_fn([base, sep], "rpartition", [_chx_cha(0), _chx_arr(1)], layout=f"{label}:plain_sep")
-    # StringDType text (a StringDType separator: NumPy 2.4.2 has no (StringDType, str) partition loop).
+    # StringDType text (a StringDType separator: NumPy has no (StringDType, str) partition loop, 2.4.2 and 2.5.4 alike).
     t_text = {"T": enc(CHM_T)}
     t_sep = {"T": enc([" "])}
     for fn in ["partition", "rpartition"]:
@@ -13670,13 +13775,13 @@ def _qf_q(fn, values):
 
 
 def gen_qfamily():
-    """Section qfamily: the quantile family's ``weights=`` keyword (NumPy 2.4.2, method ``inverted_cdf`` only) over every
+    """Section qfamily: the quantile family's ``weights=`` keyword (NumPy 2.5.4, method ``inverted_cdf`` only) over every
     dtype — numbers and text — through ``np.quantile`` / ``np.percentile`` / ``np.nanquantile`` / ``np.nanpercentile``
     (op ``quant_kw`` with a ``w_op`` operand). Every case is phase 1: NumSharp computes them.
 
     * the core matrix: 14 data kinds (9 numeric dtypes; ``U``, ``S``; StringDType without an NA, with a NaN-like NA,
       with a string NA) x 7 layouts x the 4 functions x every axis form (None, each axis, -1, every axis in order and
-      reversed) x weights of the data's shape and of the reduced axes' shape (the nan forms' NumPy 2.4.2 IndexError for
+      reversed) x weights of the data's shape and of the reduced axes' shape (the nan forms' NumPy 2.5.4 IndexError for
       the latter over a kept axis longer than 1 included);
     * q forms: a Python float, a list, a Python int, float64 / float32 / float16 / int / bool / 0-d / 2-d / 3-d arrays;
     * weight dtypes (int, uint8, bool, float16, float32, complex, text) and values (negative, NaN, inf, all zero,
@@ -14668,15 +14773,17 @@ FN_SPECS = ["<U5", "<U12", "|S5", "|S12"]
 
 
 def _fn_nonempty(spec):
-    """The P2.5 pool of ``spec``'s class without the empty string: NumPy 2.4.2's zfill of an EMPTY element reads the
-    output byte at the width for a sign before the loop zero-fills it (``string_zfill``'s ``*tmp`` past the copied text:
-    uninitialized ``np.empty_like`` memory), so its answer depends on what the allocator recycled; NumSharp's ``'0' *
-    width`` (Python's ``''.zfill``) is pinned by the unit tests instead.
+    """The P2.5 pool of ``spec``'s class for zfill: whole under NumPy 2.5, which tests for a sign only in a non-empty
+    text that got padding (``string_zfill``: ``len > 0 && final_width > len``), so an EMPTY element is ``'0' * width``
+    as in NumSharp. NumPy 2.4.2 read the output byte at the width for a sign before the loop zero-filled it
+    (uninitialized ``np.empty_like`` memory), so its answer depended on what the allocator recycled, and the pool drops
+    the empty string under it.
 
     :param spec: an S / U descriptor string.
     :returns: the texts.
     """
-    return [v for v in (FN_U_POOL if spec[1] == "U" else FN_S_POOL) if v]
+    pool = FN_U_POOL if spec[1] == "U" else FN_S_POOL
+    return list(pool) if _NUMPY_2_5 else [v for v in pool if v]
 
 
 def fn_operand(spec, layout, seed=0, pool=None):
@@ -15124,9 +15231,11 @@ TFN_POOL = ["", " ", "a", "ab", "abc", "aaaa", "abab", "  x y  ", "\tx\n", "x\ty
 # reads past a shorter haystack); replace's old: never only NULs (NumPy sizes its buffer by bytes and writes past it).
 TFN_ZPOOL = [v for v in TFN_POOL if v.strip("\x00")]
 TFN_NEEDLES = [v for v in TFN_POOL if not v.endswith("\x00")]
-# Slices whose step NumPy's StringDType loop can walk: its outsize loop counts with a C int (`int i += step`), which a step
-# past 2^31 overflows (an endless loop on 2.4.2), so tfn keeps the steps in range.
-TFN_SLICES = [a for a in _FN_SLICES if not (len(a) == 3 and a[2] is not None and abs(a[2]) >= 2**31)]
+# Slices whose step NumPy's StringDType loop can walk: NumPy 2.4.2 counted with a C int (`int i += step`), which a step
+# past 2^31 overflowed (an endless loop), so tfn kept the steps in range there; NumPy 2.5 stops before the last advance
+# and walks every step of _FN_SLICES.
+TFN_SLICES = list(_FN_SLICES) if _NUMPY_2_5 else [
+    a for a in _FN_SLICES if not (len(a) == 3 and a[2] is not None and abs(a[2]) >= 2**31)]
 
 
 def _t_scalar(spec, text):
@@ -15213,11 +15322,11 @@ def gen_tfn():
         for old in ["a", "ab", "", "é", "q", "b"]:
             for new in ["", "Q", "é" * 8, "longer than fifteen!"]:
                 for count in [(), (0,), (1,), (-1,), (-5,)]:
-                    # NumPy 2.4.2's StringDType loop sizes its buffer as size + count * growth with a size_t product: a
-                    # negative count other than -1 (which replaces nothing there) wraps it, the calloc fails and the copy
-                    # writes through NULL — an access violation whenever the replacement is longer than the old text.
-                    # NumSharp's copy of the text is pinned by the unit tests.
-                    if count == (-5,) and old and len(new.encode()) > len(old.encode()):
+                    # NumPy 2.4.2's StringDType loop sized its buffer as size + count * growth with a size_t product: a
+                    # negative count other than -1 (which replaced nothing there) wrapped it, the calloc failed and the
+                    # copy wrote through NULL whenever the replacement was longer than the old text, so those cases run
+                    # only under NumPy 2.5, which reads every negative count as "all".
+                    if count == (-5,) and old and len(new.encode()) > len(old.encode()) and not _NUMPY_2_5:
                         continue
                     fn_case(S, "replace", [op], [_Op(0), old, new, *count], f"{lab0}:{old!r}->{new!r}:{count}")
         for name in ["partition", "rpartition"]:
@@ -16677,8 +16786,8 @@ def gen_tcodec():
 # parallelism, leaving a few cores to the rest of the machine).
 FRESH_WORKERS = max(4, (os.cpu_count() or 8) - 4)
 
-# The cases a fresh-process section drops, per section: NumPy 2.4.2 answers them with its own MemoryError ("String
-# deallocation failed in clear loop": a numeric loop reduced into a StringDType out releases cells it never allocated).
+# The cases a fresh-process section drops, per section: NumPy (2.4.2 and 2.5.4) answers them with its own MemoryError
+# ("String deallocation failed in clear loop": a numeric loop reduced into a StringDType out releases cells it never allocated).
 # NumSharp computes the value NumPy means there (StringReductionIntoOutTests pins those answers).
 _FRESH_DROPPED = {}
 # The cases a fresh-process section drops because NumPy's error text is the Windows host's C long text
@@ -17225,8 +17334,9 @@ def gen_strpad():
 # The surface generators whose U cases section tsurface re-runs with StringDType operands.
 _TSURFACE_GENERATORS = ("gen_refusals", "gen_string_requests", "gen_text_precedence", "gen_shape_decided",
                         "gen_validation_order", "gen_surface")
-# Cases tsurface leaves out because NumPy 2.4.2 crashes the process on them (a segmentation fault, nothing to record),
-# by the layout they would have had; main prints the count. NumSharp's answers there are unit-tested.
+# Cases tsurface leaves out because the pinned NumPy crashes the process on them (a segmentation fault, nothing to record),
+# by the layout they would have had; main prints the count. Empty on NumPy 2.5.4: the two calls NumPy 2.4.2 crashed on
+# answer there (see _tsurface_crashes).
 _TSURFACE_CRASHES = []
 
 
@@ -17251,13 +17361,17 @@ def _tsurface_operand(pair):
 
 
 def _tsurface_crashes(op, params):
-    """Whether NumPy 2.4.2 crashes the process on this call once its text operand is StringDType: ``ndarray.byteswap()``
-    (the plan's D14: NumSharp returns a copy) and ``np.place`` (NumPy's StringDType buffer handling in ``PyArray_Place``).
+    """Whether the running NumPy crashes the process on this call once its text operand is StringDType. NumPy 2.4 did in
+    ``ndarray.byteswap()`` and in ``np.place`` (its StringDType buffer handling in ``PyArray_Place``); NumPy 2.5 raises
+    ``TypeError: dtype StringDType() does not implement copyswap`` for the first and moves each text through StringDType's
+    own copy for the second, as NumSharp does, so under the 2.5.4 pin every surface case is recorded.
 
     :param op: the case's op.
     :param params: the case's params.
-    :returns: True for a call that must not run.
+    :returns: True for a call that must not run (only under a NumPy older than 2.5).
     """
+    if _NUMPY_2_5:
+        return False
     return params.get("name") == "byteswap" or op == "place_arr"
 
 
@@ -18018,14 +18132,14 @@ def main():
     print("  " + ", ".join(f"{k} {len(v)} ({sizes[k] / 1048576:.1f} MiB)" for k, v in by_section.items()))
     for sec, dropped in _FRESH_DROPPED.items():
         if dropped:
-            print(f"  {sec}: {len(dropped)} cases dropped for NumPy 2.4.2's StringDType clear-loop MemoryError")
+            print(f"  {sec}: {len(dropped)} cases dropped for NumPy's StringDType clear-loop MemoryError")
     if _TSURFACE_CRASHES:
-        print(f"  tsurface: {len(_TSURFACE_CRASHES)} cases left out because NumPy 2.4.2 crashes on them over StringDType")
+        print(f"  tsurface: {len(_TSURFACE_CRASHES)} cases left out because NumPy crashes on them over StringDType")
     for sec, platform in _FRESH_PLATFORM.items():
         if platform:
             print(f"  {sec}: {len(platform)} cases dropped for a Windows C long overflow text")
     if _TITER_DROPPED:
-        print(f"  titer: {len(_TITER_DROPPED)} cases dropped for NumPy 2.4.2's StringDType allocated-output MemoryError")
+        print(f"  titer: {len(_TITER_DROPPED)} cases dropped for NumPy's StringDType allocated-output MemoryError")
     if _TMA_TRACE_MISMATCH:
         print(f"  tma: {len(_TMA_TRACE_MISMATCH)} cases whose traced run differed (phase kept from the outcome): "
               + ", ".join(_TMA_TRACE_MISMATCH[:20]))

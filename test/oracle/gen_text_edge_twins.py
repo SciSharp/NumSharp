@@ -3,14 +3,15 @@ Print numpy's answers for the offline text-edge twins as C# initializer rows.
 
 test/NumSharp.Tests/Backends/Strings/TextBridgeEdgeTwinTests.cs holds the rows this script prints between the braces of
 its Rows initializer: each is (label, dtype or null, elements or null, exception class chain or null, exception text or
-null) - numpy 2.4.2's answer for one operation of the pythonnet tier's edge families (TextEdgeLiveParityTests) over the
+null) - numpy 2.5.4's answer for one operation of the pythonnet tier's edge families (TextEdgeLiveParityTests) over the
 four texts ['ab', 'c ', '', 'xyz']: cross-class operands, StringDType NA kinds, ufunc keywords and numpy.char
 comparisons. The C# side computes the same operations in NumSharp and holds them to the rows, so the main suite (no
 Python at test time) guards what the live tier proves.
 
     python test/oracle/gen_text_edge_twins.py > rows.txt     # then paste rows.txt into the Rows initializer
 
-Requires numpy (2.4.2: the rows record its answers). A float prints as its repr, an S element as Latin-1 text, an NA as
+Requires numpy (2.5.4: the rows record its answers; run with -W ignore::DeprecationWarning, numpy.char.array
+is deprecated in 2.5). A float prints as its repr, an S element as Latin-1 text, an NA as
 null / double.NaN; an error row carries the exception class chain (most derived first) and str(e).
 """
 import numpy as np

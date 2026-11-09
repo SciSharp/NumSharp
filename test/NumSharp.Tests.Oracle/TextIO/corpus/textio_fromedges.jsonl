@@ -1,4 +1,4 @@
-{"header": {"section": "fromedges", "generator": "gen_textio_oracle.py", "version": 1, "numpy": "2.4.2", "python": "3.12.3", "seed": 8108, "cases": 11858}}
+{"header": {"section": "fromedges", "generator": "gen_textio_oracle.py", "version": 1, "numpy": "2.5.4", "python": "3.12.3", "seed": 8108, "cases": 11858}}
 {"id": "fromedges/0", "fn": "fromstring", "text": "0", "dtype": "int8", "count": -1, "sep": " ", "expect": {"dtype": "int8", "shape": [1], "nread": 1, "hex": "00"}}
 {"id": "fromedges/1", "fn": "fromfile_text", "dtype": "int8", "count": -1, "sep": " ", "data": {"utf8": "0"}, "skip": 0, "offset": 0, "mode": "name", "expect": {"dtype": "int8", "shape": [1], "hex": "00"}}
 {"id": "fromedges/2", "fn": "fromstring", "text": "0 5", "dtype": "int8", "count": -1, "sep": " ", "expect": {"dtype": "int8", "shape": [2], "nread": 2, "hex": "0005"}}

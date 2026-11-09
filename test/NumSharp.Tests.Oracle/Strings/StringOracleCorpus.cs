@@ -172,6 +172,20 @@ namespace NumSharp.Tests.Strings
             bool isString = descr.Meta is StringDTypeMeta;
             if (!isString)
             {
+                // An EMPTY numeric operand without a buffer: the generator built it as a view of an (empty) base, so it is a
+                // non-owning view here too — the general reconstruction makes a plain owning empty array, whose OWNDATA a
+                // "mutated" result (an out= operand returned itself, NumPy 2.5.4's quantile over an empty kept axis) would
+                // report as True where NumPy's operand says False. A 1-D (0,) operand at offset 0 WAS its empty base (the
+                // isBase rule below), an owner: it keeps the general reconstruction.
+                bool emptyBaseItself = o.Shape.Length == 1 && o.Shape[0] == 0 && o.Offset == 0;
+                if (o.BufferSize == 0 && Array.IndexOf(o.Shape, 0L) >= 0 && !emptyBaseItself)
+                {
+                    var emptyBase = new NDArray(descr.GetTypeCode(), new Shape(0L), false);
+                    var emptyView = new NDArray(emptyBase.Storage.Alias(new Shape(o.Shape)));
+                    if (o.Writeable == false)
+                        emptyView.setflags(write: false);
+                    return emptyView;
+                }
                 // Numeric operands (masks, indices, numbers) ride the general corpus' reconstruction by NumPy dtype name.
                 return FuzzCorpus.Reconstruct(new FuzzCorpus.Operand
                 {
@@ -223,7 +237,15 @@ namespace NumSharp.Tests.Strings
             var baseArray = new NDArray(descr, new Shape(new[] { o.BufferSize }), true);
             var slice = baseArray.Storage.VStringSlice;
             for (long i = 0; i < o.BufferSize; i++)
-                slice.SetIndex(i, VStringValue(o.Values[i], descr));
+            {
+                // NumPy 2.5's reductions can leave a NULL cell in a descriptor WITHOUT an NA object (a NaN NA propagated into
+                // a plain StringDType() out, which the generator then reuses as a later case's operand): no value stores it
+                // through setitem there, so the cell is packed null directly — what NumPy's memory holds.
+                if (IsNAElement(o.Values[i]) && !descr.VString.HasNAObject)
+                    PackNullCell(baseArray, slice, i);
+                else
+                    slice.SetIndex(i, VStringValue(o.Values[i], descr));
+            }
             bool isBase = o.Shape.Length == 1 && o.Shape[0] == o.BufferSize && o.Offset == 0
                           && (o.BufferSize <= 1 || o.Strides[0] == 1);
             NDArray view = isBase
@@ -243,7 +265,37 @@ namespace NumSharp.Tests.Strings
         /// <returns>The value.</returns>
         /// <exception cref="FormatException">An unknown encoding.</exception>
         internal static object VStringValue(JsonElement e, DType descr)
-            => e.ValueKind == JsonValueKind.Object && e.TryGetProperty("na", out _) ? descr.na_object : Decode(e);
+            => IsNAElement(e) ? descr.na_object : Decode(e);
+
+        /// <summary>Whether an encoded <c>StringDType</c> element is an NA cell (<c>{"na": true}</c>: its MISSING flag).</summary>
+        /// <param name="e">The encoded element.</param>
+        /// <returns>True for an NA cell.</returns>
+        private static bool IsNAElement(JsonElement e) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty("na", out _);
+
+        /// <summary>
+        ///     Packs cell <paramref name="i"/> of a fresh <c>StringDType</c> base as NULL (the MISSING flag), under its
+        ///     allocator's lock — the cell NumPy's loops leave when a NaN NA propagates into a descriptor without an NA object.
+        /// </summary>
+        /// <param name="baseArray">The fresh 1-D base (C-contiguous cells).</param>
+        /// <param name="slice">Its <c>StringDType</c> storage slice (its allocator owns the cells).</param>
+        /// <param name="i">The cell index.</param>
+        /// <exception cref="OutOfMemoryException">The allocator could not free the cell (NumPy's <c>MemoryError</c>).</exception>
+        private static unsafe void PackNullCell(NDArray baseArray, VStringArraySlice slice, long i)
+        {
+            byte* cell = (byte*)baseArray.Address + i * NumSharp.Backends.Strings.VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            slice.Allocator.acquire_allocator();
+            try
+            {
+                if (slice.Allocator.pack_null(cell) < 0)
+                    throw new OutOfMemoryException("Failed to pack null string during the operand reconstruction");
+            }
+            finally
+            {
+                slice.Allocator.release_allocator();
+            }
+            // The raw pointer does not root the array: keep it alive past the write.
+            GC.KeepAlive(baseArray);
+        }
 
         /// <summary>
         ///     A value the generator encoded with <c>enc()</c>: <c>{"u"}</c> → <see cref="string"/>, <c>{"b"}</c> →

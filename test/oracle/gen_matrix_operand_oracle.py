@@ -28,7 +28,7 @@ A budget keeps the tier small: at most 2 variants per (op, position, dtype class
 keepdims values) and 8 per (op, position, axis / keepdims values). The axis and keepdims VALUES are part of the
 cell, because a matrix reduction answers each of them differently (a scalar, a row, a column, a TypeError).
 
-EVERY MATRIX CALL RUNS IN A WORKER PROCESS. NumPy 2.4.2 corrupts its own heap when a function that allocates its
+EVERY MATRIX CALL RUNS IN A WORKER PROCESS. NumPy (2.4.2 and 2.5.4) corrupts its own heap when a function that allocates its
 result as the operand's subclass cannot finalize it: np.stack((m, m)) and np.dstack((m, m)) raise "shape too large
 to be a matrix." and a few such calls later the process dies in PyDataMem_UserFREE ("PyCapsule_GetPointer called
 with invalid PyCapsule object"; 400 calls in a fresh process always crash it, np.concatenate / np.hstack /
@@ -45,7 +45,7 @@ Outputs (../NumSharp.Tests.Oracle/Fuzz/corpus/):
                               the variants a carve rule (``_gap_of``) names: NumSharp is known to differ there
 
 Run it after the other generators (its sources are their files; its own files, the relayout files and the matrix
-tier are never sources). Needs numpy==2.4.2; deterministic.
+tier are never sources). Needs the pinned NumPy (numpy-version.txt, 2.5.4); deterministic.
 
     python test/oracle/gen_matrix_operand_oracle.py [--uncarved DIR] [--report]
 """
@@ -58,11 +58,12 @@ import sys
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
-assert np.__version__ == "2.4.2", f"corpus must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_matrix_operand_oracle.py")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_relayout_oracle as R  # noqa: E402

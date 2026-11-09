@@ -1,4 +1,4 @@
-{"header": {"section": "frombin", "generator": "gen_textio_oracle.py", "version": 1, "numpy": "2.4.2", "python": "3.12.3", "seed": 8102, "cases": 3000}}
+{"header": {"section": "frombin", "generator": "gen_textio_oracle.py", "version": 1, "numpy": "2.5.4", "python": "3.12.3", "seed": 8102, "cases": 3000}}
 {"id": "frombin/0", "fn": "fromfile_bin", "dtype": ">c16", "count": 3, "sep": "", "data": {"hex": "48255faefb6c5e6dc2520a52e4d17d9ea817dce3815ec134d81cbf13d9eeb99bd8"}, "skip": 0, "offset": 1, "mode": "file", "tell": 33, "expect": {"dtype": "complex128", "shape": [2], "hex": "c26d5e6cfbae5f25a89e7dd1e4520a52d834c15e81e3dc17d89bb9eed913bf1c"}}
 {"id": "frombin/1", "fn": "fromfile_bin", "dtype": "int32", "count": 0, "sep": null, "data": {"hex": "9de5"}, "skip": 0, "offset": 40, "mode": "name", "expect": {"dtype": "int32", "shape": [0], "hex": ""}}
 {"id": "frombin/2", "fn": "fromfile_bin", "dtype": "float32", "count": 3, "sep": "", "data": {"hex": "dae2e6"}, "skip": 0, "offset": 40, "mode": "file", "tell": 40, "expect": {"dtype": "float32", "shape": [0], "hex": ""}}

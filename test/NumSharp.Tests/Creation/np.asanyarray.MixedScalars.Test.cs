@@ -12,7 +12,7 @@ namespace NumSharp.Tests.Creation
     ///     Python list the C# list stands for, each value read through the boundary map (a <see cref="bool"/> is a Python
     ///     bool, every C# integer primitive a Python int, <see cref="float"/> and <see cref="double"/> Python floats,
     ///     <see cref="Complex"/> a Python complex, <see cref="Half"/> a NumPy float16 scalar): the committed corpus
-    ///     <c>Creation/corpus/asanyarray_mixed.numpy242.jsonl</c> (2,619 orderings written by
+    ///     <c>Creation/corpus/asanyarray_mixed.jsonl</c> (2,619 orderings written by
     ///     <c>test/oracle/gen_asanyarray_mixed_oracle.py</c>), plus pins for the defects it replaced.
     /// </summary>
     /// <remarks>
@@ -37,7 +37,7 @@ namespace NumSharp.Tests.Creation
         /// <exception cref="FileNotFoundException">The corpus was not copied to the test output (rebuild the test project).</exception>
         private static List<Case> Load()
         {
-            string path = Path.Combine(AppContext.BaseDirectory, "Creation", "corpus", "asanyarray_mixed.numpy242.jsonl");
+            string path = Path.Combine(AppContext.BaseDirectory, "Creation", "corpus", "asanyarray_mixed.jsonl");
             var cases = new List<Case>();
             foreach (var line in File.ReadLines(path))
             {

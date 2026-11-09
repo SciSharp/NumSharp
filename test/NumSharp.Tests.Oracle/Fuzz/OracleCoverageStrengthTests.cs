@@ -175,12 +175,9 @@ namespace NumSharp.Tests.Fuzz
             // operand; its four cases joined the gate when the strings rebase (2026-10-12) closed gap SU42, which had
             // carved all of them, and the index a step reports does not depend on the dtype.
             ["nditer.multi_index"] = "iteration-protocol probe: the multi_index after k next() calls is dtype-independent; the protocol section's one float32 operand carries it",
-            // finfo exists for the inexact dtypes only; these attributes' float32 / float64 / complex128 values and
-            // every refusal are carved (gaps SU11-SU14, surface_gaps.jsonl), so the kept spread is narrower until fixed.
-            ["finfo.minexp"] = "finfo of an inexact dtype: float32 / float64 / complex128 carved as SU12 (off by one)",
-            ["finfo.resolution"] = "finfo of an inexact dtype: float16 / float32 carved as SU13 (not rounded to the dtype)",
-            ["finfo.smallest_normal"] = "finfo of an inexact dtype: float32 carved as SU14 (not exactly 2**-126)",
-            ["finfo.tiny"] = "finfo of an inexact dtype: float32 carved as SU14 (not exactly 2**-126)",
+            // (finfo.minexp / resolution / smallest_normal / tiny left this ledger with the NumPy 2.5.4 regeneration: their
+            // refusals of a non-inexact dtype are NumPy 2.5's text, which NumSharp raises, so those cells are kept and each
+            // attribute spreads 5-6 dtypes beside its SU12-SU14 carves.)
 
             // The scalar-type section's relatives (gen_scalar_types): single NumPy objects and name tables, whose case
             // axis is the facet or the key, not an operand dtype.
