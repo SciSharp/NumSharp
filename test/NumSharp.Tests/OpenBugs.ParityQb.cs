@@ -870,5 +870,33 @@ namespace NumSharp.Tests
             space.GetDouble(0).Should().Be(-20000001.0);
             space.GetDouble(2).Should().Be(20000001.0);
         }
+
+        // ------------------------------------------------------------------
+        // QB-30 — the (NDArray, object) overloads read a boxed C# number as a STRONG array, not a weak Python scalar
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>np.power</c>, <c>np.floor_divide</c>, <c>np.fmod</c>, <c>np.float_power</c>, <c>np.left_shift</c> and
+        ///     <c>np.right_shift</c> have an <c>(NDArray x1, object x2)</c> overload ("scalar or array-like") that converts
+        ///     <paramref name="x2"/> with <c>np.asanyarray</c>, a STRONG 0-d array of the C# type. A C# number that reaches it
+        ///     as an <c>object</c> (a boxed value, an <c>object[]</c> argument list, generic code) is therefore an int32 / float64
+        ///     array operand: <c>np.power(int8 [2, 3], (object)2)</c> is int32 <c>[4, 9]</c>, where NumPy's Python int is weak
+        ///     under NEP 50 and the result stays int8 (the same literal written directly binds the <c>NDArray</c> overload, whose
+        ///     implicit conversion marks it weak, and is right). The library's own rule is that a C# number is a Python scalar
+        ///     (<c>NDArray.PythonLiteral</c>); these overloads skip it.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB30")]
+        public void ParityQb_QB30_ObjectOverloads_KeepABoxedNumberWeak()
+        {
+            using var a = np.array(new sbyte[] { 2, 3 });
+            object two = 2;
+
+            using var power = np.power(a, two);
+            using var floor = np.floor_divide(a, two);
+
+            // NumPy 2.4.2: np.power(int8, 2) and np.floor_divide(int8, 2) stay int8
+            power.dtype.Should().Be(np.int8);
+            floor.dtype.Should().Be(np.int8);
+        }
     }
 }
