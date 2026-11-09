@@ -1779,6 +1779,10 @@ namespace NumSharp.Tests
             c.shape.Should().Equal(2L, 3L);
             d.shape.Should().Equal(1L, 2L, 3L);
             vv.shape.Should().Equal(3L, 1L);
+
+            // numpy.ma's stackers (params object[]) inherit it: NumPy 2.4.2's np.ma.hstack(masked (3, 2)).shape is (6,)
+            var masked = np.ma.masked_array(m, np.zeros(new Shape(3, 2), np.@bool));
+            np.ma.hstack(masked).shape.Should().Equal(6L);
         }
     }
 }
