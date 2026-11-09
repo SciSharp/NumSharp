@@ -1274,5 +1274,33 @@ namespace NumSharp.Tests
             using (var lower = np.quantile(data, 0.6, method: "lower"))
                 BitConverter.DoubleToInt64Bits(lower.GetDouble()).Should().Be(BitConverter.DoubleToInt64Bits(-0.0));
         }
+
+        // ------------------------------------------------------------------
+        // QB-44 — a C# long / ulong needle binds searchsorted's DOUBLE overload
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>np.searchsorted</c> and <c>ndarray.searchsorted</c> have scalar overloads for <see cref="int"/> and
+        ///     <see cref="double"/> only; C#'s better-conversion rule sends a <see cref="long"/> or <see cref="ulong"/>
+        ///     literal to the <see cref="double"/> one (an implicit numeric conversion beats the user-defined one to
+        ///     <c>NDArray</c>), so a needle past 2^53 is rounded before the search: over int64
+        ///     <c>[2^53, 2^53 + 1, 2^53 + 2]</c> the needle <c>9007199254740993L</c> searches as 2^53 and returns 0, and over
+        ///     uint64 <c>[2^64 - 3, 2^64 - 2]</c> the needle <c>2^64 - 2</c> returns 0. NumPy 2.4.2 discovers a Python int
+        ///     needle's dtype beside the array's (<c>PyArray_DescrFromObject(v, a.dtype)</c>) and searches exactly: 1 and 1.
+        ///     The float needles are right (a float16 / float32 haystack searches the weak double as its own dtype); the 02:13
+        ///     / 02:17 overload-capture sweeps did not list searchsorted's <c>(NDArray, double)</c> pair.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB44")]
+        public void ParityQb_QB44_SearchsortedLongNeedle_IsNotRoundedToDouble()
+        {
+            using var signed = np.array(new long[] { 9007199254740992L, 9007199254740993L, 9007199254740994L });
+            using var unsigned = np.array(new ulong[] { 18446744073709551613UL, 18446744073709551614UL });
+
+            // NumPy 2.4.2: np.searchsorted([2**53, 2**53 + 1, 2**53 + 2], 2**53 + 1) is 1
+            np.searchsorted(signed, 9007199254740993L).Should().Be(1L);
+            signed.searchsorted(9007199254740993L).Should().Be(1L);
+            // NumPy 2.4.2: np.searchsorted(uint64 [2**64 - 3, 2**64 - 2], 2**64 - 2) is 1
+            np.searchsorted(unsigned, 18446744073709551614UL).Should().Be(1L);
+        }
     }
 }
