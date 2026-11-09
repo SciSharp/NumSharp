@@ -985,5 +985,47 @@ namespace NumSharp.Tests
             bits.GetInt64(0).Should().Be(0x7ff8000000000000L);
             sign.GetBoolean(0).Should().BeFalse();
         }
+
+        // ------------------------------------------------------------------
+        // QB-34 — ndarray.base is a NEW NDArray on every access, never the base object itself
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>ndarray.base</c> is the array object a view was made from (collapsed to the memory's owner):
+        ///     <c>a[2:5].base is a</c>, <c>a[2:8][1:3].base is a</c>, <c>a.T.base is a</c>, <c>a.view(np.int32).base is a</c>,
+        ///     <c>np.broadcast_to(a, …).base is a</c>, and <c>v.base is v.base</c>. NumSharp's <c>NDArray.@base</c> is
+        ///     <c>new NDArray(Storage._baseStorage)</c>, a fresh wrapper on every read, so none of those identities holds
+        ///     (the values, shape, owndata flag and write-through of the wrapper match), and NumPy's idiom for "is v a view
+        ///     of a" (<c>v.base is a</c>) is always false.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB34")]
+        public void ParityQb_QB34_Base_IsTheBaseObjectItself()
+        {
+            using var a = np.arange(10);
+            using var v = a["2:5"];
+
+            // NumPy 2.4.2: v.base is a -> True; v.base is v.base -> True
+            ReferenceEquals(v.@base, a).Should().BeTrue();
+            ReferenceEquals(v.@base, v.@base).Should().BeTrue();
+        }
+
+        // ------------------------------------------------------------------
+        // QB-35 — finfo(float16 / float32).resolution is the double 10^-p, not NumPy's scalar of the dtype
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>finfo.resolution</c> is a scalar OF THE DTYPE, <c>dtype.type(10**-precision)</c>:
+        ///     <c>float(np.finfo(np.float32).resolution)</c> is <c>9.999999974752427e-07</c> and float16's is
+        ///     <c>0.0010004043579101562</c>. NumSharp's <c>np.finfo.resolution</c> is the double <c>1e-06</c> / <c>0.001</c>
+        ///     (<c>APIs/np.finfo.cs</c> stores the decimal constants). <c>eps</c>, <c>tiny</c>, <c>max</c> and the rest are exactly
+        ///     representable and already match; float64's resolution matches too.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB35")]
+        public void ParityQb_QB35_FinfoResolution_IsTheDtypesScalar()
+        {
+            // NumPy 2.4.2: np.float32(1e-6) and np.float16(1e-3), widened
+            np.finfo(np.float32).resolution.Should().Be(9.999999974752427e-07);
+            np.finfo(np.float16).resolution.Should().Be(0.0010004043579101562);
+        }
     }
 }
