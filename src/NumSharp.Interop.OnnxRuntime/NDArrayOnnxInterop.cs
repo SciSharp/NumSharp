@@ -538,14 +538,22 @@ namespace NumSharp.Interop.OnnxRuntime
         }
 
         /// <summary>ORT's <c>long[]</c> shape → a NumSharp <see cref="Shape"/> (an empty array is the 0-d scalar).</summary>
-        internal static Shape ShapeFrom(long[] dims)
+        /// <param name="dims">The row-major extents; not modified.</param>
+        /// <param name="adopt"><c>true</c> when <paramref name="dims"/> is an array nobody else holds (the <c>Shape</c> of an
+        /// <see cref="OrtTensorTypeAndShapeInfo"/> the caller just obtained, which ORT fills fresh for every call): the shape then
+        /// keeps it instead of copying it, one allocation less per import. <c>false</c> (the default) for an array that is
+        /// shared (<see cref="OrtTensor.ShapeNoCopy"/>, a caller's list): a <see cref="Shape"/> shares its dimension array with
+        /// every array built on it, so a shared array would let a write on one side change the other.</param>
+        /// <returns>The shape.</returns>
+        /// <exception cref="ArgumentException">A dimension is negative (a symbolic extent, which a concrete tensor cannot have).</exception>
+        internal static Shape ShapeFrom(long[] dims, bool adopt = false)
         {
             if (dims is null || dims.Length == 0)
                 return Shape.Scalar;
             for (int i = 0; i < dims.Length; i++)
                 if (dims[i] < 0)
                     throw new ArgumentException($"tensor shape ({string.Join(", ", dims)}) has a negative dimension; a concrete tensor cannot carry symbolic dims.");
-            return new Shape(dims);
+            return new Shape(dims, copy: !adopt);
         }
 
         /// <summary>A NumSharp shape as ORT's row-major <c>long[]</c> (0-d → an empty array).</summary>

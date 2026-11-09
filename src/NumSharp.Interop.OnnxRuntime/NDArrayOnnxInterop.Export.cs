@@ -74,13 +74,16 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="source">The array to give to ORT.</param>
         /// <param name="ownsSource"><c>true</c> when <paramref name="source"/> is a temporary the handle should dispose.</param>
         /// <param name="mode">View, copy, or view-when-possible; see <see cref="OnnxCodecMode"/>.</param>
+        /// <param name="transient"><c>true</c> only for the synchronous <c>Run</c> tier's own handles, created and disposed
+        /// within one call on one thread and never handed out: the handle then skips the ARC token and the owner and
+        /// disposed-value tables (see <see cref="OrtTensor"/>'s constructor). Every public verb passes <c>false</c>.</param>
         /// <returns>A handle owning the <see cref="OrtValue"/>, the buffer reference and any temporary.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a member of <see cref="OnnxCodecMode"/>.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array is not C-contiguous or is Decimal.</exception>
         /// <exception cref="NotSupportedException">The dtype has no ONNX tensor element type (Complex).</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
-        internal static unsafe OrtTensor AsOrtValueCore(NDArray source, bool ownsSource, OnnxCodecMode mode)
+        internal static unsafe OrtTensor AsOrtValueCore(NDArray source, bool ownsSource, OnnxCodecMode mode, bool transient = false)
         {
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
@@ -89,7 +92,7 @@ namespace NumSharp.Interop.OnnxRuntime
             // Text first: a string tensor is a different object (ORT owns every string), and the numeric path below
             // cannot even name the dtype of a text array (NPTypeCode.String does not convert to a DType).
             if (IsText(source))
-                return TextAsOrtValue(source, ownsSource, mode);
+                return TextAsOrtValue(source, ownsSource, mode, transient);
 
             // The dtype is decided from the source alone, before anything is read: Complex has no ONNX element type
             // in any mode, so it must not cost a copy first. Decimal is fed as float64 (FeedTypeCode); the low-level
@@ -110,7 +113,8 @@ namespace NumSharp.Interop.OnnxRuntime
                     // Does NOT own or free the memory; the handle's ARC reference guarantees validity for as long
                     // as the OrtValue exists. Row-major, no strides — which is why the fed array is C-contiguous.
                     value = OrtValue.CreateTensorValueWithData(OrtMemoryInfo.DefaultInstance, elementType, dims, (IntPtr)data, nbytes);
-                    var handle = new OrtTensor(value, fed, slice, (IntPtr)data, nbytes, ownsSource: temporary is not null || ownsSource, isView, elementType, dims);
+                    var handle = new OrtTensor(value, fed, slice, (IntPtr)data, nbytes, ownsSource: temporary is not null || ownsSource, isView, elementType, dims,
+                        transient);
                     if (temporary is not null && ownsSource)
                         source.Dispose();   // the caller's temporary is superseded by the copy the handle now owns
                     temporary = null;       // ownership moved to the handle

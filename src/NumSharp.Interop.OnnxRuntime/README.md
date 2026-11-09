@@ -270,7 +270,9 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   touches carries an ARC: a verb holds a lease while it calls ORT on the value, a view for its whole life, and a
   `Dispose` - from any thread, any number of times at once - waits for the verbs in flight and releases the value
   once, after its last view. A `ToOrtValue` result and an `AsOrtValue` value have it from birth; a value ORT
-  allocated (a `Run` output of ORT's own API) gets it at its first bridge verb. For sessions, use
+  allocated (a `Run` output of ORT's own API) gets it at its first bridge verb. The values the synchronous `Run` and
+  `RunInto` create for their own inputs and pre-allocated outputs carry none: they are made, read by ORT and released
+  within the one call, on its thread, and never reach the caller (an asynchronous run's keep theirs). For sessions, use
   **`NDInferenceSession`** (a drop-in `InferenceSession` with ORT's eight constructors): its `Dispose` releases the
   native session once, after the bridge's runs on it returned (the asynchronous release runs on the thread pool),
   and refuses new runs. ORT's own calls (its `Run` overloads, `GetTensorDataAsSpan`, an `OrtIoBinding`) take no

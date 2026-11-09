@@ -80,7 +80,7 @@ namespace NumSharp.Interop.OnnxRuntime
             if (info.IsString)
                 return TextToNDArray(value, info.Shape);   // a new U array; string tensors are always CPU memory
             NPTypeCode tc = FromTensorElementType(info.ElementDataType);
-            Shape shape = ShapeFrom(info.Shape);
+            Shape shape = ShapeFrom(info.Shape, adopt: true);   // ORT fills info.Shape fresh for this call: nobody else holds it
             EnsureCpuAccessible(value, nameof(ToNDArray));
 
             // Decide the size and read the source span BEFORE allocating the result. The result used to be allocated
@@ -270,7 +270,7 @@ namespace NumSharp.Interop.OnnxRuntime
                 return text;
             }
             NPTypeCode tc = FromTensorElementType(info.ElementDataType);
-            Shape shape = ShapeFrom(info.Shape);
+            Shape shape = ShapeFrom(info.Shape, adopt: true);   // ORT fills info.Shape fresh for this call: nobody else holds it
             EnsureCpuAccessible(value, nameof(AsNDArray));
 
             long count = info.ElementCount;
@@ -311,11 +311,10 @@ namespace NumSharp.Interop.OnnxRuntime
             // views keeping them alive). Neither books a value whose bytes are counted already: a ToOrtValue result (its
             // token books them), and a value made over memory ORT does not own (CreateTensorValueFromMemory), which is
             // counted elsewhere or not freed with the value at all.
-            Action release = ownsValue
-                ? (token is null ? value.Dispose : () => DisposeThenReleaseView(value, token))
-                : (token is null ? () => GC.KeepAlive(value) : token.ReleaseView);
+            // The lease holds the value, its token and the ownership, and decides the release from them when the last view
+            // is gone (ImportLease.ReleaseValue): the same four cases the per-view delegates expressed, without allocating one.
             bool booksBytes = ownsValue && !OrtValueBooking.IsAccountedElsewhere(value);
-            var import = new ImportLease(release, ownedBytes: booksBytes ? raw.Length : 0);
+            var import = new ImportLease(value, token, ownsValue, ownedBytes: booksBytes ? raw.Length : 0);
             try
             {
                 IArraySlice slice = WrapExternal(tc, data, count, import.Release);
@@ -342,7 +341,7 @@ namespace NumSharp.Interop.OnnxRuntime
         /// </summary>
         /// <param name="value">The owned value.</param>
         /// <param name="token">Its token.</param>
-        private static void DisposeThenReleaseView(OrtValue value, OrtValueBooking.Token token)
+        internal static void DisposeThenReleaseView(OrtValue value, OrtValueBooking.Token token)
         {
             try
             {

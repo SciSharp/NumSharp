@@ -381,7 +381,9 @@ against all three:
 
 - **Values: an ARC on every value the bridge touches.** A `ToOrtValue` result, the value of an `AsOrtValue` handle and
   a `GetMapKeys` result carry it from birth; a value ORT allocated (an output of ORT's own `Run`,
-  `CreateAllocatedTensorValue`, an element read with `GetValue`) gets it at its first bridge verb. A verb holds a lease
+  `CreateAllocatedTensorValue`, an element read with `GetValue`) gets it at its first bridge verb. The values the
+  synchronous `Run` and `RunInto` make for their own inputs and pre-allocated outputs carry none: they are created, read
+  by ORT and released within the one call, on its thread, and never reach you (an asynchronous run's keep theirs). A verb holds a lease
   while it calls ORT on the value, a view - and every slice of it - for its whole life. `Dispose`, on any thread and any
   number of times at once, waits for the verbs in flight, and then ONNX Runtime releases the value exactly once: at
   once, or when its last view is gone. A verb that starts after the `Dispose` began throws `ObjectDisposedException`.
