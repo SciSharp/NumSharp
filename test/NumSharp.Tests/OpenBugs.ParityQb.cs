@@ -907,58 +907,13 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QB-31 — iterating an empty array whose FIRST axis is not empty yields nothing
+        // QB-31 and QB-32 — duplicates of earlier pins, found after pinning (journal: "Duplicates")
         // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy 2.4.2 iterates an ndarray along its first axis whatever its size: <c>list(np.zeros((3, 0)))</c> holds
-        ///     three empty (0,) rows and <c>len(list(np.zeros((2, 0, 4))))</c> is 2. NumSharp's <c>NDArray.GetEnumerator</c>
-        ///     returns an empty enumerator for any array of size 0 (<c>if (... Shape.size == 0) return _empty()</c>), so a
-        ///     <c>foreach</c> over a (3, 0) array never runs its body and LINQ's <c>Cast&lt;object&gt;().Count()</c> is 0. Only
-        ///     a first axis of length 0 (<c>(0, 3)</c>, <c>(0,)</c>) iterates zero times in NumPy.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB31")]
-        public void ParityQb_QB31_IteratingAnEmptyArray_YieldsItsFirstAxisRows()
-        {
-            using var a = np.zeros(new Shape(3, 0));
-
-            int rows = 0;
-            foreach (var row in a)
-                rows++;
-
-            // NumPy 2.4.2: len(list(np.zeros((3, 0)))) == 3
-            rows.Should().Be(3);
-        }
-
-        // ------------------------------------------------------------------
-        // QB-32 — a Python list spelled as a C# object[] is refused by every array_like parameter but np.array / asanyarray
-        // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy 2.4.2 accepts a Python list wherever it takes an array_like: <c>np.asarray([1, 2.5])</c>,
-        ///     <c>np.sum([1, 2.5])</c>, <c>np.add([1, 2], [0.5, 1])</c>, <c>np.sort([3, 1.5, 2])</c>, …. NumSharp's spelling of
-        ///     a Python list is an <c>object[]</c> (the library-wide trap: "an object[] (a Python list) needs its own
-        ///     overload"), and only <c>np.array</c> / <c>np.asanyarray</c> read it as one. Every other function receives it
-        ///     through the implicit <c>Array → NDArray</c> conversion (<c>UnmanagedStorage.FromManagedArray</c>), which runs
-        ///     the list walk for an <c>NDArray[]</c> but not for an <c>object[]</c>, and throws
-        ///     <c>NotSupportedException: Cannot interpret 'System.Object' as a data type</c>: np.asarray, ascontiguousarray,
-        ///     asfortranarray, asarray_chkfinite, copy, require, sum, mean, max, argmax, sort, unique, isin, diff, cumsum,
-        ///     clip, where, add, dot, reshape, transpose, ravel and size all refuse <c>new object[] { 1, 2.5 }</c>.
-        ///     (Through a <c>params</c> parameter, np.atleast_1d / atleast_2d, the lone <c>object[]</c> IS the params
-        ///     array — a separate, documented C# trap.)
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB32")]
-        public void ParityQb_QB32_ObjectArrayList_IsAnArrayLikeEverywhere()
-        {
-            var list = new object[] { 1, 2.5 };
-
-            using var asarray = np.asarray(list);
-            using var sum = np.sum(list);
-
-            // NumPy 2.4.2: np.asarray([1, 2.5]) is float64 [1., 2.5]; np.sum([1, 2.5]) is 3.5
-            asarray.ToArray<double>().Should().Equal(1.0, 2.5);
-            sum.GetDouble().Should().Be(3.5);
-        }
+        // QB-31 (iterating a (3, 0) array yields nothing) is OpenBugs.NDArrayIter_EmptySecondAxis_YieldsTheRows
+        // (OpenBugs.cs, found 2026-11-05 by the np.mintypecode port); QB-32 (an object[] list refused by every array_like
+        // parameter but np.array / np.asanyarray) is parity QA-28, OpenBugs.ParityQa_Asarray_PythonList_ShouldCoerceLikeNpArray
+        // (OpenBugs.ParityQa.cs). Their pins were removed here; the journal keeps the extra call sites QB-32 reached (list
+        // VALUES for setitem / put and list operands of the operators, `np.asarray(List<int>)` not compiling).
 
         // ------------------------------------------------------------------
         // QB-33 — np.nan is .NET's double.NaN, whose sign bit is SET; NumPy's np.nan is the positive quiet NaN
@@ -1010,23 +965,11 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QB-35 — finfo(float16 / float32).resolution is the double 10^-p, not NumPy's scalar of the dtype
+        // QB-35 — a duplicate of an earlier pin, found after pinning (journal: "Duplicates")
         // ------------------------------------------------------------------
-
-        /// <summary>
-        ///     NumPy 2.4.2's <c>finfo.resolution</c> is a scalar OF THE DTYPE, <c>dtype.type(10**-precision)</c>:
-        ///     <c>float(np.finfo(np.float32).resolution)</c> is <c>9.999999974752427e-07</c> and float16's is
-        ///     <c>0.0010004043579101562</c>. NumSharp's <c>np.finfo.resolution</c> is the double <c>1e-06</c> / <c>0.001</c>
-        ///     (<c>APIs/np.finfo.cs</c> stores the decimal constants). <c>eps</c>, <c>tiny</c>, <c>max</c> and the rest are exactly
-        ///     representable and already match; float64's resolution matches too.
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB35")]
-        public void ParityQb_QB35_FinfoResolution_IsTheDtypesScalar()
-        {
-            // NumPy 2.4.2: np.float32(1e-6) and np.float16(1e-3), widened
-            np.finfo(np.float32).resolution.Should().Be(9.999999974752427e-07);
-            np.finfo(np.float16).resolution.Should().Be(0.0010004043579101562);
-        }
+        // finfo(float16 / float32).resolution as the dtype's scalar is surface gap SU13,
+        // OpenBugs.Surface_Finfo_Resolution_IsRoundedToTheDtype (OpenBugs.Surface.cs), with the same two assertions; the
+        // QB-35 pin was removed here.
 
         // ------------------------------------------------------------------
         // QB-36 — the strides of LENGTH-1 axes differ from NumPy's (newaxis, (1, 1) slices, results over broadcasts)
@@ -1150,31 +1093,20 @@ namespace NumSharp.Tests
         /// <summary>
         ///     NumPy 2.4.2 checks <c>precision &gt;= 0</c> only where a FLOAT formatter is built (<c>FloatingFormat.__init__</c>'s
         ///     <c>_none_or_positive_arg</c>): <c>np.array2string(np.array([1.5]), precision=-1)</c> and <c>np.array_repr</c> /
-        ///     <c>np.array_str</c> of a float or complex array raise <c>ValueError: precision must be &gt;= 0</c>, while
-        ///     <c>np.set_printoptions(precision=-1)</c> and <c>np.printoptions(precision=-1)</c> are accepted (an integer or bool
-        ///     array then prints normally; a float array raises when printed). NumSharp has it backwards:
-        ///     <c>np.array2string</c> / <c>array_repr</c> / <c>array_str</c> never check, so a float array prints as if the
-        ///     precision were valid, and <c>set_printoptions</c> / <c>printoptions</c> raise <c>ArgumentException</c> up front.
+        ///     <c>np.array_str</c> of a float or complex array raise <c>ValueError: precision must be &gt;= 0</c>. NumSharp's
+        ///     <c>np.array2string</c> / <c>array_repr</c> / <c>array_str</c> never check (<c>BuildOptions</c> has no test), so
+        ///     a float array prints as if the precision were valid. The other half of the same misplacement —
+        ///     <c>set_printoptions</c> / <c>printoptions</c> refusing a negative precision NumPy stores — is the earlier pin
+        ///     <c>Surface_SetPrintoptions_NegativePrecision_IsStoredUntilAFloatPrints</c> (gap SU22).
         /// </summary>
         [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB40")]
         public void ParityQb_QB40_NegativePrecision_IsRefusedByTheFloatFormatter()
         {
             using var floats = np.array(new double[] { 1.5, 2.25 });
-            using var ints = np.arange(3);
 
             // NumPy 2.4.2: ValueError: precision must be >= 0
             Action floatString = () => np.array2string(floats, precision: -1);
             floatString.Should().Throw<Exception>().WithMessage("precision must be >= 0");
-
-            // NumPy 2.4.2: the option is accepted and an integer array prints under it
-            string printed = null;
-            Action scoped = () =>
-            {
-                using (np.printoptions(precision: -1))
-                    printed = ints.ToString();
-            };
-            scoped.Should().NotThrow();
-            printed.Should().Be("[0 1 2]");
         }
 
         // ------------------------------------------------------------------
