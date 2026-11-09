@@ -1058,5 +1058,34 @@ namespace NumSharp.Tests
             oneOne.strides.Should().Equal(32L, 8L);
             negated.strides.Should().Equal(24L, 8L);
         }
+
+        // ------------------------------------------------------------------
+        // QB-37 — the bitwise ufuncs judge the inputs' own promotion before the dtype= loop
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     With <c>dtype=</c>, NumPy 2.4.2 resolves the bitwise ufuncs' loop from the requested dtype and then checks each
+        ///     input's same_kind cast into it: <c>np.bitwise_or(int64 [3], uint64 [2], dtype=np.int64)</c> computes int64
+        ///     <c>[3]</c> (uint64 → int64 is same_kind); <c>np.bitwise_and(float64, float64, dtype=np.int64)</c> raises
+        ///     <c>Cannot cast ufunc 'bitwise_and' input 0 from dtype('float64') to dtype('int64') with casting rule 'same_kind'</c>;
+        ///     a float <c>dtype=</c> over a float input raises <c>No loop matching the specified signature and casting was found
+        ///     for ufunc bitwise_and</c>. NumSharp checks the inputs' own promotion first (int64 with uint64 has no integer
+        ///     result, a float input has no bitwise loop) and raises <c>ufunc 'bitwise_or' not supported for the input types,
+        ///     and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''</c> in
+        ///     every one of these cases — a refusal where NumPy computes for the first, the wrong text for the others
+        ///     (bitwise_and / or / xor and the shifts; invert and an all-integer input with a float dtype= already match).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB37")]
+        public void ParityQb_QB37_BitwiseDtypeLoop_DecidesBeforeTheInputPromotion()
+        {
+            using var a = np.array(new long[] { 3 });
+            using var b = np.array(new ulong[] { 2 });
+
+            using var r = np.bitwise_or(a, b, dtype: np.int64);
+
+            // NumPy 2.4.2: int64 [3]
+            r.dtype.Should().Be(np.int64);
+            r.GetInt64(0).Should().Be(3L);
+        }
     }
 }
