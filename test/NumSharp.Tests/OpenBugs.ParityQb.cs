@@ -959,5 +959,31 @@ namespace NumSharp.Tests
             asarray.ToArray<double>().Should().Equal(1.0, 2.5);
             sum.GetDouble().Should().Be(3.5);
         }
+
+        // ------------------------------------------------------------------
+        // QB-33 — np.nan is .NET's double.NaN, whose sign bit is SET; NumPy's np.nan is the positive quiet NaN
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>np.nan</c> is Python's <c>float('nan')</c>, the positive quiet NaN <c>0x7ff8000000000000</c>:
+        ///     <c>np.signbit(np.nan)</c> is False and <c>np.copysign(1.0, np.nan)</c> is 1.0. NumSharp's <c>np.nan</c> (and
+        ///     <c>np.NaN</c> / <c>np.NAN</c>, names NumPy 2.0 removed) is <c>double.NaN</c>, <c>0xfff8000000000000</c> on .NET:
+        ///     <c>np.signbit(np.nan)</c> is True, <c>np.copysign(1.0, np.nan)</c> is -1.0, and every array built from it
+        ///     (<c>np.full(n, np.nan)</c>, <c>np.where(..., np.nan, ...)</c>, <c>np.pad(..., constant_values: np.nan)</c>, a
+        ///     float32 cast, a saved .npy file) carries the negative NaN. The library already knows the difference (it
+        ///     writes NumPy's <c>NPY_NAN</c> as <c>0x7ff8…</c> where NumPy produces one), but the public constant was never
+        ///     changed.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB33")]
+        public void ParityQb_QB33_NpNan_IsThePositiveQuietNaN()
+        {
+            using var a = np.array(new[] { np.nan });
+            using var bits = a.view(np.int64);
+            using var sign = np.signbit(a);
+
+            // NumPy 2.4.2: 0x7ff8000000000000, signbit False
+            bits.GetInt64(0).Should().Be(0x7ff8000000000000L);
+            sign.GetBoolean(0).Should().BeFalse();
+        }
     }
 }
