@@ -23,6 +23,16 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Astype_Full() => RunCorpus("astype_full.jsonl");
 
+        /// <summary>
+        ///     float32 / float64 → int8 / uint8 / int16 / uint16 / int32 at every integer width's edges (±1 ulp, ±0.5,
+        ///     2^31, 2^63, NaN payloads, a signalling NaN, ±inf, subnormals) in short, contiguous, strided and reversed
+        ///     layouts: the scalar converter (<c>Converts.ToInt32(double)</c>, the whole cast body off x86) and the x86
+        ///     vector body. Zero excuses (valueclass <c>castedge</c>); generator <c>gen_oracle.py cast_boundary</c>.
+        /// </summary>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Cast_Boundary() => RunCorpus("cast_boundary.jsonl");
+
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Binary_Arith() => RunCorpus("binary_arith.jsonl");
@@ -1310,6 +1320,7 @@ namespace NumSharp.Tests.Fuzz
         {
             ["aliasing.jsonl"] = 320,
             ["astype_full.jsonl"] = 4056,
+            ["cast_boundary.jsonl"] = 316,   // 395 at delivery (2026-11-09)
             ["astype_smoke.jsonl"] = 249,
             ["binary_arith.jsonl"] = 1782,   // +608 F-broadcast pairs (pp_fbcast_*, plan api-parameter-parity X3) - 2228
             ["binary_divmod_power.jsonl"] = 1896,   // +668 pp_fbcast_* (X3) - 2371

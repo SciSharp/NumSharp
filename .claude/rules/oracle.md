@@ -59,7 +59,7 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   through the independent C# scalar oracle. Real product bugs are carved and pinned (`[OpenBugs]`) or fixed, never
   excused in the registry.
 - Regenerate (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes include `conversion
-  creation multioutput iter dtype_text out_where errors_full smoke astype_full binary divmod_power comparison unary
+  creation multioutput iter dtype_text out_where errors_full smoke astype_full cast_boundary binary divmod_power comparison unary
   reduce where place matmul rounding bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing
   copyto copyto_full power_fast weak_scalar errors groupa numpy_f32 matmul_parity linalg_parity poly einsum specials
   precision products random_parity fft`; `precision` also needs `mpmath`) and the index / Decimal / NPY generators, then
@@ -102,6 +102,11 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   other gate. `dtype_text.jsonl`: promotion/dtype predicates, printing, scalar predicates and `nonzero` at any rank.
   `multioutput.jsonl`: full tuple arity and every slot for split/unstack/broadcast/meshgrid/modf/average/unique.
   `creation.jsonl`, `conversion.jsonl`, `errors_full.jsonl` (the raising cells every value generator skips).
+- `cast_boundary.jsonl` (`gen_oracle.py cast_boundary`): float32 / float64 → int8 / uint8 / int16 / uint16 / int32 at
+  every integer width's edges (±1 ulp, ±0.5, 2^31, 2^63, 2^64), NaN payloads, a signalling NaN, ±inf and subnormals, in
+  short runs (every element in a scalar tail: `Converts.ToInt32(double)`, the whole cast body off x86), contiguous,
+  strided and reversed layouts. Zero excuses (valueclass `castedge`). NumPy's answer for a float32 input is one value
+  whatever the loop (all 2^32 inputs were compared once, contiguous against strided, and against NumSharp).
 - `out_where.jsonl`: ufunc `out=`/`where=` over out layouts × mask layouts × ufuncs; each case records the returned view
   AND the entire base buffer behind `out`, so masked-off slots keep their contents and a kernel writing outside a
   strided/offset/negstride window is caught.

@@ -69,6 +69,81 @@ def gen_astype(srcs, dsts, layout_names):
     return cases
 
 
+# Float -> small-integer casts at every integer width's edges (mode cast_boundary). NumSharp's float -> {int8, uint8,
+# int16, uint16, int32} cast truncates through int32 (Converts.ToInt32(double)): NaN / inf / anything whose truncation
+# leaves int32 gives int32.MinValue, whose low bits the narrow widths keep. Its x86 vector body covers long contiguous
+# runs only: the scalar converter is the WHOLE body on other hosts (arm64; Mono on Android / iOS / WebAssembly) and the
+# tail on x86, so the tier mixes short arrays (scalar tails), long contiguous ones (vector body + tail), strided and
+# reversed views. Proven exhaustively on 2026-11-09 for float32 (all 2^32 inputs, NumPy's contiguous == strided ==
+# NumSharp's converter == NumSharp's astype); this tier keeps the edges under the gate. Zero excuses (valueclass
+# castedge).
+CAST_BOUNDARY_TARGETS = ["int8", "uint8", "int16", "uint16", "int32"]
+
+
+def _cast_boundary_values(src):
+    """The edge values of a float -> integer cast for float source dtype `src`, in a fixed order."""
+    vals = [0.0, -0.0, 0.25, -0.25, 0.5, -0.5, 0.75, -0.75, 1.0, -1.0, 1.5, -1.5, 2.5, -2.5]
+    for edge in (2.0 ** 7, 2.0 ** 8, 2.0 ** 15, 2.0 ** 16, 2.0 ** 31, 2.0 ** 32, 2.0 ** 63, 2.0 ** 64):
+        for e in (edge, -edge):
+            vals += [e - 1.0, e - 0.5, e, e + 0.5, e + 1.0]
+    vals += [70000.7, -70000.7, 1e10, -1e10, 1e20, -1e20, 1e30, -1e30]
+    if src == "float64":
+        vals += [2147483647.4, 2147483647.9, -2147483648.4, -2147483648.9, -2147483649.0, 4294967295.5,
+                 2.0 ** 53, 2.0 ** 53 + 2.0, 1e300, -1e300, 5e-324, -5e-324, 1.7976931348623157e308, -1.7976931348623157e308]
+    else:
+        vals += [1e-45, -1e-45, 1.17549435e-38, 3.4028235e38, -3.4028235e38, 2147483520.0, -2147483904.0]
+    a = np.array(vals, dtype=np.float64).astype(src)
+    # One ulp either side of each integer edge as the source dtype rounds it: where truncation changes its answer.
+    edges = np.array([2.0 ** 7, 2.0 ** 8, 2.0 ** 15, 2.0 ** 16, 2.0 ** 31, 2.0 ** 32], dtype=src)
+    edges = np.concatenate([edges, -edges])
+    up = np.nextafter(edges, np.array(np.inf, dtype=src))
+    down = np.nextafter(edges, np.array(-np.inf, dtype=src))
+    if src == "float64":
+        specials = np.array([0x7FF8000000000000, 0xFFF8000000000000, 0x7FF8000000000001, 0x7FF0000000000001,
+                             0x7FF0000000000000, 0xFFF0000000000000], dtype=np.uint64).view(np.float64)
+    else:
+        specials = np.array([0x7FC00000, 0xFFC00000, 0x7FC00001, 0x7F800001, 0x7F800000, 0xFF800000],
+                            dtype=np.uint32).view(np.float32)
+    return np.concatenate([a, up, down, specials])   # quiet NaN, -NaN, a payload, a signalling NaN, +inf, -inf
+
+
+def gen_cast_boundary():
+    """float32 / float64 -> int8 / uint8 / int16 / uint16 / int32 astype over the edge values, in four layouts:
+    `short` (chunks of 1..7 elements: every element in a scalar tail), `contig` (all values: the vector body),
+    `strided` (every other element of a doubled buffer) and `reversed` (a negative-stride view)."""
+    cases = []
+    n = 0
+    for src in ("float32", "float64"):
+        values = _cast_boundary_values(src)
+        layouts = []
+        start, width = 0, 1
+        while start < len(values):                        # short runs of 1, 2, ... 7 elements, then again
+            chunk = np.ascontiguousarray(values[start:start + width])
+            layouts.append(("short", chunk, chunk))
+            start += width
+            width = width % 7 + 1
+        layouts.append(("contig", values, values))
+        doubled = np.empty(2 * len(values), dtype=src)
+        doubled[::2] = values
+        doubled[1::2] = values[::-1]                      # the skipped slots hold other edges, never read
+        layouts.append(("strided", doubled, doubled[::2]))
+        layouts.append(("reversed", values, values[::-1]))
+        for ln, base, view in layouts:
+            operand = describe(base, view)
+            for d in CAST_BOUNDARY_TARGETS:
+                cases.append({
+                    "id": f"cast_boundary/{ln}/{src}->{d}/{n}",
+                    "op": "astype",
+                    "params": {"dtype": np.dtype(d).name},
+                    "operands": [operand],
+                    "expected": _expected(view, d),
+                    "layout": ln,
+                    "valueclass": "castedge",
+                })
+                n += 1
+    return cases
+
+
 # Binary ops: NumPy computes the result (value AND NEP50 result dtype) — it is the oracle.
 # Bit-exact today (committed green matrix).
 BINARY_OPS = {
@@ -24712,6 +24787,8 @@ def main():
         cases = gen_astype(ALL_DTYPES, ALL_DTYPES, list(LAYOUTS.keys()))
         cases += char_tier("astype_full")
         write_jsonl(os.path.join(corpus_dir, "astype_full.jsonl"), cases)
+    elif mode == "cast_boundary":
+        write_jsonl(os.path.join(corpus_dir, "cast_boundary.jsonl"), gen_cast_boundary())
     elif mode == "binary":
         cases = gen_binary(BINARY_OPS, DT_PAIRS, BINARY_LAYOUT_NAMES)
         cases += char_tier("binary")
@@ -25116,7 +25193,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "polyclass_parity.jsonl"), host)
         write_jsonl(os.path.join(corpus_dir, "polyclass_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | polypts | polygauss | polyinterp | polyfit | polyprint | polyclass | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | cast_boundary | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | polypts | polygauss | polyinterp | polyfit | polyprint | polyclass | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
         sys.exit(2)
 
 
