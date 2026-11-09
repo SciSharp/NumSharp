@@ -1286,5 +1286,32 @@ namespace NumSharp.Tests
             product.strides.Should().Equal(8L, 16L);
             product.Shape.IsContiguous.Should().BeFalse();
         }
+
+        // ------------------------------------------------------------------
+        // QB-47 — a 0-d masked array prints its element in the wrong style
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>MaskedArray.__repr__</c> / <c>__str__</c> print <c>_insert_masked_print()</c>: with no mask it is
+        ///     the DATA ARRAY, which <c>np.array2string</c> formats with the float formatter (a 0-d float64 <c>-0.0</c> is
+        ///     <c>data=-0.</c>, <c>1/3</c> is <c>data=0.33333333</c>, <c>1e16</c> is <c>data=1.e+16</c>); with a mask it is an
+        ///     OBJECT copy, whose element is the Python float <c>astype(object)</c> makes (a float32 <c>0.1</c> is
+        ///     <c>0.10000000149011612</c>, a float16 <c>123.44</c> is <c>123.4375</c>, in <c>str</c> and <c>repr</c>). NumSharp's
+        ///     0-d masked print does the reverse on both: <c>data=-0.0</c> / <c>0.3333333333333333</c> / <c>1e+16</c> for the
+        ///     nomask array, and the narrow type's own shortest digits (<c>0.1</c>, <c>123.44</c>) for the masked one. N-D
+        ///     masked arrays already print both ways right (masked-arrays.md's Python-float rule holds there).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB47")]
+        public void ParityQb_QB47_ZeroDimMaskedArrayPrint_FollowsInsertMaskedPrint()
+        {
+            // NDMaskedArray is not IDisposable: its data and mask arrays are reclaimed with the wrapper.
+            var nomask = np.ma.array(NDArray.Scalar(-0.0));
+            var masked32 = np.ma.array(NDArray.Scalar(0.1f), mask: false);
+
+            // NumPy 2.4.2: repr(np.ma.array(np.array(-0.0)))
+            nomask.ToString(true).Should().Be("masked_array(data=-0.,\n             mask=False,\n       fill_value=1e+20)");
+            // NumPy 2.4.2: str(np.ma.array(np.array(np.float32(0.1)), mask=False))
+            masked32.ToString().Should().Be("0.10000000149011612");
+        }
     }
 }
