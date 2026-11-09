@@ -587,6 +587,7 @@ short window that an edit opens is found within a day.
 
 ```bash
 python test/oracle/gen_oracle.py astype_full      # 13x13 dtypes x 26 layouts (host-sensitive, see above)
+python test/oracle/gen_oracle.py cast_boundary    # float32/float64 -> int8/uint8/int16/uint16/int32 at the integer edges, NaN payloads, inf (zero excuses)
 python test/oracle/gen_oracle.py binary           # add/sub/mul/divide x NEP50 pairs x pairwise layouts
 python test/oracle/gen_oracle.py divmod_power     # floor_divide/mod (bit-exact, F1) + complex power (integer exp bit-exact; non-integer exp Misaligned)
 python test/oracle/gen_oracle.py comparison       # ==,!=,<,>,<=,>=

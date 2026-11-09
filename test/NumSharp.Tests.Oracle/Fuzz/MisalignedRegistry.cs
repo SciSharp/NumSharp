@@ -512,6 +512,13 @@ namespace NumSharp.Tests.Fuzz
             if (c.Valueclass == "negzero")
                 return null;
 
+            // cast_boundary.jsonl (valueclass "castedge": float -> int8 / uint8 / int16 / uint16 / int32 at the integer
+            // widths' edges, NaN payloads and infinities) is held to ZERO excuses: NumPy's answer for every float32 input
+            // is one value whatever the layout (proven over all 2^32 inputs on 2026-11-09), so no cast blanket may hide a
+            // difference of the scalar converter or the vector body.
+            if (c.Valueclass == "castedge")
+                return null;
+
             // The FLAT np.sum / np.mean of a float loop is NumPy's add.reduce bit for bit (NumPyAddReduce,
             // Default.Reduction.Add.Exact.cs: the identity start, NpyIter's call schedule over the operand's layout, a
             // pairwise sum per call, _mean's loop dtype and its float64 division by the count; an operand with a broadcast
