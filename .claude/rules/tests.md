@@ -155,6 +155,12 @@ mapped memory ends. Two tools make it fail:
   reflection probe; SharpCV's: `copy()` of a reversed view gathers element by element, `a[::-1]` 5.8x NumPy's and
   `a[:, ::-1]` / `a[..., ::-1]` a target beyond NumPy, same-process ratios against a contiguous copy). Their third finding, NDW003 on a `double[]` / `int[]` / `string[]` return, is
   `GateAnalyzerTests.ManagedArrayReturns_AreNotGated` in `NumSharp.Tests.Build.Analyzer`.
+  `OpenBugs.Consumers.KokoroSharp.cs` holds KokoroSharp's round (desktops and two Android phones, 2026-11-09), deferred:
+  `np`'s class constructor takes about 120 ms in a fresh load context (a 30 ms limit on the fastest of three collectible
+  contexts, `[DoNotParallelize]`); `np.load_npy` of a file stages it through a fresh 256 KB managed buffer where NumPy
+  reads straight into the array (a per-thread allocation count); no workflow runs the suite on Mono
+  (`UseMonoRuntime=true`, a scan of `.github/workflows`). Its fourth finding, a memory map of a Fortran-ordered `.npy`
+  that `Dispose` never releases, is `OpenBugs.Mmap_FortranOrder_DisposeReleasesTheFile` in `OpenBugs.cs`.
 - The LIFETIME OpenBugs (lost GC anchors) live in the Oracle project, because the bug exists only in optimized code and
   needs the lifetime child process (`oracle.md`): none is open; a new open gap gets a `Lifetime_LT<nn>_*` test beside the
   aggregate `Lifetime_KnownGaps` (and `LifetimeOracleTests.Scaled.cs`'s `LifetimeScaled_KnownGaps`).
