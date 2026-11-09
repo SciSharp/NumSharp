@@ -26,9 +26,13 @@ DEFAULT_OUTPUT = HERE / "generated"
 TOOL = HERE / "NumSharp.Tools.TestInventory" / "NumSharp.Tools.TestInventory.csproj"
 TOOL_DLL = HERE / "NumSharp.Tools.TestInventory" / "bin" / "Release" / "net8.0" / "NumSharp.Tools.TestInventory.dll"
 CORPUS = ROOT / "test" / "NumSharp.Tests.Oracle" / "Fuzz" / "corpus"
+# The repository's one NumPy pin: the corpus generators (test/oracle/numpy_pin.py), the coverage inventory, the
+# workflows and the C# tests read the same file, so the dashboard names the release the corpora were generated with.
+NUMPY_PIN = ROOT / "numpy-version.txt"
 SCHEMA_VERSION = 2
-# User-facing summaries report string contracts without exposing generator phase tags.
-GENERATOR_VERSION = "1.3.2"
+# numpyVersion is the repository pin (numpy-version.txt); 1.3.2 and earlier wrote a literal 2.4.2 whatever the
+# committed corpora had been generated with.
+GENERATOR_VERSION = "1.3.3"
 OUTPUT_FILES = ("tests-oracle-report.json", "tests-oracle-report.csv", "summary.md", "tests-oracle-manifest.json")
 
 PROJECT_ROOTS = {
@@ -573,6 +577,31 @@ def summary_text(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def pinned_numpy_version() -> str:
+    """Read the NumPy release the committed oracle corpora were generated with, from ``numpy-version.txt``.
+
+    The dashboard labels every oracle count with this release ("NumPy x.y.z" on the Tests & Oracle page), so it must
+    come from the pin the generators enforce, never from a literal here: a literal kept announcing NumPy 2.4.2 after
+    the corpora moved to 2.5.4. The inventory never imports NumPy (it reflects the test assemblies and scans committed
+    files), so the pin file is the only source. Read like ``test/oracle/numpy_pin.py`` reads it: UTF-8, stripped, so a
+    trailing newline is not part of the version.
+
+    Returns:
+        The pinned release, for example ``"2.5.4"``.
+
+    Raises:
+        SystemExit: The pin file is missing, unreadable or empty. An artifact that cannot name its NumPy would publish
+            unattributable oracle numbers, so generation stops rather than guessing a release.
+    """
+    try:
+        version = NUMPY_PIN.read_text(encoding="utf-8").strip()
+    except OSError as error:
+        raise SystemExit(f"cannot read the NumPy pin {NUMPY_PIN}: {error}") from error
+    if not version:
+        raise SystemExit(f"the NumPy pin {NUMPY_PIN} is empty")
+    return version
+
+
 def render() -> dict[str, str]:
     raw = run_reflection_inventory()
     tests, versions = enrich_tests(raw)
@@ -604,7 +633,7 @@ def render() -> dict[str, str]:
         "schemaVersion": SCHEMA_VERSION,
         "generator": "test/inventory/generate_test_inventory.py",
         "generatorVersion": GENERATOR_VERSION,
-        "numpyVersion": "2.4.2",
+        "numpyVersion": pinned_numpy_version(),
         "assemblyVersions": versions,
         "summary": {"tests": test_summary, "oracle": oracle_summary},
         "suites": suites,

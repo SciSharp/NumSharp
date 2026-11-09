@@ -2,8 +2,9 @@
 
 **Source of truth:** live `scipy==1.16.3` (enumerated on this machine, 2026-09-07) + the SciPy
 source tree (to be vendored **reference-only** at `refs/scipy`, pinned to the `v1.16.3` tag). NumPy
-behaviour is already NumSharp's oracle at `numpy==2.4.2`; SciPy sits on top of that same NumPy, so
-`ScipySharp`'s oracle is `scipy==1.16.3` **paired with** NumSharp's existing `numpy==2.4.2` pin.
+behaviour is already NumSharp's oracle at `numpy==2.5.4` (`numpy-version.txt`); SciPy sits on top of that
+same NumPy, so `ScipySharp`'s oracle is `scipy==1.16.3` **paired with** NumSharp's existing `numpy==2.5.4`
+pin (scipy 1.16.3 declares `numpy<2.6,>=1.25.2`; the plan was enumerated beside numpy 2.4.2).
 
 **Why a separate repo (not a NumSharp subfolder):** SciPy is to NumPy what OptunaSharp is to
 NumSharp — a *consumer* library. It references NumSharp, it does not extend it. Following the

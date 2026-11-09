@@ -86,7 +86,7 @@ sealed record PythonInstall(string Executable, Version Version, string Prefix, s
         }
 
         throw new PythonInteropException(
-            "No usable Python was found. Create the environment of this project (Python 3.11 to 3.13):" + Environment.NewLine +
+            "No usable Python was found. Create the environment of this project (Python 3.12 or 3.13):" + Environment.NewLine +
             SetupCommands + Environment.NewLine +
             $"or set {InterpreterVariable} to the path of an interpreter that has the libraries." + Environment.NewLine +
             "Tried:" + Environment.NewLine + string.Join(Environment.NewLine, tried));

@@ -54,7 +54,7 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      # pythonnet 3.0.5 drives Python 3.7 to 3.13, and the pinned libraries need 3.11 or later.
+      # pythonnet 3.0.5 drives Python 3.7 to 3.13, and the pinned libraries need 3.12 or later.
       # `cache: pip` keeps the downloaded wheels between runs; the key is the hash of
       # requirements.txt, so a changed pin downloads again and nothing else does.
       - name: Set up Python
