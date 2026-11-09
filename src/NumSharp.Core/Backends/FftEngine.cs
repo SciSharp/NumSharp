@@ -96,14 +96,14 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>np.fft.ifft2(a, s=None, axes=(-2, -1), norm=None, out=None)</c>: <see cref="Ifftn"/> over the last two
-        ///     axes by default. Like NumPy's, it hands <c>out=None</c> to the transforms.
+        ///     axes by default, the out handed to the transforms (NumPy 2.5; 2.4 handed them <c>out=None</c>).
         /// </summary>
         /// <param name="a">The input, real or complex.</param>
         /// <param name="s">The output length per transformed axis, or null.</param>
         /// <param name="axes">The transformed axes; null stands for <c>(-2, -1)</c>.</param>
         /// <param name="norm">The normalization mode, as for <see cref="Ifft"/>.</param>
-        /// <param name="out">Accepted for NumPy's signature; NumPy's ifft2 does not use it.</param>
-        /// <returns>The inverse transform, complex128.</returns>
+        /// <param name="out">A pre-allocated complex output, or null.</param>
+        /// <returns>The inverse transform, complex128 (<paramref name="out"/> itself when given).</returns>
         /// <exception cref="ValueError">Mismatched <paramref name="s"/> / <paramref name="axes"/>, a length below 1, or an
         ///     unknown norm.</exception>
         /// <exception cref="IndexError">An axis out of range.</exception>
@@ -225,14 +225,14 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>np.fft.irfft2(a, s=None, axes=(-2, -1), norm=None, out=None)</c>: <see cref="Irfftn"/> over the last two
-        ///     axes by default. Like NumPy's, it hands <c>out=None</c> on.
+        ///     axes by default, the out handed on (NumPy 2.5; 2.4 handed on <c>out=None</c>).
         /// </summary>
         /// <param name="a">The input spectrum.</param>
         /// <param name="s">The output length per transformed axis, or null.</param>
         /// <param name="axes">The transformed axes; null stands for <c>(-2, -1)</c>.</param>
         /// <param name="norm">The normalization mode, as for <see cref="Ifft"/>.</param>
-        /// <param name="out">Accepted for NumPy's signature; NumPy's irfft2 does not use it.</param>
-        /// <returns>The real result, float64.</returns>
+        /// <param name="out">A pre-allocated real output for the final transform, or null.</param>
+        /// <returns>The real result, float64 (<paramref name="out"/> itself when given).</returns>
         /// <exception cref="ValueError">Mismatched <paramref name="s"/> / <paramref name="axes"/>, a length below 1, or an
         ///     unknown norm.</exception>
         /// <exception cref="IndexError">An axis out of range, or no axis to transform.</exception>
@@ -267,8 +267,9 @@ namespace NumSharp
         /// <param name="n">The output length; null for <c>2 * (m - 1)</c>.</param>
         /// <param name="axis">The transformed axis.</param>
         /// <param name="norm">The normalization mode, swapped before the inverse transform.</param>
-        /// <param name="out">Accepted for NumPy's signature; NumPy's hfft hands <c>out=None</c> to irfft.</param>
-        /// <returns>The real result, float64.</returns>
+        /// <param name="out">A pre-allocated real output irfft writes (NumPy 2.5; 2.4 handed irfft <c>out=None</c>), or
+        ///     null.</param>
+        /// <returns>The real result, float64 (<paramref name="out"/> itself when given).</returns>
         /// <exception cref="ValueError">A length below 1, or an unknown norm (the inverse's text).</exception>
         /// <exception cref="IndexError"><paramref name="axis"/> out of range with <paramref name="n"/> omitted.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> out of range with <paramref name="n"/> given.</exception>

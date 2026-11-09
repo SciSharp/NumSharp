@@ -118,15 +118,15 @@ namespace NumSharp
 
         /// <summary>
         ///     Compute the inverse of <see cref="rfft2"/>. <c>irfft2</c> is <c>irfftn</c> with the
-        ///     default <paramref name="axes"/> of <c>(-2, -1)</c>. Like NumPy, the provided
-        ///     <paramref name="out"/> is not threaded through the composition.
+        ///     default <paramref name="axes"/> of <c>(-2, -1)</c>. Like NumPy 2.5, the provided <paramref name="out"/> is
+        ///     handed to <c>irfftn</c> (NumPy 2.4 ignored it).
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="s">Per-axis output lengths; <c>-1</c> uses the full input length.</param>
         /// <param name="axes">Axes over which to compute the inverse FFT. Default <c>(-2, -1)</c>.</param>
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
-        /// <param name="out">Accepted for signature parity; NumPy passes <c>out=None</c> internally.</param>
-        /// <returns>The real result, float64.</returns>
+        /// <param name="out">A pre-allocated real output for the final transform, or null.</param>
+        /// <returns>The real result, float64 (<paramref name="out"/> itself when given).</returns>
         /// <exception cref="ValueError"><paramref name="s"/> and <paramref name="axes"/> of different lengths, a length
         ///     below 1, or an unknown norm.</exception>
         /// <exception cref="IndexError">An axis out of range, or no axis to transform.</exception>

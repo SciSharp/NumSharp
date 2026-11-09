@@ -413,16 +413,15 @@ namespace NumSharp.Tests.Fourier
         }
 
         [TestMethod]
-        public void Ifft2_Out_IsIgnored_LikeNumpy()
+        public void Ifft2_Out_SameInstance_WritesThrough()
         {
-            // NumPy's ifft2 hard-codes out=None: the provided array is NOT written and NOT returned.
+            // NumPy 2.5's ifft2 hands out to _raw_fftnd (2.4 hard-coded out=None): the provided array is written and
+            // returned.
             var m = np.arange(16).astype(np.float64).reshape(4, 4);
             var o = (np.zeros(new Shape(4, 4))).astype(np.complex128);
             var r = np.fft.ifft2(m, @out: o);
-            ReferenceEquals(r, o).Should().BeFalse();
-            // o stays all-zero (untouched)
-            foreach (var z in o.Data<Complex>()) z.Magnitude.Should().Be(0);
-            AssertCloseArrays(r, np.fft.ifft2(m));
+            ReferenceEquals(r, o).Should().BeTrue();
+            AssertCloseArrays(o, np.fft.ifft2(m));
         }
 
         [TestMethod]
@@ -558,12 +557,12 @@ namespace NumSharp.Tests.Fourier
         }
 
         [TestMethod]
-        public void Fft2_BadNorm_Forward_NoSpaceMessage()
+        public void Fft2_BadNorm_Forward_SpacedMessage()
         {
             var m = np.arange(12).astype(np.float64).reshape(3, 4);
             Action act = () => np.fft.fft2(m, norm: "bad");
             act.Should().Throw<ValueError>()
-                .WithMessage("Invalid norm value bad; should be \"backward\",\"ortho\" or \"forward\".");
+                .WithMessage("Invalid norm value bad; should be \"backward\", \"ortho\" or \"forward\".");
         }
 
         [TestMethod]
