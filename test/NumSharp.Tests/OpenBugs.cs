@@ -2636,5 +2636,46 @@ namespace NumSharp.Tests
             Action act = () => np.mintypecode(new object[] { explicitZeroDim }, "Ud");
             act.Should().Throw<ValueError>().WithMessage("substring not found");
         }
+
+        /// <summary>
+        ///     Disposing a memory map of a FORTRAN-ordered <c>.npy</c> does not release the mapping: NumPy's
+        ///     <c>del a; gc.collect()</c> closes it, but NumSharp leaves the file mapped after <c>Dispose</c> AND after a full
+        ///     collection with finalizers, so Windows keeps refusing to delete or overwrite it. A C-ordered map is released by
+        ///     its <c>Dispose</c> at once. <c>NpyFormat.OpenMemmap</c> (behind <c>np.load(path, mmap_mode)</c>) returns a
+        ///     Fortran file as a transposed view of an internal mapped array (<c>reshape(shape[::-1]).T</c>), and the mapping
+        ///     goes with that internal array, which nothing disposes. The suite never saw it: <c>MappedFileCleanup</c> swallows
+        ///     the failed delete of its temp folder. Found by KokoroSharp's voice loader (2026-11-09, a test that loads a
+        ///     Fortran-ordered voice and then deletes its folder). Observable on Windows only (Unix unlinks a mapped file).
+        /// </summary>
+        [TestMethod]
+        [OpenBugs]
+        public void Mmap_FortranOrder_DisposeReleasesTheFile()
+        {
+            if (!OperatingSystem.IsWindows())
+                Assert.Inconclusive("A file still mapped is observable as a refused delete on Windows only.");
+
+            string dir = System.IO.Directory.CreateTempSubdirectory("numsharp-fmap-").FullName;
+            try
+            {
+                foreach (bool fortran in new[] { false, true })
+                {
+                    string path = System.IO.Path.Combine(dir, fortran ? "f.npy" : "c.npy");
+                    using (var a = np.arange(6).astype(NPTypeCode.Single).reshape(2, 3))
+                    using (var stored = fortran ? np.asfortranarray(a) : np.ascontiguousarray(a))
+                        np.save(path, stored);
+
+                    using (var mapped = (NDArray)np.load(path, mmap_mode: "r"))
+                        mapped.Shape.IsFContiguous.Should().Be(fortran);
+                    GcQuiescence.CollectFull();   // even a collection must not be needed; it does not help either
+
+                    Action delete = () => System.IO.File.Delete(path);
+                    delete.Should().NotThrow($"the {(fortran ? "Fortran" : "C")}-ordered map was disposed, so the file must be free");
+                }
+            }
+            finally
+            {
+                MappedFileCleanup.DeleteDirectory(dir);
+            }
+        }
     }
 }
