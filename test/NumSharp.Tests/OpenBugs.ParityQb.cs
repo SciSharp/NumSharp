@@ -77,6 +77,12 @@ namespace NumSharp.Tests
             r.GetDouble(9).Should().Be(0.9000000134110451);
             // NumPy 2.4.2: np.arange(np.float32(3.5)) -> float64 [0., 1., 2., 3.]
             s.dtype.Should().Be(np.float64);
+
+            // NumPy 2.4.2: np.arange(18446744073709551610, 18446744073709551615, 2) -> float64, 3 elements (the Python
+            // ints' exact length); a C# ulong binds the float32 overload here and gives an empty float32 array.
+            using var u = np.arange(18446744073709551610UL, 18446744073709551615UL, 2UL);
+            u.dtype.Should().Be(np.float64);
+            u.size.Should().Be(3);
         }
 
         // ------------------------------------------------------------------
