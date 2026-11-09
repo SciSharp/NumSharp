@@ -1523,5 +1523,68 @@ namespace NumSharp.Tests
             Action act = () => np.nanmedian(empty, new[] { 1, -2 });
             act.Should().Throw<ValueError>().WithMessage("duplicate value in 'axis'");
         }
+
+        // ------------------------------------------------------------------
+        // QB-55 — np.broadcast_to's (NDArray, NDArray against) extension captures NumPy's shape argument
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>broadcast_to(array, shape, subok=False)</c> reads its second argument as a SHAPE. NumSharp adds a
+        ///     <c>broadcast_to(NDArray from, NDArray against)</c> overload (broadcast against another array's shape) beside
+        ///     <c>broadcast_to(NDArray, Shape)</c>, and every C# array converts implicitly to both, so (1) NumPy's idiom
+        ///     <c>np.broadcast_to(x, a.shape)</c> does not compile (CS0121, ambiguous), nor do <c>new[] {2, 3}</c>,
+        ///     <c>new long[] {2, 3}</c> or a bare <c>4</c> (only a tuple or <c>new Shape(...)</c> binds; the existing tests
+        ///     write <c>new Shape(a.shape)</c>), and (2) an NDArray holding a shape is broadcast AGAINST instead:
+        ///     <c>np.broadcast_to(np.arange(3), np.array([2, 3]))</c> is a <c>(2, 3)</c> view in NumPy and raises "could not be
+        ///     broadcast together ... (3,) and requested shape (2,)" here, while <c>np.broadcast_to(np.arange(3),
+        ///     np.zeros((4, 3)))</c>, which NumPy refuses (an array is not a shape: "The truth value of an array with more than
+        ///     one element is ambiguous"), returns a <c>(4, 3)</c> view. The runtime binder (<c>dynamic</c>) reproduces the
+        ///     compile-time overload resolution, so the idiom's ambiguity is asserted at run time. Found by the shape-argument
+        ///     spellings sweep (q159, q160); numpy-signature-diff.md records only the parameter rename.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB55")]
+        public void ParityQb_QB55_BroadcastTo_ReadsItsSecondArgumentAsAShape()
+        {
+            using var x = np.arange(3);
+            using var target = np.zeros(new Shape(2, 3));
+            using var shapeArray = np.array(new long[] { 2, 3 });
+
+            // NumPy 2.4.2: np.broadcast_to(np.arange(3), np.array([2, 3])).shape is (2, 3)
+            using var fromArray = np.broadcast_to(x, shapeArray);
+            fromArray.shape.Should().Equal(2L, 3L);
+
+            // NumPy 2.4.2: np.broadcast_to(np.arange(3), a.shape).shape is (2, 3); in C# the call is ambiguous (CS0121)
+            dynamic shape = target.shape;
+            NDArray viaIdiom = np.broadcast_to(x, shape);
+            using (viaIdiom)
+                viaIdiom.shape.Should().Equal(2L, 3L);
+        }
+
+        // ------------------------------------------------------------------
+        // QB-56 — np.unravel_index / np.ravel_multi_index take the shape only as int[]
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>unravel_index(indices, shape, order='C')</c> and <c>ravel_multi_index(multi_index, dims, ...)</c> take
+        ///     any shape-like, and their idiom is <c>np.unravel_index(np.argmax(a), a.shape)</c>. NumSharp's overloads take the
+        ///     shape only as <c>int[]</c>, while its own <c>a.shape</c> is <c>long[]</c> and <c>Shape</c> does not convert to
+        ///     <c>int[]</c>, so <c>np.unravel_index(i, a.shape)</c>, <c>np.unravel_index(i, a.Shape)</c> and
+        ///     <c>np.ravel_multi_index(idx, a.shape)</c> do not compile (CS1503); every other shape-taking function probed
+        ///     (zeros, full, indices, ndindex, tile, resize, empty_like's <c>shape=</c>, reshape, standard_normal) binds
+        ///     <c>a.shape</c>. Converting by hand gives NumPy's values. The runtime binder (<c>dynamic</c>) reproduces the
+        ///     overload resolution, so the missing binding is asserted at run time (q159).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB56")]
+        public void ParityQb_QB56_UnravelIndex_BindsTheArraysOwnShape()
+        {
+            using var m = np.array(new double[] { 3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8 }).reshape(3, 4);
+            using var flat = np.array(new long[] { 5 });
+            dynamic shape = m.shape;
+
+            // NumPy 2.4.2: np.unravel_index([5], a.shape) is (array([1]), array([1])) for a (3, 4) array
+            NDArray[] coords = np.unravel_index(flat, shape);
+            coords[0].GetInt64(0).Should().Be(1L);
+            coords[1].GetInt64(0).Should().Be(1L);
+        }
     }
 }
