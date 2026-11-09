@@ -1463,6 +1463,12 @@ namespace NumSharp.Tests
 
             // NumPy 2.4.2: np.histogram(a, bins=[0, 1.5, 1.7, 3], weights=w)[0] is [0., 0., 3.00000000000003e+15]
             hist.GetDouble(0).Should().Be(0.0);
+
+            // np.unique(return_inverse=True) gathers through the same argsort (`aux = ar[perm]`, the first of each
+            // group survives): NumPy 2.4.2's unique of [1.5, 1.5, 0.0, -0.0, 0.0] with return_inverse is [-0., 1.5]
+            using var zeros = np.array(new[] { 1.5, 1.5, 0.0, -0.0, 0.0 });
+            var unique = np.unique(zeros, return_inverse: true);
+            BitConverter.DoubleToInt64Bits(unique.values.GetDouble(0)).Should().Be(unchecked((long)0x8000000000000000UL));
         }
 
         // ------------------------------------------------------------------
