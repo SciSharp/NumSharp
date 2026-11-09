@@ -1499,5 +1499,29 @@ namespace NumSharp.Tests
             // NumPy 2.4.2: int16 [[30000, 30000]] @ int32 [[100000], [100000]] is [[1705032704]] (6e9 wrapped in int32)
             wrapped.GetInt32(0, 0).Should().Be(1705032704);
         }
+
+        // ------------------------------------------------------------------
+        // QB-54 — np.nanmedian of EMPTY data with a repeated axis raises before NumPy's size-0 shortcut
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>nanmedian</c> answers empty data with <c>np.nanmean(a, axis, ...)</c> before it reads the axis, so
+        ///     a repeated axis on an empty array surfaces from nanmean's first reduction (<c>np.sum(~mask, axis=axis, ...)</c>,
+        ///     the C reduction's axis converter): <c>ValueError("duplicate value in 'axis'")</c>. NumSharp's tuple-axis
+        ///     overload normalizes the axes first and raises <c>normalize_axis_tuple</c>'s <c>"repeated axis"</c>, which is
+        ///     NumPy's text only for NON-empty data (<c>_ureduce</c>). Its own docs already route empty data's other prologue
+        ///     texts through nanmean (parity QA-31); the repeated-axis check is the one left ahead of that shortcut. Found by a
+        ///     random tuple-axis fuzz (q156: 220 calls over all / any / average / median / nanmedian / ptp / flip /
+        ///     expand_dims, every other text NumPy's).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB54")]
+        public void ParityQb_QB54_NanmedianOfEmptyData_RepeatedAxisRaisesNanmeansText()
+        {
+            using var empty = np.zeros(new Shape(2, 0, 3));
+
+            // NumPy 2.4.2: np.nanmedian(np.zeros((2, 0, 3)), axis=(1, -2)) raises ValueError: duplicate value in 'axis'
+            Action act = () => np.nanmedian(empty, new[] { 1, -2 });
+            act.Should().Throw<ValueError>().WithMessage("duplicate value in 'axis'");
+        }
     }
 }
