@@ -1586,5 +1586,68 @@ namespace NumSharp.Tests
             coords[0].GetInt64(0).Should().Be(1L);
             coords[1].GetInt64(0).Should().Be(1L);
         }
+
+        // ------------------------------------------------------------------
+        // QB-57 — np.kron keeps a C# literal operand WEAK, where NumPy's asanyarray makes it strong
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>kron(a, b)</c> starts with <c>b = asanyarray(b)</c> (and <c>a</c> likewise), so a Python scalar operand
+        ///     is a STRONG 0-d array before <c>kron</c>'s scalar branch (<c>if nda == 0 or ndb == 0: return multiply(a, b)</c>)
+        ///     multiplies: <c>np.kron(float32_array, 2)</c> and <c>np.kron(float32_array, 2.0)</c> are float64,
+        ///     <c>np.kron(2, float32_array)</c> float64, and <c>np.kron(int8 [-3, 0, 5, 100], 2)</c> int64
+        ///     <c>[-6, 0, 10, 200]</c>. NumSharp keeps the C# literal weak (NEP 50's Python-scalar rule, right for a ufunc
+        ///     operand but not after NumPy's own <c>asanyarray</c>): float32, and int8 <c>[-6, 0, 10, -56]</c>, a wrapped
+        ///     value. np.outer, np.inner, np.dot and np.tensordot, which also convert first, already promote as NumPy does
+        ///     (q162, q163).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB57")]
+        public void ParityQb_QB57_KronWithAScalarOperand_ConvertsItToAStrongArray()
+        {
+            using var small = np.array(new sbyte[] { -3, 0, 5, 100 });
+            using var doubled = np.kron(small, 2);
+
+            // NumPy 2.4.2: np.kron(np.array([-3, 0, 5, 100], dtype=np.int8), 2) is int64 [-6, 0, 10, 200]
+            doubled.typecode.Should().Be(NPTypeCode.Int64);
+            doubled.GetInt64(3).Should().Be(200L);
+
+            using var floats = np.array(new float[] { -1.5f, 0f, 2.5f, 7f });
+            using var scaled = np.kron(floats, 2.0);
+
+            // NumPy 2.4.2: np.kron(float32 array, 2.0).dtype is float64
+            scaled.typecode.Should().Be(NPTypeCode.Double);
+        }
+
+        // ------------------------------------------------------------------
+        // QB-58 — a Python scalar inside np.concatenate's sequence is WEAK in NumPy (and np.union1d inherits it)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>np.concatenate</c> discovers its result dtype with NEP 50's rule over the sequence's entries,
+        ///     so a Python int / float entry is WEAK: <c>np.concatenate((float32_array, 0.5), axis=None)</c> is float32,
+        ///     <c>np.concatenate((int8_array, 5), axis=None)</c> int8, and <c>np.concatenate((int8_array, 300), axis=None)</c>
+        ///     int8 with 300 stored as 44 (the cast wraps). <c>np.union1d(ar1, ar2)</c> is <c>unique(concatenate((ar1, ar2),
+        ///     axis=None))</c>, so <c>np.union1d(int8_array, 5)</c> is int8 and <c>np.union1d(float32_array, 0.5)</c> float32.
+        ///     NumSharp's concatenate reads the C# literal as a strong array (float64; int32 holding 300), and its union1d
+        ///     ravels both operands first (creation-manipulation.md: <c>unique(concatenate(ravel(ar1), ravel(ar2)))</c>),
+        ///     which makes them strong too. np.append, np.insert, np.hstack, np.stack, np.block, np.r_, np.intersect1d,
+        ///     np.setxor1d and np.setdiff1d convert their scalar first in NumPy as well, and match (q163).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB58")]
+        public void ParityQb_QB58_PythonScalarInConcatenatesSequence_IsWeak()
+        {
+            using var floats = np.array(new float[] { -1.5f, 0f, 2.5f, 7f });
+            using var joined = np.concatenate(new NDArray[] { floats, 0.5 }, axis: null);
+
+            // NumPy 2.4.2: np.concatenate((float32 array, 0.5), axis=None).dtype is float32
+            joined.typecode.Should().Be(NPTypeCode.Single);
+
+            using var small = np.array(new sbyte[] { -3, 0, 5, 100 });
+            using var union = np.union1d(small, 300);
+
+            // NumPy 2.4.2: np.union1d(int8 [-3, 0, 5, 100], 300) is int8 [-3, 0, 5, 44, 100]
+            union.typecode.Should().Be(NPTypeCode.SByte);
+            union.GetSByte(3).Should().Be((sbyte)44);
+        }
     }
 }
