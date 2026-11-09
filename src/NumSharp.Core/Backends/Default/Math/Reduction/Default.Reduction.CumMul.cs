@@ -30,14 +30,13 @@ namespace NumSharp.Backends
         ///     loop dtype with the text cast around it.</exception>
         /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number, or a
         ///     read-only <paramref name="out"/> (<c>output array is read-only</c>).</exception>
-        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape and NumPy's
-        ///     accumulate refuses it: the text of the statement that refuses (parity QA-31, <see cref="StoreIntoMisfitOut"/>):
-        ///     NpyIter's <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]:
-        ///     (4,3)-&gt;(4,3) (3,4)-&gt;(3,4) </c> (or its <c>op_axes</c> / non-broadcastable-output siblings) on NumPy's
-        ///     iterator path, an input of more than one dimension among its triggers; <c>provided out is the wrong size for
-        ///     the accumulation.</c> on the direct 1-D path. The outs NumPy accepts are written where its iterator writes
-        ///     (more trailing out axes at index 0, an extent-1 input broadcast, the accumulated axis cut to the input's
-        ///     extent), and an empty input or out comes back untouched (parity QA-54).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape: the text of the
+        ///     statement that refuses it (parity QA-31, <see cref="MisfitOutError"/>): NpyIter's <c>operands could not be
+        ///     broadcast together with remapped shapes [original-&gt;remapped]: (4,3)-&gt;(4,3) (3,4)-&gt;(3,4) </c> (or its
+        ///     <c>op_axes</c> / non-broadcastable-output siblings) on NumPy's iterator path, an input of more than one
+        ///     dimension among its triggers; otherwise — an out the iterator accepts, the direct 1-D path, an empty input or
+        ///     out included — <c>provided out is the wrong size for the accumulation.</c> (NumPy 2.5 compares the dimensions on
+        ///     every path before the empty exits; 2.4 wrote into a longer or broadcast out, parity QA-54).</exception>
         /// <remarks>
         ///     The statements are np.cumprod's, in its order (moved from <c>APIs/np.cumprod.cs</c> by the np-layer dtype
         ///     plan's P0 pilot): multiply.accumulate's loop resolution on (out, arr) answers FIRST for text or a string

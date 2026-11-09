@@ -316,9 +316,6 @@ namespace NumSharp.Backends
         ///     size 0</c> at a reduced axis of length 0); text data with an empty reduced axis (NumPy's take).</exception>
         /// <exception cref="IndexOutOfRangeException">Numeric data whose reduced axes hold no element (NumPy's IndexError
         ///     texts).</exception>
-        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0: the prologue's merge
-        ///     cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape (0,newaxis)</c>), before
-        ///     q's rank, the method and the data's refusals.</exception>
         /// <exception cref="InvalidCastException">A q array of a dtype without a real value (complex).</exception>
         /// <exception cref="OverflowException">An integer q array whose virtual indexes leave its dtype (see
         ///     <see cref="QuantileCompute"/>).</exception>
@@ -849,9 +846,6 @@ namespace NumSharp.Backends
         ///     does not cast safely to the data's, or keepdims over a 0-d result (NumPy indexes its scalar).</exception>
         /// <exception cref="IndexError">keepdims with an <paramref name="out"/> NumPy cannot index (the prologue), or an
         ///     empty reduced axis (see <see cref="QuantileText.Compute"/> for the take path's texts).</exception>
-        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0: the prologue's merge
-        ///     cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape
-        ///     (0,newaxis)</c>).</exception>
         /// <remarks>A <c>numpy.char.chararray</c> operand of the user's call meets NumPy's
         ///     <c>arr.partition(..., axis=0)</c>, which is <c>chararray.partition(sep)</c>: every check before it, then
         ///     <see cref="TypeError"/> <c>chararray.partition() got an unexpected keyword argument 'axis'</c> for every method

@@ -209,9 +209,6 @@ namespace NumSharp.Backends
         /// <exception cref="IndexError">keepdims with an out of too few dimensions (NumPy's <c>too many indices for
         ///     array</c>), or with a reduced axis of length 0 (<c>index 0 is out of bounds for axis 0 with size 0</c>) —
         ///     np.median's and np.nanmedian's out included (<see cref="UReduce"/> indexes it).</exception>
-        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0: <c>_ureduce</c>'s
-        ///     merge cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape
-        ///     (0,newaxis)</c>), before q's rank and the method (the nan forms answer an empty input before it).</exception>
         /// <exception cref="TypeError">Bool data with an interpolating method (NumPy's boolean-subtract text, after the
         ///     partition's validation and the neighbour lookup), unless <paramref name="allowBooleanContinuous"/>.</exception>
         /// <exception cref="IndexOutOfRangeException">An array with no element whose lookup fails (NumPy's IndexError
@@ -269,9 +266,8 @@ namespace NumSharp.Backends
             // _ureduce runs BEFORE the reduction function, in NumPy's order (UReduce, the family's one prologue): the axes
             // normalized (an out-of-range or repeated axis is reported before the boolean subtract below:
             // np.quantile(bool, 0.5, axis=5) is NumPy's AxisError), keepdims' view of out, then the merge of several reduced
-            // axes into one, whose -1 NumPy cannot resolve beside a kept axis of length 0 — np.quantile(zeros((0, 3, 4)), 0.5,
-            // axis=(1, 2)) is NumPy's reshape ValueError here, before q's rank and the method are looked at (the merge used to
-            // come with the staging below, with an explicit length, and gave an empty result: plan Appendix B1).
+            // axes into one of their product's length — so np.quantile(zeros((0, 3, 4)), 0.5, axis=(1, 2)) merges to (0, 12)
+            // and gives an empty result (NumPy 2.5.4; NumPy 2.4's -1 raised a reshape ValueError there).
             UReduced prologue = UReduce(a, axisArr, @out, keepdims);
 
             // The out NumPy's reduction writes into: keepdims' `out[(Ellipsis,) + index_out]` from the prologue (each reduced
@@ -1331,26 +1327,21 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     <c>PyArray_TakeFrom</c>'s checks of out, in its order: the result's exact shape, a SAFE cast from out's dtype to
-        ///     the data's (<c>PyArray_FromArray(out, data dtype)</c>), and writeability (its WRITEBACKIFCOPY base).
+        ///     <c>PyArray_TakeFrom</c>'s checks of out (NumPy 2.5), shared with <c>np.take</c>
+        ///     (<see cref="UnmanagedStorage.ValidateTakeOut"/>): the result's exact shape, the FORCECAST copy's cast of a text
+        ///     out's contents into the data's dtype, and writeability (its WRITEBACKIFCOPY base). An out of any other dtype
+        ///     is accepted and receives the result through an unsafe cast (NumPy 2.4's SAFE check of out's dtype to the
+        ///     data's is gone; NumPy 2.5 only warns when the data's dtype does not reach out's under same_kind).
         /// </summary>
         /// <param name="target">The out the take writes (keepdims' view of the caller's).</param>
         /// <param name="resultShape">The result's shape.</param>
         /// <param name="data">The data (its dtype).</param>
-        /// <exception cref="ValueError">Another shape (<c>output array does not match result of ndarray.take</c>), or a
-        ///     read-only out (<c>WRITEBACKIFCOPY base is read-only</c>).</exception>
-        /// <exception cref="TypeError">A dtype that does not cast safely to the data's: NumPy's <c>Cannot cast array data
-        ///     from dtype('float64') to dtype('float32') according to the rule 'safe'</c> ("scalar" for a 0-d out).</exception>
+        /// <exception cref="ValueError">Another shape (<c>output array does not match result of ndarray.take</c>), a text out
+        ///     whose contents do not parse as the data's numbers (<c>invalid literal for int() with base 10:
+        ///     np.str_('')</c>), or a read-only out (<c>WRITEBACKIFCOPY base is read-only</c>).</exception>
+        /// <exception cref="UnicodeEncodeError">A text out holding non-ASCII text over fixed-width bytes data.</exception>
         private static void TakeOutChecks(NDArray target, long[] resultShape, NDArray data)
-        {
-            if (!target.Shape.dimensions.AsSpan().SequenceEqual(resultShape))
-                throw new ValueError("output array does not match result of ndarray.take");
-            if (!DTypeCasting.CanCastTypeTo(target.dtype, data.dtype, NPY_CASTING.NPY_SAFE_CASTING))
-                throw new TypeError($"Cannot cast {(target.ndim == 0 ? "scalar" : "array data")} from {target.dtype.ToString(true)} " +
-                                    $"to {data.dtype.ToString(true)} according to the rule 'safe'");
-            if (!target.Shape.IsWriteable)
-                throw new ValueError("WRITEBACKIFCOPY base is read-only");
-        }
+            => UnmanagedStorage.ValidateTakeOut(data, target, resultShape);
 
         /// <summary>
         ///     The checks of <c>_lerp</c>'s <c>add(a, diff_b_a * t, out=out)</c> before it writes, in the ufunc's order: out's

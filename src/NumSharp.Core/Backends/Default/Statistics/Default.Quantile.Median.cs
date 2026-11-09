@@ -50,9 +50,6 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">Text data or a text <paramref name="out"/> that NumPy's closing mean refuses (its
         ///     verbatim text); a <c>StringDType</c> array after its sort (its mean's divide refuses the concatenated
         ///     text).</exception>
-        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0, any dtype (NumPy's
-        ///     <c>_ureduce</c> merge cannot resolve its -1: <c>cannot reshape array of size 0 into shape (0,newaxis)</c>);
-        ///     before the plan's P1a step 2 only a <c>StringDType</c> array raised it (plan Appendix B1).</exception>
         /// <exception cref="IndexError"><paramref name="keepdims"/> with an <paramref name="out"/> NumPy cannot index
         ///     (<c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c>: too few dimensions, or a reduced axis of length 0),
         ///     for every dtype and before the text refusals.</exception>

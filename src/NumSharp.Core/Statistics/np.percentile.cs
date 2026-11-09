@@ -179,9 +179,6 @@ namespace NumSharp
         /// <exception cref="IndexError"><paramref name="keepdims"/> with an <paramref name="out"/> NumPy cannot index:
         ///     <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (too few dimensions, or a reduced axis of length 0),
         ///     raised for every dtype before q's rank, the method and the data's refusals.</exception>
-        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0, any dtype:
-        ///     <c>_ureduce</c>'s merge cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape
-        ///     (0,newaxis)</c>), raised before q's rank, the method and the data's refusals.</exception>
         public static NDArray percentile(NDArray a, double q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
@@ -247,9 +244,6 @@ namespace NumSharp
         /// <exception cref="IndexError"><paramref name="keepdims"/> with an <paramref name="out"/> NumPy cannot index:
         ///     <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (too few dimensions, or a reduced axis of length 0),
         ///     raised for every dtype before q's rank, the method and the data's refusals.</exception>
-        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0, any dtype:
-        ///     <c>_ureduce</c>'s merge cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape
-        ///     (0,newaxis)</c>), raised before q's rank, the method and the data's refusals.</exception>
         public static NDArray percentile(NDArray a, double[] q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
@@ -370,9 +364,6 @@ namespace NumSharp
         /// <exception cref="IndexError"><paramref name="keepdims"/> with an <paramref name="out"/> NumPy cannot index:
         ///     <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (too few dimensions, or a reduced axis of length 0),
         ///     raised for every dtype before q's rank, the method and the data's refusals.</exception>
-        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0, any dtype:
-        ///     <c>_ureduce</c>'s merge cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape
-        ///     (0,newaxis)</c>), raised before q's rank, the method and the data's refusals.</exception>
         public static NDArray percentile(NDArray a, NDArray q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)

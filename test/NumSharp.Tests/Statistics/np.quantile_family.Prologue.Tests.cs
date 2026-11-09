@@ -9,16 +9,18 @@ namespace NumSharp.Tests.Statistics;
 ///     NumPy's <c>_ureduce</c> prologue of the quantile family — <c>np.median</c>, <c>np.nanmedian</c>,
 ///     <c>np.quantile</c>, <c>np.percentile</c>, <c>np.nanquantile</c>, <c>np.nanpercentile</c> — runs before the reduction
 ///     function's checks: the axes, keepdims' <c>out[(Ellipsis,) + index_out]</c>, then the merge of several reduced axes
-///     (<c>reshape(kept + (-1,))</c>, which cannot resolve its -1 beside a kept axis of length 0). Each route of the family
-///     had its own copy of it until the np-layer dtype plan's P1a step 2 (<see cref="DefaultEngine.UReduce"/>), and the
-///     copies disagreed (the plan's Appendix B1). Every expected outcome and text was probed against <c>numpy==2.4.2</c>;
-///     the oracle section <c>qprologue</c> gates the whole matrix.
+///     (<c>reshape(kept + (math.prod(merged),))</c>, which NumPy 2.5.4 resolves beside a kept axis of length 0 too; NumPy
+///     2.4's <c>-1</c> raised a reshape ValueError there). Each route of the family had its own copy of it until the
+///     np-layer dtype plan's P1a step 2 (<see cref="DefaultEngine.UReduce"/>), and the copies disagreed (the plan's
+///     Appendix B1). Every expected outcome and text was probed against <c>numpy==2.5.4</c>; the oracle section
+///     <c>qprologue</c> gates the whole matrix.
 /// </summary>
 [TestClass]
 public class np_quantile_family_Prologue_Tests
 {
-    /// <summary>NumPy's merge error for <c>(0, 3, 4)</c> reduced over two axes beside the kept empty one.</summary>
-    private const string MergeText = "cannot reshape array of size 0 into shape (0,newaxis)";
+    /// <summary>NumPy's refusal of an interpolating method over bool data (<c>_lerp</c>'s subtract).</summary>
+    private const string BoolSubtract = "numpy boolean subtract, the `-` operator, is not supported, use the bitwise_xor, the " +
+                                        "`^` operator, or the logical_xor function instead.";
 
     /// <summary>NumPy's IndexError for a keepdims out of one dimension under 2-D data.</summary>
     private const string TooManyIndices = "too many indices for array: array is 1-dimensional, but 2 were indexed";
@@ -44,40 +46,73 @@ public class np_quantile_family_Prologue_Tests
     }
 
     /// <summary>
-    ///     Appendix B1 itself: <c>axis=(1, 2)</c> over <c>zeros((0, 3, 4))</c> is NumPy's reshape ValueError for numbers and
-    ///     text alike, in every function that is not a nan form. NumSharp returned a <c>(0,)</c> float64 array for numeric
-    ///     median / quantile and the closing mean's refusal for <c>U3</c> median, before the shared prologue.
+    ///     Appendix B1 itself: <c>axis=(1, 2)</c> over <c>zeros((0, 3, 4))</c> merges to <c>(0, 12)</c> since NumPy 2.5.4, so
+    ///     numbers reduce to an empty float64 <c>(0,)</c> result, and every other dtype meets the reduction function's own
+    ///     refusal: bool's boolean subtract for the interpolating quantile (median's mean of nothing passes), text's closing
+    ///     mean for median and its subtract for quantile. NumPy 2.4 raised its reshape ValueError for all of them.
     /// </summary>
     [TestMethod]
-    public void B1_MergeOfAKeptEmptyAxis_IsNumPysReshapeError()
+    public void B1_MergeOfAKeptEmptyAxis_ReachesTheReduction()
     {
         int[] axes = { 1, 2 };
-        foreach (string dtype in new[] { "float64", "int32", "bool", "U3", "S3", "T" })
+        foreach (string dtype in new[] { "float64", "int32", "bool" })
         {
             using var a = EmptyB1(dtype);
-            Action median = () => np.median(a, axes);
-            median.Should().Throw<IncorrectShapeException>().WithMessage(MergeText, dtype);
-            Action quantile = () => np.quantile(a, 0.5, axes);
-            quantile.Should().Throw<IncorrectShapeException>().WithMessage(MergeText, dtype);
-            Action percentile = () => np.percentile(a, 50.0, axes);
-            percentile.Should().Throw<IncorrectShapeException>().WithMessage(MergeText, dtype);
+            using var median = np.median(a, axes);
+            median.dtype.Should().Be(np.float64, dtype);
+            median.shape.Should().Equal(new long[] { 0 }, dtype);
+            if (dtype == "bool")
+            {
+                new Action(() => np.quantile(a, 0.5, axes)).Should().Throw<TypeError>().WithMessage(BoolSubtract, dtype);
+                new Action(() => np.percentile(a, 50.0, axes)).Should().Throw<TypeError>().WithMessage(BoolSubtract, dtype);
+                continue;
+            }
+            using var quantile = np.quantile(a, 0.5, axes);
+            quantile.dtype.Should().Be(np.float64, dtype);
+            quantile.shape.Should().Equal(new long[] { 0 }, dtype);
+            using var percentile = np.percentile(a, 50.0, axes);
+            percentile.shape.Should().Equal(new long[] { 0 }, dtype);
+            using var kept = np.quantile(a, 0.5, axes, keepdims: true);
+            kept.shape.Should().Equal(new long[] { 0, 1, 1 }, dtype);
+            using var two = np.quantile(a, new[] { 0.25, 0.5 }, axes);
+            two.shape.Should().Equal(new long[] { 2, 0 }, dtype);
+        }
+        foreach (var (dtype, add, subtract) in new[]
+                 {
+                     ("U3", "the resolved dtypes are not compatible with add.reduce. Resolved (dtype('<U3'), dtype('<U3'), dtype('<U6'))",
+                      "ufunc 'subtract' did not contain a loop with signature matching types (dtype('<U3'), dtype('<U3')) -> None"),
+                     ("S3", "the resolved dtypes are not compatible with add.reduce. Resolved (dtype('S3'), dtype('S3'), dtype('S6'))",
+                      "ufunc 'subtract' did not contain a loop with signature matching types (dtype('S3'), dtype('S3')) -> None"),
+                     ("T", "ufunc 'divide' did not contain a loop with signature matching types (<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.Int64DType'>) -> None",
+                      "ufunc 'subtract' did not contain a loop with signature matching types (<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.StringDType'>) -> None"),
+                 })
+        {
+            using var a = EmptyB1(dtype);
+            new Action(() => np.median(a, axes)).Should().Throw<TypeError>().WithMessage(add, dtype);
+            new Action(() => np.quantile(a, 0.5, axes)).Should().Throw<TypeError>().WithMessage(subtract, dtype);
+            new Action(() => np.percentile(a, 50.0, axes)).Should().Throw<TypeError>().WithMessage(subtract, dtype);
+            // A selecting method takes no subtract: the empty text result in the data's dtype.
+            using var lower = np.quantile(a, 0.5, axes, method: "lower");
+            lower.dtype.Should().Be(a.dtype, dtype);
+            lower.shape.Should().Equal(new long[] { 0 }, dtype);
         }
     }
 
     /// <summary>
-    ///     The empty tuple merges NOTHING into a trailing axis of length 1, so empty data fails the same reshape
-    ///     (<c>(0,3,4,newaxis)</c>), while non-empty data reduces each element alone: <c>np.median(arange(6.).reshape(2, 3),
-    ///     axis=())</c> is the data itself, float64 <c>(2, 3)</c>.
+    ///     The empty tuple merges NOTHING into a trailing axis of length 1 (<c>math.prod(())</c> is 1), so each element is
+    ///     reduced alone: empty data gives the empty float64 <c>(0, 3, 4)</c> (NumPy 2.4's <c>-1</c> raised a reshape error
+    ///     there), and <c>np.median(arange(6.).reshape(2, 3), axis=())</c> is the data itself, float64 <c>(2, 3)</c>.
     /// </summary>
     [TestMethod]
     public void EmptyTuple_MergesIntoALengthOneAxis()
     {
         var none = Array.Empty<int>();
         using var z = EmptyB1("float64");
-        Action median = () => np.median(z, none);
-        median.Should().Throw<IncorrectShapeException>().WithMessage("cannot reshape array of size 0 into shape (0,3,4,newaxis)");
-        Action quantile = () => np.quantile(z, 0.5, none);
-        quantile.Should().Throw<IncorrectShapeException>().WithMessage("cannot reshape array of size 0 into shape (0,3,4,newaxis)");
+        using var emptyMedian = np.median(z, none);
+        emptyMedian.dtype.Should().Be(np.float64);
+        emptyMedian.shape.Should().Equal(0L, 3L, 4L);
+        using var emptyQuantile = np.quantile(z, 0.5, none);
+        emptyQuantile.shape.Should().Equal(0L, 3L, 4L);
         using var a = np.arange(6.0).reshape(2, 3);
         using var m = np.median(a, none);
         m.dtype.Should().Be(np.float64);
@@ -86,28 +121,35 @@ public class np_quantile_family_Prologue_Tests
     }
 
     /// <summary>
-    ///     The merge comes before everything the reduction function checks: an unknown method, a 3-D q, an empty text q
-    ///     (which passes NumPy's [0, 1] check), weights. Each of these is NumPy's reshape error over B1's data.
+    ///     With the merge resolved (NumPy 2.5.4), B1's data reaches everything the reduction function checks, each with its
+    ///     own error: an unknown method, a 3-D q, an empty text q (which passes NumPy's [0, 1] check and then meets the
+    ///     virtual index arithmetic); weights with <c>inverted_cdf</c> reduce to the empty float64 result. NumPy 2.4 raised
+    ///     the merge's reshape error for every one of them.
     /// </summary>
     [TestMethod]
-    public void Merge_PrecedesTheMethodQsRankTextQAndWeights()
+    public void EmptyKeptAxis_ReachesTheMethodQsRankTextQAndWeights()
     {
         int[] axes = { 1, 2 };
         using var a = EmptyB1("float64");
         Action bogus = () => np.quantile(a, 0.5, axes, method: "bogus");
-        bogus.Should().Throw<IncorrectShapeException>().WithMessage(MergeText);
+        bogus.Should().Throw<ValueError>().WithMessage("'bogus' is not a valid method. Use one of: dict_keys(['inverted_cdf', " +
+            "'averaged_inverted_cdf', 'closest_observation', 'interpolated_inverted_cdf', 'hazen', 'weibull', 'linear', " +
+            "'median_unbiased', 'normal_unbiased', 'lower', 'higher', 'midpoint', 'nearest'])");
         using var q3 = np.full(new Shape(1, 1, 1), 0.5);
         Action rank = () => np.quantile(a, q3, axes);
-        rank.Should().Throw<IncorrectShapeException>().WithMessage(MergeText);
+        rank.Should().Throw<ValueError>().WithMessage("q must be a scalar or 1d");
         using var textQ = np.zeros(new Shape(0), np.dtype("U1"));
         Action text = () => np.quantile(a, textQ, axes);
-        text.Should().Throw<IncorrectShapeException>().WithMessage(MergeText);
+        text.Should().Throw<TypeError>().WithMessage("The 'out' kwarg is necessary when using the string multiply ufunc directly. " +
+            "Use numpy.strings.multiply to multiply strings without specifying 'out'.");
         using var stringQ = np.zeros(new Shape(0), np.dtype("T"));
         Action vstring = () => np.quantile(a, stringQ, axes);
-        vstring.Should().Throw<IncorrectShapeException>().WithMessage(MergeText);
+        vstring.Should().Throw<TypeError>().WithMessage(
+            "ufunc 'floor' did not contain a loop with signature matching types <class 'numpy.dtypes.StringDType'> -> None");
         using var w = np.ones(new Shape(0, 3, 4));
-        Action weighted = () => np.quantile(a, 0.5, axes, method: "inverted_cdf", weights: w);
-        weighted.Should().Throw<IncorrectShapeException>().WithMessage(MergeText);
+        using var weighted = np.quantile(a, 0.5, axes, method: "inverted_cdf", weights: w);
+        weighted.dtype.Should().Be(np.float64);
+        weighted.shape.Should().Equal(0L);
     }
 
     /// <summary>

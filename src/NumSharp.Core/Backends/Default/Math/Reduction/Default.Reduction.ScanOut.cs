@@ -26,10 +26,10 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError"><paramref name="out"/> is read-only (<c>output array is read-only</c>).</exception>
         /// <exception cref="NumSharpException">A read-only <paramref name="out"/>: the <see cref="ValueError"/> <c>output array
         ///     is read-only</c> that <see cref="NumSharpException.ThrowIfNotWriteable"/> raises, checked first.</exception>
-        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have <paramref name="result"/>'s shape and
-        ///     NumPy's accumulate refuses it: the text of the statement that refuses (<see cref="StoreIntoMisfitOut"/>; parity
-        ///     QA-31), the house shape exception standing in for NumPy's ValueError. The outs NumPy accepts are stored
-        ///     (parity QA-54).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have <paramref name="result"/>'s shape:
+        ///     the text of the statement that refuses it (<see cref="MisfitOutError"/>; parity QA-31), the house shape
+        ///     exception standing in for NumPy's ValueError. NumPy 2.5 refuses every such out (2.4 stored into some, parity
+        ///     QA-54).</exception>
         /// <remarks>
         ///     Moved from <c>APIs/np.cumsum.cs</c> with the two scans (the np-layer dtype plan's P0 pilot). The store still
         ///     goes through <c>np.copyto</c>, a structural call into the facade that the plan's P6 replaces with an engine
@@ -44,55 +44,42 @@ namespace NumSharp.Backends
             // ahead of the accumulation-shape check). Without the guard the copyto below raised
             // the generic assignment text instead of NumPy's ufunc-out wording.
             NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
-            if (!@out.Shape.Equals(result.Shape))
-                // Another shape: PyUFunc_Accumulate's path decides between a refusal (its statement's text) and a store into
-                // the cells its iterator walks.
-                return StoreIntoMisfitOut(result, @out, arr, axis, loop);
+            if (!SameDimensions(@out.Shape, result.Shape))
+                // Other dimensions: PyUFunc_Accumulate's path decides which statement refuses it (its iterator's, or the
+                // dimension check that follows on every path since NumPy 2.5).
+                throw MisfitOutError(@out, arr, axis, loop);
             UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_UNSAFE_CASTING);
             return @out;
         }
 
         /// <summary>
-        ///     NumPy's <c>PyUFunc_Accumulate</c> for an <c>out=</c> whose dimensions are not the accumulation's, on the path it
-        ///     takes. Its outer ITERATOR (an input of more than one dimension, a loop dtype other than the input's or the
-        ///     out's, an unaligned operand, an out whose bounds overlap the input's) refuses with NpyIter's texts
+        ///     NumPy's <c>PyUFunc_Accumulate</c> refusal of an <c>out=</c> whose dimensions are not the accumulation's, on the
+        ///     path it takes. Its outer ITERATOR (an input of more than one dimension, a loop dtype other than the input's or
+        ///     the out's, an unaligned operand, an out whose bounds overlap the input's) refuses first with NpyIter's texts
         ///     (<see cref="AccumulateIteratorShapeError"/>: <c>operands could not be broadcast together with remapped shapes
-        ///     [original-&gt;remapped]: (4,3)-&gt;(4,3) (3,4)-&gt;(3,4) </c> and its two siblings; parity QA-31) and otherwise
-        ///     WRITES the cells it walks; the DIRECT 1-D path refuses with <c>provided out is the wrong size for the
-        ///     accumulation.</c>. On both paths an empty input along the axis or an empty out returns the out untouched,
-        ///     before the direct path compares the dimensions (parity QA-54).
+        ///     [original-&gt;remapped]: (4,3)-&gt;(4,3) (3,4)-&gt;(3,4) </c> and its two siblings; parity QA-31); whatever the
+        ///     iterator accepts (a longer out, an input broadcast against the out) and every direct 1-D call then meets the
+        ///     dimension comparison NumPy 2.5 runs on both paths: <c>provided out is the wrong size for the accumulation.</c>.
         /// </summary>
-        /// <param name="result">The accumulation over the input (the input's dimensions; 1-D for the flattened form).</param>
-        /// <param name="out">The caller's writeable out (its dimensions differ from <paramref name="result"/>'s).</param>
+        /// <param name="out">The caller's writeable out (its dimensions differ from the accumulation's).</param>
         /// <param name="arr">The array as the caller passed it (before any flattening).</param>
         /// <param name="axis">The accumulated axis (already validated), or null for the flattened array.</param>
         /// <param name="loop">The loop dtype (NumPy's resolved <c>descrs</c>: all three are this dtype for add / multiply).</param>
-        /// <returns><paramref name="out"/> itself, written where NumPy's iterator writes it, or untouched.</returns>
-        /// <exception cref="IncorrectShapeException">An out NumPy's accumulate refuses: the iterator's texts, or the direct
-        ///     path's wrong-size text.</exception>
+        /// <returns>The exception to throw (never null): the out is never written.</returns>
         /// <remarks>
-        ///     <para>
-        ///     The iterator's writes (op_axes naming the input's axes for both operands, then the accumulated axis removed
-        ///     and walked by the inner loop over the INPUT's extent): an out with more dimensions than the input keeps its
-        ///     extra trailing axes at index 0; along the accumulated axis only the input's extent is written (an input of
-        ///     extent 1 writes the first cell, copying the input's first element); along the other axes an input of extent 1
-        ///     broadcasts against the out's longer extent. Accumulating first and broadcasting the result after is the same
-        ///     value, since the broadcast axis is not the accumulated one. The cells outside keep the out's contents. The
-        ///     StringDType accumulation (<see cref="Strings.NDVStringReduction"/>) shares the views.
-        ///     </para>
-        ///     <para>
-        ///     A 0-d out on the direct path crashes NumPy 2.4.2 (it reads the out's stride along the axis before its empty
-        ///     exits); the direct path's text is raised instead.
-        ///     </para>
+        ///     NumPy 2.5 (gh-32709) moved the dimension check out of the direct path's branch to right after the iterator, ahead
+        ///     of the empty-input / empty-out exits, so no out of other dimensions is ever written or returned. NumPy 2.4
+        ///     compared the dimensions on the direct path only, after those exits (an empty input or an empty out returned the
+        ///     out untouched), and its iterator wrote the cells it walked of an out it accepted (parity QA-54); a 0-d out on
+        ///     its direct path crashed it.
         /// </remarks>
-        internal static NDArray StoreIntoMisfitOut(NDArray result, NDArray @out, NDArray arr, int? axis, DType loop)
+        internal static IncorrectShapeException MisfitOutError(NDArray @out, NDArray arr, int? axis, DType loop)
         {
             // PyArray_CheckAxis: axis=None, and any axis of a 0-d input, accumulate the C-order RAVEL, a 1-D array that is a
             // view of a C-contiguous input (its memory, so its alignment and its overlap with the out) and a fresh aligned
             // copy otherwise (it shares nothing). Every other call accumulates the input itself.
             bool raveled = axis is null || arr.ndim == 0;
             long[] inDims = raveled ? new[] { arr.size } : arr.Shape.dimensions;
-            int accAxis = raveled ? 0 : NormalizeAxis(axis.Value, arr.ndim);
             bool readsInputMemory = !raveled || arr.Shape.IsContiguous;
             // need_outer_iterator, NumPy's test order: more than one dimension, an unaligned operand or a loop descriptor
             // that is not equivalent to an operand's, else an out whose bounds may overlap the input's (NPY_MAY_SHARE_BOUNDS:
@@ -103,53 +90,36 @@ namespace NumSharp.Backends
                             || !DTypeCasting.EquivTypes(loop, arr.dtype)
                             || !DTypeCasting.EquivTypes(loop, @out.dtype)
                             || readsInputMemory && NDMemOverlap.SolveMayShareMemory(@out, arr, maxWork: 0) != MemOverlap.No;
-            if (iterator)
-            {
-                // NpyIter_AdvancedNew refuses before anything runs.
-                if (AccumulateIteratorShapeError(@out.Shape.dimensions ?? Array.Empty<long>(), inDims) is { } refusal)
-                    throw refusal;
-            }
-            else if (@out.ndim == 0)
-            {
-                // The direct path reads the out's stride along the axis first, which a 0-d out lacks: NumPy 2.4.2 crashes
-                // there, for an empty input too. Its text for an out of the wrong size is NumSharp's answer.
-                throw new IncorrectShapeException("provided out is the wrong size for the accumulation.");
-            }
+            // NpyIter_AdvancedNew refuses before anything runs.
+            if (iterator && AccumulateIteratorShapeError(@out.Shape.dimensions ?? Array.Empty<long>(), inDims) is { } refusal)
+                return refusal;
+            // Then the dimension comparison of the out (op[0]) with the input (op[1]), which these dimensions fail.
+            return new IncorrectShapeException("provided out is the wrong size for the accumulation.");
+        }
 
-            // `if (PyArray_DIM(op[1], axis) == 0) goto finish; else if (PyArray_SIZE(op[0]) == 0) goto finish;` — both paths,
-            // before the direct path compares the dimensions: nothing is written and the out comes back.
-            long count = inDims[accAxis];
-            if (count == 0 || @out.size == 0)
-                return @out;
-            if (!iterator)
-                throw new IncorrectShapeException("provided out is the wrong size for the accumulation.");
-
-            // The cells the iterator walks: the out's leading input-rank axes (later ones at index 0), the accumulated axis cut
-            // to the input's extent; the result broadcasts along the axes where the input had extent 1.
-            NDArray view = Strings.NDVStringReduction.LeadingAxesView(@out, inDims.Length);
-            NDArray target = view.Shape.dimensions[accAxis] == count ? view : Strings.NDVStringReduction.AxisPrefixView(view, accAxis, count);
-            try
-            {
-                // The loop wrote in its own dtype and NumPy's UPDATEIFCOPY copy-back casts it unsafely, as the full store does.
-                UnmanagedStorage.Copyto(target, result, NPY_CASTING.NPY_UNSAFE_CASTING);
-            }
-            finally
-            {
-                // The views are this call's own; the caller's out is returned.
-                if (!ReferenceEquals(target, view))
-                    target.Dispose();
-                if (!ReferenceEquals(view, @out))
-                    view.Dispose();
-            }
-
-            return @out;
+        /// <summary>
+        ///     Whether two shapes have the same dimensions (ranks and extents; strides, offsets and flags are not compared):
+        ///     <c>PyArray_CompareLists</c> over <c>PyArray_DIMS</c>, the comparison NumPy's accumulate makes of its out.
+        /// </summary>
+        /// <param name="x">The first shape.</param>
+        /// <param name="y">The second shape.</param>
+        /// <returns>True for equal ranks and extents.</returns>
+        private static bool SameDimensions(Shape x, Shape y)
+        {
+            long[] dx = x.dimensions ?? Array.Empty<long>(), dy = y.dimensions ?? Array.Empty<long>();
+            if (dx.Length != dy.Length)
+                return false;
+            for (int i = 0; i < dx.Length; i++)
+                if (dx[i] != dy[i])
+                    return false;
+            return true;
         }
 
         /// <summary>
         ///     The shape errors of <c>PyUFunc_Accumulate</c>'s iterator over (out, input) with <c>op_axes</c>
         ///     <c>[0 .. ndim-1]</c> for both, in NpyIter's order: the out's <c>op_axes</c> entries first (an out with fewer
         ///     dimensions than the input), then the broadcast of each operand's extents, then the out's NO_BROADCAST check.
-        ///     Shared by the numeric scans (<see cref="StoreIntoMisfitOut"/>) and the StringDType accumulation.
+        ///     Shared by the numeric scans (<see cref="MisfitOutError"/>) and the StringDType accumulation.
         /// </summary>
         /// <param name="outDims">The out's dimensions.</param>
         /// <param name="inDims">The accumulated input's dimensions (already flattened for <c>axis=None</c>).</param>

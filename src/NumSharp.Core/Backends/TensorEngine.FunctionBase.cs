@@ -75,8 +75,6 @@ namespace NumSharp
         ///     prologue); text data with an empty reduced axis.</exception>
         /// <exception cref="IndexOutOfRangeException">Numeric data whose reduced axes hold no element (NumPy's IndexError
         ///     texts).</exception>
-        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0 (NumPy's ValueError
-        ///     <c>cannot reshape array of size 0 into shape (0,newaxis)</c>).</exception>
         /// <exception cref="InvalidCastException">A q array of a complex dtype.</exception>
         /// <exception cref="OverflowException">An integer q array whose virtual indexes leave its dtype.</exception>
         /// <remarks>
