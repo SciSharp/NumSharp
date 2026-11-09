@@ -1675,5 +1675,76 @@ namespace NumSharp.Tests
             np.put(a, index, value);
             a.GetDouble(0).Should().Be(300.0);
         }
+
+        // ------------------------------------------------------------------
+        // QB-60 — an explicit axis=None (axis: null) is ambiguous where an int? and an int[] axis overload coexist
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>axis=None</c> is spelled explicitly wherever code forwards its own axis argument
+        ///     (<c>np.median(a, axis=axis)</c> with <c>axis=None</c>). Nine NumSharp functions declare the axis twice, an
+        ///     <c>int? axis</c> overload and a tuple-axis <c>int[] axis</c> overload with the same other parameters, and
+        ///     the null literal converts equally well to both, so <c>np.flip(a, axis: null)</c>, <c>np.ptp(a, axis: null)</c>,
+        ///     <c>np.average(a, axis: null, weights: w)</c>, <c>np.median</c>, <c>np.nanmedian</c>, <c>np.quantile</c>,
+        ///     <c>np.percentile</c>, <c>np.nanquantile</c> and <c>np.nanpercentile</c> with <c>axis: null</c> are CS0121
+        ///     (named or positional); np.all / np.any resolve through <c>[OverloadResolutionPriority]</c>, and every
+        ///     reduction with one <c>int? axis</c> binds (q166, q167). A compile error cannot fail at run time, and the
+        ///     runtime binder sees a null <c>dynamic</c> as <c>object</c>, so this pin reads the overload sets: it lists the
+        ///     functions with an <c>int?</c> / <c>int[]</c> axis pair that agree on every other parameter type and carry the
+        ///     same priority, which is exactly when C# cannot pick one for <c>axis: null</c>.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB60")]
+        public void ParityQb_QB60_ExplicitAxisNone_BindsOneOverload()
+        {
+            var names = new[]
+            {
+                "flip", "ptp", "average", "median", "nanmedian", "quantile", "percentile", "nanquantile", "nanpercentile",
+            };
+
+            // NumPy 2.4.2: every one of these accepts axis=None spelled explicitly
+            names.Where(HasAmbiguousNullAxisPair).Should().BeEmpty();
+        }
+
+        /// <summary>
+        ///     True when <paramref name="name"/> has two public static <c>np</c> overloads that differ only in an
+        ///     <c>axis</c> parameter typed <c>int?</c> in one and <c>int[]</c> in the other, with equal
+        ///     <c>[OverloadResolutionPriority]</c>: C#'s overload resolution then finds neither better for a null
+        ///     <c>axis</c> argument (CS0121).
+        /// </summary>
+        /// <param name="name">The <c>np</c> method name.</param>
+        /// <returns>Whether an explicit <c>axis: null</c> call to <paramref name="name"/> is ambiguous.</returns>
+        private static bool HasAmbiguousNullAxisPair(string name)
+        {
+            var overloads = typeof(np).GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                .Where(m => m.Name == name && !m.IsGenericMethodDefinition).ToArray();
+
+            // The priority as the compiler reads it: the attribute is matched by full name (NumSharp ships its own copy
+            // for net8.0), and an absent attribute is priority 0.
+            static int Priority(System.Reflection.MethodInfo m)
+            {
+                var attribute = m.GetCustomAttributes(false).FirstOrDefault(a =>
+                    a.GetType().FullName == "System.Runtime.CompilerServices.OverloadResolutionPriorityAttribute");
+                return attribute is null ? 0 : (int)attribute.GetType().GetProperty("Priority").GetValue(attribute);
+            }
+
+            foreach (var withNullable in overloads)
+            foreach (var withArray in overloads)
+            {
+                var p = withNullable.GetParameters();
+                var q = withArray.GetParameters();
+                if (p.Length != q.Length || Priority(withNullable) != Priority(withArray))
+                    continue;
+
+                int axis = Array.FindIndex(p, x => x.Name == "axis" && x.ParameterType == typeof(int?));
+                if (axis < 0 || q[axis].Name != "axis" || q[axis].ParameterType != typeof(int[]))
+                    continue;
+
+                // Every other parameter must agree, or some other argument decides between the two overloads.
+                if (Enumerable.Range(0, p.Length).All(i => i == axis || p[i].ParameterType == q[i].ParameterType))
+                    return true;
+            }
+
+            return false;
+        }
     }
 }
