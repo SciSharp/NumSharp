@@ -78,18 +78,13 @@ namespace NumSharp.Statistics
         ///     axis 0 with size 0</c>).</exception>
         /// <exception cref="ValueError">A q of rank above 2 (<c>q must be a scalar or 1d</c>), or <paramref name="out"/> of
         ///     another shape than the result (<c>output array does not match result of ndarray.take</c>).</exception>
-        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0: <c>_ureduce</c>'s
-        ///     merge <c>reshape(kept + (-1,))</c> cannot resolve its -1 (<c>cannot reshape array of size 0 into shape
-        ///     (0,newaxis)</c>, NumPy's ValueError text under the house reshape exception).</exception>
         /// <exception cref="ValueError">An unknown method (NumPy's <c>'x' is not a valid method</c> text; a ValueError is an
         ///     <see cref="ArgumentException"/>).</exception>
         /// <exception cref="TypeError">An interpolating method (NumPy's <c>_lerp</c> subtracts the text: see
         ///     <see cref="Backends.Strings.NDStringUfuncs.QuantileError"/>; over <c>StringDType</c> the Python subtraction of
         ///     the two neighbours, <c>unsupported operand type(s) for -: 'str' and 'str'</c>, or no <c>subtract</c> loop for a
         ///     non-scalar result; a text <paramref name="out"/> passes <c>_lerp</c>'s add and meets its subtract's
-        ///     refusal; an integer / bool out the add's same_kind cast); <paramref name="out"/>'s dtype does not cast
-        ///     safely to the data's (<c>Cannot cast array data from dtype('&lt;U5') to dtype('&lt;U2') according to the rule
-        ///     'safe'</c>; <c>Cannot cast scalar from ...</c> for a 0-d out); or keepdims without <paramref name="out"/> over
+        ///     refusal; an integer / bool out the add's same_kind cast); or keepdims without <paramref name="out"/> over
         ///     a 0-d result (<c>string indices must be integers, not 'tuple'</c> for <c>U</c> and a <c>StringDType</c> str,
         ///     <c>byte indices must be integers or slices, not tuple</c> for <c>S</c>, <c>'float' object is not
         ///     subscriptable</c> / <c>'NoneType' object is not subscriptable</c> for a <c>StringDType</c> NA object: NumPy
@@ -97,8 +92,11 @@ namespace NumSharp.Statistics
         /// <exception cref="AxisError">An axis is out of range (the prologue's first check).</exception>
         /// <exception cref="ValueError">An axis repeats (<c>repeated axis</c>, the prologue).</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements holding a None-like NA (the sort's
-        ///     <c>Cannot compare null that is not a nan-like value</c>), or the unsafe write-back into a numeric
-        ///     <paramref name="out"/> that cannot parse a string (<c>could not convert string to float: 'a'</c>).</exception>
+        ///     <c>Cannot compare null that is not a nan-like value</c>); the unsafe write-back into a numeric
+        ///     <paramref name="out"/> that cannot parse a string (<c>could not convert string to float: 'a'</c>,
+        ///     <c>invalid literal for int() with base 10: np.str_('a')</c>); or a read-only <paramref name="out"/>
+        ///     (<c>WRITEBACKIFCOPY base is read-only</c>, the take's checks: NumPy 2.5 accepts an out of any dtype, where 2.4
+        ///     refused one that did not cast safely to the data's).</exception>
         /// <exception cref="TypeError">With <paramref name="partitionRaises"/>, for every known method:
         ///     <c>chararray.partition() got an unexpected keyword argument 'axis'</c> — after the checks above it, before the
         ///     interpolating methods' refusal and the take.</exception>
@@ -114,8 +112,8 @@ namespace NumSharp.Statistics
             int nd = a.ndim;
             // _ureduce, the family's one prologue (DefaultEngine.UReduce): the axes normalized, keepdims' view of out (the
             // reduced axes taken at 0, every axis for axis=None), then the merge of several reduced axes into one last axis
-            // behind the kept ones — `a.reshape(a.shape[:nkeep] + (-1,))`, whose -1 NumPy refuses to resolve when a kept axis
-            // is 0 long ("cannot reshape array of size 0 into shape (0,newaxis)"), before q's rank is looked at.
+            // behind the kept ones — `a.reshape(a.shape[:nkeep] + (math.prod(a.shape[nkeep:]),))`, which NumPy 2.5.4 resolves
+            // beside a kept axis of length 0 too — before q's rank is looked at.
             UReduced prologue = DefaultEngine.UReduce(a, axes, @out, keepdims);
             int[] reduced = prologue.Reduced;
             NDArray target = prologue.Target;
@@ -220,15 +218,10 @@ namespace NumSharp.Statistics
             NDArray sorted = n > 1 ? np.sort(arr, 0) : arr;
 
             if (target is not null)
-            {
-                // PyArray_TakeFrom: out's shape first, then the safe cast from out's dtype to the data's.
-                if (!SameDims(target.Shape.dimensions, resultShape))
-                    throw new ValueError("output array does not match result of ndarray.take");
-                // PyArray_FromArray(out, data dtype): npy_set_invalid_cast_error names a 0-d out a "scalar".
-                if (!np.can_cast(target.dtype, arr.dtype, "safe"))
-                    throw new TypeError($"Cannot cast {(target.ndim == 0 ? "scalar" : "array data")} from {target.dtype.ToString(true)} " +
-                                        $"to {arr.dtype.ToString(true)} according to the rule 'safe'");
-            }
+                // PyArray_TakeFrom's out checks (NumPy 2.5): the shape, the FORCECAST copy's cast of a text out's contents
+                // into the data's dtype, the write-back base's writeability — before the empty-axis and index checks below.
+                // NumPy 2.4's SAFE check of out's dtype to the data's (U6 into U1 refused) is gone.
+                UnmanagedStorage.ValidateTakeOut(arr, target, resultShape);
             if (n == 0 && resultSize != 0)
                 throw new IndexError("cannot do a non-empty take from an empty axes.");
             // npy_fasttake checks every index (the outer product before the axis is one line), in C order of q.
@@ -361,19 +354,5 @@ namespace NumSharp.Statistics
         /// <returns><c>n * q + (alpha + q * (1 - alpha - beta)) - 1</c>.</returns>
         private static double ComputeVirtualIndex(double n, double q, double alpha, double beta)
             => n * q + (alpha + q * (1 - alpha - beta)) - 1;
-
-        /// <summary>Whether two dimension lists are equal.</summary>
-        /// <param name="a">The first.</param>
-        /// <param name="b">The second.</param>
-        /// <returns>True when they have the same length and values.</returns>
-        private static bool SameDims(long[] a, long[] b)
-        {
-            if (a.Length != b.Length)
-                return false;
-            for (int i = 0; i < a.Length; i++)
-                if (a[i] != b[i])
-                    return false;
-            return true;
-        }
     }
 }

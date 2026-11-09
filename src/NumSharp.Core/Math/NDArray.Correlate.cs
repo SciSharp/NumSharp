@@ -24,7 +24,7 @@ namespace NumSharp
         ///     Python's <c>repr</c>); then <c>object of too small depth for desired array</c> (a 0-d operand) or <c>object too
         ///     deep for desired array</c> (two or more dimensions), <c>first array argument cannot be empty</c> /
         ///     <c>second array argument cannot be empty</c>, or — for a fixed-width string operand, after every check
-        ///     above — <c>data type must provide an itemsize</c>.</exception>
+        ///     above — <c>function not available for this data type</c>.</exception>
         /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate.</exception>
         /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>): <c>convolve/correlate mode not
         ///     understood</c>. A <c>StringDType</c> operand: NumPy's legacy-only descriptor refusal (a <c>StringDType</c>

@@ -174,8 +174,9 @@ namespace NumSharp.Backends.Strings
         {
             var a1 = t1.Storage.VStringSlice.Allocator;
             var a2 = t2.Storage.VStringSlice.Allocator;
-            // The NA rule and the default string are the FIRST descriptor's (NumPy's descr1), whatever the swap.
-            var descr1 = t1.dtype;
+            // The NA rule and the default string are the effective NA descriptor's (NumPy 2.5.2: the first operand with an
+            // NA object; NumPy 2.4 read descr1), whatever the swap.
+            var descr1 = NDVStringCells.EffectiveNADescr(t1.dtype, t2.dtype);
             byte[] defaultText = NDUtf8.Encode(descr1.VString.default_string);
             VStringAllocator.acquire_allocators(a1, a2);
             try

@@ -774,54 +774,66 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's refusal of a <c>StringDType</c> operand in the BLAS-style products (<c>dot</c>, <c>inner</c>,
-        ///     <c>vdot</c>, <c>tensordot</c>, <c>convolve</c>, <c>correlate</c>): their C entry points accept only legacy
-        ///     descriptors (<c>PyArray_DescrFromType</c> of the operands' common type number), and a <c>StringDType</c> operand
-        ///     stops them before any shape check (probed: <c>np.dot</c> of misaligned <c>StringDType</c> vectors gives this
-        ///     text, not the alignment error). The message is two lines, NumPy's typo (<c>arbitraryuser</c>) included.
+        ///     The descriptor NumPy 2.5's products start from (<c>dot</c>, <c>inner</c>, <c>vdot</c>, <c>tensordot</c>,
+        ///     <c>correlate</c>, <c>convolve</c>): <c>PyArray_DTypeFromObject</c> on the first operand, then on the second,
+        ///     then <c>NPY_DT_CALL_ensure_canonical</c> — the second operand's descriptor PROMOTED with the first's, or null
+        ///     when the two have no common descriptor: the discovery's <c>handle_promotion</c> swallows that failure and goes
+        ///     on with OBJECT, so the product runs over Python objects.
         /// </summary>
-        /// <param name="descr">The <c>StringDType</c> descriptor NumPy names.</param>
-        /// <returns>The exception (not thrown).</returns>
-        internal static TypeError VStringProductError(DType descr)
-            => new TypeError(
-                "This function currently only supports native NumPy dtypes and old-style user dtypes, but the dtype was " +
-                $"{descr}.\n(The function may need to be updated to support arbitraryuser dtypes.)");
-
-        /// <summary>
-        ///     The descriptor lookup NumPy's legacy products start with (<c>PyArray_ObjectType(op1, NPY_NOTYPE)</c>, then
-        ///     <c>PyArray_ObjectType(op2, typenum)</c>) when one operand holds <c>StringDType</c> text: the refusal of a
-        ///     descriptor that is not legacy, or null when NumPy goes on with an OBJECT array.
-        /// </summary>
-        /// <param name="a">The first operand (<c>op1</c>).</param>
-        /// <param name="b">The second operand (<c>op2</c>; for <c>np.convolve</c> the reversed kernel, of the same dtype).</param>
-        /// <returns>The legacy-only <see cref="TypeError"/>, or null for the OBJECT fallback.</returns>
+        /// <param name="a">The first operand.</param>
+        /// <param name="b">The second operand.</param>
+        /// <returns>The common descriptor (an <c>S</c> / <c>U</c> width resolved — <c>&lt;U1</c> with float64 is
+        ///     <c>&lt;U32</c> —, a <c>StringDType</c>'s NA object and <c>coerce</c> flag combined), or null for OBJECT:
+        ///     <c>StringDType</c> beside any class but <c>U</c> and <c>StringDType</c>, or two <c>StringDType</c> operands
+        ///     with different NA objects.</returns>
         /// <remarks>
-        ///     A <c>StringDType</c> first operand is refused at once. A <c>StringDType</c> second operand is discovered by
-        ///     PROMOTING the first operand's descriptor with its own: a <c>U</c> first operand (<c>StrDType</c>) gives a
-        ///     <c>StringDType</c>, refused the same way (named by the promoted descriptor); every other class has no common
-        ///     DType with <c>StringDType</c>, and the legacy discovery swallows that failure and continues with OBJECT
-        ///     (<c>handle_promotion</c>'s <c>PROMOTION_FAILED</c> branch), so the product runs over Python objects.
+        ///     NumPy 2.4 looked up legacy type NUMBERS instead (<c>PyArray_ObjectType</c>): an unsized string type whose
+        ///     result allocation failed for want of an item size, and a refusal of every <c>StringDType</c> descriptor the
+        ///     lookup met (<c>This function currently only supports native NumPy dtypes ...</c>). Every descriptor
+        ///     NumSharp stores is already native, so <c>ensure_canonical</c> changes none.
         /// </remarks>
-        private static TypeError LegacyProductRefusal(NDArray a, NDArray b)
+        internal static DType ProductDescriptor(NDArray a, NDArray b)
         {
-            if (IsVString(a))
-                return VStringProductError(a.dtype);
-            DType promoted;
             try
             {
-                promoted = DTypePromotion.PromoteTypes(a.dtype, b.dtype);
+                // handle_promotion's PyArray_PromoteTypes(descr, *out_descr): the newly discovered (second) descriptor
+                // first, the one discovered before it second.
+                return DTypePromotion.PromoteTypes(b.dtype, a.dtype);
             }
             catch (Exception e) when (e is DTypePromotionError or TypeError)
             {
-                // No common DType: NumPy's discovery falls back to OBJECT instead of raising.
+                // No common class (DTypePromotionError), or StringDType's incompatible NA objects (common_instance's
+                // TypeError): NumPy continues with OBJECT instead of raising.
                 return null;
             }
-            return VStringProductError(promoted);
         }
 
         /// <summary>
-        ///     NumPy's answer for <c>np.dot</c> / <c>np.inner</c> with a <c>StringDType</c> operand, in the order of
-        ///     <c>PyArray_MatrixProduct2</c> (which <c>np.inner</c> reaches after the same descriptor lookup, with
+        ///     <c>PyArray_FromAny(op, typec, ...)</c>'s conversion check of one product operand into the common descriptor,
+        ///     under the 'safe' rule (the products pass no <c>NPY_ARRAY_FORCECAST</c>). Promotion makes every <c>S</c> /
+        ///     <c>U</c> / number pair safe; only a <c>U</c> operand beside <c>StringDType</c> fails (<c>U</c> to
+        ///     <c>StringDType</c> is a 'same_kind' cast).
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <param name="typec">The common descriptor (<see cref="ProductDescriptor"/>).</param>
+        /// <exception cref="TypeError">The cast is not safe: <c>Cannot cast array data from dtype('&lt;U1') to
+        ///     StringDType() according to the rule 'safe'</c> (<c>scalar</c> for a 0-d operand).</exception>
+        /// <remarks>A Python str (<see cref="NDArray.WasPythonStr"/>) is not cast: NumPy builds its array straight in the
+        ///     requested descriptor (it packs the text), so it never fails here.</remarks>
+        internal static void ThrowIfUnsafeProductCast(NDArray x, DType typec)
+        {
+            if (x.WasPythonStr)
+                return;
+            if (!DTypeCasting.CanCastTypeTo(x.dtype, typec, NPY_CASTING.NPY_SAFE_CASTING))
+                throw new TypeError(
+                    $"Cannot cast {(x.ndim == 0 ? "scalar" : "array data")} from {x.dtype.ToString(true)} to {typec.ToString(true)} " +
+                    "according to the rule 'safe'");
+        }
+
+        /// <summary>
+        ///     NumPy's answer for <c>np.dot</c> / <c>np.inner</c> computed over Python objects — a <c>StringDType</c> operand
+        ///     with no common descriptor beside the other (<see cref="ProductDescriptor"/> returned null) — in the order of
+        ///     <c>PyArray_MatrixProduct2</c> (which <c>np.inner</c> reaches after the same descriptor discovery, with
         ///     <paramref name="b"/> already transposed).
         /// </summary>
         /// <param name="a">The first operand.</param>
@@ -829,22 +841,17 @@ namespace NumSharp.Backends.Strings
         /// <param name="out">The <c>out=</c> array of <c>np.dot</c>, or null.</param>
         /// <returns>The exception to throw (never null).</returns>
         /// <remarks>
-        ///     <para>The descriptor lookup first (<see cref="LegacyProductRefusal"/>): a <c>StringDType</c> first operand, or a
-        ///     <c>U</c> one beside it, is the legacy-only refusal.</para>
-        ///     <para>Otherwise NumPy multiplies Python objects. A 0-d operand makes the product the OBJECT <c>multiply</c> ufunc
+        ///     NumPy multiplies Python objects. A 0-d operand makes the product the OBJECT <c>multiply</c> ufunc
         ///     (<c>out=</c> parsed and cast from <c>dtype('O')</c> first); otherwise the contracted lengths must align, an
         ///     <c>out=</c> must be an object array (<c>new_array_for_sum</c>), and <c>OBJECT_dot</c> multiplies
         ///     <c>a[0, ..., 0] * b[0, ..., 0]</c> first. That first product decides by the Python types alone: a float /
-        ///     complex / bytes / None beside a str raises Python's <see cref="TypeError"/> (<c>can't multiply sequence by
-        ///     non-int of type 'float'</c>, <c>unsupported operand type(s) for *: 'float' and 'NoneType'</c>). A product
+        ///     complex / bytes / str / None beside a str raises Python's <see cref="TypeError"/> (<c>can't multiply sequence
+        ///     by non-int of type 'float'</c>, <c>unsupported operand type(s) for *: 'float' and 'NoneType'</c>). A product
         ///     that does not raise (an int repeating the text) builds an object array, which NumSharp does not have: a
-        ///     <see cref="NotSupportedException"/>.</para>
+        ///     <see cref="NotSupportedException"/>.
         /// </remarks>
         internal static Exception VStringProductAnswer(NDArray a, NDArray b, NDArray @out)
         {
-            if (LegacyProductRefusal(a, b) is { } refusal)
-                return refusal;
-
             // `np.multiply(ap1, ap2, out)` over the object arrays: the out= parse, its cast from object, then the products.
             if (a.ndim == 0 || b.ndim == 0)
             {
@@ -884,8 +891,9 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's answer for <c>np.vdot</c> with a <c>StringDType</c> operand, in the order of <c>array_vdot</c>: the
-        ///     descriptor lookup, the two flattening reshapes, then <c>OBJECT_vdot</c>'s first product.
+        ///     NumPy's answer for <c>np.vdot</c> computed over Python objects — a <c>StringDType</c> operand with no common
+        ///     descriptor beside the other (<see cref="ProductDescriptor"/> returned null) — in the order of
+        ///     <c>array_vdot</c>: the two flattening reshapes, then <c>OBJECT_vdot</c>'s first product.
         /// </summary>
         /// <param name="a">The first operand (the one NumPy's vdot conjugates).</param>
         /// <param name="b">The second operand.</param>
@@ -894,9 +902,7 @@ namespace NumSharp.Backends.Strings
         ///     <paramref name="b"/> to <paramref name="a"/>'s length through the dims buffer it reuses (<c>cannot reshape array
         ///     of size 3 into shape (2,)</c>), before any element is read.</exception>
         /// <remarks>
-        ///     <para>The descriptor lookup first (<see cref="LegacyProductRefusal"/>): a <c>StringDType</c> first operand, or a
-        ///     <c>U</c> one beside it, is the legacy-only refusal.</para>
-        ///     <para>Otherwise NumPy converts both operands to OBJECT arrays and flattens them. <c>OBJECT_vdot</c> then calls
+        ///     <para>NumPy converts both operands to OBJECT arrays and flattens them. <c>OBJECT_vdot</c> then calls
         ///     <c>a[0].conjugate()</c> — a method <c>str</c>, <c>bytes</c> and <c>None</c> lack (Python's
         ///     <see cref="AttributeError"/>), and which turns a <c>bool</c> into an <c>int</c> — and multiplies the result by
         ///     <c>b[0]</c>, which decides by the Python types alone (<see cref="PyMultiplyError"/>). A product that does not
@@ -905,8 +911,6 @@ namespace NumSharp.Backends.Strings
         /// </remarks>
         internal static Exception VStringVdotAnswer(NDArray a, NDArray b)
         {
-            if (LegacyProductRefusal(a, b) is { } refusal)
-                return refusal;
             // ap1 = a raveled (its length n resolves the reused dims buffer), ap2 = b reshaped to (n,): a length mismatch is
             // b's reshape error, raised by the reshape itself.
             long n = a.size;
@@ -926,9 +930,11 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's answer for a sliding product with a <c>StringDType</c> operand — <c>PyArray_Correlate</c> (behind
-        ///     <c>np.convolve</c>) or <c>PyArray_Correlate2</c> (behind <c>np.correlate</c>) once the mode is parsed — in the
-        ///     order of those functions, over the operands as the C function receives them.
+        ///     NumPy's answer for a sliding product computed over Python objects — a <c>StringDType</c> operand with no
+        ///     common descriptor beside the other (<see cref="ProductDescriptor"/> returned null) — in
+        ///     <c>PyArray_Correlate</c> (behind <c>np.convolve</c>) or <c>PyArray_Correlate2</c> (behind
+        ///     <c>np.correlate</c>) once the mode is parsed, in the order of those functions, over the operands as the C
+        ///     function receives them.
         /// </summary>
         /// <param name="a">The first operand as the C function receives it (for <c>np.convolve</c>: the longer one, after
         ///     its Python swap).</param>
@@ -939,7 +945,6 @@ namespace NumSharp.Backends.Strings
         ///     <c>convolve</c> for <c>multiarray.correlate</c>, <c>correlate</c> for <c>multiarray.correlate2</c>.</param>
         /// <returns>The exception to throw (never null).</returns>
         /// <remarks>
-        ///     The descriptor lookup first (<see cref="LegacyProductRefusal"/>), then for the OBJECT fallback
         ///     <c>PyArray_FromAny(op, OBJECT, 1, 1)</c> (one dimension each: <c>object of too small depth for desired
         ///     array</c> / <c>object too deep for desired array</c>, the first operand first), <c>_pyarray_correlate</c>'s
         ///     emptiness checks (np.convolve made its own in Python, so they never fire behind it), the swap that makes
@@ -949,8 +954,6 @@ namespace NumSharp.Backends.Strings
         /// </remarks>
         internal static Exception VStringSlidingAnswer(NDArray a, NDArray v, int mode, string op)
         {
-            if (LegacyProductRefusal(a, v) is { } refusal)
-                return refusal;
             if (OneDimensionalError(a) is { } depthA)
                 return depthA;
             if (OneDimensionalError(v) is { } depthV)
@@ -1063,8 +1066,9 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     The refusal of a product NumPy computes over Python objects (its legacy products fall back to an OBJECT array
-        ///     when <c>StringDType</c> has no common DType with the other operand, and the first product did not raise).
+        ///     The refusal of a product NumPy computes over Python objects (its products' descriptor discovery falls back to
+        ///     an OBJECT array when <c>StringDType</c> has no common descriptor with the other operand, and the first
+        ///     product did not raise).
         /// </summary>
         /// <param name="op">The NumPy function (<c>dot</c>, <c>convolve</c>, <c>correlate</c>).</param>
         /// <param name="a">The first operand.</param>
@@ -1073,6 +1077,6 @@ namespace NumSharp.Backends.Strings
         private static NotSupportedException ObjectArrayRefusal(string op, NDArray a, NDArray b)
             => new NotSupportedException(
                 $"NumPy computes np.{op} of {a.dtype} and {b.dtype} as Python objects: the two descriptors have no common " +
-                "DType, so NumPy's legacy product falls back to an object array, which NumSharp does not have.");
+                "descriptor, so NumPy's product falls back to an object array, which NumSharp does not have.");
     }
 }

@@ -97,11 +97,13 @@ namespace NumSharp.Tests.Backends.Strings
             // ma.inner reshapes a 0-d operand to (1,) BEFORE np.inner checks the lengths.
             Action inner = () => np.ma.inner(MU(), "ab");
             inner.Should().Throw<Exception>().WithMessage("shapes (3,) and (1,) not aligned: 3 (dim 0) != 1 (dim 0)*");
-            // Matching lengths reach the result allocation, which the string type number cannot size — empty or not.
+            // Matching lengths reach NumPy 2.5's result in the common descriptor, which has no dot function; empty operands
+            // first zero-fill it from a bool False, which a one-character text cannot hold under the 'safe' rule.
             Action innerText = () => np.ma.inner(MU(), MU());
-            innerText.Should().Throw<ValueError>().WithMessage("data type must provide an itemsize");
+            innerText.Should().Throw<ValueError>().WithMessage("dot not available for this type");
             Action innerEmpty = () => np.ma.inner(Empty(), Empty());
-            innerEmpty.Should().Throw<ValueError>().WithMessage("data type must provide an itemsize");
+            innerEmpty.Should().Throw<TypeError>()
+                .WithMessage("Cannot cast scalar from dtype('bool') to dtype('<U1') according to the rule 'safe'");
             // ma.dot of an array and a str multiplies (no string loop); ma.outer calls np.multiply.outer directly.
             Action dot = () => np.ma.dot(MU(), "ab");
             dot.Should().Throw<TypeError>()

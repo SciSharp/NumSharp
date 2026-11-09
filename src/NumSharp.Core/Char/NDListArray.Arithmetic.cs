@@ -371,15 +371,29 @@ namespace NumSharp
             return @out;
         }
 
-        /// <summary>NumPy's <c>real</c> of an object array: the array ITSELF (<c>a.real is a</c>), so the caller must not
-        ///     dispose it separately.</summary>
+        /// <summary>
+        ///     NumPy's <c>real</c> of an object array since NumPy 2.5 (gh-30984): <c>getattr(element, "real", element)</c>
+        ///     elementwise into a NEW read-only array — a list has no <c>real</c>, so every element is the list itself —
+        ///     laid out as a ufunc output over this array (its memory order kept: a transposed array gives an F-contiguous
+        ///     result, a reversed or stepped one a contiguous result). NumPy 2.4 returned the array itself.
+        /// </summary>
+        /// <returns>A new read-only list array of the same lists; the caller owns (and disposes) it.</returns>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
+        /// <remarks>
+        ///     Read-only because NumPy 2.5 makes <c>.real</c> and <c>.imag</c> of an object array read-only, so an in-place
+        ///     change cannot silently miss the original. For a 0-d array NumPy returns the element (a Python list) rather
+        ///     than an array; NumSharp's member keeps its type and returns the 0-d read-only array holding it.
+        /// </remarks>
         public NDListArray real
         {
             get
             {
                 ThrowIfDisposed();
-                return this;
+                // The ufunc-style ArrayMethod allocates in K order (NpyIter's KEEPORDER), which copy('K') reproduces, and
+                // the copy shares the lists themselves (they are immutable heap ranges), as NumPy's references do.
+                var result = copy('K');
+                result.Ids.setflags(write: false);
+                return result;
             }
         }
 

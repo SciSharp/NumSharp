@@ -108,9 +108,9 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy 2.4.2 crashes (an access violation) in <c>np.lexsort</c> when a <c>StringDType</c> key is not contiguous
-        ///     along the axis — a transposed 2-D key, or a stepped 1-D key in a key list. NumSharp sorts and gives NumPy's
-        ///     answer for contiguous copies of the keys.
+        ///     NumPy crashes (an access violation) in <c>np.lexsort</c> when a <c>StringDType</c> key is not contiguous
+        ///     along the axis — a transposed 2-D key, or a stepped 1-D key in a key list (NumPy 2.4.2, and 2.5.4 still).
+        ///     NumSharp sorts and gives NumPy's answer for contiguous copies of the keys.
         /// </summary>
         [TestMethod]
         [Misaligned]
@@ -128,8 +128,9 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy 2.4.2's argsort of a BROADCAST <c>StringDType</c> view misorders arena texts (a 16-byte text lands before
-        ///     shorter, smaller ones); the same array copied sorts right. NumSharp sorts the view like its copy.
+        ///     NumPy's argsort of a BROADCAST <c>StringDType</c> view misorders arena texts (a 16-byte text lands before
+        ///     shorter, smaller ones) — in NumPy 2.4.2 and still in 2.5.4, in another wrong order; the same array copied sorts
+        ///     right. NumSharp sorts the view like its copy.
         /// </summary>
         [TestMethod]
         [Misaligned]
@@ -138,7 +139,8 @@ namespace NumSharp.Tests.Backends.Strings
             using var b = A(T, new string('a', 16), "b", new string('a', 17), "c");
             using var view = np.broadcast_to(b, new Shape(3, 4));
             using var order = np.argsort(view, null);
-            // NumPy's argsort of view.copy(); NumPy's own argsort of the view gives [4, 6, 10, 0, 2, 1, 5, 9, 3, 7, 11, 8].
+            // NumPy's argsort of view.copy(); NumPy 2.5.4's own argsort of the view gives [4, 8, 10, 0, 2, 1, 5, 9, 3, 7, 11, 6]
+            // (2.4.2's: [4, 6, 10, 0, 2, 1, 5, 9, 3, 7, 11, 8]).
             L(order).Should().Equal(0L, 4L, 8L, 2L, 6L, 10L, 1L, 5L, 9L, 3L, 7L, 11L);
         }
 
@@ -235,12 +237,12 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy 2.4.2's searchsorted loads the HAYSTACK cells with the keys' allocator, so a haystack text in its arena
-        ///     raises <c>MemoryError: Failed to load string in string comparison</c> (or reads another array's arena). NumSharp
-        ///     reads each array's cells with its own allocator and searches.
+        ///     searchsorted reads each array's cells with its own allocator, so a haystack text in its arena searches like any
+        ///     other: NumPy 2.5.4's answer. NumPy 2.4 loaded the HAYSTACK cells with the keys' allocator and raised
+        ///     <c>MemoryError: Failed to load string in string comparison</c> (or read another array's arena), so this was a
+        ///     <c>[Misaligned]</c> pin of NumSharp's answer until the bump.
         /// </summary>
         [TestMethod]
-        [Misaligned]
         public void SearchSorted_ArenaHaystackTexts_Search()
         {
             using var hay = A(T, new string('a', 20), new string('b', 20), new string('c', 20));
@@ -500,12 +502,12 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy 2.4.2's <c>StringDType</c> to complex cast writes the real part into the imaginary part too, so its
-        ///     <c>np.sort_complex(['2', '1'])</c> is <c>[1+1j, 2+2j]</c>. NumSharp's cast parses the text as Python's
-        ///     <c>complex()</c> does.
+        ///     The <c>StringDType</c> to complex cast parses the text as Python's <c>complex()</c> does, so
+        ///     <c>np.sort_complex(['2', '1'])</c> is <c>[1+0j, 2+0j]</c>: NumPy 2.5.4's answer. NumPy 2.4's cast wrote the real
+        ///     part into the imaginary part too (<c>[1+1j, 2+2j]</c>), so this was a <c>[Misaligned]</c> pin of NumSharp's
+        ///     answer until the bump.
         /// </summary>
         [TestMethod]
-        [Misaligned]
         public void SortComplex_ParsesTheText_RealPartOnly()
         {
             using var sorted = np.sort_complex(A(T, "2", "1"));
@@ -513,8 +515,9 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy 2.4.2's <c>np.argsort(view, axis=None)</c> of a non-contiguous <c>StringDType</c> view misorders its arena
-        ///     texts (a 17-byte text before a 16-byte prefix of it), while <c>np.sort(view, axis=None)</c>, an axis, the
+        ///     NumPy's <c>np.argsort(view, axis=None)</c> of a non-contiguous <c>StringDType</c> view misorders its arena
+        ///     texts (a 17-byte text before a 16-byte prefix of it; NumPy 2.4.2, and 2.5.4 still), while
+        ///     <c>np.sort(view, axis=None)</c>, an axis, the
         ///     partitions and <c>ndarray.sort</c> order them right. NumSharp's argsort gives the answer NumPy gives for the
         ///     view's copy.
         /// </summary>
@@ -534,20 +537,22 @@ namespace NumSharp.Tests.Backends.Strings
 
         /// <summary>
         ///     The nan forms remove the NaN-like NAs as NumPy's <c>_remove_nan_1d</c> does — the first NaN slots filled with the
-        ///     non-NaN elements of the last ones, not a mask selection in input order — and the partition that picks the
-        ///     element keeps texts tied under <c>NpyString_cmp</c> in that order: <c>['\0x', nan, '\0y', 'z', nan, '\0w']</c>
-        ///     becomes <c>['\0x', '\0w', '\0y', 'z']</c>, so the element at index 1 is <c>'\0w'</c>.
+        ///     non-NaN elements of the last ones, not a mask selection in input order: <c>['\0x', nan, '\0y', 'z', nan, '\0w']</c>
+        ///     becomes <c>['\0x', '\0w', '\0y', 'z']</c> — and the partition that picks the element orders the texts by every
+        ///     byte (<c>NpyString_cmp</c> is <c>memcmp</c> since NumPy 2.5), <c>'\0w' &lt; '\0x' &lt; '\0y' &lt; 'z'</c>, so the
+        ///     element at index 1 is <c>'\0x'</c>. (NumPy 2.4's <c>strncmp</c> tied the three NUL texts and the removal order
+        ///     picked <c>'\0w'</c>.)
         /// </summary>
         [TestMethod]
-        public void NanQuantile_TiedTexts_FollowNumPysNaNRemovalOrder()
+        public void NanQuantile_NulTexts_OrderByEveryByte()
         {
             using var a = A(TNaN, "\0x", double.NaN, "\0y", "z", double.NaN, "\0w");
             using (var r = np.nanquantile(a, 0.34, method: "lower"))
-                r.GetAtIndex(0).Should().Be("\0w");
+                r.GetAtIndex(0).Should().Be("\0x");
             using (var r = np.nanquantile(a, 0.67, method: "nearest"))
                 r.GetAtIndex(0).Should().Be("\0y");
             using (var r = np.nanpercentile(a, 50.0, method: "lower"))
-                r.GetAtIndex(0).Should().Be("\0w");
+                r.GetAtIndex(0).Should().Be("\0x");
         }
 
         /// <summary>
@@ -570,9 +575,10 @@ namespace NumSharp.Tests.Backends.Strings
 
         /// <summary>
         ///     <c>np.searchsorted</c> converts the keys to <c>PyArray_PromoteTypes(keys, haystack)</c>, whose
-        ///     <c>common_instance</c> takes the present NA object and the FIRST operand's <c>coerce</c>, a <c>U</c> operand
-        ///     counting as <c>StringDType()</c> — so a <c>U</c>-array key into a <c>coerce=False</c> haystack is refused naming
-        ///     <c>StringDType()</c>, not the haystack's descriptor.
+        ///     <c>common_instance</c> takes the present NA object and <c>coerce</c> only when BOTH operands coerce (NumPy 2.5.2,
+        ///     gh-31901; a <c>U</c> operand counts as <c>StringDType()</c>) — so a <c>U</c>-array key into a <c>coerce=False</c>
+        ///     haystack is refused naming the haystack's <c>coerce=False</c>. (NumPy 2.4 took the first operand's <c>coerce</c>
+        ///     and named <c>StringDType()</c>.)
         /// </summary>
         [TestMethod]
         public void SearchSorted_UKeys_AreRefusedNamingThePromotedDescriptor()
@@ -580,11 +586,11 @@ namespace NumSharp.Tests.Backends.Strings
             using var hay = np.array(new object[] { "a", "b" }, np.dtypes.StringDType(coerce: false));
             Action plain = () => np.searchsorted(hay, np.array(new[] { "a" }));
             plain.Should().Throw<TypeError>()
-                .WithMessage("Cannot cast array data from dtype('<U1') to StringDType() according to the rule 'safe'");
+                .WithMessage("Cannot cast array data from dtype('<U1') to StringDType(coerce=False) according to the rule 'safe'");
             using var hayNA = np.array(new object[] { "a", "b" }, np.dtypes.StringDType(na_object: null, coerce: false));
             Action withNA = () => np.searchsorted(hayNA, np.array(new[] { "a" }));
             withNA.Should().Throw<TypeError>()
-                .WithMessage("Cannot cast array data from dtype('<U1') to StringDType(na_object=None) according to the rule 'safe'");
+                .WithMessage("Cannot cast array data from dtype('<U1') to StringDType(na_object=None, coerce=False) according to the rule 'safe'");
         }
     }
 }

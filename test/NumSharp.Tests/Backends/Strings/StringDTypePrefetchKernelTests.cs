@@ -78,8 +78,8 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's <c>NpyString_cmp</c>: <c>strncmp</c> over the shorter length (it stops at the first differing byte or at
-        ///     a NUL both texts share), then the sizes.
+        ///     NumPy's <c>NpyString_cmp</c>: <c>memcmp</c> over the shorter length (the first differing byte decides, a NUL
+        ///     included — NumPy 2.5.0; 2.4's <c>strncmp</c> stopped at a NUL both texts shared), then the sizes.
         /// </summary>
         /// <param name="s1">The first text.</param>
         /// <param name="s2">The second text.</param>
@@ -89,12 +89,8 @@ namespace NumSharp.Tests.Backends.Strings
             byte[] a = Encoding.UTF8.GetBytes(s1), b = Encoding.UTF8.GetBytes(s2);
             int min = System.Math.Min(a.Length, b.Length);
             for (int k = 0; k < min; k++)
-            {
                 if (a[k] != b[k])
                     return a[k] < b[k] ? -1 : 1;
-                if (a[k] == 0)
-                    break;
-            }
             return System.Math.Sign(a.Length.CompareTo(b.Length));
         }
 

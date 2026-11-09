@@ -167,14 +167,15 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     <c>multiply</c>: a negative count overflows the size (NumPy converts it to <c>size_t</c>), so does a product past
-        ///     the size limit; a string NA repeats its text; a None-like NA is a TypeError; the count may come first.
+        ///     <c>multiply</c>: a count below 1 gives the empty text (NumPy 2.5's loop clamps it; NumPy 2.4 converted a negative
+        ///     count to <c>size_t</c> and overflowed), a product past the size limit overflows; a NaN-like NA stays NA; a string
+        ///     NA repeats its text; a None-like NA is a TypeError; the count may come first.
         /// </summary>
         [TestMethod]
         public void Multiply_Counts_AndNARules()
         {
-            Action negative = () => np.multiply(A(TNaN, "ab", double.NaN, "c"), np.array(new long[] { 2, 3, -1 }));
-            negative.Should().Throw<OverflowException>().WithMessage("Overflow encountered in string multiply");
+            using var negative = np.multiply(A(TNaN, "ab", double.NaN, "c"), np.array(new long[] { 2, 3, -1 }));
+            V(negative).Should().Equal("abab", double.NaN, "");
             using var r = np.multiply(np.array(3L), A(TStr, "ab", "NA"));
             V(r).Should().Equal("ababab", "NANANA");
             Action none = () => np.multiply(A(TNone, "ab", null), np.array(2L));
@@ -304,11 +305,11 @@ namespace NumSharp.Tests.Backends.Strings
 
         /// <summary>
         ///     The max / min lane loads its accumulator once and compares by its first eight bytes first: texts held outside
-        ///     their cells that share those bytes are decided by the rest, a NUL among them leaves the decision to
-        ///     <c>NpyString_cmp</c> (a NUL both texts share ends the bytes, the sizes decide, a tie keeps the first), in-cell and
-        ///     arena texts meet in both orders, and a NaN-like NA that wins <c>maximum</c> ends its lane only (the other lanes,
-        ///     a where= mask that skips the NA, and <c>minimum</c>, which passes NAs over, still see every element). Expected
-        ///     values probed against NumPy 2.4.2; a 4,000-text lane is held to the ordinal order of its ASCII texts.
+        ///     their cells that share those bytes are decided by the rest, a NUL among them is an ordinary byte of
+        ///     <c>NpyString_cmp</c> (<c>memcmp</c> since NumPy 2.5: the bytes after a shared NUL decide), in-cell and arena texts
+        ///     meet in both orders, and a NaN-like NA that wins <c>maximum</c> ends its lane only (the other lanes, a where= mask
+        ///     that skips the NA, and <c>minimum</c>, which passes NAs over, still see every element). Expected values probed
+        ///     against NumPy 2.5.4; a 4,000-text lane is held to the ordinal order of its ASCII texts.
         /// </summary>
         [TestMethod]
         public void MaxMin_AccumulatorKeyAndNaNStop_AreNumPys()
@@ -316,7 +317,7 @@ namespace NumSharp.Tests.Backends.Strings
             using (var x = A(T, "ab\0cdefghijklmnopqrst", "ab\0zzzzzzzzzzzzzzzzzz", "ab\0a"))
             {
                 using (var r = np.max(x))
-                    V(r).Should().Equal("ab\0cdefghijklmnopqrst");
+                    V(r).Should().Equal("ab\0zzzzzzzzzzzzzzzzzz");
                 using (var r = np.min(x))
                     V(r).Should().Equal("ab\0a");
             }
@@ -406,10 +407,13 @@ namespace NumSharp.Tests.Backends.Strings
                 r.Should().Throw<IncorrectShapeException>()
                     .WithMessage("non-broadcastable output operand with shape (1,2) [remapped to (2,1)] doesn't match the broadcast shape (2,2)");
             }
+            // NumPy 2.5 compares the dimensions after the iterator accepted the out: a longer out is the wrong size and
+            // stays untouched (2.4 wrote its leading cells).
             using (var o = np.full(new Shape(2, 2, 2), "k", T))
             {
-                np.cumsum(m, 0, null, o);
-                V(o).Should().Equal("a", "k", "b", "k", "ac", "k", "bd", "k");
+                Action r = () => np.cumsum(m, 0, null, o);
+                r.Should().Throw<IncorrectShapeException>().WithMessage("provided out is the wrong size for the accumulation.");
+                V(o).Should().Equal("k", "k", "k", "k", "k", "k", "k", "k");
             }
             using (var v = A(T, "a", "b", "c"))
             using (var o = np.empty(new Shape(2), T))
@@ -417,11 +421,13 @@ namespace NumSharp.Tests.Backends.Strings
                 Action r = () => np.cumsum(v, null, null, o);
                 r.Should().Throw<IncorrectShapeException>().WithMessage("provided out is the wrong size for the accumulation.");
             }
+            // A row the iterator broadcasts against the out: the wrong size too (2.4 wrote the first row).
             using (var row = np.array(new[,] { { "x", "yy", "z" } }, T))
             using (var o = np.full(new Shape(2, 3), "k", T))
             {
-                np.cumsum(row, 0, null, o);
-                V(o).Should().Equal("x", "yy", "z", "k", "k", "k");
+                Action r = () => np.cumsum(row, 0, null, o);
+                r.Should().Throw<IncorrectShapeException>().WithMessage("provided out is the wrong size for the accumulation.");
+                V(o).Should().Equal("k", "k", "k", "k", "k", "k");
             }
             using (var u = np.empty(new Shape(3), np.dtype("U5")))
             {
@@ -438,9 +444,9 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     A 1-D accumulation into a 0-d out crashes NumPy 2.4.2 for every dtype, an empty input included (its direct
-        ///     path reads the out's stride along the axis first); NumSharp raises the direct path's wrong-size error for text
-        ///     as for numbers.
+        ///     A 1-D accumulation into a 0-d out is the wrong size for every dtype, an empty input included: NumPy 2.5 compares
+        ///     the dimensions before its empty exits and before the direct path reads the out's stride along the axis (where
+        ///     NumPy 2.4.2 crashed).
         /// </summary>
         [TestMethod]
         public void CumSum_ZeroDimOut_IsTheWrongSizeError()
@@ -650,21 +656,23 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy 2.4.2 HANGS on an empty <c>StringDType</c> text times a negative count: its multiply converts the count
-        ///     to <c>size_t</c>, the overflow check multiplies it by the size 0 and passes, and the repeat loop then runs
-        ///     2^64 - 1 times copying nothing. NumSharp returns the answer that loop would end with, the empty text (a
-        ///     non-empty text still raises NumPy's overflow error).
+        ///     A <c>StringDType</c> text times a count below 1 is the empty text, the empty text included (NumPy 2.5.4; NumPy
+        ///     2.4.2 HUNG on an empty text times a negative count — its repeat loop ran 2^64 - 1 times — and raised its overflow
+        ///     error for a non-empty one).
         /// </summary>
         [TestMethod]
-        [Misaligned]
-        public void Multiply_EmptyTextTimesANegativeCount_IsTheEmptyText()
+        public void Multiply_TextTimesACountBelowOne_IsTheEmptyText()
         {
             using var r = np.multiply(A(T, "", "ab"), np.array(new long[] { -1, 2 }));
             V(r).Should().Equal("", "abab");
             using var first = np.multiply(np.array(long.MinValue), A(T, ""));
             V(first).Should().Equal("");
-            Action nonEmpty = () => np.multiply(A(T, "a"), np.array(-1L));
-            nonEmpty.Should().Throw<OverflowException>().WithMessage("Overflow encountered in string multiply");
+            using var nonEmpty = np.multiply(A(T, "a"), np.array(-1L));
+            V(nonEmpty).Should().Equal("");
+            using var zero = np.multiply(A(T, "ab"), np.array(0L));
+            V(zero).Should().Equal("");
+            using var nan = np.multiply(A(TNaN, double.NaN), np.array(-1L));
+            V(nan).Should().Equal(double.NaN);
         }
 
         /// <summary>

@@ -10,12 +10,15 @@ using NumSharp.Backends.Strings;
 // argpartition / searchsorted / argmax / argmin
 // =============================================================================
 //
-// What NumPy runs for an OBJECT array (numpy/_core/src/multiarray/item_selection.c, npysort; probed against 2.4.2):
+// What NumPy runs for an OBJECT array (numpy/_core/src/multiarray/item_selection.c, npysort; probed against 2.5.4):
 //
 //   * sort / argsort take the GENERIC sorts with OBJECT_compare (Py_LT, then Py_GT): the default kind is npy_quicksort /
 //     npy_aquicksort (an introsort: median of three, insertion sort below 17 elements, a heapsort fallback once the depth
 //     budget 2 * msb(n) is spent — NOT stable, so the order of equal lists is the algorithm's), 'heapsort' maps to the
-//     default (PyArray_Sort clears the heapsort bit), and the stable kind is npy_timsort (stable);
+//     default (PyArray_Sort clears the heapsort bit), and the stable kind is npy_timsort (stable). NumPy 2.5's
+//     descending flag finds no function in either table: TypeError "no current sort function meets the requirements"
+//     (sort, after the axis and writeability checks) / "no current argsort function meets the requirements" (argsort,
+//     before the axis check);
 //   * partition / argpartition have no selection function for objects: PyArray_(Arg)Partition sorts the whole line with
 //     the default kind, after their own checks (the kind must be 'introselect', kth integers within the axis);
 //   * searchsorted is npy_binsearch with OBJECT_compare over a 1-D haystack;
@@ -38,7 +41,7 @@ namespace NumSharp
         // =============================================================================================================
 
         /// <summary>
-        ///     NumPy's in-place <c>sort(axis=-1, kind=None, order=None, *, stable=None)</c>: every line along
+        ///     NumPy's in-place <c>sort(axis=-1, kind=None, order=None, *, stable=None, descending=False)</c>: every line along
         ///     <paramref name="axis"/> ordered by Python's list order — the default kind with NumPy's introsort (the order of
         ///     EQUAL lists is the algorithm's, not their input order), the stable kind keeping equal lists in order.
         /// </summary>
@@ -47,38 +50,54 @@ namespace NumSharp
         ///     <c>'stable'</c>; NumPy's parser reads the first letter.</param>
         /// <param name="order">Must be null (an object array has no fields).</param>
         /// <param name="stable">NumPy's keyword-only <c>stable=</c>: true selects the stable kind.</param>
-        /// <exception cref="ValueError">An unknown kind, <paramref name="kind"/> with <paramref name="stable"/>, an
-        ///     <paramref name="order"/>, or a read-only array (<c>sort array is read-only</c>).</exception>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending=</c>: an object array has no descending sort, so
+        ///     true is refused (after the axis and writeability checks); null and false sort ascending.</param>
+        /// <exception cref="ValueError">An unknown kind, <paramref name="kind"/> with <paramref name="stable"/> or
+        ///     <paramref name="descending"/>, an <paramref name="order"/>, or a read-only array (<c>sort array is
+        ///     read-only</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="descending"/> true (<c>no current sort function meets the
+        ///     requirements</c>).</exception>
         /// <exception cref="AxisError">An axis outside the array.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public void sort(int axis = -1, string kind = null, object order = null, bool? stable = null)
+        public void sort(int axis = -1, string kind = null, object order = null, bool? stable = null, bool? descending = null)
         {
             ThrowIfDisposed();
-            var sortKind = SortKindArguments.Resolve(kind, order, stable);
+            var sortKind = SortKindArguments.ClearHeapsort(SortKindArguments.Resolve(kind, order, stable, descending));
             int ax = Shape.check_and_adjust_axis(ndim, axis);
             if (!Ids.Shape.IsWriteable)
                 throw new ValueError("sort array is read-only");
-            SortInPlace(ax, sortKind == NPY_SORTKIND.NPY_STABLESORT);
+            // PyArray_Sort's legacy lookup: neither the type's table nor the generic one has a descending entry.
+            if (SortKindArguments.IsDescending(sortKind))
+                throw new TypeError("no current sort function meets the requirements");
+            SortInPlace(ax, SortKindArguments.IsStable(sortKind));
         }
 
         /// <summary>
-        ///     NumPy's <c>argsort(axis=-1, kind=None, order=None, *, stable=None)</c>: the int64 indices that sort every line
+        ///     NumPy's <c>argsort(axis=-1, kind=None, order=None, *, stable=None, descending=False)</c>: the int64 indices that sort every line
         ///     (C-ordered, the array's shape); <paramref name="axis"/> null sorts the flattened (C-order) array.
         /// </summary>
         /// <param name="axis">The axis, or null for the flattened array.</param>
         /// <param name="kind">See <see cref="sort"/>.</param>
         /// <param name="order">Must be null.</param>
         /// <param name="stable">NumPy's <c>stable=</c>.</param>
+        /// <param name="descending">NumPy 2.5's <c>descending=</c>: refused when true (an object array has no descending
+        ///     argsort), before the axis is checked.</param>
         /// <returns>The indices.</returns>
-        /// <exception cref="ValueError">An unknown kind, <paramref name="kind"/> with <paramref name="stable"/>, or an
-        ///     <paramref name="order"/>.</exception>
+        /// <exception cref="ValueError">An unknown kind, <paramref name="kind"/> with <paramref name="stable"/> or
+        ///     <paramref name="descending"/>, or an <paramref name="order"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="descending"/> true (<c>no current argsort function meets the
+        ///     requirements</c>).</exception>
         /// <exception cref="AxisError">An axis outside the array.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDArray argsort(int? axis = -1, string kind = null, object order = null, bool? stable = null)
+        public NDArray argsort(int? axis = -1, string kind = null, object order = null, bool? stable = null,
+            bool? descending = null)
         {
             ThrowIfDisposed();
-            var sortKind = SortKindArguments.Resolve(kind, order, stable);
-            return ArgSortCore(axis, sortKind == NPY_SORTKIND.NPY_STABLESORT);
+            var sortKind = SortKindArguments.ClearHeapsort(SortKindArguments.Resolve(kind, order, stable, descending));
+            // PyArray_ArgSort looks its function up before PyArray_CheckAxis: no table has a descending entry.
+            if (SortKindArguments.IsDescending(sortKind))
+                throw new TypeError("no current argsort function meets the requirements");
+            return ArgSortCore(axis, SortKindArguments.IsStable(sortKind));
         }
 
         // =============================================================================================================
