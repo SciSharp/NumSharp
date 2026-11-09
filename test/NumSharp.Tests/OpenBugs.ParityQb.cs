@@ -1649,5 +1649,31 @@ namespace NumSharp.Tests
             union.typecode.Should().Be(NPTypeCode.SByte);
             union.GetSByte(3).Should().Be((sbyte)44);
         }
+
+        // ------------------------------------------------------------------
+        // QB-59 — np.put(a, <scalar index>, v) is ambiguous between its two overloads
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>np.put(a, ind, v, mode='raise')</c> is written with a scalar index as often as with a list
+        ///     (<c>np.put(a, 0, 300)</c>, <c>np.put(a, 1, 2.5)</c>, <c>np.put(a, 3, [5.0, 6.0])</c>). NumSharp declares
+        ///     <c>put(NDArray a, NDArray indices, NDArray values, string mode)</c> and <c>put(NDArray a, long index, object value,
+        ///     string mode)</c>: for a C# integer index the long overload is the better conversion, for the value the NDArray
+        ///     overload is (<c>NDArray</c> converts to <c>object</c>, so it is the more specific target), so every scalar-index
+        ///     call is CS0121, ambiguous, <c>0L</c> included; only a C# array index (<c>new[] {0, 2}</c>) binds, and
+        ///     <c>ndarray.put(0, 300)</c> works. The runtime binder (<c>dynamic</c>) repeats the compile-time resolution, so the
+        ///     pin asserts NumPy's answer through it (q164, q165).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB59")]
+        public void ParityQb_QB59_PutWithAScalarIndex_Binds()
+        {
+            using var a = np.array(new[] { 1.0, 2.0, 3.0, 4.0 });
+            dynamic index = 0;
+            dynamic value = 300;
+
+            // NumPy 2.4.2: a = np.array([1., 2, 3, 4]); np.put(a, 0, 300) leaves [300., 2., 3., 4.]
+            np.put(a, index, value);
+            a.GetDouble(0).Should().Be(300.0);
+        }
     }
 }
