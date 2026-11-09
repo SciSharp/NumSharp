@@ -1422,5 +1422,47 @@ namespace NumSharp.Tests
             // NumPy 2.4.2: np.multiply(t[0:1].reshape(1, 1), t[1:2]) is [[4-3.473028842108373e-17j]]
             ((Complex)product[0, 0]).Imaginary.Should().Be(-3.473028842108373e-17);
         }
+
+        // ------------------------------------------------------------------
+        // QB-52 — NumPy statements that gather a second array through the default (unstable) argsort
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumSharp's <c>np.argsort</c> is one stable radix order for every <c>kind</c> (sorting.md), while NumPy 2.4.2's
+        ///     default kind (<c>'quicksort'</c>) runs x86-simd-sort's networks for 32/64-bit dtypes and orders EQUAL keys
+        ///     its own way (<c>np.argsort([0, .5, 0, .5, .25, .25])</c> is <c>[0 2 5 4 3 1]</c> on this AVX2 host,
+        ///     NumSharp <c>[0 2 4 5 1 3]</c>). The oracle ledger excuses that only where the two permutations select equal
+        ///     values, but two NumPy statements gather a SECOND array through the permutation, so the tie order becomes
+        ///     visible values: <c>np.interp(..., period=)</c> (<c>asort_xp = np.argsort(xp % period)</c>, then
+        ///     <c>fp = fp[asort_xp]</c>: xp values equal modulo the period pick their fp in NumPy's order) and the weighted
+        ///     histogram over non-uniform bins (<c>_histogram</c>'s cumulative route: <c>sw = w[np.argsort(a)]</c>, whose
+        ///     <c>cumsum</c> rounds in that order). Expected values are NumPy 2.4.2 on an AVX2 host (an AVX-512 host runs
+        ///     another network and may order ties differently). Uniform bins (the bincount route) and xp without ties
+        ///     modulo the period match. A fix ports the default kind's tie order, or records the class as [Misaligned].
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB52")]
+        public void ParityQb_QB52_DefaultArgsortTieOrder_ShowsInInterpPeriodAndWeightedHistogram()
+        {
+            using var x = np.array(new[] { 0.1, 0.3, 0.6 });
+            using var xp = np.array(new[] { -3.0, -1.0, 0.0, 0.5, 2.5, 4.0 });
+            using var fp = np.array(new[] { 3.3, 0.001, 0.002, 0.003, -0.0, -1e300 });
+            using var periodic = np.interp(x, xp, fp, period: 0.75);
+
+            // NumPy 2.4.2: np.interp([.1, .3, .6], xp, fp, period=0.75) is [-4e+299, 0.0005999999999999998, 1.3205999999999996]
+            periodic.GetDouble(0).Should().Be(-4e+299);
+            periodic.GetDouble(1).Should().Be(0.0005999999999999998);
+
+            var block = new[] { 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 1.0, 2.0 };
+            var weightBlock = new[] { 1e16, 1.0, -1e16, 3.0, 1e-3, 7.0, 0.5, 1e15 };
+            using var a = np.array(block.Concat(block).Concat(block).ToArray());
+            using var w = np.array(weightBlock.Concat(weightBlock).Concat(weightBlock).ToArray());
+            using var bins = np.array(new[] { 0.0, 1.5, 1.7, 3.0 });
+            var result = np.histogram(a, bins, weights: w);
+            using var hist = result.hist;
+            using var edges = result.bin_edges;
+
+            // NumPy 2.4.2: np.histogram(a, bins=[0, 1.5, 1.7, 3], weights=w)[0] is [0., 0., 3.00000000000003e+15]
+            hist.GetDouble(0).Should().Be(0.0);
+        }
     }
 }
