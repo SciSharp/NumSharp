@@ -1234,5 +1234,57 @@ namespace NumSharp.Tests
             // NumPy 2.4.2: np.searchsorted(uint64 [2**64 - 3, 2**64 - 2], 2**64 - 2) is 1
             np.searchsorted(unsigned, 18446744073709551614UL).Should().Be(1L);
         }
+
+        // ------------------------------------------------------------------
+        // QB-45 — einsum's default order 'K' over operands that are BOTH C- and F-contiguous gives an F-ordered result
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's default <c>np.einsum</c> (<c>c_einsum</c>) allocates its output through NpyIter in K order: the
+        ///     operands' strides vote on the axis order, and where they do not decide — two 1-D vectors mapped to different
+        ///     output axes, <c>(2, 1)</c> by <c>(1, 3)</c> — C order wins, so <c>np.einsum('i,j->ij', arange(3.), arange(4.))</c>
+        ///     has strides <c>(32, 8)</c> and <c>'i,j,k->ijk'</c> over three vectors <c>(96, 32, 8)</c>. NumSharp's rule
+        ///     ("'A' and 'K' give F-contiguous when every input is F-contiguous") counts a 1-D or single-row / single-column
+        ///     operand as F-contiguous — it is both — and returns <c>(8, 24)</c> / <c>(8, 16, 48)</c>: the values match, the
+        ///     layout (and every <c>ravel('K')</c>, <c>tobytes('A')</c>, flags read) differs. A non-contiguous vector
+        ///     (<c>[::-1]</c>, <c>[::2]</c>) and <c>order='A'</c> (NumPy's F there too) already match; np.outer / tensordot /
+        ///     a broadcast multiply are C on both sides.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB45")]
+        public void ParityQb_QB45_EinsumKOrder_OverBothContiguousOperands_IsC()
+        {
+            using var a = np.arange(3.0);
+            using var b = np.arange(4.0);
+            using var outer = np.einsum("i,j->ij", a, b);
+
+            // NumPy 2.4.2: (32, 8), C-contiguous
+            outer.strides.Should().Equal(32L, 8L);
+            outer.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        // ------------------------------------------------------------------
+        // QB-46 — einsum with optimize= returns NumPy's bmm_einsum result as it leaves it (a view of the matmul)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     With <c>optimize=True</c> (or a path name / an explicit path) and the default <c>order='K'</c>, NumPy 2.4.2
+        ///     contracts each pair through <c>bmm_einsum</c>, whose <c>_parse_output_order('K')</c> is None: the result is what
+        ///     the final <c>matmul</c> plus its <c>reshape</c> / <c>transpose(perm_ab)</c> leave, a NON-OWNING view —
+        ///     <c>np.einsum('ij,jk->ik', a23, b34, optimize=True)</c> has strides <c>(8, 16)</c> and <c>owndata</c> False,
+        ///     <c>'ij,jk->ki'</c> <c>(16, 8)</c>, the batch <c>'bij,bjk->bik'</c> <c>(120, 8, 24)</c>, a three-operand chain
+        ///     <c>(8, 16)</c>. NumSharp ignores the path for the layout and allocates its own (C here: <c>(32, 8)</c>, owning,
+        ///     <c>(8, 32)</c> for <c>'ki'</c>, <c>(120, 40, 8)</c> for the batch). Values match; <c>order='C'</c> matches.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB46")]
+        public void ParityQb_QB46_EinsumOptimize_ReturnsTheBmmResultsLayout()
+        {
+            using var a = np.arange(6.0).reshape(2, 3);
+            using var b = np.arange(12.0).reshape(3, 4);
+            using var product = np.einsum("ij,jk->ik", new[] { a, b }, optimize: true);
+
+            // NumPy 2.4.2: strides (8, 16), owndata False (a transposed view of the matmul result)
+            product.strides.Should().Equal(8L, 16L);
+            product.Shape.IsContiguous.Should().BeFalse();
+        }
     }
 }
