@@ -1027,5 +1027,36 @@ namespace NumSharp.Tests
             np.finfo(np.float32).resolution.Should().Be(9.999999974752427e-07);
             np.finfo(np.float16).resolution.Should().Be(0.0010004043579101562);
         }
+
+        // ------------------------------------------------------------------
+        // QB-36 — the strides of LENGTH-1 axes differ from NumPy's (newaxis, (1, 1) slices, results over broadcasts)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     A length-1 axis can carry any stride without changing what an array addresses, so NumPy's values there are
+        ///     a matter of its construction rules, visible through <c>.strides</c>: <c>np.newaxis</c> inserts stride 0
+        ///     (<c>a[:, np.newaxis, :]</c> of a (3, 4) int64 array has strides (32, 0, 8)); a slice keeps its parent's stride
+        ///     on every axis (<c>a[1:2, 2:3]</c> is (32, 8)); a ufunc allocates its result fresh (<c>np.negative</c> of
+        ///     <c>np.broadcast_to(np.arange(3), (1, 3))</c> has strides (24, 8)). NumSharp gives (32, 32, 8), (8, 8) and (0, 8):
+        ///     the computed C stride on the new axis, re-derived strides for an all-length-1 slice, and the input's stride
+        ///     array reused by the elementwise result. Flags and values are unaffected (a length-1 axis is ignored by the
+        ///     contiguity tests); the zero-size cases are the EmptyStrides pins, and broadcast_to's own extent-1 stride is a
+        ///     documented divergence (ufuncs.md, np.clip).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB36")]
+        public void ParityQb_QB36_LengthOneAxes_TakeNumPysStrides()
+        {
+            using var a = np.arange(12).reshape(3, 4);
+            using var withAxis = a[":, np.newaxis, :"];
+            using var oneOne = a["1:2, 2:3"];
+            using var row = np.arange(3);
+            using var broadcast = np.broadcast_to(row, new Shape(1, 3));
+            using var negated = np.negative(broadcast);
+
+            // NumPy 2.4.2: (32, 0, 8), (32, 8), (24, 8)
+            withAxis.strides.Should().Equal(32L, 0L, 8L);
+            oneOne.strides.Should().Equal(32L, 8L);
+            negated.strides.Should().Equal(24L, 8L);
+        }
     }
 }
