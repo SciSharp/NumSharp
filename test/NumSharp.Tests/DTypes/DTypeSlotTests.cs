@@ -145,6 +145,9 @@ namespace NumSharp.Tests.DTypes
                 Overrides("fill").Should().Be(m is LegacyBuiltinDTypeMeta, $"{m.Name}.fill");
                 // NumPy's funcs->fill != NULL, the test np.arange makes before it computes anything
                 m.HasFill.Should().Be(m is LegacyBuiltinDTypeMeta, $"{m.Name}.HasFill");
+                // NumPy's funcs->copyswapn != NULL, the test ndarray.byteswap makes before it copies anything: every class
+                // but StringDType, whose cells hold references (the classes without storage never reach the test)
+                m.HasCopyswapn.Should().Be(m is not VStringDTypeMeta, $"{m.Name}.HasCopyswapn");
                 // NumPy's funcs->scanfunc / fromstr != NULL, the tests np.fromfile's and np.fromstring's text reads make:
                 // the numeric classes have both, the text classes and the classes without storage neither
                 m.HasScanFunc.Should().Be(m is LegacyBuiltinDTypeMeta, $"{m.Name}.HasScanFunc");
@@ -446,13 +449,16 @@ namespace NumSharp.Tests.DTypes
                 using var buf = new NativeBuffer(32);
                 Record(() => d.Meta.copyswapn(d, buf.P, 16, buf.P + 16, 16, 1, false)).Should().BeOfType<NotSupportedException>()
                     .Which.Message.Should().Contain("hold references");
-                // With no source the swap is the identity (the owner's decision D14: a cell has no byte order, and NumPy
-                // 2.4.2 crashes in ndarray.byteswap of a StringDType array): the cells are left exactly as they are.
+                // With no source it is NumPy 2.5's missing-slot TypeError (NumPy leaves StringDType's copyswapn NULL; NumPy
+                // 2.4 crashed in ndarray.byteswap, and NumSharp's identity swap was the owner's decision D14 then), and
+                // the cells are left exactly as they are.
                 for (int k = 0; k < 32; k++)
                     buf.P[k] = (byte)(k * 13 + 5);
                 var before = buf.Bytes(0, 32);
-                d.Meta.copyswapn(d, buf.P, 16, null, 16, 2, swap: true);
+                Record(() => d.Meta.copyswapn(d, buf.P, 16, null, 16, 2, swap: true)).Should().BeOfType<TypeError>()
+                    .Which.Message.Should().Be($"dtype {d} does not implement copyswap");
                 buf.Bytes(0, 32).Should().Equal(before, $"{d}: in-place copyswapn");
+                d.Meta.HasCopyswapn.Should().BeFalse($"{d}: NumPy's NULL copyswapn");
                 d.Meta.fill(d, buf.P, 3).Should().BeFalse();
             }
         }

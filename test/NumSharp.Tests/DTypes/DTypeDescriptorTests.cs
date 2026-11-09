@@ -309,7 +309,9 @@ namespace NumSharp.Tests.DTypes
                 (np.dtype("?"), "bool", true), (np.dtype("?"), "b1", true), (np.dtype("?"), "?", true),
                 (np.dtype("M8[ns]"), "M8[ns]", true), (np.dtype("M8[ns]"), "M8[s]", false), (np.dtype("M8[ns]"), "M8", false),
                 (np.dtype("U5"), "U5", true), (np.dtype("U5"), "U", false),
-                (np.dtype("S"), "S", true), (np.dtype("S"), "S0", true), (np.dtype("S"), "a", true),
+                (np.dtype("S"), "S", true), (np.dtype("S"), "S0", true),
+                // NumPy 2.5 removed the 'a' alias: the string no longer coerces, so it equals nothing (2.4: True).
+                (np.dtype("S"), "a", false), (np.dtype("S5"), "a5", false),
                 // A StringDType descriptor does not coerce: stringdtype_richcompare returns NotImplemented for a str.
                 (np.dtype("T"), "T", false), (np.dtype("T"), "bogus", false),
             };

@@ -85,19 +85,27 @@ namespace NumSharp
         /// Create finfo for the specified dtype.
         /// </summary>
         /// <param name="dtype">A floating point dtype (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/> — all convert implicitly).</param>
-        /// <exception cref="ArgumentException">Thrown if <paramref name="dtype"/> is not a floating point type.</exception>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is null: NumPy 2.5's <c>dtype must not be None</c> (NumPy 2.4
+        ///     deprecated a None and returned float64's limits).</exception>
+        /// <exception cref="ValueError"><paramref name="dtype"/> is not a floating point or complex type: NumPy 2.5's
+        ///     <c>data type dtype('int32') not compatible with finfo</c>, naming the descriptor's repr in native byte order
+        ///     (NumPy normalizes it through <c>result_type</c> first; text names its own descriptor,
+        ///     <c>dtype('&lt;U3')</c> or <c>StringDType()</c>).</exception>
         public finfo(DType dtype)
         {
+            // NumPy 2.5's first statement (the None deprecation of 1.25 expired).
             if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
+                throw new TypeError("dtype must not be None");
 
-            // Text is not inexact: NumPy names the scalar type (data type <class 'numpy.str_'> not inexact).
-            if (dtype.Meta is StringDTypeMeta text)
-                throw new ArgumentException($"data type <class 'numpy.{text.ScalarName}'> not inexact", nameof(dtype));
-
+            // NumPy 2.5 resolves the real dtype in C (_finfo_get_realdtype / _populate_finfo_constants) and refuses
+            // whatever has no floating-point constants with the descriptor's repr, after `result_type(dtype)` has made it
+            // native: text, bool, the integers, datetimes. Text is refused before its type code is read (a string class
+            // has no numeric lane to resolve).
+            if (dtype.Meta is StringDTypeMeta)
+                throw NotCompatible(dtype);
             NPTypeCode typeCode = dtype.GetTypeCode();
             if (!IsFloatType(typeCode))
-                throw new ArgumentException($"data type '{typeCode.AsNumpyDtypeName()}' not inexact", nameof(dtype));
+                throw NotCompatible(dtype);
 
             // NumPy parity: np.finfo(np.complex128).dtype == np.float64.
             // The finfo represents the precision of the underlying real component, so
@@ -199,6 +207,16 @@ namespace NumSharp
         /// </remarks>
         public override string ToString() => Backends.Printing.MachineLimitsRepr.Finfo(dtype, resolution, min, max);
 
+        /// <summary>
+        ///     NumPy 2.5's refusal of a dtype without floating-point constants: <c>data type %R not compatible with
+        ///     finfo</c> (<c>_populate_finfo_constants</c>), where <c>%R</c> is the repr of the native descriptor
+        ///     <c>result_type(dtype)</c> left (<c>np.finfo('&gt;i4')</c> names <c>dtype('int32')</c>).
+        /// </summary>
+        /// <param name="dtype">The refused descriptor, as given.</param>
+        /// <returns>The <see cref="ValueError"/> to throw (NumPy's type and text).</returns>
+        internal static ValueError NotCompatible(DType dtype)
+            => new ValueError($"data type {dtype.Meta.ensure_canonical(dtype).ToString(true)} not compatible with finfo");
+
         private static bool IsFloatType(NPTypeCode typeCode)
         {
             return typeCode switch
@@ -236,12 +254,10 @@ namespace NumSharp
         ///     an <see cref="NPTypeCode"/>, a NumPy dtype string or a <see cref="DType"/> (<c>np.float64</c>, <c>arr.dtype</c>) all
         ///     convert implicitly.
         /// </param>
-        public static finfo finfo(DType dtype)
-        {
-            if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
-            return new finfo(dtype);
-        }
+        /// <exception cref="TypeError"><paramref name="dtype"/> is null (NumPy 2.5's <c>dtype must not be None</c>).</exception>
+        /// <exception cref="ValueError"><paramref name="dtype"/> is not a floating point or complex type
+        ///     (<c>data type dtype('int32') not compatible with finfo</c>).</exception>
+        public static finfo finfo(DType dtype) => new finfo(dtype);
 
         /// <summary>
         ///     Machine limits of a floating-point scalar CLASS — NumPy's <c>np.finfo(cls)</c>: a concrete class gives its
@@ -252,26 +268,33 @@ namespace NumSharp
         /// </summary>
         /// <param name="dtype">The scalar class.</param>
         /// <returns>The limits.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is null (NumPy 2.5's <c>dtype must not be None</c>).</exception>
         /// <exception cref="ValueError">
-        ///     The class is not inexact — NumPy's text, which names the class: <c>data type &lt;class 'numpy.int64'&gt; not
-        ///     inexact</c> (also for <c>int</c>, whose NumPy class is int64). An abstract class is <c>data type &lt;class
-        ///     'numpy.object_'&gt; not inexact</c>: NumPy's <c>finfo</c> retries a value that converts to no dtype with the
-        ///     dtype of its TYPE, and the type of a class is Python's <c>type</c>, an object dtype — so even
-        ///     <c>np.finfo(np.floating)</c> names <c>object_</c>.
+        ///     The class is not inexact — NumPy 2.5's text, which names the class's dtype: <c>data type dtype('int64') not
+        ///     compatible with finfo</c> (also for <c>int</c>, whose NumPy class is int64). An abstract class is
+        ///     <c>data type dtype('O') not compatible with finfo</c>: NumPy's <c>finfo</c> retries a value that converts to
+        ///     no dtype with the dtype of its TYPE, and the type of a class is Python's <c>type</c>, an object dtype — so
+        ///     even <c>np.finfo(np.floating)</c> names <c>dtype('O')</c>.
         /// </exception>
         public static finfo finfo(NDScalarType dtype)
         {
             if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
+                throw new TypeError("dtype must not be None");
             if (dtype.IsAbstract)
-                throw new ValueError("data type <class 'numpy.object_'> not inexact");
+                throw new ValueError("data type dtype('O') not compatible with finfo");
 
             // A Python built-in class is read as NumPy's dtype(cls).type (float -> float64, int -> int64), as every NumPy
-            // dtype argument is; then NumPy's obj2sctype(dtype) must be inexact, and its error names that class.
+            // dtype argument is; a class that is not inexact has no floating-point constants, and NumPy's error names
+            // its dtype.
             var cls = dtype.NumPyClass;
             if (!inexact.__subclasscheck__(cls))
-                throw new ValueError($"data type {cls} not inexact");
+            {
+                // A class NumSharp has no dtype for (object_, void: the NumPy dtypes of Python's object / memoryview too)
+                // is named by its NumPy kind, which for those two IS the descriptor's character: dtype('O') / dtype('V').
+                if (cls.IsDtypeless)
+                    throw new ValueError($"data type dtype('{cls.NumPyKind}') not compatible with finfo");
+                throw global::NumSharp.finfo.NotCompatible(cls.ToDescriptor());
+            }
             // NumPy's _convert_to_float: a complex class has its real part's limits. complex64 has no NumSharp dtype, so
             // its float32 part is named here instead of reached through the descriptor.
             if (cls.IsDtypeless)

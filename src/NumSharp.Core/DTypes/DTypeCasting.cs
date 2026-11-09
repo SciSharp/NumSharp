@@ -332,6 +332,10 @@ namespace NumSharp
         ///     <c>b(0) &lt; u(1) &lt; i(2) &lt; f(4) &lt; c(5) &lt; S(6) &lt; U(7) &lt; V(8) &lt; O(9)</c>; datetime kinds do not fit
         ///     the hierarchy (-1).
         /// </summary>
+        /// <param name="kind">A descriptor's kind character (<c>dtype.kind</c>), not a type character.</param>
+        /// <returns>The kind's rank, or -1 for a kind outside the hierarchy (the datetime kinds <c>'M'</c> / <c>'m'</c>,
+        ///     NumSharp's own decimal / char kinds, and <c>'a'</c>, the bytes alias NumPy 2.5 removed from this switch with
+        ///     the alias itself: no descriptor has that kind).</returns>
         public static int KindToOrdering(char kind)
         {
             switch (kind)
@@ -341,8 +345,7 @@ namespace NumSharp
                 case 'i': return 2;
                 case 'f': return 4;
                 case 'c': return 5;
-                case 'S':
-                case 'a': return 6;
+                case 'S': return 6;
                 case 'U': return 7;
                 case 'V': return 8;
                 case 'O': return 9;

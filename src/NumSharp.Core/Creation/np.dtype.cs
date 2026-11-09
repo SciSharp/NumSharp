@@ -498,7 +498,7 @@ namespace NumSharp
             Add("Decimal", typeof(decimal));
 
             // ---- fixed-width Unicode (StrDType): NumPy's typeDict names resolve to the UNSIZED builtin U0 ----
-            // ("bytes"/"bytes_" and the bare "a" resolve in dtype(string) itself: BytesDType has no C# Type of its own.)
+            // ("bytes"/"bytes_" resolve in dtype(string) itself: BytesDType has no C# Type of its own.)
             Add("str",     typeof(string));
             Add("str_",    typeof(string));
             Add("unicode", typeof(string));
@@ -572,7 +572,7 @@ namespace NumSharp
         ///     <c>'complex256'</c> on 64-bit Linux). NumPy looks a name up by the WHOLE string, so only the bare name is a valid
         ///     dtype (<c>'object'</c>); with a byte-order prefix (<c>'&lt;object'</c>) it is NumPy's "not understood". The
         ///     string classes' names are NumSharp's own: <c>'str'</c> / <c>'str_'</c> / <c>'unicode'</c> resolve through the
-        ///     name table, <c>'bytes'</c> / <c>'bytes_'</c> / <c>'a'</c> in <see cref="ConvertFromStr"/>.
+        ///     name table, <c>'bytes'</c> / <c>'bytes_'</c> in <see cref="ConvertFromStr"/>.
         ///     <para>
         ///     Each name maps to NumPy's item size of its descriptor, which the refusal carries for the comma-string
         ///     conversion (<see cref="NumPyOnlyDType"/>).
@@ -827,8 +827,9 @@ namespace NumSharp
                 switch (kind)
                 {
                     case 'S':
-                    case 'a': // NPY_DEPRECATED_STRINGLTR2: still S (NumPy also emits a DeprecationWarning, which NumSharp has no channel for)
-                        // An explicit 0 keeps NumPy's builtin unsized singleton ("S0" is dtype('S'), isbuiltin 1).
+                        // An explicit 0 keeps NumPy's builtin unsized singleton ("S0" is dtype('S'), isbuiltin 1). NumPy 2.5
+                        // removed the 'a' alias (NPY_DEPRECATED_STRINGLTR2): 'a5' reaches the default branch and is "not
+                        // understood", as 'a0' and a bare 'a' are below.
                         flexible = elsize == 0 ? DTypeRegistry.Bytes.singleton : DTypeRegistry.Bytes.Descr(elsize);
                         break;
                     case 'U':
@@ -867,9 +868,9 @@ namespace NumSharp
                 if (_unsupported_numpy_names.TryGetValue(dtype, out int numpyNameSize))
                     throw NumPyOnlyDType(dtype, numpyNameSize);
                 // The bytes class has no C# Type to resolve through the name table, so its names give the unsized builtin
-                // S0 here: 'bytes', 'bytes_' and the deprecated bare alias 'a' (np.dtype('a') is dtype('S'), while
-                // np.dtype('|a') is "not understood"; 'a5' / '|a5' parse above as kind + size).
-                if (dtype == "a" || dtype == "bytes" || dtype == "bytes_")
+                // S0 here: 'bytes' and 'bytes_'. The bare alias 'a' is gone since NumPy 2.5 (it was dtype('S') with a
+                // DeprecationWarning in NumPy 2.0-2.4): it falls through to "data type 'a' not understood".
+                if (dtype == "bytes" || dtype == "bytes_")
                     flexible = DTypeRegistry.Bytes.singleton;
                 else if (!_dtype_string_map.TryGetValue(dtype, out resolved))
                 {
@@ -1469,8 +1470,6 @@ namespace NumSharp
         NPY_OBJECTLTR = 'O',
         /// <summary><c>'S'</c>: fixed-width bytes (<c>np.bytes_</c>, <c>|S5</c>). Not supported by NumSharp.</summary>
         NPY_STRINGLTR = 'S',
-        /// <summary><c>'a'</c>: the deprecated alias of <see cref="NPY_STRINGLTR"/>; NumPy 2 accepts it with a DeprecationWarning ("Use the 'S' alias instead").</summary>
-        NPY_DEPRECATED_STRINGLTR2 = 'a',
         /// <summary><c>'U'</c>: fixed-width Unicode (<c>np.str_</c>, <c>&lt;U5</c>), the slot of <see cref="NPTypeCode.String"/>. Not supported by <c>np.dtype</c>.</summary>
         NPY_UNICODELTR = 'U',
         /// <summary><c>'V'</c>: void (raw bytes and structured records). Not supported by NumSharp.</summary>

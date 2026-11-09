@@ -369,29 +369,31 @@ namespace NumSharp.Tests.DTypes
         // ------------------------------------------------------------------------------------------------------------
 
         /// <summary>
-        ///     <c>np.isdtype</c>: a <c>StringDType</c> dtype argument is refused first (before any kind, even an unknown one or
-        ///     an empty tuple); a <c>StringDType</c> kind is refused with the kind text.
+        ///     <c>np.isdtype</c> with <c>StringDType</c> (NumPy 2.5.2, gh-32030): <c>_preprocess_dtype</c> turns any
+        ///     <c>StringDType</c> descriptor into the <c>StringDType</c> CLASS, so it is accepted on either side — in no named
+        ///     kind, no NumPy scalar class or descriptor, and matching every other <c>StringDType</c> whatever its NA object —
+        ///     and the kinds are still validated (an unknown name raises). NumPy 2.5.4's answers; 2.4 refused the descriptor
+        ///     with <c>dtype argument must be a NumPy dtype</c> / <c>kind argument must be comprised of NumPy dtypes or
+        ///     strings only</c>.
         /// </summary>
         [TestMethod]
-        public void IsDtype_RefusesStringDType()
+        public void IsDtype_StringDTypeIsTheStringDTypeClass()
         {
             var t = np.dtype("T");
-            const string dtypeText = "dtype argument must be a NumPy dtype, but it is a <class 'numpy.dtypes.StringDType'>.";
-            const string kindText = "kind argument must be comprised of NumPy dtypes or strings only, but is a <class 'numpy.dtypes.StringDType'>.";
-            Action a1 = () => np.isdtype(t, "numeric");
-            a1.Should().Throw<TypeError>().WithMessage(dtypeText);
-            Action a2 = () => np.isdtype(t, "foo");
-            a2.Should().Throw<TypeError>().WithMessage(dtypeText);
-            Action a3 = () => np.isdtype(t, np.float64);
-            a3.Should().Throw<TypeError>().WithMessage(dtypeText);
-            Action a4 = () => np.isdtype(t, new string[0]);
-            a4.Should().Throw<TypeError>().WithMessage(dtypeText);
-            Action a5 = () => np.isdtype(t, new DType[0]);
-            a5.Should().Throw<TypeError>().WithMessage(dtypeText);
-            Action a6 = () => np.isdtype(np.float64, t);
-            a6.Should().Throw<TypeError>().WithMessage(kindText);
-            Action a7 = () => np.isdtype(np.float64, new[] { np.float64, t });
-            a7.Should().Throw<TypeError>().WithMessage(kindText);
+            var tNone = np.dtypes.StringDType(na_object: null);
+            np.isdtype(t, "numeric").Should().BeFalse();
+            Action unknown = () => np.isdtype(t, "foo");
+            unknown.Should().Throw<ValueError>().WithMessage("kind argument is a string, but 'foo' is not a known kind name.");
+            np.isdtype(t, np.float64).Should().BeFalse();
+            np.isdtype(t, new string[0]).Should().BeFalse();
+            np.isdtype(t, new DType[0]).Should().BeFalse();
+            np.isdtype(np.float64, t).Should().BeFalse();
+            np.isdtype(np.float64, new[] { np.float64, t }).Should().BeTrue();
+            np.isdtype(t, t).Should().BeTrue();
+            np.isdtype(t, tNone).Should().BeTrue();
+            np.isdtype(t, new[] { np.float64, t }).Should().BeTrue();
+            Action unknownInTuple = () => np.isdtype(t, "numeric", "foo");
+            unknownInTuple.Should().Throw<ValueError>().WithMessage("kind argument is a string, but 'foo' is not a known kind name.");
             np.isdtype(np.dtype("U5"), "numeric").Should().BeFalse();
         }
 
@@ -460,8 +462,9 @@ namespace NumSharp.Tests.DTypes
         }
 
         /// <summary>
-        ///     The common instance: compatible sentinels (at most one present, or equal) give the present one and the FIRST
-        ///     descriptor's <c>coerce</c>; two different sentinels are NumPy's TypeError naming both descriptors.
+        ///     The common instance: compatible sentinels (at most one present, or equal) give the present one, and
+        ///     <c>coerce</c> only when both descriptors coerce (NumPy 2.5.2's <c>stringdtype_common_na_coerce</c>; NumPy 2.4
+        ///     took the FIRST descriptor's); two different sentinels are NumPy's TypeError naming both descriptors.
         /// </summary>
         [TestMethod]
         public void PromoteTypes_CommonInstance()
@@ -469,12 +472,12 @@ namespace NumSharp.Tests.DTypes
             np.promote_types(np.dtypes.StringDType(null), np.dtypes.StringDType()).ToString().Should().Be("StringDType(na_object=None)");
             np.promote_types(np.dtypes.StringDType(), np.dtypes.StringDType(null)).ToString().Should().Be("StringDType(na_object=None)");
             np.promote_types(np.dtypes.StringDType(false), np.dtypes.StringDType()).ToString().Should().Be("StringDType(coerce=False)");
-            np.promote_types(np.dtypes.StringDType(), np.dtypes.StringDType(false)).ToString().Should().Be("StringDType()");
+            np.promote_types(np.dtypes.StringDType(), np.dtypes.StringDType(false)).ToString().Should().Be("StringDType(coerce=False)");
             np.promote_types(np.dtypes.StringDType("NA"), np.dtypes.StringDType("NA")).ToString().Should().Be("StringDType(na_object='NA')");
             np.promote_types(np.dtypes.StringDType(null, false), np.dtype("T")).ToString().Should().Be("StringDType(na_object=None, coerce=False)");
             np.promote_types(np.dtypes.StringDType(false), np.dtype("U5")).ToString().Should().Be("StringDType(coerce=False)");
-            np.promote_types(np.dtype("U5"), np.dtypes.StringDType(false)).ToString().Should().Be("StringDType()",
-                "U5 casts to a fresh StringDType(), the first operand of the common instance");
+            np.promote_types(np.dtype("U5"), np.dtypes.StringDType(false)).ToString().Should().Be("StringDType(coerce=False)",
+                "U5 casts to a fresh StringDType(), which coerces, and the common instance coerces only when both do");
             np.promote_types(np.dtype("U5"), np.dtypes.StringDType(null)).ToString().Should().Be("StringDType(na_object=None)");
             Action a = () => np.promote_types(np.dtypes.StringDType(null), np.dtypes.StringDType(double.NaN));
             a.Should().Throw<TypeError>().WithMessage(
