@@ -311,9 +311,10 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   view lives still frees the memory under it: keep them alive, or copy with `ToNDArray`.
 - **Only CPU-addressable tensors** can be read or viewed. A CUDA / DirectML / TensorRT-resident output is
   refused (`the tensor lives in 'Cuda' memory ... which the CPU cannot address`) — bind a CPU output or copy
-  to CPU first. Host-accessible device memory (`CudaPinned`, `HipPinned`, `QnnHtpShared`) and `CpuAligned4K`
-  are fine: the bridge asks ORT for the device memory kind where the loaded ORT can tell, and uses the
-  allocator name otherwise.
+  to CPU first. Host-accessible device memory (`CudaPinned`, `HipPinned`, `QnnHtpShared`), `CpuAligned4K` and
+  XNNPACK's outputs (CPU memory under its own allocator name, `XnnpackExecutionProvider`, on ORT's Android and
+  iOS packages) are fine: the bridge asks ORT for the device memory kind where the loaded ORT can tell, and uses
+  the allocator name otherwise.
 - No GIL, no interpreter lifetime, no thread-affinity: ORT is thread-safe and the verbs are plain calls.
 
 ## Limits (stated up front)

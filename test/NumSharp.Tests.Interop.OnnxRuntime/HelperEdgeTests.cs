@@ -166,24 +166,20 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     OPEN BUG (found 2026-11-09 by KokoroSharp's device probe on a Galaxy S23 Ultra, ONNX Runtime 1.22.0 for
-        ///     Android): the CPU device's memory under a provider's OWN allocator name is refused. XNNPACK, the CPU
-        ///     accelerator of ONNX Runtime's Android and iOS packages, describes its outputs as <c>XnnpackExecutionProvider</c>
-        ///     memory on the CPU device with default memory, so every import of an XNNPACK session's output
-        ///     (<c>AsNDArray</c>, <c>ToNDArray</c>, <c>session.Run(…, zeroCopyOutputs: true)</c>) throws "the tensor lives in
-        ///     'XnnpackExecutionProvider' memory (device 0, Default), which the CPU cannot address", while ONNX Runtime's
-        ///     own <c>GetTensorDataAsSpan</c> reads the same tensor. <see cref="NDArrayOnnxInterop.IsCpuAccessible"/>'s
-        ///     rule 3 knows only the CPU provider's names, and the device memory type it can ask for is <c>DEFAULT</c> for a
-        ///     CPU's and a GPU's own memory alike; the device TYPE would decide it, but only the C API exposes it
-        ///     (<c>MemoryInfoGetDeviceType</c>). Reproduced with no XNNPACK through ONNX Runtime 1.23's
-        ///     <c>CreateMemoryInfo_V2</c>, which describes memory by device type under any name; Inconclusive on an older
-        ///     ONNX Runtime (the floor, 1.16.0, cannot describe it).
+        ///     Regression pin (found 2026-11-09 by KokoroSharp's device probe on a Galaxy S23 Ultra, ONNX Runtime 1.22.0 for
+        ///     Android): the CPU device's memory under a provider's OWN allocator name is read. XNNPACK, the CPU accelerator of
+        ///     ONNX Runtime's Android and iOS packages, describes its outputs as <c>XnnpackExecutionProvider</c> memory on the
+        ///     CPU device with default memory; every import of an XNNPACK session's output (<c>AsNDArray</c>,
+        ///     <c>ToNDArray</c>, <c>session.Run(…, zeroCopyOutputs: true)</c>) threw "the tensor lives in
+        ///     'XnnpackExecutionProvider' memory (device 0, Default), which the CPU cannot address" while ONNX Runtime's own
+        ///     <c>GetTensorDataAsSpan</c> read the same tensor. Described here with no XNNPACK through ONNX Runtime 1.23's
+        ///     <c>CreateMemoryInfo_V2</c> (any name, a device type); Inconclusive on an older ONNX Runtime (the floor, 1.16.0,
+        ///     cannot describe it). The real provider end to end: <c>NumSharp.Tests.Interop.OnnxRuntime.Android</c>.
         /// </summary>
         [TestMethod]
-        [TestCategory("OpenBugs")]
         public unsafe void IsCpuAccessible_CpuDeviceMemoryUnderAProvidersOwnName_IsRead()
         {
-            using OrtMemoryInfo xnnpack = TryDescribeCpuDevice("XnnpackExecutionProvider");
+            using OrtMemoryInfo xnnpack = TryDescribe("XnnpackExecutionProvider", "CPU", "DEFAULT");
             if (xnnpack is null)
                 Assert.Inconclusive("the loaded ONNX Runtime has no OrtMemoryInfo(name, OrtMemoryInfoDeviceType, …) constructor (CreateMemoryInfo_V2, 1.23+)");
 
@@ -196,6 +192,8 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
                 output.GetTensorDataAsSpan<float>()[3].Should().Be(3f, "ONNX Runtime itself reads it");
                 using NDArray view = output.AsNDArray();
                 view.GetSingle(3).Should().Be(3f);
+                using NDArray copy = output.ToNDArray();
+                copy.ToArray<float>().Should().Equal(0f, 1f, 2f, 3f);
             }
 
             NDArrayOnnxInterop.LiveImports.Should().Be(0);
@@ -203,23 +201,89 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
         }
 
         /// <summary>
-        ///     Describes the CPU device's default memory under <paramref name="name"/> through ONNX Runtime 1.23's
-        ///     name-and-device-type constructor, found by reflection because the suite compiles against the 1.16.0 floor,
-        ///     which has neither the constructor nor its two enums.
+        ///     Every execution provider's allocator, described the way the provider registers it in ONNX Runtime's sources
+        ///     (device type, memory type, name): the CPU-device ones are read, end to end through <c>AsNDArray</c> and
+        ///     <c>ToNDArray</c> over a tensor in that memory; a GPU's or NPU's own memory stays refused, under its real name
+        ///     and under a name the bridge has never seen. Inconclusive on an ONNX Runtime without <c>CreateMemoryInfo_V2</c>
+        ///     (before 1.23).
+        /// </summary>
+        /// <remarks>
+        ///     The rows follow the audit recorded on <c>NDArrayOnnxInterop.CpuAllocatorNames</c>. A refused row never reads
+        ///     its tensor (the memory here is ordinary host memory, which a wrong acceptance would read without faulting, so
+        ///     the assertion is on the decision and the thrown message, not on a fault).
+        /// </remarks>
+        [TestMethod]
+        public unsafe void IsCpuAccessible_EveryProvidersAllocator_CpuDeviceRead_DeviceMemoryRefused()
+        {
+            var accepted = new (string Name, string Device, string Provider)[]
+            {
+                ("Cpu", "CPU", "CPU, ACL, DNNL, NNAPI, CoreML, RKNPU, SNPE, Azure, VitisAI"),
+                ("CpuAligned4K", "CPU", "VSINPU"),
+                ("XnnpackExecutionProvider", "CPU", "XNNPACK"),
+            };
+            var refused = new (string Name, string Device, string Provider)[]
+            {
+                ("Cuda", "GPU", "CUDA, TensorRT, NV TensorRT RTX"),
+                ("CUDAMemPoolArena", "GPU", "CUDA (mempool arena)"),
+                ("DML", "GPU", "DirectML"),
+                ("WebGPU_Buf", "GPU", "WebGPU, JS (ORT 1.25+)"),
+                ("WebGPU_Buffer", "GPU", "WebGPU, JS (before 1.25)"),
+                ("WebNN_Ten", "GPU", "WebNN (ORT 1.25+)"),
+                ("WebNN_Tensor", "GPU", "WebNN (before 1.25)"),
+                ("MIGraphX", "GPU", "MIGraphX"),
+                ("Cann", "NPU", "CANN"),
+                ("OpenVINO_GPU", "GPU", "OpenVINO"),
+                ("OpenVINO_NPU", "NPU", "OpenVINO"),
+                ("SomeFutureGpuProvider", "GPU", "an unknown GPU provider"),
+            };
+
+            using NDArray backing = Arange(NPTypeCode.Single, 4);
+            var address = (IntPtr)backing.Storage.InternalArray.Address;
+            foreach (var (name, device, provider) in accepted)
+            {
+                using OrtMemoryInfo info = TryDescribe(name, device, "DEFAULT");
+                if (info is null)
+                    Assert.Inconclusive("the loaded ONNX Runtime has no OrtMemoryInfo(name, OrtMemoryInfoDeviceType, …) constructor (CreateMemoryInfo_V2, 1.23+)");
+                NDArrayOnnxInterop.IsCpuAccessible(info).Should().BeTrue($"'{name}' is {provider}'s CPU-device memory");
+                using OrtValue output = OrtValue.CreateTensorValueWithData(info, Microsoft.ML.OnnxRuntime.Tensors.TensorElementType.Float, new long[] { 4 }, address, 16);
+                using (NDArray view = output.AsNDArray())
+                    view.GetSingle(2).Should().Be(2f, name);
+                using (NDArray copy = output.ToNDArray())
+                    copy.ToArray<float>().Should().Equal(new[] { 0f, 1f, 2f, 3f }, name);
+            }
+            foreach (var (name, device, provider) in refused)
+            {
+                using OrtMemoryInfo info = TryDescribe(name, device, "DEFAULT");
+                NDArrayOnnxInterop.IsCpuAccessible(info).Should().BeFalse($"'{name}' is {provider}'s own {device} memory");
+                using OrtValue output = OrtValue.CreateTensorValueWithData(info, Microsoft.ML.OnnxRuntime.Tensors.TensorElementType.Float, new long[] { 4 }, address, 16);
+                new Action(() => output.AsNDArray()).Should().Throw<InvalidOperationException>().WithMessage($"*'{name}'*cannot address*");
+                new Action(() => output.ToNDArray()).Should().Throw<InvalidOperationException>().WithMessage($"*'{name}'*cannot address*");
+            }
+
+            NDArrayOnnxInterop.LiveImports.Should().Be(0);
+            GC.KeepAlive(backing);
+        }
+
+        /// <summary>
+        ///     Describes memory of a device type under <paramref name="name"/> through ONNX Runtime 1.23's name-and-device-type
+        ///     constructor, found by reflection because the suite compiles against the 1.16.0 floor, which has neither the
+        ///     constructor nor its two enums.
         /// </summary>
         /// <param name="name">Any allocator name; the constructor accepts names ORT does not know.</param>
+        /// <param name="deviceType">An <c>OrtMemoryInfoDeviceType</c> member name: <c>CPU</c>, <c>GPU</c>, <c>FPGA</c>, <c>NPU</c>.</param>
+        /// <param name="deviceMemoryType">An <c>OrtDeviceMemoryType</c> member name: <c>DEFAULT</c> or <c>HOST_ACCESSIBLE</c>.</param>
         /// <returns>The memory info, which the caller disposes, or <c>null</c> when the loaded ONNX Runtime lacks the constructor.</returns>
         /// <exception cref="System.Reflection.TargetInvocationException">ONNX Runtime refused the description.</exception>
-        private static OrtMemoryInfo TryDescribeCpuDevice(string name)
+        private static OrtMemoryInfo TryDescribe(string name, string deviceType, string deviceMemoryType)
         {
             System.Reflection.Assembly ort = typeof(OrtMemoryInfo).Assembly;
-            Type deviceType = ort.GetType("Microsoft.ML.OnnxRuntime.OrtMemoryInfoDeviceType");
-            Type deviceMemoryType = ort.GetType("Microsoft.ML.OnnxRuntime.OrtDeviceMemoryType");
-            if (deviceType is null || deviceMemoryType is null)
+            Type deviceTypeEnum = ort.GetType("Microsoft.ML.OnnxRuntime.OrtMemoryInfoDeviceType");
+            Type deviceMemoryTypeEnum = ort.GetType("Microsoft.ML.OnnxRuntime.OrtDeviceMemoryType");
+            if (deviceTypeEnum is null || deviceMemoryTypeEnum is null)
                 return null;
-            var constructor = typeof(OrtMemoryInfo).GetConstructor(new[] { typeof(string), deviceType, typeof(uint), typeof(int), deviceMemoryType, typeof(ulong), typeof(OrtAllocatorType) });
-            // The enum members are looked up by name (CPU, DEFAULT), never assumed to be numbers.
-            return (OrtMemoryInfo)constructor?.Invoke(new object[] { name, Enum.Parse(deviceType, "CPU"), 0u, 0, Enum.Parse(deviceMemoryType, "DEFAULT"), 0UL, OrtAllocatorType.DeviceAllocator });
+            var constructor = typeof(OrtMemoryInfo).GetConstructor(new[] { typeof(string), deviceTypeEnum, typeof(uint), typeof(int), deviceMemoryTypeEnum, typeof(ulong), typeof(OrtAllocatorType) });
+            // The enum members are looked up by name, never assumed to be numbers.
+            return (OrtMemoryInfo)constructor?.Invoke(new object[] { name, Enum.Parse(deviceTypeEnum, deviceType), 0u, 0, Enum.Parse(deviceMemoryTypeEnum, deviceMemoryType), 0UL, OrtAllocatorType.DeviceAllocator });
         }
     }
 }

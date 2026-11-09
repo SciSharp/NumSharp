@@ -160,7 +160,16 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   row, so the model gathers on axis 1), and `TextRunTierEdgeTests` (text input through `RunInto` into a preallocated
   numeric output, `Run`, `RunAsync` / `RunIntoAsync` over the fixed-shape LabelEncoder model - `RunAsync` cannot allocate
   for an output declared without dimensions -, the declared rank validated, StringNormalizer stopwords removing elements
-  down to one empty string, eight concurrent string runs). The `interop-test` CI job
+  down to one empty string, eight concurrent string runs), and the execution providers: `ProviderEndToEndTests` (each
+  CPU-side provider the loaded ORT carries runs `matmul_const_f32` - X times a CONSTANT W, the MatMul form XNNPACK takes
+  - and its output is imported through `AsNDArray`, `ToNDArray` and `Run(zeroCopyOutputs)`, the output's allocator
+  asserted so a silent CPU fallback cannot pass; each GPU provider's output, bound to its own memory through
+  `OrtIoBinding`, is refused) and `HelperEdgeTests`' table of every provider's allocator from ORT's sources (CPU-device
+  memory read, GPU / NPU memory refused, via ORT 1.23's `CreateMemoryInfo_V2`). Desktop ORT packages carry only the CPU
+  provider, so `test/NumSharp.Tests.Interop.OnnxRuntime.Android` (an instrumentation-only app, not in the sln: no
+  Android workload in CI; run by hand over adb, its README) runs the same `ProviderEndToEnd` code on a device: CPU,
+  XNNPACK (outputs in `XnnpackExecutionProvider` memory) and NNAPI imported, WebGPU's `WebGPU_Buf` refused. The
+  `interop-test` CI job
   runs it against ONNX Runtime 1.16.0 (the async tests Inconclusive, the refusal tested) and 1.31.1, the current
   release (the only gating leg that runs the async tests: never set it below 1.30.0), and (advisory) against the newest
   `Microsoft.ML.OnnxRuntime` on nuget.org, release candidates included, with no Python. Its "Package consumer:" steps

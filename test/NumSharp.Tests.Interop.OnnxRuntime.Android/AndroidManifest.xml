@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No activity: the app is driven only through its instrumentation (ProviderCheck.cs), whose element the build generates.
+     A headless run holds a partial wake lock: a device that suspends mid-run freezes the process for minutes. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <application android:label="NumSharp ORT providers" android:allowBackup="false" />
+</manifest>

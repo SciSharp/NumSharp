@@ -468,18 +468,33 @@ namespace NumSharp.Interop.OnnxRuntime
             }
             string name = memInfo.Name;
             if (IsOneOf(name, CpuAllocatorNames))
-                return true;   // a CPU device's own memory (the CPU EP's device or arena allocator, the 4 KB-aligned one)
+                return true;   // a CPU device's own memory (the CPU EP's device or arena allocator, the 4 KB-aligned one, XNNPACK's)
             if (HostAccessibleProbe.Value is null && IsOneOf(name, HostAccessibleAllocatorNames))
                 return true;   // an ORT without GetDeviceMemoryType: the names ORT itself maps to host-accessible memory
             return memInfo.Equals(OrtMemoryInfo.DefaultInstance);
         }
 
         /// <summary>
-        ///     ORT's allocator names for a CPU device's own memory (<c>onnxruntime::CPU</c>, <c>onnxruntime::CPU_ALIGNED_4K</c>
-        ///     in <c>core/framework/allocator.h</c>; <c>CreateMemoryInfo</c> maps both to <c>OrtDevice::CPU</c> with default
-        ///     memory). <c>CpuAligned4K</c> was refused before: only the exact name <c>Cpu</c> was accepted.
+        ///     The allocator names under which ORT hands out a CPU device's own memory: <c>onnxruntime::CPU</c> and
+        ///     <c>onnxruntime::CPU_ALIGNED_4K</c> (<c>core/framework/allocator.h</c>; <c>CreateMemoryInfo</c> maps both to
+        ///     <c>OrtDevice::CPU</c> with default memory), and <c>kXnnpackExecutionProvider</c>.
         /// </summary>
-        private static readonly string[] CpuAllocatorNames = { "Cpu", "CpuAligned4K" };
+        /// <remarks>
+        ///     <para>The list comes from an audit of every execution provider's <c>CreatePreferredAllocators</c> in ONNX
+        ///     Runtime's sources (main, 2026-08): the CPU provider and every provider without allocators of its own (ACL,
+        ///     DNNL, NNAPI, CoreML, RKNPU, SNPE, Azure) use <c>Cpu</c>; VitisAI uses <c>Cpu</c>; VSINPU uses
+        ///     <c>CpuAligned4K</c>; XNNPACK — the CPU accelerator of ORT's Android and iOS packages — registers a
+        ///     <c>CPUAllocator</c> named <c>XnnpackExecutionProvider</c> on the default device (<c>OrtDevice()</c>: the
+        ///     CPU), so every output an XNNPACK node produces lives in CPU memory under that name. QNN's shared memory
+        ///     (<c>QnnHtpShared</c>) is host-accessible device memory, rule 2's case. Every other provider allocator is a
+        ///     GPU or NPU device's own memory and stays refused: CUDA / TensorRT / NV TensorRT RTX (<c>Cuda</c>,
+        ///     <c>CUDAMemPoolArena</c>), DML, WebGPU and JS (<c>WebGPU_Buf</c>; <c>WebGPU_Buffer</c> before ORT 1.25), WebNN
+        ///     (<c>WebNN_Ten</c>; <c>WebNN_Tensor</c> before 1.25), MIGraphX, CANN, and OpenVINO's device memory (which it marks
+        ///     <c>CpuInput</c> when it is the host's, rule 1).</para>
+        ///     <para><c>CpuAligned4K</c> and <c>XnnpackExecutionProvider</c> were refused before (only the exact name
+        ///     <c>Cpu</c> was accepted): an XNNPACK session's outputs could not be imported at all.</para>
+        /// </remarks>
+        private static readonly string[] CpuAllocatorNames = { "Cpu", "CpuAligned4K", "XnnpackExecutionProvider" };
 
         /// <summary>
         ///     ORT's allocator names for memory a device shares with the host (<c>CreateMemoryInfo</c> maps each to
