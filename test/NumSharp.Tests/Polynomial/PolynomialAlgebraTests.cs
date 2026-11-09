@@ -819,24 +819,25 @@ namespace NumSharp.Tests.Polynomial
         }
 
         /// <summary>
-        ///     A NaN root's SIGN follows NumPy's <c>roots.sort()</c> (the 2026-10-05 re-review): NumPy's float sort turns
-        ///     every NaN into the positive quiet NaN, <c>line(-r, 1)</c> negates it, and the products carry that negative
-        ///     NaN into every coefficient it reaches. NumSharp's sort wrote .NET's negative NaN, so the negation made them
-        ///     all positive. Inputs: a positive payload NaN (float64) and a negative payload NaN (float32, whose lines are
-        ///     float64 by array coercion) — the sort's canonical NaN, not the input's bits, decides the result.
+        ///     A NaN root's bits follow NumPy's <c>roots.sort()</c>: NumPy 2.5's float sort keeps every NaN's bits (its
+        ///     x86-simd-sort moves the NaNs to the end as they are; 2.4's turned each into the positive quiet NaN),
+        ///     <c>line(-r, 1)</c> negates it, and the products carry that NaN into every coefficient it reaches. Inputs: a
+        ///     positive payload NaN (float64), negated to <c>0xfff8000000000005</c>, and a negative payload NaN (float32,
+        ///     whose lines are float64 by array coercion), negated to the positive <c>0x7fc00005</c> and widened with its
+        ///     payload — the input's bits, not a canonical NaN, decide the result.
         /// </summary>
         [TestMethod]
-        public void FromRoots_NaNRoot_TakesTheSortsCanonicalNaN()
+        public void FromRoots_NaNRoot_KeepsTheSortedNaNsBits()
         {
             double nan5 = BitConverter.UInt64BitsToDouble(0x7ff8000000000005UL);
-            // P.polyfromroots(np.array([1.0, nan5, -2.0])) and C.chebfromroots(...) on NumPy 2.4.2:
+            // P.polyfromroots(np.array([1.0, nan5, -2.0])) and C.chebfromroots(...) on NumPy 2.5.4:
             AssertBytes(np.polynomial.polynomial.polyfromroots(np.array(new[] { 1.0, nan5, -2.0 })), "float64", new long[] { 4 },
-                        "000000000000f8ff000000000000f8ff000000000000f8ff000000000000f03f", "polyfromroots");
+                        "050000000000f8ff050000000000f8ff050000000000f8ff000000000000f03f", "polyfromroots");
             AssertBytes(np.polynomial.chebyshev.chebfromroots(np.array(new[] { 1.0, nan5, -2.0 })), "float64", new long[] { 4 },
-                        "000000000000f8ff000000000000f8ff000000000000f8ff000000000000d03f", "chebfromroots");
-            // P.polyfromroots(np.array([0.25, -nan(payload 5)], np.float32)) -> float64 [-nan, -nan, 1.0]
+                        "050000000000f8ff050000000000f8ff050000000000f8ff000000000000d03f", "chebfromroots");
+            // P.polyfromroots(np.array([0.25, -nan(payload 5)], np.float32)) -> float64 [nan(0x7ff80000a0000000) x2, 1.0]
             AssertBytes(np.polynomial.polynomial.polyfromroots(np.array(new[] { 0.25f, BitConverter.UInt32BitsToSingle(0xffc00005U) })),
-                        "float64", new long[] { 3 }, "000000000000f8ff000000000000f8ff000000000000f03f", "float32 roots");
+                        "float64", new long[] { 3 }, "000000a00000f87f000000a00000f87f000000000000f03f", "float32 roots");
         }
 
         /// <summary>

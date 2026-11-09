@@ -18,8 +18,9 @@ namespace NumSharp.Tests.Backends
     ///     carry a per-column sign/phase freedom and (for <c>eig</c>) the eigenvalue ORDER is
     ///     LAPACK-defined, so the primary check is the eigen equation <c>A·v = λ·v</c> (order- and
     ///     sign-invariant); eigenvalues are additionally compared directly (<c>eigh</c> ascending,
-    ///     <c>eig</c> sorted). Byte-exactness against NumPy 2.4.2 is proven live in
-    ///     <c>NumSharp.Tests.Interop</c>.
+    ///     <c>eig</c> sorted). Byte-exactness against NumPy 2.5.4 is proven live in
+    ///     <c>NumSharp.Tests.Interop</c>. Since NumPy 2.5 (gh-30411) <c>eig</c> / <c>eigvals</c> always return complex
+    ///     results: a real operand with real eigenvalues no longer collapses to a real dtype.
     /// </remarks>
     [TestClass]
     [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
@@ -235,16 +236,16 @@ namespace NumSharp.Tests.Backends
         // =========================================================================================
 
         [TestMethod]
-        public void Eig_RealMatrixWithRealEigenvalues_CollapsesToReal()
+        public void Eig_RealMatrixWithRealEigenvalues_IsComplex()
         {
             RequireLapack();
             var a = np.diag(np.array(new double[] { 1, 2, 3 }));
             var (w, v) = np.linalg.eig(a);
 
-            // all imaginary parts zero -> real dtype (NumPy's real-output optimization)
-            Assert.AreEqual(typeof(double), w.dtype);
-            Assert.AreEqual(typeof(double), v.dtype);
-            AssertClose(w, Tol, 1, 2, 3);
+            // NumPy 2.5 dropped the real-output collapse (2.4 returned float64 when every imaginary part was zero).
+            Assert.AreEqual(typeof(Complex), w.dtype);
+            Assert.AreEqual(typeof(Complex), v.dtype);
+            AssertCloseComplex(w, Tol, new Complex(1, 0), new Complex(2, 0), new Complex(3, 0));
             AssertEigenEquation(a, w, v, Tol);
         }
 
@@ -265,19 +266,19 @@ namespace NumSharp.Tests.Backends
         public void Eigvals_MatchesEig_WithoutVectors()
         {
             RequireLapack();
-            AssertClose(np.linalg.eigvals(np.diag(np.array(new double[] { 1, 2, 3 }))), Tol, 1, 2, 3);
+            AssertCloseComplex(np.linalg.eigvals(np.diag(np.array(new double[] { 1, 2, 3 }))), Tol, new Complex(1, 0), new Complex(2, 0), new Complex(3, 0));
             AssertCloseComplex(np.linalg.eigvals(np.array(new double[,] { { 1, -1 }, { 1, 1 } })), Tol,
                 new Complex(1, 1), new Complex(1, -1));
         }
 
         /// <summary>
-        ///     A real-collapsed result (<c>w.real</c>: a lane VIEW of the complex eigenvalue buffer, whose own handle the eig
-        ///     scope disposes) must keep that buffer alive. It used to be a non-counted alias, so the buffer went back to the
-        ///     pool the moment eigvals returned and the next same-size allocation — another eigvals call — overwrote the
-        ///     first result (single-threaded; under threads it read other threads' eigenvalues).
+        ///     An eigenvalue result must keep its buffer alive past later calls. The real-collapsed result NumPy 2.4 returned
+        ///     (<c>w.real</c>, a lane VIEW of the complex buffer the eig scope disposes) once went back to the pool the moment
+        ///     eigvals returned, and the next same-size allocation overwrote it; NumPy 2.5's result is the complex array
+        ///     itself, which owns its data (probed: <c>flags.owndata</c> True).
         /// </summary>
         [TestMethod]
-        public void Eigvals_RealResult_OwnsItsBuffer_SurvivesLaterCallsAndAllocations()
+        public void Eigvals_Result_OwnsItsBuffer_SurvivesLaterCallsAndAllocations()
         {
             RequireLapack();
             var r1 = np.linalg.eigvals(np.array(new double[,] { { 2, 0 }, { 0, 3 } }));
@@ -285,25 +286,24 @@ namespace NumSharp.Tests.Backends
             var r2 = np.linalg.eigvals(np.array(new double[,] { { 7, 0 }, { 0, 9 } }));
             using (var thief = np.full(new Shape(2), new Complex(-111, -222)))
             {
-                AssertClose(r1, 0, 2, 3);
-                AssertClose(w1, 0, 4, 5);
-                AssertClose(r2, 0, 7, 9);
+                AssertCloseComplex(r1, 0, new Complex(2, 0), new Complex(3, 0));
+                AssertCloseComplex(w1, 0, new Complex(4, 0), new Complex(5, 0));
+                AssertCloseComplex(r2, 0, new Complex(7, 0), new Complex(9, 0));
             }
             r1.Storage.InternalArray.IsReleased.Should().BeFalse();
-            r1.flags.owndata.Should().BeFalse("the real parts are a view of the complex result, as NumPy's w.real is");
+            r1.flags.owndata.Should().BeTrue("NumPy 2.5's eigvals returns the complex result itself");
         }
 
         [TestMethod]
-        public void Eig_Float32_RealEigsStaySingle_ComplexEigsBecomeComplex128()
+        public void Eig_Float32_IsComplex128WithSingleValues()
         {
             RequireLapack();
-            // float32 real-eigenvalue result stays single...
+            // NumPy 2.5's float32 result is complex64 whatever the eigenvalues (2.4 kept a real result float32); NumSharp has
+            // no complex64, so it is complex128 holding the same float32-rounded values (documented divergence, #569).
             var wReal = np.linalg.eig(np.diag(np.array(new float[] { 1, 2, 3 }))).eigenvalues;
-            Assert.AreEqual(typeof(float), wReal.dtype);
-            AssertClose(wReal, 1e-6, 1, 2, 3);
+            Assert.AreEqual(typeof(Complex), wReal.dtype);
+            AssertCloseComplex(wReal, 1e-6, new Complex(1, 0), new Complex(2, 0), new Complex(3, 0));
 
-            // ...but a complex result is complex128 — NumSharp has no complex64 (documented divergence,
-            // values identical to NumPy's complex64).
             var wCplx = np.linalg.eig(np.array(new float[,] { { 1, -1 }, { 1, 1 } })).eigenvalues;
             Assert.AreEqual(typeof(Complex), wCplx.dtype);
             AssertCloseComplex(wCplx, 1e-6, new Complex(1, 1), new Complex(1, -1));
@@ -346,12 +346,12 @@ namespace NumSharp.Tests.Backends
         }
 
         [TestMethod]
-        public void Eig_IntegerWidensToFloat64()
+        public void Eig_IntegerWidensToComplex128()
         {
             RequireLapack();
             var w = np.linalg.eig(np.diag(np.array(new int[] { 1, 2, 3 }))).eigenvalues;
-            Assert.AreEqual(typeof(double), w.dtype);
-            AssertClose(w, Tol, 1, 2, 3);
+            Assert.AreEqual(typeof(Complex), w.dtype);
+            AssertCloseComplex(w, Tol, new Complex(1, 0), new Complex(2, 0), new Complex(3, 0));
         }
 
         [TestMethod]
@@ -394,16 +394,19 @@ namespace NumSharp.Tests.Backends
             RequireLapack();
             var a = np.array(new double[,] { { 1, 2, 3 }, { 0, 4, 5 }, { 0, 0, 6 } });
             var w = np.linalg.eigvals(a);
-            Assert.AreEqual(typeof(double), w.dtype);
-            AssertClose(w, Tol, 1, 4, 6);
+            Assert.AreEqual(typeof(Complex), w.dtype);
+            AssertCloseComplex(w, Tol, new Complex(1, 0), new Complex(4, 0), new Complex(6, 0));
         }
 
         [TestMethod]
         public void Eig_Degenerate_1x1_And_0x0()
         {
             RequireLapack();
-            AssertClose(np.linalg.eig(np.array(new double[,] { { 7 } })).eigenvalues, Tol, 7);
-            np.linalg.eig(np.zeros(new Shape(0, 0))).eigenvalues.Should().BeShaped(0);
+            AssertCloseComplex(np.linalg.eig(np.array(new double[,] { { 7 } })).eigenvalues, Tol, new Complex(7, 0));
+            var empty = np.linalg.eig(np.zeros(new Shape(0, 0)));
+            empty.eigenvalues.Should().BeShaped(0);
+            Assert.AreEqual(typeof(Complex), empty.eigenvalues.dtype);
+            Assert.AreEqual(typeof(Complex), empty.eigenvectors.dtype);
         }
 
         // =========================================================================================

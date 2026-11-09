@@ -85,7 +85,7 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     The <c>eig</c> / <c>eigvals</c> gufunc: OpenBLAS <c>geev</c> through the operand engine's
-        ///     <see cref="TensorEngine.Blas"/>, always complex128 (<see cref="Eig"/> collapses a real result); an empty
+        ///     <see cref="TensorEngine.Blas"/>, always complex128 (and so is <see cref="Eig"/>'s result); an empty
         ///     operand is <see cref="LinAlgEmpty.Eig"/>, with or without a backend.
         /// </summary>
         /// <param name="a">The square matrix or stack, validated (finite included) and cast to the loop dtype.</param>
@@ -187,12 +187,17 @@ namespace NumSharp.Backends
         /// <param name="rcond">The singular-value cutoff ratio (NumPy's default already applied).</param>
         /// <returns>The solution, the residuals, the rank and the singular values, before <see cref="Lstsq"/>'s casts; the
         ///     rank is NumPy's scalar (a read-only 0-d array, the gufunc's return step).</returns>
-        /// <exception cref="LinAlgError">The SVD did not converge (<c>SVD did not converge in Linear Least
-        ///     Squares</c>).</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A non-empty coefficient matrix that no backend serves.</exception>
+        /// <exception cref="LinAlgError">The SVD did not converge, or the coefficient matrix holds an inf or a NaN (<c>SVD
+        ///     did not converge in Linear Least Squares</c>).</exception>
+        /// <exception cref="OpenBlasMissingBackendException">A non-empty, finite coefficient matrix that no backend
+        ///     serves.</exception>
         /// <remarks>
         ///     NumPy's lstsq calls the gufunc <c>_umath_linalg.lstsq</c>, whose 0-d rank output the ufunc machinery returns
         ///     as a numpy scalar (<c>np.intc</c>); <see cref="NDArray.MarkReductionScalar"/> is that step for both routes.
+        ///     Since NumPy 2.5 the gufunc checks the coefficient matrix before <c>gelsd</c> (<c>all_finite</c>, gh-32719):
+        ///     LAPACK's SVD drivers can loop forever on an inf, so a non-finite <paramref name="a"/> is a failed
+        ///     factorisation. The check is NumPy's code, not LAPACK's, so it runs with or without a backend; the right-hand
+        ///     sides are not checked (a NaN in b solves to NaN).
         /// </remarks>
         protected virtual (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) LstsqKernel(
             NDArray a, NDArray b, double rcond)
@@ -204,6 +209,9 @@ namespace NumSharp.Backends
                 var (emptyX, emptyRes, emptyRank, emptyS) = LinAlgEmpty.Lstsq(a, b);
                 return (emptyX, emptyRes, emptyRank.MarkReductionScalar(), emptyS);
             }
+            // umath_linalg's `not_ok = !all_finite(A, m * n) || call_gelsd(&params)`: A only, before LAPACK sees it.
+            if (!Backends.Kernels.FiniteScan.IsAllFinite(a))
+                throw new LinAlgError("SVD did not converge in Linear Least Squares");
             // One read of the settable property (see CholeskyKernel).
             var blas = a.TensorEngine.Blas;
             if (blas != null && blas.TryLstsq(a, b, rcond, out var x, out var res, out var rank, out var s))
@@ -245,15 +253,28 @@ namespace NumSharp.Backends
         ///     rows.</param>
         /// <param name="computeUv">NumPy's <c>compute_uv</c>; the U and Vh slots are null otherwise.</param>
         /// <returns>U, the real singular values (descending) and Vh.</returns>
-        /// <exception cref="LinAlgError">The SVD did not converge (<c>SVD did not converge</c>).</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no backend serves: Core carries no
-        ///     managed SVD.</exception>
+        /// <exception cref="LinAlgError">The SVD did not converge, or a matrix of the operand holds an inf or a NaN (<c>SVD
+        ///     did not converge</c>).</exception>
+        /// <exception cref="OpenBlasMissingBackendException">A non-empty, finite operand that no backend serves: Core carries
+        ///     no managed SVD.</exception>
+        /// <remarks>
+        ///     Since NumPy 2.5 the svd gufuncs check each matrix before <c>gesdd</c> (<c>all_finite</c>, gh-32591 /
+        ///     gh-32719): LAPACK's SVD drivers loop forever on some inputs holding inf and return garbage for the rest, so a
+        ///     non-finite matrix is a failed factorisation — NumPy 2.4 returned NaN singular values for an inf and raised for
+        ///     a NaN. The gufunc marks the matrix failed and raises once its loop ends, so one non-finite matrix in a stack
+        ///     fails the whole call. The check is NumPy's code, not LAPACK's, so it runs with or without a backend (np.linalg
+        ///     cond's NaN-instead-of-error reading is <c>CondSvdvals</c>, which checks matrix by matrix itself).
+        /// </remarks>
         protected virtual (NDArray U, NDArray S, NDArray Vh) SvdKernel(NDArray a, bool fullMatrices, bool computeUv)
         {
             // An empty operand (an empty matrix or a zero-size batch) factorises nothing: NumPy's answer needs no LAPACK, so
             // Core gives it whether or not a backend is installed (LinAlgEmpty, probed against NumPy 2.4.2).
             if (a.size == 0)
                 return LinAlgEmpty.Svd(a, fullMatrices, computeUv);
+            // umath_linalg's `not_ok = !all_finite(A, M * N) || call_gesdd(&params)`, matrix by matrix; any failed matrix
+            // raises after the loop, so one scan of the whole operand decides the call.
+            if (!Backends.Kernels.FiniteScan.IsAllFinite(a))
+                throw new LinAlgError("SVD did not converge");
             // One read of the settable property (see CholeskyKernel).
             var blas = a.TensorEngine.Blas;
             if (blas != null && blas.TrySvd(a, fullMatrices, computeUv, out var u, out var s, out var vh))

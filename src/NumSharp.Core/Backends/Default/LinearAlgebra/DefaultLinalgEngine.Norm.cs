@@ -760,21 +760,6 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         private static int NormalizeAxis(int axis, int nd) => Shape.check_and_adjust_axis(nd, axis);
 
-        /// <summary>
-        ///     Python's <c>x.shape[axis]</c>: the tuple index np.linalg.cross reads BEFORE it normalizes anything, so an
-        ///     axis out of range is the IndexError Python raises there, not an AxisError.
-        /// </summary>
-        /// <param name="axis">The axis; negative values count from the end.</param>
-        /// <param name="nd">The operand's rank.</param>
-        /// <returns>The non-negative axis.</returns>
-        /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range").</exception>
-        private static int ShapeIndex(int axis, int nd)
-        {
-            if (axis < -nd || axis >= nd)
-                throw new IndexError("tuple index out of range");
-            return axis < 0 ? axis + nd : axis;
-        }
-
         /// <summary>Whether an order is a name (a C# string: NumPy's str order).</summary>
         /// <param name="ord">The order argument.</param>
         /// <param name="word">The name, or null.</param>

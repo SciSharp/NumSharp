@@ -586,9 +586,10 @@ namespace NumSharp.Tests.Backends
         }
 
         /// <summary>
-        ///     A zero eigenvalue's sign is 0, so NumPy's Vh has a zero row there (Vh is not unitary then). A complex operand's
-        ///     Vh is a new array in the order of the transposed view the conjugate ufunc reads (F for one matrix, the swapped
-        ///     axes for a stack); a float32 operand gives float32 factors. Expected values: NumPy 2.4.2.
+        ///     A zero eigenvalue's row of Vh is its eigenvector: NumPy 2.5 signs the rows with <c>np.copysign(1.0, s)</c>
+        ///     ("avoid zero sign"), so Vh stays unitary, where NumPy 2.4's <c>sign(s)</c> was 0 there and zeroed the row. A
+        ///     complex operand's Vh is a new array in the order of the transposed view the conjugate ufunc reads (F for one
+        ///     matrix, the swapped axes for a stack); a float32 operand gives float32 factors. Expected values: NumPy 2.5.4.
         /// </summary>
         [TestMethod]
         public void Svd_Hermitian_ZeroEigenvalue_Complex_Float32()
@@ -597,8 +598,9 @@ namespace NumSharp.Tests.Backends
             var z = np.array(new double[,] { { 1.0, 2.0 }, { 2.0, 4.0 } });
             var (_, sz, vz) = np.linalg.svd(z, hermitian: true);
             AssertClose(sz, 1e-12, 5.0, 0.0);
-            vz.GetDouble(1, 0).Should().Be(0.0);
-            vz.GetDouble(1, 1).Should().Be(0.0);
+            // NumPy 2.5.4: vh = [[0.447…, 0.894…], [-0.8944271909999159, 0.4472135954999579]] (2.4.2's second row: zeros).
+            vz.GetDouble(1, 0).Should().BeApproximately(-0.8944271909999159, 1e-12);
+            vz.GetDouble(1, 1).Should().BeApproximately(0.4472135954999579, 1e-12);
 
             var c = np.array(new[,] { { new Complex(2, 0), new Complex(1, -2) }, { new Complex(1, 2), new Complex(-3, 0) } });
             var (uc, sc, vc) = np.linalg.svd(c, hermitian: true);

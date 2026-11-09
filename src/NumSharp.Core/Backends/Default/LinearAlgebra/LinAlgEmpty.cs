@@ -40,8 +40,9 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     <c>np.linalg.eig</c> / <c>eigvals</c> of an empty operand, as the <c>geev</c> seam returns it: complex128
-        ///     eigenvalues <c>(…, N)</c> and eigenvectors <c>(…, N, N)</c>. The caller's realness collapse then makes them
-        ///     real for a real operand, because NumPy's <c>all(w.imag == 0)</c> is vacuously true for an empty result.
+        ///     eigenvalues <c>(…, N)</c> and eigenvectors <c>(…, N, N)</c>, which is also the final result (NumPy 2.5's
+        ///     eig is always complex; NumPy 2.4 made an empty real operand's result real, its vacuous
+        ///     <c>all(w.imag == 0)</c>).
         /// </summary>
         /// <param name="a">The operand, cast to <c>result_t</c>, with <c>a.size == 0</c> (validated square by the caller).</param>
         /// <param name="computeVectors">Whether the eigenvectors are wanted; when false their slot is null.</param>

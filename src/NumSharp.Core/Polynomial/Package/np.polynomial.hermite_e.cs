@@ -128,8 +128,8 @@ namespace NumSharp
 
         /// <summary>
         ///     Evaluates the N-D probabilists' Hermite series at the points <c>pts = (x, y, …)</c> — the n-dimensional
-        ///     <see cref="hermeval2d"/>. Added in NumPy's development branch (<c>pu._valnd(hermeval, c, *pts)</c>); not in
-        ///     NumPy 2.4.2, where the same computation is the private <c>polyutils._valnd</c>.
+        ///     <see cref="hermeval2d"/>. NumPy 2.5's addition (gh-30857): <c>pu._valnd(hermeval, c, *pts)</c>, the computation NumPy
+        ///     2.4 kept private as <c>polyutils._valnd</c>.
         /// </summary>
         /// <param name="pts">The coordinates, all of one shape (one per series axis evaluated): each an
         ///     <see cref="NDArray"/>, a typed C# array, a Python tuple / list or a scalar, converted first as in
@@ -141,7 +141,7 @@ namespace NumSharp
         /// <exception cref="IndexError"><paramref name="pts"/> is empty (<c>list index out of range</c>).</exception>
         /// <exception cref="ValueError">The coordinates differ in shape, or a tuple / list argument is ragged.</exception>
         /// <exception cref="System.NotSupportedException">A null or str <paramref name="c"/>, or a str coordinate.</exception>
-        /// <remarks>https://numpy.org/devdocs/reference/generated/numpy.polynomial.hermite_e.hermevalnd.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite_e.hermevalnd.html</remarks>
         public NDArray hermevalnd(object[] pts, object c) => NDPolyEval.ValNd(PolyBasis.HermiteE, c, pts);
 
         // ---- U1: constants, line, add/sub, trim ----
@@ -604,9 +604,10 @@ namespace NumSharp
         ///     +0.0 and -0.0 roots meet, NumPy's SIMD sort orders them by CPU and NumSharp's sort deterministically.
         /// </summary>
         /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Trailing zeros are trimmed first; integer series are computed in float64; a bool series has no common type.</param>
-        /// <returns>The sorted roots: REAL when every eigenvalue is — a view of the eigenvalue array's real parts for a float64
-        ///     series (OWNDATA false, as NumPy's <c>w.real</c>), a new float32 array for a float32 series — otherwise
-        ///     complex128 (NumPy's complex64 for a float32 series: NumSharp has one complex width).</returns>
+        /// <returns>The sorted roots: for degree 2 or more the eigenvalue array <see cref="np.linalg.eigvals"/> returned,
+        ///     sorted in place — always complex128 since NumPy 2.5 (real roots carry zero imaginary parts; NumPy's complex64
+        ///     for a float32 series: NumSharp has one complex width); a linear series' single root keeps the series
+        ///     dtype.</returns>
         /// <exception cref="ValueError">An empty series (<c>Coefficient array is empty</c>), a series that is not 1-d (<c>Coefficient array is not 1-d</c>), or no common type (a bool or str series), in NumPy's order; a ragged list (np.array's inhomogeneous-shape text).</exception>
         /// <exception cref="TypeError">A float16 (or decimal) series of degree 2 or more: linalg's
         ///     <c>array type float16 is unsupported in linalg</c>. An OBJECT series of three or more terms whose arithmetic

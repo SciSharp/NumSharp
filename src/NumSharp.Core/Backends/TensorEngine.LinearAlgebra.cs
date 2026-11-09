@@ -52,7 +52,7 @@ namespace NumSharp
         ///     raises the house type of that path with the same NumPy text.</exception>
         /// <exception cref="TypeError">A fixed-width string operand beside a 0-d one: NumPy's no-loop refusal of the
         ///     <c>multiply</c> it computes.</exception>
-        /// <exception cref="ValueError">A fixed-width string operand otherwise: "data type must provide an itemsize" (the
+        /// <exception cref="ValueError">A text operand otherwise: "dot not available for this type" (the
         ///     string product has no item size to allocate).</exception>
         [NDAnchored]
         [ArrayWrap("a", "b")]
@@ -78,19 +78,12 @@ namespace NumSharp
         [AsArray]
         public virtual NDArray Vdot(NDArray a, NDArray b)
         {
-            // A StringDType operand: NumPy's legacy descriptor lookup refuses it, or falls back to an OBJECT product that
-            // NumSharp cannot hold; VStringVdotAnswer gives NumPy's answer in NumPy's order.
-            if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsVString(b))
-                throw Backends.Strings.NDStringUfuncs.VStringVdotAnswer(a, b);
-            // vdot flattens both operands first (one reused dims buffer: a length mismatch is b's reshape error), so even
-            // a 0-d string then fails NumPy's result allocation for want of an item size.
-            if (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(b))
-            {
-                long n = a.size;
-                if (b.size != n)
-                    b.reshape(new long[] {n});
-                throw Backends.Strings.NDStringUfuncs.NoItemsize();
-            }
+            // A text operand (S, U or StringDType): NumPy 2.5 converts both operands into their common descriptor and
+            // flattens them (one reused dims buffer: a length mismatch is b's reshape error), and the descriptor has no dot
+            // function — or, with no common descriptor beside a StringDType operand, multiplies Python objects
+            // (VStringVdotAnswer, which NumSharp cannot hold past the first product). Either way in NumPy's order.
+            if (Backends.Strings.NDStringUfuncs.IsText(a) || Backends.Strings.NDStringUfuncs.IsText(b))
+                throw Backends.Strings.NDStringUfuncs.VdotTextAnswer(a, b);
             var blas = Blas;
             if (blas != null && blas.TryVdot(a, b, out var accelerated))
                 return accelerated;

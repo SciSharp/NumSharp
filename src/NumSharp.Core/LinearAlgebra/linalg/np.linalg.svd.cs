@@ -94,10 +94,12 @@ namespace NumSharp
             /// <param name="p">
             ///     The order: <c>null</c> (default) and <c>±2</c> use singular values;
             ///     <c>±1</c>, <c>±inf</c> and <c>"fro"</c> are defined as
-            ///     <c>norm(x, p) * norm(inv(x), p)</c>.
+            ///     <c>norm(x, p) * norm(inv(x), p)</c>, and <c>"nuc"</c> as the product of the sums of the singular values
+            ///     of x and of its inverse.
             /// </param>
             /// <returns>The condition number, real: a 0-d array for one matrix (NumPy's scalar), one per matrix of a stack;
-            ///     inf for a singular matrix.</returns>
+            ///     inf for a singular matrix, and since NumPy 2.5 NaN for a matrix holding a NaN (inf for one holding only
+            ///     infinities), each matrix of a stack on its own.</returns>
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.cond.html
             ///     <para>
@@ -105,7 +107,9 @@ namespace NumSharp
             ///     a matrix backend for a non-empty operand; ±1, ±inf and <c>"fro"</c> the inverse, which the managed LU
             ///     computes without one. As in NumPy the inverse runs in float64 (complex128 for a complex operand) whatever
             ///     the result dtype, and a singular matrix's inverse is NaN rather than an error, so its condition number is
-            ///     inf, inside a stack too.
+            ///     inf, inside a stack too. NumPy 2.5 reads the singular values the same way (<c>_cond_svdvals</c>, gh-32591):
+            ///     a non-finite matrix, or one the SVD does not converge on, gives NaN values where np.linalg.svd raises, and
+            ///     NumPy's tail turns a NaN condition number into inf unless the matrix itself held a NaN.
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">An SVD-based order (null, ±2, <c>"nuc"</c>) over a non-empty
@@ -113,8 +117,9 @@ namespace NumSharp
             /// <exception cref="TypeError">An array or list <paramref name="p"/>: NumPy's <c>p in {2, -2}</c> hashes it
             ///     (<c>unhashable type: 'numpy.ndarray'</c> / <c>'list'</c>), after the empty-operand check; a float16,
             ///     decimal or char operand.</exception>
-            /// <exception cref="LinAlgError">An empty operand, a non-square one for an inverse-based order, or
-            ///     <c>"nuc"</c> of a singular matrix (the SVD of its NaN inverse: <c>SVD did not converge</c>).</exception>
+            /// <exception cref="LinAlgError">An empty operand, fewer than two axes, or a non-square operand for an
+            ///     inverse-based order (<c>"nuc"</c> of a singular matrix is inf since NumPy 2.5, where NumPy 2.4 raised
+            ///     <c>SVD did not converge</c> for its NaN inverse).</exception>
             /// <exception cref="ValueError">An order the norm refuses.</exception>
             /// <exception cref="TypeError">A text operand (NumPy's gufunc input-cast refusal).</exception>
             /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>

@@ -393,11 +393,12 @@ namespace NumSharp.Backends
         public override NDArray Polymul(NDArray a1, NDArray a2)
         {
             // Text: NumPy's poly1d trims leading "zeros" of text (empty strings; the trim cannot fail and an all-empty
-            // input becomes the text '0') and convolve then refuses any text operand for want of an item size — so
-            // after each input's rank check the answer is that refusal, whatever the text holds. StringDType: poly1d
-            // trims each input (leading empty strings; an all-empty input becomes the text '0') and np.convolve answers
-            // the pair — its legacy descriptor lookup refuses a StringDType first operand, or falls back to an OBJECT
-            // product whose first element product decides (np.convolve's StringDType route).
+            // input becomes the text '0'), and convolve converts both into their common descriptor (S / U / numbers
+            // always convert) and finds no dot function for it — so after each input's rank check the answer is that
+            // refusal, whatever the text holds. StringDType: poly1d trims each input (leading empty strings; an
+            // all-empty input becomes the text '0') and np.convolve answers the pair — a StringDType product refused for
+            // want of a dot function, a U operand's 'safe' conversion error, or (no common descriptor) an OBJECT product
+            // whose first element product decides (np.convolve's StringDType route).
             if (Backends.Strings.NDStringUfuncs.IsVString(a1) || Backends.Strings.NDStringUfuncs.IsVString(a2))
             {
                 using var t1 = new poly1d(a1);
@@ -408,7 +409,7 @@ namespace NumSharp.Backends
             {
                 if (NDArray.atleast_1d(a1).ndim > 1 || NDArray.atleast_1d(a2).ndim > 1)
                     throw new ValueError("Polynomial must be 1d only.");
-                throw Backends.Strings.NDStringUfuncs.NoItemsize();
+                throw Backends.Strings.NDStringUfuncs.FunctionNotAvailable();
             }
             // poly1d normalisation trims leading zeros (and maps an all-zero input to [0]). The polynomials
             // own their coefficient arrays (field egress — no ambient scope reclaims them), so they are
@@ -550,7 +551,9 @@ namespace NumSharp.Backends
                 // Companion matrix: ones on the sub-diagonal, first row = -p[1:] / p[0].
                 NDArray a = NDArray.diag(NDArray.ones(new Shape(n - 2), p.typecode), -1);   // np.diag(np.ones(n - 2), -1)
                 a["0, :"] = Negate(p["1:"]) / p["0"];   // np.negative of a 1-D slice: Negate
-                rootsArr = Linalg.Eigvals(a);
+                // NumPy 2.5: eigvals is always complex; `_to_real_if_imag_zero(roots, A)` ("backwards compat") makes the
+                // roots of a real companion matrix real again when every eigenvalue is.
+                rootsArr = DefaultLinalgEngine.ToRealIfImagZero(Linalg.Eigvals(a), a.typecode);
             }
             else
             {

@@ -14,10 +14,11 @@ namespace NumSharp
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.eig.html
             ///     <para>
-            ///     The result dtype is DATA-dependent: a real matrix with a complex-conjugate pair of
-            ///     eigenvalues yields complex output, so the dtype cannot be predicted from the input
-            ///     dtype alone. Use <see cref="eigh"/> where the operand is known symmetric or
-            ///     Hermitian — it is both faster and guaranteed to give real eigenvalues.
+            ///     The result is always complex (NumPy 2.5): a real matrix with real eigenvalues gives
+            ///     complex values with zero imaginary parts, so the dtype no longer depends on the values
+            ///     (NumPy 2.4 returned a real dtype then). Use <see cref="eigh"/> where the operand is known
+            ///     symmetric or Hermitian — it is both faster and gives real eigenvalues; or take
+            ///     <c>np.real(w)</c> when <c>!np.any(np.imag(w))</c>, NumPy's own recipe for the old result.
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
@@ -36,7 +37,7 @@ namespace NumSharp
             ///     Eigenvalues of a general matrix, without the eigenvectors.
             /// </summary>
             /// <param name="a">The square matrix, or a stack of them.</param>
-            /// <returns>The eigenvalues: real for a real operand whose eigenvalues are all real, else complex.</returns>
+            /// <returns>The eigenvalues, always complex (NumPy 2.5), as <see cref="eig"/>'s.</returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.eigvals.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
             /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or an operand holding inf / NaN.</exception>
