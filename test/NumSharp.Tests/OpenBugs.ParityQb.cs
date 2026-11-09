@@ -1366,5 +1366,31 @@ namespace NumSharp.Tests
             using (var either = np.ma.mask_or(falses, falses, false))
                 either.ndim.Should().Be(0);
         }
+
+        // ------------------------------------------------------------------
+        // QB-50 — complex cumprod over an axis of length 2: NumPy's one-element accumulate call runs simd_cmul
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>CDOUBLE_multiply</c> picks its arithmetic per call by the operands' memory overlap
+        ///     (<c>is_mem_overlap</c>): an accumulate call <c>out[i] = out[i-1] * in[i]</c> over n ≥ 2 elements overlaps its
+        ///     own output and runs the MSVC-contracted <c>loop_scalar</c> (<c>im = fma(a.im, b.re, a.re*b.im)</c>), but along an
+        ///     accumulation axis of length 2 the call has ONE element, whose ranges do not overlap, so it runs
+        ///     <c>simd_cmul</c> (<c>im = fma(a.re, b.im, a.im*b.re)</c>). With <c>t = 2·sign([3-1j, 3+1j])</c>,
+        ///     <c>np.cumprod(t)[1]</c> is <c>4+3.473028842108373e-17j</c> (np.multiply's bits), while three or more elements
+        ///     give the <c>-3.47e-17j</c> of loop_scalar; a (2, 2) array along axis 0 and a (1, 2) along axis 1 take the
+        ///     one-element form too. NumSharp's complex cumprod multiplies with loop_scalar on every route (reductions.md:
+        ///     "every multiply.accumulate step ... runs loop_scalar"), so a length-2 axis gets <c>4-3.47e-17j</c>.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB50")]
+        public void ParityQb_QB50_ComplexCumprodOfLengthTwo_RunsSimdCmul()
+        {
+            using var signs = np.sign(np.array(new[] { new Complex(3, -1), new Complex(3, 1) }));
+            using var t = signs + signs;
+            using var scan = np.cumprod(t);
+
+            // NumPy 2.4.2: np.cumprod(t)[1].imag is +3.473028842108373e-17
+            ((Complex)scan[1]).Imaginary.Should().Be(3.473028842108373e-17);
+        }
     }
 }
