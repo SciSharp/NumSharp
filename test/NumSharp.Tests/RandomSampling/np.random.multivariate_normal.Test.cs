@@ -299,6 +299,24 @@ namespace NumSharp.Tests.RandomSampling
                 np.random.multivariate_normal(mean, cov, null, "raise"));
         }
 
+        /// <summary>
+        ///     NumPy 2.5's svd gufunc refuses a non-finite covariance before gesdd (<c>all_finite</c>, gh-32719), so
+        ///     <c>RandomState(1).multivariate_normal([0, 0], [[inf, 0], [0, 1]], 2)</c> raises "SVD did not converge" like a
+        ///     NaN covariance does (NumPy 2.4 sampled NaN for the inf), with or without a LAPACK backend.
+        /// </summary>
+        [TestMethod]
+        public void MultivariateNormal_NonFiniteCovariance_SvdDoesNotConverge()
+        {
+            var mean = new double[] { 0, 0 };
+            foreach (var bad in new[] { double.PositiveInfinity, double.NaN })
+            {
+                var rng = np.random.RandomState(1);
+                var cov = new double[,] { { bad, 0 }, { 0, 1 } };
+                var e = Assert.ThrowsException<LinAlgError>(() => rng.multivariate_normal(mean, cov, new Shape(2)));
+                Assert.AreEqual("SVD did not converge", e.Message, $"cov[0, 0] = {bad}");
+            }
+        }
+
         [TestMethod]
         public void MultivariateNormal_CheckValidIgnore_ReturnsResultForNonPositiveDefinite()
         {

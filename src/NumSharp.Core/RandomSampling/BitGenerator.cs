@@ -77,12 +77,18 @@ namespace NumSharp
         /// </summary>
         /// <param name="n_children">The number of children.</param>
         /// <returns>The children, of this bit generator's concrete type (NumPy's <c>type(self)(seed=s)</c>).</returns>
+        /// <exception cref="ValueError"><paramref name="n_children"/> is negative: NumPy 2.5's <c>n_children must be
+        /// non-negative</c>, raised before the seed sequence is looked at (so a legacy-seeded MT19937 reports it, not the
+        /// TypeError below).</exception>
         /// <exception cref="TypeError">The seed sequence cannot spawn — e.g. none (legacy-seeded MT19937, keyed Philox): NumPy's
         /// <c>The underlying SeedSequence does not implement spawning.</c></exception>
         /// <exception cref="OverflowException">The seed sequence's child count would leave its uint32 range.</exception>
         /// <remarks>Spawning advances the parent seed sequence's <c>n_children_spawned</c>, so repeated calls never repeat a child.</remarks>
         public BitGenerator[] spawn(int n_children)
         {
+            // NumPy 2.5's first statement (2.4 let a negative count reach the seed sequence's uint32 conversion).
+            if (n_children < 0)
+                throw new ValueError("n_children must be non-negative");
             if (_seedSeq is not ISpawnableSeedSequence spawnable)
                 throw new TypeError("The underlying SeedSequence does not implement spawning.");
             ISpawnableSeedSequence[] children = spawnable.spawn(n_children);

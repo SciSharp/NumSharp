@@ -1242,12 +1242,11 @@ namespace NumSharp
                 : u * np.sqrt(s);
 
             NDArray result = mean + np.matmul(x, factor.T);
-            // NumPy: x.shape = tuple(final_shape) — an IN-PLACE shape assignment on the fresh product, so the result owns
-            // its data. reshape() would return a view (owndata False, and a size-changing resize would refuse).
-            // The shape setter would copy finalShape (it cannot tell a caller's array from this one, bug 2d); the array
-            // is built here and already shared with `normals`' shape, so the Shape setter adopts it.
-            result.Shape = new Shape(finalShape, copy: false);
-            return result;
+            // NumPy 2.5: `return x.reshape(tuple(final_shape))` — a VIEW of the (rows, N) product (owndata False, its base
+            // that product, at every size: size=None reshapes (1, N) to (N,)); NumPy 2.4 assigned x.shape in place and
+            // returned an owning array. finalShape is built here and already shared with `normals`' shape, so the view's
+            // Shape adopts it; the scope reclaims the product's own wrapper while the view keeps its buffer alive.
+            return result.reshape(new Shape(finalShape, copy: false));
         }
 
         /// <summary>
@@ -1257,6 +1256,8 @@ namespace NumSharp
         /// <param name="covD">The float64 covariance, N x N.</param>
         /// <param name="n">N.</param>
         /// <returns><c>u</c> (N x N), the singular values (descending) and <c>vh</c> (N x N).</returns>
+        /// <exception cref="LinAlgError">The covariance holds an inf or a NaN, or the backend's SVD did not converge
+        ///     (<c>SVD did not converge</c>).</exception>
         /// <remarks>
         ///     For a symmetric <c>cov = V diag(λ) V^T</c> the SVD is <c>U diag(|λ|) V^T</c> with <c>U</c>'s columns those of
         ///     <c>V</c> signed by <c>λ</c>; the fallback builds exactly that from the legacy sampler's Jacobi routines.
@@ -1265,6 +1266,11 @@ namespace NumSharp
         {
             if (n == 0)
                 return (np.empty(new Shape(0L, 0L), np.float64), np.empty(new Shape(0L), np.float64), np.empty(new Shape(0L, 0L), np.float64));
+            // NumPy 2.5's svd gufunc refuses a non-finite matrix before gesdd (all_finite, gh-32719), after the normals were
+            // drawn: an inf covariance raises where NumPy 2.4 sampled NaN. The managed fallback has no such failure of its
+            // own, so the check keeps both routes NumPy's.
+            if (!Backends.Kernels.FiniteScan.IsAllFinite(covD))
+                throw new LinAlgError("SVD did not converge");
             var blas = covD.TensorEngine.Blas; // read once: a concurrent Disable() must not null it between test and call
             if (blas != null && blas.TrySvd(covD, true, true, out var u, out var s, out var vh))
                 return (u, s, vh);

@@ -35,8 +35,9 @@ namespace NumSharp
         /// <summary>
         ///     <c>RandomState</c>'s binomial setup cache (NumPy's <c>self._binomial</c>), shared by <c>binomial</c> and
         ///     <c>multinomial</c> and never reset — not by re-seeding, not by <c>set_state</c> (see <see cref="BinomialState"/>).
+        ///     Legacy family: both draw through <c>legacy_random_binomial</c>, whose BTPE keeps the original Stirling bound.
         /// </summary>
-        private readonly BinomialState _binomial = new BinomialState();
+        private readonly BinomialState _binomial = new BinomialState(legacyBtpe: true);
 
         /// <summary>Whether <paramref name="size"/> is NumPy's <c>size=None</c> (or <c>()</c>): draw one value, return it 0-d.</summary>
         /// <param name="size">The requested output shape; <c>default</c> stands for <c>None</c>.</param>
@@ -857,26 +858,31 @@ namespace NumSharp
         /// <returns>The count of successes.</returns>
         /// <remarks>
         ///     The walk itself is shared with the modern sampler (<see cref="BinomialSetup.InversionWalk"/>), which memoizes
-        ///     the <c>px</c> sequence per key; the setup statements here are the legacy ones.
+        ///     the <c>px</c> sequence per key; the setup statements here are the legacy ones. A miss goes through
+        ///     <see cref="BinomialState.Acquire"/> like the modern sampler's: outside a <c>multinomial</c> fill that is NumPy's
+        ///     in-place repopulation of the one entry, inside one the fill's memo — which, since NumPy 2.5 made
+        ///     <c>multinomial</c> legacy too, only ever holds legacy setups here.
         /// </remarks>
         private long LegacyBinomialInversion(ref DrawBufferDouble src, long n, double p)
         {
             BinomialSetup e = _binomial.Current;
             if (!e.has_binomial || (e.nsave != n) || (e.psave != p))
             {
-                // NumPy's in-place repopulation of its one entry — never through the modern-only memo (BinomialState):
-                // a legacy q^n must not land in a memo slot a later multinomial lookup could hit.
-                double q, np;
-                e.nsave = n;
-                e.psave = p;
-                e.has_binomial = true;
-                e.q = q = 1.0 - p;
-                e.r = Math.Exp(n * Math.Log(q));
-                e.c = np = n * p;
-                // C's MIN macro — `n < y ? n : y` in double — then the (RAND_INT_TYPE) cast.
-                double limit = np + 10.0 * Math.Sqrt(np * q + 1);
-                e.m = Distributions.ToInt64(n < limit ? n : limit);
-                e.ResetMemos();
+                e = _binomial.Acquire(n, p, out bool fresh);
+                if (fresh)
+                {
+                    double q, np;
+                    e.nsave = n;
+                    e.psave = p;
+                    e.has_binomial = true;
+                    e.q = q = 1.0 - p;
+                    e.r = Math.Exp(n * Math.Log(q));
+                    e.c = np = n * p;
+                    // C's MIN macro — `n < y ? n : y` in double — then the (RAND_INT_TYPE) cast.
+                    double limit = np + 10.0 * Math.Sqrt(np * q + 1);
+                    e.m = Distributions.ToInt64(n < limit ? n : limit);
+                    e.ResetMemos();
+                }
             }
             return e.InversionWalk(ref src, n, p);
         }
@@ -909,6 +915,46 @@ namespace NumSharp
                 else
                     return n - Distributions.RandomBinomialBtpe(ref src, n, q, _binomial);
             }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>legacy_random_multinomial</c> (NumPy 2.5): one conditional LEGACY binomial per category, the last
+        ///     category taking whatever is left. Writes one row of counts.
+        /// </summary>
+        /// <param name="src">The draw source — per-draw, or a read-ahead whose no-overdraw accounting the caller keeps.</param>
+        /// <param name="n">The number of trials.</param>
+        /// <param name="mnix">The row to write — its <paramref name="d"/> slots must be zero on entry (NumPy writes into an
+        ///     <c>np.zeros</c> buffer and leaves untouched categories at 0). C <c>long</c> counts, modelled LP64.</param>
+        /// <param name="pix">The category probabilities (<paramref name="d"/> values).</param>
+        /// <param name="d">The number of categories.</param>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy 2.5 gave RandomState this copy of <c>random_multinomial</c> so that fixing the modern binomial (its BTPE
+        ///     bound) could not move RandomState's stream. Calling <see cref="LegacyBinomial"/> instead of the modern sampler
+        ///     changes two things against NumPy 2.4: no category is skipped for <c>dn == 0</c> or a zero probability (the
+        ///     legacy sampler has no such shortcut, so every category before the last draws at least one uniform, and the
+        ///     zero comes from the walk), and the inversion's <c>q^n</c> is the legacy <c>exp(n * log(q))</c>.
+        ///     </para>
+        ///     <para>
+        ///     Each count is READ BACK from the row before being subtracted from the remainder, exactly as the C code reads
+        ///     <c>mnix[j]</c>; the loop stops early once no trials remain, leaving the later categories at zero.
+        ///     </para>
+        /// </remarks>
+        private unsafe void LegacyMultinomial(ref DrawBufferDouble src, long n, long* mnix, double* pix, long d)
+        {
+            double remaining_p = 1.0;
+            long j;
+            long dn = n;
+            for (j = 0; j < (d - 1); j++)
+            {
+                mnix[j] = LegacyBinomial(ref src, pix[j] / remaining_p, dn);
+                dn = dn - mnix[j];
+                if (dn <= 0)
+                    break;
+                remaining_p -= pix[j];
+            }
+            if (dn > 0)
+                mnix[d - 1] = dn;
         }
 
         /// <summary>
