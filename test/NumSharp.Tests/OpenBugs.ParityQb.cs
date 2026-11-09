@@ -570,6 +570,13 @@ namespace NumSharp.Tests
             median.GetInt32().Should().Be(unchecked((int)0xff800789));
             prod.GetInt64().Should().Be(unchecked((long)0xfff8000000000789UL));
             cumsum.GetInt64(0).Should().Be(unchecked((long)0xfff0000000000789UL));
+
+            // NumPy 2.4.2: float16 cbrt / arcsinh / arccosh / arctanh hand a signalling NaN back untouched (the UCRT float
+            // function returns its NaN argument; npy_half_to_float / float_to_half keep the quiet bit); NumSharp's float16
+            // widen-unary path quiets it (0x7c01 -> 0x7e01). float16 sqrt / sinh quiet it on both sides.
+            using var h = np.array(new short[] { 0x7c01 }).view(np.float16);
+            using var cbrt = np.cbrt(h).view(np.int16);
+            cbrt.GetInt16().Should().Be((short)0x7c01);
         }
 
         // ------------------------------------------------------------------
