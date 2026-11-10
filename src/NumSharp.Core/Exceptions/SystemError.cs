@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     /// <summary>
@@ -21,8 +23,25 @@ namespace NumSharp
     /// </remarks>
     public class SystemError : NumSharpException
     {
+        /// <summary>
+        ///     Creates the error with Python's text for a bare <c>raise SystemError</c>: an empty
+        ///     <see cref="Exception.Message"/>, as <c>str(SystemError())</c> is <c>''</c>.
+        /// </summary>
+        /// <remarks><see cref="Exception.ToString"/> then starts with the class name alone, as Python's traceback prints a
+        ///     bare <c>SystemError</c>.</remarks>
+        public SystemError() : base(string.Empty) { }
+
         /// <summary>Creates the error with CPython's message text.</summary>
         /// <param name="message">The verbatim message (<c>invalid maximum character passed to PyUnicode_New</c>).</param>
         public SystemError(string message) : base(message) { }
+
+        /// <summary>
+        ///     Creates the error with a message and the exception that caused it: Python's <c>raise SystemError(message) from
+        ///     innerException</c>, the cause kept in <see cref="Exception.InnerException"/> as Python keeps it in
+        ///     <c>__cause__</c>.
+        /// </summary>
+        /// <param name="message">The text, verbatim: Python's <c>str()</c> of the error.</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        public SystemError(string message, Exception innerException) : base(message, innerException) { }
     }
 }

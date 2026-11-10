@@ -51,9 +51,10 @@ namespace NumSharp
         /// <param name="n_words">Ignored.</param>
         /// <param name="dtype">Ignored.</param>
         /// <returns>Never returns.</returns>
-        /// <exception cref="NotImplementedException">Always (NumPy's <c>NotImplementedError('seedless SeedSequences cannot generate state')</c>).</exception>
+        /// <exception cref="NotImplementedError">Always (NumPy's <c>NotImplementedError('seedless SeedSequences cannot generate state')</c>,
+        ///     type and text).</exception>
         public NDArray generate_state(long n_words, DType dtype = null)
-            => throw new NotImplementedException("seedless SeedSequences cannot generate state");
+            => throw new NotImplementedError("seedless SeedSequences cannot generate state");
 
         /// <summary>Returns this same instance <paramref name="n_children"/> times (NumPy's <c>[self] * n_children</c>).</summary>
         /// <param name="n_children">The number of "children" (non-positive: none).</param>

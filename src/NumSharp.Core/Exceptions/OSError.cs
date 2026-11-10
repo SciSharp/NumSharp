@@ -25,6 +25,15 @@ namespace NumSharp
     /// </remarks>
     public class OSError : IOException, INumSharpException
     {
+        /// <summary>
+        ///     Creates the error with Python's text for a bare <c>raise OSError</c>: an empty
+        ///     <see cref="Exception.Message"/>, as <c>str(OSError())</c> is <c>''</c> (not .NET's
+        ///     <see cref="IOException"/> default, "I/O error occurred.").
+        /// </summary>
+        /// <remarks><see cref="Exception.ToString"/> then starts with the class name alone, as Python's traceback prints a
+        ///     bare <c>OSError</c>; prefer a message that names the file and the operation.</remarks>
+        public OSError() : base(string.Empty) { }
+
         /// <summary>Creates the error with NumPy's message text.</summary>
         /// <param name="message">The verbatim message (<c>cannot write object arrays to a file in binary mode</c>).</param>
         public OSError(string message) : base(message) { }

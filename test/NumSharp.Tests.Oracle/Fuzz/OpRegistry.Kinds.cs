@@ -499,6 +499,14 @@ namespace NumSharp.Tests.Fuzz
                 case "indices_sparse":
                     return np.indices_sparse(ParseIntArray(p["dimensions"]),
                         FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                // np.linspace(..., retstep=True): NumPy's (samples, step); naming retstep binds the whole-signature
+                // overload over object ends, which returns np.LinspaceResult.
+                case "linspace_retstep":
+                {
+                    var result = np.linspace(ops[0], ops[1], p["num"].GetInt64(), p["endpoint"].GetBoolean(), retstep: true,
+                        dtype: LinspaceDtype(p), axis: p["axis"].GetInt32());
+                    return new[] { result.samples, result.step };
+                }
 
                 // ---- LAPACK factorisation family (linalg_parity tier; TUPLE results) ----
                 // svd/eig/eigh/qr return multiple arrays; lstsq returns four. Computable ONLY

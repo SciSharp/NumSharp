@@ -11860,6 +11860,86 @@ def gen_creation(dtypes):
                            cid=f"indices_sparse/{dt}/{n}"))
         n += 1
 
+    # np.linspace over array_like ends (NumPy's _array_converter). The computation dtype is
+    # result_type(start, stop, ensure_inexact=True): an array end - a 0-d one included, the NumPy scalar of the replay -
+    # is strong, so float16 / float32 ends compute in their own width and integer / bool ends in float64, while the
+    # "linspace_weak" rows' JSON-number start is a weak Python float. The sample axis is prepended to the ends' broadcast
+    # shape and moved by `axis`; an integer `dtype` floors first; "linspace_retstep" records NumPy's (samples, step).
+    # The first value set holds a zero step in its last column, so the whole call takes gh-5437's `y /= div` order.
+    def ls_values(d):
+        """(start, stop) values for dtype `d`, three columns: two ramps (up and down) and a zero step, in range for every
+        integer width (no negatives for unsigned) and exact in float16."""
+        if d.kind == "b":
+            return [False, True, True], [True, False, True]
+        if d.kind == "u":
+            return [0, 6, 5], [3, 2, 5]
+        if d.kind == "i":
+            return [0, 6, -5], [3, -2, -5]
+        if d.kind == "f":
+            return [0.1, 6.0, -5.5], [0.7, -2.25, -5.5]
+        return [0.1 + 1j, 6 - 2j, -5.5], [0.7 - 0.5j, -2.25 + 1j, -5.5]
+
+    def ls_end(values, d, shape=None, stride=1):
+        """One end as an operand: `values` every `stride` elements of a 1-D base (zero filler between), reshaped."""
+        vals = np.array(values, dtype=d)
+        base = np.zeros(len(vals) * stride, dtype=d)
+        base[::stride] = vals
+        view = base[::stride]
+        if shape is not None:
+            view = view.reshape(shape)
+        return describe(base, view), view
+
+    def ls_emit(opname, params, ends, label, retstep=False):
+        """Record one linspace row: NumPy's samples (or, for "linspace_weak", the JSON-number start against the one
+        operand; with `retstep`, the (samples, step) tuple) for the operand ends built by `ls_end`."""
+        nonlocal n
+        operands = [o for o, _ in ends]
+        views = [v for _, v in ends]
+        dtype = params["dtype"]
+        kwargs = dict(num=params["num"], endpoint=params["endpoint"], axis=params["axis"],
+                      dtype=None if dtype is None else np.dtype(dtype))
+        if opname == "linspace_weak":
+            result = np.linspace(params["start"], views[0], **kwargs)
+            expected = _arr_expected(result)
+        elif retstep:
+            samples, step = np.linspace(views[0], views[1], retstep=True, **kwargs)
+            expected = _tuple_expected([samples, np.asarray(step)])
+        else:
+            expected = _arr_expected(np.linspace(views[0], views[1], **kwargs))
+        cases.append(_case(opname, params, operands, expected, label, "creation", cid=f"{opname}/{label}/{n}"))
+        n += 1
+
+    for dt in dtypes:
+        d = np.dtype(dt)
+        lo, hi = ls_values(d)
+        integer_request = [None] if d.kind == "c" else [None, "int32"]
+        for req in integer_request:
+            # (3,) ends with a zero-step column: every sample through gh-5437's order.
+            for num, endpoint, axis in [(5, True, 0), (4, False, -1), (1, True, 0), (0, True, 0)]:
+                ls_emit("linspace_arrays", {"num": num, "endpoint": endpoint, "axis": axis, "dtype": req},
+                        [ls_end(lo, d), ls_end(hi, d)], f"linspace_arrays/vec/{dt}/{req}")
+            # Strided (2,) ends without a zero step: the plain arange * step + start order.
+            ls_emit("linspace_arrays", {"num": 5, "endpoint": True, "axis": 0, "dtype": req},
+                    [ls_end(lo[:2], d, stride=2), ls_end(hi[:2], d, stride=3)], f"linspace_arrays/strided/{dt}/{req}")
+        # A (2, 1) column against a (3,) row: the (num, 2, 3) broadcast, the sample axis moved to the middle and the end.
+        for axis in [0, 1, -1]:
+            ls_emit("linspace_arrays", {"num": 3, "endpoint": True, "axis": axis, "dtype": None},
+                    [ls_end(lo[:2], d, shape=(2, 1)), ls_end(hi, d)], f"linspace_arrays/broadcast/{dt}")
+        # 0-d ends (NumPy scalars, strong): float32 ends compute in float32, integer ends in float64.
+        for num, endpoint in [(6, True), (6, False), (1, True)]:
+            ls_emit("linspace_arrays", {"num": num, "endpoint": endpoint, "axis": 0, "dtype": None},
+                    [ls_end([lo[0]], d, shape=()), ls_end([hi[0]], d, shape=())], f"linspace_arrays/0d/{dt}")
+        # A weak Python-float start against an array stop takes the stop's float dtype.
+        ls_emit("linspace_weak", {"start": 0.5, "num": 4, "endpoint": True, "axis": 0, "dtype": None},
+                [ls_end(hi, d)], f"linspace_weak/{dt}")
+        # retstep: NumPy's step beside the samples (0-d for scalar ends, the broadcast shape for array ends, nan with
+        # no step).
+        for num, ends in [(5, [ls_end(lo, d), ls_end(hi, d)]),
+                          (6, [ls_end([lo[0]], d, shape=()), ls_end([hi[0]], d, shape=())]),
+                          (1, [ls_end(lo, d), ls_end(hi, d)])]:
+            ls_emit("linspace_retstep", {"num": num, "endpoint": True, "axis": 0, "dtype": None}, ends,
+                    f"linspace_retstep/{dt}", retstep=True)
+
     return cases
 
 

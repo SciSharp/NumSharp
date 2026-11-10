@@ -83,7 +83,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="seed">The seed sequence — normally a <see cref="SeedSequence"/>; any <see cref="ISeedSequence"/>
         /// works (NumPy uses it as-is when <c>isinstance(seed, ISeedSequence)</c>); null is NumPy's <c>seed=None</c>: a fresh OS-entropy <see cref="SeedSequence"/> (the parameter name is NumPy's, so <c>seed: sequence</c> ports verbatim).</param>
-        /// <exception cref="NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        /// <exception cref="NotImplementedError"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
         /// <remarks>
         ///     <c>pos</c> is 623, not 624: NumPy's fill loop leaves <c>i = 623</c> behind and stores it, so the first
         ///     draw tempers <c>key[623]</c> before the first twist. That is part of the stream and is kept.
@@ -124,7 +124,7 @@ namespace NumSharp
         /// <summary>NumPy's <c>MT19937.__init__</c> seeding body (and the <c>seed=None</c> branch of legacy seeding).</summary>
         /// <param name="seedSeq">The sequence supplying 624 words.</param>
         /// <param name="setPos">Whether to set <c>pos = 623</c> (the constructor does; <c>_legacy_seeding(None)</c> leaves pos alone).</param>
-        /// <exception cref="NotImplementedException"><paramref name="seedSeq"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        /// <exception cref="NotImplementedError"><paramref name="seedSeq"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
         private void SeedFromSequence(ISeedSequence seedSeq, bool setPos = true)
         {
             uint[] val = SeedWords32(seedSeq, N);

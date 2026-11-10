@@ -70,7 +70,7 @@ namespace NumSharp
         /// <param name="seed">The seed sequence — normally a <see cref="NumSharp.SeedSequence"/> (e.g. one of its <c>spawn</c>ed children);
         /// null is NumPy's <c>default_rng(None)</c> — fresh OS entropy.</param>
         /// <returns>A new <see cref="NumSharp.Generator"/>.</returns>
-        /// <exception cref="NotImplementedException">A <see cref="SeedlessSeedSequence"/>, which cannot generate the PCG64
+        /// <exception cref="NotImplementedError">A <see cref="SeedlessSeedSequence"/>, which cannot generate the PCG64
         /// state (NumPy's <c>seedless SeedSequences cannot generate state</c>).</exception>
         /// <remarks>
         ///     The overload a bare <c>null</c> literal binds (<c>np.random.default_rng(null)</c>, NumPy's

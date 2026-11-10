@@ -1207,7 +1207,12 @@ namespace NumSharp
                     ret = new NDArray(array);
                     break;
                 case string str:
-                    ret = str; //implicit cast located in NDArray.Implicit.Array
+                    // Under the character dtype 'c' NumPy's discovery reads a str whose length is not 1 as a sequence of
+                    // its characters (np.asanyarray('ab', dtype='c') is (2,) |S1); any other request converts the 0-d
+                    // text array below.
+                    ret = Backends.UnmanagedStorage.DiscoversStringsAsSequences(dtype)
+                        ? Backends.UnmanagedStorage.FromLoneText(str, dtype)
+                        : str; //implicit cast located in NDArray.Implicit.Array
                     break;
 
                 case IEnumerable<bool> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;

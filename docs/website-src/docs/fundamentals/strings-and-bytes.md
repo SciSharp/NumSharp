@@ -104,6 +104,16 @@ np.array(new object[] { Encoding.ASCII.GetBytes("ab"), Encoding.ASCII.GetBytes("
 
 > **Footgun:** `np.array(new[] { bytes1, bytes2 })` with a `byte[][]` is a jagged NUMERIC array in C#. It becomes a 2-D `uint8` array, not an `S` array.
 
+NumPy's character dtype `np.dtype("c")` is an `|S1` that keeps the type character `'c'`. Creating an array from values with it splits every text into one byte per character, so equal-length rows make a 2-D byte map:
+
+```csharp
+np.array(new[] { "SFFF", "FHFH" }, np.dtype("c"));   // [[b'S' b'F' b'F' b'F'] [b'F' b'H' b'F' b'H']], (2, 4) |S1
+np.array("abc", np.dtype("c"));                      // [b'a' b'b' b'c'], (3,)
+np.array(new[] { "ab", "abc" }, np.dtype("c"));      // ValueError: ... inhomogeneous shape after 1 dimensions ...
+```
+
+A cast never splits: `astype("c")` and `np.asarray(existingArray, "c")` keep each value's first byte, as `S1` does. Pass the C# `string[]` to `np.array`, not `np.asarray`, which converts it to a `<U` array before it reads the dtype.
+
 ---
 
 ## Reading and writing elements

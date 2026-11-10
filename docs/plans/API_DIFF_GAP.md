@@ -231,7 +231,7 @@ int64 -> float64). **Target.** One overload per name with NumPy's signature.
 | pattern | example | collapse to |
 |---|---|---|
 | shape spelled as `int`, `int[]`, `long[]`, `params`, `Shape` | `np.empty` 8, `np.zeros` 8, `np.ones` 8, `reshape` 4–6 | one `Shape` parameter: `Shape` converts implicitly from `int`, `long`, `int[]`, `long[]` and 2- to 6-element tuples |
-| one overload per C# scalar type | `np.arange` 11, `np.linspace` 4, `np.insert` 12, `np.pad` 10 | one overload over `NDArray` / `object` / the widest type; a value's C# type still decides the dtype where NumPy's Python type does (decision OD2) |
+| one overload per C# scalar type | `np.arange` 11, `np.insert` 12, `np.pad` 10 (`np.linspace`'s 4 became one `NDArray` overload plus NumPy's whole `object` signature, plan D3) | one overload over `NDArray` / `object` / the widest type; a value's C# type still decides the dtype where NumPy's Python type does (decision OD2) |
 | one overload per C# input array type | `np.array` 33, `np.asarray` 7, `np.frombuffer` 18 | one array_like parameter (decision OD2) |
 | dtype spelled as `NPTypeCode`, `Type`, `DType`, generic `<T>` | `np.can_cast` 20, `np.isdtype` 15, `np.issubdtype` 11, `np.result_type` 8 | one `DType` (AD6, AD7) |
 | axis spelled as `int`, `int?`, `int[]` | `np.all` 6, `np.any` 6, `np.sum` 7, `np.mean` 5 | one axis type (decision OD1; AD9, AD10) |
@@ -370,7 +370,7 @@ result's shape (it is never broadcast); the result is cast into `out` under NumP
 
 | name | missing | note |
 |---|---|---|
-| `np.linspace` | `retstep`, `axis` | plan D3: one result type for NumPy's array-or-tuple return |
+| `np.linspace` | (done) | plan D3: `retstep` and `axis` exist; `retstep` binds NumPy's whole signature over `object` ends, which returns `np.LinspaceResult` |
 | `np.average`, `np.ma.average` | `returned` | B10: `np.average_returned` exists as a separate NumSharp name; NumPy's form is one function |
 | `np.indices`, `np.ma.indices` | `sparse` | plan D4: `np.indices_sparse` exists separately |
 | `np.vectorize` | `doc`, `excluded`, `cache` | H2 |
@@ -495,8 +495,8 @@ values at NumPy's `*args` (`a.transpose(1, 0)`) and the call without a parameter
 - `empty_like`, `full_like`, `ones_like`, `zeros_like`: `order` needs `dtype`. NumPy:
   `empty_like(prototype, /, dtype=None, order='K', subok=True, shape=None, *, device=None)` (plan D2; `subok`
   excluded).
-- `linspace`: the required-only call `np.linspace(start, stop)` does not compile (C# requires `num`). NumPy:
-  `linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis=0, *, device=None)` (plan D3).
+- `linspace`: fixed by plan D3 (`num` defaults to 50; `np.linspace(start, stop)` compiles). NumPy:
+  `linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis=0, *, device=None)`.
 - `mean`: `dtype` needs `axis` (B3).
 - `nanmean`, `nanstd`, `nanvar`, `std`, `var`: NumPy's positional `(a, axis, dtype)` fails (C# puts `keepdims` at
   slot 2 or 3). NumPy: `std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=<no value>, *, where=<no value>,
@@ -771,7 +771,7 @@ void dtype; [`dtype-system.md`](dtype-system.md)).
    `np.fromfunction` / `np.poly1d` exposure; `np.ma.masked_array()` and `SeedSequence` optional first parameters
    (AD8).
 2. **Creation family**, after OD2 / OD6: `np.empty` / `zeros` / `ones` / `full` and the `*_like` functions (AD1,
-   AD3e, AD8: one signature each, plan D1 / D2), `np.linspace` (plan D3), `np.arange`, `ndarray.astype` (plan G2).
+   AD3e, AD8: one signature each, plan D1 / D2), `np.arange`, `ndarray.astype` (plan G2); `np.linspace` (plan D3) is done.
 3. **Reductions**, after OD1: one signature with NumPy's keywords and tuple axes for `sum`, `prod`, `mean`, `std`,
    `var`, the nan family, `count_nonzero`, the percentile family, `average`, `ptp`, `flip`, `squeeze`, `roll`
    (AD1, AD3b, AD8, AD9b, AD10; plan B1–B11, G4). The largest package; do it as one design with its oracle tiers.

@@ -18,11 +18,22 @@ namespace NumSharp
     ///     <see cref="ArgumentException"/>: Python's AssertionError is no ValueError / TypeError, so a handler for the
     ///     argument errors does not catch it.
     ///     </para>
+    ///     <para>
+    ///     A port of Python's bare <c>assert condition</c> throws <c>new AssertionError()</c>: its message is empty, exactly
+    ///     as <c>str()</c> of the <c>AssertionError</c> a failed bare <c>assert</c> raises, so error texts compared with
+    ///     Python's match.
+    ///     </para>
     /// </remarks>
     public class AssertionError : NumSharpException
     {
-        /// <summary>Creates the exception with Python's bare type name as its message.</summary>
-        public AssertionError() : base("AssertionError") { }
+        /// <summary>
+        ///     Creates the exception with Python's text for a failed bare <c>assert</c>: an empty
+        ///     <see cref="Exception.Message"/>, as <c>str(AssertionError())</c> is <c>''</c>.
+        /// </summary>
+        /// <remarks><see cref="Exception.ToString"/> then starts with the class name alone, as Python's traceback prints a
+        ///     bare <c>AssertionError</c>. Pass a message wherever the failure has something to say: an empty one tells a
+        ///     reader of the log nothing.</remarks>
+        public AssertionError() : base(string.Empty) { }
 
         /// <summary>Creates the exception with NumPy's message.</summary>
         /// <param name="message">The text NumPy raises, verbatim.</param>

@@ -1139,7 +1139,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     The single-dtype linspace core: float64 defers to <see cref="np.linspace(double,double,int,bool,DType,string)"/> (already double-internal),
+        ///     The single-dtype linspace core: float64 defers to <see cref="TensorEngine.Linspace(double,double,long,bool,DType,string)"/> (already double-internal),
         ///     while float32/float16 run the arithmetic in their OWN width (widen-op-narrow for float16, matching
         ///     NumPy's npy_half ufuncs) so a strong-endpoint narrow-float histogram is bit-exact rather than the
         ///     ~1 ULP off a double-internal linspace would give.

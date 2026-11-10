@@ -58,7 +58,7 @@ namespace NumSharp
 
         /// <summary>Constructs and seeds a PCG64DXSM from the given seed sequence (<c>generate_state(4, uint64)</c>).</summary>
         /// <param name="seed">The seed sequence — null is NumPy's <c>seed=None</c>: a fresh OS-entropy <see cref="SeedSequence"/> (the parameter name is NumPy's, so <c>seed: sequence</c> ports verbatim).</param>
-        /// <exception cref="NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        /// <exception cref="NotImplementedError"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
         /// <remarks>
         ///     The overload a bare <c>null</c> literal binds (<c>new PCG64DXSM(null)</c>, NumPy's <c>PCG64DXSM(None)</c>): the
         ///     <c>int[]</c>/<c>long[]</c>/<c>uint[]</c> overloads are equally good targets for it under plain C# rules, so

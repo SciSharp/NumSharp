@@ -15,6 +15,15 @@ namespace NumSharp
     /// </remarks>
     public class LookupError : ArgumentException, INumSharpException
     {
+        /// <summary>
+        ///     Creates the error with Python's text for a bare <c>raise LookupError</c>: an empty
+        ///     <see cref="Exception.Message"/>, as <c>str(LookupError())</c> is <c>''</c> (not .NET's
+        ///     <see cref="ArgumentException"/> default text).
+        /// </summary>
+        /// <remarks><see cref="Exception.ToString"/> then starts with the class name alone, as Python's traceback prints a
+        ///     bare <c>LookupError</c>; prefer a message that names what was looked up.</remarks>
+        public LookupError() : base(string.Empty) { }
+
         /// <summary>Creates the error with Python's message text.</summary>
         /// <param name="message">The verbatim message (<c>unknown encoding: bytes</c>).</param>
         public LookupError(string message) : base(message) { }

@@ -28,7 +28,7 @@ namespace NumSharp
         ///     an <see cref="NPTypeCode"/>, a NumPy dtype string (<c>"f4"</c>) or a <see cref="DType"/> all convert
         ///     implicitly. If null (default) the result is float64. The computation ALWAYS runs in float64 and is then
         ///     cast to <paramref name="dtype"/> — so an integer dtype TRUNCATES toward zero (NumPy's
-        ///     <c>power(...).astype(dtype)</c>), unlike <see cref="linspace(double,double,long,bool,DType,string)"/> which floors.
+        ///     <c>power(...).astype(dtype)</c>), unlike <see cref="linspace(NDArray,NDArray,long,bool,DType,int,string)"/> which floors.
         /// </param>
         /// <param name="axis">
         ///     The axis in the result to store the samples. Relevant only for array-like inputs, which NumSharp's scalar

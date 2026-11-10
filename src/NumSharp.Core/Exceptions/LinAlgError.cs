@@ -25,10 +25,25 @@ namespace NumSharp
     /// </remarks>
     public class LinAlgError : ValueError
     {
-        public LinAlgError() { }
+        /// <summary>
+        ///     Creates the error with Python's text for a bare <c>raise LinAlgError</c>: an empty
+        ///     <see cref="Exception.Message"/>, as <c>str(np.linalg.LinAlgError())</c> is <c>''</c>.
+        /// </summary>
+        /// <remarks><see cref="Exception.ToString"/> then starts with the class name alone, as Python's traceback prints a
+        ///     bare <c>LinAlgError</c>; prefer one of NumPy's texts listed on the class.</remarks>
+        public LinAlgError() : base(string.Empty) { }
 
+        /// <summary>Creates the error with NumPy's message.</summary>
+        /// <param name="message">The text NumPy raises, verbatim (<c>Singular matrix</c>).</param>
         public LinAlgError(string message) : base(message) { }
 
+        /// <summary>
+        ///     Creates the error with NumPy's message and the exception that caused it: Python's <c>raise
+        ///     LinAlgError(message) from innerException</c>, the cause kept in <see cref="Exception.InnerException"/>.
+        /// </summary>
+        /// <param name="message">The text NumPy raises, verbatim.</param>
+        /// <param name="innerException">The exception that led to this one (a backend's own failure), or null for
+        ///     none.</param>
         public LinAlgError(string message, Exception innerException) : base(message, innerException) { }
     }
 }

@@ -73,6 +73,26 @@ namespace NumSharp.Tests.Documentation
             jagged.Should().BeShaped(2, 2);
         }
 
+        /// <summary>
+        ///     The character-dtype snippet: <c>np.dtype("c")</c> splits each text into one byte per character when an array
+        ///     is created from values (NumPy 2.4.2's shapes and repr), refuses texts of different lengths, and a cast keeps
+        ///     the first byte instead.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from the page.</exception>
+        [TestMethod]
+        public void Creating_CharacterDtypeSplitsTexts()
+        {
+            var c = np.dtype("c");
+            np.array(new[] { "SFFF", "FHFH" }, c).ToString(true)
+              .Should().Be("array([[b'S', b'F', b'F', b'F'],\n       [b'F', b'H', b'F', b'H']], dtype='|S1')");
+            np.array("abc", c).ToString(true).Should().Be("array([b'a', b'b', b'c'], dtype='|S1')");
+            Action ragged = () => np.array(new[] { "ab", "abc" }, c);
+            ragged.Should().Throw<ValueError>().WithMessage("*inhomogeneous shape after 1 dimensions*");
+
+            // A cast never splits.
+            np.array(new[] { "ab", "cd" }).astype(c).ToString(true).Should().Be("array([b'a', b'c'], dtype='|S1')");
+        }
+
         // ── Reading and writing elements ──────────────────────────────────────────────────────────
 
         [TestMethod]

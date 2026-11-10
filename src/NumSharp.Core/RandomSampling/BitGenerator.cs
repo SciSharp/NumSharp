@@ -106,7 +106,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="seed">The seed sequence (normally a fresh <see cref="SeedSequence"/> over the caller's entropy).</param>
         /// <returns>The new generator; this instance is not touched.</returns>
-        /// <exception cref="NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        /// <exception cref="NotImplementedError"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
         internal BitGenerator NewSeeded(ISeedSequence seed) => CreateFromSeed(seed);
 
         /// <summary>
