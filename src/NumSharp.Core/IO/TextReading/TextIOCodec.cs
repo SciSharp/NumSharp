@@ -358,10 +358,7 @@ namespace NumSharp.IO
         /// <param name="reason">CPython's reason text.</param>
         /// <returns>The exception (not thrown).</returns>
         internal static UnicodeDecodeError DecodeError(string codec, ReadOnlySpan<byte> data, int start, int end, string reason)
-            => new UnicodeDecodeError(end - start == 1
-                ? string.Create(CultureInfo.InvariantCulture, $"'{codec}' codec can't decode byte 0x{data[start]:x2} in position {start}: {reason}")
-                : string.Create(CultureInfo.InvariantCulture, $"'{codec}' codec can't decode bytes in position {start}-{end - 1}: {reason}"),
-                codec, data.ToArray(), start, end, reason);
+            => new UnicodeDecodeError(codec, data.ToArray(), start, end, reason);
 
         // ---- charmap ------------------------------------------------------------------------------------------------
 
@@ -444,7 +441,7 @@ namespace NumSharp.IO
                     first = cp;
                 position++;
             }
-            throw NDStringCodec.EncodeErrorFor(first, start, position, "charmap", "character maps to <undefined>");
+            throw NDStringCodec.EncodeErrorFor(text.ToString(), first, start, position, "charmap", "character maps to <undefined>");
         }
 
         /// <summary>The charmap encode of validated text: one byte per character.</summary>

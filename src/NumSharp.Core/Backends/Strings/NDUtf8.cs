@@ -248,10 +248,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="reason">CPython's reason text.</param>
         /// <returns>The exception to throw.</returns>
         internal static UnicodeDecodeError DecodeError(ReadOnlySpan<byte> bytes, int start, int end, string reason)
-            => new UnicodeDecodeError(end - start == 1
-                ? string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't decode byte 0x{bytes[start]:x2} in position {start}: {reason}")
-                : string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't decode bytes in position {start}-{end - 1}: {reason}"),
-                "utf-8", bytes.ToArray(), start, end, reason);
+            => new UnicodeDecodeError("utf-8", bytes.ToArray(), start, end, reason);
 
         /// <summary>
         ///     CPython 3.12's strict UTF-8 decoder diagnosis (<c>stringlib/codecs.h</c>, <c>utf8_decode</c>,
@@ -405,9 +402,8 @@ namespace NumSharp.Backends.Strings
                    && !(char.IsHighSurrogate(s[endUnit]) && endUnit + 1 < s.Length && char.IsLowSurrogate(s[endUnit + 1])))
                 endUnit++;
             int runLength = endUnit - unitIndex;
-            if (runLength == 1)
-                return new UnicodeEncodeError(string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't encode character '\\u{(int)s[unitIndex]:x4}' in position {position}: surrogates not allowed"));
-            return new UnicodeEncodeError(string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't encode characters in position {position}-{position + runLength - 1}: surrogates not allowed"));
+            // A lone surrogate is one BMP code point, so the one-character message quotes it as '\uNNNN'.
+            return new UnicodeEncodeError("utf-8", s.ToString(), position, position + runLength, "surrogates not allowed", s[unitIndex]);
         }
     }
 }

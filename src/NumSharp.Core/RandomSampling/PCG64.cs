@@ -232,7 +232,16 @@ namespace NumSharp
         ///     The PCG64 state — NumPy's <c>{'bit_generator': 'PCG64', 'state': {'state': int, 'inc': int},
         ///     'has_uint32': int, 'uinteger': int}</c> with the nested <c>'state'</c> dict flattened.
         /// </summary>
-        public sealed class State : BitGeneratorState
+        /// <remarks>
+        ///     Unsealed, so a subclass engine that adds state of its own derives its snapshot from this class. Its
+        ///     <see cref="PCG64.GetStateCore"/> override returns the derived snapshot, which passes the typed
+        ///     <see cref="PCG64.state"/> getter (a cast to <see cref="State"/>) and <see cref="PCG64.SetStateCore"/> (an
+        ///     <c>is State</c> test); its <see cref="PCG64.SetStateCore"/> override restores its own fields and calls the base for
+        ///     the engine's. Footgun: the <see cref="bit_generator"/> label stays <c>"PCG64"</c> and the base
+        ///     <see cref="PCG64.SetStateCore"/> takes any <see cref="State"/>, where NumPy labels a subclass's state with the
+        ///     subclass's class name and refuses another class's state.
+        /// </remarks>
+        public class State : BitGeneratorState
         {
             /// <summary>Creates an all-zero state (fill the members before assigning it).</summary>
             public State() { }

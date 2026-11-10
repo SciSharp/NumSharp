@@ -505,7 +505,7 @@ namespace NumSharp.Backends.Strings
                         long end = i + 1;
                         while (end < n && p[end] - 0xD800u <= 0x7FFu)
                             end++;
-                        throw NDCodec.EncodeError("utf-8", p, i, end, "surrogates not allowed");
+                        throw NDCodec.EncodeError("utf-8", p, n, i, end, "surrogates not allowed");
                     }
                 }
                 for (long i = 0; i < n; i++)

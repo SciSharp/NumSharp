@@ -536,7 +536,7 @@ namespace NumSharp.Backends.Strings
             var value = (byte[])spread.Storage.GetAtIndex(flat);
             for (int i = 0; i < value.Length; i++)
                 if (value[i] >= 0x80)
-                    return NDStringCodec.DecodeError(value[i], i);
+                    return NDStringCodec.DecodeError(value, i);
             return new InvalidOperationException("the element holds no non-ASCII byte");
         }
 

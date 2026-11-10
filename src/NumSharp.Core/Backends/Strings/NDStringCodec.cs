@@ -385,7 +385,7 @@ namespace NumSharp.Backends.Strings
                     firstCodePoint = cp;
                 endPosition++;
             }
-            throw EncodeErrorFor(firstCodePoint, first, endPosition, codec, reason);
+            throw EncodeErrorFor(value.ToString(), firstCodePoint, first, endPosition, codec, reason);
         }
 
         /// <summary>
@@ -421,7 +421,7 @@ namespace NumSharp.Backends.Strings
             int end = first;
             while (end < len && src[end] > 0x7F)
                 end++;
-            throw EncodeErrorFor(src[first], first, end);
+            throw EncodeErrorFor(TextOfUcs4(src, len), src[first], first, end);
         }
 
         /// <summary>
@@ -435,15 +435,19 @@ namespace NumSharp.Backends.Strings
             int first = value.IndexOfAnyExceptInRange((byte)0, (byte)0x7F);
             if (first < 0)
                 return;
-            throw DecodeError(value[first], first);
+            throw DecodeError(value, first);
         }
 
-        /// <summary>CPython's <c>UnicodeDecodeError</c> text for the ASCII codec at <paramref name="position"/>.</summary>
-        /// <param name="value">The offending byte.</param>
-        /// <param name="position">Its index in the value being decoded.</param>
-        /// <returns>The exception (not thrown).</returns>
-        public static UnicodeDecodeError DecodeError(byte value, long position)
-            => new UnicodeDecodeError(string.Create(CultureInfo.InvariantCulture, $"'ascii' codec can't decode byte 0x{value:x2} in position {position}: ordinal not in range(128)"));
+        /// <summary>CPython's <c>UnicodeDecodeError</c> for the ASCII codec at <paramref name="position"/>.</summary>
+        /// <param name="value">The bytes being decoded (a fixed-width <c>S</c> element with or without its NUL padding).</param>
+        /// <param name="position">The index of the offending byte in <paramref name="value"/>.</param>
+        /// <returns>The exception (not thrown), carrying Python's <c>encoding</c> / <c>object</c> / <c>start</c> /
+        ///     <c>end</c> / <c>reason</c>.</returns>
+        /// <remarks>The error's <c>object</c> drops the trailing NULs: NumPy reads an <c>S</c> element into a Python
+        ///     <c>bytes</c> without its padding (<c>STRING_getitem</c>) before the codec sees it. The offending byte is at
+        ///     least <c>0x80</c>, so it always lies before the padding.</remarks>
+        public static UnicodeDecodeError DecodeError(ReadOnlySpan<byte> value, long position)
+            => new UnicodeDecodeError("ascii", value.TrimEnd((byte)0).ToArray(), position, position + 1, "ordinal not in range(128)");
 
         /// <summary>
         ///     Builds CPython's <c>UnicodeEncodeError</c> for the run of unencodable code points starting at the UTF-16 index
@@ -476,40 +480,59 @@ namespace NumSharp.Backends.Strings
                     firstCodePoint = cp;
                 endPosition++;
             }
-            return EncodeErrorFor(firstCodePoint, position, endPosition);
+            return EncodeErrorFor(value.ToString(), firstCodePoint, position, endPosition);
         }
 
         /// <summary>
-        ///     CPython's <c>UnicodeEncodeError.__str__</c>: one bad character prints as <c>\xNN</c> / <c>\uNNNN</c> /
+        ///     CPython's ASCII <c>UnicodeEncodeError</c>: one bad character prints as <c>\xNN</c> / <c>\uNNNN</c> /
         ///     <c>\UNNNNNNNN</c> (lowercase hex); a longer run prints its position range.
         /// </summary>
+        /// <param name="text">The element's text (the error's <c>object</c>).</param>
         /// <param name="firstCodePoint">The first unencodable code point.</param>
         /// <param name="start">Code-point position of the run start.</param>
         /// <param name="end">Code-point position one past the run end.</param>
         /// <returns>The exception (not thrown).</returns>
-        internal static UnicodeEncodeError EncodeErrorFor(uint firstCodePoint, long start, long end)
-            => EncodeErrorFor(firstCodePoint, start, end, "ascii", "ordinal not in range(128)");
+        internal static UnicodeEncodeError EncodeErrorFor(string text, uint firstCodePoint, long start, long end)
+            => EncodeErrorFor(text, firstCodePoint, start, end, "ascii", "ordinal not in range(128)");
 
         /// <summary>
-        ///     CPython's <c>UnicodeEncodeError.__str__</c> for any codec: one bad character prints as <c>\xNN</c> /
-        ///     <c>\uNNNN</c> / <c>\UNNNNNNNN</c> (lowercase hex); a longer run prints its position range.
+        ///     CPython's <c>UnicodeEncodeError</c> for any codec: one bad character prints as <c>\xNN</c> / <c>\uNNNN</c> /
+        ///     <c>\UNNNNNNNN</c> (lowercase hex); a longer run prints its position range.
         /// </summary>
-        /// <param name="firstCodePoint">The first unencodable code point.</param>
+        /// <param name="text">The element's text (the error's <c>object</c>): the whole str the codec was given.</param>
+        /// <param name="firstCodePoint">The first unencodable code point (passed in, not re-read from
+        ///     <paramref name="text"/>: two lone surrogate units of a UCS-4 element are two code points there).</param>
         /// <param name="start">Code-point position of the run start.</param>
         /// <param name="end">Code-point position one past the run end.</param>
         /// <param name="codec">CPython's codec name (<c>ascii</c>, <c>latin-1</c>).</param>
         /// <param name="reason">CPython's reason text.</param>
-        /// <returns>The exception (not thrown).</returns>
-        internal static UnicodeEncodeError EncodeErrorFor(uint firstCodePoint, long start, long end, string codec, string reason)
+        /// <returns>The exception (not thrown), carrying Python's five attributes.</returns>
+        internal static UnicodeEncodeError EncodeErrorFor(string text, uint firstCodePoint, long start, long end, string codec, string reason)
+            => new UnicodeEncodeError(codec, text, start, end, reason, firstCodePoint);
+
+        /// <summary>
+        ///     The text of <paramref name="n"/> UCS-4 code points, the <c>object</c> a codec error names: a code point past
+        ///     <c>U+FFFF</c> becomes a surrogate pair, every other one (a lone surrogate included) one char.
+        /// </summary>
+        /// <param name="units">The code points.</param>
+        /// <param name="n">Their number.</param>
+        /// <returns>The text.</returns>
+        /// <remarks>Only error paths call it, after the element was read: a unit past <c>U+10FFFF</c> (which NumPy refuses
+        ///     before any codec runs) becomes <c>U+FFFD</c> here rather than failing a second time.</remarks>
+        internal static unsafe string TextOfUcs4(uint* units, long n)
         {
-            if (end == start + 1)
+            var sb = new System.Text.StringBuilder(checked((int)n));
+            for (long i = 0; i < n; i++)
             {
-                string escaped = firstCodePoint <= 0xFF ? string.Create(CultureInfo.InvariantCulture, $"\\x{firstCodePoint:x2}")
-                    : firstCodePoint <= 0xFFFF ? string.Create(CultureInfo.InvariantCulture, $"\\u{firstCodePoint:x4}")
-                    : string.Create(CultureInfo.InvariantCulture, $"\\U{firstCodePoint:x8}");
-                return new UnicodeEncodeError(string.Create(CultureInfo.InvariantCulture, $"'{codec}' codec can't encode character '{escaped}' in position {start}: {reason}"));
+                uint cp = units[i];
+                if (cp <= 0xFFFF)
+                    sb.Append((char)cp);
+                else if (cp <= MaxCodePoint)
+                    sb.Append(char.ConvertFromUtf32((int)cp));
+                else
+                    sb.Append('�');
             }
-            return new UnicodeEncodeError(string.Create(CultureInfo.InvariantCulture, $"'{codec}' codec can't encode characters in position {start}-{end - 1}: {reason}"));
+            return sb.ToString();
         }
 
         // ---------------------------------------------------------------------------------------------

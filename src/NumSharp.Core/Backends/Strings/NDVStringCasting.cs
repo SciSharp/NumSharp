@@ -520,7 +520,7 @@ namespace NumSharp.Backends.Strings
                             // NumPy raises UnicodeEncodeError(ascii, str, i, i + 1): every byte before i is ASCII, so the byte
                             // index is also the code-point index of the character CPython quotes.
                             System.Text.Rune.DecodeFromUtf8(new ReadOnlySpan<byte>(buf + b, (int)Math.Min(size - b, 4)), out var rune, out _);
-                            throw NDStringCodec.EncodeErrorFor((uint)rune.Value, b, b + 1);
+                            throw NDStringCodec.EncodeErrorFor(System.Text.Encoding.UTF8.GetString(buf, checked((int)size)), (uint)rune.Value, b, b + 1);
                         }
                     }
                     long copy = Math.Min(size, chars);

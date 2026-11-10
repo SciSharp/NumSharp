@@ -48,9 +48,8 @@ sealed-class	NumSharp	MaskedPrintOption	sealed class			sealed (other; base objec
 static-class	NumSharp	MethodImplOptionsConstants	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Utilities/MethodImplOptionsConstants.cs	17
 sealed-class	NumSharp	ModuleNameAttribute	sealed class			sealed (attribute; base Attribute)	src/NumSharp.Core/Assembly/ModuleNameAttribute.cs	37
 sealed-class	NumSharp	MrClass	sealed class			sealed (other; base object)	src/NumSharp.Core/Ma/NDMaskedArray.cs	1960
-internal-state	NumSharp	MT19937	class	property	uint[] Key { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/RandomSampling/MT19937.cs	679
-internal-state	NumSharp	MT19937	class	property	int Pos { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/RandomSampling/MT19937.cs	682
-sealed-class	NumSharp	MT19937.State	sealed class			sealed (other; base BitGeneratorState)	src/NumSharp.Core/RandomSampling/MT19937.cs	591
+internal-state	NumSharp	MT19937	class	property	uint[] Key { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/RandomSampling/MT19937.cs	688
+internal-state	NumSharp	MT19937	class	property	int Pos { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/RandomSampling/MT19937.cs	691
 value-type	NumSharp	NativeRandomState	struct			struct: not inheritable by nature	src/NumSharp.Core/RandomSampling/NativeRandomState.cs	13
 sealed-class	NumSharp	NDAnchoredAttribute	sealed class			sealed (attribute; base Attribute)	src/NumSharp.Core/Backends/NDAnchoredAttribute.cs	40
 private-protected	NumSharp	NDArray	class	method	NDArray GetAdvanced(object[] indicesObjects)	visible to subclasses inside NumSharp.dll only	src/NumSharp.Core/Selection/NDArray.Indexing.cs	409
@@ -165,11 +164,7 @@ value-type	NumSharp	np.UniqueInverseResult	readonly struct			readonly struct: no
 value-type	NumSharp	np.UniqueResult	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Manipulation/np.unique.cs	33
 static-class	NumSharp	NPTypeCodeExtensions	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Backends/NPTypeCode.cs	247
 sealed-class	NumSharp	NumPyRandom.State	sealed class			sealed (other; base object)	src/NumSharp.Core/RandomSampling/np.random.cs	740
-sealed-class	NumSharp	PCG64.State	sealed class			sealed (other; base BitGeneratorState)	src/NumSharp.Core/RandomSampling/PCG64.cs	235
-sealed-class	NumSharp	PCG64DXSM.State	sealed class			sealed (other; base BitGeneratorState)	src/NumSharp.Core/RandomSampling/PCG64DXSM.cs	212
-sealed-class	NumSharp	Philox.State	sealed class			sealed (other; base BitGeneratorState)	src/NumSharp.Core/RandomSampling/Philox.cs	588
 static-class	NumSharp	PocketFFTDriver	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Fourier/PocketFFTDriver.cs	22
-sealed-class	NumSharp	poly1d	sealed class			sealed (other; base object)	src/NumSharp.Core/Polynomial/poly1d.cs	18
 value-type	NumSharp	PolyfitResult	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Polynomial/np.polyfit.cs	64
 ctor-closed	NumSharp	PolynomialModule	class			every instance constructor is internal: internal PolynomialModule()	src/NumSharp.Core/Polynomial/Package/np.polynomial.cs	68
 ctor-closed	NumSharp	PolyUtilsModule	class			every instance constructor is internal: internal PolyUtilsModule()	src/NumSharp.Core/Polynomial/Package/np.polynomial.polyutils.cs	30
@@ -177,7 +172,6 @@ ctor-closed	NumSharp	PowerSeriesModule	class			every instance constructor is int
 sealed-class	NumSharp	PyScalarDTypeMeta	sealed class			sealed (other; base DTypeMeta)	src/NumSharp.Core/DTypes/PyScalarDTypeMeta.cs	30
 sealed-class	NumSharp	SeedlessSeedSequence	sealed class			sealed (other; base object)	src/NumSharp.Core/RandomSampling/ISeedSequence.cs	48
 sealed-class	NumSharp	SeedSequence	sealed class			sealed (other; base object)	src/NumSharp.Core/RandomSampling/SeedSequence.cs	21
-sealed-class	NumSharp	SFC64.State	sealed class			sealed (other; base BitGeneratorState)	src/NumSharp.Core/RandomSampling/SFC64.cs	149
 value-type	NumSharp	Shape	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/View/Shape.cs	50
 value-type	NumSharp	SliceDef	struct			struct: not inheritable by nature	src/NumSharp.Core/View/Slice.cs	512
 sealed-class	NumSharp	StringComputationNotSupportedException	sealed class			sealed (exception; base NotSupportedException)	src/NumSharp.Core/Exceptions/StringComputationNotSupportedException.cs	29
@@ -189,11 +183,6 @@ sealed-class	NumSharp	TensorEngine.Threading.Variable	sealed class			sealed (oth
 sealed-class	NumSharp	TimeToStringCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/StringCastingImpls.cs	243
 sealed-class	NumSharp	TimeToTimeCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/CastingImpls.cs	194
 sealed-class	NumSharp	ToStringCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/StringCastingImpls.cs	106
-internal-state	NumSharp	UnicodeDecodeError	class	property	string CodecName { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/Exceptions/UnicodeError.cs	85
-internal-state	NumSharp	UnicodeDecodeError	class	property	byte[] ObjectBytes { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/Exceptions/UnicodeError.cs	88
-internal-state	NumSharp	UnicodeDecodeError	class	property	int Start { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/Exceptions/UnicodeError.cs	91
-internal-state	NumSharp	UnicodeDecodeError	class	property	int End { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/Exceptions/UnicodeError.cs	94
-internal-state	NumSharp	UnicodeDecodeError	class	property	string Reason { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/Exceptions/UnicodeError.cs	97
 sealed-class	NumSharp	Vectorized	sealed class			sealed (other; base object)	src/NumSharp.Core/APIs/np.vectorize.cs	93
 sealed-class	NumSharp	VStringDTypeMeta	sealed class			sealed (other; base DTypeMeta)	src/NumSharp.Core/DTypes/VStringDTypeMeta.cs	44
 sealed-class	NumSharp	VStringToFixedWidthCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/VStringCastingImpls.cs	135

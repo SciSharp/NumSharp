@@ -231,7 +231,7 @@ namespace NumSharp.Backends.Strings
         {
             var rep = CallEncodeHandler(errors, "utf-8", SurrogatesText, s, n, start, end, out bool isBytes, out long newpos);
             if (!isBytes && !IsAscii(rep))
-                throw EncodeError("utf-8", s, start, end, SurrogatesText);
+                throw EncodeError("utf-8", s, n, start, end, SurrogatesText);
             sink.PutBytes(rep);
             return newpos;
         }
@@ -275,7 +275,7 @@ namespace NumSharp.Backends.Strings
                 switch (errors.Inline)
                 {
                     case NDErrorHandler.Strict:
-                        throw EncodeError(encoding, s, collstart, collend, reason);
+                        throw EncodeError(encoding, s, n, collstart, collend, reason);
                     case NDErrorHandler.Replace:
                         // One byte per character: within the room reserved for the str.
                         for (long k = collstart; k < collend; k++)
@@ -344,7 +344,7 @@ namespace NumSharp.Backends.Strings
             var rep = CallEncodeHandler(errors, encoding, reason, s, n, start, end, out bool isBytes, out long newpos);
             // A str replacement must be one-byte for Latin-1 (every byte of the span is) and ASCII for ASCII.
             if (!isBytes && limit == 128 && !IsAscii(rep))
-                throw EncodeError(encoding, s, start, end, reason);
+                throw EncodeError(encoding, s, n, start, end, reason);
             sink.PutBytes(rep);
             return newpos;
         }
@@ -402,13 +402,13 @@ namespace NumSharp.Backends.Strings
                 if (isBytes)
                 {
                     if ((rep.Length & 1) != 0)
-                        throw EncodeError(encoding, s, pos, pos + 1, SurrogatesText);
+                        throw EncodeError(encoding, s, n, pos, pos + 1, SurrogatesText);
                     sink.PutBytes(rep);
                 }
                 else
                 {
                     if (!IsAscii(rep))
-                        throw EncodeError(encoding, s, pos, pos + 1, SurrogatesText);
+                        throw EncodeError(encoding, s, n, pos, pos + 1, SurrogatesText);
                     // ucs1lib_utf16_encode of the str: each character one unit in the codec's order.
                     sink.Reserve(rep.Length * 2L);
                     foreach (byte b in rep)
@@ -492,13 +492,13 @@ namespace NumSharp.Backends.Strings
                 if (isBytes)
                 {
                     if ((rep.Length & 3) != 0)
-                        throw EncodeError(encoding, s, pos, pos + 1, SurrogatesText);
+                        throw EncodeError(encoding, s, n, pos, pos + 1, SurrogatesText);
                     sink.PutBytes(rep);
                 }
                 else
                 {
                     if (!IsAscii(rep))
-                        throw EncodeError(encoding, s, pos, pos + 1, SurrogatesText);
+                        throw EncodeError(encoding, s, n, pos, pos + 1, SurrogatesText);
                     sink.Reserve(rep.Length * 4L);
                     foreach (byte b in rep)
                         Put32(sink, b, big);
@@ -577,13 +577,13 @@ namespace NumSharp.Backends.Strings
                 switch (errors.Inline)
                 {
                     case NDErrorHandler.Strict:
-                        throw EncodeError(encoding, s, collstart, collend, UndefinedText);
+                        throw EncodeError(encoding, s, n, collstart, collend, UndefinedText);
                     case NDErrorHandler.Replace:
                     {
                         // '?' through the table per character (EBCDIC writes 0x6F; a table without '?' raises).
                         int q = CharmapByte('?');
                         if (q < 0)
-                            throw EncodeError(encoding, s, collstart, collend, UndefinedText);
+                            throw EncodeError(encoding, s, n, collstart, collend, UndefinedText);
                         for (long k = collstart; k < collend; k++)
                             sink.PutByte((byte)q);
                         inpos = collend;
@@ -607,7 +607,7 @@ namespace NumSharp.Backends.Strings
                             {
                                 int q = CharmapByte(text[t]);
                                 if (q < 0)
-                                    throw EncodeError(encoding, s, collstart, collend, UndefinedText);
+                                    throw EncodeError(encoding, s, n, collstart, collend, UndefinedText);
                                 sink.PutByte((byte)q);
                             }
                         }
@@ -629,7 +629,7 @@ namespace NumSharp.Backends.Strings
                             {
                                 int q = CharmapByte(r);
                                 if (q < 0)
-                                    throw EncodeError(encoding, s, collstart, collend, UndefinedText);
+                                    throw EncodeError(encoding, s, n, collstart, collend, UndefinedText);
                                 sink.PutByte((byte)q);
                             }
                         }

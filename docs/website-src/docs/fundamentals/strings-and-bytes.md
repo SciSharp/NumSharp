@@ -153,7 +153,7 @@ names.astype("U2");                        // ['ca', 'do', 'bi']
 np.array(new[] { "é" }).astype("S1");      // UnicodeEncodeError
 ```
 
-The last call raises `UnicodeEncodeError` with Python's message: `'ascii' codec can't encode character '\xe9' in position 0: ordinal not in range(128)`.
+The last call raises `UnicodeEncodeError` with Python's message: `'ascii' codec can't encode character '\xe9' in position 0: ordinal not in range(128)`. Its `encoding`, `@object`, `start`, `end` and `reason` are Python's: `ascii`, `é`, 0, 1, `ordinal not in range(128)`.
 
 ---
 

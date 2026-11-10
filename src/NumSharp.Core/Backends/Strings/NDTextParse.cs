@@ -1391,10 +1391,7 @@ namespace NumSharp.Backends.Strings
                     return new SystemError(NDStringCodec.InvalidMaxCharMessage);
                 case TextParseStatus.DecodeError:
                 {
-                    string text = d.DecodeEnd - d.DecodeStart == 1
-                        ? string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't decode byte 0x{bytes[d.DecodeStart]:x2} in position {d.DecodeStart}: {d.DecodeReason}")
-                        : string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't decode bytes in position {d.DecodeStart}-{d.DecodeEnd - 1}: {d.DecodeReason}");
-                    return new UnicodeDecodeError(text);
+                    return new UnicodeDecodeError("utf-8", bytes, d.DecodeStart, d.DecodeEnd, d.DecodeReason);
                 }
                 default:
                     throw new InvalidOperationException($"No error for parse status {status}.");
