@@ -678,6 +678,18 @@ namespace NumSharp.Tests.Fuzz
                 case "linspace": return np.linspace(p["start"].GetDouble(), p["stop"].GetDouble(),
                     p["num"].GetInt32(), p["endpoint"].GetBoolean(),
                     FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                // np.linspace over array_like ends (each end an operand, 0-d for a NumPy scalar: strong).
+                case "linspace_arrays":
+                    return np.linspace(ops[0], ops[1], p["num"].GetInt64(), p["endpoint"].GetBoolean(),
+                        LinspaceDtype(p), p["axis"].GetInt32());
+                // A weak Python-float start against an array stop: the harness holds the C# number's 0-d array (the
+                // implicit conversion NumPy's Python float stands for) so the leak gate sees only the library's arrays.
+                case "linspace_weak":
+                {
+                    using NDArray start = p["start"].GetDouble();
+                    return np.linspace(start, ops[0], p["num"].GetInt64(), p["endpoint"].GetBoolean(),
+                        LinspaceDtype(p), p["axis"].GetInt32());
+                }
                 case "logspace": return np.logspace(p["start"].GetDouble(), p["stop"].GetDouble(),
                     p["num"].GetInt32(), p["endpoint"].GetBoolean(), p["base"].GetDouble(),
                     FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
@@ -1035,6 +1047,15 @@ namespace NumSharp.Tests.Fuzz
                 throw;
             }
         }
+
+        /// <summary>
+        ///     The <c>dtype</c> of a linspace row (gen_oracle.py's <c>gen_creation</c> array-end block): JSON <c>null</c> is
+        ///     NumPy's <c>dtype=None</c> (the computation dtype), a name is that dtype.
+        /// </summary>
+        /// <param name="p">The row's params.</param>
+        /// <returns>The requested dtype, or null for none.</returns>
+        internal static DType LinspaceDtype(IReadOnlyDictionary<string, JsonElement> p)
+            => p["dtype"].ValueKind == JsonValueKind.Null ? null : FuzzCorpus.DtypeToTC(p["dtype"].GetString());
 
         private static int[] ParseIntArray(JsonElement arr)
         {

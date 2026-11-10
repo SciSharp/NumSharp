@@ -4,8 +4,9 @@
 // with NumPy's statements. Their facades take no array operand, so np.linspace / np.logspace / np.geomspace call the
 // default engine's member (TensorEngine.Default, as np.fft.fftfreq does); an engine that derives from DefaultEngine reaches
 // its own override by calling the member on itself. np.arange, which NumPy fills through the dtype's ArrFuncs fill and
-// no ufunc, is the array object's (UnmanagedStorage.Ctors.cs), not an engine member (Appendix D). NumSharp's spacing
-// functions take scalar ends only: array_like ends and the new axis they would place are not ported.
+// no ufunc, is the array object's (UnmanagedStorage.Ctors.cs), not an engine member (Appendix D). np.linspace takes NumPy's
+// array_like ends (the NDArray member: its dtype from result_type, the new sample axis placed by `axis`), reached through the
+// start operand's engine; np.logspace and np.geomspace take scalar ends.
 
 using System;
 using System.Numerics;
@@ -50,13 +51,59 @@ namespace NumSharp
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no storage lane (a datetime
         ///     descriptor).</exception>
         /// <remarks>
-        ///     <c>np.linspace</c> calls this member of the default engine. An override must keep NumPy's arithmetic, which
+        ///     <c>np.linspace</c> reaches this member through the array-ends member, which hands it two 0-d ends that compute
+        ///     in float64 (two C# numbers, NumPy float64 / integer / bool scalars) with the sample axis first: the same
+        ///     samples, without the ramp arrays. An override must keep NumPy's arithmetic, which
         ///     code ported from NumPy reads: the floor of the integer dtypes, the exact last sample, one sample as
         ///     <c>0 * (stop - start) + start</c> (a NaN when an end is infinite or NaN, +0.0 for a start of -0.0), and a
         ///     step that underflows to zero replaced by <c>(i / div) * (stop - start) + start</c> (NumPy's gh-5437 branch,
         ///     which keeps a subnormal range spread out).
         /// </remarks>
         public abstract NDArray Linspace(double start, double stop, long num, bool endpoint = true, DType dtype = null, string device = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.linspace(start, stop, num, endpoint, dtype=dtype, axis=axis, device=device)</c> over array_like
+        ///     ends, statement for statement: the samples are computed in <c>result_type(start, stop, ensure_inexact=True)</c>
+        ///     (float32 ends stay float32, integer ends compute in float64, complex ends in complex), along a new axis of
+        ///     length <paramref name="num"/> in front of the ends' broadcast shape, which <paramref name="axis"/> then moves.
+        /// </summary>
+        /// <param name="start">The first sample (a 0-d array for a scalar end). A C# number that reached the
+        ///     <see cref="NDArray"/> parameter through its implicit conversion is a WEAK Python number (NEP 50): it takes the
+        ///     other end's dtype, so <c>(0, float32 1.5)</c> computes in float32 and two C# numbers in float64.</param>
+        /// <param name="stop">The last sample when <paramref name="endpoint"/> is true; otherwise the bound the samples
+        ///     approach. Broadcast against <paramref name="start"/>.</param>
+        /// <param name="num">The number of samples.</param>
+        /// <param name="endpoint">Whether <paramref name="stop"/> is the last sample (it is then written exactly:
+        ///     <c>y[-1, ...] = stop</c>).</param>
+        /// <param name="dtype">The result dtype, or null for the computation dtype. An integer dtype FLOORS the samples before
+        ///     the cast (NumPy 1.20+), bool casts (nonzero is True), a text dtype formats them as <c>astype</c> does.</param>
+        /// <param name="axis">Where the sample axis goes in the result (NumPy's <c>moveaxis(y, 0, axis)</c>); 0 keeps it
+        ///     first, -1 makes it last.</param>
+        /// <param name="device">NumPy's Array-API <c>device=</c>: only <c>"cpu"</c> and null are accepted, checked where
+        ///     NumPy's ramp <c>np.arange</c> checks it (after the count, the promotion and the broadcast).</param>
+        /// <returns>The samples: <c>(num, *broadcast(start, stop).shape)</c> with the sample axis moved to
+        ///     <paramref name="axis"/>. Ownership follows NumPy's statements: a moved axis or two scalar ends computed in
+        ///     float64 give a view whose buffer the array does not own; array ends give a fresh array.</returns>
+        /// <exception cref="ValueError">A negative <paramref name="num"/> (<c>Number of samples, -1, must be
+        ///     non-negative.</c>), checked first; a <paramref name="device"/> other than <c>"cpu"</c>.</exception>
+        /// <exception cref="DTypePromotionError">Ends with no common inexact dtype (text ends: NumPy's text naming the
+        ///     DType classes and <c>_PyFloatDType</c>).</exception>
+        /// <exception cref="IncorrectShapeException">Ends that do not broadcast (NumPy's ValueError text, <c>operands could
+        ///     not be broadcast together with shapes ...</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> out of range for the result's rank (NumPy's
+        ///     <c>destination: axis 3 is out of bounds for array of dimension 2</c>).</exception>
+        /// <exception cref="TypeError">An integer <paramref name="dtype"/> over complex ends: NumPy's <c>floor</c> has no
+        ///     complex loop.</exception>
+        /// <remarks>
+        ///     <c>np.linspace</c> calls this member of the start operand's engine. An override must keep NumPy's arithmetic,
+        ///     which ported code reads bit for bit: <c>arange(num) * step + start</c> in the computation dtype (float32 ends
+        ///     round in float32), the exact last sample, <c>y * delta + start</c> for one sample with the endpoint, and NumPy's
+        ///     gh-5437 order <c>arange(num) / div * delta + start</c> when ANY step is zero. A subclass operand
+        ///     (<c>numpy.matrix</c>) arrives as a plain view and the result is wrapped by its class, as NumPy's
+        ///     <c>_array_converter.wrap</c> does.
+        /// </remarks>
+        [ArrayWrap("start", "stop")]
+        public abstract NDArray Linspace(NDArray start, NDArray stop, long num, bool endpoint, DType dtype, int axis, string device);
 
         /// <summary>
         ///     NumPy's <c>np.logspace(start, stop, num=50, endpoint=True, base=10.0, dtype=None, axis=0)</c> over scalar

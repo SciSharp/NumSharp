@@ -631,7 +631,11 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 - [ ] D1 `np.empty`, `np.zeros`, `np.ones`, `np.full`: `order=` at NumPy's position `(shape, dtype, order)`.
 - [ ] D2 `np.empty_like`, `np.zeros_like`, `np.ones_like`, `np.full_like`: `shape=`; `order=` at NumPy's position.
-- [ ] D3 `np.linspace`: `retstep=` (array-or-tuple result type), `axis=`.
+- [x] D3 `np.linspace`: `retstep=` (array-or-tuple result type), `axis=`. Done with NumPy's array_like ends (the owner's
+  choice, 2026-11-10): `NDArray linspace(NDArray start, NDArray stop, long num = 50, bool endpoint = true, DType dtype =
+  null, int axis = 0, string device = null)` replaced the four scalar overloads, and NumPy's whole signature over
+  `object` ends returns `np.LinspaceResult` (implicit `NDArray`, `Deconstruct(samples, step)`); a compiled C# 12 / 13
+  probe found no ambiguity between the two.
 - [ ] D4 `np.indices`: `sparse=` (array-or-tuple result type; `np.indices_sparse` exists today).
 - [ ] D5 `np.asanyarray`: `copy=`.
 - [ ] D6 `np.array`: `ndmax=`; first parameter named `object`.

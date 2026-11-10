@@ -165,11 +165,29 @@ a copy) in `Backends/Unmanaged/UnmanagedStorage.Buffer.cs`.
 
 NumPy 2.4.2's `numpy/_core/function_base.py`: `Creation/np.{linspace,logspace,geomspace}.cs` are the facades,
 `TensorEngine.Linspace` / `Logspace` / `Geomspace` (`Backends/TensorEngine.CoreFunctionBase.cs`) the members,
-DefaultEngine's fills in `Backends/Default/Creation/Default.CoreFunctionBase.cs`. `start`, `stop` and `base` are scalars
-(`double`); array-like values are not supported. Otherwise full parameter parity: `num=50`, `endpoint=true`,
-`base=10.0` (logspace only), `dtype=null`, `axis=0` (int and long `num` overloads).
-- `linspace(start, stop, num, endpoint, dtype, device)` runs NumPy's statements in NumPy's order: the count's ValueError
-  first, then the device, then `arange(num) * step + start` with NumPy's three observable branches (one sample is
+DefaultEngine's fills in `Backends/Default/Creation/Default.CoreFunctionBase.cs`. `linspace` takes NumPy's array_like
+ends; `logspace` / `geomspace` take scalar `start`, `stop` and `base` (`double`). Otherwise full parameter parity:
+`num=50`, `endpoint=true`, `base=10.0` (logspace only), `dtype=null`, `axis=0`.
+- `linspace` has two overloads that never collide (a compiled C# 12 / 13 binding probe): `NDArray linspace(NDArray start,
+  NDArray stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0, string device = null)` for every
+  call, and NumPy's whole signature `LinspaceResult linspace(object start, object stop, ..., bool retstep = false, ...)`,
+  which a call binds only when it names `retstep` (or passes it fifth) or types an end `object` (`NDArray` is the better
+  conversion target). `LinspaceResult` converts to the samples and deconstructs into `(samples, step)`; its step is NumPy's
+  `delta / div` through the public ufuncs (a matrix end gives a matrix step), a weak 0-d NaN without a step.
+- The array member, `TensorEngine.Linspace(NDArray, NDArray, ...)` (`[ArrayWrap("start", "stop")]`: a matrix end gives a
+  matrix, its finalize dropping the length-1 axis), is reached through the start operand's engine. Its dtype is
+  `_array_converter(start, stop).result_type(ensure_inexact=True)` = `DTypePromotion.ResultType(start.Nep50Operand,
+  stop.Nep50Operand, PyFloat)`: a C# number end is a weak Python number (float64 beside another number, the strong end's
+  dtype otherwise), `NDArray.Scalar(0.1f)` / float32 arrays compute in float32 (NumPy's bits, not float64 cast down),
+  float16 in float16, complex in complex128, decimal in decimal, `char` as its uint16 proxy. Two 0-d ends that compute in
+  float64 with `axis` 0 take the scalar member (every C# number call: no ramp arrays); everything else runs NumPy's
+  statements over arrays (`subtract(stop, start, dtype=dt)` raises the broadcast error, the ramp is `ArangeObj(0, num, 1,
+  dt)` reshaped `(num, 1, ...)`, in-place multiply for scalar ends and a new array for array ends, `y += start`,
+  `y[-1, ...] = stop`, `moveaxis`, the integer floor, `astype(dtype, copy=False)`), so OWNDATA matches NumPy (array ends:
+  fresh; a moved axis: an F-contiguous view; scalar ends: the ramp's view).
+- The scalar member, `linspace(start, stop, num, endpoint, dtype, device)` over doubles, runs NumPy's statements in
+  NumPy's order: the count's ValueError first, then the device, then `arange(num) * step + start` with NumPy's three
+  observable branches (one sample is
   `0 * (stop - start) + start`: NaN for an infinite or NaN end, +0.0 for a start of -0.0; a step that underflows to zero
   takes gh-5437's `(i / div) * delta + start`; `y[-1] = stop` for two or more samples). Integer dtypes are FLOORED, a text
   dtype is formatted by `astype` (`dtype='U5'` → `['0.0', '0.25', ...]`), and the result is NumPy's float64 view

@@ -96,7 +96,7 @@ A *weak* C# scalar assigned into an integer array **does** range-check and raise
 | Function | Produces |
 |----------|----------|
 | `np.arange(stop)` / `np.arange(start, stop, step)` | regularly incrementing values (stop **exclusive**); integer overloads are **int64** |
-| `np.linspace(start, stop, num)` | `num` values, endpoints included |
+| `np.linspace(start, stop, num)` | `num` values, endpoints included; array ends give one ramp per element |
 | `np.logspace(start, stop, num, base)` | `base ** linspace(...)` - log-scaled |
 | `np.geomspace(start, stop, num)` | geometric progression between endpoints |
 
@@ -110,6 +110,14 @@ np.geomspace(1, 1000, 4);      // [1. 10. 100. 1000.]
 ```
 
 As in NumPy, prefer `linspace` when you need a guaranteed element count and both endpoints; `arange` with a float step can miss or include `stop` from roundoff.
+
+`linspace` computes in the ends' dtype, as NumPy's `result_type(start, stop, 1.0)`: C# numbers are Python numbers (float64), float32 ends stay float32, and array ends add the sample axis in front (or where `axis` puts it). `retstep: true` also returns the step:
+
+```csharp
+np.linspace(np.array(new[] { 0.0, 1.0 }), np.array(new[] { 1.0, 3.0 }), 3);   // [[0.  1. ] [0.5 2. ] [1.  3. ]]
+np.linspace(NDArray.Scalar(0.1f), NDArray.Scalar(0.7f), 11);                  // float32 samples, NumPy's bits
+var (samples, step) = np.linspace(0, 1, 5, retstep: true);                    // step: 0.25
+```
 
 ### 2-D / matrix constructors
 

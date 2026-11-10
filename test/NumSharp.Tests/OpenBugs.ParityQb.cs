@@ -845,24 +845,18 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QB-29 — C# integer literals bind the FLOAT overloads of np.mod / np.remainder / np.linspace
+        // QB-29 — C# integer literals bind the FLOAT overloads of np.mod / np.remainder
         // ------------------------------------------------------------------
 
         /// <summary>
         ///     C#'s better-conversion rule prefers <c>float</c> over <c>double</c> (and over a user-defined conversion to
         ///     <c>NDArray</c>) for an <c>int</c> / <c>long</c> / <c>uint</c> / <c>short</c> / <c>byte</c> argument, so the
-        ///     <c>float</c> overloads <c>np.mod(NDArray, float)</c>, <c>np.remainder(NDArray, float)</c> and
-        ///     <c>np.linspace(float, float, …)</c> capture every integer literal:
-        ///     <list type="bullet">
-        ///         <item><c>np.mod(np.array([7, -7]), 3)</c> is float64 <c>[1.0, 2.0]</c> (NumPy: int64 <c>[1, 2]</c>, the
-        ///         Python int is weak); int8 / uint8 / bool arrays give float32; <c>np.mod([5], 0)</c> is NaN (NumPy's integer
-        ///         loop: 0); <c>np.mod([16777217, 33554435], 16777217)</c> is <c>[1.0, 3.0]</c> (NumPy <c>[0, 1]</c>: the
-        ///         divisor rounded to 16777216f). The <c>%</c> operator is right.</item>
-        ///         <item><c>np.linspace(-20000001, 20000001, 3)</c> is <c>[-20000000, 0, 20000000]</c> (NumPy keeps the Python
-        ///         ints exactly: <c>[-20000001, 0, 20000001]</c>); <c>np.linspace(0, 100000001, 5, endpoint: false)</c> steps
-        ///         by 20000000 instead of 20000000.2. Any integer bound past 2^24 is rounded to float32 first.</item>
-        ///     </list>
-        ///     (np.arange's float overload is QB-02.)
+        ///     <c>float</c> overloads <c>np.mod(NDArray, float)</c> and <c>np.remainder(NDArray, float)</c> capture every
+        ///     integer literal: <c>np.mod(np.array([7, -7]), 3)</c> is float64 <c>[1.0, 2.0]</c> (NumPy: int64 <c>[1, 2]</c>,
+        ///     the Python int is weak); int8 / uint8 / bool arrays give float32; <c>np.mod([5], 0)</c> is NaN (NumPy's integer
+        ///     loop: 0); <c>np.mod([16777217, 33554435], 16777217)</c> is <c>[1.0, 3.0]</c> (NumPy <c>[0, 1]</c>: the divisor
+        ///     rounded to 16777216f). The <c>%</c> operator is right. (np.arange's float overload is QB-02; np.linspace has
+        ///     no float overload, so its integer literals stay exact Python ints: <c>np_linspace_ArrayBounds_Test</c>.)
         /// </summary>
         [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB29")]
         public void ParityQb_QB29_IntegerLiterals_DoNotBindTheFloatOverloads()
@@ -870,12 +864,9 @@ namespace NumSharp.Tests
             using var a = np.array(new long[] { 7, -7 });
 
             using var mod = np.mod(a, 3);
-            using var space = np.linspace(-20000001, 20000001, 3);
 
-            // NumPy 2.4.2: int64 [1, 2] and [-20000001., 0., 20000001.]
+            // NumPy 2.4.2: int64 [1, 2]
             mod.dtype.Should().Be(np.int64);
-            space.GetDouble(0).Should().Be(-20000001.0);
-            space.GetDouble(2).Should().Be(20000001.0);
         }
 
         // ------------------------------------------------------------------

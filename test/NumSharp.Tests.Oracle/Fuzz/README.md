@@ -594,7 +594,7 @@ python test/oracle/gen_oracle.py comparison       # ==,!=,<,>,<=,>=
 python test/oracle/gen_oracle.py unary            # negate/abs/sqrt/trig/exp/log/...
 python test/oracle/gen_oracle.py reduce           # sum/prod/min/max/mean/std/var/argmax/argmin/all/any
 python test/oracle/gen_oracle.py where            # np.where(cond,x,y)
-python test/oracle/gen_oracle.py creation         # deterministic zero-operand creators + Char proxy
+python test/oracle/gen_oracle.py creation         # deterministic creators (+ linspace over array ends) + Char proxy
 python test/oracle/gen_oracle.py conversion       # array/as*/require/frombuffer/fromstring + errors
 python test/oracle/gen_oracle.py multioutput      # full tuple arity + every result slot
 python test/oracle/gen_oracle.py iter             # ndindex/ndenumerate/nditer/broadcast TRACES (order gate)

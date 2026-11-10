@@ -32,6 +32,205 @@ namespace NumSharp.Backends
             return LinspaceCore(start, stop, num, endpoint, dtype?.GetTypeCode() ?? NPTypeCode.Double);
         }
 
+        /// <inheritdoc />
+        public override NDArray Linspace(NDArray start, NDArray stop, long num, bool endpoint, DType dtype, int axis, string device)
+        {
+            // The facades refuse a null end before they pick an engine; this guards a direct engine call.
+            if (start is null)
+                throw new ArgumentNullException(nameof(start));
+            if (stop is null)
+                throw new ArgumentNullException(nameof(stop));
+
+            // num = operator.index(num); if num < 0: raise ValueError(...) - NumPy's first statements, before the ends are read.
+            ValidateSampleCount(num);
+            long div = endpoint ? num - 1 : num;
+
+            // conv = _array_converter(start, stop); dt = conv.result_type(ensure_inexact=True).
+            DType dt = LinspaceComputeType(start, stop);
+            // integer_dtype = issubdtype(dtype, integer), read before dtype defaults to dt (which is never an integer).
+            bool integerDtype = dtype != null && IsSpacingIntegerDtype(dtype.typecode);
+
+            // Two 0-d ends that compute in float64, with the sample axis first, are the scalar member's case: its ramp is
+            // NumPy's float64 statements value for value (the same roundings, the exact last sample, the gh-5437 branch, the
+            // same ownership), without the arange / delta / step arrays. The C# number ends of every existing call land here.
+            if (axis == 0 && start.ndim == 0 && stop.ndim == 0 && dt.typecode == NPTypeCode.Double)
+                return Linspace(Converts.ToDouble(start.GetAtIndex(0)), Converts.ToDouble(stop.GetAtIndex(0)), num, endpoint, dtype, device);
+
+            return LinspaceArrays(start, stop, num, endpoint, div, dt, integerDtype, dtype ?? dt, axis, device);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.linspace</c> statements after the dtype is known, over arrays: <c>delta = np.subtract(stop, start,
+        ///     dtype=dt)</c>, the ramp <c>arange(0, num, dtype=dt)</c> shaped <c>(num, 1, ...)</c> against delta's rank, the
+        ///     step and its gh-5437 branch, <c>y += start</c>, the exact last sample, the axis move, the integer floor and the
+        ///     final <c>astype(dtype, copy=False)</c>.
+        /// </summary>
+        /// <param name="start">The first end (any shape that broadcasts with <paramref name="stop"/>).</param>
+        /// <param name="stop">The second end.</param>
+        /// <param name="num">The number of samples (validated non-negative).</param>
+        /// <param name="endpoint">Whether the last sample is <paramref name="stop"/> itself.</param>
+        /// <param name="div"><c>num - 1</c> with the endpoint, <c>num</c> without; no step when it is not positive.</param>
+        /// <param name="dt">The computation dtype (<see cref="LinspaceComputeType"/>).</param>
+        /// <param name="integerDtype">Whether the requested dtype is an integer one (the samples are floored first).</param>
+        /// <param name="dtype">The result dtype (<paramref name="dt"/> when none was requested).</param>
+        /// <param name="axis">The destination of the sample axis.</param>
+        /// <param name="device">The Array-API device, checked where NumPy's ramp checks it.</param>
+        /// <returns>The samples; a view of the ramp buffer where NumPy's result is one (scalar ends, a moved axis).</returns>
+        /// <exception cref="IncorrectShapeException">Ends that do not broadcast (the subtract's text).</exception>
+        /// <exception cref="ValueError">A <paramref name="device"/> other than <c>"cpu"</c>.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> out of range for the result's rank.</exception>
+        /// <exception cref="TypeError">An integer <paramref name="dtype"/> over complex samples (floor has no complex loop).</exception>
+        /// <remarks>Every intermediate is released before returning: on success only the result's buffer stays referenced,
+        ///     and on a failure the partial ramp goes with the rest.</remarks>
+        private NDArray LinspaceArrays(NDArray start, NDArray stop, long num, bool endpoint, long div, DType dt,
+            bool integerDtype, DType dtype, int axis, string device)
+        {
+            // delta = np.subtract(stop, start, dtype=type(dt)): the ends broadcast here (NumPy's broadcast error is raised by
+            // this subtract), and a weak Python-number end takes dt.
+            NDArray delta = Subtract(stop, start, dt, null, null);
+            NDArray step = null, y = null;
+            try
+            {
+                // y = _nx.arange(0, num, dtype=dt, device=device).reshape((-1,) + (1,) * ndim(delta)): the ramp in dt (the
+                // dtype's own fill, as NumPy's arange), as a VIEW shaped to broadcast against delta.
+                DeviceArguments.ValidateDevice(device);
+                y = LinspaceRamp(num, dt, delta.ndim);
+
+                // _mult_inplace = _nx.isscalar(delta): two scalar ends multiply in place (y stays the ramp's view), array ends
+                // into a new array; the values are the same, NumPy's result ownership is not.
+                bool scalarDelta = delta.ndim == 0;
+                if (div > 0)
+                {
+                    // step = delta / div: the Python int div is weak, so the division runs in dt.
+                    using var divisor = NDArray.PythonLiteral(div);
+                    step = Divide(delta, divisor, null, null, null);
+                    bool anyStepZero;
+                    using (var zero = step == 0)
+                        anyStepZero = Any(zero);
+                    if (anyStepZero)
+                    {
+                        // Special handling for denormal numbers, gh-5437: y /= div; y *= delta (y = y * delta for arrays),
+                        // so a step that underflowed to zero does not collapse every sample onto the start.
+                        Divide(y, divisor, null, y, null);
+                        if (scalarDelta)
+                            Multiply(y, delta, null, y, null);
+                        else
+                            y = ReplaceLinspaceStage(y, Multiply(y, delta, null, null, null));
+                    }
+                    else if (scalarDelta)
+                        Multiply(y, step, null, y, null);
+                    else
+                        y = ReplaceLinspaceStage(y, Multiply(y, step, null, null, null));
+                }
+                else
+                {
+                    // No samples, or one with the endpoint: no step (NumPy's nan); y = y * delta keeps NumPy's 0 * delta, a NaN
+                    // for an infinite end.
+                    y = ReplaceLinspaceStage(y, Multiply(y, delta, null, null, null));
+                }
+
+                // y += start (in place: the result keeps dt; an integer or weak start is cast into it).
+                Add(y, start, null, y, null);
+
+                // if endpoint and num > 1: y[-1, ...] = stop - the last sample is the end itself, never a rounded ramp value.
+                if (endpoint && num > 1)
+                    y["-1, ..."] = stop;
+
+                // if axis != 0: y = _nx.moveaxis(y, 0, axis) - raises NumPy's "destination: axis ..." AxisError.
+                if (axis != 0)
+                    y = ReplaceLinspaceStage(y, MoveAxis(y, new[] { 0 }, new[] { axis }));
+
+                // if integer_dtype: _nx.floor(y, out=y) - NumPy 1.20+ rounds toward -inf before the integer cast.
+                if (integerDtype)
+                    Floor(y, null, y, null);
+
+                // y = conv.wrap(y.astype(dtype, copy=False)): the wrap is this member's [ArrayWrap] declaration, which the
+                // woven np.linspace applies to a subclass operand's result.
+                NDArray result = y.astype(dtype, false);
+                if (!ReferenceEquals(result, y))
+                    y.Dispose();
+                return result;
+            }
+            catch
+            {
+                y?.Dispose();
+                throw;
+            }
+            finally
+            {
+                delta.Dispose();
+                step?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's linspace ramp, <c>_nx.arange(0, num, dtype=dt).reshape((-1,) + (1,) * ndim)</c>: the counts
+        ///     <c>0 .. num-1</c> written by <paramref name="dt"/>'s own fill, as a view with <paramref name="ndim"/> trailing
+        ///     axes of length 1.
+        /// </summary>
+        /// <param name="num">The number of samples.</param>
+        /// <param name="dt">The computation dtype.</param>
+        /// <param name="ndim">The rank of delta: the ramp broadcasts against it from the front.</param>
+        /// <returns>The ramp view (it holds the arange buffer alive; the arange's own reference is released here).</returns>
+        private static NDArray LinspaceRamp(long num, DType dt, int ndim)
+        {
+            var dims = new long[1 + ndim];
+            dims[0] = num;
+            for (int i = 1; i < dims.Length; i++)
+                dims[i] = 1;
+            using NDArray counts = UnmanagedStorage.ArangeObj(0L, num, 1L, dt);
+            return counts.reshape(new Shape(dims, copy: false));
+        }
+
+        /// <summary>
+        ///     Swaps one stage of the linspace ramp for the next (NumPy rebinding <c>y</c>): the stage that is replaced is
+        ///     released, and the new one holds whatever buffer it still needs (a view keeps its source alive).
+        /// </summary>
+        /// <param name="previous">The stage being replaced; disposed unless the next stage is the same object.</param>
+        /// <param name="next">The new stage.</param>
+        /// <returns><paramref name="next"/>.</returns>
+        private static NDArray ReplaceLinspaceStage(NDArray previous, NDArray next)
+        {
+            if (!ReferenceEquals(previous, next))
+                previous.Dispose();
+            return next;
+        }
+
+        /// <summary>
+        ///     The dtype NumPy's <c>np.linspace</c> computes in: <c>_array_converter(start, stop).result_type(ensure_inexact=True)</c>,
+        ///     the promotion of the two ends' classes with the abstract Python float. A NumPy array or scalar end is strong (its
+        ///     dtype counts: two float32 ends give float32, a float32 with a float64 end float64); a C# number that reached the
+        ///     <see cref="NDArray"/> parameter through its implicit conversion is a weak Python number (its kind counts, not its
+        ///     width: a Python int beside a float32 end gives float32). Integer and bool ends give float64.
+        /// </summary>
+        /// <param name="start">The first end.</param>
+        /// <param name="stop">The second end.</param>
+        /// <returns>The computation dtype (always inexact).</returns>
+        /// <exception cref="DTypePromotionError">No common DType (a text end: NumPy's text lists the classes and
+        ///     <c>_PyFloatDType</c>).</exception>
+        /// <remarks>NumSharp's <c>char</c> lane, which NumPy lacks, promotes as its uint16 proxy, as np.pad's linear ramp
+        ///     reads it.</remarks>
+        internal static DType LinspaceComputeType(NDArray start, NDArray stop)
+            => DTypePromotion.ResultType(LinspacePromotionOperand(start), LinspacePromotionOperand(stop), DTypeRegistry.PyFloat);
+
+        /// <summary>The operand <see cref="LinspaceComputeType"/> promotes for one end: the weak Python number a C# literal
+        ///     stands for, the uint16 proxy of a char end, or the end itself (strong).</summary>
+        /// <param name="end">The end.</param>
+        /// <returns>The <see cref="DTypePromotion.ResultType"/> operand.</returns>
+        private static object LinspacePromotionOperand(NDArray end)
+            => end.typecode == NPTypeCode.Char ? np.uint16 : end.Nep50Operand;
+
+        /// <summary>
+        ///     NumPy's <c>issubdtype(dtype, np.integer)</c> over NumSharp's lanes, for the floor linspace applies before an
+        ///     integer cast: the signed and unsigned integers, and NumSharp's <c>char</c>, which casts like uint16. Bool is not
+        ///     an integer there (it casts the samples directly: nonzero is True).
+        /// </summary>
+        /// <param name="typeCode">The requested dtype's lane.</param>
+        /// <returns>True when the samples are floored before the cast.</returns>
+        private static bool IsSpacingIntegerDtype(NPTypeCode typeCode)
+            => typeCode is NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Int32
+                or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 or NPTypeCode.Char;
+
         /// <summary>
         ///     The storage-lane core behind every public <c>linspace(..., dtype)</c> overload (which all take the single
         ///     <see cref="DType"/> descriptor parameter, like NumPy's <c>dtype=</c>).

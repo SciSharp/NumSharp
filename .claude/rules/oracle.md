@@ -102,6 +102,12 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   other gate. `dtype_text.jsonl`: promotion/dtype predicates, printing, scalar predicates and `nonzero` at any rank.
   `multioutput.jsonl`: full tuple arity and every slot for split/unstack/broadcast/meshgrid/modf/average/unique.
   `creation.jsonl`, `conversion.jsonl`, `errors_full.jsonl` (the raising cells every value generator skips).
+  `creation.jsonl` also holds np.linspace over array_like ends (`linspace_arrays`: contiguous / strided / (2, 1)-against-
+  (3,) / 0-d strong ends of every dtype, axis 0 / 1 / -1, a zero-step column that takes gh-5437's order, no samples and
+  one, an int32 `dtype` floored first; `linspace_weak`: a JSON-number start replayed as a C# double, NEP 50's weak Python
+  float; `linspace_retstep`: the `(samples, step)` tuple, nan step included). The string oracle's `strings_creation.jsonl`
+  replays `np.array(values, dtype="c")` over its value sets and lone texts (the character dtype's split, its ragged and
+  position-0 encode errors).
 - `cast_boundary.jsonl` (`gen_oracle.py cast_boundary`): float32 / float64 → int8 / uint8 / int16 / uint16 / int32 at
   every integer width's edges (±1 ulp, ±0.5, 2^31, 2^63, 2^64), NaN payloads, a signalling NaN, ±inf and subnormals, in
   short runs (every element in a scalar tail: `Converts.ToInt32(double)`, the whole cast body off x86), contiguous,
