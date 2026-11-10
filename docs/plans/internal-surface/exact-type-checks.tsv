@@ -55,5 +55,5 @@ src/NumSharp.Core/RandomSampling/SeedSequence.cs	272	uint[]	no	case uint[] words
 src/NumSharp.Core/RandomSampling/SeedSequence.cs	935	uint[]	no	case uint[] u when u.GetType() == typeof(uint[]):
 src/NumSharp.Core/Utilities/SpanSource/UnmanagedSpan.cs	47	T[]	no	if (!typeof(T).IsValueType && array.GetType() != typeof(T[]))
 src/NumSharp.Core/Utilities/SpanSource/UnmanagedSpan.cs	76	T[]	no	if (!typeof(T).IsValueType && array.GetType() != typeof(T[]))
-src/NumSharp.Core/View/Shape.cs	1748	?	yes	if (obj.GetType() != this.GetType())
+src/NumSharp.Core/View/Shape.cs	1734	?	yes	if (obj.GetType() != this.GetType())
 src/NumSharp.Core/View/Slice.cs	369	Slice	yes	if (obj.GetType() != typeof(Slice))

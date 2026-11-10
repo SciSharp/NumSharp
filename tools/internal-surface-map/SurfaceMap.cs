@@ -1455,7 +1455,11 @@ namespace SurfaceMap
     ///             and cannot reach).</item>
     ///         <item><c>internal-interface</c>: a visible type implementing an internal interface (library code that dispatches
     ///             on that interface never sees a consumer's type).</item>
-    ///         <item><c>sealed-class</c> / <c>static-class</c> / <c>value-type</c>: closed by declaration.</item>
+    ///         <item><c>sealed-member</c>: a visible <c>sealed override</c> on a non-sealed class - a consumer's subclass inherits
+    ///             the member but cannot override it again, so the class is open everywhere except there.</item>
+    ///         <item><c>sealed-class</c> / <c>static-class</c> / <c>value-type</c>: closed by declaration. A sealed class's detail
+    ///             names its group and its base class (<c>sealed (other; base NDPolyBase)</c>), so the classes one decision
+    ///             covers - the six series classes, the five state snapshots - group together.</item>
     ///     </list>
     /// </summary>
     internal static class Extensibility
@@ -1492,9 +1496,15 @@ namespace SurfaceMap
 
                 if (td.IsSealed)
                 {
-                    findings.Add(new Finding("sealed-class", ti, null, $"sealed ({SealedGroup(td)})"));
+                    findings.Add(new Finding("sealed-class", ti, null, $"sealed ({SealedGroup(td)}; base {BaseName(model, td)})"));
                     continue;
                 }
+
+                // A sealed override closes one slot of an otherwise open class: the subclass inherits the member as it is.
+                // Only visible ones count - an internal sealed override is already reported as a hidden-hook-override.
+                foreach (var m in ti.Members.Where(m => m.Reach is Reach.Public or Reach.Protected
+                                                       && m.Modifiers.Contains("sealed override", StringComparison.Ordinal)))
+                    findings.Add(new Finding("sealed-member", ti, m, $"{m.Access} sealed override: a subclass cannot override it again"));
 
                 var ctors = ti.Members.Where(m => m.Kind == "ctor" && !m.IsStatic).ToList();
                 if (ctors.Count > 0 && ctors.All(c => c.Reach == Reach.Internal))
@@ -1554,6 +1564,30 @@ namespace SurfaceMap
             }
 
             return "other";
+        }
+
+        /// <summary>
+        ///     The immediate base class of a sealed class as the map spells it: NumSharp's own C# display name
+        ///     (<c>NDPolyBase</c>, <c>BitGeneratorState</c>) when the base is declared in NumSharp.dll, the CLR short name
+        ///     otherwise (<c>object</c> for <see cref="object"/>, <c>Exception</c>, <c>Attribute</c>).
+        /// </summary>
+        /// <param name="model">The model, whose <see cref="Model.ByType"/> maps NumSharp's own definitions to their display names.</param>
+        /// <param name="td">The sealed class.</param>
+        /// <returns>The base's name; <c>object</c> when the class derives from nothing else.</returns>
+        /// <remarks>Groups the sealed-class findings by what one decision covers: classes that share a NumSharp base (the six
+        ///     series classes over <c>NDPolyBase</c>, the engines' state snapshots over <c>BitGeneratorState</c>) are one
+        ///     question, a class straight off <see cref="object"/> is its own.</remarks>
+        public static string BaseName(Model model, TypeDefinition td)
+        {
+            if (td.BaseType is null || td.BaseType.FullName == "System.Object")
+                return "object";
+            var resolved = SafeResolve(td.BaseType);
+            if (resolved is not null && model.ByType.TryGetValue(resolved, out var baseInfo))
+                return baseInfo.Display;
+            // A generic instantiation (Foo`1<T>) keeps its name without the arity suffix; the arguments do not decide the group.
+            string name = td.BaseType.Name;
+            int tick = name.IndexOf('`');
+            return tick < 0 ? name : name[..tick];
         }
 
         /// <summary>Resolves a type reference, or <c>null</c> when its assembly is not found (the map only needs best effort here).</summary>
@@ -2140,7 +2174,7 @@ namespace SurfaceMap
             foreach (var g in findings.GroupBy(f => f.Category).OrderBy(g => CategoryOrder(g.Key)))
                 md.AppendLine($"| {g.Key} | {g.Count()} | {g.Select(f => f.Type).Distinct().Count()} |");
             md.AppendLine();
-            foreach (var category in new[] { "abstract-closed", "interface-closed", "ctor-closed", "hidden-hook", "hidden-hook-override", "private-protected", "narrow-accessor", "internal-interface", "internal-state", "sealed-class" })
+            foreach (var category in new[] { "abstract-closed", "interface-closed", "ctor-closed", "hidden-hook", "hidden-hook-override", "private-protected", "narrow-accessor", "internal-interface", "internal-state", "sealed-member", "sealed-class" })
             {
                 var list = findings.Where(f => f.Category == category).ToList();
                 if (list.Count == 0)
@@ -2266,7 +2300,9 @@ namespace SurfaceMap
                 md.AppendLine();
             }
 
-            File.WriteAllText(Path.Combine(options.Out, "tables.md"), md.ToString().Replace("\r\n", "\n"), new UTF8Encoding(false));
+            // Every section ends with a blank separator line; the file itself ends with exactly one newline (git diff --check
+            // flags a blank line at EOF).
+            File.WriteAllText(Path.Combine(options.Out, "tables.md"), md.ToString().Replace("\r\n", "\n").TrimEnd('\n') + "\n", new UTF8Encoding(false));
         }
 
         /// <summary>A friend assembly name without the shared <c>NumSharp.Interop.</c> prefix (table width).</summary>
@@ -2281,7 +2317,7 @@ namespace SurfaceMap
         {
             "abstract-closed" => 0, "interface-closed" => 1, "ctor-closed" => 2, "hidden-hook" => 3, "hidden-hook-override" => 4,
             "private-protected" => 5, "narrow-accessor" => 6, "internal-interface" => 7, "internal-state" => 8,
-            "sealed-class" => 9, "static-class" => 10, "value-type" => 11, _ => 12,
+            "sealed-member" => 9, "sealed-class" => 10, "static-class" => 11, "value-type" => 12, _ => 13,
         };
 
         /// <summary>A type kind folded into the totals table's rows.</summary>

@@ -1,18 +1,18 @@
 category	namespace	type	type_kind	member_kind	member	detail	file	line
-sealed-class	NumSharp	AnyToVStringCastingImpl	sealed class			sealed (other)	src/NumSharp.Core/DTypes/VStringCastingImpls.cs	83
-sealed-class	NumSharp	ArrayMethodContext	sealed class			sealed (other)	src/NumSharp.Core/DTypes/ArrayMethod.cs	147
+sealed-class	NumSharp	AnyToVStringCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/VStringCastingImpls.cs	83
+sealed-class	NumSharp	ArrayMethodContext	sealed class			sealed (other; base object)	src/NumSharp.Core/DTypes/ArrayMethod.cs	147
 private-protected	NumSharp	BitGenerator	abstract class	field	ISeedSequence _seedSeq	visible to subclasses inside NumSharp.dll only	src/NumSharp.Core/RandomSampling/BitGenerator.cs	30
 private-protected	NumSharp	BitGenerator	abstract class	const	int FillChunk	visible to subclasses inside NumSharp.dll only	src/NumSharp.Core/RandomSampling/BitGenerator.cs	363
-sealed-class	NumSharp	BuiltinCastingImpl	sealed class			sealed (other)	src/NumSharp.Core/DTypes/CastingImpls.cs	32
+sealed-class	NumSharp	BuiltinCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/CastingImpls.cs	32
 value-type	NumSharp	Char8	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Primitives/Char8.cs	40
 static-class	NumSharp	Char8SpanExtensions	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Primitives/Char8.Spans.cs	10
-sealed-class	NumSharp	CharModule	sealed class			sealed (other)	src/NumSharp.Core/APIs/np.char.cs	70
+sealed-class	NumSharp	CharModule	sealed class			sealed (other; base object)	src/NumSharp.Core/APIs/np.char.cs	70
 ctor-closed	NumSharp	ChebyshevModule	class			every instance constructor is internal: internal ChebyshevModule()	src/NumSharp.Core/Polynomial/Package/np.polynomial.chebyshev.cs	12
 value-type	NumSharp	DateTime64	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/DateTime64.cs	72
-sealed-class	NumSharp	DatetimeDTypeMeta	sealed class			sealed (other)	src/NumSharp.Core/DTypes/DatetimeDTypeMeta.cs	29
+sealed-class	NumSharp	DatetimeDTypeMeta	sealed class			sealed (other; base DTypeMeta)	src/NumSharp.Core/DTypes/DatetimeDTypeMeta.cs	29
 value-type	NumSharp	DatetimeMetaData	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/DTypes/DatetimeMetaData.cs	68
-sealed-class	NumSharp	DatetimeTimedeltaCastingImpl	sealed class			sealed (other)	src/NumSharp.Core/DTypes/CastingImpls.cs	279
-sealed-class	NumSharp	DType	sealed class			sealed (other)	src/NumSharp.Core/DTypes/DType.cs	121
+sealed-class	NumSharp	DatetimeTimedeltaCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/CastingImpls.cs	279
+sealed-class	NumSharp	DType	sealed class			sealed (other; base object)	src/NumSharp.Core/DTypes/DType.cs	121
 static-class	NumSharp	DTypeCasting	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/DTypes/DTypeCasting.cs	21
 hidden-hook	NumSharp	DTypeMeta	abstract class	method	void setitem(DType descr, object value, byte* item, IArraySlice buffer)	internal virtual: an override point only NumSharp.dll's classes can use	src/NumSharp.Core/DTypes/DTypeMeta.cs	394
 hidden-hook	NumSharp	DTypeMeta	abstract class	method	void SetFreshItems(DType descr, IReadOnlyList<object> values, byte* first, IArraySlice buffer)	internal virtual: an override point only NumSharp.dll's classes can use	src/NumSharp.Core/DTypes/DTypeMeta.cs	431
@@ -33,26 +33,26 @@ static-class	NumSharp	DTypeRegistry	static class			static: extended with extensi
 value-type	NumSharp	EinsumPath	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/LinearAlgebra/EinsumPath.cs	27
 ctor-closed	NumSharp	EmathModule	class			every instance constructor is internal: internal EmathModule()	src/NumSharp.Core/Math/np.emath.cs	63
 static-class	NumSharp	EnvVars	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/EnvVars.cs	23
-sealed-class	NumSharp	finfo	sealed class			sealed (other)	src/NumSharp.Core/APIs/np.finfo.cs	13
+sealed-class	NumSharp	finfo	sealed class			sealed (other; base object)	src/NumSharp.Core/APIs/np.finfo.cs	13
 ctor-closed	NumSharp	FourierModule	class			every instance constructor is internal: internal FourierModule()	src/NumSharp.Core/Fourier/np.fft.Helper.cs	5
 ctor-closed	NumSharp	HermiteEModule	class			every instance constructor is internal: internal HermiteEModule()	src/NumSharp.Core/Polynomial/Package/np.polynomial.hermite_e.cs	11
 ctor-closed	NumSharp	HermiteModule	class			every instance constructor is internal: internal HermiteModule()	src/NumSharp.Core/Polynomial/Package/np.polynomial.hermite.cs	11
-sealed-class	NumSharp	iinfo	sealed class			sealed (other)	src/NumSharp.Core/APIs/np.iinfo.cs	13
+sealed-class	NumSharp	iinfo	sealed class			sealed (other; base object)	src/NumSharp.Core/APIs/np.iinfo.cs	13
 ctor-closed	NumSharp	LaguerreModule	class			every instance constructor is internal: internal LaguerreModule()	src/NumSharp.Core/Polynomial/Package/np.polynomial.laguerre.cs	11
-sealed-class	NumSharp	LegacyBuiltinDTypeMeta	sealed class			sealed (other)	src/NumSharp.Core/DTypes/LegacyBuiltinDTypeMeta.cs	35
-sealed-class	NumSharp	LegacyWrappingCastingImpl	sealed class			sealed (other)	src/NumSharp.Core/DTypes/CastingImpls.cs	311
+sealed-class	NumSharp	LegacyBuiltinDTypeMeta	sealed class			sealed (other; base DTypeMeta)	src/NumSharp.Core/DTypes/LegacyBuiltinDTypeMeta.cs	35
+sealed-class	NumSharp	LegacyWrappingCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/CastingImpls.cs	311
 ctor-closed	NumSharp	LegendreModule	class			every instance constructor is internal: internal LegendreModule()	src/NumSharp.Core/Polynomial/Package/np.polynomial.legendre.cs	11
 ctor-closed	NumSharp	MaskedArrayModule	class			every instance constructor is internal: internal MaskedArrayModule()	src/NumSharp.Core/Ma/NDMaskedArray.cs	2069
 value-type	NumSharp	MaskedArrayModule.UniqueResult	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Ma/NDMaskedArray.SetOps.cs	39
-sealed-class	NumSharp	MaskedPrintOption	sealed class			sealed (other)	src/NumSharp.Core/Ma/NDMaskedArray.cs	1885
+sealed-class	NumSharp	MaskedPrintOption	sealed class			sealed (other; base object)	src/NumSharp.Core/Ma/NDMaskedArray.cs	1885
 static-class	NumSharp	MethodImplOptionsConstants	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Utilities/MethodImplOptionsConstants.cs	17
-sealed-class	NumSharp	ModuleNameAttribute	sealed class			sealed (attribute)	src/NumSharp.Core/Assembly/ModuleNameAttribute.cs	37
-sealed-class	NumSharp	MrClass	sealed class			sealed (other)	src/NumSharp.Core/Ma/NDMaskedArray.cs	1960
+sealed-class	NumSharp	ModuleNameAttribute	sealed class			sealed (attribute; base Attribute)	src/NumSharp.Core/Assembly/ModuleNameAttribute.cs	37
+sealed-class	NumSharp	MrClass	sealed class			sealed (other; base object)	src/NumSharp.Core/Ma/NDMaskedArray.cs	1960
 internal-state	NumSharp	MT19937	class	property	uint[] Key { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/RandomSampling/MT19937.cs	679
 internal-state	NumSharp	MT19937	class	property	int Pos { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/RandomSampling/MT19937.cs	682
-sealed-class	NumSharp	MT19937.State	sealed class			sealed (other)	src/NumSharp.Core/RandomSampling/MT19937.cs	591
+sealed-class	NumSharp	MT19937.State	sealed class			sealed (other; base BitGeneratorState)	src/NumSharp.Core/RandomSampling/MT19937.cs	591
 value-type	NumSharp	NativeRandomState	struct			struct: not inheritable by nature	src/NumSharp.Core/RandomSampling/NativeRandomState.cs	13
-sealed-class	NumSharp	NDAnchoredAttribute	sealed class			sealed (attribute)	src/NumSharp.Core/Backends/NDAnchoredAttribute.cs	40
+sealed-class	NumSharp	NDAnchoredAttribute	sealed class			sealed (attribute; base Attribute)	src/NumSharp.Core/Backends/NDAnchoredAttribute.cs	40
 private-protected	NumSharp	NDArray	class	method	NDArray GetAdvanced(object[] indicesObjects)	visible to subclasses inside NumSharp.dll only	src/NumSharp.Core/Selection/NDArray.Indexing.cs	409
 private-protected	NumSharp	NDArray	class	method	NDArray GetMasked(NDArray<bool> mask)	visible to subclasses inside NumSharp.dll only	src/NumSharp.Core/Selection/NDArray.Indexing.Masking.cs	26
 private-protected	NumSharp	NDArray	class	method	NDArray ZeroDBoolSelection(bool selected)	visible to subclasses inside NumSharp.dll only	src/NumSharp.Core/Selection/NDArray.Indexing.Masking.cs	82
@@ -72,22 +72,22 @@ internal-state	NumSharp	NDArray	class	field	NDScope TrackingScope	internal field
 internal-state	NumSharp	NDArray	class	field	int TrackingIndex	internal field: hidden from a consumer's subclass	src/NumSharp.Core/Backends/NDArray.cs	68
 value-type	NumSharp	NDArray._Unsafe	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/NDArray.Unmanaged.cs	18
 value-type	NumSharp	NDArray._Unsafe._Pinning	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/NDArray.Unmanaged.cs	139
-sealed-class	NumSharp	NDArrayFlags	sealed class			sealed (other)	src/NumSharp.Core/Backends/NDArray.flags.cs	41
+sealed-class	NumSharp	NDArrayFlags	sealed class			sealed (other; base object)	src/NumSharp.Core/Backends/NDArray.flags.cs	41
 static-class	NumSharp	NDArrayNetInterop	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/APIs/NDArrayNetInterop.cs	22
-sealed-class	NumSharp	NDBorrowedAttribute	sealed class			sealed (attribute)	src/NumSharp.Core/Backends/NDBorrowedAttribute.cs	40
+sealed-class	NumSharp	NDBorrowedAttribute	sealed class			sealed (attribute; base Attribute)	src/NumSharp.Core/Backends/NDBorrowedAttribute.cs	40
 internal-state	NumSharp	NDCharArray	class	property	bool IsScalarStandIn { get; private set; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/Char/NDCharArray.cs	180
-sealed-class	NumSharp	NDChebyshev	sealed class			sealed (other)	src/NumSharp.Core/Polynomial/Package/NDChebyshev.cs	35
-sealed-class	NumSharp	NDHermite	sealed class			sealed (other)	src/NumSharp.Core/Polynomial/Package/NDHermite.cs	35
-sealed-class	NumSharp	NDHermiteE	sealed class			sealed (other)	src/NumSharp.Core/Polynomial/Package/NDHermiteE.cs	35
-sealed-class	NumSharp	NDLaguerre	sealed class			sealed (other)	src/NumSharp.Core/Polynomial/Package/NDLaguerre.cs	35
-sealed-class	NumSharp	NDLegendre	sealed class			sealed (other)	src/NumSharp.Core/Polynomial/Package/NDLegendre.cs	35
-sealed-class	NumSharp	NDListArray	sealed class			sealed (other)	src/NumSharp.Core/Char/NDListArray.Compare.cs	36
+sealed-class	NumSharp	NDChebyshev	sealed class			sealed (other; base NDPolyBase)	src/NumSharp.Core/Polynomial/Package/NDChebyshev.cs	35
+sealed-class	NumSharp	NDHermite	sealed class			sealed (other; base NDPolyBase)	src/NumSharp.Core/Polynomial/Package/NDHermite.cs	35
+sealed-class	NumSharp	NDHermiteE	sealed class			sealed (other; base NDPolyBase)	src/NumSharp.Core/Polynomial/Package/NDHermiteE.cs	35
+sealed-class	NumSharp	NDLaguerre	sealed class			sealed (other; base NDPolyBase)	src/NumSharp.Core/Polynomial/Package/NDLaguerre.cs	35
+sealed-class	NumSharp	NDLegendre	sealed class			sealed (other; base NDPolyBase)	src/NumSharp.Core/Polynomial/Package/NDLegendre.cs	35
+sealed-class	NumSharp	NDListArray	sealed class			sealed (other; base object)	src/NumSharp.Core/Char/NDListArray.Compare.cs	36
 internal-state	NumSharp	NDMaskedArray	class	property	Shape Shape { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/Ma/NDMaskedArray.cs	237
 internal-state	NumSharp	NDMaskedArray	class	field	NDArray _data	internal field: hidden from a consumer's subclass	src/NumSharp.Core/Ma/NDMaskedArray.cs	52
 internal-state	NumSharp	NDMaskedArray	class	field	NDArray _mask	internal field: hidden from a consumer's subclass	src/NumSharp.Core/Ma/NDMaskedArray.cs	59
 internal-state	NumSharp	NDMaskedArray	class	field	NDArray _fill_value	internal field: hidden from a consumer's subclass	src/NumSharp.Core/Ma/NDMaskedArray.cs	80
 internal-state	NumSharp	NDMaskedArray	class	field	bool _hardmask	internal field: hidden from a consumer's subclass	src/NumSharp.Core/Ma/NDMaskedArray.cs	109
-sealed-class	NumSharp	NDMaskedConstant	sealed class			sealed (other)	src/NumSharp.Core/Ma/NDMaskedArray.cs	1851
+sealed-class	NumSharp	NDMaskedConstant	sealed class			sealed (other; base NDMaskedArray)	src/NumSharp.Core/Ma/NDMaskedArray.cs	1851
 ctor-closed	NumSharp	NDPolyBase	abstract class			every instance constructor is internal: private protected NDPolyBase(NDPolyClass kind)	src/NumSharp.Core/Polynomial/Package/NDPolyBase.Protocol.cs	125
 private-protected	NumSharp	NDPolyBase	abstract class	method	NDPolyBase EvaluateAtSeries(NDPolyBase arg)	visible to subclasses inside NumSharp.dll only	src/NumSharp.Core/Polynomial/Package/NDPolyBase.Algebra.cs	47
 private-protected	NumSharp	NDPolyBase	abstract class	method	NDPolyBase Identity(NDPolyClass kind, object domain, object window, string symbol)	visible to subclasses inside NumSharp.dll only	src/NumSharp.Core/Polynomial/Package/NDPolyBase.Algebra.cs	248
@@ -116,32 +116,32 @@ internal-state	NumSharp	NDPolyBase	abstract class	property	PolyBasis Basis { get
 private-protected	NumSharp	NDPolyBase	abstract class	property	NDArray Coef { get; }	visible to subclasses inside NumSharp.dll only	src/NumSharp.Core/Polynomial/Package/NDPolyBase.cs	294
 private-protected	NumSharp	NDPolyBase	abstract class	property	NDPolyBase.FitStatus Fit { get; }	visible to subclasses inside NumSharp.dll only	src/NumSharp.Core/Polynomial/Package/NDPolyBase.cs	1209
 private-protected	NumSharp	NDPolyBase	abstract class	const	string Superscripts	visible to subclasses inside NumSharp.dll only	src/NumSharp.Core/Polynomial/Package/NDPolyBase.Printing.cs	42
-sealed-class	NumSharp	NDPolyClass	sealed class			sealed (other)	src/NumSharp.Core/Polynomial/Package/NDPolyClass.cs	53
-sealed-class	NumSharp	NDPolyFitResult	sealed class			sealed (other)	src/NumSharp.Core/Polynomial/Package/NDPolyFitResult.cs	25
-sealed-class	NumSharp	NDPolynomial	sealed class			sealed (other)	src/NumSharp.Core/Polynomial/Package/NDPolynomial.cs	35
-sealed-class	NumSharp	NDScalarType	sealed class			sealed (other)	src/NumSharp.Core/DTypes/NDScalarType.cs	87
-sealed-class	NumSharp	NDScope	sealed class			sealed (other)	src/NumSharp.Core/Backends/NDScope.cs	59
-sealed-class	NumSharp	NDScopedAsyncAttribute	sealed class			sealed (attribute)	src/NumSharp.Core/Backends/NDScopedAsyncAttribute.cs	65
-sealed-class	NumSharp	NDScopedAttribute	sealed class			sealed (attribute)	src/NumSharp.Core/Backends/NDScopedAttribute.cs	72
-sealed-class	NumSharp	NDScopedCoveredAttribute	sealed class			sealed (attribute)	src/NumSharp.Core/Backends/NDScopedCoveredAttribute.cs	74
-sealed-class	NumSharp	NDScopedExitAttribute	sealed class			sealed (attribute)	src/NumSharp.Core/Backends/NDScopedExitAttribute.cs	61
+sealed-class	NumSharp	NDPolyClass	sealed class			sealed (other; base object)	src/NumSharp.Core/Polynomial/Package/NDPolyClass.cs	53
+sealed-class	NumSharp	NDPolyFitResult	sealed class			sealed (other; base NDArray)	src/NumSharp.Core/Polynomial/Package/NDPolyFitResult.cs	25
+sealed-class	NumSharp	NDPolynomial	sealed class			sealed (other; base NDPolyBase)	src/NumSharp.Core/Polynomial/Package/NDPolynomial.cs	35
+sealed-class	NumSharp	NDScalarType	sealed class			sealed (other; base object)	src/NumSharp.Core/DTypes/NDScalarType.cs	87
+sealed-class	NumSharp	NDScope	sealed class			sealed (other; base object)	src/NumSharp.Core/Backends/NDScope.cs	59
+sealed-class	NumSharp	NDScopedAsyncAttribute	sealed class			sealed (attribute; base Attribute)	src/NumSharp.Core/Backends/NDScopedAsyncAttribute.cs	65
+sealed-class	NumSharp	NDScopedAttribute	sealed class			sealed (attribute; base Attribute)	src/NumSharp.Core/Backends/NDScopedAttribute.cs	72
+sealed-class	NumSharp	NDScopedCoveredAttribute	sealed class			sealed (attribute; base Attribute)	src/NumSharp.Core/Backends/NDScopedCoveredAttribute.cs	74
+sealed-class	NumSharp	NDScopedExitAttribute	sealed class			sealed (attribute; base Attribute)	src/NumSharp.Core/Backends/NDScopedExitAttribute.cs	61
 static-class	NumSharp	np	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Creation/np.array.cs	17
 ctor-closed	NumSharp	np.AxisConcatenator	abstract class			every instance constructor is internal: internal AxisConcatenator(int axis, bool matrix, int ndmin, int trans1d)	src/NumSharp.Core/Creation/np.r_.cs	49
 narrow-accessor	NumSharp	np.Broadcast	class	property	Shape shape { get; internal set; }	public property with internal set	src/NumSharp.Core/Creation/np.broadcast.cs	89
 narrow-accessor	NumSharp	np.Broadcast	class	property	NDFlatIterator[] iters { get; internal set; }	public property with internal set	src/NumSharp.Core/Creation/np.broadcast.cs	111
-sealed-class	NumSharp	np.CClass	sealed class			sealed (other)	src/NumSharp.Core/Creation/np.c_.cs	26
+sealed-class	NumSharp	np.CClass	sealed class			sealed (other; base np.AxisConcatenator)	src/NumSharp.Core/Creation/np.c_.cs	26
 static-class	NumSharp	np.dtypes	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/DTypes/np.dtypes.cs	29
-sealed-class	NumSharp	np.FlatIterator	sealed class			sealed (other)	src/NumSharp.Core/APIs/np.flatiter.cs	118
+sealed-class	NumSharp	np.FlatIterator	sealed class			sealed (other; base object)	src/NumSharp.Core/APIs/np.flatiter.cs	118
 value-type	NumSharp	np.FlatRefIter<T>	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/APIs/np.flatiter.cs	511
 value-type	NumSharp	np.GradientResult	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Math/np.gradient.cs	38
 value-type	NumSharp	np.Histogram2dResult	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Statistics/np.histogram2d.cs	14
 value-type	NumSharp	np.HistogramddResult	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Statistics/np.histogramdd.cs	14
 value-type	NumSharp	np.HistogramResult	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Statistics/np.histogram.cs	15
-sealed-class	NumSharp	np.IndexExpression	sealed class			sealed (other)	src/NumSharp.Core/Indexing/np.s_.cs	37
+sealed-class	NumSharp	np.IndexExpression	sealed class			sealed (other; base object)	src/NumSharp.Core/Indexing/np.s_.cs	37
 static-class	NumSharp	np.linalg	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/LinearAlgebra/linalg/np.linalg.arrayapi.cs	7
-sealed-class	NumSharp	np.MemoryView	sealed class			sealed (other)	src/NumSharp.Core/APIs/np.memoryview.cs	55
+sealed-class	NumSharp	np.MemoryView	sealed class			sealed (other; base object)	src/NumSharp.Core/APIs/np.memoryview.cs	55
 value-type	NumSharp	np.MeshgridResult	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Creation/np.meshgrid.cs	15
-sealed-class	NumSharp	np.MGridClass	sealed class			sealed (other)	src/NumSharp.Core/Creation/np.mgrid.cs	132
+sealed-class	NumSharp	np.MGridClass	sealed class			sealed (other; base object)	src/NumSharp.Core/Creation/np.mgrid.cs	132
 value-type	NumSharp	np.MGridResult	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Creation/np.mgrid.cs	18
 value-type	NumSharp	np.NDChunkIter<T>	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/APIs/np.nditer.Typed.cs	226
 value-type	NumSharp	np.NDChunkIter<T>.Enumerator	ref struct			ref struct: not inheritable by nature	src/NumSharp.Core/APIs/np.nditer.Typed.cs	252
@@ -152,9 +152,9 @@ value-type	NumSharp	np.NDIndexSpans	readonly struct			readonly struct: not inher
 value-type	NumSharp	np.NDIndexSpans.Enumerator	ref struct			ref struct: not inheritable by nature	src/NumSharp.Core/Indexing/np.ndindex.cs	230
 value-type	NumSharp	np.NDRefIter<T>	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/APIs/np.nditer.Typed.cs	116
 value-type	NumSharp	np.NDRefIter<T>.Enumerator	ref struct			ref struct: not inheritable by nature	src/NumSharp.Core/APIs/np.nditer.Typed.cs	138
-sealed-class	NumSharp	np.OGridClass	sealed class			sealed (other)	src/NumSharp.Core/Creation/np.ogrid.cs	160
+sealed-class	NumSharp	np.OGridClass	sealed class			sealed (other; base object)	src/NumSharp.Core/Creation/np.ogrid.cs	160
 value-type	NumSharp	np.OGridResult	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Creation/np.ogrid.cs	25
-sealed-class	NumSharp	np.RClass	sealed class			sealed (other)	src/NumSharp.Core/Creation/np.r_.cs	421
+sealed-class	NumSharp	np.RClass	sealed class			sealed (other; base np.AxisConcatenator)	src/NumSharp.Core/Creation/np.r_.cs	421
 static-class	NumSharp	np.strings	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/APIs/np.strings.Transform.cs	8
 static-class	NumSharp	np.typing	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/APIs/np.typing.cs	45
 ctor-closed	NumSharp	np.typing.NBitBase	abstract class			every instance constructor is internal: private protected NBitBase()	src/NumSharp.Core/APIs/np.typing.cs	87
@@ -164,51 +164,51 @@ value-type	NumSharp	np.UniqueCountsResult	readonly struct			readonly struct: not
 value-type	NumSharp	np.UniqueInverseResult	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Manipulation/np.unique_values.cs	164
 value-type	NumSharp	np.UniqueResult	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Manipulation/np.unique.cs	33
 static-class	NumSharp	NPTypeCodeExtensions	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Backends/NPTypeCode.cs	247
-sealed-class	NumSharp	NumPyRandom.State	sealed class			sealed (other)	src/NumSharp.Core/RandomSampling/np.random.cs	740
-sealed-class	NumSharp	PCG64.State	sealed class			sealed (other)	src/NumSharp.Core/RandomSampling/PCG64.cs	235
-sealed-class	NumSharp	PCG64DXSM.State	sealed class			sealed (other)	src/NumSharp.Core/RandomSampling/PCG64DXSM.cs	212
-sealed-class	NumSharp	Philox.State	sealed class			sealed (other)	src/NumSharp.Core/RandomSampling/Philox.cs	588
+sealed-class	NumSharp	NumPyRandom.State	sealed class			sealed (other; base object)	src/NumSharp.Core/RandomSampling/np.random.cs	740
+sealed-class	NumSharp	PCG64.State	sealed class			sealed (other; base BitGeneratorState)	src/NumSharp.Core/RandomSampling/PCG64.cs	235
+sealed-class	NumSharp	PCG64DXSM.State	sealed class			sealed (other; base BitGeneratorState)	src/NumSharp.Core/RandomSampling/PCG64DXSM.cs	212
+sealed-class	NumSharp	Philox.State	sealed class			sealed (other; base BitGeneratorState)	src/NumSharp.Core/RandomSampling/Philox.cs	588
 static-class	NumSharp	PocketFFTDriver	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Fourier/PocketFFTDriver.cs	22
-sealed-class	NumSharp	poly1d	sealed class			sealed (other)	src/NumSharp.Core/Polynomial/poly1d.cs	18
+sealed-class	NumSharp	poly1d	sealed class			sealed (other; base object)	src/NumSharp.Core/Polynomial/poly1d.cs	18
 value-type	NumSharp	PolyfitResult	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Polynomial/np.polyfit.cs	64
 ctor-closed	NumSharp	PolynomialModule	class			every instance constructor is internal: internal PolynomialModule()	src/NumSharp.Core/Polynomial/Package/np.polynomial.cs	68
 ctor-closed	NumSharp	PolyUtilsModule	class			every instance constructor is internal: internal PolyUtilsModule()	src/NumSharp.Core/Polynomial/Package/np.polynomial.polyutils.cs	30
 ctor-closed	NumSharp	PowerSeriesModule	class			every instance constructor is internal: internal PowerSeriesModule()	src/NumSharp.Core/Polynomial/Package/np.polynomial.polynomial.cs	16
-sealed-class	NumSharp	PyScalarDTypeMeta	sealed class			sealed (other)	src/NumSharp.Core/DTypes/PyScalarDTypeMeta.cs	30
-sealed-class	NumSharp	SeedlessSeedSequence	sealed class			sealed (other)	src/NumSharp.Core/RandomSampling/ISeedSequence.cs	48
-sealed-class	NumSharp	SeedSequence	sealed class			sealed (other)	src/NumSharp.Core/RandomSampling/SeedSequence.cs	21
-sealed-class	NumSharp	SFC64.State	sealed class			sealed (other)	src/NumSharp.Core/RandomSampling/SFC64.cs	149
+sealed-class	NumSharp	PyScalarDTypeMeta	sealed class			sealed (other; base DTypeMeta)	src/NumSharp.Core/DTypes/PyScalarDTypeMeta.cs	30
+sealed-class	NumSharp	SeedlessSeedSequence	sealed class			sealed (other; base object)	src/NumSharp.Core/RandomSampling/ISeedSequence.cs	48
+sealed-class	NumSharp	SeedSequence	sealed class			sealed (other; base object)	src/NumSharp.Core/RandomSampling/SeedSequence.cs	21
+sealed-class	NumSharp	SFC64.State	sealed class			sealed (other; base BitGeneratorState)	src/NumSharp.Core/RandomSampling/SFC64.cs	149
 value-type	NumSharp	Shape	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/View/Shape.cs	50
 value-type	NumSharp	SliceDef	struct			struct: not inheritable by nature	src/NumSharp.Core/View/Slice.cs	512
-sealed-class	NumSharp	StringComputationNotSupportedException	sealed class			sealed (exception)	src/NumSharp.Core/Exceptions/StringComputationNotSupportedException.cs	29
-sealed-class	NumSharp	StringDTypeMeta	sealed class			sealed (other)	src/NumSharp.Core/DTypes/StringDTypeMeta.cs	43
-sealed-class	NumSharp	StringToDatetimeCastingImpl	sealed class			sealed (other)	src/NumSharp.Core/DTypes/StringCastingImpls.cs	331
-sealed-class	NumSharp	StringToStringCastingImpl	sealed class			sealed (other)	src/NumSharp.Core/DTypes/StringCastingImpls.cs	20
+sealed-class	NumSharp	StringComputationNotSupportedException	sealed class			sealed (exception; base NotSupportedException)	src/NumSharp.Core/Exceptions/StringComputationNotSupportedException.cs	29
+sealed-class	NumSharp	StringDTypeMeta	sealed class			sealed (other; base DTypeMeta)	src/NumSharp.Core/DTypes/StringDTypeMeta.cs	43
+sealed-class	NumSharp	StringToDatetimeCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/StringCastingImpls.cs	331
+sealed-class	NumSharp	StringToStringCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/StringCastingImpls.cs	20
 static-class	NumSharp	TensorEngine.Threading	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Backends/TensorEngine.Threading.cs	45
-sealed-class	NumSharp	TensorEngine.Threading.Variable	sealed class			sealed (other)	src/NumSharp.Core/Backends/TensorEngine.Threading.cs	260
-sealed-class	NumSharp	TimeToStringCastingImpl	sealed class			sealed (other)	src/NumSharp.Core/DTypes/StringCastingImpls.cs	243
-sealed-class	NumSharp	TimeToTimeCastingImpl	sealed class			sealed (other)	src/NumSharp.Core/DTypes/CastingImpls.cs	194
-sealed-class	NumSharp	ToStringCastingImpl	sealed class			sealed (other)	src/NumSharp.Core/DTypes/StringCastingImpls.cs	106
+sealed-class	NumSharp	TensorEngine.Threading.Variable	sealed class			sealed (other; base object)	src/NumSharp.Core/Backends/TensorEngine.Threading.cs	260
+sealed-class	NumSharp	TimeToStringCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/StringCastingImpls.cs	243
+sealed-class	NumSharp	TimeToTimeCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/CastingImpls.cs	194
+sealed-class	NumSharp	ToStringCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/StringCastingImpls.cs	106
 internal-state	NumSharp	UnicodeDecodeError	class	property	string CodecName { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/Exceptions/UnicodeError.cs	85
 internal-state	NumSharp	UnicodeDecodeError	class	property	byte[] ObjectBytes { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/Exceptions/UnicodeError.cs	88
 internal-state	NumSharp	UnicodeDecodeError	class	property	int Start { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/Exceptions/UnicodeError.cs	91
 internal-state	NumSharp	UnicodeDecodeError	class	property	int End { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/Exceptions/UnicodeError.cs	94
 internal-state	NumSharp	UnicodeDecodeError	class	property	string Reason { get; }	internal property: hidden from a consumer's subclass	src/NumSharp.Core/Exceptions/UnicodeError.cs	97
-sealed-class	NumSharp	Vectorized	sealed class			sealed (other)	src/NumSharp.Core/APIs/np.vectorize.cs	93
-sealed-class	NumSharp	VStringDTypeMeta	sealed class			sealed (other)	src/NumSharp.Core/DTypes/VStringDTypeMeta.cs	44
-sealed-class	NumSharp	VStringToFixedWidthCastingImpl	sealed class			sealed (other)	src/NumSharp.Core/DTypes/VStringCastingImpls.cs	135
-sealed-class	NumSharp	VStringToNumberCastingImpl	sealed class			sealed (other)	src/NumSharp.Core/DTypes/VStringCastingImpls.cs	199
-sealed-class	NumSharp	VStringToVStringCastingImpl	sealed class			sealed (other)	src/NumSharp.Core/DTypes/VStringCastingImpls.cs	18
+sealed-class	NumSharp	Vectorized	sealed class			sealed (other; base object)	src/NumSharp.Core/APIs/np.vectorize.cs	93
+sealed-class	NumSharp	VStringDTypeMeta	sealed class			sealed (other; base DTypeMeta)	src/NumSharp.Core/DTypes/VStringDTypeMeta.cs	44
+sealed-class	NumSharp	VStringToFixedWidthCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/VStringCastingImpls.cs	135
+sealed-class	NumSharp	VStringToNumberCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/VStringCastingImpls.cs	199
+sealed-class	NumSharp	VStringToVStringCastingImpl	sealed class			sealed (other; base CastingImpl)	src/NumSharp.Core/DTypes/VStringCastingImpls.cs	18
 static-class	NumSharp.Backends	MultiThread	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Backends/MultiThread.cs	18
 internal-state	NumSharp.Backends	UnmanagedStorage	class	field	UnmanagedStorage _baseStorage	internal field: hidden from a consumer's subclass	src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.cs	105
 narrow-accessor	NumSharp.Backends	UnmanagedStorage	class	property	bool WriteProtected { get; internal set; }	public property with internal set	src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.cs	180
 narrow-accessor	NumSharp.Backends	UnmanagedStorage	class	property	bool ExternalBase { get; internal set; }	public property with internal set	src/NumSharp.Core/Backends/Unmanaged/UnmanagedStorage.cs	193
-sealed-class	NumSharp.Backends.Iteration	ArrayNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.Evaluate.cs	947
-sealed-class	NumSharp.Backends.Iteration	BinaryNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	1368
-sealed-class	NumSharp.Backends.Iteration	CallNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	2829
-sealed-class	NumSharp.Backends.Iteration	CastNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	1896
-sealed-class	NumSharp.Backends.Iteration	ComparisonNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	2223
-sealed-class	NumSharp.Backends.Iteration	CompiledExpression	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.Program.cs	893
+sealed-class	NumSharp.Backends.Iteration	ArrayNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.Evaluate.cs	947
+sealed-class	NumSharp.Backends.Iteration	BinaryNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	1368
+sealed-class	NumSharp.Backends.Iteration	CallNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	2829
+sealed-class	NumSharp.Backends.Iteration	CastNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	1896
+sealed-class	NumSharp.Backends.Iteration	ComparisonNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	2223
+sealed-class	NumSharp.Backends.Iteration	CompiledExpression	sealed class			sealed (other; base object)	src/NumSharp.Core/Backends/Iterators/NDExpr.Program.cs	893
 value-type	NumSharp.Backends.Iteration	ComplexAllKernel	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDScalarReductionKernels.cs	601
 value-type	NumSharp.Backends.Iteration	ComplexAnyKernel	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDScalarReductionKernels.cs	575
 value-type	NumSharp.Backends.Iteration	ComplexArgAccumulator	struct			struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDScalarReductionKernels.cs	100
@@ -219,7 +219,7 @@ value-type	NumSharp.Backends.Iteration	ComplexMinKernel	readonly struct			readon
 value-type	NumSharp.Backends.Iteration	ComplexMinMaxAccumulator	struct			struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDScalarReductionKernels.cs	73
 value-type	NumSharp.Backends.Iteration	ComplexProdKernel	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDScalarReductionKernels.cs	192
 value-type	NumSharp.Backends.Iteration	ComplexSumKernel	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDScalarReductionKernels.cs	152
-sealed-class	NumSharp.Backends.Iteration	ConstNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	1121
+sealed-class	NumSharp.Backends.Iteration	ConstNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	1121
 value-type	NumSharp.Backends.Iteration	CountNonZeroKernel<T>	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDLogicalReductionKernels.cs	16
 value-type	NumSharp.Backends.Iteration	CumProdAxisKernel<T>	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDAxisIter.cs	26
 value-type	NumSharp.Backends.Iteration	CumSumAxisKernel<T>	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDAxisIter.cs	12
@@ -237,9 +237,9 @@ value-type	NumSharp.Backends.Iteration	HalfMinKernel	readonly struct			readonly 
 value-type	NumSharp.Backends.Iteration	HalfMinMaxAccumulator	struct			struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDScalarReductionKernels.cs	56
 value-type	NumSharp.Backends.Iteration	HalfProdKernel	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDScalarReductionKernels.cs	128
 value-type	NumSharp.Backends.Iteration	HalfSumKernel	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDScalarReductionKernels.cs	113
-sealed-class	NumSharp.Backends.Iteration	InputNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	1044
-sealed-class	NumSharp.Backends.Iteration	LogicalNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	2712
-sealed-class	NumSharp.Backends.Iteration	MinMaxNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	2422
+sealed-class	NumSharp.Backends.Iteration	InputNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	1044
+sealed-class	NumSharp.Backends.Iteration	LogicalNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	2712
+sealed-class	NumSharp.Backends.Iteration	MinMaxNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	2422
 value-type	NumSharp.Backends.Iteration	NanMaxDoubleKernel	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDNanReductionKernels.cs	204
 value-type	NumSharp.Backends.Iteration	NanMaxFloatKernel	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDNanReductionKernels.cs	180
 value-type	NumSharp.Backends.Iteration	NanMaxHalfKernel	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDNanReductionKernels.cs	412
@@ -284,9 +284,9 @@ abstract-closed	NumSharp.Backends.Iteration	NDExpr	abstract class	method	bool Ca
 hidden-hook	NumSharp.Backends.Iteration	NDExpr	abstract class	method	bool CanEmitVectorMixed(IReadOnlyDictionary<NDExpr, NPTypeCode> types)	internal virtual: an override point only NumSharp.dll's classes can use	src/NumSharp.Core/Backends/Iterators/NDExpr.Vector.cs	625
 private-protected	NumSharp.Backends.Iteration	NDExpr	abstract class	method	void EmitVectorChildAs(ILGenerator il, NDExprCompileContext ctx, NDExpr child, NPTypeCode target)	visible to subclasses inside NumSharp.dll only	src/NumSharp.Core/Backends/Iterators/NDExpr.Vector.cs	644
 abstract-closed	NumSharp.Backends.Iteration	NDExpr	abstract class	property	bool ContainsReduce { get; }	internal abstract: a subclass outside NumSharp.dll cannot implement it, so it cannot derive from NDExpr	src/NumSharp.Core/Backends/Iterators/NDExpr.Evaluate.cs	714
-sealed-class	NumSharp.Backends.Iteration	NDExprCompileContext	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	899
-sealed-class	NumSharp.Backends.Iteration	NDExprProgram	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.Program.cs	59
-sealed-class	NumSharp.Backends.Iteration	NDFlatIterator	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDFlatIterator.cs	23
+sealed-class	NumSharp.Backends.Iteration	NDExprCompileContext	sealed class			sealed (other; base object)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	899
+sealed-class	NumSharp.Backends.Iteration	NDExprProgram	sealed class			sealed (other; base object)	src/NumSharp.Core/Backends/Iterators/NDExpr.Program.cs	59
+sealed-class	NumSharp.Backends.Iteration	NDFlatIterator	sealed class			sealed (other; base object)	src/NumSharp.Core/Backends/Iterators/NDFlatIterator.cs	23
 static-class	NumSharp.Backends.Iteration	NDIter	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Backends/Iterators/NDIter.cs	4766
 static-class	NumSharp.Backends.Iteration	NDIterBufferManager	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Backends/Iterators/NDIterBufferManager.cs	13
 static-class	NumSharp.Backends.Iteration	NDIterCasting	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Backends/Iterators/NDIterCasting.cs	13
@@ -302,13 +302,13 @@ value-type	NumSharp.Backends.Iteration	NDMaxAxisKernel<T>	readonly struct			read
 value-type	NumSharp.Backends.Iteration	NDMinAxisKernel<T>	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDLogicalReductionKernels.cs	137
 value-type	NumSharp.Backends.Iteration	NDProdAxisKernel<T>	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDLogicalReductionKernels.cs	104
 value-type	NumSharp.Backends.Iteration	NDSumAxisKernel<T>	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDLogicalReductionKernels.cs	91
-sealed-class	NumSharp.Backends.Iteration	ReduceNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.Evaluate.cs	1001
-sealed-class	NumSharp.Backends.Iteration	RoundNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	2032
+sealed-class	NumSharp.Backends.Iteration	ReduceNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.Evaluate.cs	1001
+sealed-class	NumSharp.Backends.Iteration	RoundNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	2032
 value-type	NumSharp.Backends.Iteration	StdAxisDoubleKernel	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDAxisIter.cs	93
-sealed-class	NumSharp.Backends.Iteration	UnaryNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	1519
+sealed-class	NumSharp.Backends.Iteration	UnaryNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	1519
 value-type	NumSharp.Backends.Iteration	VarAxisDoubleKernel	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Iterators/NDAxisIter.cs	73
-sealed-class	NumSharp.Backends.Iteration	WeightedAverageNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.Evaluate.cs	1767
-sealed-class	NumSharp.Backends.Iteration	WhereNode	sealed class			sealed (other)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	2551
+sealed-class	NumSharp.Backends.Iteration	WeightedAverageNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.Evaluate.cs	1767
+sealed-class	NumSharp.Backends.Iteration	WhereNode	sealed class			sealed (other; base NDExpr)	src/NumSharp.Core/Backends/Iterators/NDExpr.cs	2551
 value-type	NumSharp.Backends.Kernels	AxisReductionKernelKey	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Kernels/ReductionKernel.cs	54
 value-type	NumSharp.Backends.Kernels	BinaryScalarKernelKey	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Kernels/ScalarKernel.cs	34
 value-type	NumSharp.Backends.Kernels	ComparisonKernelKey	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Kernels/BinaryKernel.cs	118
@@ -333,44 +333,42 @@ static-class	NumSharp.Backends.Kernels	SimdMatMul	static class			static: extende
 static-class	NumSharp.Backends.Kernels	StrideDetector	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Backends/Kernels/StrideDetector.cs	10
 value-type	NumSharp.Backends.Kernels	UnaryKernelKey	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Kernels/BinaryKernel.cs	70
 value-type	NumSharp.Backends.Kernels	UnaryScalarKernelKey	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Kernels/ScalarKernel.cs	12
-sealed-class	NumSharp.Backends.Printing	PrintOptions	sealed class			sealed (other)	src/NumSharp.Core/Backends/Printing/PrintOptions.cs	17
-sealed-class	NumSharp.Backends.Strings	VStringAllocator	sealed class			sealed (other)	src/NumSharp.Core/Backends/Strings/VStringAllocator.cs	91
+sealed-class	NumSharp.Backends.Printing	PrintOptions	sealed class			sealed (other; base object)	src/NumSharp.Core/Backends/Printing/PrintOptions.cs	17
+sealed-class	NumSharp.Backends.Strings	VStringAllocator	sealed class			sealed (other; base object)	src/NumSharp.Core/Backends/Strings/VStringAllocator.cs	91
 static-class	NumSharp.Backends.Unmanaged	ArraySlice	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Backends/Unmanaged/ArraySlice.cs	10
 value-type	NumSharp.Backends.Unmanaged	ArraySlice<T>	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Backends/Unmanaged/ArraySlice`1.cs	24
-sealed-class	NumSharp.Backends.Unmanaged	StringArraySlice	sealed class			sealed (other)	src/NumSharp.Core/Backends/Unmanaged/StringArraySlice.cs	38
+sealed-class	NumSharp.Backends.Unmanaged	StringArraySlice	sealed class			sealed (other; base object)	src/NumSharp.Core/Backends/Unmanaged/StringArraySlice.cs	38
 static-class	NumSharp.Backends.Unmanaged	UnmanagedHelper	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Backends/Unmanaged/UnmanagedHelper.cs	7
 static-class	NumSharp.Backends.Unmanaged	UnmanagedMemoryBlock	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Backends/Unmanaged/UnmanagedMemoryBlock.cs	6
 value-type	NumSharp.Backends.Unmanaged	UnmanagedMemoryBlock<T>	struct			struct: not inheritable by nature	src/NumSharp.Core/Backends/Unmanaged/UnmanagedMemoryBlock`1.cs	17
-sealed-class	NumSharp.Backends.Unmanaged	UnmanagedMemoryManager<T>	sealed class			sealed (other)	src/NumSharp.Core/Backends/Unmanaged/UnmanagedMemoryManager.cs	23
-sealed-class	NumSharp.Backends.Unmanaged	VStringArraySlice	sealed class			sealed (other)	src/NumSharp.Core/Backends/Unmanaged/VStringArraySlice.cs	41
+sealed-class	NumSharp.Backends.Unmanaged	UnmanagedMemoryManager<T>	sealed class			sealed (other; base MemoryManager)	src/NumSharp.Core/Backends/Unmanaged/UnmanagedMemoryManager.cs	23
+sealed-class	NumSharp.Backends.Unmanaged	VStringArraySlice	sealed class			sealed (other; base object)	src/NumSharp.Core/Backends/Unmanaged/VStringArraySlice.cs	41
 static-class	NumSharp.Backends.Unmanaged.Pooling	SizeBucketedBufferPool	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Backends/Unmanaged/Pooling/SizeBucketedBufferPool.cs	134
-sealed-class	NumSharp.Collections	ConcurrentOrderedCompactDictionary<TKey, TValue>	sealed class			sealed (other)	src/NumSharp.Core/Collections/Concurrent/ConcurrentOrderedCompactDictionary.cs	84
+sealed-class	NumSharp.Collections	ConcurrentOrderedCompactDictionary<TKey, TValue>	sealed class			sealed (other; base object)	src/NumSharp.Core/Collections/Concurrent/ConcurrentOrderedCompactDictionary.cs	84
 value-type	NumSharp.Collections	ConcurrentOrderedCompactDictionary<TKey, TValue>.Enumerator	struct			struct: not inheritable by nature	src/NumSharp.Core/Collections/Concurrent/ConcurrentOrderedCompactDictionary.cs	1612
 value-type	NumSharp.Collections	ConcurrentOrderedCompactDictionary<TKey, TValue>.ValuesView	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Collections/Concurrent/ConcurrentOrderedCompactDictionary.cs	1533
-sealed-class	NumSharp.Collections	ConcurrentOrderedDictionary<TKey, TValue>	sealed class			sealed (other)	src/NumSharp.Core/Collections/Concurrent/ConcurrentOrderedDictionary.cs	111
+sealed-class	NumSharp.Collections	ConcurrentOrderedDictionary<TKey, TValue>	sealed class			sealed (other; base object)	src/NumSharp.Core/Collections/Concurrent/ConcurrentOrderedDictionary.cs	111
 value-type	NumSharp.Collections	ConcurrentOrderedDictionary<TKey, TValue>.Enumerator	struct			struct: not inheritable by nature	src/NumSharp.Core/Collections/Concurrent/ConcurrentOrderedDictionary.cs	1438
 value-type	NumSharp.Collections	ConcurrentOrderedDictionary<TKey, TValue>.ValuesView	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/Collections/Concurrent/ConcurrentOrderedDictionary.cs	1355
-sealed-class	NumSharp.Collections	OrderedDictionary<TKey, TValue>	sealed class			sealed (other)	src/NumSharp.Core/Collections/Concurrent/OrderedDictionary.cs	127
-value-type	NumSharp.Collections	OrderedDictionary<TKey, TValue>.Enumerator	struct			struct: not inheritable by nature	src/NumSharp.Core/Collections/Concurrent/OrderedDictionary.cs	938
-sealed-class	NumSharp.Fourier	Cfftp	sealed class			sealed (other)	src/NumSharp.Core/Fourier/PocketFFT.Complex.cs	20
-sealed-class	NumSharp.Fourier	CfftpF	sealed class			sealed (other)	src/NumSharp.Core/Fourier/PocketFFT.Complex.Single.cs	22
+sealed-class	NumSharp.Fourier	Cfftp	sealed class			sealed (other; base object)	src/NumSharp.Core/Fourier/PocketFFT.Complex.cs	20
+sealed-class	NumSharp.Fourier	CfftpF	sealed class			sealed (other; base object)	src/NumSharp.Core/Fourier/PocketFFT.Complex.Single.cs	22
 value-type	NumSharp.Fourier	Cmplx	struct			struct: not inheritable by nature	src/NumSharp.Core/Fourier/PocketFFT.Twiddle.cs	30
 value-type	NumSharp.Fourier	CmplxF	struct			struct: not inheritable by nature	src/NumSharp.Core/Fourier/PocketFFT.Twiddle.Single.cs	36
-sealed-class	NumSharp.Fourier	Fftblue	sealed class			sealed (other)	src/NumSharp.Core/Fourier/PocketFFT.Bluestein.cs	13
-sealed-class	NumSharp.Fourier	FftblueF	sealed class			sealed (other)	src/NumSharp.Core/Fourier/PocketFFT.Bluestein.Single.cs	17
-sealed-class	NumSharp.Fourier	PocketFFTComplexPlan	sealed class			sealed (other)	src/NumSharp.Core/Fourier/PocketFFT.Plan.cs	15
-sealed-class	NumSharp.Fourier	PocketFFTComplexPlanF	sealed class			sealed (other)	src/NumSharp.Core/Fourier/PocketFFT.Plan.Single.cs	14
+sealed-class	NumSharp.Fourier	Fftblue	sealed class			sealed (other; base object)	src/NumSharp.Core/Fourier/PocketFFT.Bluestein.cs	13
+sealed-class	NumSharp.Fourier	FftblueF	sealed class			sealed (other; base object)	src/NumSharp.Core/Fourier/PocketFFT.Bluestein.Single.cs	17
+sealed-class	NumSharp.Fourier	PocketFFTComplexPlan	sealed class			sealed (other; base object)	src/NumSharp.Core/Fourier/PocketFFT.Plan.cs	15
+sealed-class	NumSharp.Fourier	PocketFFTComplexPlanF	sealed class			sealed (other; base object)	src/NumSharp.Core/Fourier/PocketFFT.Plan.Single.cs	14
 static-class	NumSharp.Fourier	PocketFFTPlanCache	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Fourier/PocketFFT.Plan.cs	82
 static-class	NumSharp.Fourier	PocketFFTPlanCacheF	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Fourier/PocketFFT.Plan.Single.cs	81
-sealed-class	NumSharp.Fourier	PocketFFTRealPlan	sealed class			sealed (other)	src/NumSharp.Core/Fourier/PocketFFT.Plan.cs	47
-sealed-class	NumSharp.Fourier	PocketFFTRealPlanF	sealed class			sealed (other)	src/NumSharp.Core/Fourier/PocketFFT.Plan.Single.cs	46
+sealed-class	NumSharp.Fourier	PocketFFTRealPlan	sealed class			sealed (other; base object)	src/NumSharp.Core/Fourier/PocketFFT.Plan.cs	47
+sealed-class	NumSharp.Fourier	PocketFFTRealPlanF	sealed class			sealed (other; base object)	src/NumSharp.Core/Fourier/PocketFFT.Plan.Single.cs	46
 static-class	NumSharp.Fourier	PocketFFTUtil	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Fourier/PocketFFT.Twiddle.cs	156
-sealed-class	NumSharp.Fourier	Rfftp	sealed class			sealed (other)	src/NumSharp.Core/Fourier/PocketFFT.Real.cs	19
-sealed-class	NumSharp.Fourier	RfftpF	sealed class			sealed (other)	src/NumSharp.Core/Fourier/PocketFFT.Real.Single.cs	19
-sealed-class	NumSharp.Fourier	SinCos2PiByN	sealed class			sealed (other)	src/NumSharp.Core/Fourier/PocketFFT.Twiddle.cs	71
+sealed-class	NumSharp.Fourier	Rfftp	sealed class			sealed (other; base object)	src/NumSharp.Core/Fourier/PocketFFT.Real.cs	19
+sealed-class	NumSharp.Fourier	RfftpF	sealed class			sealed (other; base object)	src/NumSharp.Core/Fourier/PocketFFT.Real.Single.cs	19
+sealed-class	NumSharp.Fourier	SinCos2PiByN	sealed class			sealed (other; base object)	src/NumSharp.Core/Fourier/PocketFFT.Twiddle.cs	71
 static-class	NumSharp.IO	NpyFormat	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/IO/NpyFormat.cs	56
 value-type	NumSharp.IO	NpyFormat.FormatVersion	readonly struct			readonly struct: not inheritable by nature	src/NumSharp.Core/IO/NpyFormat.cs	107
-sealed-class	NumSharp.IO	NpzFile	sealed class			sealed (other)	src/NumSharp.Core/IO/NpzFile.cs	39
+sealed-class	NumSharp.IO	NpzFile	sealed class			sealed (other; base object)	src/NumSharp.Core/IO/NpzFile.cs	39
 static-class	NumSharp.Utilities	ArrayConvert	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Utilities/ArrayConvert.cs	18
 static-class	NumSharp.Utilities	Arrays	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Utilities/Arrays.cs	13
 static-class	NumSharp.Utilities	ArraysExtensions	static class			static: extended with extension methods, never inherited	src/NumSharp.Core/Utilities/ArraysExtensions.cs	12

@@ -1,16 +1,18 @@
 # NumSharp.dll internal surface map
 
 Every internal class and member of `NumSharp.dll` (`src/NumSharp.Core`), and which of them stop a consumer from
-extending or inheriting NumSharp. The tables describe `strings` at `34e48e16` with the access changes of `687fb94f`
-(2026-11-07), which opened the seams the owner decided on (see [Decisions](#decisions-2026-11-07)). The map from before
-those changes is the first commit of this folder, `62570760`.
+extending or inheriting NumSharp. The tables describe `journey5` at `9694788e` (2026-11-10): 0.80.0 with the access
+changes of `687fb94f` (2026-11-07), which opened the seams the owner decided on (see
+[Decisions](#decisions-2026-11-07)). The map from before those changes is the first commit of this folder, `62570760`;
+the 2026-11-07 tables are `cdc422e5`'s. The re-scan added the [sealed classes](#sealed-classes-2026-11-10) and the
+[internal properties](#internal-properties-2026-11-10).
 
 | File | Holds |
 |------|-------|
 | [tables.md](tables.md) | The generated summary: totals, areas, findings by category, virtuality, friend usage, exact type tests, and every internal type by area with its summary and source link |
-| [internal-types.tsv](internal-types.tsv) | One row per internal type (489): area, kind, file:line, member counts, the friend packages that name it, doc summary |
-| [internal-members.tsv](internal-members.tsv) | One row per internal member (5,939): declared access, modifiers, C# signature, file:line, friend use, doc summary |
-| [extensibility-findings.tsv](extensibility-findings.tsv) | One row per way a visible type is closed to a consumer (405) |
+| [internal-types.tsv](internal-types.tsv) | One row per internal type (492): area, kind, file:line, member counts, the friend packages that name it, doc summary |
+| [internal-members.tsv](internal-members.tsv) | One row per internal member (6,003): declared access, modifiers, C# signature, file:line, friend use, doc summary |
+| [extensibility-findings.tsv](extensibility-findings.tsv) | One row per way a visible type is closed to a consumer (403), a sealed class's row naming its base class |
 | [virtuality.tsv](virtuality.tsv) | Per visible non-sealed class: visible constructors, how much of its instance surface can be overridden, which members |
 | [friend-internals-usage.tsv](friend-internals-usage.tsv) | Every internal type / member the six `InternalsVisibleTo` packages name, with sites and callers |
 | [exact-type-checks.tsv](exact-type-checks.tsv) | The `GetType()` equality tests in Core's source |
@@ -27,7 +29,7 @@ assembly with Mono.Cecil instead of grepping source, so every accessibility answ
   members are excluded.
 - **Locations** come from the portable PDB (moved from the first sequence point to the signature line); fields, constants
   and abstract members, which have no IL body, are found by a keyword-checked search of every file of their partial type.
-  Every one of the 5,939 lines was checked to declare its member; the implicit parameterless constructors C# supplies have
+  Every one of the 6,003 lines was checked to declare its member; the implicit parameterless constructors C# supplies have
   no declaration of their own and link their type's.
 - **Summaries** are the first sentence of each member's XML `<summary>`.
 - **Friend usage** walks the IL of every `InternalsVisibleTo` friend that builds from `src/` (OpenBLAS, pythonnet,
@@ -65,22 +67,27 @@ Where an instruction met a technical limit, the call made:
   derived from `DefaultEngine` cannot run a program itself.
 - `UnmanagedStorage._baseStorage` stays internal: `BaseStorage` is its public read form, and a public setter is the
   use-after-free its own docs rule out.
-- `Shape.Adopt` is gone: the owner's `journey4` commit `278e9862`, re-derived on `release-0.80.0`, replaces it with
-  public `Shape(dims, order, copy)` and `Shape(dims, strides, copy)` constructors, NumPy's `copy` keyword being the
-  public no-copy route.
+- `Shape.Adopt` is gone: the owner's `journey4` commit `278e9862`, re-derived on `release-0.80.0` and shipped in 0.80.0,
+  replaces it with public `Shape(dims, order, copy)` and `Shape(dims, strides, copy)` constructors, NumPy's `copy`
+  keyword being the public no-copy route.
 - `DTypeMeta`'s element slots were not decided and stay internal.
 
 ## The numbers
 
 | | Public | Internal | Private (nested) | Total |
 |---|---:|---:|---:|---:|
-| Types (no protected nested type exists) | 528 | 489 | 282 | 1,299 |
+| Types (no protected nested type exists) | 525 | 492 | 285 | 1,302 |
 
 | Internal members | Count |
 |---|---:|
-| Declared `internal` / `private protected` on one of 164 visible types | 1,851 |
-| Non-private members of internal types | 4,088 |
-| **Total** | **5,939** |
+| Declared `internal` / `private protected` on one of 162 visible types | 1,851 |
+| Non-private members of internal types | 4,152 |
+| **Total** | **6,003** |
+
+Since the 2026-11-07 tables the internal types grew by three, each by the owner's decision of 2026-11-08 ("Hide both",
+`82d952c9`): `NumSharp.Collections.OrderedDictionary<TKey, TValue>` with its `Enumerator` and the vendored
+`NumSharp.Collections.Concurrent.ConcurrentDictionary<TKey, TValue>`, whose names are the BCL's (CS0104 beside
+`System.Collections.Generic`). No internal type became public; the rest of the growth is new code inside existing types.
 
 Where they are (internal types / their members / internal members declared on the area's visible types):
 
@@ -89,7 +96,7 @@ Where they are (internal types / their members / internal members declared on th
 | Backends/Strings | 67 | 758 | 38 |
 | Utilities/Maths | 1 | 726 | 0 |
 | Backends/Kernels | 109 | 542 | 494 |
-| Backends/Default | 73 | 515 | 169 |
+| Backends/Default | 73 | 515 | 172 |
 | Backends/Iterators | 46 | 260 | 306 |
 | RandomSampling | 22 | 246 | 64 |
 | Polynomial/Package | 26 | 212 | 46 |
@@ -101,7 +108,7 @@ The one type in `Utilities/Maths` is
 `test/`, so it is dead code.
 
 The public types carrying the most internal members are `DirectILKernelGenerator` (395 internal beside 110 visible),
-`NDArray` (187 / 416), `DefaultEngine` (148 / 296), `UnmanagedStorage` (96 / 208) and `Shape` (62 / 110).
+`NDArray` (187 / 416), `DefaultEngine` (151 / 296), `UnmanagedStorage` (96 / 208) and `Shape` (63 / 110).
 
 ## Extension scenarios
 
@@ -190,12 +197,12 @@ What our six `InternalsVisibleTo` packages needed is public now:
 [`StringDType` allocator](../../../src/NumSharp.Core/Backends/Strings/VStringAllocator.cs#L91)'s `NpyString` API, and
 `Shape`'s raw layout ([fields](../../../src/NumSharp.Core/View/Shape.cs#L71) and the
 [view constructor](../../../src/NumSharp.Core/View/Shape.cs#L654)). The ONNX Runtime, ML.NET and System.Numerics.Tensors
-bridges use no internal at all. The 16 internals still named (68 IL sites):
+bridges use no internal at all. The 15 internals still named (55 IL sites; `Shape.Adopt`'s 13 OpenBLAS sites call
+`Shape(dims, copy: false)` since `278e9862`):
 
 | Package | Internal | Sites | Public route |
 |---|---|---:|---|
 | OpenBLAS | `NDArray.GetTypeCode` | 27 | `NDArray.typecode`: the same value |
-| OpenBLAS | `Shape.Adopt(dims)` | 13 | `Shape(dims, copy: false)`, which the 13 sites now call (`278e9862` on `release-0.80.0`) |
 | OpenBLAS | `np._FindCommonArrayType` | 6 | `np.promote_types` / `np.result_type` |
 | pythonnet | `VStringAllocator.isnull`, `size`, `newsize`, `TryReserve`, `ArenaBytesForDuplicate` | 9 | `load` (its return value is the null test, its `size` the length) and `pack`; the other three are the allocator's private arithmetic, private in NumPy too |
 | pythonnet | `VStringParameters` (`coerce`, `HasNAObject`, `na_object`), `DType.VString` | 10 | `DType.coerce` / `DType.na_object` |
@@ -250,9 +257,49 @@ above), `Slice.Equals` (`obj.GetType() != typeof(Slice)`: a `Slice` subclass nev
 `Shape.Equals` (a struct: nothing derives from it) and `NDExpr`'s delegate-identity comparer (two delegates' classes). The
 other 53 dispatch on CLR element types, where exact and `is` agree.
 
+## Sealed classes (2026-11-10)
+
+100 visible classes are sealed; each `sealed-class` row of the findings names the class's base. No visible member is a
+`sealed override` (the `sealed-member` category is empty; Core's only two sealed overrides are in an internal text
+codec), so every unsealed class is open member by member as far as its virtuals go.
+
+NumPy 2.4.2 was asked the same question of each counterpart (`type("Sub", (cls,), {})`). Its C types without
+`Py_TPFLAGS_BASETYPE` refuse: `np.dtype` and every DType class ("Preliminary-API: Cannot subclass DType"),
+`np.flatiter`, `np.nditer`, `np.broadcast`, the flags object, `memoryview` and `np.ufunc`. Every Python-level class
+accepts a subclass: `finfo`, `iinfo`, `ndindex`, `ndenumerate`, `vectorize`, `poly1d`, the series classes,
+`SeedSequence`, the bit generators, `Generator`, `RandomState`, `NpzFile`, `MaskedConstant`, `mr_class` and the
+index-trick classes. NumSharp's `np.NDIterator` and `np.Broadcast` are unsealed where NumPy's `nditer` and `broadcast`
+are not; nothing depends on that, and sealing them now would break a consumer who derives.
+
+| Group | Classes | NumPy | Recommendation (for the owner to decide) |
+|---|---|---|---|
+| Engine state snapshots (5) | `MT19937.State`, `PCG64.State`, `PCG64DXSM.State`, `Philox.State`, `SFC64.State` | The state is a dict; a subclass adds its own keys | **Unseal.** The engines are unsealed since `687fb94f`, and a subclass that adds state needs its engine's typed `state` (`PCG64.State`) to carry it. Public constructors exist, and `SetStateCore` tests with `is`, so a derived snapshot passes |
+| `poly1d` (1) | `poly1d` | A plain Python class whose operations build `poly1d(...)` explicitly: a subclass's results are plain `poly1d` | **Unseal**, which is exactly NumPy's behavior, with the dispose pattern (`protected virtual Dispose(bool)`) its `IDisposable` then needs |
+| Polynomial series (6) | `NDPolynomial`, `NDChebyshev`, `NDLegendre`, `NDLaguerre`, `NDHermite`, `NDHermiteE` | Ordinary subclasses of `ABCPolyBase`; every result is built with `self.__class__`, so a subclass's arithmetic returns the subclass | **Decide with the `NDPolyBase` design.** Unsealing alone returns the base series from every operation (`NDPolyBase.Derive` builds through the class object, `_kind.Blank()`), unlike NumPy; matching NumPy needs results built by the receiver's class |
+| NumPy refuses the subclass (22) | `DType`, `NDArrayFlags`, `np.FlatIterator`, `NDFlatIterator`, `np.MemoryView`; the 5 `DTypeMeta` classes and 12 `CastingImpl` classes | `np.dtype` / DType classes, `flatiter`, the flags object, `memoryview`: not subclassable; a new dtype or cast registers its own class | **Keep sealed.** A user dtype derives from the public abstract `DTypeMeta` / `CastingImpl`, not from a built-in one |
+| Identity is the API (11) | `NDMaskedConstant`, `MaskedPrintOption`, `MrClass`, `CharModule`, `np.CClass`, `np.RClass`, `np.MGridClass`, `np.OGridClass`, `np.IndexExpression`, `NDScalarType`, `NDPolyClass` | Python classes used through their one instance (`np.ma.masked`, `np.r_`, ...) | **Keep sealed.** The library recognises them by reference (`np.ma.masked`: nine identity tests) |
+| Lifetime and memory safety (5) | `NDScope`, `VStringAllocator`, `StringArraySlice`, `VStringArraySlice`, `UnmanagedMemoryManager<T>` | (C-level in NumPy) | **Keep sealed.** NumSharp's release paths rely on their exact disposal and arena behavior |
+| Closed by design (30) | the 14 `NDExpr` nodes, `CompiledExpression`, `NDExprCompileContext`, `NDExprProgram`, `ArrayMethodContext`; the 11 pocketfft plans and twiddle tables; `TensorEngine.Threading.Variable` | (C-level in NumPy) | **Keep sealed.** The expression compiler handles a closed set of nodes (user code enters through `NDExpr.Call`); the FFT plans carry NumPy's bit-exact twiddles |
+| Seeding objects (2) | `SeedSequence`, `SeedlessSeedSequence` | Subclassable, but NumPy's documented seam is the `ISeedSequence` protocol | **Keep sealed.** NumSharp has the protocol as the public `ISeedSequence` / `ISpawnableSeedSequence`, and `BitGenerator.SeedWords32` / `SeedWords64` take a fast path for `is SeedSequence` that would bypass a subclass's `generate_state` |
+| Values and results with nothing to override (10) | `finfo`, `iinfo`, `NpzFile`, `Vectorized`, `PrintOptions`, `NumPyRandom.State`, `NDPolyFitResult`, `NDListArray`, `ConcurrentOrderedDictionary`, `ConcurrentOrderedCompactDictionary` | `finfo`, `iinfo`, `NpzFile`, `vectorize` are subclassable Python classes | **Keep sealed**: none has a virtual member, so a subclass could only add members, and the collections stay sealed so the JIT devirtualizes their hot calls. Unsealing the first four would match NumPy; `NpzFile` would need the dispose pattern |
+| .NET conventions (8) | `ModuleNameAttribute`, `NDAnchoredAttribute`, `NDBorrowedAttribute`, `NDScopedAttribute`, `NDScopedAsyncAttribute`, `NDScopedCoveredAttribute`, `NDScopedExitAttribute`; `StringComputationNotSupportedException` | (no counterparts) | **Keep sealed.** Attributes are sealed by .NET's rule (CA1813), and the weaver and the NDW analyzers match them by exact name, so a derived attribute would be ignored silently; callers catch the exception as `NotSupportedException` |
+
+## Internal properties (2026-11-10)
+
+399 internal properties and indexers: 249 on internal types (machinery, below) and 150 on 45 visible types, in six groups:
+
+| Group | Properties | Where | Verdict |
+|---|---:|---|---|
+| Expression internals | 69 | the `NDExpr` nodes' `Child` / `Op` / `Axis` / ..., `NDExprProgram` (10), `NDEvaluateOptions` (7), `NDExprCompileContext` (5) | Keep: a closed node set, and the opaque program of the 2026-11-07 decision |
+| The dtype system | 25 | `DTypeMeta`'s `internal virtual` `HasFill` / `HasScanFunc` / `HasFromStr` / `ByteOrderNotApplicable` / `OwnsTypeCode` / `OwnsScalarType` and the concrete metas' overrides, `DType.VString`, `DTypeRegistry`'s snapshots, `NDScalarType`'s four NumPy facts | Part of the undecided user-dtype slots (see Still closed) |
+| Diagnostics and test hooks | 21 | `VStringAllocator`'s 10 arena / heap counters, `SizeBucketedBufferPool.OutstandingForeignBytes`, the kernel generators' availability flags and fallback counters, `NDIterRef` / `NDIterState` | Keep |
+| NumPy-semantics bookkeeping on `NDArray` | 12 | the NEP 50 operand marks (`WasPythonLiteral`, `WasNumPyScalar`, `WasPythonStr`, `WasPythonBytes`, `WasPythonBool`, `WasScalarArgument`, `PythonStrText`, `Nep50Operand`), `IsExplicitZeroDimArray`, `SubclassOrigin`, `IsTextUfuncInput`, `GetTypeCode` | Keep: they record how a value entered NumSharp; `GetTypeCode`'s public twin is `typecode` |
+| State with a public read route | 18 | `MT19937.Key` / `Pos` (`state`), `NDMaskedArray.Shape` (`shape`), `PrintOptions.Current` (`np.get_printoptions`), `np.DefaultTypeDescr`, `BackendFactory.BuiltIn`, `NDScope.Current`, `ArrayMethodContext.Allocators`, `NDArray._Unsafe.Array`, `NpyFormat.FormatVersion.StrictHeaderEncoding`, `NDListArray`'s four, `NDCharArray.IsScalarStandIn`, `NDPolyBase`'s three | Keep |
+| **`UnicodeDecodeError`** | 5 | `CodecName`, `ObjectBytes`, `Start`, `End`, `Reason`, with the constructor that sets them | **Make public under Python's names**: Python's `UnicodeDecodeError` exposes `encoding`, `object`, `start`, `end` and `reason`, and takes them in its constructor, so code catching the error from `np.strings.decode` cannot read where decoding failed |
+
 ## What the internals are
 
-The TSVs classify nothing; read by kind, the 5,939 members fall into five groups:
+The TSVs classify nothing; read by kind, the 6,003 members fall into five groups:
 
 - **Machinery**: the IL kernel generators and their delegates (`Backends/Kernels`, 109 types plus 494 members on public
   kernel classes), NDIter and its buffers (`Backends/Iterators`), printing, text codecs and the string engine
@@ -275,4 +322,5 @@ The TSVs classify nothing; read by kind, the 5,939 members fall into five groups
 | `DTypeMeta`'s element slots | Not decided | `protected internal virtual` slots, plus a per-dtype loop registry for a user dtype to compute |
 | `NDPolyBase` | The basis math is an internal enum, not a member a subclass implements | A design with virtual basis operations |
 | `NDExpr` nodes | By design | (`NDExpr.Call` is the extension route) |
-| `Shape.Adopt` | Replaced by public `Shape(dims, ..., copy)` constructors (`278e9862` on `journey4`, re-derived on `release-0.80.0`) | Done; `strings` still has `Shape.Adopt` |
+| The sealed engine states, `poly1d`, the series classes | Sealed ([Sealed classes](#sealed-classes-2026-11-10)) | The owner's decision on the recommendations there |
+| `UnicodeDecodeError`'s attributes | Internal under C# names | Public as Python's `encoding` / `object` / `start` / `end` / `reason` |
