@@ -1616,9 +1616,9 @@ namespace NumSharp
         /// <param name="fid">Ignored (NumPy's file id).</param>
         /// <param name="sep">Ignored (NumPy's separator).</param>
         /// <param name="format">Ignored (NumPy's format).</param>
-        /// <exception cref="NotImplementedException">Always — matching NumPy's <c>NotImplementedError</c>.</exception>
+        /// <exception cref="NotImplementedError">Always — NumPy's <c>NotImplementedError</c>, type and text.</exception>
         public void tofile(string fid, string sep = "", string format = "%s")
-            => throw new NotImplementedException("MaskedArray.tofile() not implemented yet.");
+            => throw new NotImplementedError("MaskedArray.tofile() not implemented yet.");
 
         /// <summary>
         ///     Reinterprets the data buffer as another dtype (NumPy's <c>MaskedArray.view</c>) — a VIEW sharing
@@ -8232,8 +8232,8 @@ namespace NumSharp
         /// <param name="a">2-D operand.</param>
         /// <returns>The surviving rows: the data ITSELF when nothing is masked, an empty float64 array when everything
         ///     is (NumPy's <c>compress_nd</c>).</returns>
-        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D (<c>compress_rows works for 2D arrays
-        ///     only.</c>).</exception>
+        /// <exception cref="NotImplementedError"><paramref name="a"/> is not 2-D (NumPy's <c>compress_rows works for 2D
+        ///     arrays only.</c>).</exception>
         /// <remarks>NumPy's statements: <c>a = asarray(a); if a.ndim != 2: raise NotImplementedError(...); return
         /// compress_rowcols(a, 0)</c>. Scoped (<c>[NDScoped]</c>): an array-like operand the rank check had to materialize
         /// is reclaimed.</remarks>
@@ -8241,22 +8241,22 @@ namespace NumSharp
         public NDArray compress_rows(object a)
         {
             if (AsData(a).ndim != 2)
-                throw new NotImplementedException("compress_rows works for 2D arrays only.");
+                throw new NotImplementedError("compress_rows works for 2D arrays only.");
             return compress_rowcols(a, 0);
         }
 
         /// <summary>Drops the COLUMNS of a 2-D array that contain ANY masked element (NumPy's <c>compress_cols</c>).</summary>
         /// <param name="a">2-D operand.</param>
         /// <returns>The surviving columns (see <see cref="compress_rows"/> for the unmasked and all-masked forms).</returns>
-        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D (<c>compress_cols works for 2D arrays
-        ///     only.</c>).</exception>
+        /// <exception cref="NotImplementedError"><paramref name="a"/> is not 2-D (NumPy's <c>compress_cols works for 2D
+        ///     arrays only.</c>).</exception>
         /// <remarks>NumPy's <c>compress_rowcols(a, 1)</c> after its own rank check. Scoped (<c>[NDScoped]</c>), as
         /// <see cref="compress_rows"/>.</remarks>
         [NDScoped]
         public NDArray compress_cols(object a)
         {
             if (AsData(a).ndim != 2)
-                throw new NotImplementedException("compress_cols works for 2D arrays only.");
+                throw new NotImplementedError("compress_cols works for 2D arrays only.");
             return compress_rowcols(a, 1);
         }
 
@@ -8264,7 +8264,7 @@ namespace NumSharp
         /// is <c>mask_rowcols(a, 0)</c>).</summary>
         /// <param name="a">2-D operand.</param>
         /// <returns>The row-masked array (over the operand's data, with a new mask).</returns>
-        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D: NumPy reports it from
+        /// <exception cref="NotImplementedError"><paramref name="a"/> is not 2-D: NumPy reports it from
         ///     <c>mask_rowcols</c> (<c>mask_rowcols works for 2D arrays only.</c>).</exception>
         public NDMaskedArray mask_rows(object a) => mask_rowcols(a, 0);
 
@@ -8272,7 +8272,7 @@ namespace NumSharp
         /// which is <c>mask_rowcols(a, 1)</c>).</summary>
         /// <param name="a">2-D operand.</param>
         /// <returns>The column-masked array (over the operand's data, with a new mask).</returns>
-        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D (<c>mask_rowcols works for 2D arrays
+        /// <exception cref="NotImplementedError"><paramref name="a"/> is not 2-D (NumPy's <c>mask_rowcols works for 2D arrays
         ///     only.</c>).</exception>
         public NDMaskedArray mask_cols(object a) => mask_rowcols(a, 1);
 
@@ -8285,7 +8285,8 @@ namespace NumSharp
         /// <param name="a">2-D operand.</param>
         /// <param name="axis">null (rows AND cols), 0 (rows), or 1/-1 (cols).</param>
         /// <returns>The row/column-masked array (an all-unmasked input is returned unchanged).</returns>
-        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D.</exception>
+        /// <exception cref="NotImplementedError"><paramref name="a"/> is not 2-D (NumPy's <c>mask_rowcols works for 2D
+        ///     arrays only.</c>).</exception>
         /// <remarks>Scoped by hand: the working mask copy, the per-axis reductions, their broadcasts and the
         /// superseded OR steps are reclaimed (on the rank throw too); only the result's data and final mask leave.</remarks>
         public NDMaskedArray mask_rowcols(object a, int? axis = null)
@@ -8293,7 +8294,7 @@ namespace NumSharp
             using var scope = NDScope.Open();
             var ma_ = array(a);
             if (ma_.ndim != 2)
-                throw new NotImplementedException("mask_rowcols works for 2D arrays only.");
+                throw new NotImplementedError("mask_rowcols works for 2D arrays only.");
             var m = ma_._mask;
             if (m is null || !np.any(m))
                 return Yield(scope, ma_);
@@ -8369,14 +8370,15 @@ namespace NumSharp
         /// <param name="x">2-D operand.</param>
         /// <param name="axis">null (rows AND cols), 0 (rows), or 1 (cols).</param>
         /// <returns>The surviving data as a plain <see cref="NDArray"/>.</returns>
-        /// <exception cref="NotImplementedException"><paramref name="x"/> is not 2-D.</exception>
+        /// <exception cref="NotImplementedError"><paramref name="x"/> is not 2-D (NumPy's <c>compress_rowcols works for 2D
+        ///     arrays only.</c>).</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>): an array-like operand the rank check had to materialize is
         /// reclaimed; <see cref="compress_nd"/> scopes its own intermediates.</remarks>
         [NDScoped]
         public NDArray compress_rowcols(object x, int? axis = null)
         {
             if (AsData(x).ndim != 2)
-                throw new NotImplementedException("compress_rowcols works for 2D arrays only.");
+                throw new NotImplementedError("compress_rowcols works for 2D arrays only.");
             return compress_nd(x, axis);
         }
 
@@ -8446,8 +8448,8 @@ namespace NumSharp
         /// <returns><c>Slice[]</c> for the flat/1-D case; <c>Slice[][]</c> for a 2-D explicit axis. Returned as
         /// <see cref="object"/> because the nesting depends on the runtime axis, as it does in NumPy — cast at the
         /// call site.</returns>
-        /// <exception cref="NotSupportedException">The input has more than 2 dimensions (NumPy's
-        /// <c>NotImplementedError("Currently limited to at most 2D array.")</c>).</exception>
+        /// <exception cref="NotImplementedError">The input has more than 2 dimensions (NumPy's
+        /// <c>NotImplementedError("Currently limited to at most 2D array.")</c>, type and text).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the operand's rank.</exception>
         /// <remarks>Scoped by hand (the result holds no array): the masked operand wrapper, every per-line view and
         /// the raveled/inverted masks behind each line's runs are reclaimed before the slices are returned.</remarks>
@@ -8457,7 +8459,7 @@ namespace NumSharp
             var d = AsData(a);
             int nd = d.ndim;
             if (nd > 2)
-                throw new NotSupportedException("Currently limited to at most 2D array."); // NumPy's message
+                throw new NotImplementedError("Currently limited to at most 2D array."); // NumPy's type and message
             if (axis is null || nd == 1)
                 return flatnotmasked_contiguous(a);
 

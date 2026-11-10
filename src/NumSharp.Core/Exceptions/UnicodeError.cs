@@ -16,6 +16,14 @@ namespace NumSharp
     /// </remarks>
     public class UnicodeError : ValueError
     {
+        /// <summary>
+        ///     Creates the error with Python's text for a bare <c>raise UnicodeError</c>: an empty
+        ///     <see cref="Exception.Message"/>, as <c>str(UnicodeError())</c> is <c>''</c>.
+        /// </summary>
+        /// <remarks>Its two subclasses have no such form, as in Python, whose <see cref="UnicodeEncodeError"/> and
+        ///     <see cref="UnicodeDecodeError"/> require their five arguments.</remarks>
+        public UnicodeError() : base(string.Empty) { }
+
         /// <summary>Creates the error with CPython's message text.</summary>
         /// <param name="message">The verbatim message (<c>'ascii' codec can't encode …</c>).</param>
         public UnicodeError(string message) : base(message) { }
@@ -53,6 +61,18 @@ namespace NumSharp
         ///     raise site fills the five values, so a caught error carries them; this form is for code that holds a text
         ///     only.</remarks>
         public UnicodeEncodeError(string message) : base(message) { }
+
+        /// <summary>
+        ///     Creates the error from a message and the exception that caused it (Python's <c>raise ... from
+        ///     innerException</c>): like the message-only form, <see cref="encoding"/>, <see cref="@object"/> and
+        ///     <see cref="reason"/> are null and <see cref="start"/> / <see cref="end"/> are 0.
+        /// </summary>
+        /// <param name="message">The verbatim message.</param>
+        /// <param name="innerException">The exception that led to this one (a .NET encoder's failure), or null for
+        ///     none.</param>
+        /// <remarks>For code that wraps a .NET codec failure in Python's class; prefer the five-argument form when the
+        ///     position of the unencodable text is known, so a caller can read it without parsing the message.</remarks>
+        public UnicodeEncodeError(string message, Exception innerException) : base(message, innerException) { }
 
         /// <summary>
         ///     Python's <c>UnicodeEncodeError(encoding, object, start, end, reason)</c>: the message is CPython's
@@ -194,6 +214,18 @@ namespace NumSharp
         ///     raise site fills the five values, so a caught error carries them; this form is for code that holds a text
         ///     only.</remarks>
         public UnicodeDecodeError(string message) : base(message) { }
+
+        /// <summary>
+        ///     Creates the error from a message and the exception that caused it (Python's <c>raise ... from
+        ///     innerException</c>): like the message-only form, <see cref="encoding"/>, <see cref="@object"/> and
+        ///     <see cref="reason"/> are null and <see cref="start"/> / <see cref="end"/> are 0.
+        /// </summary>
+        /// <param name="message">The verbatim message.</param>
+        /// <param name="innerException">The exception that led to this one (a .NET decoder's failure), or null for
+        ///     none.</param>
+        /// <remarks>For code that wraps a .NET codec failure in Python's class; prefer the five-argument form when the
+        ///     bad byte range is known, so a caller can read it without parsing the message.</remarks>
+        public UnicodeDecodeError(string message, Exception innerException) : base(message, innerException) { }
 
         /// <summary>
         ///     Python's <c>UnicodeDecodeError(encoding, object, start, end, reason)</c>: the message is CPython's

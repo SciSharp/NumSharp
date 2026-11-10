@@ -8,6 +8,7 @@ NumSharp raises NumPy's errors: an exception named after the Python or NumPy exc
 2. **NumPy's class, on a .NET base.** Each class follows Python's hierarchy where .NET allows it, and derives from the .NET exception a .NET caller expects: `ValueError` is an `ArgumentException`, `AxisError` an `ArgumentOutOfRangeException`, `OSError` an `IOException`.
 3. **One marker.** Every NumSharp exception implements `INumSharpException`, whatever its .NET base, so one filter catches them all.
 4. **The same text under every culture.** A number in a message is formatted with the invariant culture, as NumPy's texts are ASCII whatever the locale (see [Culture-independent texts](#culture-independent-texts)).
+5. **Python's constructors.** Every Python-named class takes no argument, a message, or a message and its cause. A bare `new KeyError()` reads Python's `str(KeyError())`, an empty text (`SyntaxError()` reads `None`, as CPython prints it), so a port of a bare `assert` or `raise NotImplementedError` keeps Python's text. `new KeyError(message, innerException)` is Python's `raise KeyError(message) from e`: the cause stays in `InnerException`.
 
 ---
 
@@ -28,7 +29,10 @@ Exception
 |   +-- SystemError
 |   +-- BufferError
 |   +-- RuntimeError
+|   |   +-- NotImplementedError         Python's, as NumPy raises it
 |   |   +-- TooHardError                numpy.exceptions.TooHardError
+|   +-- ImportError                     Python's, for ported code
+|   |   +-- ModuleNotFoundError
 |   +-- IncorrectShapeException         a shape that does not fit (NumPy's ValueError text)
 |   +-- IncorrectSizeException          a size that does not fit (NumPy's ValueError text)
 +-- ArgumentException
@@ -52,6 +56,8 @@ Exception
 ```
 
 `ValueError`, `LookupError` and `AxisError` sit under .NET's argument exceptions, so a .NET `catch (ArgumentException)` also catches them. Python's `IndexError` and `KeyError` derive from `LookupError`; in NumSharp they are `NumSharpException`s, because `LookupError` is an `ArgumentException` here.
+
+`NotImplementedError` follows Python's hierarchy, so `catch (RuntimeError)` catches it as `except RuntimeError` does. It is not .NET's `NotImplementedException`: NumSharp raises `NotImplementedError` where NumPy refuses an input, and keeps `NotImplementedException` / `NotSupportedException` for what NumSharp itself does not implement.
 
 ---
 
@@ -88,7 +94,7 @@ Exception
 
 `UnicodeEncodeError` and `UnicodeDecodeError` carry Python's attributes: `encoding`, `@object` (the element's text or bytes), `start`, `end` and `reason`. A `catch (UnicodeDecodeError e)` therefore reads where a codec failed without parsing the message. `start` and `end` count code points of the text, as Python's str indices do, or bytes of the bytes. Python's five-argument constructors exist too, and build CPython's message from the five values.
 
-The other NumPy-named classes are raised where NumPy raises them: `KeyError` for a key NumPy looks up and does not find (an unknown `flags` name, a `%(name)s` formatting key, a dtype field name, an `einsum_path` path name), `AttributeError` for an attribute NumPy refuses, `BufferError` when a buffer cannot be exported in the requested form, `OSError` for a file operation NumPy refuses (`tofile` of a `StringDType` array in binary mode), `SystemError` for data no Python object can represent, `SyntaxError` for text that is not a valid Python literal, `TooHardError` when `np.shares_memory`'s bounded search exhausts `max_work`, and `RuntimeError` / `AssertionError` / `NameError` where NumPy's own code raises them. `MAError` and `MaskError` exist so code ported from `numpy.ma` can catch them.
+The other NumPy-named classes are raised where NumPy raises them: `KeyError` for a key NumPy looks up and does not find (an unknown `flags` name, a `%(name)s` formatting key, a dtype field name, an `einsum_path` path name), `AttributeError` for an attribute NumPy refuses, `BufferError` when a buffer cannot be exported in the requested form, `OSError` for a file operation NumPy refuses (`tofile` of a `StringDType` array in binary mode), `SystemError` for data no Python object can represent, `SyntaxError` for text that is not a valid Python literal, `TooHardError` when `np.shares_memory`'s bounded search exhausts `max_work`, `NotImplementedError` where NumPy declines an input (a masked array's `tofile`, numpy.ma's two-dimensional functions `compress_rows`, `compress_cols`, `compress_rowcols`, `mask_rowcols` and `notmasked_contiguous` on other ranks, a seedless `SeedSequence` asked for state), and `RuntimeError` / `AssertionError` / `NameError` where NumPy's own code raises them. `MAError` and `MaskError` exist so code ported from `numpy.ma` can catch them, and `ImportError` / `ModuleNotFoundError` (with Python's `msg`, `name` and `path`) so ported code can raise and catch Python's import errors; NumSharp itself raises neither.
 
 NumSharp also raises .NET's own exceptions where they describe the failure: `ArgumentNullException` for a `null` argument NumPy has no `None` meaning for, `InvalidCastException` for a cast that a casting rule refuses (`Cannot cast array data from dtype('float64') to dtype('int32') according to the rule 'safe'`), `ObjectDisposedException` for a disposed array or iterator, and `OutOfMemoryException` for NumPy's `MemoryError`.
 

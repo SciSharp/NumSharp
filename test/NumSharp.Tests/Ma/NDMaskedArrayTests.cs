@@ -1252,7 +1252,7 @@ namespace NumSharp.Tests.Ma
 
         /// <summary>notmasked_contiguous with an explicit axis on a 2-D array returns NumPy's list-of-lists — one
         /// inner Slice[] of contiguous unmasked runs per line along the OTHER axis (empty for a fully-masked
-        /// line); >2-D raises NumPy's "Currently limited to at most 2D array." (NotSupportedException here).</summary>
+        /// line); >2-D raises NumPy's NotImplementedError "Currently limited to at most 2D array.", type and text.</summary>
         [TestMethod]
         public void NotmaskedContiguous_2DAxis()
         {
@@ -1273,8 +1273,9 @@ namespace NumSharp.Tests.Ma
             Assert.AreEqual("0:1,2:4", string.Join(",", c1[0].Select(s => $"{s.Start}:{s.Stop}")));
             Assert.AreEqual("3:4", string.Join(",", c1[1].Select(s => $"{s.Start}:{s.Stop}")));
 
-            Assert.ThrowsException<NotSupportedException>(
+            var tooDeep = Assert.ThrowsException<NotImplementedError>(
                 () => np.ma.notmasked_contiguous(np.ma.array(np.arange(8).reshape(2, 2, 2)), 0));
+            Assert.AreEqual("Currently limited to at most 2D array.", tooDeep.Message);
         }
 
         /// <summary>ma.power's third (modulus) argument is rejected with NumPy's MaskError "3-argument power not

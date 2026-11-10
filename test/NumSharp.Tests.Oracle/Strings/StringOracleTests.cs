@@ -1160,9 +1160,6 @@ namespace NumSharp.Tests.Strings
             ["UnicodeEncodeError"] = new[] { "UnicodeEncodeError" },
             ["UnicodeDecodeError"] = new[] { "UnicodeDecodeError" },
             ["SystemError"] = new[] { "SystemError" },
-            // numpy.ma's rank checks (compress_rowcols / mask_rowcols on a non-2-D array) raise NotImplementedError; the
-            // .NET class with that meaning is NotImplementedException (the message is matched verbatim).
-            ["NotImplementedError"] = new[] { "NotImplementedException" },
             // np.char.array of an empty str / bytes, or with itemsize 0: NumPy's `len(obj) // itemsize` raises Python's
             // ZeroDivisionError; .NET's class with that meaning is DivideByZeroException (the message is matched verbatim).
             ["ZeroDivisionError"] = new[] { "DivideByZeroException" },

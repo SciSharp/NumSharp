@@ -280,11 +280,11 @@ namespace NumSharp.Tests.RandomSampling
         public void SeedlessSeedSequence_MatchesNumPy()
         {
             var s = new SeedlessSeedSequence();
-            Throws<NotImplementedException>(() => s.generate_state(2), "seedless SeedSequences cannot generate state");
+            Throws<NotImplementedError>(() => s.generate_state(2), "seedless SeedSequences cannot generate state");
             var kids = s.spawn(3);
             kids.Length.Should().Be(3);
             kids.All(k => ReferenceEquals(k, s)).Should().BeTrue();
-            Throws<NotImplementedException>(() => new PCG64(s), "seedless SeedSequences cannot generate state");
+            Throws<NotImplementedError>(() => new PCG64(s), "seedless SeedSequences cannot generate state");
         }
 
         // =====================================================================================

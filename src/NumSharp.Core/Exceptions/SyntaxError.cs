@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     /// <summary>
@@ -20,13 +22,28 @@ namespace NumSharp
     /// </remarks>
     public class SyntaxError : NumSharpException
     {
-        /// <summary>Creates the error with Python's bare class name as its message. Prefer the overload that
-        ///     carries the parser's text: a bare <c>SyntaxError</c> tells the user nothing about the token.</summary>
-        public SyntaxError() : base("SyntaxError") { }
+        /// <summary>
+        ///     Creates the error with Python's text for a bare <c>raise SyntaxError</c>: <c>"None"</c>, as
+        ///     <c>str(SyntaxError())</c> is <c>'None'</c> (CPython's <c>SyntaxError.__str__</c> prints its <c>msg</c>
+        ///     attribute, which is None without arguments), unlike the other Python errors' empty text.
+        /// </summary>
+        /// <remarks>Prefer the overload that carries the parser's text: a bare <c>SyntaxError</c> tells the user nothing
+        ///     about the token.</remarks>
+        public SyntaxError() : base("None") { }
 
         /// <summary>Creates the error with the parser's message.</summary>
         /// <param name="message">CPython's message, including its <c>(&lt;unknown&gt;, line 1)</c> location suffix
         ///     where CPython prints one.</param>
         public SyntaxError(string message) : base(message) { }
+
+        /// <summary>
+        ///     Creates the error with the parser's message and the exception that caused it: Python's <c>raise
+        ///     SyntaxError(message) from innerException</c>, the cause kept in <see cref="Exception.InnerException"/> as
+        ///     Python keeps it in <c>__cause__</c>.
+        /// </summary>
+        /// <param name="message">CPython's message, verbatim.</param>
+        /// <param name="innerException">The exception that led to this one (a tokenizer's own failure), or null for
+        ///     none.</param>
+        public SyntaxError(string message, Exception innerException) : base(message, innerException) { }
     }
 }

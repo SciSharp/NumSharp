@@ -24,6 +24,9 @@ namespace NumSharp.Tests.Documentation
             typeof(DTypePromotionError).BaseType.Should().Be(typeof(TypeError));
             typeof(IndexError).BaseType.Should().Be(typeof(NumSharpException));
             typeof(TooHardError).BaseType.Should().Be(typeof(RuntimeError));
+            typeof(NotImplementedError).BaseType.Should().Be(typeof(RuntimeError));
+            typeof(ImportError).BaseType.Should().Be(typeof(NumSharpException));
+            typeof(ModuleNotFoundError).BaseType.Should().Be(typeof(ImportError));
             typeof(IncorrectShapeException).BaseType.Should().Be(typeof(NumSharpException));
             typeof(IncorrectSizeException).BaseType.Should().Be(typeof(NumSharpException));
             typeof(ValueError).BaseType.Should().Be(typeof(ArgumentException));
@@ -39,7 +42,8 @@ namespace NumSharp.Tests.Documentation
             typeof(StringComputationNotSupportedException).BaseType.Should().Be(typeof(NotSupportedException));
             typeof(MaskError).BaseType.Should().Be(typeof(MAError));
             foreach (var t in new[] { typeof(ValueError), typeof(AxisError), typeof(LookupError), typeof(OSError), typeof(TypeError),
-                                      typeof(MissingBackendException), typeof(StringComputationNotSupportedException) })
+                                      typeof(MissingBackendException), typeof(StringComputationNotSupportedException),
+                                      typeof(NotImplementedError), typeof(ImportError) })
                 typeof(INumSharpException).IsAssignableFrom(t).Should().BeTrue(t.Name);
         }
 

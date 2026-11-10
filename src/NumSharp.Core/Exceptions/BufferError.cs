@@ -15,8 +15,13 @@ namespace NumSharp
     /// </remarks>
     public class BufferError : NumSharpException
     {
-        /// <summary>Creates the exception with the default message <c>BufferError</c>.</summary>
-        public BufferError() : base("BufferError") { }
+        /// <summary>
+        ///     Creates the exception with Python's text for a bare <c>raise BufferError</c>: an empty
+        ///     <see cref="Exception.Message"/>, as <c>str(BufferError())</c> is <c>''</c>.
+        /// </summary>
+        /// <remarks><see cref="Exception.ToString"/> then starts with the class name alone, as Python's traceback prints a
+        ///     bare <c>BufferError</c>.</remarks>
+        public BufferError() : base(string.Empty) { }
 
         /// <summary>Creates the exception with NumPy's message.</summary>
         /// <param name="message">The message, verbatim from NumPy where NumPy has one.</param>

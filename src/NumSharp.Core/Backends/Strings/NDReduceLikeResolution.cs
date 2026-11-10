@@ -456,8 +456,8 @@ namespace NumSharp.Backends.Strings
         /// <param name="onlyPromoters">True on the retry after an ambiguity.</param>
         /// <returns>The entry, or null.</returns>
         /// <exception cref="RuntimeError">Two promoters match equally well.</exception>
-        /// <exception cref="NotImplementedException">Two different abstract DTypes compete for a slot (NumPy's
-        ///     NotImplementedError; cannot happen with the modelled tables).</exception>
+        /// <exception cref="NotImplementedError">Two different abstract DTypes compete for a slot (NumPy's
+        ///     NotImplementedError, type and text; cannot happen with the modelled tables).</exception>
         private static Entry ResolveImplementationInfo(Entry[] table, DTypeMeta[] opDTypes, bool onlyPromoters)
         {
             Entry best = null;
@@ -506,7 +506,7 @@ namespace NumSharp.Backends.Strings
                         else if (!newAbstract)
                             better = 1;
                         else
-                            throw new NotImplementedException(
+                            throw new NotImplementedError(
                                 "deciding which one of two abstract dtypes is a better match is not yet implemented.  " +
                                 "This will pick the better (or bail) in the future.");
                         if (better == -1)

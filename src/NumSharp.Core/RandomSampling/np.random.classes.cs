@@ -96,7 +96,7 @@ namespace NumSharp
         /// <param name="seed">The seed sequence; null is NumPy's <c>None</c> — fresh OS entropy.</param>
         /// <returns>A new <see cref="NumSharp.MT19937"/> — the object <c>new MT19937(…)</c> builds from the same
         ///     arguments.</returns>
-        /// <exception cref="System.NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>
+        /// <exception cref="NotImplementedError"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>
         ///     (NumPy's <c>seedless SeedSequences cannot generate state</c>).</exception>
         /// <remarks>
         ///     The overload a bare <c>null</c> literal binds (<c>np.random.MT19937(null)</c>, NumPy's
@@ -184,7 +184,7 @@ namespace NumSharp
         /// <param name="seed">The seed sequence; null is NumPy's <c>None</c> — fresh OS entropy.</param>
         /// <returns>A new <see cref="NumSharp.PCG64"/> — the object <c>new PCG64(…)</c> builds from the same
         ///     arguments.</returns>
-        /// <exception cref="System.NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>
+        /// <exception cref="NotImplementedError"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>
         ///     (NumPy's <c>seedless SeedSequences cannot generate state</c>).</exception>
         /// <remarks>
         ///     The overload a bare <c>null</c> literal binds (<c>np.random.PCG64(null)</c>, NumPy's
@@ -273,7 +273,7 @@ namespace NumSharp
         /// <param name="seed">The seed sequence; null is NumPy's <c>None</c> — fresh OS entropy.</param>
         /// <returns>A new <see cref="NumSharp.PCG64DXSM"/> — the object <c>new PCG64DXSM(…)</c> builds from the same
         ///     arguments.</returns>
-        /// <exception cref="System.NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>
+        /// <exception cref="NotImplementedError"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>
         ///     (NumPy's <c>seedless SeedSequences cannot generate state</c>).</exception>
         /// <remarks>
         ///     The overload a bare <c>null</c> literal binds (<c>np.random.PCG64DXSM(null)</c>, NumPy's
@@ -362,7 +362,7 @@ namespace NumSharp
         /// <param name="seed">The seed sequence; null is NumPy's <c>None</c> — fresh OS entropy.</param>
         /// <returns>A new <see cref="NumSharp.Philox"/> — the object <c>new Philox(…)</c> builds from the same
         ///     arguments.</returns>
-        /// <exception cref="System.NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>
+        /// <exception cref="NotImplementedError"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>
         ///     (NumPy's <c>seedless SeedSequences cannot generate state</c>).</exception>
         /// <remarks>
         ///     The overload a bare <c>null</c> literal binds (<c>np.random.Philox(null)</c>, NumPy's
@@ -467,7 +467,7 @@ namespace NumSharp
         /// <param name="seed">The seed sequence; null is NumPy's <c>None</c> — fresh OS entropy.</param>
         /// <returns>A new <see cref="NumSharp.SFC64"/> — the object <c>new SFC64(…)</c> builds from the same
         ///     arguments.</returns>
-        /// <exception cref="System.NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>
+        /// <exception cref="NotImplementedError"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>
         ///     (NumPy's <c>seedless SeedSequences cannot generate state</c>).</exception>
         /// <remarks>
         ///     The overload a bare <c>null</c> literal binds (<c>np.random.SFC64(null)</c>, NumPy's
