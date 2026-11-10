@@ -34,6 +34,11 @@ namespace NumSharp.Backends
     // CPython's int() / float() / complex() and its errors quote the Python object
     // (invalid literal for int() with base 10: '3.5'), a number is packed as itself (range-checked).
     //
+    // The character dtype. np.dtype('c') (an S1 whose type character is 'c') sets NumPy's DISCOVER_STRINGS_AS_SEQUENCES
+    // flag: the shape walk reads a str or bytes value whose length is not 1 as a SEQUENCE of its characters (code points
+    // of a str, byte values of a bytes object), so np.array(['ab', 'cd'], dtype='c') is a (2, 2) |S1 array and a ragged
+    // set of lengths is NumPy's inhomogeneous-shape ValueError. Arrays, and casts to 'c', are never split.
+    //
     // The plan's phase P6 moved the ndmin padding it called (np.AtLeastNdView) to the array object
     // (NDArray.AtLeastNdView) and the file from beside its facades (Creation/) to Backends/Unmanaged/.
     // ---------------------------------------------------------------------------------------------------------------------
@@ -169,22 +174,29 @@ namespace NumSharp.Backends
         /// <param name="ndmin">Minimum number of dimensions: leading 1s are prepended as a VIEW of the built array (NumPy's result does not own its data).</param>
         /// <param name="order">The memory layout: <c>'C'</c>, <c>'F'</c>, or <c>'A'</c>/<c>'K'</c> (C for a fresh array).</param>
         /// <returns>The new array.</returns>
-        /// <exception cref="ValueError">A ragged jagged array (NumPy's inhomogeneous-shape text).</exception>
-        /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
+        /// <exception cref="ValueError">A ragged jagged array (NumPy's inhomogeneous-shape text), or under the character
+        ///     dtype <c>'c'</c> texts of different lengths (they are split into their characters).</exception>
+        /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c> (under <c>'c'</c> each character is encoded
+        ///     alone, so the position is always 0, as in NumPy).</exception>
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>.</exception>
         /// <exception cref="NotSupportedException">A numeric dtype, a number among the values, or <c>None</c> without a dtype.</exception>
+        /// <remarks>Under NumPy's character dtype (<see cref="DiscoversStringsAsSequences"/>) every text value whose
+        ///     length is not 1 is one more axis of its characters: <c>np.array(["SFFF", "FHFH"], np.dtype("c"))</c> is a
+        ///     (2, 4) <c>|S1</c> array that keeps the <c>'c'</c> type character.</remarks>
         internal static NDArray FromManagedText(Array array, DType dtype, int ndmin, char order)
         {
             if (array is null)
                 throw new ArgumentNullException(nameof(array));
 
+            // PyArray_DiscoverDTypeAndShape's legacy flag: the request alone decides it, before any value is seen.
+            bool stringsAsSequences = DiscoversStringsAsSequences(dtype);
             long[] dims;
             IReadOnlyList<object> values;
-            if (array is string[] strings)
+            if (array is string[] strings && !stringsAsSequences)
             {
                 // A flat string[] (the common input) is its own element list: no per-item walk through the non-generic
                 // enumerator and no copy into a List — the array, read through its object view (array covariance; never
-                // written).
+                // written). Under 'c' its values are sequences, so it takes the walk below.
                 dims = new[] { strings.LongLength };
                 values = strings;
             }
@@ -192,7 +204,7 @@ namespace NumSharp.Backends
             {
                 var found = new List<long>();
                 var collected = new List<object>();
-                CollectValues(array, found, collected);
+                CollectValues(array, found, collected, stringsAsSequences);
                 dims = found.ToArray();
                 values = collected;
             }
@@ -416,11 +428,15 @@ namespace NumSharp.Backends
         /// <param name="array">The managed array.</param>
         /// <param name="dims">Receives the dimensions.</param>
         /// <param name="values">Receives the elements in C order.</param>
-        /// <exception cref="ValueError">A ragged jagged level (NumPy's inhomogeneous-shape text).</exception>
-        internal static void CollectValues(Array array, List<long> dims, List<object> values)
+        /// <param name="stringsAsSequences">NumPy's <c>DISCOVER_STRINGS_AS_SEQUENCES</c> (<see cref="DiscoversStringsAsSequences"/>):
+        ///     a text value whose length is not 1 is one more level of its characters instead of an element. False for
+        ///     every request but the character dtype <c>'c'</c>.</param>
+        /// <exception cref="ValueError">A ragged jagged level (NumPy's inhomogeneous-shape text), texts of different lengths
+        ///     under <paramref name="stringsAsSequences"/>, or a text beside a one-character text there.</exception>
+        internal static void CollectValues(Array array, List<long> dims, List<object> values, bool stringsAsSequences = false)
         {
             int leafDepth = -1;
-            Visit(array, 0, dims, values, ref leafDepth);
+            Visit(array, 0, dims, values, ref leafDepth, stringsAsSequences);
         }
 
         /// <summary>
@@ -432,8 +448,10 @@ namespace NumSharp.Backends
         /// <param name="dims">The dimensions found so far.</param>
         /// <param name="values">The elements so far (C order).</param>
         /// <param name="leafDepth">The depth of the first leaf seen (-1 before any), which every later leaf must match.</param>
+        /// <param name="stringsAsSequences">Whether a text value whose length is not 1 is a level of its characters
+        ///     (<see cref="CharacterSequence"/>) rather than a leaf.</param>
         /// <exception cref="ValueError">A level or a leaf disagrees with what an earlier sibling established.</exception>
-        private static void Visit(Array array, int depth, List<long> dims, List<object> values, ref int leafDepth)
+        private static void Visit(Array array, int depth, List<long> dims, List<object> values, ref int leafDepth, bool stringsAsSequences)
         {
             int rank = array.Rank;
             for (int r = 0; r < rank; r++)
@@ -459,7 +477,16 @@ namespace NumSharp.Backends
                 // A nested array is one more level — except a byte[], which is ONE bytes value (Python's `bytes`).
                 if (item is Array child && item is not byte[])
                 {
-                    Visit(child, childDepth, dims, values, ref leafDepth);
+                    Visit(child, childDepth, dims, values, ref leafDepth, stringsAsSequences);
+                    continue;
+                }
+
+                // Under the character dtype a str or bytes value whose length is not 1 is a sequence too (NumPy's
+                // force_sequence_due_to_char_dtype): its characters are one more level, each a one-character leaf, so the
+                // update_shape checks below report a ragged set of lengths exactly as they report a ragged list.
+                if (stringsAsSequences && CharacterSequence(item) is { } characters)
+                {
+                    Visit(characters, childDepth, dims, values, ref leafDepth, stringsAsSequences);
                     continue;
                 }
 
@@ -476,6 +503,81 @@ namespace NumSharp.Backends
                 }
                 values.Add(item);
             }
+        }
+
+        /// <summary>
+        ///     Whether a requested descriptor sets NumPy's <c>DISCOVER_STRINGS_AS_SEQUENCES</c> flag
+        ///     (<c>PyArray_DiscoverDTypeAndShape</c>): only the legacy character dtype <c>np.dtype('c')</c>, an <c>S1</c>
+        ///     whose type character is <c>'c'</c> (<c>NPY_CHARLTR</c>), does. <c>np.dtype('S1')</c> compares equal to it but
+        ///     keeps every text whole (and truncates it).
+        /// </summary>
+        /// <param name="requested">The dtype the caller asked for, or null.</param>
+        /// <returns>True for the character dtype, whose array coercion splits texts into their characters.</returns>
+        internal static bool DiscoversStringsAsSequences(DType requested)
+            => requested is { itemsize: 1, @char: (char)NPY_TYPECHAR.NPY_CHARLTR } && requested.Meta is StringDTypeMeta { IsUnicode: false };
+
+        /// <summary>
+        ///     The sequence a text value is under the character dtype (NumPy's <c>PySequence_Fast</c> of a str or bytes
+        ///     object whose length is not 1): a str's code points, each as a one-character <see cref="string"/> (a surrogate
+        ///     pair stays one code point, a lone surrogate is its own, as Python counts them), or a bytes value's byte values,
+        ///     each a Python int (a boxed <see cref="long"/>, which the <c>S</c> setitem stores as its <c>str()</c> cut to one
+        ///     byte: <c>b'ab'</c> under <c>'c'</c> is <c>b'9', b'9'</c>, as in NumPy).
+        /// </summary>
+        /// <param name="value">A collected value: a <see cref="string"/>, a <c>byte[]</c>, or anything else.</param>
+        /// <returns>The items of the sequence (empty for an empty text), or null when the value is an element there: a text
+        ///     of exactly one character or byte, or any value that is no text.</returns>
+        internal static object[] CharacterSequence(object value)
+        {
+            switch (value)
+            {
+                case string text:
+                {
+                    // Python's len() counts code points: a valid surrogate pair is one, a lone surrogate one too.
+                    var characters = new List<object>(text.Length);
+                    for (int i = 0; i < text.Length; i++)
+                    {
+                        bool pair = char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]);
+                        characters.Add(text.Substring(i, pair ? 2 : 1));
+                        if (pair)
+                            i++;
+                    }
+                    return characters.Count == 1 ? null : characters.ToArray();
+                }
+                case byte[] bytes when bytes.Length != 1:
+                {
+                    // Iterating a bytes object yields ints: NumPy stores each through the S setitem as its str().
+                    var items = new object[bytes.Length];
+                    for (int i = 0; i < bytes.Length; i++)
+                        items[i] = (long)bytes[i];
+                    return items;
+                }
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        ///     <c>np.array(value, dtype)</c> for ONE text value: the 0-d array <see cref="FromAnyScalar"/> builds, except
+        ///     under the character dtype <c>'c'</c>, where NumPy's discovery reads a text whose length is not 1 as a sequence:
+        ///     <c>np.array('abc', dtype='c')</c> is the (3,) array <c>[b'a', b'b', b'c']</c> and <c>np.array('', dtype='c')</c>
+        ///     the (0,) one.
+        /// </summary>
+        /// <param name="value">The text (a <see cref="string"/> or a <c>byte[]</c>), or any other value
+        ///     <see cref="FromAnyScalar"/> takes.</param>
+        /// <param name="dtype">The requested dtype, or null to discover it.</param>
+        /// <returns>The new array: 0-d, or 1-D of the characters under <c>'c'</c>.</returns>
+        /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
+        /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>.</exception>
+        /// <exception cref="ValueError">A text that does not parse as a numeric dtype's number.</exception>
+        /// <exception cref="OverflowException">An integer text outside an integer dtype's range.</exception>
+        /// <exception cref="NotSupportedException">None without a dtype (NumPy's object array).</exception>
+        /// <remarks>Only the array coercion splits: a fill or a store into a <c>'c'</c> array packs the whole text, cut to
+        ///     its one byte, as NumPy's setitem does, so it keeps calling <see cref="FromAnyScalar"/>.</remarks>
+        internal static NDArray FromLoneText(object value, DType dtype)
+        {
+            if (DiscoversStringsAsSequences(dtype) && CharacterSequence(value) is { } characters)
+                return FromManagedText(characters, dtype, 0, 'C');
+            return FromAnyScalar(value, dtype);
         }
 
         /// <summary>NumPy's ragged-sequence error: the shape agreed so far plus "inhomogeneous part".</summary>

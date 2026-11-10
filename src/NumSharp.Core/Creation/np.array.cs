@@ -260,11 +260,14 @@ namespace NumSharp
 
         /// <summary>
         ///     Creates a 0-d fixed-width string array holding <paramref name="value"/> with the given string dtype —
-        ///     NumPy's <c>np.array('abc', dtype='U5')</c> / <c>dtype='S'</c>.
+        ///     NumPy's <c>np.array('abc', dtype='U5')</c> / <c>dtype='S'</c>. Under the character dtype
+        ///     <c>np.dtype("c")</c> a text whose length is not 1 is a sequence, as NumPy reads it: <c>np.array("abc",
+        ///     np.dtype("c"))</c> is the (3,) <c>|S1</c> array of its characters.
         /// </summary>
         /// <param name="value">The text.</param>
-        /// <param name="dtype">A string dtype (<c>"U"</c>, <c>"U5"</c>, <c>"S"</c>, <c>np.str_</c>, <c>np.bytes_</c>) or null to discover.</param>
-        /// <returns>A 0-d <c>S</c>/<c>U</c> array.</returns>
+        /// <param name="dtype">A string dtype (<c>"U"</c>, <c>"U5"</c>, <c>"S"</c>, <c>"c"</c>, <c>np.str_</c>,
+        ///     <c>np.bytes_</c>) or null to discover.</param>
+        /// <returns>A 0-d <c>S</c>/<c>U</c> array, or the 1-D character array under <c>"c"</c> (0-d for one character).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
         /// <exception cref="ValueError">A numeric dtype and text that does not parse as that number (<c>could not convert
@@ -274,7 +277,7 @@ namespace NumSharp
         {
             if (value == null)
                 throw new ArgumentNullException(nameof(value));
-            return UnmanagedStorage.FromAnyScalar(value, dtype);
+            return UnmanagedStorage.FromLoneText(value, dtype);
         }
 
         /// <summary>

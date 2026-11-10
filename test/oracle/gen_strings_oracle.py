@@ -654,6 +654,19 @@ def gen_creation():
             operands=[operand(spec, "c1", seed=3, ascii_only=True)], layout="c1",
             call=lambda a, s=shape, d=dt, o=offset: np.ndarray(s, d, buffer=a, offset=o))
 
+    # The character dtype np.dtype('c') (an S1 whose type character is 'c') sets DISCOVER_STRINGS_AS_SEQUENCES: a str or
+    # bytes value whose length is not 1 is a sequence of its characters (code points of a str, ints of a bytes value),
+    # so equal lengths make one more axis, unequal ones are NumPy's inhomogeneous-shape error, and each character is
+    # encoded alone (a non-ASCII one fails at position 0). Appended after every other creation case so their ids keep.
+    for vals in value_sets + [["SFFF", "FHFH", "FFFH", "HFFG"], ["a", "b"], [1, 2], ["ab", 12]]:
+        add("creation", "array", params={"values": enc(vals), "dtype": "c"},
+            call=lambda v=vals: np.array(v, dtype="c"))
+    # A lone str: one character stays 0-d, any other length is a 1-D sequence (b"" / bytes replay through
+    # NDArray.Scalar, which is no array coercion, so only str values are recorded here).
+    for v in ["abc", "", "a", "a\x00", "\U0001F600", "\U0001F600x", "it's"]:
+        add("creation", "array_scalar", params={"value": enc(v), "dtype": "c"},
+            call=lambda v=v: np.array(v, dtype="c"))
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # C. Casts between string dtypes (and the text <-> number casts NumPy computes)
