@@ -278,7 +278,7 @@ namespace NumSharp.Tests.Polynomial
                 .WithMessage("ufunc 'subtract' did not contain a loop with signature matching types (dtype('<U1'), dtype('float64')) -> None");
 
             Action big = () => Vfr(BigInteger.Pow(10, 400), new object[] { 1.0 });
-            big.Should().Throw<OverflowException>().WithMessage("int too large to convert to float");
+            big.Should().Throw<OverflowError>().WithMessage("int too large to convert to float");
         }
 
         /// <summary>

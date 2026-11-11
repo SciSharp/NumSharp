@@ -224,7 +224,7 @@ namespace NumSharp
         ///     order that is not portable (both contain the same set); float dtypes are sorted on both sides.
         ///     The Array API leaves the order unspecified.
         /// </remarks>
-        /// <exception cref="OutOfMemoryException">A corrupt NEP 55 <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
+        /// <exception cref="MemoryError">A corrupt NEP 55 <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
         ///     text). A <c>StringDType</c> array otherwise computes without raising: NumPy's values-only <c>sorted=False</c>
         ///     pass hashes the texts and compares no NA (the values come back sorted here, NumPy's hash set keeps its own
         ///     order — the same set).</exception>
@@ -250,7 +250,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
         ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
         ///     nan-like value</c>.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         // NDScoped: the hash/sort internals are reclaimed; the weaver yields both result-struct
         // members (values, counts) by decomposing the returned UniqueCountsResult's fields.
         [NDScoped]
@@ -277,7 +277,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
         ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
         ///     nan-like value</c>.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         // NDScoped: internals reclaimed; the weaver yields the values and the (possibly reshaped)
         // inverse — the two UniqueInverseResult fields. The engine member owns a scope too: its
         // DefaultEngine.ReshapeInverseToInput returns a view of the flat inverse, which that scope
@@ -306,7 +306,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
         ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
         ///     nan-like value</c>.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         // NDScoped: internals reclaimed; the weaver yields all four UniqueAllResult members (values,
         // indices, inverse_indices, counts) by decomposing the struct's fields.
         [NDScoped]

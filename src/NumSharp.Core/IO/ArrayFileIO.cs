@@ -349,7 +349,7 @@ namespace NumSharp.IO
         /// <exception cref="OSError">Binary mode over a <c>StringDType</c> array.</exception>
         /// <exception cref="ValueError">A malformed format; a NaN under an integer conversion.</exception>
         /// <exception cref="TypeError">CPython's <c>TypeError</c> of <c>format % (item,)</c>.</exception>
-        /// <exception cref="OverflowException">CPython's <c>OverflowError</c> of <c>format % (item,)</c>.</exception>
+        /// <exception cref="OverflowError">CPython's <c>OverflowError</c> of <c>format % (item,)</c>.</exception>
         /// <exception cref="UnicodeEncodeError">An element's text is not ASCII.</exception>
         internal static void ToFile(NDArray a, Stream stream, string sep, string format)
         {

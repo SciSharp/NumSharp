@@ -349,13 +349,13 @@ public class np_histogram_Tests
             return np.array(v);
         }
 
-        ((Action)(() => np.histogram_bin_edges(Int64Span(1L << 33), "fd"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram_bin_edges(Int64Span(1L << 33), "fd"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 64.0 GiB for an array with shape (8589934593,) and data type float64");
-        ((Action)(() => np.histogram(Int64Span((1L << 34) + 12345), "fd"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram(Int64Span((1L << 34) + 12345), "fd"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 128. GiB for an array with shape (17179881530,) and data type float64");
-        ((Action)(() => np.histogram_bin_edges(Int64Span(1L << 40), "fd"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram_bin_edges(Int64Span(1L << 40), "fd"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 8.00 TiB for an array with shape (1099511627777,) and data type float64");
-        ((Action)(() => np.histogram_bin_edges(Int64Span((1L << 52) + 7), "fd"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram_bin_edges(Int64Span((1L << 52) + 7), "fd"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 32.0 PiB for an array with shape (4503599627370504,) and data type float64");
         ((Action)(() => np.histogram_bin_edges(Int64Span(1L << 61), "fd"))).Should().Throw<ValueError>()
             .WithMessage("array is too big; `arr.size * arr.dtype.itemsize` is larger than the maximum possible size.");
@@ -368,7 +368,7 @@ public class np_histogram_Tests
         ((Action)(() => np.histogram_bin_edges(UInt64Span(ulong.MaxValue), "fd"))).Should().Throw<ValueError>()
             .WithMessage("Maximum allowed size exceeded");
         ((Action)(() => np.histogram_bin_edges(UInt64Span(1UL << 40), "fd", range: (0.0, 1099511627776.0))))
-            .Should().Throw<OutOfMemoryException>()
+            .Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 8.00 TiB for an array with shape (1099511627777,) and data type float64");
 
         static NDArray TinyIqr(double spread)
@@ -378,9 +378,9 @@ public class np_histogram_Tests
             v[100] = 1e3;
             return np.array(v);
         }
-        ((Action)(() => np.histogram_bin_edges(TinyIqr(1e-9), "fd"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram_bin_edges(TinyIqr(1e-9), "fd"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 16.9 TiB for an array with shape (2326176056681,) and data type float64");
-        ((Action)(() => np.histogram_bin_edges(TinyIqr(1e-12), "fd"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram_bin_edges(TinyIqr(1e-12), "fd"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 16.5 PiB for an array with shape (2325969469107706,) and data type float64");
         ((Action)(() => np.histogram_bin_edges(TinyIqr(1e-15), "fd"))).Should().Throw<ValueError>()
             .WithMessage("array is too big; `arr.size * arr.dtype.itemsize` is larger than the maximum possible size.");
@@ -460,7 +460,7 @@ public class np_histogram_Tests
 
         ((Action)(() => np.histogram(np.full(Shape.Vector(6), (Half)0.7), "scott")))
             .Should().Throw<ValueError>().WithMessage("Too many bins for data range. Cannot create 1066 finite-sized bins.");
-        ((Action)(() => np.histogram(np.full(Shape.Vector(3), 0.1), "scott"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram(np.full(Shape.Vector(3), 0.1), "scott"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 212. PiB for an array with shape (29770864728363688,) and data type float64");
     }
 

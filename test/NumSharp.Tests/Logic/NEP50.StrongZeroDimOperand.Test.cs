@@ -149,7 +149,7 @@ public class Nep50StrongZeroDimOperandTests
 
         using var i8 = np.array(new sbyte[] { 1, -2, 3 });
         Action overflow = () => (i8 + 1000).Dispose();
-        overflow.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+        overflow.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
 
         using var f32 = np.array(new[] { 1f, 2f });
         using var scaled = f32 * 2.5;
@@ -168,7 +168,7 @@ public class Nep50StrongZeroDimOperandTests
 
         using var i8 = NDArray.Scalar((sbyte)1);
         Action overflow = () => (i8 + 1000).Dispose();
-        overflow.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+        overflow.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
 
         using var f32 = NDArray.Scalar(2.5f);
         using var product = f32 * 1.5;

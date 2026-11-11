@@ -76,7 +76,7 @@ namespace NumSharp.Tests.Selection
             Values(untouched).Should().Equal(Values(A2()));
 
             Action emptyOverflow = () => np.zeros(new Shape(3), np.uint8)[false] = -1;
-            emptyOverflow.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+            emptyOverflow.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
         }
 
         /// <summary>A lone bool on a 0-d array is the full mask: NumPy's boolean assignment and its texts.</summary>

@@ -99,13 +99,13 @@ namespace NumSharp.Tests.Backends.Strings
             try
             {
                 Action toU = () => a.astype(np.dtype("U4"));
-                toU.Should().Throw<OutOfMemoryException>().WithMessage("Failed to load string in in string to unicode cast");
+                toU.Should().Throw<MemoryError>().WithMessage("Failed to load string in in string to unicode cast");
                 Action toS = () => a.astype(np.dtype("S4"));
-                toS.Should().Throw<OutOfMemoryException>().WithMessage("Failed to load string in in string to bytes cast");
+                toS.Should().Throw<MemoryError>().WithMessage("Failed to load string in in string to bytes cast");
                 Action toBool = () => a.astype(np.dtype("?"));
-                toBool.Should().Throw<OutOfMemoryException>().WithMessage("Failed to load string in string to bool cast");
+                toBool.Should().Throw<MemoryError>().WithMessage("Failed to load string in string to bool cast");
                 Action toInt = () => a.astype(np.dtype("i8"));
-                toInt.Should().Throw<OutOfMemoryException>().WithMessage("Failed to load string for conversion to a non-nullable type");
+                toInt.Should().Throw<MemoryError>().WithMessage("Failed to load string for conversion to a non-nullable type");
             }
             finally
             {
@@ -133,10 +133,10 @@ namespace NumSharp.Tests.Backends.Strings
                     try
                     {
                         Action whole = () => a.astype(np.dtype("?"));
-                        whole.Should().Throw<OutOfMemoryException>().WithMessage(Message, $"n={n}, corrupt cell {k}");
+                        whole.Should().Throw<MemoryError>().WithMessage(Message, $"n={n}, corrupt cell {k}");
                         using var strided = a[$"{k % 2}::2"];
                         Action stepped = () => strided.astype(np.dtype("?"));
-                        stepped.Should().Throw<OutOfMemoryException>().WithMessage(Message, $"n={n}, corrupt cell {k}, step 2");
+                        stepped.Should().Throw<MemoryError>().WithMessage(Message, $"n={n}, corrupt cell {k}, step 2");
                     }
                     finally
                     {
@@ -197,7 +197,7 @@ namespace NumSharp.Tests.Backends.Strings
             using (var big = np.array(new[] { "2147483648" }, T))
             {
                 Action overflow = () => big.astype(np.dtype("i4"));
-                overflow.Should().Throw<OverflowException>().WithMessage("Integer 2147483648 is out of bounds for int",
+                overflow.Should().Throw<OverflowError>().WithMessage("Integer 2147483648 is out of bounds for int",
                     "NumSharp pins the LP64 C type name of int32 (Windows NumPy says 'long')");
             }
         }

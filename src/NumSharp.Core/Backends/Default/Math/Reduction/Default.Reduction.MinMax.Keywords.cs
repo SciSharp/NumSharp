@@ -1458,7 +1458,7 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException">The mask or out does not broadcast against <paramref name="a"/>.</exception>
-        /// <exception cref="OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="TypeError"><paramref name="initial"/> is a complex for a real loop, or of an unconvertible type.</exception>
         /// <remarks><see cref="NDAnchoredAttribute"/>: the reduction iterator and the seeded exact engines read raw
         ///     addresses, and the keyword front doors (<c>np.max(a, initial: …, where: …)</c>, <c>ndarray.max</c>, the

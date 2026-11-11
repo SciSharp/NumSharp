@@ -22,7 +22,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="max_work"/> is less than <c>-2</c>.</exception>
         /// <exception cref="TooHardError">The solver hit the <paramref name="max_work"/> candidate cap
         ///     (or was restricted to a bounds check via <c>max_work: 0</c>) before it could decide exactly.</exception>
-        /// <exception cref="OverflowException">The solver's integer arithmetic overflowed while computing overlap.</exception>
+        /// <exception cref="OverflowError">The solver's integer arithmetic overflowed while computing overlap.</exception>
         /// <exception cref="RuntimeError">The solver reported an internal error (does not occur for valid inputs).</exception>
         /// <remarks>
         ///     This is the STRICT counterpart of <see cref="may_share_memory(NDArray,NDArray,long)"/>: two
@@ -86,7 +86,7 @@ namespace NumSharp
         /// <returns>Whether the arrays overlap, per the semantics of the calling entry point.</returns>
         /// <exception cref="ValueError"><paramref name="max_work"/> is less than <c>-2</c>.</exception>
         /// <exception cref="TooHardError">Undecided within the cap and <paramref name="raiseExceptions"/> is set.</exception>
-        /// <exception cref="OverflowException">Solver arithmetic overflowed and <paramref name="raiseExceptions"/> is set.</exception>
+        /// <exception cref="OverflowError">Solver arithmetic overflowed and <paramref name="raiseExceptions"/> is set.</exception>
         /// <exception cref="RuntimeError">The solver reported an internal error.</exception>
         private static bool SharesMemoryImpl(NDArray a, NDArray b, long max_work, bool raiseExceptions)
         {
@@ -110,7 +110,7 @@ namespace NumSharp
                 case MemOverlap.Overflow:
                     // shares_memory promises exactness → surface the overflow; may_share_memory says "yes".
                     if (raiseExceptions)
-                        throw new OverflowException("Integer overflow in computing overlap");
+                        throw new OverflowError("Integer overflow in computing overlap");
                     return true;
                 case MemOverlap.TooHard:
                     // Budget exhausted (or bounds-only): the exact answer is unknown.

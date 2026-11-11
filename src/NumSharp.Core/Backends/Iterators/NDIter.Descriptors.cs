@@ -197,8 +197,8 @@ namespace NumSharp.Backends.Iteration
         /// <exception cref="UnicodeDecodeError">A copy from <c>S</c> to <c>U</c> meets a byte at or above <c>0x80</c>.</exception>
         /// <exception cref="ValueError">A copy from text to numbers meets a text that does not parse (NumPy's <c>int()</c> /
         ///     <c>float()</c> texts).</exception>
-        /// <exception cref="OverflowException">A copy from text to an integer dtype meets a number outside it.</exception>
-        /// <exception cref="OutOfMemoryException">A copy into or out of <c>StringDType</c> cannot allocate a string.</exception>
+        /// <exception cref="OverflowError">A copy from text to an integer dtype meets a number outside it.</exception>
+        /// <exception cref="MemoryError">A copy into or out of <c>StringDType</c> cannot allocate a string.</exception>
         /// <remarks>
         ///     Runs between the axis reorder and the coalescing, so the temporaries' dense strides take part in the coalescing
         ///     exactly as NumPy's do. On any failure the temporaries made so far are released and no write-back is registered

@@ -100,8 +100,9 @@ namespace NumSharp.IO
         /// <param name="found">The path <see cref="FindFile"/> returned.</param>
         /// <returns>The byte stream (the caller owns it).</returns>
         /// <exception cref="NotSupportedException">A bz2 or LZMA file.</exception>
-        /// <exception cref="IOException">The file cannot be opened.</exception>
-        /// <exception cref="UnauthorizedAccessException">The path is a directory, or access is denied.</exception>
+        /// <exception cref="PermissionError">Access is denied, or (Windows) the path is a directory.</exception>
+        /// <exception cref="IsADirectoryError">The path is a directory (Linux and macOS).</exception>
+        /// <exception cref="IOException">Any other refusal of the operating system, as .NET reports it.</exception>
         internal static Stream OpenRead(string found)
         {
             ThrowIfUnsupportedCompression(found);

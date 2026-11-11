@@ -39,7 +39,7 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
-        /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <remarks>
         ///     The member keeps the plain-array meaning for a <c>numpy.matrix</c> object (an <see cref="NDMatrix"/> declares its
         ///     own <c>max</c>). https://numpy.org/doc/stable/reference/generated/numpy.ndarray.max.html
@@ -72,7 +72,7 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
-        /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <remarks>
         ///     The member keeps the plain-array meaning for a <c>numpy.matrix</c> object (an <see cref="NDMatrix"/> declares its
         ///     own <c>min</c>). https://numpy.org/doc/stable/reference/generated/numpy.ndarray.min.html

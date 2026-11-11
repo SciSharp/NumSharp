@@ -314,7 +314,7 @@ namespace NumSharp.Backends
         ///     an array is CAST (NumPy's unsafe assignment cast), a C# literal (<see cref="NDArray.WasPythonLiteral"/>) is
         ///     PACKED as the Python scalar it stands for (<see cref="NDArray.PackForStore"/>).
         /// </remarks>
-        /// <exception cref="OverflowException">A C# literal out of this dtype's range (NumPy's OverflowError texts).</exception>
+        /// <exception cref="OverflowError">A C# literal out of this dtype's range (NumPy's OverflowError texts).</exception>
         /// <exception cref="ValueError">A float NaN literal into an integer dtype, a sequence into one element, or a value
         ///     that does not broadcast to the selection.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype; <c>None</c> (a null <paramref name="value"/>)

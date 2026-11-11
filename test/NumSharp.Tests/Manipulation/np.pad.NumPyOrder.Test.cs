@@ -148,7 +148,7 @@ namespace NumSharp.Tests.Manipulation
 
             // np.pad(np.zeros((2, 2), np.uint8), 1, constant_values=np.array([[1, -1], [2, -2]], np.int32))
             Action table = () => np.pad(np.zeros(new Shape(2, 2), np.uint8), 1, constant_values: new int[,] { { 1, -1 }, { 2, -2 } });
-            table.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+            table.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
 
             // np.pad(np.arange(6).reshape(2, 3), 1, constant_values=np.array([[10, 20], [30, 40]]))
             np.pad(M, 1, constant_values: np.array(new long[,] { { 10, 20 }, { 30, 40 } })).ToArray<long>().Should().Equal(

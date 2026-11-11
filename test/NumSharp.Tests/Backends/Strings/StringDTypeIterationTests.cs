@@ -932,7 +932,7 @@ namespace NumSharp.Tests.Backends.Strings
                             using var it = route.Open();
                             foreach (var _ in it) { }
                         };
-                        walk.Should().Throw<OutOfMemoryException>($"{route.Name}, after {successes} allocations")
+                        walk.Should().Throw<MemoryError>($"{route.Name}, after {successes} allocations")
                             .WithMessage("Failed to allocate string in string to string cast");
                     }
                     finally

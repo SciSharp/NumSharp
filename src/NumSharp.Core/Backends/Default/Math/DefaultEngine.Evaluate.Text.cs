@@ -50,7 +50,7 @@ namespace NumSharp.Backends
         ///     a search's <c>start</c> / <c>end</c> cannot reach int64.</exception>
         /// <exception cref="ArgumentException">The result does not broadcast into <paramref name="out"/>; a non-bool
         ///     <c>where=</c>.</exception>
-        /// <exception cref="OverflowException">A StringDType repeat by a negative count or past 2^63 - 1 characters, or a parse
+        /// <exception cref="OverflowError">A StringDType repeat by a negative count or past 2^63 - 1 characters, or a parse
         ///     out of the target's range.</exception>
         /// <remarks>
         ///     <para>
@@ -253,9 +253,8 @@ namespace NumSharp.Backends
                     // np.evaluate's out= rule: the result's dtype must reach out's under the casting rule (by descriptor, so a
                     // text width or class decides as in NumPy: U5 → U3 is same_kind, U → S is not), checked before any write.
                     if (!DTypeCasting.CanCastTypeTo(current.dtype, @out.dtype, options.Casting))
-                        throw new TypeError(
-                            $"Cannot cast ufunc 'evaluate' output from {current.dtype.ToString(true)} to " +
-                            $"{@out.dtype.ToString(true)} with casting rule '{DTypeCasting.CastingToString(options.Casting)}'");
+                        throw new UFuncOutputCastingError("evaluate", 1, DTypeCasting.CastingToString(options.Casting),
+                            current.dtype, @out.dtype, 2);
                     if (reduction.Ufunc is not null)
                     {
                         // A flat reduction's out has the result's exact rank (0, or the input's under keepdims, one element:

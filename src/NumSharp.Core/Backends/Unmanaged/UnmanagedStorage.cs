@@ -1515,6 +1515,9 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentNullException"><paramref name="shape"/> is uninitialized, or <paramref name="dtype"/> is null.</exception>
         /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet.</exception>
         /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
+        /// <exception cref="ArrayMemoryError">The memory cannot hold the array (NumPy's <c>_ArrayMemoryError</c>: <c>Unable to
+        ///     allocate 1.00 EiB for an array with shape (1152921504606846976,) and data type int8</c>), the allocator's
+        ///     <see cref="OutOfMemoryException"/> as the cause.</exception>
         internal void Allocate(Shape shape, DType dtype, bool fillZeros, bool overwriteAll)
         {
             if (shape.IsEmpty)
@@ -1523,6 +1526,33 @@ namespace NumSharp.Backends
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
 
+            try
+            {
+                AllocateChecked(shape, dtype, fillZeros, overwriteAll);
+            }
+            catch (OutOfMemoryException e) when (e is not MemoryError)
+            {
+                // PyArray_NewFromDescr_int's failed allocation: NumPy raises _ArrayMemoryError(shape, descr), whose text
+                // names the size the request needed; .NET's allocator failure stays as the cause. A MemoryError a lower
+                // layer already raised with NumPy's own text (a StringDType arena) passes through unchanged.
+                throw new ArrayMemoryError(shape.dimensions ?? Array.Empty<long>(), dtype, e);
+            }
+        }
+
+        /// <summary>
+        ///     The body of <see cref="Allocate(Shape, DType, bool, bool)"/> after its argument checks: the size guard, then
+        ///     the buffer of the dtype's lane.
+        /// </summary>
+        /// <param name="shape">The dimensions (not empty).</param>
+        /// <param name="dtype">The dtype descriptor (not null).</param>
+        /// <param name="fillZeros">Zero the fresh buffer.</param>
+        /// <param name="overwriteAll">The caller overwrites every byte (see the caller).</param>
+        /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet.</exception>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows.</exception>
+        /// <exception cref="OutOfMemoryException">The allocator has no memory for the buffer (the caller turns it into
+        ///     NumPy's <see cref="ArrayMemoryError"/>).</exception>
+        private void AllocateChecked(Shape shape, DType dtype, bool fillZeros, bool overwriteAll)
+        {
             var typeCode = dtype.GetTypeCode(); // throws the descriptive "no storage yet" for a descriptor-only class
             if (dtype.Meta is VStringDTypeMeta)
             {

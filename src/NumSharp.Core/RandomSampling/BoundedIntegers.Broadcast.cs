@@ -45,7 +45,7 @@ namespace NumSharp
         ///     literal (<c>invalid literal for int() with base 10: …</c>); bounds that do not broadcast (the comparison
         ///     ufunc's <c>operands could not be broadcast together with shapes …</c>) or a size they do not broadcast with
         ///     (<c>shape mismatch: … arg 0 … arg 2 …</c>); a negative size.</exception>
-        /// <exception cref="OverflowException">An infinity reaching Python's <c>int()</c> (NumPy's
+        /// <exception cref="OverflowError">An infinity reaching Python's <c>int()</c> (NumPy's
         ///     <c>OverflowError: cannot convert float infinity to integer</c>).</exception>
         /// <remarks>
         ///     <para>
@@ -170,7 +170,7 @@ namespace NumSharp
         /// <returns>The draws.</returns>
         /// <exception cref="TypeError">A bound is <c>None</c> or holds a value <c>int()</c> refuses.</exception>
         /// <exception cref="ValueError">See <see cref="DrawArray"/>.</exception>
-        /// <exception cref="OverflowException">An infinite float bound.</exception>
+        /// <exception cref="OverflowError">An infinite float bound.</exception>
         private static NDArray Broadcast64(BitGenerator bg, NDArray lo, NDArray hi, Shape size, NPTypeCode tc, Int128 lb,
                                            Int128 ub, bool closed, bool useMasked)
         {
@@ -478,7 +478,7 @@ namespace NumSharp
         /// <param name="subtract">Subtracted from each stored value (the high bound's <c>is_open</c>; 0 for the low one).</param>
         /// <returns>A new C-contiguous array (logical values in NumPy's scrambled order, see the remarks) the caller disposes.</returns>
         /// <exception cref="ValueError">A value fails <paramref name="check"/>, or is NaN.</exception>
-        /// <exception cref="OverflowException">A value is infinite.</exception>
+        /// <exception cref="OverflowError">A value is infinite.</exception>
         /// <exception cref="TypeError">A value <c>int()</c> refuses.</exception>
         /// <exception cref="ValueError">A text element that is not an integer literal (<c>invalid literal for int() with base
         ///     10: np.str_('1a')</c> for a <c>U</c> element, <c>b'1a'</c> for an <c>S</c> one).</exception>
@@ -601,7 +601,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A NaN, or text that is not a base-10 literal (<c>invalid literal for int() with base 10:
         ///     '1a'</c>; a 0-d array converts through a plain Python str / bytes, so the repr is <c>'1a'</c> / <c>b'1a'</c>,
         ///     never <c>np.str_('1a')</c>).</exception>
-        /// <exception cref="OverflowException">An infinity.</exception>
+        /// <exception cref="OverflowError">An infinity.</exception>
         private static Int128 PyInt(NDArray x)
         {
             if (x is null)
@@ -622,7 +622,7 @@ namespace NumSharp
         /// <param name="v">The boxed element.</param>
         /// <returns>The value.</returns>
         /// <exception cref="ValueError">A NaN.</exception>
-        /// <exception cref="OverflowException">An infinity.</exception>
+        /// <exception cref="OverflowError">An infinity.</exception>
         private static Int128 PyIntOfElement(object v) => v switch
         {
             bool b => b ? 1 : 0,
@@ -647,7 +647,7 @@ namespace NumSharp
         /// <param name="d">The float.</param>
         /// <returns>The integer, clamped to <c>±2**100</c>.</returns>
         /// <exception cref="ValueError">NaN (<c>cannot convert float NaN to integer</c>).</exception>
-        /// <exception cref="OverflowException">Infinity (NumPy's <c>OverflowError: cannot convert float infinity to integer</c>).</exception>
+        /// <exception cref="OverflowError">Infinity (NumPy's <c>OverflowError: cannot convert float infinity to integer</c>).</exception>
         /// <remarks>
         ///     Python's result is exact at any magnitude; the clamp stands in for it beyond <c>2**100</c>, where every
         ///     comparison the checks make (against a dtype bound within <c>±2**64</c>, or against the other bound) is
@@ -658,7 +658,7 @@ namespace NumSharp
             if (double.IsNaN(d))
                 throw new ValueError("cannot convert float NaN to integer");
             if (double.IsInfinity(d))
-                throw new OverflowException("cannot convert float infinity to integer");
+                throw new OverflowError("cannot convert float infinity to integer");
             const double Limit = 1267650600228229401496703205376.0;   // 2**100
             if (d >= Limit)
                 return (Int128)1 << 100;

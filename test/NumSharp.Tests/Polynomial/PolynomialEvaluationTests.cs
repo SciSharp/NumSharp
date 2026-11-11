@@ -304,7 +304,7 @@ namespace NumSharp.Tests.Polynomial
             bcast.Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (2,) (3,) ");
 
             Action overflow = () => np.polynomial.laguerre.lagval(np.array(new sbyte[] { 1, 2 }), np.ones(new Shape(70)));
-            overflow.Should().Throw<OverflowException>().WithMessage("Python integer 137 out of bounds for int8");
+            overflow.Should().Throw<OverflowError>().WithMessage("Python integer 137 out of bounds for int8");
 
             Action v2 = () => np.polynomial.chebyshev.chebval2d(np.ones(new Shape(3)), np.ones(new Shape(2)), np.ones(new Shape(2, 2)));
             v2.Should().Throw<ValueError>().WithMessage("x, y are incompatible");

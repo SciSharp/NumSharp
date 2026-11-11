@@ -48,7 +48,7 @@ namespace NumSharp.Backends.Strings
         ///     <c>invalid literal for int() with base 10: np.str_('x')</c>, <c>could not convert string to float: ...</c>,
         ///     <c>complex() arg is a malformed string</c>) or an integer text of more than 4300 digits — the FIRST such
         ///     element in NumPy's raw assignment order.</exception>
-        /// <exception cref="OverflowException">Text → integer meets a value outside the target (NumPy's LP64 texts:
+        /// <exception cref="OverflowError">Text → integer meets a value outside the target (NumPy's LP64 texts:
         ///     <c>Python integer 300 out of bounds for int8</c>, <c>Python int too large to convert to C long</c>).</exception>
         public static NDArray AsType(NDArray src, DType dtype, bool copy, char order, string casting)
             => AsType(src, dtype, copy, order, casting, beforeAllocate: null);
@@ -75,7 +75,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeEncodeError"><c>U → S</c> meets a code point at or above 128.</exception>
         /// <exception cref="UnicodeDecodeError"><c>S → U</c> meets a byte at or above <c>0x80</c>.</exception>
         /// <exception cref="SystemError">A unit above <c>U+10FFFF</c> where the cast decodes text.</exception>
-        /// <exception cref="OverflowException">Text → integer meets a value outside the target.</exception>
+        /// <exception cref="OverflowError">Text → integer meets a value outside the target.</exception>
         internal static NDArray AsType(NDArray src, DType dtype, bool copy, char order, string casting, Action<DType> beforeAllocate)
         {
             // npy_parse_arguments runs astype's converters in its parameter order - dtype, order, casting - before the dtype

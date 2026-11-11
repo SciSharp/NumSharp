@@ -70,18 +70,28 @@ namespace NumSharp.Backends.Strings
         ///     This is the name for a ufunc of two or more inputs; a ONE-input ufunc marks no operand weak, see
         ///     <see cref="UnaryDispatchClass"/>.
         /// </remarks>
-        internal static string DispatchClass(NDArray x)
+        internal static string DispatchClass(NDArray x) => UFuncTypeError.DescrRepr(DispatchMeta(x));
+
+        /// <summary>
+        ///     The class object <see cref="DispatchClass"/> prints: the <see cref="DTypeMeta"/> of the operand's descriptor,
+        ///     the abstract NEP 50 class for a C# number literal, or null (NumPy's <c>None</c>) for an absent slot — the value
+        ///     a <see cref="UFuncNoLoopError"/>'s <see cref="UFuncNoLoopError.dtypes"/> holds, as NumPy's error keeps the
+        ///     class objects themselves.
+        /// </summary>
+        /// <param name="x">The operand, or null for an absent slot.</param>
+        /// <returns>The class, or null.</returns>
+        internal static object DispatchMeta(NDArray x)
         {
             if (x is null)
-                return "None";
+                return null;
             if (x.WasPythonLiteral)
                 return x.Storage.GetAtIndex(0) switch
                 {
-                    Complex => DTypeRegistry.PyComplex.ToString(),
-                    float or double => DTypeRegistry.PyFloat.ToString(),
-                    _ => DTypeRegistry.PyLong.ToString(),
+                    Complex => DTypeRegistry.PyComplex,
+                    float or double => DTypeRegistry.PyFloat,
+                    _ => DTypeRegistry.PyLong,
                 };
-            return x.dtype.Meta.ToString();
+            return x.dtype.Meta;
         }
 
         /// <summary>
@@ -100,16 +110,25 @@ namespace NumSharp.Backends.Strings
         ///     mapping is <see cref="NDStringMethods.AsAnyArray"/>'s, NumPy's <c>np.asarray</c> of the Python scalar. (A
         ///     Python int past uint64 is an object array there, <c>ObjectDType</c>; no C# literal holds one.)
         /// </remarks>
-        internal static string UnaryDispatchClass(NDArray x)
+        internal static string UnaryDispatchClass(NDArray x) => UFuncTypeError.DescrRepr(UnaryDispatchMeta(x));
+
+        /// <summary>
+        ///     The class object <see cref="UnaryDispatchClass"/> prints (the default descriptor's class of a C# number
+        ///     literal, never the abstract NEP 50 one), or null for an absent slot: a <see cref="UFuncNoLoopError"/>'s
+        ///     <see cref="UFuncNoLoopError.dtypes"/> entry.
+        /// </summary>
+        /// <param name="x">The operand, or null for an absent slot.</param>
+        /// <returns>The class, or null.</returns>
+        internal static object UnaryDispatchMeta(NDArray x)
         {
             if (x is null || !x.WasPythonLiteral)
-                return DispatchClass(x);
+                return DispatchMeta(x);
             return x.Storage.GetAtIndex(0) switch
             {
-                Complex => np.complex128.Meta.ToString(),
-                float or double => np.float64.Meta.ToString(),
-                ulong u when u > long.MaxValue => np.uint64.Meta.ToString(),
-                _ => np.int64.Meta.ToString(),
+                Complex => np.complex128.Meta,
+                float or double => np.float64.Meta,
+                ulong u when u > long.MaxValue => np.uint64.Meta,
+                _ => np.int64.Meta,
             };
         }
 
@@ -124,29 +143,48 @@ namespace NumSharp.Backends.Strings
         private static bool IsNumericLoop(NPTypeCode? loop) => loop is { } l && l != NPTypeCode.String && l != NPTypeCode.Empty;
 
         /// <summary>
-        ///     The OUT part of a <c>StringDType</c> refusal under a <c>dtype=</c> request: the requested class, or
-        ///     <c>None</c> without a numeric request.
+        ///     The OUT part of a <c>StringDType</c> refusal under a <c>dtype=</c> request: the requested class, or null
+        ///     (NumPy's <c>None</c>) without a numeric request.
         /// </summary>
         /// <param name="loop">The requested loop, or null.</param>
-        /// <returns>The class repr, or <c>None</c>.</returns>
-        private static string LoopOutputClass(NPTypeCode? loop)
-            => IsNumericLoop(loop) ? DTypeRegistry.FromTypeCode(loop.Value).ToString() : "None";
+        /// <returns>The class, or null.</returns>
+        private static object LoopOutputMeta(NPTypeCode? loop)
+            => IsNumericLoop(loop) ? DTypeRegistry.FromTypeCode(loop.Value) : null;
 
         /// <summary>
         ///     NumPy's dispatcher refusal for <c>StringDType</c> operands (the class remarks): <c>ufunc 'X' did not contain a
         ///     loop with signature matching types IN -&gt; OUT</c>.
         /// </summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
-        /// <param name="inputs">The input classes (<see cref="DispatchClass"/>), in call order; one input prints bare.</param>
-        /// <param name="output">The output class, or <c>None</c>.</param>
+        /// <param name="inputs">The input classes (<see cref="DispatchMeta"/>, a <see cref="DTypeMeta"/>, a
+        ///     <see cref="DType"/> where NumPy names an instance), in call order; one input prints bare.</param>
+        /// <param name="output">The output class, or null for <c>None</c>.</param>
         /// <param name="nout">The ufunc's output count: two print as a tuple of <paramref name="output"/>.</param>
-        /// <returns>The exception (not thrown); the house type of NumPy's UFuncTypeError.</returns>
-        internal static TypeError VStringNoLoop(string ufunc, string[] inputs, string output = "None", int nout = 1)
+        /// <returns>The exception (not thrown): NumPy's <see cref="UFuncNoLoopError"/>, its
+        ///     <see cref="UFuncNoLoopError.dtypes"/> the inputs then <paramref name="nout"/> times the output.</returns>
+        /// <exception cref="InvalidOperationException">A text reached the dtype list (an internal caller still passing a
+        ///     class's repr instead of the class): it would print quoted, so it is refused rather than mis-printed.</exception>
+        internal static UFuncNoLoopError VStringNoLoop(string ufunc, object[] inputs, object output = null, int nout = 1)
         {
-            string ins = inputs.Length == 1 ? inputs[0] : "(" + string.Join(", ", inputs) + ")";
-            string outs = nout == 1 ? output : "(" + output + ", " + output + ")";
-            return new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {ins} -> {outs}");
+            var dtypes = new object[inputs.Length + nout];
+            for (int i = 0; i < inputs.Length; i++)
+                dtypes[i] = RequireDescr(inputs[i]);
+            for (int i = 0; i < nout; i++)
+                dtypes[inputs.Length + i] = RequireDescr(output);
+            return new UFuncNoLoopError(ufunc, inputs.Length, dtypes);
         }
+
+        /// <summary>
+        ///     The internal guard of the refusal builders: a dtype-like value is a class, a descriptor, a placeholder or
+        ///     null, never its printed repr.
+        /// </summary>
+        /// <param name="descr">The value.</param>
+        /// <returns>The value, unchanged.</returns>
+        /// <exception cref="InvalidOperationException">The value is a string.</exception>
+        internal static object RequireDescr(object descr)
+            => descr is string s
+                ? throw new InvalidOperationException($"A ufunc refusal received the text {s} where a dtype class belongs.")
+                : descr;
 
         /// <summary>
         ///     The output descriptor of the <c>StringDType</c> loop NumPy runs for <paramref name="ufunc"/> over these operands,
@@ -248,7 +286,7 @@ namespace NumSharp.Backends.Strings
             // dtype='f8') names Float64DType as the output).
             if (VStringLoopOutput(ufunc, x, null) is { } output && (!IsNumericLoop(loop) || loop == NPTypeCode.Boolean))
                 return VStringComputeAnswer(ufunc, x, null, @out, where, output);
-            return VStringNoLoop(ufunc, new[] { DispatchClass(x) }, LoopOutputClass(loop), UfuncOutputs(ufunc));
+            return VStringNoLoop(ufunc, new[] { DispatchMeta(x) }, LoopOutputMeta(loop), UfuncOutputs(ufunc));
         }
 
         /// <summary>
@@ -326,7 +364,7 @@ namespace NumSharp.Backends.Strings
                     computed = output;
                 return answer;
             }
-            return VStringNoLoop(ufunc, new[] { DispatchClass(x1), DispatchClass(x2) }, LoopOutputClass(loop), UfuncOutputs(ufunc));
+            return VStringNoLoop(ufunc, new[] { DispatchMeta(x1), DispatchMeta(x2) }, LoopOutputMeta(loop), UfuncOutputs(ufunc));
         }
 
         /// <summary>
@@ -346,7 +384,7 @@ namespace NumSharp.Backends.Strings
         ///     NA, NumPy's texts).</exception>
         /// <exception cref="TypeError">A repetition of a <c>None</c>-like NA (<c>Cannot multiply null that is not a nan-like
         ///     value</c>).</exception>
-        /// <exception cref="OverflowException">A repetition past <c>2^63 - 1</c> bytes (<c>Overflow encountered in string
+        /// <exception cref="OverflowError">A repetition past <c>2^63 - 1</c> bytes (<c>Overflow encountered in string
         ///     multiply</c>).</exception>
         /// <exception cref="InvalidOperationException">A ufunc without a computing <c>StringDType</c> loop (a routing bug).</exception>
         private static NDArray VStringCompute(string ufunc, NDArray x1, NDArray x2, NDArray @out, NDArray where, DType output)
@@ -418,9 +456,9 @@ namespace NumSharp.Backends.Strings
                 if (!(textLoop && IsVString(@out)))
                 {
                     var produced = textLoop ? DTypeRegistry.VString.default_descr() : output;
+                    // The output's operand index follows the inputs (one or two).
                     if (!DTypeCasting.CanCastTypeTo(produced, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                        return new TypeError(
-                            $"Cannot cast ufunc '{ufunc}' output from {produced.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
+                        return new UFuncOutputCastingError(ufunc, 1, "same_kind", produced, @out.dtype, x2 is null ? 1 : 2);
                 }
             }
             // NumPy's trivial loop copies a short input its loop casts, keeping the input's class: a chararray of the user's
@@ -544,9 +582,9 @@ namespace NumSharp.Backends.Strings
                 // No reduction ufunc: the arg-reductions (the dtype's ArgFunc), np.nanmedian (NDVStringStatistics.NanMedian)
                 // and the sorts and searches (VStringSort / VStringSearch) all compute over StringDType.
                 return null;
-            string input = a.dtype.Meta.ToString();
-            // The reduction signature's first slot: dtype= wins, then the out's class, else None.
-            string first = dtype is not null ? dtype.Meta.ToString() : @out is not null ? DispatchClass(@out) : "None";
+            object input = a.dtype.Meta;
+            // The reduction signature's first slot: dtype= wins, then the out's class, else None (null).
+            object first = dtype is not null ? dtype.Meta : DispatchMeta(@out);
             // An INTEGER out under multiply (any of the eight widths) meets the StringDType repeat promoter first: it finds
             // the loop (int64 or uint64, StringDType) -> StringDType, which is not reduce-compatible (its first input and
             // its output differ), so promote_and_get_ufuncimpl fixes the first slot to that output class and retries with
@@ -556,7 +594,7 @@ namespace NumSharp.Backends.Strings
                 first = input;
             bool loopExists = ufunc is "add" or "maximum" or "minimum";
             if (!loopExists)
-                return VStringNoLoop(ufunc, new[] { first, input }, dtype is not null ? first : "None");
+                return VStringNoLoop(ufunc, new[] { first, input }, dtype is not null ? first : null);
             if (dtype is not null)
                 return VStringNoLoop(ufunc, new[] { first, input }, first);
             // An out= of another class than the loop's operands has no loop either: add pairs StringDType with StrDType,
@@ -770,7 +808,7 @@ namespace NumSharp.Backends.Strings
         private static Exception VStringIsCloseAnswer(NDArray a, NDArray b)
         {
             var y = DTypePromotion.ResultType(b, 1.0);
-            return VStringNoLoop("subtract", new[] { DispatchClass(a), y.Meta.ToString() });
+            return VStringNoLoop("subtract", new[] { DispatchMeta(a), y.Meta });
         }
 
         /// <summary>
@@ -849,8 +887,8 @@ namespace NumSharp.Backends.Strings
             if (a.ndim == 0 || b.ndim == 0)
             {
                 if (@out is not null)
-                    return OutWhereError(@out, null) ?? new TypeError(
-                        $"Cannot cast ufunc 'multiply' output from dtype('O') to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
+                    return OutWhereError(@out, null) ?? new UFuncOutputCastingError("multiply", 1, "same_kind",
+                        PyDescrPlaceholder.ObjectDescr, @out.dtype, 2);
                 // A 0-d operand broadcasts against anything; an empty other operand leaves no product to make.
                 if (a.size == 0 || b.size == 0)
                     return ObjectArrayRefusal("dot", a, b);
@@ -916,7 +954,7 @@ namespace NumSharp.Backends.Strings
             {
                 string x = PyObjectTypeName(a, 0);
                 if (x is "str" or "bytes" or "NoneType")
-                    return new AttributeError($"'{x}' object has no attribute 'conjugate'");
+                    return new AttributeError($"'{x}' object has no attribute 'conjugate'", "conjugate", a.GetAtIndex(0));
                 // bool.conjugate() returns an int (bool subclasses int), so the product names 'int'.
                 string message = PyMultiplyError(x == "bool" ? "int" : x, PyObjectTypeName(b, 0));
                 if (message is not null)

@@ -55,9 +55,7 @@ namespace NumSharp.Backends
             // from the complex-INPUT "No loop matching the specified signature" above
             // (both probed 2.4.2).
             if (typeCode == NPTypeCode.Complex)
-                throw new TypeError(
-                    "ufunc 'absolute' did not contain a loop with signature matching types " +
-                    $"<class 'numpy.dtypes.{NumPyDTypeClassName(inputType)}'> -> <class 'numpy.dtypes.Complex128DType'>");
+                throw new UFuncNoLoopError("absolute", 1, ((DType)inputType).Meta, DType.Complex.Meta);
 
             // dtype= runs the loop in that dtype: the input must reach it via
             // a same_kind cast (abs(f64, dtype=i32) raises, probed 2.4.2).

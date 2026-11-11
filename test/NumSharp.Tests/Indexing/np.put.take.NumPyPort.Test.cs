@@ -134,7 +134,7 @@ namespace NumSharp.Tests.Indexing
             act = () => np.put(np.zeros(0, np.int8), np.array(new[] { 0 }), 300);
             act.Should().Throw<IndexError>().WithMessage("cannot replace elements of an empty array");
             act = () => np.put(np.arange(4).astype(np.int8), np.array(new long[0]), 300);
-            act.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            act.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
 
             var a = np.arange(4);
             np.put(a, np.array(new[] { 0 }), np.array(new long[] { 7 }), null);   // None is raise

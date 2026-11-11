@@ -52,7 +52,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="ValueError">An out of the wrong rank or shape (the reduction iterator's texts), or a text that does
         ///     not parse into the loop dtype (NumPy's cast texts, at the fill that meets it).</exception>
         /// <exception cref="IncorrectShapeException">The out does not broadcast against the result.</exception>
-        /// <exception cref="OverflowException">An integer text outside the loop's integer type.</exception>
+        /// <exception cref="OverflowError">An integer text outside the loop's integer type.</exception>
         [NDScoped] // the overlap copy and the identity scalar are this call's own
         internal static NDArray Reduce(string ufunc, NDArray a, bool[] axisFlags, bool keepdims, NDArray @out, DType loop)
         {
@@ -93,7 +93,7 @@ namespace NumSharp.Backends.Strings
         ///     that does not broadcast, an out that would have to broadcast).</exception>
         /// <exception cref="ValueError">The out's text, then the input's, does not parse into the loop dtype (NumPy copies the
         ///     out first: its error wins).</exception>
-        /// <exception cref="OverflowException">An integer text outside the loop's integer type.</exception>
+        /// <exception cref="OverflowError">An integer text outside the loop's integer type.</exception>
         [NDScoped] // the raveled input, the views, the loop-dtype copies and the accumulation are this call's own
         internal static NDArray Accumulate(string ufunc, NDArray a, int? axis, NDArray @out, DType loop)
         {

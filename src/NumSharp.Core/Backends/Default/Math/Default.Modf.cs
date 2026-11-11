@@ -281,12 +281,13 @@ namespace NumSharp.Backends
         /// <param name="output">The provided output (a text one is checked by descriptor: its storage lane alone carries
         ///     no width or class).</param>
         /// <param name="operandIndex">1 for the fractional output, 2 for the integral output.</param>
-        /// <exception cref="TypeError">When the cast is not permitted under the same_kind rule.</exception>
+        /// <exception cref="UFuncOutputCastingError">When the cast is not permitted under the same_kind rule (NumPy's
+        ///     text, naming the operand index of the two-output modf).</exception>
         private static void ValidateModfOutCast(NPTypeCode loopType, NDArray output, int operandIndex)
         {
             if (output.typecode == NPTypeCode.String)
             {
-                ThrowIfTextOutCastFails("modf", $"output {operandIndex}", loopType, output);
+                ThrowIfTextOutCastFails("modf", 2, operandIndex, loopType, output);
                 return;
             }
             var outType = output.typecode;
@@ -294,10 +295,7 @@ namespace NumSharp.Backends
                 return;
             if (NDIterCasting.CanCast(loopType, outType, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 return;
-            throw new TypeError(
-                string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc 'modf' output {operandIndex} from " +
-                $"dtype('{loopType.AsNumpyDtypeName()}') to " +
-                $"dtype('{outType.AsNumpyDtypeName()}') with casting rule 'same_kind'"));
+            throw new UFuncOutputCastingError("modf", 2, "same_kind", loopType.AsNumpyDescr(), outType.AsNumpyDescr(), operandIndex);
         }
 
         /// <summary>

@@ -102,7 +102,7 @@ namespace NumSharp.Backends
         /// <param name="casting">The casting level.</param>
         /// <param name="where">The caller's mask, or <c>null</c>.</param>
         /// <exception cref="TypeError">The 'equiv' rule with a dtype other than the scalar's default.</exception>
-        /// <exception cref="OverflowException">An integer that does not fit an integer destination.</exception>
+        /// <exception cref="OverflowError">An integer that does not fit an integer destination.</exception>
         internal static unsafe void CopytoPythonScalar(NDArray dst, object value, PyScalarKind kind, NPY_CASTING casting, NDArray @where)
         {
             // The dtype PyArray_FromAny gives the scalar on its own: int64 for an int (uint64 past int64, an object
@@ -158,7 +158,7 @@ namespace NumSharp.Backends
         /// <param name="dstType">The numeric target dtype.</param>
         /// <param name="element">Receives the element; at least <paramref name="dstType"/>'s item size.</param>
         /// <exception cref="ValueError">The text does not parse into <paramref name="dstType"/>.</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dstType"/>.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer <paramref name="dstType"/>.</exception>
         private static unsafe void CopytoParseTextScalar(NDArray text, NPTypeCode dstType, Span<byte> element)
         {
             // One element: the array cast's own parse (its NumPy-scalar error texts), then the element copied out.
@@ -179,7 +179,7 @@ namespace NumSharp.Backends
         /// <param name="element">Receives the element; at least <see cref="ReductionInitial.SlotBytes"/> bytes.</param>
         /// <returns><c>false</c> when <paramref name="value"/> is not a scalar this rule covers (an array with dimensions, a
         ///     list): the caller keeps its own conversion.</returns>
-        /// <exception cref="OverflowException">A Python int out of an integer dtype's range ("Python integer 1000 out of
+        /// <exception cref="OverflowError">A Python int out of an integer dtype's range ("Python integer 1000 out of
         ///     bounds for int8"; the LP64 texts past the C <c>long</c>), or past the double range into a float; an integer
         ///     text outside an integer dtype.</exception>
         /// <exception cref="ValueError">A text (a C# string or <c>byte[]</c>, or a 0-d text array) that does not parse into

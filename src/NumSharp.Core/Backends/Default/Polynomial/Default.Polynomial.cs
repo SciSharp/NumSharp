@@ -191,7 +191,7 @@ namespace NumSharp.Backends
             if (p.ndim == 0)
                 throw new TypeError("len() of unsized object");
             if (Backends.Strings.NDStringUfuncs.IsVString(p))
-                throw Backends.Strings.NDStringUfuncs.VStringNoLoop("divide", new[] { p.dtype.Meta.ToString(), DType.Int64.Meta.ToString() });
+                throw Backends.Strings.NDStringUfuncs.VStringNoLoop("divide", new[] { p.dtype.Meta, DType.Int64.Meta });
             if (Backends.Strings.NDStringUfuncs.IsString(p))
                 throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("divide");
 

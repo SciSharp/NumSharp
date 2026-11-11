@@ -518,7 +518,7 @@ namespace NumSharp
         ///     the 400-year leap cycle average (365.2425 days per year). Overflow yields <c>(0, 0)</c>.
         /// </summary>
         /// <exception cref="ValueError">Converting specific units to generic units.</exception>
-        /// <exception cref="OverflowException">The factor overflows (NumPy's <c>OverflowError</c>).</exception>
+        /// <exception cref="OverflowError">The factor overflows (NumPy's <c>OverflowError</c>).</exception>
         internal static (long num, long denom) ConversionFactor(in DatetimeMetaData src, in DatetimeMetaData dst)
         {
             /* Generic units change to the destination with no conversion factor */
@@ -597,7 +597,7 @@ namespace NumSharp
 
             /* If something overflowed, make both num and denom 0 */
             if (num == 0)
-                throw new OverflowException(
+                throw new OverflowError(
                     $"Integer overflow while computing the conversion factor between NumPy datetime units {UnitStrings[(int)srcBase]} and {UnitStrings[(int)dstBase]}");
 
             /* Swap the numerator and denominator if necessary */
@@ -701,7 +701,7 @@ namespace NumSharp
         /// </summary>
         /// <exception cref="TypeError"><c>Cannot get a common metadata divisor for Numpy datetime metadata [Y] and [D]
         /// because they have incompatible nonlinear base time units.</c></exception>
-        /// <exception cref="OverflowException"><c>Integer overflow getting a common metadata divisor for NumPy datetime
+        /// <exception cref="OverflowError"><c>Integer overflow getting a common metadata divisor for NumPy datetime
         /// metadata [as] and [Y].</c></exception>
         public static DatetimeMetaData GreatestCommonDivisor(in DatetimeMetaData meta1, in DatetimeMetaData meta2,
             bool strictWithNonlinearUnits1, bool strictWithNonlinearUnits2)
@@ -800,8 +800,8 @@ namespace NumSharp
             => new TypeError("Cannot get a common metadata divisor for Numpy datetime metadata " +
                              $"{meta1.ToString(false)} and {meta2.ToString(false)} because they have incompatible nonlinear base time units.");
 
-        private static OverflowException UnitsOverflow(in DatetimeMetaData meta1, in DatetimeMetaData meta2)
-            => new OverflowException("Integer overflow getting a common metadata divisor for NumPy datetime metadata " +
+        private static OverflowError UnitsOverflow(in DatetimeMetaData meta1, in DatetimeMetaData meta2)
+            => new OverflowError("Integer overflow getting a common metadata divisor for NumPy datetime metadata " +
                                      $"{meta1.ToString(false)} and {meta2.ToString(false)}.");
 
         // ------------------------------------------------------------------------------------------------

@@ -88,7 +88,7 @@ namespace NumSharp
         ///     <c>lagweight</c> (NumPy's boolean-negative error), or a Python int whose first NumPy operand fits neither
         ///     int64 nor uint64 (NumPy's object-loop error).
         /// </exception>
-        /// <exception cref="OverflowException">
+        /// <exception cref="OverflowError">
         ///     CPython's own overflow on a Python-scalar x: a huge int meeting a float (<c>int too large to convert to
         ///     float</c>), or the square of a float or complex past the float range (<see cref="PyScalar.PowTwo"/>).
         /// </exception>

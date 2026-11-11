@@ -26,9 +26,7 @@ namespace NumSharp.Backends
             // sign has NO bool loop (ufunc.types starts at 'b->b'; probed
             // verbatim on 2.4.2).
             if (loopType == NPTypeCode.Boolean)
-                throw new TypeError(
-                    "ufunc 'sign' did not contain a loop with signature matching types " +
-                    "<class 'numpy.dtypes.BoolDType'> -> None");
+                throw new UFuncNoLoopError("sign", 1, DType.Boolean.Meta, null);
 
             if (typeCode.HasValue)
                 ValidateUnaryInputCast(nd.GetTypeCode, typeCode.Value, "sign");

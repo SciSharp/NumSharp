@@ -127,7 +127,7 @@ namespace NumSharp
         /// <param name="d">Sample spacing (inverse of the sampling rate). Default 1.</param>
         /// <param name="device">Array-API device; must be <c>null</c> or <c>"cpu"</c>.</param>
         /// <returns>A float64 array of length <paramref name="n"/>.</returns>
-        /// <exception cref="DivideByZeroException"><c>n * d</c> is zero (<c>float division by zero</c>).</exception>
+        /// <exception cref="ZeroDivisionError"><c>n * d</c> is zero (<c>float division by zero</c>).</exception>
         /// <exception cref="ValueError">A device other than <c>"cpu"</c>, then a negative <paramref name="n"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.fftfreq.html</remarks>
         public NDArray fftfreq(int n, double d = 1.0, string device = null)
@@ -142,7 +142,7 @@ namespace NumSharp
         /// <param name="d">Sample spacing (inverse of the sampling rate). Default 1.</param>
         /// <param name="device">Array-API device; must be <c>null</c> or <c>"cpu"</c>.</param>
         /// <returns>A float64 array of length <paramref name="n"/>.</returns>
-        /// <exception cref="DivideByZeroException"><c>n * d</c> is zero (<c>float division by zero</c>, checked
+        /// <exception cref="ZeroDivisionError"><c>n * d</c> is zero (<c>float division by zero</c>, checked
         ///     first).</exception>
         /// <exception cref="ValueError">A device other than <c>"cpu"</c> (<c>Device not understood. ...</c>), then a
         ///     negative <paramref name="n"/> (<c>negative dimensions are not allowed</c>).</exception>
@@ -172,7 +172,7 @@ namespace NumSharp
         /// <param name="d">Sample spacing (inverse of the sampling rate). Default 1.</param>
         /// <param name="device">Array-API device; must be <c>null</c> or <c>"cpu"</c>.</param>
         /// <returns>A float64 array of length <c>n//2 + 1</c>.</returns>
-        /// <exception cref="DivideByZeroException"><c>n * d</c> is zero (<c>float division by zero</c>).</exception>
+        /// <exception cref="ZeroDivisionError"><c>n * d</c> is zero (<c>float division by zero</c>).</exception>
         /// <exception cref="ValueError">A device other than <c>"cpu"</c>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfftfreq.html</remarks>
         public NDArray rfftfreq(int n, double d = 1.0, string device = null)
@@ -186,7 +186,7 @@ namespace NumSharp
         /// <param name="d">Sample spacing (inverse of the sampling rate). Default 1.</param>
         /// <param name="device">Array-API device; must be <c>null</c> or <c>"cpu"</c>.</param>
         /// <returns>A float64 array of length <c>n//2 + 1</c> (empty when that is not positive).</returns>
-        /// <exception cref="DivideByZeroException"><c>n * d</c> is zero (<c>float division by zero</c>, checked
+        /// <exception cref="ZeroDivisionError"><c>n * d</c> is zero (<c>float division by zero</c>, checked
         ///     first).</exception>
         /// <exception cref="ValueError">A device other than <c>"cpu"</c>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.rfftfreq.html

@@ -125,7 +125,7 @@ namespace NumSharp.Tests.Fourier
                 new[] { 0.0, 0.125, 0.25, 0.375, 0.5 });
             // long preserves the error contract
             ((Action)(() => { var _ = np.fft.fftfreq(0L); }))
-                .Should().Throw<DivideByZeroException>();
+                .Should().Throw<ZeroDivisionError>();
             np.fft.rfftfreq(-5L).size.Should().Be(0);
         }
 
@@ -159,7 +159,7 @@ namespace NumSharp.Tests.Fourier
         {
             // val = 1.0/(0*d) -> NumPy ZeroDivisionError("float division by zero"); .NET analog.
             Action act = () => { var _ = np.fft.fftfreq(0); };
-            act.Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+            act.Should().Throw<ZeroDivisionError>().WithMessage("float division by zero");
         }
 
         [TestMethod]
@@ -168,7 +168,7 @@ namespace NumSharp.Tests.Fourier
             // d==0 -> 1.0/(n*0) division by zero for ANY n>0 (.NET's float 1/0 is +inf, so it is
             // checked explicitly to match NumPy which raises).
             Action act = () => { var _ = np.fft.fftfreq(8, 0.0); };
-            act.Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+            act.Should().Throw<ZeroDivisionError>().WithMessage("float division by zero");
         }
 
         [TestMethod]
@@ -177,7 +177,7 @@ namespace NumSharp.Tests.Fourier
             // ORDER: val=1/(n*d) computed BEFORE empty(n). n*d==0 (d=0), so ZeroDivision wins over
             // negative-dimensions even though n<0.
             Action act = () => { var _ = np.fft.fftfreq(-5, 0.0); };
-            act.Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+            act.Should().Throw<ZeroDivisionError>().WithMessage("float division by zero");
         }
 
         [TestMethod]
@@ -195,9 +195,9 @@ namespace NumSharp.Tests.Fourier
         public void RfftFreq_ZeroSpacing_IsDivisionByZero()
         {
             Action a1 = () => { var _ = np.fft.rfftfreq(8, 0.0); };
-            a1.Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+            a1.Should().Throw<ZeroDivisionError>().WithMessage("float division by zero");
             Action a2 = () => { var _ = np.fft.rfftfreq(-5, 0.0); };   // val first -> ZeroDivision
-            a2.Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+            a2.Should().Throw<ZeroDivisionError>().WithMessage("float division by zero");
         }
 
         // ---- device (Array-API interop param, NumPy 2.0) ----
@@ -225,7 +225,7 @@ namespace NumSharp.Tests.Fourier
         {
             // zero-division precedes device; device precedes negative-dims; integer-check precedes all.
             ((Action)(() => { var _ = np.fft.fftfreq(0, device: "gpu"); }))
-                .Should().Throw<DivideByZeroException>();
+                .Should().Throw<ZeroDivisionError>();
             ((Action)(() => { var _ = np.fft.fftfreq(-5, device: "gpu"); }))
                 .Should().Throw<ValueError>().WithMessage("Device not understood*");
             ((Action)(() => { var _ = np.fft.fftfreq(3.5, device: "gpu"); }))

@@ -32,7 +32,7 @@ namespace NumSharp.Backends
         /// <exception cref="UnicodeEncodeError">A selected <c>U</c> element is not ASCII and the destination is <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">A selected <c>S</c> element is not ASCII and the destination is <c>U</c>.</exception>
         /// <exception cref="SystemError">A selected <c>U</c> element holds a unit above <c>U+10FFFF</c> and the destination is <c>S</c>.</exception>
-        /// <exception cref="OverflowException">An allowed text → integer cast meets a value outside the destination (see
+        /// <exception cref="OverflowError">An allowed text → integer cast meets a value outside the destination (see
         ///     <see cref="CopytoTextNumber"/>).</exception>
         /// <remarks>
         ///     <para><b>Which elements are converted.</b> NumPy's masked cast converts only the elements the mask selects, so a
@@ -146,7 +146,7 @@ namespace NumSharp.Backends
         ///     (<c>could not broadcast input array from shape (2,) into shape (3,)</c>, <c>… where mask …</c>), or a converted
         ///     text is not a number of the destination's kind (NumPy's <c>int()</c> / <c>float()</c> / <c>complex()</c>
         ///     texts).</exception>
-        /// <exception cref="OverflowException">A converted integer text does not fit the destination.</exception>
+        /// <exception cref="OverflowError">A converted integer text does not fit the destination.</exception>
         /// <exception cref="SystemError">A converted <c>U</c> element is one unit above U+10FFFF.</exception>
         /// <exception cref="UnicodeDecodeError">A converted <c>S</c> element is not UTF-8 and the destination is
         ///     complex.</exception>
@@ -231,7 +231,7 @@ namespace NumSharp.Backends
         /// <param name="layout">The temporary's shape (a fresh dense layout).</param>
         /// <returns>The converted array (the caller disposes it).</returns>
         /// <exception cref="ValueError">A text is not a number of <paramref name="to"/>'s kind.</exception>
-        /// <exception cref="OverflowException">An integer text does not fit <paramref name="to"/>.</exception>
+        /// <exception cref="OverflowError">An integer text does not fit <paramref name="to"/>.</exception>
         /// <exception cref="SystemError">A <c>U</c> element is one unit above U+10FFFF.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> element converted to complex is not UTF-8.</exception>
         private static NDArray CopytoConvertWhole(NDArray src, DType to, Shape layout)

@@ -43,11 +43,11 @@ namespace NumSharp.Tests.Selection
         public void IndexArrayValues_AreCheckedAfterTheValuesConversion()
         {
             Action arrayAndInteger = () => I8()[new long[] { 0, 99 }, 0] = 1000;
-            arrayAndInteger.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+            arrayAndInteger.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
             Action twoArrays = () => I8()[np.array(new long[] { 0, 99 }), np.array(new long[] { 0, 0 })] = 1000;
-            twoArrays.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+            twoArrays.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
             Action withSlice = () => I8()[new long[] { 0, 99 }, "1:3"] = 1000;
-            withSlice.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+            withSlice.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
 
             Action fits = () => I8()[new long[] { 0, 99 }, 0] = 7;
             fits.Should().Throw<IndexError>().WithMessage("index 99 is out of bounds for axis 0 with size 3");

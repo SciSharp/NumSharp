@@ -150,7 +150,7 @@ namespace NumSharp.Utilities
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's texts, quoting
         ///     <c>'…'</c>), or an integer literal has more than 4300 digits.</exception>
-        /// <exception cref="OverflowException">An integer literal outside the target (NumPy's <c>Python integer 300 out of
+        /// <exception cref="OverflowError">An integer literal outside the target (NumPy's <c>Python integer 300 out of
         ///     bounds for uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static unsafe TOut ParseNumPyText<TOut>(string text, NPTypeCode target) where TOut : unmanaged
@@ -180,7 +180,7 @@ namespace NumSharp.Utilities
         /// <param name="target">The target dtype.</param>
         /// <returns>The boxed value of <paramref name="target"/>'s C# type.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">An integer literal outside the target.</exception>
+        /// <exception cref="OverflowError">An integer literal outside the target.</exception>
         /// <exception cref="InvalidCastException"><paramref name="target"/> is <see cref="NPTypeCode.Empty"/>.</exception>
         internal static object ParseNumPyTextBoxed(string text, NPTypeCode target) => target switch
         {

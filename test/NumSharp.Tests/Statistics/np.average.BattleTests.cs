@@ -272,7 +272,7 @@ public class np_average_BattleTests
         var a = np.array(new[] { 1.0, 2.0, 3.0 });
         var w = np.array(new[] { 1.0, -1.0, 0.0 });
         Action act = () => np.average(a, weights: w);
-        act.Should().Throw<DivideByZeroException>();
+        act.Should().Throw<ZeroDivisionError>();
     }
 
     [TestMethod]
@@ -407,7 +407,7 @@ public class np_average_BattleTests
         var a = np.array(new System.Numerics.Complex[] { new(1, 0), new(2, 0), new(3, 0) });
         var w = np.array(new System.Numerics.Complex[] { new(1, 0), new(-1, 0), new(0, 0) });
         Action act = () => np.average(a, weights: w);
-        act.Should().Throw<DivideByZeroException>();
+        act.Should().Throw<ZeroDivisionError>();
     }
 
     [TestMethod]
@@ -445,7 +445,7 @@ public class np_average_BattleTests
         // because avg.size == 0 and scl = a.size / avg.size = 0/0
         var a = np.zeros(new Shape(0, 3));
         Action act = () => np.average(a, axis: 1);
-        act.Should().Throw<DivideByZeroException>();
+        act.Should().Throw<ZeroDivisionError>();
     }
 
     [TestMethod]

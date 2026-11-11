@@ -629,8 +629,7 @@ namespace NumSharp.Backends
                     };
                 case NDArray nd:
                     if (Backends.Strings.NDStringUfuncs.IsText(nd))
-                        throw new TypeError(
-                            $"ufunc 'less' did not contain a loop with signature matching types ({nd.dtype.Meta}, {DTypeRegistry.PyLong}) -> None");
+                        throw new UFuncNoLoopError("less", 2, nd.dtype.Meta, DTypeRegistry.PyLong, null);
                     return NumericBelowOne(nd.GetAtIndex(0));
                 case null:
                     throw new TypeError("'<' not supported between instances of 'NoneType' and 'int'");

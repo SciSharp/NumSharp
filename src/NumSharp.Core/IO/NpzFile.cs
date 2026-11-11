@@ -21,6 +21,12 @@ namespace NumSharp.IO
     ///     <c>npz["weights.npy"]</c> are the same member — while <see cref="Files"/> reports the stripped
     ///     names, matching NumPy.
     ///
+    ///     A missing key raises NumPy's errors: the indexer a <see cref="KeyError"/> (<c>'x is not a file in the
+    ///     archive'</c>) and dot access an <see cref="AttributeError"/> (<c>x</c>). Footgun: although the class is an
+    ///     <see cref="IReadOnlyDictionary{TKey, TValue}"/>, its indexer does NOT throw .NET's
+    ///     <see cref="KeyNotFoundException"/>; test with <see cref="ContainsKey"/> or <see cref="TryGetValue"/> first, or
+    ///     catch <see cref="KeyError"/>.
+    ///
     ///     The archive holds an open file handle, so dispose it:
     ///     <code>
     ///     using var npz = np.load_npz("model.npz");
@@ -204,7 +210,8 @@ namespace NumSharp.IO
         /// <param name="key">The member name, with or without the <c>.npy</c> suffix.</param>
         /// <returns>The member's array, owned by the caller that first read it (the archive never disposes it).</returns>
         /// <exception cref="ObjectDisposedException">The archive was disposed.</exception>
-        /// <exception cref="KeyNotFoundException">No such member.</exception>
+        /// <exception cref="KeyError">No such member: NumPy's <c>KeyError</c>, whose text is Python's <c>str()</c> of it
+        ///     (<c>'x is not a file in the archive'</c>, quoted).</exception>
         /// <exception cref="FormatException">The member is not a .npy file — use <see cref="GetRawBytes"/> — or its header is malformed.</exception>
         /// <exception cref="NotSupportedException">The member holds a dtype NumSharp cannot load (an object array, say).</exception>
         /// <exception cref="InvalidDataException">A compressed member's data is corrupt.</exception>
@@ -219,7 +226,7 @@ namespace NumSharp.IO
                 ThrowIfDisposed();
 
                 if (!_keyToEntry.TryGetValue(key, out ZipArchiveEntry entry))
-                    throw new KeyNotFoundException($"{key} is not a file in the archive");
+                    throw new KeyError(PyLiteral.Repr($"{key} is not a file in the archive"));
 
                 if (_cache.TryGetValue(entry, out NDArray cached))
                     return cached;
@@ -267,14 +274,14 @@ namespace NumSharp.IO
         /// <param name="key">The member name, with or without the <c>.npy</c> suffix.</param>
         /// <returns>A new array holding the member's bytes.</returns>
         /// <exception cref="ObjectDisposedException">The archive was disposed.</exception>
-        /// <exception cref="KeyNotFoundException">No such member.</exception>
+        /// <exception cref="KeyError">No such member (the indexer's NumPy <c>KeyError</c> and text).</exception>
         /// <exception cref="InvalidDataException">A compressed member's data is corrupt.</exception>
         public byte[] GetRawBytes(string key)
         {
             ThrowIfDisposed();
 
             if (!_keyToEntry.TryGetValue(key, out ZipArchiveEntry entry))
-                throw new KeyNotFoundException($"{key} is not a file in the archive");
+                throw new KeyError(PyLiteral.Repr($"{key} is not a file in the archive"));
 
             lock (_archiveGate)
             {
@@ -441,8 +448,10 @@ namespace NumSharp.IO
 
             public override bool TryGetMember(GetMemberBinder binder, out object result)
             {
+                // NumPy's BagObj.__getattribute__: `raise AttributeError(key) from None` around the archive's KeyError,
+                // which CPython's attribute lookup then marks with the name and the BagObj (set_attribute_error_context).
                 if (!_owner.ContainsKey(binder.Name))
-                    throw new KeyNotFoundException($"{binder.Name} is not a file in the archive");
+                    throw new AttributeError(binder.Name, binder.Name, this);
 
                 result = _owner[binder.Name];
                 return true;

@@ -121,7 +121,7 @@ namespace NumSharp
         ///     points (S, U or <c>StringDType</c>), whose <c>x + 0.0</c> has no add loop (NumPy's UFuncTypeError text).</exception>
         /// <exception cref="ValueError"><c>deg must be non-negative</c>; a ragged list x; <c>Maximum allowed dimension
         ///     exceeded</c> (deg ≥ 2^63 - 1) or <c>array is too big; …</c> (the matrix's byte count).</exception>
-        /// <exception cref="OutOfMemoryException">The matrix cannot be allocated (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">The matrix cannot be allocated (NumPy's MemoryError).</exception>
         /// <exception cref="NotSupportedException">A null x, or a list holding None / a Python int past uint64 — NumPy builds an
         ///     object array and its <c>+ 0.0</c> computes with Python objects. (A str x is NumPy's str array: the TypeError
         ///     above.)</exception>
@@ -179,7 +179,7 @@ namespace NumSharp
         /// <returns>The exception to throw (NumPy's UFuncTypeError, the house <see cref="TypeError"/>).</returns>
         private static TypeError TextPlusZeroError(DType text)
             => text.Meta is VStringDTypeMeta
-                ? Backends.Strings.NDStringUfuncs.VStringNoLoop("add", new[] { text.Meta.ToString(), DTypeRegistry.PyFloat.ToString() })
+                ? Backends.Strings.NDStringUfuncs.VStringNoLoop("add", new object[] { text.Meta, DTypeRegistry.PyFloat })
                 : Backends.Strings.NDStringUfuncs.NoLoop("add", text, DType.Double);
 
         /// <summary>
@@ -231,8 +231,8 @@ namespace NumSharp
         ///     <c>array is too big; …</c>.</exception>
         /// <exception cref="IncorrectShapeException">No points: NumPy's reshape ValueError text (<c>cannot reshape array of size
         ///     0 into shape (0,newaxis)</c>).</exception>
-        /// <exception cref="OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated (MemoryError).</exception>
-        /// <exception cref="OverflowException">Scalar points with a Python int past the float range (<c>int too large to convert
+        /// <exception cref="MemoryError">A matrix NumPy allocates on the way cannot be allocated (MemoryError).</exception>
+        /// <exception cref="OverflowError">Scalar points with a Python int past the float range (<c>int too large to convert
         ///     to float</c>, NumPy's OverflowError at its per-element <c>+ 0.0</c> of the object stack).</exception>
         /// <exception cref="NotSupportedException">Points NumPy stacks into a str array, or into an object array it computes
         ///     with as Python objects (non-scalar points holding a Python int past uint64) or fails on (a None / str element) —
@@ -374,7 +374,7 @@ namespace NumSharp
         /// <param name="points">The 2 or 3 scalar points (C# numbers, <see cref="BigInteger"/>, 0-d NDArrays).</param>
         /// <returns>Per dimension, a new 0-d array of that number (its dtype is what NumPy's <c>{p}vander</c> receives). The
         ///     caller disposes them.</returns>
-        /// <exception cref="OverflowException">A Python int past the float range (<c>int too large to convert to float</c>),
+        /// <exception cref="OverflowError">A Python int past the float range (<c>int too large to convert to float</c>),
         ///     raised where NumPy raises it — at the first such element, before any later one is looked at.</exception>
         /// <exception cref="NotSupportedException">A None / str element (NumPy's <c>+ 0.0</c> raises a TypeError on it; NumSharp
         ///     refuses the object stack there, as everywhere).</exception>
@@ -436,7 +436,7 @@ namespace NumSharp
         /// <returns>The <c>(1, prod(deg + 1))</c> matrix.</returns>
         /// <exception cref="TypeError">A non-integer degree item.</exception>
         /// <exception cref="ValueError">A negative degree, or a dimension / product NumPy cannot allocate.</exception>
-        /// <exception cref="OutOfMemoryException">An allocation fails (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">An allocation fails (NumPy's MemoryError).</exception>
         private static NDArray MixedDtypeVander(PolyBasis basis, NDArray[] ps, object[] degItems)
         {
             int n = ps.Length;
@@ -793,7 +793,7 @@ namespace NumSharp
         /// <param name="dims">The array's dims.</param>
         /// <param name="t">Its dtype.</param>
         /// <exception cref="ValueError"><c>array is too big; …</c>.</exception>
-        /// <exception cref="OutOfMemoryException">The allocation fails (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">The allocation fails (NumPy's MemoryError).</exception>
         private static void Reserve(long[] dims, NPTypeCode t)
         {
             int size = DirectILKernelGenerator.GetTypeSize(t);

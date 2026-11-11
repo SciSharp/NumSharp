@@ -377,13 +377,13 @@ namespace NumSharp.Tests.IO
         public void FileName_NotFound_AfterTheCompressedNames()
         {
             string path = Path.Combine(Path.GetTempPath(), "ns_nosuch_" + Guid.NewGuid().ToString("N"));
-            var e = Assert.ThrowsException<FileNotFoundException>(() => np.loadtxt(path));
+            var e = Assert.ThrowsException<FileNotFoundError>(() => np.loadtxt(path));
             Assert.AreEqual($"{path} not found.", e.Message);
             string dotFile = Path.Combine(Path.GetTempPath(), "." + Guid.NewGuid().ToString("N"));
-            Assert.AreEqual($"{dotFile} not found.", Assert.ThrowsException<FileNotFoundException>(() => np.loadtxt(dotFile)).Message);
+            Assert.AreEqual($"{dotFile} not found.", Assert.ThrowsException<FileNotFoundError>(() => np.loadtxt(dotFile)).Message);
             // A compressed name has no further fall-back.
             string gz = path + ".gz";
-            Assert.AreEqual($"{gz} not found.", Assert.ThrowsException<FileNotFoundException>(() => np.loadtxt(gz)).Message);
+            Assert.AreEqual($"{gz} not found.", Assert.ThrowsException<FileNotFoundError>(() => np.loadtxt(gz)).Message);
         }
     }
 }

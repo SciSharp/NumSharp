@@ -227,8 +227,8 @@ namespace NumSharp.Backends.Strings
                 // None beside an ndarray is an object array: no loop pairs it with StringDType.
                 throw NDStringUfuncs.VStringNoLoop("subtract", new[]
                 {
-                    maxIsArray ? NDStringUfuncs.DispatchClass(max) : ObjectDTypeClass,
-                    minIsArray ? NDStringUfuncs.DispatchClass(min) : ObjectDTypeClass,
+                    maxIsArray ? NDStringUfuncs.DispatchMeta(max) : PyDescrPlaceholder.ObjectDTypeClass,
+                    minIsArray ? NDStringUfuncs.DispatchMeta(min) : PyDescrPlaceholder.ObjectDTypeClass,
                 });
             using var x = maxIsArray ? null : PyOperand(maxObj);
             using var y = minIsArray ? null : PyOperand(minObj);
@@ -269,9 +269,6 @@ namespace NumSharp.Backends.Strings
         // =============================================================================================================
         // shared statements
         // =============================================================================================================
-
-        /// <summary>The repr NumPy's dispatcher prints for the object DType class (an object array operand).</summary>
-        private const string ObjectDTypeClass = "<class 'numpy.dtypes.ObjectDType'>";
 
         /// <summary>
         ///     <c>_count_reduce_items</c>: the number of elements each output reduces (the product of the reduced extents; 1
@@ -314,7 +311,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="ret">The sum (unused when null: the class names the operands).</param>
         /// <returns>The refusal (not thrown).</returns>
         private static TypeError DivideRefusal(NDArray ret)
-            => NDStringUfuncs.VStringNoLoop("divide", new[] { DTypeRegistry.VString.ToString(), DTypeRegistry.FromTypeCode(NPTypeCode.Int64).ToString() });
+            => NDStringUfuncs.VStringNoLoop("divide", new object[] { DTypeRegistry.VString, DTypeRegistry.FromTypeCode(NPTypeCode.Int64) });
 
         /// <summary>
         ///     Python's <c>value / np.intp(rcount)</c> for the object of a 0-d <c>StringDType</c> sum: a <c>str</c> becomes

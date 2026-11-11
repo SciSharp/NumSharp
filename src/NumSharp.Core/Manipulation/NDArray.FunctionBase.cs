@@ -304,7 +304,7 @@ namespace NumSharp
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IndexOutOfRangeException"><paramref name="obj"/> is outside <c>[-N, N]</c>.</exception>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError,
+        /// <exception cref="OverflowError">A C# number literal outside the array dtype's range (NumPy's OverflowError,
         ///     <c>Python integer 1000 out of bounds for int8</c>).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
         /// <exception cref="ValueError">The values do not broadcast into the insertion slot (NumPy's view-assignment text,
@@ -331,7 +331,7 @@ namespace NumSharp
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
+        /// <exception cref="OverflowError">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
         /// <exception cref="ValueError">The values do not fit the insertion slots: for one position NumPy's view-assignment
         ///     text (<c>could not broadcast input array from shape ... into shape ...</c>), for several MapIter's (<c>shape
@@ -369,7 +369,7 @@ namespace NumSharp
         /// <exception cref="IndexOutOfRangeException">One position outside <c>[-N, N]</c> (NumPy's text prints the
         ///     sequence, <c>index [13] is out of bounds ...</c>); of several, a SHIFTED position outside <c>[-M, M)</c>,
         ///     <c>M = N + numnew</c> (<c>index 14 is out of bounds for axis 0 with size 14</c>).</exception>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
+        /// <exception cref="OverflowError">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
         /// <exception cref="ValueError">The values do not fit the insertion slots: for one position NumPy's view-assignment
         ///     text (<c>could not broadcast input array from shape ... into shape ...</c>), for several MapIter's (<c>shape
@@ -404,7 +404,7 @@ namespace NumSharp
         /// <exception cref="IndexOutOfRangeException">One position outside <c>[-N, N]</c> (NumPy's text prints the
         ///     sequence, <c>index [13] is out of bounds ...</c>); of several, a SHIFTED position outside <c>[-M, M)</c>,
         ///     <c>M = N + numnew</c> (<c>index 14 is out of bounds for axis 0 with size 14</c>).</exception>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
+        /// <exception cref="OverflowError">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
         /// <exception cref="ValueError">The values do not fit the insertion slots: for one position NumPy's view-assignment
         ///     text (<c>could not broadcast input array from shape ... into shape ...</c>), for several MapIter's (<c>shape
@@ -450,7 +450,7 @@ namespace NumSharp
         /// <exception cref="IndexOutOfRangeException">One integer position outside <c>[-N, N]</c>, or a mask's one True
         ///     past <c>N</c> (NumPy's text prints the array or the mask, <c>index [13] ...</c>); of several, a SHIFTED
         ///     position outside <c>[-M, M)</c>, <c>M = N + numnew</c>.</exception>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError),
+        /// <exception cref="OverflowError">A C# number literal outside the array dtype's range (NumPy's OverflowError),
         ///     or, for several positions, an axis length the index dtype cannot hold (<c>Python integer 300 out of bounds
         ///     for uint8</c>).</exception>
         /// <exception cref="TypeError">Several positions in an UNSIGNED index array: NumPy's in-place shift cannot cast
@@ -579,7 +579,7 @@ namespace NumSharp
         /// <param name="values">The values to insert; null is Python's None.</param>
         /// <param name="axis">The normalized axis.</param>
         /// <returns>A fresh array with the values at NumPy's positions and the array's slabs in the slots left over.</returns>
-        /// <exception cref="OverflowException">The axis length does not fit the index dtype: <c>indices &lt; 0</c> meets the
+        /// <exception cref="OverflowError">The axis length does not fit the index dtype: <c>indices &lt; 0</c> meets the
         ///     Python int <c>N</c>, which NEP 50 packs into that dtype (<c>Python integer 300 out of bounds for uint8</c>);
         ///     also a C# number literal outside the array dtype's range.</exception>
         /// <exception cref="TypeError">An unsigned index dtype: the in-place <c>indices[order] += np.arange(numnew)</c>
@@ -850,7 +850,7 @@ namespace NumSharp
 
             // `indices < 0`: text has no loop with a Python int (NumPy's weak int class), even for no element.
             if (text)
-                return new TypeError($"ufunc 'less' did not contain a loop with signature matching types ({obj.dtype.Meta}, {DTypeRegistry.PyLong}) -> None");
+                return new UFuncNoLoopError("less", 2, obj.dtype.Meta, DTypeRegistry.PyLong, null);
             return new IndexError("arrays used as indices must be of integer (or boolean) type");
         }
 
@@ -870,7 +870,7 @@ namespace NumSharp
         ///     pack with NumPy's <c>PyArray_Pack</c> rules; a C# array or collection as <c>np.asanyarray(value)</c>, cast
         ///     there too. A <c>StringDType</c> target, and a <see cref="System.Numerics.BigInteger"/> (a Python int past the
         ///     machine types, which has no marked 0-d form), are converted here, as before.</returns>
-        /// <exception cref="OverflowException">A <see cref="System.Numerics.BigInteger"/> outside the target dtype's range
+        /// <exception cref="OverflowError">A <see cref="System.Numerics.BigInteger"/> outside the target dtype's range
         ///     (NumPy's OverflowError: raised here, before the index checks, where NumPy raises it after them).</exception>
         /// <exception cref="ValueError">A <c>StringDType(coerce=False)</c> target and a non-text value (its setitem refusal,
         ///     raised here).</exception>
@@ -946,7 +946,7 @@ namespace NumSharp
         /// <param name="scalarObj">True when NumPy's scalar-obj quirk applies (moveaxis of the values' first axis).</param>
         /// <returns>The converted values with at least <c>arr.ndim</c> axes, the first one moved to <paramref name="axis"/>
         ///     for a scalar obj; <paramref name="values"/> itself when nothing changed.</returns>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range.</exception>
+        /// <exception cref="OverflowError">A C# number literal outside the array dtype's range.</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError), or a complex literal into a
         ///     real one.</exception>
         /// <exception cref="ValueError">Text values that do not parse as the array's number type.</exception>
@@ -1071,7 +1071,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="values"/> cannot broadcast to the indexing result: MapIter's text,
         ///     <c>shape mismatch: value array of shape (3,) could not be broadcast to indexing result of shape (2,)</c> (see
         ///     <see cref="NDArray.PrepareAssignedValue"/>); text values that do not parse as the array's number type.</exception>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range.</exception>
+        /// <exception cref="OverflowError">A C# number literal outside the array dtype's range.</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the covered <see cref="InsertMultiIndex"/>,
         ///     under the <c>[NDScoped]</c> <c>insert</c> overloads. The cast, the ndmin reshape, the broadcast view and
@@ -2471,7 +2471,7 @@ namespace NumSharp
         /// <param name="args">Extra arguments for the <c>Func&lt;NDArray, object[], NDArray&gt;</c> entries.</param>
         /// <returns>A new array of <paramref name="x"/>'s shape and dtype.</returns>
         /// <exception cref="ValueError">The function count is neither the condition count nor one more.</exception>
-        /// <exception cref="OverflowException">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
+        /// <exception cref="OverflowError">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
         ///     integer 1000 out of bounds for int8"), a float infinity into an integer dtype.</exception>
         /// <exception cref="TypeError">A complex constant into an integer or float <paramref name="x"/> (Python's
         ///     <c>int()</c> / <c>float()</c> texts), a None constant into an integer one.</exception>
@@ -2500,7 +2500,7 @@ namespace NumSharp
         /// <param name="args">Extra arguments for the <c>Func&lt;NDArray, object[], NDArray&gt;</c> entries.</param>
         /// <returns>A new array of <paramref name="x"/>'s shape and dtype.</returns>
         /// <exception cref="ValueError">The function count is neither the condition count nor one more.</exception>
-        /// <exception cref="OverflowException">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
+        /// <exception cref="OverflowError">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
         ///     integer 1000 out of bounds for int8"), a float infinity into an integer dtype.</exception>
         /// <exception cref="TypeError">A complex constant into an integer or float <paramref name="x"/> (Python's
         ///     <c>int()</c> / <c>float()</c> texts), a None constant into an integer one.</exception>
@@ -2540,7 +2540,7 @@ namespace NumSharp
         /// <param name="args">Extra arguments for the <c>Func&lt;NDArray, object[], NDArray&gt;</c> entries.</param>
         /// <returns>A new array of <paramref name="x"/>'s shape and dtype.</returns>
         /// <exception cref="ValueError">The function count is neither the condition count nor one more.</exception>
-        /// <exception cref="OverflowException">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
+        /// <exception cref="OverflowError">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
         ///     integer 1000 out of bounds for int8"), a float infinity into an integer dtype.</exception>
         /// <exception cref="TypeError">A complex constant into an integer or float <paramref name="x"/> (Python's
         ///     <c>int()</c> / <c>float()</c> texts), a None constant into an integer one.</exception>
@@ -2600,7 +2600,7 @@ namespace NumSharp
         /// <returns>A fresh array of <paramref name="x"/>'s shape and dtype, owned by the caller.</returns>
         /// <exception cref="ValueError">The function count is neither <c>condlist.Length</c> nor one more; or a constant
         ///     NumPy's store refuses (a float NaN, a text that is not a number, into a number dtype).</exception>
-        /// <exception cref="OverflowException">A constant does not fit <paramref name="x"/>'s integer dtype.</exception>
+        /// <exception cref="OverflowError">A constant does not fit <paramref name="x"/>'s integer dtype.</exception>
         /// <exception cref="TypeError">A complex constant into an integer or float <paramref name="x"/>, a None constant into
         ///     an integer one.</exception>
         /// <exception cref="IndexError">A condition that does not fit <paramref name="x"/> (NumPy's boolean-index text),
@@ -2746,7 +2746,7 @@ namespace NumSharp
         ///     into int8 is 44), null Python's None (NaN, <c>nan+nanj</c>, False, <c>'None'</c>, or int()'s TypeError), a C#
         ///     array or collection a Python list (one value per selected slot, or one for all).</param>
         /// <exception cref="IndexError">The mask does not fit <paramref name="y"/>.</exception>
-        /// <exception cref="OverflowException">A Python int outside an integer dtype, or a float infinity into one.</exception>
+        /// <exception cref="OverflowError">A Python int outside an integer dtype, or a float infinity into one.</exception>
         /// <exception cref="TypeError">A complex value into an integer or float dtype, None into an integer one.</exception>
         /// <exception cref="ValueError">A float NaN or a non-number text into a number dtype, or a sequence whose length is
         ///     neither 1 nor the number of selected slots.</exception>
@@ -2867,7 +2867,7 @@ namespace NumSharp
         /// <param name="value">One C# number or a text (the fused path admits nothing else).</param>
         /// <param name="dtype">The target dtype (x's dtype, a number dtype).</param>
         /// <param name="elemSize">The byte width of <paramref name="dtype"/>.</param>
-        /// <exception cref="OverflowException">A Python int outside an integer dtype, or a float infinity into one.</exception>
+        /// <exception cref="OverflowError">A Python int outside an integer dtype, or a float infinity into one.</exception>
         /// <exception cref="TypeError">A complex value into an integer or float dtype.</exception>
         /// <exception cref="ValueError">A float NaN or a non-number text into a number dtype.</exception>
         private static unsafe void WriteCoercedScalar(byte* dst, object value, NPTypeCode dtype, int elemSize)

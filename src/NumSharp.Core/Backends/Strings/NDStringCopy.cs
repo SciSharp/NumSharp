@@ -59,7 +59,7 @@ namespace NumSharp.Backends.Strings
         ///     <c>U+10FFFF</c>.</exception>
         /// <exception cref="ValueError">A text is not a number of the numeric destination's kind (NumPy's <c>int()</c> /
         ///     <c>float()</c> / <c>complex()</c> texts), or an integer text has more than 4300 digits.</exception>
-        /// <exception cref="OverflowException">An integer text does not fit the numeric destination (NumPy's LP64 texts).</exception>
+        /// <exception cref="OverflowError">An integer text does not fit the numeric destination (NumPy's LP64 texts).</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> text converted to complex is not UTF-8.</exception>
         /// <remarks>An EMPTY destination converts nothing, so it returns after the writeability and broadcast checks, as
         ///     NumPy's raw assignment does.</remarks>

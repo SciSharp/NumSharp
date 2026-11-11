@@ -688,7 +688,7 @@ namespace NumSharp
             }
             catch (OutOfMemoryException)
             {
-                throw new OutOfMemoryException(string.Create(CultureInfo.InvariantCulture, $"Insufficient memory for multivariate_hypergeometric with method='count' and sum(colors)={total}"));
+                throw new MemoryError(string.Create(CultureInfo.InvariantCulture, $"Insufficient memory for multivariate_hypergeometric with method='count' and sum(colors)={total}"));
             }
             ulong* choices = (ulong*)work.Address;
             try

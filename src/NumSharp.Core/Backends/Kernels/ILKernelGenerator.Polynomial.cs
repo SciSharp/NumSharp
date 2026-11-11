@@ -176,7 +176,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         /// <param name="a">The base.</param>
         /// <returns><c>a ** 2</c>, of CPython's result type (an int for an int or bool base).</returns>
-        /// <exception cref="OverflowException">
+        /// <exception cref="OverflowError">
         ///     A float whose square is past the float range — <c>float_pow</c> sees the platform <c>pow</c> return
         ///     <c>HUGE_VAL</c> and raises <c>OverflowError: (34, 'Result too large')</c>, the text of
         ///     <c>PyErr_SetFromErrno(ERANGE)</c>; or a complex whose square has an infinite part, which
@@ -220,7 +220,7 @@ namespace NumSharp.Backends.Kernels
                         return Float(1.0);                         // 1**w = 1, kept away from the libm
                     double r = Math.Pow(v, 2.0);
                     if (double.IsInfinity(r))
-                        throw new OverflowException("(34, 'Result too large')");
+                        throw new OverflowError("(34, 'Result too large')");
                     return Float(r);
                 }
                 default:
@@ -230,7 +230,7 @@ namespace NumSharp.Backends.Kernels
                     Complex p = ComplexProd(a.C, a.C);
                     Complex r = ComplexProd(s_complexOne, p);
                     if (double.IsInfinity(r.Real) || double.IsInfinity(r.Imaginary))
-                        throw new OverflowException("complex exponentiation");
+                        throw new OverflowError("complex exponentiation");
                     return Cplx(r);
                 }
             }
@@ -268,7 +268,7 @@ namespace NumSharp.Backends.Kernels
         ///     rounded, raising for a magnitude past the float range instead of returning inf.
         /// </summary>
         /// <returns>The nearest double.</returns>
-        /// <exception cref="OverflowException">The int does not fit a double — CPython's
+        /// <exception cref="OverflowError">The int does not fit a double — CPython's
         ///     <c>OverflowError: int too large to convert to float</c>.</exception>
         public double IntToDouble()
         {
@@ -281,7 +281,7 @@ namespace NumSharp.Backends.Kernels
                 return (double)(long)I;
             double d = double.Parse(I.ToString(CultureInfo.InvariantCulture), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
             if (double.IsInfinity(d))
-                throw new OverflowException("int too large to convert to float");
+                throw new OverflowError("int too large to convert to float");
             return d;
         }
 
@@ -311,11 +311,11 @@ namespace NumSharp.Backends.Kernels
         /// <param name="a">Left operand.</param>
         /// <param name="b">Right operand.</param>
         /// <returns>The Python result.</returns>
-        /// <exception cref="DivideByZeroException">Division by zero — Python's ZeroDivisionError with CPython's
+        /// <exception cref="ZeroDivisionError">Division by zero — Python's ZeroDivisionError with CPython's
         ///     text for the operand kinds (<c>division by zero</c>, <c>float division by zero</c>,
         ///     <c>complex division by zero</c>).</exception>
         /// <exception cref="NotSupportedException">An operator other than the four.</exception>
-        /// <exception cref="OverflowException">An int too large for a float met a float or complex operand
+        /// <exception cref="OverflowError">An int too large for a float met a float or complex operand
         ///     (<c>int too large to convert to float</c>), or an int/int quotient beyond the float range
         ///     (<c>integer division result too large for a float</c>).</exception>
         public static PyScalar Apply(BinaryOp op, in PyScalar a, in PyScalar b)
@@ -367,7 +367,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="b">Divisor.</param>
         /// <returns>The quotient, bit for bit as CPython 3.12 computes it (MSVC x64 build: SSE2, no FMA
         ///     contraction).</returns>
-        /// <exception cref="DivideByZeroException">Both parts of <paramref name="b"/> are ±0.</exception>
+        /// <exception cref="ZeroDivisionError">Both parts of <paramref name="b"/> are ±0.</exception>
         /// <remarks>
         ///     NOT NumPy's complex division (<c>ComplexDivideNumPy</c>): NumPy multiplies by a reciprocal
         ///     <c>scl = 1/denom</c> and turns division by zero into inf/nan, where CPython divides by
@@ -383,7 +383,7 @@ namespace NumSharp.Backends.Kernels
             {
                 // Divide top and bottom by b.real. (A NaN abs_breal fails this test and the next one.)
                 if (abs_breal == 0.0)
-                    throw new DivideByZeroException("complex division by zero");
+                    throw new ZeroDivisionError("complex division by zero");
                 double ratio = LeftDiv(b.Imaginary, b.Real);
                 double denom = LeftAdd(b.Real, LeftMul(b.Imaginary, ratio));
                 return new Complex(LeftDiv(LeftAdd(a.Real, LeftMul(a.Imaginary, ratio)), denom),
@@ -481,11 +481,11 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>CPython's <c>float / float</c>: a ±0 divisor is ZeroDivisionError, else the left operand's NaN wins.</summary>
         /// <param name="a">Dividend.</param><param name="b">Divisor.</param><returns>The quotient.</returns>
-        /// <exception cref="DivideByZeroException"><paramref name="b"/> is ±0 (<c>float division by zero</c>).</exception>
+        /// <exception cref="ZeroDivisionError"><paramref name="b"/> is ±0 (<c>float division by zero</c>).</exception>
         public static double FloatDiv(double a, double b)
         {
             if (b == 0)
-                throw new DivideByZeroException("float division by zero");
+                throw new ZeroDivisionError("float division by zero");
             return LeftDiv(a, b);
         }
 
@@ -501,13 +501,13 @@ namespace NumSharp.Backends.Kernels
         /// <param name="a">Dividend.</param>
         /// <param name="b">Divisor.</param>
         /// <returns>The quotient; a zero result carries the XOR of the operand signs (<c>0 / -5</c> is <c>-0.0</c>).</returns>
-        /// <exception cref="DivideByZeroException"><paramref name="b"/> is 0 (<c>division by zero</c>).</exception>
-        /// <exception cref="OverflowException">The quotient exceeds the float range (<c>integer division result too
+        /// <exception cref="ZeroDivisionError"><paramref name="b"/> is 0 (<c>division by zero</c>).</exception>
+        /// <exception cref="OverflowError">The quotient exceeds the float range (<c>integer division result too
         ///     large for a float</c>).</exception>
         public static double IntTrueDivide(BigInteger a, BigInteger b)
         {
             if (b.IsZero)
-                throw new DivideByZeroException("division by zero");
+                throw new ZeroDivisionError("division by zero");
             // CPython: negate = (a < 0) != (b < 0), with a zero dividend never negative.
             bool negate = (a.Sign < 0) != (b.Sign < 0);
             if (a.IsZero)
@@ -523,7 +523,7 @@ namespace NumSharp.Backends.Kernels
             const int DblMantDig = 53, DblMaxExp = 1024, DblMinExp = -1021;
             long diff = (long)aa.GetBitLength() - (long)bb.GetBitLength();
             if (diff > DblMaxExp)
-                throw new OverflowException("integer division result too large for a float");
+                throw new OverflowError("integer division result too large for a float");
             if (diff < DblMinExp - DblMantDig - 1)
                 return negate ? -0.0 : 0.0;
 
@@ -559,7 +559,7 @@ namespace NumSharp.Backends.Kernels
             // x now has at most DBL_MANT_DIG significant bits (plus trailing zeros): the conversion is exact.
             double dx = (double)x;
             if (shift + xBits >= DblMaxExp && (shift + xBits > DblMaxExp || dx == Math.ScaleB(1.0, (int)xBits)))
-                throw new OverflowException("integer division result too large for a float");
+                throw new OverflowError("integer division result too large for a float");
             double result = Math.ScaleB(dx, (int)shift);
             return negate ? -result : result;
         }

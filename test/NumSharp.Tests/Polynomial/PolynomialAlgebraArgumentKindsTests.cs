@@ -125,7 +125,7 @@ namespace NumSharp.Tests.Polynomial
             Raises<ValueError>(() => C.cheb2poly(new List<bool> { true, false }), "Coefficient arrays have no common type", "List<bool>");
             Raises<ValueError>(() => np.polynomial.hermite_e.poly2herme(Enumerable.Empty<object>()), "Coefficient array is empty",
                                "an empty LINQ sequence");
-            Raises<DivideByZeroException>(() => P.polydiv(c2, 0), "", "polydiv(c, 0)");
+            Raises<ZeroDivisionError>(() => P.polydiv(c2, 0), "", "polydiv(c, 0)");
         }
 
         /// <summary>
@@ -157,7 +157,7 @@ namespace NumSharp.Tests.Polynomial
             Raises<ValueError>(() => C.chebpow(c, "x"), "invalid literal for int() with base 10: 'x'", "chebpow(c, 'x')");
             Raises<ValueError>(() => C.chebpow(c, ""), "invalid literal for int() with base 10: ''", "chebpow(c, '')");
             Raises<ValueError>(() => C.chebpow(c, Half.NaN), "cannot convert float NaN to integer", "np.float16('nan')");
-            Raises<OverflowException>(() => C.chebpow(c, Half.PositiveInfinity), "cannot convert float infinity to integer",
+            Raises<OverflowError>(() => C.chebpow(c, Half.PositiveInfinity), "cannot convert float infinity to integer",
                                       "np.float16('inf')");
             Raises<ValueError>(() => C.chebpow(c, BigInteger.Pow(2, 70)), "Power is too large", "chebpow(c, 2**70)");
             Raises<ValueError>(() => C.chebpow(c, NDArray.Scalar((byte)250)), "Power is too large", "np.array(250, np.uint8)");
@@ -227,9 +227,9 @@ namespace NumSharp.Tests.Polynomial
             ((Action)(() => P.polypow(obj, p, NDArray.Scalar((float)System.Math.Pow(2, 60))))).Should().Throw<NotSupportedException>(
                 "the power rounds to float32 2**60 (through a double first): not exceeded");
             Raises<ValueError>(() => P.polypow(obj, p, System.Math.Pow(2, 60)), TooLarge, "a Python float compares exactly");
-            Raises<OverflowException>(() => P.polypow(obj, BigInteger.Pow(2, 63), NDArray.Scalar(true)), "int too big to convert",
+            Raises<OverflowError>(() => P.polypow(obj, BigInteger.Pow(2, 63), NDArray.Scalar(true)), "int too big to convert",
                                       "a bool limit compares in int64");
-            Raises<OverflowException>(() => P.polypow(obj, BigInteger.Pow(2, 1100), NDArray.Scalar(1.0)),
+            Raises<OverflowError>(() => P.polypow(obj, BigInteger.Pow(2, 1100), NDArray.Scalar(1.0)),
                                       "int too large to convert to float", "a float64 limit converts the power to a double");
         }
 
@@ -249,8 +249,8 @@ namespace NumSharp.Tests.Polynomial
             Raises<ValueError>(() => P.polymul(null, new object[] { new object[] { 1, 2 }, new object[] { 3 } }),
                                "setting an array element with a sequence. The requested array has an inhomogeneous shape after 1 " +
                                "dimensions. The detected shape was (2,) + inhomogeneous part.", "polymul(None, [[1, 2], [3]])");
-            Raises<DivideByZeroException>(() => P.polydiv(null, new[] { 0.0 }), "", "polydiv(None, [0.])");
-            Raises<DivideByZeroException>(() => P.polydiv(new object[] { null }, new[] { false }), "",
+            Raises<ZeroDivisionError>(() => P.polydiv(null, new[] { 0.0 }), "", "polydiv(None, [0.])");
+            Raises<ZeroDivisionError>(() => P.polydiv(new object[] { null }, new[] { false }), "",
                                           "polydiv([None], [False]): the zero test runs on the object copies");
             ((Action)(() => P.polydiv(null, new[] { 1.0 }))).Should().Throw<NotSupportedException>("None / 1.0 is object arithmetic");
             Raises<ValueError>(() => P.polypow(null, -1), "Power must be a non-negative integer.", "polypow(None, -1)");

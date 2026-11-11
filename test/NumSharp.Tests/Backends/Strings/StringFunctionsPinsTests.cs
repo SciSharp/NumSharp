@@ -102,7 +102,7 @@ namespace NumSharp.Tests.Backends.Strings
             using NDArray big = 9223372036854775808UL;
             using var u = np.array(new[] { "ab" });
             Action act = () => np.strings.find(u, a, big);
-            act.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            act.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
         }
 
         /// <summary>

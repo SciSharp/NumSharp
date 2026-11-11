@@ -69,7 +69,7 @@ namespace NumSharp.Backends
         /// <returns>A new 0-d array that holds the scalar in the comparison's loop dtype (float16, float32, or complex128
         ///     with float32-rounded parts), or in an integer array's own dtype when an integer 0-d operand fits it; null
         ///     when the operands stand as given. The caller owns the array and disposes it after the comparison.</returns>
-        /// <exception cref="OverflowException">A bool operand against a Python int at or past 2^63: NumPy's int64 pack
+        /// <exception cref="OverflowError">A bool operand against a Python int at or past 2^63: NumPy's int64 pack
         ///     fails ("Python int too large to convert to C long", the LP64 text).</exception>
         /// <remarks>
         ///     <para>
@@ -164,7 +164,7 @@ namespace NumSharp.Backends
         /// <param name="arrayType">The array's dtype: <see cref="NPTypeCode.Half"/> or <see cref="NPTypeCode.Single"/>.</param>
         /// <returns>A new 0-d array the caller owns: of <paramref name="arrayType"/> for a real value, or complex128 with
         ///     both parts rounded to float32 for a complex one (the complex64 NumPy compares at).</returns>
-        /// <exception cref="OverflowException">A <see cref="BigInteger"/> past the double range: CPython's
+        /// <exception cref="OverflowError">A <see cref="BigInteger"/> past the double range: CPython's
         ///     <c>float(int)</c> text, "int too large to convert to float".</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="arrayType"/> is neither float16 nor float32 — a
         ///     caller bug.</exception>
@@ -192,7 +192,7 @@ namespace NumSharp.Backends
                 d = PythonInt.ToDouble(bi);
                 // PythonInt.ToDouble saturates; CPython's float(int) raises past the double range instead.
                 if (double.IsInfinity(d))
-                    throw new OverflowException("int too large to convert to float");
+                    throw new OverflowError("int too large to convert to float");
             }
             else
             {
@@ -250,7 +250,7 @@ namespace NumSharp.Backends
         /// <param name="loop">The ufunc's final loop dtype.</param>
         /// <param name="loopFromPromotion">True when <paramref name="loop"/> came from promotion (no <c>dtype=</c>): a
         ///     bool array then meets the Python int in NumPy's int64 loop, whatever dtype NumSharp's table names.</param>
-        /// <exception cref="OverflowException">The 0-d Python-int operand does not fit the loop dtype (NumPy's texts, LP64:
+        /// <exception cref="OverflowError">The 0-d Python-int operand does not fit the loop dtype (NumPy's texts, LP64:
         ///     <see cref="NDExprTypeRules.CheckPyIntPacksIntoLoop"/>).</exception>
         /// <remarks>
         ///     <para>

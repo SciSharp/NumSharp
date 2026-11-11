@@ -305,7 +305,7 @@ namespace NumSharp.Tests.Backends.Strings
                 *(ulong*)s.Address = 1;
                 *(ulong*)(s.Address + 8) = 20UL | (0x40UL << 56);
                 Action read = () => s.GetIndex(0);
-                read.Should().Throw<OutOfMemoryException>().WithMessage("Failed to load string in StringDType getitem");
+                read.Should().Throw<MemoryError>().WithMessage("Failed to load string in StringDType getitem");
             }
             finally
             {
@@ -455,7 +455,7 @@ namespace NumSharp.Tests.Backends.Strings
                         VStringAllocator.release_allocators(a.Allocator, b.Allocator);
                     }
                 };
-                copy.Should().Throw<OutOfMemoryException>().WithMessage("Failed to deallocate string in string to string cast");
+                copy.Should().Throw<MemoryError>().WithMessage("Failed to deallocate string in string to string cast");
                 new Span<byte>(a.Address + 48, 16).Clear();
             }
             finally

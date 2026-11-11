@@ -146,7 +146,7 @@ namespace NumSharp
         ///     maximum possible size.</c>) — scanned left to right like NumPy's, so <c>(2^62, -1)</c> reports the size — or,
         ///     after a successful allocation, the shape errors of <see cref="OutputDims"/> (the parameters do not broadcast, or
         ///     the size is not their broadcast shape).</exception>
-        /// <exception cref="OutOfMemoryException">A valid size that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
+        /// <exception cref="MemoryError">A valid size that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
         /// <remarks>
         ///     <para>
         ///     NumPy's <c>cont_broadcast_N</c> / <c>discrete_broadcast_*</c> (and the Generator's hand-written binomial) run

@@ -148,7 +148,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="p"/> is 0-D.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="p"/>'s rank.</exception>
         /// <exception cref="TypeError"><paramref name="p"/> is complex.</exception>
-        /// <exception cref="OverflowException">
+        /// <exception cref="OverflowError">
         ///     <paramref name="p"/> is an unsigned integer (or char) — or a signed
         ///     integer too narrow for the derived interval — so the negative
         ///     <c>interval_low</c> (or <paramref name="period"/> itself) cannot be

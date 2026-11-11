@@ -51,7 +51,7 @@ namespace NumSharp.Tests.IO
             }
             positions.Should().Equal(319, 471, 769);
             Action fourth = () => np.load(ms, allow_pickle: true);
-            fourth.Should().Throw<EndOfStreamException>().WithMessage("No data left in file");
+            fourth.Should().Throw<EOFError>().WithMessage("No data left in file");
         }
 
         /// <summary>

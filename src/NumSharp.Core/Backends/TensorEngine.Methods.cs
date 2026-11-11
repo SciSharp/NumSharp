@@ -50,7 +50,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast
         ///     against <paramref name="arr"/>.</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <remarks>
         ///     <paramref name="out"/> joined the contract in 0.80.0 (the np-layer dtype plan's P1d), <paramref name="initial"/>
         ///     and <paramref name="where"/> in its P10 (decision D10): a breaking change for a subclass, which must add the
@@ -196,7 +196,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A read-only out, or operands that do not broadcast / an out that would be stretched.</exception>
         /// <exception cref="TypeError">A dtype= / out= cast NumPy's same_kind rule refuses.</exception>
         /// <exception cref="ArgumentException">A non-bool where.</exception>
-        /// <exception cref="OverflowException">A kept Python-int bound does not fit an integer loop dtype.</exception>
+        /// <exception cref="OverflowError">A kept Python-int bound does not fit an integer loop dtype.</exception>
         /// <exception cref="TypeError">No bound is left and the loop would be bool (positive has no bool loop).</exception>
         public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, DType dtype = null, NDArray @out = null, NDArray where = null);
 
@@ -435,7 +435,7 @@ namespace NumSharp
         ///     than <paramref name="arr"/>, a mask without <paramref name="initial"/> or an empty reduced axis without it
         ///     (NumPy's no-identity texts), an <paramref name="initial"/> the loop cannot hold (a NaN into an integer loop, a
         ///     sequence).</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
         /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.80.0
         ///     (the np-layer dtype plan, phase PE, E5: D2): the keyword path was the static
@@ -477,7 +477,7 @@ namespace NumSharp
         ///     than <paramref name="arr"/>, a mask without <paramref name="initial"/> or an empty reduced axis without it
         ///     (NumPy's no-identity texts), an <paramref name="initial"/> the loop cannot hold (a NaN into an integer loop, a
         ///     sequence).</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
         /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.80.0
         ///     (the np-layer dtype plan, phase PE, E5: D2): the keyword path was the static
@@ -511,7 +511,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast safely to int64 (uint64, the
         ///     floats, complex, text: NumPy's <c>Cannot cast array data from dtype('uint64') to dtype('int64') according to
         ///     the rule 'safe'</c>, which names a 0-d out a <c>scalar</c>).</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>Widened with <paramref name="out"/> in 0.80.0 (the np-layer dtype plan): NumPy's <c>out=</c> contract
         ///     was np's <c>NanArgWriteOut</c>, which np.argmax and np.nanargmax called around this member. Its two checks run
         ///     in NumPy's order, the shape before the dtype, and both before an element is compared
@@ -547,7 +547,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast safely to int64 (uint64, the
         ///     floats, complex, text: NumPy's <c>Cannot cast array data from dtype('uint64') to dtype('int64') according to
         ///     the rule 'safe'</c>, which names a 0-d out a <c>scalar</c>).</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>Widened with <paramref name="out"/> in 0.80.0 (the np-layer dtype plan): NumPy's <c>out=</c> contract
         ///     was np's <c>NanArgWriteOut</c>, which np.argmin and np.nanargmin called around this member. Its two checks run
         ///     in NumPy's order, the shape before the dtype, and both before an element is compared
@@ -583,7 +583,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast
         ///     against the input.</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a string request: NumPy's refusal (no multiply loop reduces text into itself;
         ///     integer counts into a text out repeat); a C# scalar as <paramref name="out"/>; a complex
         ///     <paramref name="initial"/> for a real loop.</exception>

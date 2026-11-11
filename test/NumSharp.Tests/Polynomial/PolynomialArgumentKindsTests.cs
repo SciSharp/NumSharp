@@ -224,7 +224,7 @@ namespace NumSharp.Tests.Polynomial
             AssertBytes(C.chebint(C64(), lbnd: BigInteger.Pow(2, 70)), "float64", new long[] { 4 },
                 "00000000000020cd000000000000e0bf000000000000e03f000000000000e03f");
             Action overflow = () => C.chebint(C64(), lbnd: BigInteger.Pow(2, 1030));
-            overflow.Should().Throw<OverflowException>().WithMessage("int too large to convert to float");
+            overflow.Should().Throw<OverflowError>().WithMessage("int too large to convert to float");
         }
 
         /// <summary>
@@ -253,7 +253,7 @@ namespace NumSharp.Tests.Polynomial
             Action mneg = () => C.chebint(c, -1, raggedK);
             mneg.Should().Throw<ValueError>().WithMessage("The order of integration must be non-negative");
             Action lbndFirst = () => C.chebint(c, 1, raggedK, lbnd: BigInteger.Pow(2, 1030));
-            lbndFirst.Should().Throw<OverflowException>().WithMessage("int too large to convert to float");
+            lbndFirst.Should().Throw<OverflowError>().WithMessage("int too large to convert to float");
             Action used = () => C.chebint(c, 1, raggedK);
             used.Should().Throw<ValueError>().WithMessage("*inhomogeneous shape after 1 dimensions. The detected shape was (2,) + inhomogeneous part.");
         }

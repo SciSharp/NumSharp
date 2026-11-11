@@ -178,13 +178,13 @@ namespace NumSharp.Tests.Manipulation
         public void WeakInteger_IsRangeChecked_NeverWrapped()
         {
             Action int8 = () => np.copyto(np.zeros(3, np.int8), 1000);
-            int8.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+            int8.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
 
             Action masked = () => np.copyto(np.zeros(3, np.int8), 1000, where: Mask(true, false, true));
-            masked.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+            masked.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
 
             Action negative = () => np.copyto(np.zeros(3, np.uint8), -1);
-            negative.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+            negative.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
 
             var u8 = np.array(new byte[] { 7, 7, 7 });
             np.copyto(u8, 0);

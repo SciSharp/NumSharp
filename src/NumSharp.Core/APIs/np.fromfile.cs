@@ -53,7 +53,11 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="sep"/> is null (NumPy's <c>sep=None</c>: <c>fromfile() argument 4 must be
         ///     str, not None</c>), or an <paramref name="offset"/> with a text separator (<c>'offset' argument only permitted
         ///     for binary files</c>), checked before the file is opened.</exception>
-        /// <exception cref="FileNotFoundException">No such file (Python's <c>[Errno 2] No such file or directory: 'name'</c>).</exception>
+        /// <exception cref="FileNotFoundError">No such file (Python's <c>[Errno 2] No such file or directory: 'name'</c>).</exception>
+        /// <exception cref="PermissionError">The file cannot be opened for reading (<c>[Errno 13] Permission denied</c>;
+        ///     on Windows also a directory).</exception>
+        /// <exception cref="IsADirectoryError">The name is a directory (Linux and macOS: <c>[Errno 21] Is a
+        ///     directory</c>).</exception>
         /// <exception cref="OSError">An offset before the start of the file (<c>[Errno 22] Invalid argument</c>).</exception>
         /// <exception cref="ValueError"><paramref name="sep"/> holds a NUL; a <c>StringDType</c> (<c>Cannot read into object
         ///     array</c>); an unsized string dtype with a negative count, or a count past the end of a binary file
@@ -72,16 +76,9 @@ namespace NumSharp
             // array_fromfile tests offset-with-a-separator before it opens the file, so a missing file reports this first.
             if (offset != 0 && sepBytes.Length != 0)
                 throw new TypeError("'offset' argument only permitted for binary files");
-            FileStream fs;
-            try
-            {
-                fs = NumSharp.IO.NDFileShare.OpenRead(file);
-            }
-            catch (FileNotFoundException e)
-            {
-                throw new FileNotFoundException(
-                    $"[Errno 2] No such file or directory: {Backends.Printing.PyRepr.Str(file)}", file, e);
-            }
+            // A missing or unreadable file is CPython open()'s FileNotFoundError / PermissionError, raised by the open
+            // itself with Python's "[Errno 2] No such file or directory: 'name'".
+            FileStream fs = NumSharp.IO.NDFileShare.OpenRead(file);
             using (fs)
                 return ArrayFileIO.FromFile(fs, dtype, count, sepBytes, offset);
         }

@@ -241,7 +241,7 @@ namespace NumSharp.Tests
             using var npz = np.load_npz(np.savez(np.arange(3)));
 
             Action act = () => { var _ = npz["nope"]; };
-            act.Should().Throw<KeyNotFoundException>().WithMessage("*nope is not a file in the archive*");
+            act.Should().Throw<KeyError>().WithMessage("*nope is not a file in the archive*");
         }
 
         [TestMethod]
@@ -321,7 +321,7 @@ namespace NumSharp.Tests
             np.load_npy(ms).shape.Should().Equal(new long[] { 2, 2 });
 
             Action act = () => np.load_npy(ms);
-            act.Should().Throw<EndOfStreamException>("there is no third array");
+            act.Should().Throw<EOFError>("there is no third array");
         }
 
         [TestMethod]
@@ -381,7 +381,7 @@ namespace NumSharp.Tests
         public void Load_EmptyFile_ThrowsEof()
         {
             Action act = () => np.load(Array.Empty<byte>());
-            act.Should().Throw<EndOfStreamException>().WithMessage("*No data left in file*");
+            act.Should().Throw<EOFError>().WithMessage("*No data left in file*");
         }
 
         #endregion

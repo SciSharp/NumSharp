@@ -26,11 +26,11 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="device"/> is not <c>"cpu"</c>; the length is NaN (<c>arange: cannot
         ///     compute length</c>) or past npy_intp (<c>Maximum allowed size exceeded</c>); the array is past the byte limit; or
         ///     a NaN is stored into an integer dtype.</exception>
-        /// <exception cref="DivideByZeroException"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: float
+        /// <exception cref="ZeroDivisionError"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: float
         ///     division by zero</c>).</exception>
         /// <exception cref="TypeError"><paramref name="dtype"/> is a text dtype (<c>arange() not supported for inputs with
         ///     DType ...</c>), or bool with more than two elements.</exception>
-        /// <exception cref="OverflowException"><paramref name="start"/> or <paramref name="start"/> + <paramref name="step"/>
+        /// <exception cref="OverflowError"><paramref name="start"/> or <paramref name="start"/> + <paramref name="step"/>
         ///     does not fit an integer dtype (<c>Python integer 300 out of bounds for int8</c>).</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no NumSharp storage yet (datetime64,
         ///     timedelta64).</exception>
@@ -80,7 +80,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="device"/> is not <c>"cpu"</c>; the length is NaN or past npy_intp; or
         ///     the array is past the byte limit.</exception>
         /// <exception cref="TypeError"><paramref name="dtype"/> is a text dtype, or bool with more than two elements.</exception>
-        /// <exception cref="OverflowException"><paramref name="start"/> or <paramref name="start"/> + 1 does not fit an integer
+        /// <exception cref="OverflowError"><paramref name="start"/> or <paramref name="start"/> + 1 does not fit an integer
         ///     dtype.</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no NumSharp storage yet (datetime64,
         ///     timedelta64).</exception>
@@ -118,7 +118,7 @@ namespace NumSharp
         /// <param name="step">Spacing between values. Default is 1.</param>
         /// <returns>Array of evenly spaced float values.</returns>
         /// <exception cref="ValueError">The length is NaN or past npy_intp, or the array is past the byte limit.</exception>
-        /// <exception cref="DivideByZeroException"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: float
+        /// <exception cref="ZeroDivisionError"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: float
         ///     division by zero</c>).</exception>
         public static NDArray arange(float start, float stop, float step = 1)
             => arange(start, stop, step, NPTypeCode.Single);
@@ -131,7 +131,7 @@ namespace NumSharp
         /// <param name="step">Spacing between values. Default is 1.</param>
         /// <returns>Array of evenly spaced double values.</returns>
         /// <exception cref="ValueError">The length is NaN or past npy_intp, or the array is past the byte limit.</exception>
-        /// <exception cref="DivideByZeroException"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: float
+        /// <exception cref="ZeroDivisionError"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: float
         ///     division by zero</c>).</exception>
         public static NDArray arange(double start, double stop, double step = 1)
             => arange(start, stop, step, NPTypeCode.Double);
@@ -154,7 +154,7 @@ namespace NumSharp
         /// <param name="step">Spacing between values. Default is 1.</param>
         /// <returns>Array of evenly spaced int64 values.</returns>
         /// <exception cref="ValueError">The array is past the byte limit (<c>array is too big</c>).</exception>
-        /// <exception cref="DivideByZeroException"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: division by
+        /// <exception cref="ZeroDivisionError"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: division by
         ///     zero</c>).</exception>
         /// <remarks>NumPy 2.x returns int64 for integer arange.</remarks>
         public static NDArray arange(int start, int stop, int step = 1)
@@ -177,7 +177,7 @@ namespace NumSharp
         /// <param name="stop">End of interval (exclusive), a Python int.</param>
         /// <param name="step">Spacing between values, a Python int. Default is 1.</param>
         /// <returns>Array of evenly spaced int64 values.</returns>
-        /// <exception cref="DivideByZeroException"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: division by
+        /// <exception cref="ZeroDivisionError"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: division by
         ///     zero</c>).</exception>
         /// <exception cref="ValueError">The array is past the byte limit (<c>array is too big</c>).</exception>
         /// <remarks>

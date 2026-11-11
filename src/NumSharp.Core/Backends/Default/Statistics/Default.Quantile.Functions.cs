@@ -320,7 +320,7 @@ namespace NumSharp.Backends
         ///     cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape (0,newaxis)</c>), before
         ///     q's rank, the method and the data's refusals.</exception>
         /// <exception cref="InvalidCastException">A q array of a dtype without a real value (complex).</exception>
-        /// <exception cref="OverflowException">An integer q array whose virtual indexes leave its dtype (see
+        /// <exception cref="OverflowError">An integer q array whose virtual indexes leave its dtype (see
         ///     <see cref="QuantileCompute"/>).</exception>
         /// <remarks>
         ///     Moved from the sixteen public overloads of <c>np.quantile</c> and <c>np.percentile</c> by the np-layer dtype
@@ -542,7 +542,7 @@ namespace NumSharp.Backends
         ///     index (<c>_ureduce</c>'s prologue: <c>too many indices for array ...</c>, or <c>index 0 is out of bounds for
         ///     axis 0 with size 0</c> at a reduced axis of length 0) — before the text refusals.</exception>
         /// <exception cref="InvalidCastException">A q array of a dtype without a real value (complex).</exception>
-        /// <exception cref="OverflowException">An integer q array whose virtual indexes leave its dtype.</exception>
+        /// <exception cref="OverflowError">An integer q array whose virtual indexes leave its dtype.</exception>
         /// <remarks>
         ///     Moved from the public overloads of <c>np.nanquantile</c> and <c>np.nanpercentile</c> (and their private
         ///     <c>NanQuantileOfArrayQ</c> / <c>NanPercentileOfArrayQ</c>) by the np-layer dtype plan's P1a (step 1),

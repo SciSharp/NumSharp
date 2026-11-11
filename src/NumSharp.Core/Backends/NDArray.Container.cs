@@ -234,7 +234,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="value"/> is null (Python's <c>None</c>) and this is an integer (or
         ///     <c>decimal</c>) array: <c>int(None)</c>'s text, after the index's bounds check. A float array stores NaN,
         ///     complex <c>nan+nanj</c>, bool <c>False</c>, text <c>'None'</c> or a <c>StringDType</c> NA object.</exception>
-        /// <exception cref="OverflowException">A C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
+        /// <exception cref="OverflowError">A C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
         /// <exception cref="ValueError">The array is read-only, the value does not broadcast to the selection, or does not
         ///     parse into its dtype.</exception>
         public void __setitem__(object key, object value)
@@ -320,7 +320,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException">An entry of the key is null.</exception>
         /// <exception cref="TypeError">The value does not convert: <c>int()</c>'s text for None or a list into an integer
         ///     dtype, <c>must be real number, not list</c> for complex.</exception>
-        /// <exception cref="OverflowException">A Python int an integer dtype cannot hold (NumPy's OverflowError, LP64
+        /// <exception cref="OverflowError">A Python int an integer dtype cannot hold (NumPy's OverflowError, LP64
         ///     texts).</exception>
         /// <remarks>
         ///     <para>
@@ -451,7 +451,7 @@ namespace NumSharp
         /// <param name="value">The Python value (None, an int, a list, ...).</param>
         /// <returns>The 0-d array; the caller owns it.</returns>
         /// <exception cref="TypeError">See <see cref="SetItemConverted"/>.</exception>
-        /// <exception cref="OverflowException">See <see cref="SetItemConverted"/>.</exception>
+        /// <exception cref="OverflowError">See <see cref="SetItemConverted"/>.</exception>
         /// <exception cref="ValueError">The dtype's setitem refuses the value (a sequence into a fixed-width text or float
         ///     dtype).</exception>
         private unsafe NDArray PackForStore(object value)

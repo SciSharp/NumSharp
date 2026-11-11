@@ -79,7 +79,7 @@ namespace NumSharp
         /// <returns>The children, of this bit generator's concrete type (NumPy's <c>type(self)(seed=s)</c>).</returns>
         /// <exception cref="TypeError">The seed sequence cannot spawn — e.g. none (legacy-seeded MT19937, keyed Philox): NumPy's
         /// <c>The underlying SeedSequence does not implement spawning.</c></exception>
-        /// <exception cref="OverflowException">The seed sequence's child count would leave its uint32 range.</exception>
+        /// <exception cref="OverflowError">The seed sequence's child count would leave its uint32 range.</exception>
         /// <remarks>Spawning advances the parent seed sequence's <c>n_children_spawned</c>, so repeated calls never repeat a child.</remarks>
         public BitGenerator[] spawn(int n_children)
         {

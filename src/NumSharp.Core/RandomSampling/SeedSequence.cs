@@ -160,7 +160,7 @@ namespace NumSharp
         /// a float/bool array, a 0-d array, a null element); <paramref name="spawn_key"/> is not iterable (NumPy's
         /// <c>'int' object is not iterable</c>), is a 0-d array (<c>iteration over a 0-d array</c>) or holds an element the
         /// coercion refuses (a float: <c>seed must be integer</c>; null: <c>object of type 'NoneType' has no len()</c>).</exception>
-        /// <exception cref="OutOfMemoryException"><paramref name="pool_size"/> is larger than an array can hold (NumPy's
+        /// <exception cref="ArrayMemoryError"><paramref name="pool_size"/> is larger than an array can hold (NumPy's
         ///     <c>MemoryError</c> from <c>np.zeros(pool_size)</c>).</exception>
         public SeedSequence(object entropy, object spawn_key = null, long pool_size = DEFAULT_POOL_SIZE, uint n_children_spawned = 0)
         {
@@ -169,7 +169,7 @@ namespace NumSharp
             // The pool is a managed uint[] (it is mixed word by word and read by every generate_state): a size past what an
             // array can hold is NumPy's MemoryError from np.zeros(pool_size), refused before any entropy is drawn for it.
             if (pool_size > Array.MaxLength)
-                throw new OutOfMemoryException(string.Create(CultureInfo.InvariantCulture, $"Unable to allocate an entropy pool of {pool_size} uint32 words."));
+                throw new ArrayMemoryError(new[] { pool_size }, DType.UInt32);
 
             if (entropy is null)
             {
@@ -692,7 +692,7 @@ namespace NumSharp
         /// <summary>Validates a child count against NumPy's uint32 attribute.</summary>
         /// <param name="n">The count.</param>
         /// <returns>The count as uint32.</returns>
-        /// <exception cref="OverflowException">Negative, or above 2**32 - 1 (NumPy's OverflowError texts).</exception>
+        /// <exception cref="OverflowError">Negative, or above 2**32 - 1 (NumPy's OverflowError texts).</exception>
         /// <remarks>
         ///     Cython converts a Python int to <c>uint32_t</c> through <c>unsigned long</c> where that type is wider, so the
         ///     too-large text is LP64 NumPy's <c>value too large to convert to uint32_t</c> — the platform NumSharp's legacy
@@ -702,9 +702,9 @@ namespace NumSharp
         private static uint ToUInt32Count(long n)
         {
             if (n < 0)
-                throw new OverflowException("can't convert negative value to uint32_t");
+                throw new OverflowError("can't convert negative value to uint32_t");
             if (n > uint.MaxValue)
-                throw new OverflowException("value too large to convert to uint32_t");
+                throw new OverflowError("value too large to convert to uint32_t");
             return (uint)n;
         }
 
@@ -772,7 +772,7 @@ namespace NumSharp
         /// address (<c>array is too big; ...</c>) — for uint64 the DOUBLED count is what NumPy allocates, so one that leaves
         /// int64 is <c>Maximum allowed dimension exceeded</c> — or <paramref name="dtype"/> is not the NATIVE uint32/uint64
         /// (NumPy compares with <c>==</c>, so a byte-swapped <c>'&gt;u4'</c> is rejected too).</exception>
-        /// <exception cref="OutOfMemoryException">A valid count that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
+        /// <exception cref="MemoryError">A valid count that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
         /// <remarks>
         ///     NumPy fills <c>np.zeros(n_words * (2 if uint64 else 1), uint32)</c> from the hash cycle and views a uint64 request
         ///     little-endian (<c>astype('&lt;u4').view('&lt;u8')</c>); the uint64 array here is written through the same uint32
@@ -865,7 +865,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="n_children">The number of children (a C# <c>int</c>: the result is an array, which cannot hold more).</param>
         /// <returns>The children (empty for 0).</returns>
-        /// <exception cref="OverflowException">The child count would leave the uint32 range NumPy stores it in (a negative
+        /// <exception cref="OverflowError">The child count would leave the uint32 range NumPy stores it in (a negative
         /// <paramref name="n_children"/> included — NumPy raises after an empty loop, and no children are returned).</exception>
         /// <remarks>
         ///     The overflow is refused BEFORE any child is built, which is where NumPy 2.4.2 diverges: its loop counter is a

@@ -293,7 +293,7 @@ namespace NumSharp
         ///     <c>'Polynomial' object has no attribute 'coef'</c>.</exception>
         private protected NDArray Coef => _disposed
             ? throw new ObjectDisposedException(_kind.__name__)
-            : _coef ?? throw new AttributeError($"'{_kind.__name__}' object has no attribute 'coef'");
+            : _coef ?? throw new AttributeError($"'{_kind.__name__}' object has no attribute 'coef'", "coef", this);
 
         /// <summary>Appends an attribute to NumPy's <c>__dict__</c> order the first time it is assigned on the instance.</summary>
         /// <param name="name">The attribute (<c>domain</c>, <c>window</c>, <c>maxpower</c>).</param>
@@ -406,7 +406,7 @@ namespace NumSharp
         /// <summary>The symbol the printers write for the variable (NumPy's read-only <c>symbol</c>, default <c>"x"</c>).</summary>
         /// <exception cref="AttributeError">A state set by <see cref="__setstate__"/> without <c>_symbol</c>: NumPy's
         ///     <c>'Polynomial' object has no attribute '_symbol'</c>.</exception>
-        public string symbol => _symbol ?? throw new AttributeError($"'{_kind.__name__}' object has no attribute '_symbol'");
+        public string symbol => _symbol ?? throw new AttributeError($"'{_kind.__name__}' object has no attribute '_symbol'", "_symbol", this);
 
         /// <summary>
         ///     The largest power <c>__pow__</c> allows (NumPy's <c>maxpower</c>): the class attribute (<c>Class.maxpower</c>,
@@ -464,7 +464,7 @@ namespace NumSharp
         /// <exception cref="ObjectDisposedException">A series was disposed.</exception>
         public bool has_samecoef(NDPolyBase other)
         {
-            if (other is null) throw new AttributeError("'NoneType' object has no attribute 'coef'");
+            if (other is null) throw new AttributeError("'NoneType' object has no attribute 'coef'", "coef", null);
             return PyLen(Coef) == PyLen(other.Coef) && AllEqual(Coef, other.Coef);
         }
 
@@ -475,7 +475,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Domains whose shapes do not broadcast (an assigned domain).</exception>
         public bool has_samedomain(NDPolyBase other)
         {
-            if (other is null) throw new AttributeError("'NoneType' object has no attribute 'domain'");
+            if (other is null) throw new AttributeError("'NoneType' object has no attribute 'domain'", "domain", null);
             return AllEqual(domain, other.domain);
         }
 
@@ -486,7 +486,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Windows whose shapes do not broadcast (an assigned window).</exception>
         public bool has_samewindow(NDPolyBase other)
         {
-            if (other is null) throw new AttributeError("'NoneType' object has no attribute 'window'");
+            if (other is null) throw new AttributeError("'NoneType' object has no attribute 'window'", "window", null);
             return AllEqual(window, other.window);
         }
 
@@ -722,7 +722,7 @@ namespace NumSharp
         ///     unparsable str — a parsable one fails the <c>!=</c>).</exception>
         /// <exception cref="TypeError">int() refuses <paramref name="size"/> (None, complex, a list, an array of one or more
         ///     dims).</exception>
-        /// <exception cref="OverflowException">An infinity.</exception>
+        /// <exception cref="OverflowError">An infinity.</exception>
         public virtual NDPolyBase truncate(object size)
         {
             using var scope = NDScope.Open();
@@ -748,7 +748,7 @@ namespace NumSharp
         /// <param name="differs">Whether <c>int(v) != v</c>.</param>
         /// <returns><c>int(v)</c>.</returns>
         /// <exception cref="ValueError">int()'s ValueErrors (a NaN, an unparsable str).</exception>
-        /// <exception cref="OverflowException">An infinity.</exception>
+        /// <exception cref="OverflowError">An infinity.</exception>
         /// <exception cref="TypeError">int() refuses <paramref name="v"/>.</exception>
         private static System.Numerics.BigInteger PyIntOf(object v, out bool differs)
         {

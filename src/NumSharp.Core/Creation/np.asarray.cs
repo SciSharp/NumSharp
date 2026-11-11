@@ -70,7 +70,7 @@ namespace NumSharp
         ///     is allowed, but received: ...</c>).</exception>
         /// <exception cref="ArgumentException"><paramref name="copy"/> is <c>false</c> and a copy (or a C# literal's or
         ///     <c>None</c>'s conversion) is required.</exception>
-        /// <exception cref="OverflowException">A C# literal out of <paramref name="dtype"/>'s integer range (NumPy's
+        /// <exception cref="OverflowError">A C# literal out of <paramref name="dtype"/>'s integer range (NumPy's
         ///     OverflowError texts).</exception>
         /// <exception cref="ValueError">A float NaN literal into an integer <paramref name="dtype"/>.</exception>
         /// <exception cref="TypeError">A complex literal into a real <paramref name="dtype"/>, or <c>None</c> into an integer

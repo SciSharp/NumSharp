@@ -193,7 +193,7 @@ namespace NumSharp.Tests.Documentation
         {
             var a = np.zeros(3, dtype: np.int8);
             Action weak = () => a.fill(300);
-            weak.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            weak.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
             a.fill(NDArray.Scalar<int>(300));
             a.ToArray<sbyte>().Should().Equal((sbyte)44, (sbyte)44, (sbyte)44);
         }

@@ -164,7 +164,7 @@ namespace NumSharp
         ///     flags AND the builder reads THIS heap through pointers captured at the start: <see cref="FlagPiece"/> would
         ///     allocate the flags lazily, after that capture, and the captured pointers would miss every flag.</param>
         /// <returns>The heap (one reference, the caller's).</returns>
-        /// <exception cref="OutOfMemoryException">An array cannot be allocated (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">An array cannot be allocated (NumPy's MemoryError).</exception>
         /// <remarks>Each array is allocated once, at its final size, and not filled (every slot is written before it is
         ///     read) — except <c>offsets[0]</c>, the units the first piece starts at, and the flags, whose unwritten slots
         ///     must read false. An <see cref="Empty(char)"/> heap grown to the same size allocated every array twice and

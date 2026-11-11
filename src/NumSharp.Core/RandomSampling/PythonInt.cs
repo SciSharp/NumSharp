@@ -28,7 +28,7 @@ namespace NumSharp
         /// <returns>The integer value.</returns>
         /// <exception cref="ValueError">A NaN (<c>cannot convert float NaN to integer</c>) or an unparsable string / bytes
         /// (<c>invalid literal for int() with base 10: '…'</c> / <c>b'…'</c>).</exception>
-        /// <exception cref="OverflowException">An infinity (<c>cannot convert float infinity to integer</c>).</exception>
+        /// <exception cref="OverflowError">An infinity (<c>cannot convert float infinity to integer</c>).</exception>
         /// <exception cref="TypeError">A complex or any other non-real value (<c>int() argument must be a string, a
         /// bytes-like object or a real number, not '…'</c>).</exception>
         internal static BigInteger From(object v)
@@ -103,13 +103,13 @@ namespace NumSharp
         /// <param name="d">The float.</param>
         /// <returns>The truncated integer.</returns>
         /// <exception cref="ValueError"><paramref name="d"/> is NaN.</exception>
-        /// <exception cref="OverflowException"><paramref name="d"/> is infinite.</exception>
+        /// <exception cref="OverflowError"><paramref name="d"/> is infinite.</exception>
         private static BigInteger FromDouble(double d)
         {
             if (double.IsNaN(d))
                 throw new ValueError("cannot convert float NaN to integer");
             if (double.IsInfinity(d))
-                throw new OverflowException("cannot convert float infinity to integer");
+                throw new OverflowError("cannot convert float infinity to integer");
             // BigInteger(double) keeps the exact integral part of the binary value (2.0**64 is exactly 2**64).
             return new BigInteger(Math.Truncate(d));
         }

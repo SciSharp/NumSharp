@@ -632,13 +632,11 @@ namespace NumSharp.Backends.Strings
                 // A text out: the add's output cast lets the value through (written as its str), and the subtract's dtype=
                 // names the out's class, for which no loop takes two Python numbers.
                 UnmanagedStorage.Copyto(target, lerp, NPY_CASTING.NPY_UNSAFE_CASTING);
-                string operand = PyClassOf(b).ToString();
-                throw NDStringUfuncs.VStringNoLoop("subtract", new[] { operand, DTypeRegistry.PyFloat.ToString() },
-                    target.dtype.Meta.ToString());
+                throw NDStringUfuncs.VStringNoLoop("subtract", new object[] { PyClassOf(b), DTypeRegistry.PyFloat },
+                    target.dtype.Meta);
             }
             if (!DTypeCasting.CanCastTypeTo(loop, target.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new TypeError($"Cannot cast ufunc 'add' output from {loop.ToString(true)} to {target.dtype.ToString(true)} " +
-                                    "with casting rule 'same_kind'");
+                throw new UFuncOutputCastingError("add", 1, "same_kind", loop, target.dtype, 2);
             UnmanagedStorage.Copyto(target, lerp, NPY_CASTING.NPY_UNSAFE_CASTING);
             return @out;
         }
@@ -701,7 +699,7 @@ namespace NumSharp.Backends.Strings
         {
             if (op is "percentile" or "nanpercentile")
                 // `q = np.true_divide(q, 100)`.
-                return NDStringUfuncs.VStringNoLoop("divide", new[] { q.dtype.Meta.ToString(), DTypeRegistry.PyLong.ToString() });
+                return NDStringUfuncs.VStringNoLoop("divide", new object[] { q.dtype.Meta, DTypeRegistry.PyLong });
 
             if (q.ndim == 1 && q.size < 10)
             {

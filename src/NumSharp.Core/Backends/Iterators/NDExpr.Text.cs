@@ -630,7 +630,7 @@ namespace NumSharp.Backends.Iteration
         /// <inheritdoc/>
         /// <exception cref="ValueError">An element that does not parse (NumPy's <c>invalid literal for int() ...</c>, <c>could
         ///     not convert string to float: ...</c>), or a <c>StringDType</c> NA cast to a non-nullable type.</exception>
-        /// <exception cref="OverflowException">A parsed integer out of the target's range (NumPy's
+        /// <exception cref="OverflowError">A parsed integer out of the target's range (NumPy's
         ///     <c>OverflowError</c>).</exception>
         /// <exception cref="UnicodeEncodeError">A <c>U</c> / StringDType element outside ASCII cast to <c>S</c> (NumPy's
         ///     ascii codec refusal).</exception>

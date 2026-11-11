@@ -36,7 +36,7 @@ namespace NumSharp
         ///     <c>'NoneType' object has no attribute 'capsule'</c> (its constructor reads <c>bit_generator.capsule</c>).</exception>
         public Generator(BitGenerator bit_generator)
         {
-            _bitGenerator = bit_generator ?? throw new AttributeError("'NoneType' object has no attribute 'capsule'");
+            _bitGenerator = bit_generator ?? throw new AttributeError("'NoneType' object has no attribute 'capsule'", "capsule", null);
         }
 
         /// <summary>The bit generator supplying this Generator's stream.</summary>
@@ -62,7 +62,7 @@ namespace NumSharp
         /// <returns>The children, each a <see cref="Generator"/> over a fresh bit generator of the same type.</returns>
         /// <exception cref="TypeError">The bit generator's seed sequence cannot spawn (a legacy-seeded <see cref="MT19937"/>, a
         /// keyed <see cref="Philox"/>): <c>The underlying SeedSequence does not implement spawning.</c></exception>
-        /// <exception cref="OverflowException">The seed sequence's child count would leave its uint32 range (e.g. a negative count).</exception>
+        /// <exception cref="OverflowError">The seed sequence's child count would leave its uint32 range (e.g. a negative count).</exception>
         /// <remarks>
         ///     Spawning advances the seed sequence's <see cref="SeedSequence.n_children_spawned"/>, so it never repeats a
         ///     child; it does NOT consume this generator's stream (the children are seeded, not drawn).

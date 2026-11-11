@@ -53,7 +53,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>None</c> into a <c>StringDType(coerce=False)</c>; an array fill value that does not
         ///     broadcast into the result or whose text does not parse into a numeric dtype; a negative dimension or a byte
         ///     count past the limit (<see cref="AllocationGuard"/>).</exception>
-        /// <exception cref="OverflowException">A Python int outside an integer dtype's range (the copy is unsafe, but the
+        /// <exception cref="OverflowError">A Python int outside an integer dtype's range (the copy is unsafe, but the
         ///     Python scalar is packed first).</exception>
         /// <remarks>Without a dtype, a scalar's C# type picks the storage lane (a C# <c>int</c> fills an int32 array), not
         ///     NumPy's discovery of the Python scalar it stands for.</remarks>
@@ -121,7 +121,7 @@ namespace NumSharp
         /// <exception cref="ValueError">The fill value does not broadcast into the result (NumPy's copyto text, <c>could not
         ///     broadcast input array from shape (2,) into shape (3,)</c>), or a text element does not parse into a numeric
         ///     result (the cast's text).</exception>
-        /// <exception cref="OverflowException">A text element parses to an integer outside an integer result.</exception>
+        /// <exception cref="OverflowError">A text element parses to an integer outside an integer result.</exception>
         /// <remarks>
         ///     The fill value used to fall to the house scalar conversion, which refused or misread every array of rank
         ///     ≥ 1 (<c>np.full_like(f3, [1, 2, 3])</c> is <c>[1., 2., 3.]</c> in NumPy). Text results keep their own fill
@@ -185,7 +185,7 @@ namespace NumSharp
         /// <exception cref="ValueError">An array fill value that does not broadcast into the result, or whose text does not
         ///     parse into a numeric result; <c>None</c> into a <c>StringDType(coerce=False)</c>; a byte count past the
         ///     limit.</exception>
-        /// <exception cref="OverflowException">A Python int outside the result's integer range
+        /// <exception cref="OverflowError">A Python int outside the result's integer range
         ///     (<c>np.full_like(int8_array, 1000)</c>).</exception>
         /// <remarks>NumPy's <c>subok=True</c>: <c>[NewSubtype("a")]</c> creates the result as the operand's class (a matrix
         ///     view; a chararray), and a chararray operand's finalize rule runs on the result dtype here, where

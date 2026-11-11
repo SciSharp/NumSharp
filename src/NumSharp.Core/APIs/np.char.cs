@@ -283,7 +283,7 @@ namespace NumSharp
         ///     <c>Can only multiply by integers</c> (probed against NumPy 2.4.2). Also NumPy's own ValueErrors: an empty
         ///     broadcast result (<c>zero-size array to reduction operation maximum which has no identity</c>) and operands
         ///     that do not broadcast.</exception>
-        /// <exception cref="OverflowException">A string's <c>len * i</c> exceeds <c>sys.maxsize</c> ("Overflow encountered
+        /// <exception cref="OverflowError">A string's <c>len * i</c> exceeds <c>sys.maxsize</c> ("Overflow encountered
         ///     in string multiply"): an OverflowError, not a TypeError, so it passes through.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="a"/> and <paramref name="i"/> do not broadcast.</exception>
         /// <remarks>A NEP 55 <c>StringDType</c> <paramref name="a"/> with an integer count computes NumPy's <c>a * i</c>

@@ -22,7 +22,7 @@ namespace NumSharp
         /// <exception cref="InvalidCastException">The cast from <c>&lt;U{len}</c> to the destination's dtype is not allowed:
         ///     <c>Cannot cast scalar from dtype('&lt;U6') to dtype('S3') according to the rule 'same_kind'</c>.</exception>
         /// <exception cref="UnicodeEncodeError">The text is not ASCII and the destination is <c>S</c>.</exception>
-        /// <exception cref="OverflowException">The destination is an integer dtype and the text is an integer outside it
+        /// <exception cref="OverflowError">The destination is an integer dtype and the text is an integer outside it
         ///     (NumPy's LP64 OverflowError texts).</exception>
         /// <exception cref="SystemError">The text is one unit above U+10FFFF (only reachable through a raw view).</exception>
         /// <exception cref="ValueError">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>; also a numeric destination

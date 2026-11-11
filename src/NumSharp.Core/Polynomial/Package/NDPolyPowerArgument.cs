@@ -72,7 +72,7 @@ namespace NumSharp
         /// <returns>The integer power (any size).</returns>
         /// <exception cref="ValueError">A NaN (<c>cannot convert float NaN to integer</c>) or a str that is not an integer
         ///     literal (<c>invalid literal for int() with base 10: '…'</c>).</exception>
-        /// <exception cref="OverflowException">An infinity (<c>cannot convert float infinity to integer</c>).</exception>
+        /// <exception cref="OverflowError">An infinity (<c>cannot convert float infinity to integer</c>).</exception>
         /// <exception cref="TypeError">A complex, None, a list or tuple (<c>int() argument must be a string, a bytes-like
         ///     object or a real number, not '…'</c>), or an ndarray of one or more dims (<c>only 0-dimensional arrays can be
         ///     converted to Python scalars</c>).</exception>
@@ -132,7 +132,7 @@ namespace NumSharp
         /// <returns>True when NumPy raises <c>Power is too large</c>.</returns>
         /// <exception cref="TypeError">A complex, str, list, tuple or other non-comparable limit (<c>'&gt;' not supported
         ///     between instances of 'int' and '…'</c>).</exception>
-        /// <exception cref="OverflowException">A power NumPy cannot convert into the limit's comparison dtype (<c>int too
+        /// <exception cref="OverflowError">A power NumPy cannot convert into the limit's comparison dtype (<c>int too
         ///     large to convert to float</c> for a float16 / float / complex ndarray or np.float16, <c>int too big to
         ///     convert</c> for a bool ndarray).</exception>
         /// <exception cref="ValueError">An ndarray limit with no element or more than one (NumPy's truth-value texts).</exception>
@@ -179,7 +179,7 @@ namespace NumSharp
         /// <param name="power">The integer power (≥ 0).</param>
         /// <param name="nd">The limit array (any layout, any rank).</param>
         /// <returns>The single element's comparison.</returns>
-        /// <exception cref="OverflowException">The power does not convert into the comparison dtype.</exception>
+        /// <exception cref="OverflowError">The power does not convert into the comparison dtype.</exception>
         /// <exception cref="ValueError">No element, or more than one.</exception>
         private static bool ArrayExceeds(BigInteger power, NDArray nd)
         {
@@ -189,7 +189,7 @@ namespace NumSharp
             if (t is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex)
                 p = ToDoubleOrThrow(power);
             else if (t == NPTypeCode.Boolean && (power > long.MaxValue || power < long.MinValue))
-                throw new OverflowException("int too big to convert");   // bool with a weak int is an int64 loop
+                throw new OverflowError("int too big to convert");   // bool with a weak int is an int64 loop
 
             // `if power > maxpower:` tests the result array for truth: only a one-element result has one.
             if (nd.size == 0)
@@ -270,12 +270,12 @@ namespace NumSharp
         /// </summary>
         /// <param name="power">The integer.</param>
         /// <returns>The double.</returns>
-        /// <exception cref="OverflowException"><c>int too large to convert to float</c>.</exception>
+        /// <exception cref="OverflowError"><c>int too large to convert to float</c>.</exception>
         private static double ToDoubleOrThrow(BigInteger power)
         {
             double d = PythonInt.ToDouble(power);
             if (double.IsInfinity(d))
-                throw new OverflowException("int too large to convert to float");
+                throw new OverflowError("int too large to convert to float");
             return d;
         }
     }

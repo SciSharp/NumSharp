@@ -83,8 +83,8 @@ namespace NumSharp
         /// <exception cref="TypeError"><c>deg must be an integer, received {deg}</c>.</exception>
         /// <exception cref="ValueError"><c>deg must be a positive integer</c>, or the companion's <c>Series must have maximum
         ///     degree of at least 1.</c> for a 0-d array <paramref name="deg"/> (see the file header).</exception>
-        /// <exception cref="OverflowException">A count past npy_intp (CPython's list repeat).</exception>
-        /// <exception cref="OutOfMemoryException">A count CPython's list cannot hold, or one the machine cannot hold.</exception>
+        /// <exception cref="OverflowError">A count past npy_intp (CPython's list repeat).</exception>
+        /// <exception cref="MemoryError">A count CPython's list cannot hold, or one the machine cannot hold.</exception>
         /// <exception cref="NotSupportedException">No LAPACK backend is installed (<c>np.linalg.eigvalsh</c> needs
         ///     <c>NumSharp.Interop.OpenBLAS</c>).</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="basis"/> is not Legendre or Laguerre.</exception>
@@ -149,8 +149,8 @@ namespace NumSharp
         /// <exception cref="TypeError"><c>deg must be an integer, received {deg}</c>.</exception>
         /// <exception cref="ValueError"><c>deg must be a positive integer</c>, or the companion's <c>Series must have maximum
         ///     degree of at least 1.</c> for a 0-d array <paramref name="deg"/> (see the file header).</exception>
-        /// <exception cref="OverflowException">A count past npy_intp (CPython's list repeat).</exception>
-        /// <exception cref="OutOfMemoryException">A count CPython's list cannot hold, or one the machine cannot hold.</exception>
+        /// <exception cref="OverflowError">A count past npy_intp (CPython's list repeat).</exception>
+        /// <exception cref="MemoryError">A count CPython's list cannot hold, or one the machine cannot hold.</exception>
         /// <exception cref="NotSupportedException">No LAPACK backend is installed (<c>np.linalg.eigvalsh</c> needs
         ///     <c>NumSharp.Interop.OpenBLAS</c>).</exception>
         /// <exception cref="InvalidOperationException">IL generation is disabled (the recurrence is an emitted kernel).</exception>
@@ -241,8 +241,8 @@ namespace NumSharp
         /// <param name="ideg">Its integer (positive).</param>
         /// <returns>The coefficients: deg zeros and a one (int64) for a Python int / bool / char; NumPy's elementwise
         ///     <c>[0] * deg + [1]</c> (the one-element series [1]) for a 0-d array.</returns>
-        /// <exception cref="OverflowException"><paramref name="ideg"/> past npy_intp (CPython's list repeat).</exception>
-        /// <exception cref="OutOfMemoryException"><paramref name="ideg"/> at or past CPython's list size limit.</exception>
+        /// <exception cref="OverflowError"><paramref name="ideg"/> past npy_intp (CPython's list repeat).</exception>
+        /// <exception cref="MemoryError"><paramref name="ideg"/> at or past CPython's list size limit.</exception>
         private static NDArray SeriesOfDegree(object deg, BigInteger ideg)
         {
             if (deg is NDArray d)
@@ -254,9 +254,9 @@ namespace NumSharp
             // list_repeat takes a Py_ssize_t (CPython's text for a larger int), and list_new_prealloc refuses a list of
             // more than PY_SSIZE_T_MAX / sizeof(PyObject*) items with an empty MemoryError — before anything is allocated.
             if (ideg > long.MaxValue)
-                throw new OverflowException("cannot fit 'int' into an index-sized integer");
+                throw new OverflowError("cannot fit 'int' into an index-sized integer");
             if (ideg >= (1L << 60) - 1)
-                throw new OutOfMemoryException(string.Empty);
+                throw new MemoryError(string.Empty);
             long n = (long)ideg;
             // np.array of Python ints is int64: deg zeros, then the 1.
             var c = np.zeros(new Shape(n + 1), np.int64);

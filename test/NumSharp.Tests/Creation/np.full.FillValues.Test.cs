@@ -55,7 +55,7 @@ namespace NumSharp.Tests.Creation
             using var like = np.full_like(np.zeros(new Shape(0, 3), np.complex128), "ab");
             like.size.Should().Be(0);
             Action packed = () => np.full(new Shape(0), 300, np.int8);
-            packed.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            packed.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
         }
 
         /// <summary>

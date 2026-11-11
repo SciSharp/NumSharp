@@ -16,7 +16,7 @@ namespace NumSharp.Tests.IO
     /// <remarks>
     ///     The string oracle's section tio replays the NumPy cases of both writers over every NumPy dtype (the format matrix
     ///     of 2026-10-15); these tests pin what a corpus cannot hold: the exact exception TYPES (the wrapped and the raw
-    ///     <see cref="TypeError"/>, <see cref="OutOfMemoryException"/> for CPython's <c>MemoryError</c>), the parse
+    ///     <see cref="TypeError"/>, <see cref="MemoryError"/> for CPython's <c>MemoryError</c>), the parse
     ///     driven directly, NumSharp's <c>Char</c> / <c>Decimal</c> elements (no NumPy dtype), the case where NumPy
     ///     crashes, and the file <c>tofile</c> must not create.
     /// </remarks>
@@ -135,8 +135,8 @@ namespace NumSharp.Tests.IO
             Assert.AreEqual("1", Py("%*d", long.MinValue, 1));
             Assert.AreEqual("2", Py("%.*f", -3, 1.5));
             Assert.AreEqual("0004", Py("%.*d", 4, 4));
-            Throws<OverflowException>(() => Py("%*d", BigInteger.Pow(2, 63), 3), "Python int too large to convert to C ssize_t");
-            Throws<OverflowException>(() => Py("%.*d", 1L << 31, 3), "Python int too large to convert to C int");
+            Throws<OverflowError>(() => Py("%*d", BigInteger.Pow(2, 63), 3), "Python int too large to convert to C ssize_t");
+            Throws<OverflowError>(() => Py("%.*d", 1L << 31, 3), "Python int too large to convert to C int");
             Throws<PrintfArgumentException>(() => Py("%*d", 5.0, 3), "* wants int");
             Throws<PrintfArgumentException>(() => Py("%*d", "5", 3), "* wants int");
             Throws<PrintfArgumentException>(() => Py("%*d", null, 3), "* wants int");
@@ -175,7 +175,7 @@ namespace NumSharp.Tests.IO
             Throws<PrintfArgumentException>(() => S("%d", "a", NPTypeCode.String),
                 "%d format: a real number is required, not numpy.str_");
             Throws<ValueError>(() => S("%d", (Half)double.NaN, NPTypeCode.Half), "cannot convert float NaN to integer");
-            Throws<OverflowException>(() => S("%i", float.PositiveInfinity, NPTypeCode.Single),
+            Throws<OverflowError>(() => S("%i", float.PositiveInfinity, NPTypeCode.Single),
                 "cannot convert float infinity to integer");
         }
 
@@ -193,8 +193,8 @@ namespace NumSharp.Tests.IO
             Throws<PrintfArgumentException>(() => Py("%x", 1.0), "%x format: an integer is required, not float");
             Throws<PrintfArgumentException>(() => Py("%c", "ab"), "%c requires int or char");
             Throws<PrintfArgumentException>(() => Py("%e", new Complex(1, 2)), "must be real number, not complex");
-            Throws<OverflowException>(() => Py("%c", -2), "%c arg not in range(0x110000)");
-            Throws<OverflowException>(() => Py("%c", BigInteger.Pow(2, 70)), "%c arg not in range(0x110000)");
+            Throws<OverflowError>(() => Py("%c", -2), "%c arg not in range(0x110000)");
+            Throws<OverflowError>(() => Py("%c", BigInteger.Pow(2, 70)), "%c arg not in range(0x110000)");
             Throws<ValueError>(() => Py("%d", BigInteger.Pow(10, 4300)),
                 "Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit");
             // Power-of-two bases have no limit.
@@ -205,7 +205,7 @@ namespace NumSharp.Tests.IO
         /// <summary>
         ///     CPython's arithmetic at the limits: <c>%.2147483647e</c> is <c>%.0e</c> (its <c>precision + 1</c> wraps),
         ///     <c>%g</c> strips zeros past any precision, an integer precision past <c>INT_MAX - 3</c> is <c>precision too
-        ///     large</c>, and a width no string can meet is <c>MemoryError</c> (<see cref="OutOfMemoryException"/>).
+        ///     large</c>, and a width no string can meet is <c>MemoryError</c> (<see cref="MemoryError"/>).
         /// </summary>
         [TestMethod]
         public void LimitQuirks_AreCPythons()
@@ -215,9 +215,9 @@ namespace NumSharp.Tests.IO
             Assert.AreEqual("2.e+00", Py("%#.2147483647e", 1.5));
             Assert.AreEqual("0.1000000000000000055511151231257827021181583404541015625", Py("%.2147483647g", 0.1));
             Assert.AreEqual("ab", Py("%.2147483647s", "ab"));
-            Throws<OverflowException>(() => Py("%.2147483647d", 1), "precision too large");
-            Throws<OverflowException>(() => Py("%.2147483645x", 1), "precision too large");
-            Assert.ThrowsException<OutOfMemoryException>(() => Py("%9223372036854775807d", 1));
+            Throws<OverflowError>(() => Py("%.2147483647d", 1), "precision too large");
+            Throws<OverflowError>(() => Py("%.2147483645x", 1), "precision too large");
+            Assert.ThrowsException<MemoryError>(() => Py("%9223372036854775807d", 1));
             // The conversion's own error comes first, as CPython converts before it writes.
             Throws<PrintfArgumentException>(() => Py("%9223372036854775807d", "a"),
                 "%d format: a real number is required, not str");
@@ -259,7 +259,7 @@ namespace NumSharp.Tests.IO
             Throws<PrintfArgumentException>(() => Run("%x", new object[] { new Complex(1, 2) }, new[] { NPTypeCode.Complex }),
                 "%x format: an integer is required, not numpy.complex128");
             // A precision .NET's F / E formats cannot take: the result is past any .NET string (CPython builds it).
-            Assert.ThrowsException<OutOfMemoryException>(() => Py("%.1000000000f", 1.0));
+            Assert.ThrowsException<MemoryError>(() => Py("%.1000000000f", 1.0));
         }
 
         // ---- ndarray.tofile ----------------------------------------------------------------------------------------
@@ -286,7 +286,7 @@ namespace NumSharp.Tests.IO
             Assert.AreEqual("1.5", ToFile(np.array(new[] { (Half)1.5 }), "%s"));
             var e = Throws<TypeError>(() => ToFile(np.array(new long[] { 7 }), "%*d"), "not enough arguments for format string");
             Assert.AreEqual(typeof(TypeError), e.GetType(), "tofile does not wrap the TypeError; its exact type is TypeError");
-            Throws<OverflowException>(() => ToFile(np.array(new[] { ulong.MaxValue }), "%*d"),
+            Throws<OverflowError>(() => ToFile(np.array(new[] { ulong.MaxValue }), "%*d"),
                 "Python int too large to convert to C ssize_t");
             Throws<TypeError>(() => ToFile(np.array(new[] { 1.5 }), "%x"), "%x format: an integer is required, not float");
             // Char: an int (uint16) — %s / %d its number, %c its character, a '*' width.

@@ -136,7 +136,7 @@ namespace NumSharp.IO
             if (s == null)
             {
                 if (NullLineIsAttributeError)
-                    throw new AttributeError("'NoneType' object has no attribute 'split'");
+                    throw new AttributeError("'NoneType' object has no attribute 'split'", "split", null);
                 throw new TypeError("non-string returned while reading data");
             }
             line = s.AsMemory();

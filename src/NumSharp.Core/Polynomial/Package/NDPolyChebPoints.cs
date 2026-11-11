@@ -88,11 +88,11 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>npts must be integer</c>, <c>npts must be &gt;= 1</c>, int()'s ValueErrors (NaN, a
         ///     non-integer str), <c>array is too big; …</c> or <c>Maximum allowed size exceeded</c>.</exception>
         /// <exception cref="TypeError">int()'s TypeErrors (None, a complex, a list or tuple, an ndarray of one or more dims).</exception>
-        /// <exception cref="OverflowException">int() of an infinity, or an <c>npts</c> too large for a float (CPython's
+        /// <exception cref="OverflowError">int() of an infinity, or an <c>npts</c> too large for a float (CPython's
         ///     <c>int too large to convert to float</c>, raised by <c>0.5*np.pi / npts</c>).</exception>
         /// <exception cref="NotSupportedException">An <c>npts</c> in <c>[2**63 + 2, 2**63 + 1024]</c>, for which NumPy returns an
         ///     empty object array.</exception>
-        /// <exception cref="OutOfMemoryException">A count below the byte limit that the machine cannot allocate (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">A count below the byte limit that the machine cannot allocate (NumPy's MemoryError).</exception>
         public static unsafe NDArray Pts1(object npts)
         {
             BigInteger n = PointCount(npts, 1, "npts must be >= 1");
@@ -124,7 +124,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>npts must be integer</c>, <c>npts must be &gt;= 2</c>, int()'s ValueErrors,
         ///     <c>array is too big; …</c> or <c>Maximum allowed size exceeded</c>.</exception>
         /// <exception cref="TypeError">int()'s TypeErrors.</exception>
-        /// <exception cref="OverflowException">int() of an infinity.</exception>
+        /// <exception cref="OverflowError">int() of an infinity.</exception>
         /// <exception cref="IndexError">An <c>npts</c> in the <c>2**63</c> band, whose linspace ramp is empty (NumPy's
         ///     <c>index -1 is out of bounds for axis 0 with size 0</c> from <c>y[-1, ...] = stop</c>).</exception>
         /// <exception cref="OutOfMemoryException">A count below the byte limit that the machine cannot allocate.</exception>
@@ -189,7 +189,7 @@ namespace NumSharp
         /// <returns>The count.</returns>
         /// <exception cref="ValueError"><c>npts must be integer</c>, <paramref name="tooFew"/>, or int()'s ValueErrors.</exception>
         /// <exception cref="TypeError">int()'s TypeErrors.</exception>
-        /// <exception cref="OverflowException">int() of an infinity.</exception>
+        /// <exception cref="OverflowError">int() of an infinity.</exception>
         private static BigInteger PointCount(object npts, int minimum, string tooFew)
         {
             BigInteger n = PolyPowerArgument.Int(npts);
@@ -206,12 +206,12 @@ namespace NumSharp
         /// </summary>
         /// <param name="v">The integer.</param>
         /// <returns>The nearest double.</returns>
-        /// <exception cref="OverflowException">CPython's <c>int too large to convert to float</c>.</exception>
+        /// <exception cref="OverflowError">CPython's <c>int too large to convert to float</c>.</exception>
         private static double IntToFloat(BigInteger v)
         {
             double d = PythonInt.ToDouble(v);
             if (double.IsInfinity(d))
-                throw new OverflowException("int too large to convert to float");
+                throw new OverflowError("int too large to convert to float");
             return d;
         }
 
@@ -241,8 +241,9 @@ namespace NumSharp
             {
                 value = PyScalar.IntTrueDivide(next, step);
             }
-            catch (OverflowException)
+            catch (OverflowError)
             {
+                // PyScalar.IntTrueDivide's OverflowError, which PyArray_ArangeObj reports as this ValueError.
                 throw new ValueError(MaxSize);
             }
             // NumPy's "underflow and divide-by-inf" check: a zero quotient of a NONZERO difference is an underflow — one

@@ -969,7 +969,7 @@ namespace NumSharp.IO
                     byte* cell = slice.Address + cast.Shape.offset * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
                     int isNull = allocator.load(cell, out byte* buf, out long size);
                     if (isNull < 0)
-                        throw new OutOfMemoryException("Failed to load string in StringDType getitem");
+                        throw new MemoryError("Failed to load string in StringDType getitem");
                     if (isNull == 1)
                         AddNA();
                     else
@@ -1014,7 +1014,7 @@ namespace NumSharp.IO
                             if ((record & 1) != 0)
                             {
                                 if (allocator.pack_null(cell) < 0)
-                                    throw new OutOfMemoryException("Failed to pack null string during StringDType setitem");
+                                    throw new MemoryError("Failed to pack null string during StringDType setitem");
                             }
                             else
                             {
@@ -1022,7 +1022,7 @@ namespace NumSharp.IO
                                 if (size > VStringAllocator.NPY_SHORT_STRING_MAX_SIZE)
                                 {
                                     if (allocator.pack(cell, _text + start, size) < 0)
-                                        throw new OutOfMemoryException("Failed to pack string during StringDType setitem");
+                                        throw new MemoryError("Failed to pack string during StringDType setitem");
                                 }
                                 else if (size > 0)
                                 {

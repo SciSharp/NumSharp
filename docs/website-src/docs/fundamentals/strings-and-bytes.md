@@ -194,7 +194,7 @@ np.pad(np.array(new[] { "ab", "c" }), 1);     // ['0' 'ab' 'c' '0']
 
 ### Text to numbers
 
-A cast to a number parses each element. `int()` takes decimal digits with an optional sign, underscores between digits and surrounding whitespace. `float()` also takes `inf`, `nan` and exponents. `complex()` takes `1+2j` forms, with or without parentheses. An element that does not parse raises NumPy's `ValueError`, and an integer that does not fit raises NumPy's `OverflowError` (as `OverflowException`):
+A cast to a number parses each element. `int()` takes decimal digits with an optional sign, underscores between digits and surrounding whitespace. `float()` also takes `inf`, `nan` and exponents. `complex()` takes `1+2j` forms, with or without parentheses. An element that does not parse raises NumPy's `ValueError`, and an integer that does not fit raises NumPy's `OverflowError`:
 
 ```csharp
 np.array(new[] { "1", " 22 ", "-3", "1_000" }).astype(np.int64);    // [   1   22   -3 1000]
@@ -202,7 +202,7 @@ np.array(new[] { "1.5", "inf", "-nan", "1e3" }).astype(np.float64); // [   1.5  
 np.array(new[] { "1+2j", "3", "(4-5j)" }).astype(np.complex128);    // [1.+2.j 3.+0.j 4.-5.j]
 np.array(new[] { "1", "x" }).astype(np.int64);      // ValueError: invalid literal for int() with base 10: np.str_('x')
 np.array(new[] { "1", "a" }).astype(np.float64);    // ValueError: could not convert string to float: np.str_('a')
-np.array(new[] { "300" }).astype(np.int8);          // OverflowException: Python integer 300 out of bounds for int8
+np.array(new[] { "300" }).astype(np.int8);          // OverflowError: Python integer 300 out of bounds for int8
 ```
 
 A `bytes` (`S`) element parses the same way. The error names the first element that fails, in NumPy's order.
@@ -297,7 +297,7 @@ The `np.multiply` ufunc cannot size its result, so it needs `out=`. It writes ea
 np.multiply(names, 2, np.zeros(new Shape(3L), "U5"));   // ['catca' 'dogdo' 'birdb']
 ```
 
-Broadcasting, every memory layout, `out=` (a narrower or wider text array receives the result cut or padded) and `where=` work as for numbers. A `bytes` array with a `str` array has no loop: `np.add` raises NumPy's `TypeError`. A repetition longer than 2^63 - 1 characters raises NumPy's `OverflowError` (as `OverflowException`).
+Broadcasting, every memory layout, `out=` (a narrower or wider text array receives the result cut or padded) and `where=` work as for numbers. A `bytes` array with a `str` array has no loop: `np.add` raises NumPy's `UFuncBinaryResolutionError` (a `TypeError`). A repetition longer than 2^63 - 1 characters raises NumPy's `OverflowError`.
 
 ### Length and substring search
 

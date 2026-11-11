@@ -248,7 +248,7 @@ public class AuditV2_NDArrayCreation
 
         // But the actual `arr + 1000` must raise OverflowError, not wrap to 233.
         Action act = () => { var _ = arr + 1000; };
-        act.Should().Throw<OverflowException>(
+        act.Should().Throw<OverflowError>(
             "NumPy raises OverflowError when adding a Python int that doesn't fit in uint8; " +
             "NumSharp wraps silently to 233/234/235");
     }

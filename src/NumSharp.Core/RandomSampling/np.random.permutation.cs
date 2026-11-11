@@ -27,7 +27,7 @@ namespace NumSharp
         /// <param name="x">The length of the range; a negative length gives an empty range, as <c>np.arange</c> does.</param>
         /// <returns>A shuffled int64 range (<c>np.result_type(x, np.long)</c> with the LP64 <c>long</c>, <see cref="LegacyLong"/>).</returns>
         /// <exception cref="ValueError">A length whose int64 byte count cannot be addressed (<c>array is too big; ...</c>).</exception>
-        /// <exception cref="OutOfMemoryException">A valid length that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
+        /// <exception cref="MemoryError">A valid length that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.permutation.html
         /// </remarks>
@@ -42,7 +42,7 @@ namespace NumSharp
         /// <returns>The shuffled int64 range (<see cref="LegacyLong"/>).</returns>
         /// <exception cref="ValueError">The length is past npy_intp (<c>Maximum allowed size exceeded</c>) or its int64 byte
         ///     count cannot be addressed (<c>array is too big; ...</c>).</exception>
-        /// <exception cref="OutOfMemoryException">A valid length that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
+        /// <exception cref="MemoryError">A valid length that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
         private NDArray LegacyPermutation(BigInteger n)
         {
             var nd = np.arange(ArangeLength(n));

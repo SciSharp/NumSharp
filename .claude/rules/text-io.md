@@ -41,8 +41,8 @@ the `%` format matrix through savetxt and tofile), and the unit suites named bel
     (`TypeError("can only concatenate str (not \"NoneType\") to str")`; a real row's becomes NumPy's `Mismatch between
     array dtype ...`, a complex row's stays the plain TypeError, an empty array writes nothing and does not fail), and a
     null entry of a spec list is `str.join`'s `TypeError("sequence item {i}: expected str instance, NoneType found")`.
-  - `[Misaligned]`: `%d`/`%i`/`%u` on inf raises `System.OverflowException` (the message is NumPy's `OverflowError`; nan
-    raises ValueError verbatim), and the AttributeError renders a C# `string[]` as a Python list repr.
+  - `[Misaligned]`: the AttributeError renders a C# `string[]` as a Python list repr (`%d`/`%i`/`%u` on inf raises
+    NumPy's `OverflowError`, nan its ValueError, verbatim).
   - Gate: `IO/SaveTxtTests.cs`.
 
 ## `np.loadtxt`
@@ -166,7 +166,7 @@ dtype: a `float` for float16 / float32, an `int`, a `bool`, a `complex`, a `str`
   precision is 0, past `ssize_t` / `int` is CPython's OverflowError. CPython's limits: `%.2147483647e` is `%.0e` (its
   `precision + 1` wraps), `%g` without `#` strips zeros past any precision, an integer precision past `INT_MAX - 3` is
   `precision too large`, a decimal conversion of an int past 4300 digits is CPython's ValueError, a width no string can
-  meet is `OutOfMemoryException` (`MemoryError`).
+  meet is `MemoryError`.
 - Python's semantics throughout: an integer conversion's `.precision` is a minimum digit count (`%.5d` → `00042`,
   `%#08x` → `0x0000ff`); `%c` of a code point past 0x10FFFF is `OverflowError("%c arg not in range(0x110000)")`; an
   `np.bool` is not an integer (`%x` / `%c` refuse it) while a Python `bool` is (`'%x' % True` is `1`); a NumPy scalar's
@@ -219,9 +219,10 @@ Stream, sep="", format="%s")`. The facades (`APIs/np.{fromstring,fromfile,tofile
   instead`), REFCHK (`Cannot create an object array from a string` / `Cannot read into object array` for
   `StringDType`), item size 0 (`zero-valued itemsize`), no `fromstr` / `scan` (`don't know how to read character strings
   with that array type` / `Unable to read character files of that array type`). `fromfile`'s `offset` with a separator is
-  `TypeError` before the file is opened; a missing file is `FileNotFoundException("[Errno 2] No such file or directory:
-  'x'")`. `tofile`'s `sep` and `format` are `s` arguments too: a null one is Python's None, `TypeError("tofile() argument
-  2 must be str, not None")` (3 for the format, `sep` first) before the file is opened or the stream used.
+  `TypeError` before the file is opened; a missing file is `FileNotFoundError("[Errno 2] No such file or directory:
+  'x'")` (CPython's `open()`, raised by `NDFileShare` for every NumSharp file function). `tofile`'s `sep` and `format`
+  are `s` arguments too: a null one is Python's None, `TypeError("tofile() argument 2 must be str, not None")` (3 for the
+  format, `sep` first) before the file is opened or the stream used.
 - Binary: `fread` straight into the result's buffer (count -1: every whole item, `(size - pos) / itemsize` in C's
   truncating division, so a position past the end is `negative dimensions are not allowed` and a partial trailing item
   stays unread; a count past the end consumes the partial item); spans of 1 GB, so files past 2 GB read; a non-native

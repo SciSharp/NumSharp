@@ -68,7 +68,7 @@ namespace NumSharp.Backends.Strings
         ///     <c>StringDType</c> text (a routing bug).</exception>
         /// <exception cref="ValueError">An ordering meets an NA of a <c>None</c>-like descriptor (NumPy's
         ///     <c>'less' not supported for null values that are not nan-like or strings.</c>).</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt cell (NumPy's <c>Failed to load string in …</c>).</exception>
+        /// <exception cref="MemoryError">A corrupt cell (NumPy's <c>Failed to load string in …</c>).</exception>
         internal static unsafe NDArray Execute(string ufunc, NDArray x1, NDArray x2, NDArray @out, NDArray where)
         {
             if (!NDStringUfuncs.IsVString(x1) && !NDStringUfuncs.IsVString(x2))

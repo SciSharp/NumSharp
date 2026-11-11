@@ -49,7 +49,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">An axis that appears twice (<c>repeated axis in `axis` argument</c>); weights not
         ///     of the reduced axes' shape (<c>Shape of weights must be consistent with shape of a along specified
         ///     axis.</c>).</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero (<c>Weights sum to zero, can't be
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero (<c>Weights sum to zero, can't be
         ///     normalized</c>), or a mean without weights whose result is empty (<c>division by zero</c>: NumPy's
         ///     <c>a.size / avg.size</c>).</exception>
         /// <exception cref="TypeError">Weights of another shape without an axis (<c>Axis must be specified when shapes of a
@@ -109,7 +109,7 @@ namespace NumSharp.Backends
                 // (before the returned check), so 0/0 raises ZeroDivisionError even when
                 // returned=False — see lib/_function_base_impl.average lines 576-578.
                 if (avg.size == 0)
-                    throw new DivideByZeroException("division by zero");
+                    throw new ZeroDivisionError("division by zero");
 
                 if (!returned) return (scope.Returns(avg), null);
 
@@ -146,7 +146,7 @@ namespace NumSharp.Backends
             NDArray weightSum = SumWithAxes(wgt, normalizedAxis, resultDtype, keepdims);
             // if np.any(scl == 0.0): raise ZeroDivisionError - before the product is formed.
             if (HasZero(weightSum))
-                throw new DivideByZeroException("Weights sum to zero, can't be normalized");
+                throw new ZeroDivisionError("Weights sum to zero, can't be normalized");
 
             // avg = avg_as_array = np.multiply(a, wgt, dtype=result_dtype).sum(axis, **keepdims_kw) / scl
             NDArray weightedSum = SumOfProducts(a, wgt, resultDtype, normalizedAxis, keepdims);

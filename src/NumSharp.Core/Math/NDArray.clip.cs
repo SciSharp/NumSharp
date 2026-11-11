@@ -18,7 +18,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the computation runs in (NumPy's <c>ndarray.clip(..., **kwargs)</c> passes <c>dtype</c> through to the ufunc). Null (default) keeps the promoted result dtype.</param>
         /// <param name="where">NumPy's ufunc <c>where=</c> mask (bool, broadcast with the operands): only its True positions are written.</param>
         /// <returns>An array with the elements of this array, but where values &lt; min are replaced with min, and those &gt; max with max.</returns>
-        /// <exception cref="OverflowException">A kept integer bound does not fit the integer dtype the computation runs in.</exception>
+        /// <exception cref="OverflowError">A kept integer bound does not fit the integer dtype the computation runs in.</exception>
         /// <exception cref="TypeError">A <paramref name="dtype"/> or <paramref name="out"/> that breaks NumPy's
         ///     same_kind casting rule.</exception>
         /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>.</exception>

@@ -551,7 +551,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="aux">The call's context (arena bases, NA rule, default string).</param>
         /// <param name="negate">True for <c>!=</c> (an emit-time constant of the calling kernel).</param>
         /// <returns>1 or 0.</returns>
-        /// <exception cref="OutOfMemoryException">A corrupt arena cell (NumPy's <c>Failed to load string in equal</c>).</exception>
+        /// <exception cref="MemoryError">A corrupt arena cell (NumPy's <c>Failed to load string in equal</c>).</exception>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static byte Equal(byte* a, byte* b, VStringPairAux* aux, bool negate)
         {
@@ -853,7 +853,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="op">The kernel's operation (after the operand swap of <c>greater</c> / <c>greater_equal</c>).</param>
         /// <returns>1 or 0.</returns>
         /// <exception cref="ValueError">An NA in an ordering under the <see cref="VStringNARule.Null"/> rule.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt arena cell: <c>Failed to load string in {ufunc}</c>.</exception>
+        /// <exception cref="MemoryError">A corrupt arena cell: <c>Failed to load string in {ufunc}</c>.</exception>
         /// <remarks>
         ///     Lean on purpose: two texts compare inline here, and every pair with an NA or a corrupt cell goes on to
         ///     <see cref="ComparePairNA"/>. The NA handling's interpolated messages used to sit in this method, whose frame then
@@ -925,12 +925,12 @@ namespace NumSharp.Backends.Strings
         /// <param name="op">The kernel's operation.</param>
         /// <returns>1 or 0.</returns>
         /// <exception cref="ValueError">An NA in an ordering under the <see cref="VStringNARule.Null"/> rule.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt arena cell: <c>Failed to load string in {ufunc}</c>.</exception>
+        /// <exception cref="MemoryError">A corrupt arena cell: <c>Failed to load string in {ufunc}</c>.</exception>
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static byte ComparePairNA(int na, int nb, byte* ba, long sa, byte* bb, long sb, VStringPairAux* aux, TextCompareOp op)
         {
             if (na < 0 || nb < 0)
-                throw new OutOfMemoryException($"Failed to load string in {ComparisonNames[aux->Ufunc]}");
+                throw new MemoryError($"Failed to load string in {ComparisonNames[aux->Ufunc]}");
             if (na != 0 || nb != 0)
             {
                 switch (aux->Rule)

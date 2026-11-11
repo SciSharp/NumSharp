@@ -90,7 +90,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast
         ///     against <paramref name="a"/> (NumPy's "remapped shapes" text).</exception>
-        /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop ("Python integer
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop ("Python integer
         ///     1000 out of bounds for int8").</exception>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>
@@ -133,7 +133,7 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
-        /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
         public static NDArray amax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
@@ -167,7 +167,7 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
-        /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.min.html</remarks>
         public static NDArray min(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
@@ -205,7 +205,7 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
-        /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
         public static NDArray amin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
@@ -246,7 +246,7 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
-        /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>
         ///     <para>
@@ -314,7 +314,7 @@ namespace NumSharp
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
-        /// <exception cref="System.OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>
         ///     <para>

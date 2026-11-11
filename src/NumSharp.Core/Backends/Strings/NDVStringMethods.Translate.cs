@@ -44,7 +44,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="a">The operand (<c>StringDType</c>).</param>
         /// <param name="result">The fresh result (all-zero cells; see <see cref="SameNADescr"/>).</param>
         /// <param name="st">The call's state: the compiled table (with its handle set) and the error word.</param>
-        /// <exception cref="OutOfMemoryException">A result no string can hold (NumPy's MemoryError), or a corrupt input cell.</exception>
+        /// <exception cref="MemoryError">A result no string can hold (NumPy's MemoryError), or a corrupt input cell.</exception>
         /// <remarks>The error word is the caller's to read: a translate error is raised by its C-order walk, never here.</remarks>
         internal static void TranslateKernel(NDArray a, NDArray result, TranslateState* st)
         {

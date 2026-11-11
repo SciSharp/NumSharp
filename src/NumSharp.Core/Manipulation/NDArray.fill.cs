@@ -47,7 +47,7 @@ namespace NumSharp
         ///     Python's <c>int(None)</c> — raised even for an EMPTY array, as NumPy packs the scalar first.</exception>
         /// <exception cref="ValueError">This array is read-only (broadcast view / read-only memmap);
         ///     raises NumPy's exact <c>ValueError: assignment destination is read-only</c>.</exception>
-        /// <exception cref="OverflowException">A weak integer/float value is out of range for an integer dtype,
+        /// <exception cref="OverflowError">A weak integer/float value is out of range for an integer dtype,
         ///     or a ±inf value is assigned to an integer dtype (NumPy's <c>OverflowError</c>).</exception>
         /// <exception cref="ValueError"><paramref name="value"/> is a multi-element array (a sequence), or a NaN
         ///     value is assigned to an integer dtype (NumPy's <c>ValueError</c>).</exception>

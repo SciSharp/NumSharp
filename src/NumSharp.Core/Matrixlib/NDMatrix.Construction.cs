@@ -94,7 +94,7 @@ namespace NumSharp
         ///     that does not fit uint64: NumPy builds a str or object matrix, dtypes NumSharp does not have.</exception>
         /// <exception cref="TypeError">A complex token with a real <paramref name="dtype"/> (NumPy's
         ///     <c>float() argument must be a string or a real number, not 'complex'</c>).</exception>
-        /// <exception cref="OverflowException">An integer token outside an integer <paramref name="dtype"/>'s
+        /// <exception cref="OverflowError">An integer token outside an integer <paramref name="dtype"/>'s
         ///     range (NumPy's <c>Python integer 300 out of bounds for int8</c>).</exception>
         [NDScoped]
         internal static NDMatrix Create(string data, DType dtype)
@@ -116,7 +116,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A ragged sequence (NumPy's inhomogeneous-shape text), or a float NaN for
         ///     an integer dtype.</exception>
         /// <exception cref="TypeError">A complex element for a real dtype.</exception>
-        /// <exception cref="OverflowException">A Python int outside an integer dtype's range, or a float
+        /// <exception cref="OverflowError">A Python int outside an integer dtype's range, or a float
         ///     infinity for an integer dtype.</exception>
         /// <exception cref="NotSupportedException">The sequence holds strings, <c>null</c> items or other
         ///     objects.</exception>
@@ -201,7 +201,7 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">The value holds strings, <c>null</c> items or other objects:
         ///     NumPy's str / object dtypes.</exception>
         /// <exception cref="TypeError">A sequence holds a complex number and <paramref name="dtype"/> is real.</exception>
-        /// <exception cref="OverflowException">A sequence holds a Python int outside an integer
+        /// <exception cref="OverflowError">A sequence holds a Python int outside an integer
         ///     <paramref name="dtype"/>'s range.</exception>
         /// <remarks>
         ///     With a <paramref name="dtype"/> a SEQUENCE is stored element by element with the dtype's own

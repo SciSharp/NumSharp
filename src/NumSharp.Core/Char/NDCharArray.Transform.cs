@@ -161,7 +161,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A tab size that cannot reach int64 by a same_kind cast (a float).</exception>
         /// <exception cref="ValueError">An empty array.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="tabsize"/> does not broadcast.</exception>
-        /// <exception cref="System.OverflowException">An expanded string longer than 2^31 - 1.</exception>
+        /// <exception cref="OverflowError">An expanded string longer than 2^31 - 1.</exception>
         [NDScoped]
         public NDCharArray expandtabs(object tabsize = null)
         {

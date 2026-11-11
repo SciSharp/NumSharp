@@ -601,7 +601,7 @@ public class ArangeBattleTests
     [TestMethod]
     public void Arange_ZeroStep_RaisesZeroDivisionError()
     {
-        new Action(() => np.arange(0, 10, 0)).Should().Throw<DivideByZeroException>().WithMessage("division by zero");
+        new Action(() => np.arange(0, 10, 0)).Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
     }
 
     /// <summary>
@@ -610,7 +610,7 @@ public class ArangeBattleTests
     [TestMethod]
     public void Arange_ZeroStepFloat_RaisesZeroDivisionError()
     {
-        new Action(() => np.arange(0.0, 10.0, 0.0)).Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+        new Action(() => np.arange(0.0, 10.0, 0.0)).Should().Throw<ZeroDivisionError>().WithMessage("float division by zero");
     }
 
     #endregion

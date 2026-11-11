@@ -50,7 +50,7 @@ namespace NumSharp
         ///     str array, dtypes NumSharp does not have).</exception>
         /// <exception cref="IndexError">The series is empty.</exception>
         /// <exception cref="IncorrectShapeException"><c>tensor=False</c> and the shapes do not broadcast.</exception>
-        /// <exception cref="OverflowException">A Python int in the recurrence does not fit an integer x dtype.</exception>
+        /// <exception cref="OverflowError">A Python int in the recurrence does not fit an integer x dtype.</exception>
         internal static NDArray Val(PolyBasis basis, object x, object c, bool tensor)
         {
             if (c is NDArray nd)
@@ -139,7 +139,7 @@ namespace NumSharp
         /// <exception cref="IndexError">The series is empty.</exception>
         /// <exception cref="IncorrectShapeException"><c>tensor=False</c> and <c>c.shape[1:]</c> does not broadcast
         ///     with <c>x.shape</c> (NumPy's ValueError text, house exception type).</exception>
-        /// <exception cref="OverflowException">A Python int in the recurrence does not fit an integer x dtype
+        /// <exception cref="OverflowError">A Python int in the recurrence does not fit an integer x dtype
         ///     (e.g. lagval with 70 coefficients on int8 x).</exception>
         /// <exception cref="TypeError">Text points under hermval, or under chebval with a series of other than one or two
         ///     coefficients: NumPy's first statement <c>x*2</c> / <c>2*x</c> is the string multiply ufunc without out=, whose
@@ -491,7 +491,7 @@ namespace NumSharp
         /// <returns>The values, laid out as NumPy's result is (<see cref="ResultShape"/>).</returns>
         /// <exception cref="IndexError">Empty series.</exception>
         /// <exception cref="IncorrectShapeException">tensor=False broadcast mismatch.</exception>
-        /// <exception cref="OverflowException">A Python int does not fit an integer x dtype.</exception>
+        /// <exception cref="OverflowError">A Python int does not fit an integer x dtype.</exception>
         private static NDArray Evaluate(PolyBasis basis, NDArray xa, PyScalar xw, bool weak, NDArray c, Shape cLayout, bool tensor)
         {
             long nc = c.Shape.dimensions[0];

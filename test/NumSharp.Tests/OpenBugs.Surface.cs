@@ -192,7 +192,7 @@ namespace NumSharp.Tests
             using var a = np.arange(3).astype(np.int32);
             Action act = () => a.setfield(-1, np.uint8, 1);
 
-            act.Should().Throw<OverflowException>().Which.Message.Should().Be("Python integer -1 out of bounds for uint8");
+            act.Should().Throw<OverflowError>().Which.Message.Should().Be("Python integer -1 out of bounds for uint8");
         }
 
         // ----- finfo / iinfo -----

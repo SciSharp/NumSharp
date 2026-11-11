@@ -427,11 +427,11 @@ namespace NumSharp.Backends.Printing
         /// <exception cref="ValueError"><c>incomplete format</c>, <c>width too big</c>, <c>precision too big</c>,
         ///     <c>unsupported format character 'y' (0x79) at index 1</c>, <c>cannot convert float NaN to integer</c>, or a
         ///     Python <c>int</c> of more than 4300 digits under a decimal conversion.</exception>
-        /// <exception cref="OverflowException">CPython's <c>OverflowError</c>s: <c>cannot convert float infinity to
+        /// <exception cref="OverflowError">CPython's <c>OverflowError</c>s: <c>cannot convert float infinity to
         ///     integer</c>, <c>%c arg not in range(0x110000)</c>, <c>int too large to convert to float</c>, <c>precision too
         ///     large</c> (an integer conversion with a precision past <c>INT_MAX - 3</c>), <c>Python int too large to
         ///     convert to C ssize_t</c> / <c>C int</c> (a <c>*</c> argument).</exception>
-        /// <exception cref="OutOfMemoryException">The result would exceed the longest string .NET can hold (CPython's
+        /// <exception cref="MemoryError">The result would exceed the longest string .NET can hold (CPython's
         ///     <c>MemoryError</c> for a huge width; CPython itself can build somewhat longer strings).</exception>
         internal void FormatInto(StringBuilder sb, ReadOnlySpan<object> args, ReadOnlySpan<NPTypeCode> kinds)
         {
@@ -471,7 +471,7 @@ namespace NumSharp.Backends.Printing
         /// <param name="next">In / out: the index of the next item to take.</param>
         /// <exception cref="PrintfArgumentException">See <see cref="FormatInto"/>.</exception>
         /// <exception cref="ValueError">See <see cref="FormatInto"/>.</exception>
-        /// <exception cref="OverflowException">See <see cref="FormatInto"/>.</exception>
+        /// <exception cref="OverflowError">See <see cref="FormatInto"/>.</exception>
         /// <exception cref="OutOfMemoryException">See <see cref="FormatInto"/>.</exception>
         private static void RunSpec(StringBuilder sb, in Op op, ReadOnlySpan<object> args, ReadOnlySpan<NPTypeCode> kinds,
             ref int next)
@@ -553,13 +553,13 @@ namespace NumSharp.Backends.Printing
         /// <param name="kind">Its kind.</param>
         /// <returns>The width (negative left-justifies).</returns>
         /// <exception cref="PrintfArgumentException"><c>* wants int</c>.</exception>
-        /// <exception cref="OverflowException"><c>Python int too large to convert to C ssize_t</c>.</exception>
+        /// <exception cref="OverflowError"><c>Python int too large to convert to C ssize_t</c>.</exception>
         private static long StarWidth(object value, NPTypeCode kind)
         {
             if (kind != PyObject || !PrintfFormatter.TryPyInt(value, out BigInteger big))
                 throw new PrintfArgumentException("* wants int");
             if (big < long.MinValue || big > long.MaxValue)
-                throw new OverflowException("Python int too large to convert to C ssize_t");
+                throw new OverflowError("Python int too large to convert to C ssize_t");
             return (long)big;
         }
 
@@ -568,13 +568,13 @@ namespace NumSharp.Backends.Printing
         /// <param name="kind">Its kind.</param>
         /// <returns>The precision (negative means 0).</returns>
         /// <exception cref="PrintfArgumentException"><c>* wants int</c>.</exception>
-        /// <exception cref="OverflowException"><c>Python int too large to convert to C int</c>.</exception>
+        /// <exception cref="OverflowError"><c>Python int too large to convert to C int</c>.</exception>
         private static int StarPrecision(object value, NPTypeCode kind)
         {
             if (kind != PyObject || !PrintfFormatter.TryPyInt(value, out BigInteger big))
                 throw new PrintfArgumentException("* wants int");
             if (big < int.MinValue || big > int.MaxValue)
-                throw new OverflowException("Python int too large to convert to C int");
+                throw new OverflowError("Python int too large to convert to C int");
             return (int)big;
         }
 

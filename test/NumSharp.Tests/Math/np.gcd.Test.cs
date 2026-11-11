@@ -176,15 +176,15 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void NonIntegerInputs_RaiseNoLoop_Verbatim()
         {
-            var e1 = Assert.ThrowsException<TypeError>(() => np.gcd(np.array(new[] { 1.0 }), np.array(new[] { 2.0 })));
+            var e1 = Assert.ThrowsException<UFuncNoLoopError>(() => np.gcd(np.array(new[] { 1.0 }), np.array(new[] { 2.0 })));
             StringAssert.Contains(e1.Message,
                 "ufunc 'gcd' did not contain a loop with signature matching types " +
                 "(<class 'numpy.dtypes.Float64DType'>, <class 'numpy.dtypes.Float64DType'>) -> None");
 
-            var e2 = Assert.ThrowsException<TypeError>(() => np.gcd(np.array(new[] { true }), np.array(new[] { false })));
+            var e2 = Assert.ThrowsException<UFuncNoLoopError>(() => np.gcd(np.array(new[] { true }), np.array(new[] { false })));
             StringAssert.Contains(e2.Message, "(<class 'numpy.dtypes.BoolDType'>, <class 'numpy.dtypes.BoolDType'>) -> None");
 
-            var e3 = Assert.ThrowsException<TypeError>(() => np.lcm(
+            var e3 = Assert.ThrowsException<UFuncNoLoopError>(() => np.lcm(
                 np.array(new Complex[] { 1 }), np.array(new Complex[] { 2 })));
             StringAssert.Contains(e3.Message, "ufunc 'lcm' did not contain a loop");
         }
@@ -194,7 +194,7 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void UInt64PlusSigned_PromotesToFloat64_NoLoop()
         {
-            var e = Assert.ThrowsException<TypeError>(() => np.gcd(np.array(new[] { 1L }), np.array(new ulong[] { 2 })));
+            var e = Assert.ThrowsException<UFuncNoLoopError>(() => np.gcd(np.array(new[] { 1L }), np.array(new ulong[] { 2 })));
             StringAssert.Contains(e.Message,
                 "(<class 'numpy.dtypes.Int64DType'>, <class 'numpy.dtypes.UInt64DType'>) -> None");
         }
@@ -204,12 +204,12 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void NonIntegerDtype_RaisesNoLoop_WithOutputTail()
         {
-            var e1 = Assert.ThrowsException<TypeError>(() =>
+            var e1 = Assert.ThrowsException<UFuncNoLoopError>(() =>
                 np.gcd(np.array(new[] { 1 }), np.array(new[] { 2 }), dtype: np.float64));
             StringAssert.Contains(e1.Message,
                 "(<class 'numpy.dtypes.Int32DType'>, <class 'numpy.dtypes.Int32DType'>) -> <class 'numpy.dtypes.Float64DType'>");
 
-            var e2 = Assert.ThrowsException<TypeError>(() =>
+            var e2 = Assert.ThrowsException<UFuncNoLoopError>(() =>
                 np.gcd(np.array(new[] { 1 }), np.array(new[] { 2 }), dtype: np.@bool));
             StringAssert.Contains(e2.Message, "-> <class 'numpy.dtypes.BoolDType'>");
         }
@@ -219,7 +219,7 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void FloatInputs_IntegerDtype_RaiseInputCast()
         {
-            var e = Assert.ThrowsException<TypeError>(() =>
+            var e = Assert.ThrowsException<UFuncInputCastingError>(() =>
                 np.gcd(np.array(new[] { 1.0 }), np.array(new[] { 2.0 }), dtype: np.int64));
             StringAssert.Contains(e.Message,
                 "Cannot cast ufunc 'gcd' input 0 from dtype('float64') to dtype('int64') with casting rule 'same_kind'");

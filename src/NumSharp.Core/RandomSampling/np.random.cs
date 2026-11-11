@@ -180,7 +180,7 @@ namespace NumSharp
         public void set_bit_generator(BitGenerator bitgen)
         {
             if (bitgen is null)
-                throw new AttributeError("'NoneType' object has no attribute 'capsule'");
+                throw new AttributeError("'NoneType' object has no attribute 'capsule'", "capsule", null);
             // NumPy resets the Gaussian cache under the NEW engine's lock (self.lock = bit_generator.lock first).
             lock (bitgen.@lock)
             {

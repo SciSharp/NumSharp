@@ -134,7 +134,7 @@ namespace NumSharp
             ///     number, …: NumPy's no-loop text); two <c>StringDType</c> operands with different NA objects.</exception>
             /// <exception cref="TypeError"><paramref name="start"/> / <paramref name="end"/> cannot reach int64 by a
             ///     same_kind cast (a float: <c>Cannot cast ufunc 'find' input 2 from dtype('float64') …</c>).</exception>
-            /// <exception cref="OverflowException">A start / end literal past int64 (<c>Python int too large to convert to C
+            /// <exception cref="OverflowError">A start / end literal past int64 (<c>Python int too large to convert to C
             ///     long</c>).</exception>
             /// <exception cref="IncorrectShapeException">The four operands do not broadcast.</exception>
             /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string; a chararray operand
@@ -158,7 +158,7 @@ namespace NumSharp
             /// <returns>An int64 array of the broadcast shape.</returns>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
             /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
-            /// <exception cref="OverflowException">A start / end literal past int64.</exception>
+            /// <exception cref="OverflowError">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string; a chararray operand
             ///     beside a <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d
@@ -181,7 +181,7 @@ namespace NumSharp
             /// <returns>An int64 array of the broadcast shape.</returns>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
             /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
-            /// <exception cref="OverflowException">A start / end literal past int64.</exception>
+            /// <exception cref="OverflowError">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">An element without a match (<c>substring not found</c>); a <c>StringDType</c> NA
             ///     whose NA object is not a string; a chararray operand beside a
@@ -205,7 +205,7 @@ namespace NumSharp
             /// <returns>An int64 array of the broadcast shape.</returns>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
             /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
-            /// <exception cref="OverflowException">A start / end literal past int64.</exception>
+            /// <exception cref="OverflowError">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">An element without a match; a <c>StringDType</c> NA whose NA object is not a
             ///     string; a chararray operand beside a
@@ -230,7 +230,7 @@ namespace NumSharp
             /// <returns>An int64 array of the broadcast shape.</returns>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
             /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
-            /// <exception cref="OverflowException">A start / end literal past int64.</exception>
+            /// <exception cref="OverflowError">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string; a chararray operand
             ///     beside a <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d
@@ -253,7 +253,7 @@ namespace NumSharp
             /// <returns>A bool array of the broadcast shape.</returns>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
             /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
-            /// <exception cref="OverflowException">A start / end literal past int64.</exception>
+            /// <exception cref="OverflowError">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is neither a string nor NaN-like (a
             ///     NaN-like NA is False); a chararray operand beside a
@@ -277,7 +277,7 @@ namespace NumSharp
             /// <returns>A bool array of the broadcast shape.</returns>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
             /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
-            /// <exception cref="OverflowException">A start / end literal past int64.</exception>
+            /// <exception cref="OverflowError">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is neither a string nor NaN-like; a
             ///     chararray operand beside a <c>StringDType</c> one that NumPy's trivial loop copies into

@@ -281,7 +281,7 @@ null check, and their woven subclass path answers for a numpy.matrix operand (`N
   `np.result_type` over the descriptors (`'f8'` joins for an integer / bool operand), so text weights meet NumPy's
   refusals in the weight sum. Without weights `avg = a.mean(axis)` and the count is `avg.dtype.type(a.size / avg.size)`:
   NumPy's scalar beside a 0-d mean, the broadcast copy beside one with dimensions. With weights `scl = wgt.sum(axis,
-  dtype=result_dtype)`, the zero check (`DivideByZeroException` "Weights sum to zero, can't be normalized"),
+  dtype=result_dtype)`, the zero check (`ZeroDivisionError` "Weights sum to zero, can't be normalized"),
   `np.multiply(a, wgt, dtype=result_dtype).sum(axis) / scl` (`SumOfProducts`, `Quotient`), and `returned` broadcasts and
   copies `scl` when its shape differs.
 - Axis tuples: one axis is np.mean's / np.sum's axis route (tested first, so a 1-D operand's `(0,)` takes the one-output
@@ -447,7 +447,7 @@ index (`DONT_NEGATE_STRIDES`: a reversed run is visited from its high address do
   edges are NumPy's.
 - Errors: `ValueError` (`m has more than 2 dimensions`, `{f,a}weights cannot be negative`), `TypeError`
   (`fweights must be integer`), `RuntimeError` (`cannot handle multidimensional {f,a}weights`, `incompatible numbers of
-  samples and {f,a}weights`); weights summing to zero raise `DivideByZeroException` (NumPy's `ZeroDivisionError`).
+  samples and {f,a}weights`); weights summing to zero raise NumPy's `ZeroDivisionError`.
 - Two NumPy details ported on purpose: `X -= avg[:, None]` runs in the operand's dtype (so `dtype=float32` without
   weights keeps float32), and for complex input `fact` is complex128, so NumPy's `.../w_sum` is Smith's
   `numer*(1/w_sum)`, reproduced as a reciprocal multiply (it rounds 1 ULP off real division and decides finite versus inf

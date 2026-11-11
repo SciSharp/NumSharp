@@ -400,7 +400,7 @@ namespace NumSharp.Backends.Strings
                 // The dispatcher names the operand CLASSES, and a Python int / float / complex operand (a C# literal) is the
                 // abstract _PyLongDType / _PyFloatDType / _PyComplexDType, not its default descriptor's class (probed:
                 // np.less(np.array(['a']), 0) names _PyLongDType; np.less(u, np.int32(0)) names Int32DType).
-                return new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types ({DispatchClass(x1)}, {DispatchClass(x2)}) -> None");
+                return new UFuncNoLoopError(ufunc, 2, DispatchMeta(x1), DispatchMeta(x2), null);
             }
 
             // NumPy's string add promoter wins over a dtype= request: add(U3, U3, dtype='f8') still concatenates (probed).
@@ -435,7 +435,7 @@ namespace NumSharp.Backends.Strings
 
             // NumPy's string add promoter refuses a bytes/str mix with its own text (probed: add(U3, S2)).
             if (ufunc == "add" && s1 && s2)
-                return new TypeError($"ufunc 'add' cannot use operands with types {d1.ToString(true)} and {d2.ToString(true)}");
+                return new UFuncBinaryResolutionError("add", d1, d2);
 
             if (s_descriptorNoLoop.Contains(ufunc))
                 return NoLoop(ufunc, d1, d2);
@@ -487,8 +487,7 @@ namespace NumSharp.Backends.Strings
             var d = x.dtype;
             // positive has no bool loop, so dtype=bool names the missing signature (probed: positive(u, dtype=bool)).
             if (ufunc == "positive" && loop == NPTypeCode.Boolean)
-                return new TypeError(
-                    $"ufunc 'positive' did not contain a loop with signature matching types {d.Meta} -> {DTypeRegistry.FromTypeCode(NPTypeCode.Boolean)}");
+                return new UFuncNoLoopError("positive", 1, d.Meta, DTypeRegistry.FromTypeCode(NPTypeCode.Boolean));
             // logical_not's loops are bool-output only (?->? .. G->?): a dtype= other than bool asks for an output it has no
             // loop for, so NumPy's no-loop text comes before any input cast (probed: logical_not(U5, dtype=float64) and
             // (S5, dtype=int8)); dtype=bool binds the ?->? loop, whose input cast from text fails next (the branch below).
@@ -498,12 +497,10 @@ namespace NumSharp.Backends.Strings
                     "No loop matching the specified signature and casting was found for ufunc logical_not");
             // A numeric dtype= fixes the loop, and the input's cast to it fails first. The unary text names no index.
             if (loop is { } numeric && numeric != NPTypeCode.String && numeric != NPTypeCode.Empty)
-                return new TypeError(
-                    $"Cannot cast ufunc '{ufunc}' input from {d.ToString(true)} to dtype('{numeric.AsNumpyDtypeName()}') " +
-                    "with casting rule 'same_kind'");
+                return new UFuncInputCastingError(ufunc, 1, "same_kind", d, numeric.AsNumpyDescr(), 0);
 
             if (s_classNoLoop.Contains(ufunc))
-                return new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {d.Meta} -> None");
+                return new UFuncNoLoopError(ufunc, 1, d.Meta, null);
 
             // isnat checks its operand kind itself, before any loop search.
             if (ufunc == "isnat")
@@ -671,7 +668,7 @@ namespace NumSharp.Backends.Strings
                     if (textD && textO)
                     {
                         if (o.Meta != d.Meta)
-                            return new TypeError($"ufunc 'add' cannot use operands with types {o.ToString(true)} and {d.ToString(true)}");
+                            return new UFuncBinaryResolutionError("add", o, d);
                         return new TypeError(
                             $"the resolved dtypes are not compatible with add.{method}. Resolved ({o.ToString(true)}, " +
                             $"{d.ToString(true)}, {Concatenation(o, d).ToString(true)})");
@@ -977,15 +974,16 @@ namespace NumSharp.Backends.Strings
         ///     unwrap's subtract, cross's multiply) see both kinds. A Python scalar's abstract class cannot be expressed by a
         ///     descriptor: those sites use <see cref="VStringNoLoop"/> directly.
         /// </remarks>
-        internal static TypeError NoLoop(string ufunc, params DType[] operands)
+        internal static UFuncNoLoopError NoLoop(string ufunc, params DType[] operands)
         {
             bool classes = false;
             foreach (var operand in operands)
                 classes |= operand.Meta is VStringDTypeMeta;
-            var reprs = new string[operands.Length];
-            for (int i = 0; i < reprs.Length; i++)
-                reprs[i] = classes ? operands[i].Meta.ToString() : operands[i].ToString(true);
-            return new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types ({string.Join(", ", reprs)}) -> None");
+            // The inputs (each its class or its descriptor, as the refusing resolver names them), then the one output None.
+            var dtypes = new object[operands.Length + 1];
+            for (int i = 0; i < operands.Length; i++)
+                dtypes[i] = classes ? operands[i].Meta : operands[i];
+            return new UFuncNoLoopError(ufunc, operands.Length, dtypes);
         }
 
         /// <summary>
@@ -1109,7 +1107,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="from">The input's descriptor.</param>
         /// <param name="loop">The requested numeric loop.</param>
         /// <returns>The exception, or null when the cast is allowed.</returns>
-        private static TypeError InputCastError(string ufunc, int index, DType from, NPTypeCode loop)
+        private static UFuncInputCastingError InputCastError(string ufunc, int index, DType from, NPTypeCode loop)
         {
             if (from.Meta is not StringDTypeMeta)
             {
@@ -1117,9 +1115,8 @@ namespace NumSharp.Backends.Strings
                 if (code == loop || NDIterCasting.CanCast(code, loop, NPY_CASTING.NPY_SAME_KIND_CASTING))
                     return null;
             }
-            return new TypeError(
-                string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc '{ufunc}' input {index} from {from.ToString(true)} to dtype('{loop.AsNumpyDtypeName()}') ") +
-                "with casting rule 'same_kind'");
+            // A binary ufunc's input: NumPy names its index.
+            return new UFuncInputCastingError(ufunc, 2, "same_kind", from, loop.AsNumpyDescr(), index);
         }
     }
 }

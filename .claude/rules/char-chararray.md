@@ -43,7 +43,7 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
 - `np.@char.chararray(shape, itemsize, unicode, buffer, offset, strides, order)`: a `string` buffer FILLS,
   `ReadOnlyMemory<byte>` is Python's read-only `bytes`, `byte[]` a writable `bytearray`, an `NDArray` is borrowed.
   `np.@char.array` / `asarray` follow NumPy's branches (str / bytes: `itemsize = len`, shape `len // itemsize`, Python's
-  ZeroDivisionError as `DivideByZeroException`; an S / U array: a view, `itemsize // 4` for U, so U is always cast;
+  Python's `ZeroDivisionError`; an S / U array: a view, `itemsize // 4` for U, so U is always cast;
   numbers, bools, None and StringDType through NumPy's `tolist()` route, value-based widths; floats cast once, then
   narrowed).
 - The finalize rule (`dtype.char in 'VSUbc'`, else `ValueError: Can only create a chararray from string data.`) runs

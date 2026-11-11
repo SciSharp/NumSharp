@@ -186,7 +186,7 @@ namespace NumSharp
             TensorEngine.ReduceAdd(self, axis, keepdims: true, dtype, outView);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
-                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'", "_collapse", @out);
             return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
@@ -228,7 +228,7 @@ namespace NumSharp
             TensorEngine.ReduceProduct(self, axis, keepdims: true, dtype, outView);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
-                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'", "_collapse", @out);
             return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
@@ -278,7 +278,7 @@ namespace NumSharp
             TensorEngine.ReduceMean(self, axis, keepdims: true, dtype, outView);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
-                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'", "_collapse", @out);
             return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
@@ -332,7 +332,7 @@ namespace NumSharp
             TensorEngine.ReduceVar(self, axis, keepdims: true, ddof, dtype, outView);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
-                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'", "_collapse", @out);
             return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
@@ -386,7 +386,7 @@ namespace NumSharp
             TensorEngine.ReduceStd(self, axis, keepdims: true, ddof, dtype, outView);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
-                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'", "_collapse", @out);
             return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
@@ -490,7 +490,7 @@ namespace NumSharp
             np.max(self, axis: axis, @out: outView, keepdims: true);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
-                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'", "_collapse", @out);
             return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
@@ -528,7 +528,7 @@ namespace NumSharp
             np.min(self, axis: axis, @out: outView, keepdims: true);
             // matrix._collapse(axis) on the out NumPy's reduction returned: a plain out has no _collapse (after the store)
             if (@out is not NDMatrix matrixOut)
-                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'");
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_collapse'", "_collapse", @out);
             return axis is null ? ScalarFrom(matrixOut) : matrixOut;
         }
 
@@ -754,7 +754,7 @@ namespace NumSharp
                 return index;
             // _align(None) is self[0, 0]: a plain out has no _align.
             if (@out is not NDMatrix matrixOut)
-                throw new AttributeError("'numpy.ndarray' object has no attribute '_align'");
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_align'", "_align", @out);
             return ScalarFrom(matrixOut);
         }
 
@@ -778,7 +778,7 @@ namespace NumSharp
                 if (!indices.Shape.Equals(@out.Shape))
                     throw new ValueError($"output array does not match result of np.{(max ? "argmax" : "argmin")}.");
                 np.copyto(outView, indices, casting: "unsafe");
-                throw new AttributeError("'numpy.ndarray' object has no attribute '_align'");
+                throw new AttributeError("'numpy.ndarray' object has no attribute '_align'", "_align", @out);
             }
 
             return Align(indices, axis, wrapped: false);

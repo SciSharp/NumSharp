@@ -667,7 +667,7 @@ namespace NumSharp
         /// <exception cref="UnicodeDecodeError">An <c>S</c> input is not ASCII and the result is <c>U</c>.</exception>
         /// <exception cref="ValueError">A text input does not parse into a numeric result (NumPy's <c>int()</c> /
         ///     <c>float()</c> / <c>complex()</c> texts).</exception>
-        /// <exception cref="OverflowException">An integer text input does not fit a numeric result.</exception>
+        /// <exception cref="OverflowError">An integer text input does not fit a numeric result.</exception>
         /// <remarks>
         ///     <b>Order (NumPy's <c>PyArray_ConcatenateArrays</c>).</b> The <paramref name="out"/> shape first; then each input
         ///     in turn through <c>PyArray_AssignArray</c> — its casting rule, then its conversion — so the FIRST input's rule or
@@ -780,7 +780,7 @@ namespace NumSharp
         ///     builds an object array, which NumSharp has no storage for).</exception>
         /// <exception cref="ArgumentException"><paramref name="copy"/> is false and a copy, a cast or a literal's / None's
         ///     conversion is needed (NumPy's "Unable to avoid copy" ValueError).</exception>
-        /// <exception cref="OverflowException">A C# literal out of an integer <paramref name="dtype"/>'s range.</exception>
+        /// <exception cref="OverflowError">A C# literal out of an integer <paramref name="dtype"/>'s range.</exception>
         /// <exception cref="ValueError">A NaN literal into an integer dtype, or an unknown <paramref name="order"/>.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype, or None into an integer (or decimal) one.</exception>
         /// <remarks>An explicit 0-d array (<see cref="NDArray.IsExplicitZeroDimArray"/>) stays one through the copy, the cast
@@ -879,7 +879,7 @@ namespace NumSharp
         ///     0-d array), or a new C-contiguous array: the caller must not dispose the result unless it is not
         ///     <paramref name="a"/> (<c>ReferenceEquals</c>), and a view keeps <paramref name="a"/>'s buffer
         ///     alive.</returns>
-        /// <exception cref="OverflowException">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s
+        /// <exception cref="OverflowError">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s
         ///     range (<see cref="asarray"/>'s Python-scalar packing).</exception>
         /// <exception cref="ValueError">A NaN literal into an integer dtype.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
@@ -907,7 +907,7 @@ namespace NumSharp
         ///     0-d array), or a new F-contiguous array: the caller must not dispose the result unless it is not
         ///     <paramref name="a"/> (<c>ReferenceEquals</c>), and a view keeps <paramref name="a"/>'s buffer
         ///     alive.</returns>
-        /// <exception cref="OverflowException">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s
+        /// <exception cref="OverflowError">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s
         ///     range (<see cref="asarray"/>'s Python-scalar packing).</exception>
         /// <exception cref="ValueError">A NaN literal into an integer dtype.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
@@ -942,7 +942,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A ragged jagged array or object list (NumPy's inhomogeneous-shape text), or a value
         ///     the requested dtype's setitem refuses.</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
-        /// <exception cref="OverflowException">A Python int (a C# integer in an object list) outside the requested integer
+        /// <exception cref="OverflowError">A Python int (a C# integer in an object list) outside the requested integer
         ///     dtype.</exception>
         /// <exception cref="TypeError">A value of an object list the requested dtype cannot convert (None into an
         ///     integer dtype, a complex number into a real one).</exception>
@@ -1068,7 +1068,7 @@ namespace NumSharp
         /// <returns>The new array.</returns>
         /// <exception cref="ValueError">A ragged list (NumPy's inhomogeneous-shape text), or a value the requested dtype's
         ///     setitem refuses.</exception>
-        /// <exception cref="OverflowException">A Python int outside the requested integer dtype.</exception>
+        /// <exception cref="OverflowError">A Python int outside the requested integer dtype.</exception>
         /// <exception cref="TypeError">A value the requested dtype cannot convert.</exception>
         /// <exception cref="NotSupportedException">None or a Python int past 64 bits without a request (NumPy's object
         ///     array), or a value of no NumPy type.</exception>
@@ -1119,7 +1119,7 @@ namespace NumSharp
         /// <returns><paramref name="operand"/> itself, or a new array of its class.</returns>
         /// <exception cref="ValueError">A chararray converted to a dtype that is not string data (<c>Can only create a
         ///     chararray from string data.</c>), or a matrix result with more than two axes longer than 1.</exception>
-        /// <exception cref="OverflowException">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s range
+        /// <exception cref="OverflowError">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s range
         ///     (<see cref="asarray"/>'s Python-scalar packing).</exception>
         /// <remarks>The conversion runs on the operand's plain view (the plain route answers every dtype and layout question
         ///     exactly as for a plain array); the scope reclaims that view and the hidden plain result, which the subclass
@@ -1160,7 +1160,7 @@ namespace NumSharp
         ///     a dtype (NumPy's object array), or a value of a type this conversion does not read.</exception>
         /// <exception cref="TypeError">None into an integer (or decimal) dtype, or a list item the requested dtype cannot
         ///     convert.</exception>
-        /// <exception cref="OverflowException">A Python int in a list outside the requested integer dtype.</exception>
+        /// <exception cref="OverflowError">A Python int in a list outside the requested integer dtype.</exception>
         /// <remarks>The subclass's own conversion code (<see cref="SubclassAwareAttribute"/>): an array subclass operand
         ///     (<see cref="NDMatrix"/>, <see cref="NDCharArray"/>) passes through as its class - itself when nothing needs
         ///     converting, else the conversion created as the class (<see cref="AsAnyArrayOfSubclass"/>) - so a public

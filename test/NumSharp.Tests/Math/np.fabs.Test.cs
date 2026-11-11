@@ -114,7 +114,7 @@ namespace NumSharp.Tests.Math
         public void fabs_Complex_FloatDtype_ThrowsCastError()
         {
             var c = np.array(new[] { new Complex(3, 4) });
-            var ex = Assert.ThrowsException<TypeError>(() => np.fabs(c, dtype: np.float64));
+            var ex = Assert.ThrowsException<UFuncInputCastingError>(() => np.fabs(c, dtype: np.float64));
             StringAssert.Contains(ex.Message,
                 "Cannot cast ufunc 'fabs' input from dtype('complex128') to dtype('float64') with casting rule 'same_kind'");
         }
@@ -171,7 +171,7 @@ namespace NumSharp.Tests.Math
         {
             // The loop dtype is float64 (int32 input); out=int64 is not a same_kind cast. The error must
             // name "fabs" (not "absolute") even though the kernel is UnaryOp.Abs.
-            var ex = Assert.ThrowsException<TypeError>(
+            var ex = Assert.ThrowsException<UFuncOutputCastingError>(
                 () => np.fabs(np.array(new[] { -3 }), @out: np.zeros(1, np.int64)));
             StringAssert.Contains(ex.Message,
                 "Cannot cast ufunc 'fabs' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'");

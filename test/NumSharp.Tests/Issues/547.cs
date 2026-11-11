@@ -35,7 +35,7 @@ namespace NumSharp.Tests.Issues
         public void Nep50_IsDone()
         {
             (np.ones(new Shape(2), np.float32) + 0.1).typecode.Should().Be(NPTypeCode.Single);
-            new Action(() => { var _ = np.array(new byte[] { 1 }) + 300; }).Should().Throw<OverflowException>();
+            new Action(() => { var _ = np.array(new byte[] { 1 }) + 300; }).Should().Throw<OverflowError>();
             np.result_type(np.int8, np.uint8).Should().Be((DType)np.int16);
             np.result_type(np.uint8, np.int8).Should().Be((DType)np.int16);
         }

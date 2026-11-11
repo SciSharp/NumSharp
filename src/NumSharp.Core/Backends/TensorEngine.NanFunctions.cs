@@ -38,7 +38,7 @@ namespace NumSharp
         ///     reduction operation fmin which has no identity</c>, NumPy's ValueError); a non-bool mask.</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, a mask without
         ///     <paramref name="initial"/>, an <paramref name="initial"/> the loop cannot hold.</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a complex <paramref name="initial"/> for a real loop.</exception>
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
         /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.80.0
@@ -69,7 +69,7 @@ namespace NumSharp
         ///     reduction operation fmax which has no identity</c>, NumPy's ValueError); a non-bool mask.</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, a mask without
         ///     <paramref name="initial"/>, an <paramref name="initial"/> the loop cannot hold.</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a complex <paramref name="initial"/> for a real loop.</exception>
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
         /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.80.0
@@ -248,7 +248,7 @@ namespace NumSharp
         /// <exception cref="IndexError">Data that is not empty, under keepdims, with an out NumPy cannot index
         ///     (<c>_ureduce</c>'s prologue), before the text refusals.</exception>
         /// <exception cref="InvalidCastException">A q array of a complex dtype.</exception>
-        /// <exception cref="OverflowException">An integer q array whose virtual indexes leave its dtype.</exception>
+        /// <exception cref="OverflowError">An integer q array whose virtual indexes leave its dtype.</exception>
         /// <remarks>
         ///     NumPy writes nanquantile in Python; DefaultEngine's override runs its statements in NumPy's order.
         ///     <c>np.nanquantile</c> calls it after its class rule; an override replaces it for every array whose engine it
@@ -348,7 +348,7 @@ namespace NumSharp
         ///     result of np.argmax.</c>); a <c>StringDType</c> line of two or more elements holding an NA that is neither a
         ///     string nor NaN-like.</exception>
         /// <exception cref="TypeError">An out whose dtype does not cast safely to int64.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
         ///     text).</exception>
         /// <remarks>The result cannot be trusted when a slice holds only NaNs and infinities of the losing sign (NumPy's
         ///     caveat).</remarks>
@@ -378,7 +378,7 @@ namespace NumSharp
         ///     result of np.argmin.</c>); a <c>StringDType</c> line of two or more elements holding an NA that is neither a
         ///     string nor NaN-like.</exception>
         /// <exception cref="TypeError">An out whose dtype does not cast safely to int64.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
         ///     text).</exception>
         /// <remarks>The result cannot be trusted when a slice holds only NaNs and infinities of the losing sign (NumPy's
         ///     caveat).</remarks>

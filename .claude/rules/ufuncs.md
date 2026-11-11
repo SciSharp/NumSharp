@@ -20,11 +20,15 @@ paths:
   exactly; `add(True, True, dtype: i32)` is 2 (the bool→logical-OR remap keys off the final loop dtype);
   `negative(bool, dtype: f64)` is legal. Inputs must reach the loop through same_kind casts (`Cannot cast ufunc
   '<name>' input [N] from ...`; binary errors are indexed, unary errors are not).
-- Every ufunc cast refusal raises `TypeError` with NumPy's `UFuncTypeError` text (parity QA-04): an input that cannot
-  reach a `dtype=` loop, a loop result that cannot reach `out=` (`Cannot cast ufunc '<name>' output from ...`), a gufunc's
-  text operand, `round_`/`around`'s float64 composition cast back into a bool or integer array, on every route (the
-  validators in `DefaultEngine.UfuncOut.cs`, `GufuncGuard.cs`, the string loops, np.evaluate, fft, linalg, polynomial
-  calculus). It is not an `ArgumentException`; the `where=` mask's 'safe'-cast refusal still is.
+- Every ufunc cast refusal raises NumPy's `UFuncInputCastingError` / `UFuncOutputCastingError` (both `UFuncCastingError`
+  : `UFuncTypeError` : `TypeError`) with NumPy's text and attributes (parity QA-04): an input that cannot reach a `dtype=`
+  loop, a loop result that cannot reach `out=` (`Cannot cast ufunc '<name>' output from ...`), a gufunc's text operand,
+  `round_`/`around`'s float64 composition cast back into a bool or integer array, on every route (the validators in
+  `DefaultEngine.UfuncOut.cs`, `GufuncGuard.cs`, the string loops, np.evaluate, fft, linalg, polynomial calculus); a
+  missing loop for the operands' dtypes raises `UFuncNoLoopError` (its `dtypes` the classes or descriptors NumPy's
+  resolver named), two text classes `UFuncBinaryResolutionError`. A Char / Decimal operand is named by the NumPy dtype it
+  stands in for (`NPTypeCode.AsNumpyDescr`: uint16 / float64), as the texts always were. It is not an
+  `ArgumentException`; the `where=` mask's 'safe'-cast refusal still is.
 - Loop-existence gates raise `No loop matching ... ufunc <name>`: the float-only ufuncs (sqrt, exp, log, trig, `divide`,
   `true_divide`) reject an int or bool dtype; the bitwise ufuncs reject float, complex and decimal dtypes; floor_divide,
   remainder (`np.mod` quotes that name) and fmod reject a bool or complex dtype (integer and float loops only; parity

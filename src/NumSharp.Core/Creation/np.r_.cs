@@ -199,7 +199,7 @@ namespace NumSharp
                 /// <returns>A fresh 1-D array: int64 when every field is a Python int, else float64.</returns>
                 /// <exception cref="ValueError">An imaginary step without a stop; arange's NaN length or length past
                 ///     npy_intp; the allocation guard's <c>array is too big</c>.</exception>
-                /// <exception cref="DivideByZeroException">A zero step: Python's <c>division by zero</c> for ints,
+                /// <exception cref="ZeroDivisionError">A zero step: Python's <c>division by zero</c> for ints,
                 ///     <c>float division by zero</c> once a float is involved.</exception>
                 public NDArray Materialize()
                 {

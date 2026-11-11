@@ -95,7 +95,7 @@ namespace NumSharp.Backends
                 if (NDExprTypeRules.IsIntegerKind(typeCode.Value))
                     return;
                 // A non-integer dtype= has no loop: "(lhs, rhs) -> {dtype}DType".
-                throw new TypeError(GcdLcmNoLoopMessage(ufuncName, lhs.GetTypeCode, rhs.GetTypeCode, typeCode.Value));
+                throw GcdLcmNoLoopError(ufuncName, lhs.GetTypeCode, rhs.GetTypeCode, typeCode.Value);
             }
 
             // No dtype=: resolve the loop from the inputs' NEP50 common type (uint64+signed -> float64,
@@ -103,29 +103,22 @@ namespace NumSharp.Backends
             var common = np._FindCommonType(lhs, rhs);
             if (NDExprTypeRules.IsIntegerKind(common))
                 return;
-            throw new TypeError(GcdLcmNoLoopMessage(ufuncName, lhs.GetTypeCode, rhs.GetTypeCode, null));
+            throw GcdLcmNoLoopError(ufuncName, lhs.GetTypeCode, rhs.GetTypeCode, null);
         }
 
         /// <summary>
-        /// Build NumPy's verbatim no-loop message for gcd/lcm (the
-        /// <c>PyUFunc_SimpleUniformOperationTypeResolver</c> form): the two INPUT operand dtype classes,
-        /// then <c>-&gt; None</c> when the loop was resolved from the inputs, or <c>-&gt; {out}DType</c>
-        /// when an explicit <c>dtype=</c> named the (missing) output loop. Reuses
-        /// <see cref="NumPyDTypeClassName"/> (the shared <c>numpy.dtypes.*DType</c> speller).
+        /// Build NumPy's no-loop refusal for gcd/lcm (the <c>PyUFunc_SimpleUniformOperationTypeResolver</c> form): the
+        /// two INPUT operand dtype classes, then <c>-&gt; None</c> when the loop was resolved from the inputs, or
+        /// <c>-&gt; {out}DType</c> when an explicit <c>dtype=</c> named the (missing) output loop. The classes are the
+        /// descriptors' own <see cref="DTypeMeta"/> objects (NumPy's error holds the classes), printed as NumPy prints them.
         /// </summary>
         /// <param name="ufuncName">"gcd" or "lcm".</param>
         /// <param name="lhsType">First input's dtype.</param>
         /// <param name="rhsType">Second input's dtype.</param>
         /// <param name="outType">The requested output loop dtype, or null for the inputs-resolution form.</param>
-        /// <returns>The exception message, byte-identical to NumPy 2.4.2.</returns>
-        private static string GcdLcmNoLoopMessage(string ufuncName, NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode? outType)
-        {
-            string outRepr = outType.HasValue
-                ? $"<class 'numpy.dtypes.{NumPyDTypeClassName(outType.Value)}'>"
-                : "None";
-            return $"ufunc '{ufuncName}' did not contain a loop with signature matching types " +
-                   $"(<class 'numpy.dtypes.{NumPyDTypeClassName(lhsType)}'>, " +
-                   $"<class 'numpy.dtypes.{NumPyDTypeClassName(rhsType)}'>) -> {outRepr}";
-        }
+        /// <returns>The exception (not thrown), its text byte-identical to NumPy 2.4.2.</returns>
+        private static UFuncNoLoopError GcdLcmNoLoopError(string ufuncName, NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode? outType)
+            => new UFuncNoLoopError(ufuncName, 2, ((DType)lhsType).Meta, ((DType)rhsType).Meta,
+                outType.HasValue ? ((DType)outType.Value).Meta : null);
     }
 }

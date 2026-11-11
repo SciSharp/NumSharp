@@ -197,7 +197,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A scl, constant or lbnd value the series cannot absorb in place (NumPy's
         ///     UFuncTypeError text).</exception>
         /// <exception cref="IncorrectShapeException">Constants that do not broadcast with the series' columns.</exception>
-        /// <exception cref="OverflowException">A Python-int scl / lbnd / constant too large for the series' float dtype
+        /// <exception cref="OverflowError">A Python-int scl / lbnd / constant too large for the series' float dtype
         ///     (<c>int too large to convert to float</c>).</exception>
         /// <exception cref="NotSupportedException">A null series; a text series whose recurrence would read the strings
         ///     (<see cref="NDPolySeries.TextArithmeticRefusal(NDArray)"/>, after NumPy's checks, the m == 0 copy, the first
@@ -376,7 +376,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">A result tmp[0] cannot hold in place (N-D) — named complex64 where NumPy's
         ///     value is complex64.</exception>
         /// <exception cref="IncorrectShapeException">A constant that does not broadcast with tmp[0] (N-D).</exception>
-        /// <exception cref="OverflowException">A Python-int lbnd or constant too large for the series' dtype.</exception>
+        /// <exception cref="OverflowError">A Python-int lbnd or constant too large for the series' dtype.</exception>
         /// <exception cref="NotSupportedException">A str lbnd (NumPy evaluates the series AT it — a str-dtype error).</exception>
         private static void Correct(PolyBasis basis, NDArray buf, long ws, long len, long[] md, bool oneD, NPTypeCode t,
             object kRaw, object lbndArg)
@@ -558,14 +558,14 @@ namespace NumSharp
                 int len = 0;
                 foreach (var _ in text.EnumerateRunes())
                     len++;
-                throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"ufunc 'add' did not contain a loop with signature matching types " +
-                                    $"(dtype('{cm.typecode.AsNumpyDtypeName()}'), dtype('<U{Math.Max(1, len)}')) -> None"));
+                throw new UFuncNoLoopError("add", 2, cm.typecode.AsNumpyDescr(),
+                    (DType)string.Create(CultureInfo.InvariantCulture, $"<U{Math.Max(1, len)}"), null);
             }
             if (kRaw is TextBytesConstant bytes)
             {
                 // c[0] + np.bytes_(…): the same no-loop add, the bytes' dtype np.array's — S{len}, S1 for the empty bytes.
-                throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"ufunc 'add' did not contain a loop with signature matching types " +
-                                    $"(dtype('{cm.typecode.AsNumpyDtypeName()}'), dtype('S{Math.Max(1, bytes.Length)}')) -> None"));
+                throw new UFuncNoLoopError("add", 2, cm.typecode.AsNumpyDescr(),
+                    (DType)string.Create(CultureInfo.InvariantCulture, $"S{Math.Max(1, bytes.Length)}"), null);
             }
             if (kRaw is NDArray textRow && Backends.Strings.NDStringUfuncs.IsText(textRow))
             {
@@ -618,9 +618,8 @@ namespace NumSharp
                 // NEP 50 promotion is symmetric, so the side does not matter.
                 bool c64 = PolyNumber.IsComplex64Loop(operand, t, bIsComplex64: false)
                            || (operandIsComplex64 && PolyNumber.IsComplex64Loop(PolyNumber.FromArray(target), NPTypeCode.Complex, bIsComplex64: true));
-                string loopName = loop == NPTypeCode.Complex && c64 ? "complex64" : loop.AsNumpyDtypeName();
-                throw new TypeError($"Cannot cast ufunc '{ufunc}' output from dtype('{loopName}') to " +
-                                            $"dtype('{t.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+                object loopDescr = loop == NPTypeCode.Complex && c64 ? PyDescrPlaceholder.Complex64Descr : loop.AsNumpyDescr();
+                throw new UFuncOutputCastingError(ufunc, 1, "same_kind", loopDescr, t.AsNumpyDescr(), 2);
             }
             if (operand.IsNdArray)
                 CheckInPlaceBroadcast(target.Shape, operand.Array.Shape);
@@ -920,9 +919,9 @@ namespace NumSharp
                 case TextBytesConstant b:
                 {
                     // np.array(np.bytes_(…)).dtype: S{len}, S1 for the empty bytes.
-                    string other = v.IsComplex64 ? "complex64" : v.Dtype.AsNumpyDtypeName();
-                    throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"ufunc 'subtract' did not contain a loop with signature matching types " +
-                                        $"(dtype('S{Math.Max(1, b.Length)}'), dtype('{other}')) -> None"));
+                    object other = v.IsComplex64 ? PyDescrPlaceholder.Complex64Descr : v.Dtype.AsNumpyDescr();
+                    throw new UFuncNoLoopError("subtract", 2,
+                        (DType)string.Create(CultureInfo.InvariantCulture, $"S{Math.Max(1, b.Length)}"), other, null);
                 }
                 case NDArray text when Backends.Strings.NDStringUfuncs.IsText(text):
                 {
@@ -938,9 +937,9 @@ namespace NumSharp
                     int len = 0;
                     foreach (var _ in text.EnumerateRunes())
                         len++;
-                    string other = v.IsComplex64 ? "complex64" : v.Dtype.AsNumpyDtypeName();
-                    throw new TypeError(string.Create(CultureInfo.InvariantCulture, $"ufunc 'subtract' did not contain a loop with signature matching types " +
-                                        $"(dtype('<U{Math.Max(1, len)}'), dtype('{other}')) -> None"));
+                    object other = v.IsComplex64 ? PyDescrPlaceholder.Complex64Descr : v.Dtype.AsNumpyDescr();
+                    throw new UFuncNoLoopError("subtract", 2,
+                        (DType)string.Create(CultureInfo.InvariantCulture, $"<U{Math.Max(1, len)}"), other, null);
                 }
                 case null:
                     throw new TypeError($"unsupported operand type(s) for -: 'NoneType' and '{NDPolyBase.ObjectLoopTypeName(v)}'");
@@ -1073,17 +1072,16 @@ namespace NumSharp
         ///     UFuncTypeError text).</exception>
         /// <exception cref="NotSupportedException">A string scl.</exception>
         /// <exception cref="ValueError">A ragged list / tuple scl.</exception>
-        /// <exception cref="OverflowException">A Python int scl too large for the series' dtype.</exception>
+        /// <exception cref="OverflowError">A Python int scl too large for the series' dtype.</exception>
         private static ScaleRoute ClassifyScale(object scl, NPTypeCode t, out PolyNumber num, byte* raw, out NPTypeCode scaleLoop)
         {
             num = scl is null ? PolyNumber.FromPython(s_one) : PolyNumber.FromObject(scl);
             var loop = num.IsPython ? PolyNumber.WeakPromote(t, num.Py) : PolyTyping.Promote(t, num.Dtype);
             if (loop != t && !NDIterCasting.CanCast(loop, t, NPY_CASTING.NPY_SAME_KIND_CASTING))
             {
-                string loopName = loop == NPTypeCode.Complex && PolyNumber.IsComplex64Loop(num, t, bIsComplex64: false)
-                    ? "complex64" : loop.AsNumpyDtypeName();
-                throw new TypeError($"Cannot cast ufunc 'multiply' output from dtype('{loopName}') to " +
-                                            $"dtype('{t.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+                object loopDescr = loop == NPTypeCode.Complex && PolyNumber.IsComplex64Loop(num, t, bIsComplex64: false)
+                    ? PyDescrPlaceholder.Complex64Descr : loop.AsNumpyDescr();
+                throw new UFuncOutputCastingError("multiply", 1, "same_kind", loopDescr, t.AsNumpyDescr(), 2);
             }
             if (!num.IsNdArray && (loop == t || PolyCalcKey.HasWidenedScale(t, loop)))
             {

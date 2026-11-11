@@ -676,12 +676,12 @@ namespace NumSharp.Backends.Strings
             /// <summary>A <c>StringDType</c> element (<c>stringdtype_getitem</c>): a str, or the NA object.</summary>
             /// <param name="cell">The cell.</param>
             /// <param name="e">Receives the object.</param>
-            /// <exception cref="OutOfMemoryException">A corrupt cell.</exception>
+            /// <exception cref="MemoryError">A corrupt cell.</exception>
             private void ReadVString(byte* cell, ref Elem e)
             {
                 int isNull = Allocator.load(cell, out byte* buf, out long size);
                 if (isNull < 0)
-                    throw new OutOfMemoryException("Failed to load string");
+                    throw new MemoryError("Failed to load string");
                 if (isNull == 1)
                 {
                     // An NA reads as the NA object itself (a string NA is that string); without an NA object as ''.
@@ -908,7 +908,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>The integer.</returns>
         /// <exception cref="TypeError">No <c>__index__</c>: <c>'numpy.float64' object cannot be interpreted as an integer</c>
         ///     (<c>np.bool</c> has none in NumPy 2).</exception>
-        /// <exception cref="OverflowException">The integer exceeds <c>Py_ssize_t</c> (<c>Python int too large to convert to C
+        /// <exception cref="OverflowError">The integer exceeds <c>Py_ssize_t</c> (<c>Python int too large to convert to C
         ///     ssize_t</c>).</exception>
         private static long Index(in Elem e)
         {
@@ -927,7 +927,7 @@ namespace NumSharp.Backends.Strings
                     case NPTypeCode.UInt64:
                         ulong u = *(ulong*)e.Raw;
                         if (u > long.MaxValue)
-                            throw new OverflowException(SsizeOverflowText);
+                            throw new OverflowError(SsizeOverflowText);
                         return (long)u;
                 }
             }
@@ -945,11 +945,11 @@ namespace NumSharp.Backends.Strings
                     case long v: return v;
                     case ulong v:
                         if (v > long.MaxValue)
-                            throw new OverflowException(SsizeOverflowText);
+                            throw new OverflowError(SsizeOverflowText);
                         return (long)v;
                     case BigInteger v:
                         if (v < long.MinValue || v > long.MaxValue)
-                            throw new OverflowException(SsizeOverflowText);
+                            throw new OverflowError(SsizeOverflowText);
                         return (long)v;
                 }
             }
@@ -1876,7 +1876,7 @@ namespace NumSharp.Backends.Strings
         ///     doesn't apply to a 'NoneType' object</c>); a maxsplit without <c>__index__</c>; a str method's separator that
         ///     is not a str or None (<c>must be str or None, not numpy.int64</c>); a bytes method's separator without a
         ///     buffer (<c>a bytes-like object is required, not 'str'</c>).</exception>
-        /// <exception cref="OverflowException">A maxsplit beyond <c>Py_ssize_t</c>.</exception>
+        /// <exception cref="OverflowError">A maxsplit beyond <c>Py_ssize_t</c>.</exception>
         /// <exception cref="ValueError">An empty separator (<c>empty separator</c>).</exception>
         private static bool SplitElement<TUnit>(byte* pa, byte* ps, byte* pm, SplitState state)
             where TUnit : unmanaged, IEquatable<TUnit>
@@ -2418,7 +2418,7 @@ namespace NumSharp.Backends.Strings
                                 int bytes = EncodeUtf8(points, (int)length, ref utf8);
                                 fixed (byte* u = utf8)
                                     if (allocator.newsize(u, bytes, cells + position * 16) < 0)
-                                        throw new OutOfMemoryException("Failed to pack string in join");
+                                        throw new MemoryError("Failed to pack string in join");
                             }
                             position++;
                         }

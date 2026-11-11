@@ -152,7 +152,7 @@ namespace NumSharp.Tests.Math
             // A zero step with edge_order=2: CPython's `-1.5 / 0.0` raises; np.float16(0) gives -inf, inf, -inf
             // coefficients (scalarmath), so the edges are inf - inf, a NaN (its sign is the CPU's default NaN).
             Action pyZero = () => np.gradient(f32, 0.0, edge_order: 2);
-            pyZero.Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+            pyZero.Should().Throw<ZeroDivisionError>().WithMessage("float division by zero");
             float[] halfZero = ((NDArray)np.gradient(f32, (Half)0.0, edge_order: 2)).ToArray<float>();
             float.IsNaN(halfZero[0]).Should().BeTrue();
             float.IsNaN(halfZero[6]).Should().BeTrue();
@@ -314,7 +314,7 @@ namespace NumSharp.Tests.Math
             secondAxis.Should().Throw<IndexError>().WithMessage("index 2 is out of bounds for axis 1 with size 2");
             // The coefficients come first: a Python zero step raises its ZeroDivisionError before the index does.
             Action zeroStep = () => np.gradient(np.array(new[] { 1.0, 2.0 }), 0.0, edge_order: 0);
-            zeroStep.Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+            zeroStep.Should().Throw<ZeroDivisionError>().WithMessage("float division by zero");
         }
 
         /// <summary>

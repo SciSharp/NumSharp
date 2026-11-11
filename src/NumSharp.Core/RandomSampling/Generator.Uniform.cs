@@ -11,7 +11,7 @@ namespace NumSharp
         /// <param name="high">Upper boundary (exclusive). Default 1.</param>
         /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
         /// <returns>The float64 draws.</returns>
-        /// <exception cref="OverflowException"><c>high - low</c> is not finite (NumPy's <c>OverflowError</c>).</exception>
+        /// <exception cref="OverflowError"><c>high - low</c> is not finite (NumPy's <c>OverflowError</c>).</exception>
         /// <exception cref="ValueError"><c>high - low</c> has its sign bit set (NumPy's <c>CONS_NON_NEGATIVE</c>: <c>-0.0</c> included).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.uniform.html
@@ -21,7 +21,7 @@ namespace NumSharp
         {
             double range = high - low;
             if (double.IsInfinity(range) || double.IsNaN(range))
-                throw new OverflowException("high - low range exceeds valid bounds");
+                throw new OverflowError("high - low range exceeds valid bounds");
             CheckNonNegative(range, "high - low"); // NumPy CONS_NON_NEGATIVE on 'high - low'
 
             lock (_bitGenerator.@lock)

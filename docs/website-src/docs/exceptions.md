@@ -1,14 +1,14 @@
 # NumSharp Exceptions
 
-NumSharp raises NumPy's errors: an exception named after the Python or NumPy exception NumPy raises (`ValueError`, `TypeError`, `AxisError`, `LinAlgError`, ...), with NumPy's message text. Where .NET already has the matching exception, NumSharp uses it (`OverflowException` for Python's `OverflowError`, `NotSupportedException` for a dtype or feature NumSharp does not implement).
+NumSharp raises NumPy's errors: an exception named after the Python or NumPy exception NumPy raises (`ValueError`, `TypeError`, `OverflowError`, `AxisError`, `LinAlgError`, ...), with NumPy's message text. Every exception class of Python 3.12 and of NumPy has a NumSharp class of the same name, with Python's constructors and attributes, so code ported from Python raises and catches the same classes.
 
 ## Design principles
 
 1. **NumPy's message.** The message is NumPy's text for the same failure, so an error you look up in NumPy's documentation or issue tracker reads the same.
-2. **NumPy's class, on a .NET base.** Each class follows Python's hierarchy where .NET allows it, and derives from the .NET exception a .NET caller expects: `ValueError` is an `ArgumentException`, `AxisError` an `ArgumentOutOfRangeException`, `OSError` an `IOException`.
+2. **A .NET twin, then Python's hierarchy.** A class directly under Python's `Exception` derives from the .NET exception with the same meaning: `ValueError` is an `ArgumentException`, `ArithmeticError` an `ArithmeticException`, `MemoryError` an `OutOfMemoryException`, `OSError` an `IOException`, `EOFError` an `EndOfStreamException`, `BaseExceptionGroup` an `AggregateException`. A class with no .NET twin derives from `NumSharpException`. Every other class derives from its Python parent: `OverflowError` from `ArithmeticError`, `FileNotFoundError` from `OSError`, `RecursionError` from `RuntimeError`.
 3. **One marker.** Every NumSharp exception implements `INumSharpException`, whatever its .NET base, so one filter catches them all.
 4. **The same text under every culture.** A number in a message is formatted with the invariant culture, as NumPy's texts are ASCII whatever the locale (see [Culture-independent texts](#culture-independent-texts)).
-5. **Python's constructors.** Every Python-named class takes no argument, a message, or a message and its cause. A bare `new KeyError()` reads Python's `str(KeyError())`, an empty text (`SyntaxError()` reads `None`, as CPython prints it), so a port of a bare `assert` or `raise NotImplementedError` keeps Python's text. `new KeyError(message, innerException)` is Python's `raise KeyError(message) from e`: the cause stays in `InnerException`.
+5. **Python's constructors and attributes.** Every Python-named class takes no argument, a message, or a message and its cause. A bare `new KeyError()` reads Python's `str(KeyError())`, an empty text (the `SyntaxError` family reads `None`, as CPython prints it), so a port of a bare `assert` or `raise NotImplementedError` keeps Python's text. `new KeyError(message, innerException)` is Python's `raise KeyError(message) from e`: the cause stays in `InnerException`. Classes with attributes in Python take Python's arguments and expose the attributes (`OSError.errno`, `SyntaxError.lineno`, `StopIteration.value`, see [Python's attributes](#pythons-attributes)).
 
 ---
 
@@ -18,21 +18,40 @@ NumSharp raises NumPy's errors: an exception named after the Python or NumPy exc
 Exception
 +-- NumSharpException
 |   +-- TypeError
-|   |   +-- IncorrectTypeException      no loop for the requested dtype (NumPy's UFuncTypeError text)
+|   |   +-- IncorrectTypeException      no loop for the requested dtype (NumPy's TypeError text)
 |   |   +-- DTypePromotionError         numpy.exceptions.DTypePromotionError
+|   |   +-- UFuncTypeError              a ufunc that cannot run for its operands' dtypes
+|   |       +-- UFuncNoLoopError        no loop for the dtypes
+|   |       |   +-- UFuncBinaryResolutionError
+|   |       +-- UFuncCastingError       a cast the casting= rule forbids
+|   |           +-- UFuncInputCastingError
+|   |           +-- UFuncOutputCastingError
 |   +-- IndexError
 |   +-- KeyError
 |   +-- AttributeError
 |   +-- NameError
+|   |   +-- UnboundLocalError
 |   +-- AssertionError
 |   +-- SyntaxError
+|   |   +-- IndentationError
+|   |       +-- TabError
 |   +-- SystemError
 |   +-- BufferError
+|   +-- ReferenceError
 |   +-- RuntimeError
 |   |   +-- NotImplementedError         Python's, as NumPy raises it
+|   |   +-- RecursionError
 |   |   +-- TooHardError                numpy.exceptions.TooHardError
-|   +-- ImportError                     Python's, for ported code
+|   +-- ImportError
 |   |   +-- ModuleNotFoundError
+|   +-- StopIteration
+|   +-- StopAsyncIteration
+|   +-- LapackError                     numpy.linalg.lapack_lite.LapackError
+|   +-- ConverterError                  numpy.lib._iotools.ConverterError
+|   |   +-- ConverterLockError
+|   +-- KeyboardInterrupt               BaseException-level in Python
+|   +-- SystemExit                      BaseException-level in Python
+|   +-- GeneratorExit                   BaseException-level in Python
 |   +-- IncorrectShapeException         a shape that does not fit (NumPy's ValueError text)
 |   +-- IncorrectSizeException          a size that does not fit (NumPy's ValueError text)
 +-- ArgumentException
@@ -40,13 +59,31 @@ Exception
 |   |   +-- UnicodeError
 |   |   |   +-- UnicodeEncodeError
 |   |   |   +-- UnicodeDecodeError
+|   |   |   +-- UnicodeTranslateError
 |   |   +-- LinAlgError                 numpy.linalg.LinAlgError
 |   +-- LookupError
 |   +-- ArgumentOutOfRangeException
 |       +-- AxisError                   numpy.exceptions.AxisError
 |           +-- AxisOutOfRangeException legacy, no longer raised
++-- ArithmeticException
+|   +-- ArithmeticError
+|       +-- OverflowError
+|       +-- ZeroDivisionError
+|       +-- FloatingPointError
++-- OutOfMemoryException
+|   +-- MemoryError
+|       +-- ArrayMemoryError            NumPy's _ArrayMemoryError
 +-- IOException
 |   +-- OSError
+|   |   +-- FileNotFoundError, FileExistsError, PermissionError, IsADirectoryError, NotADirectoryError,
+|   |   |   BlockingIOError, ChildProcessError, InterruptedError, ProcessLookupError, TimeoutError
+|   |   +-- ConnectionError
+|   |       +-- BrokenPipeError, ConnectionAbortedError, ConnectionRefusedError, ConnectionResetError
+|   +-- EndOfStreamException
+|       +-- EOFError
++-- AggregateException
+|   +-- BaseExceptionGroup
+|       +-- ExceptionGroup
 +-- NotSupportedException
 |   +-- MissingBackendException         an operation that needs a native backend
 |   |   +-- OpenBlasMissingBackendException
@@ -57,7 +94,17 @@ Exception
 
 `ValueError`, `LookupError` and `AxisError` sit under .NET's argument exceptions, so a .NET `catch (ArgumentException)` also catches them. Python's `IndexError` and `KeyError` derive from `LookupError`; in NumSharp they are `NumSharpException`s, because `LookupError` is an `ArgumentException` here.
 
-`NotImplementedError` follows Python's hierarchy, so `catch (RuntimeError)` catches it as `except RuntimeError` does. It is not .NET's `NotImplementedException`: NumSharp raises `NotImplementedError` where NumPy refuses an input, and keeps `NotImplementedException` / `NotSupportedException` for what NumSharp itself does not implement.
+The arithmetic, memory, I/O and group classes sit on their .NET twins, so `catch (ArithmeticException)` catches every `OverflowError` and `ZeroDivisionError`, `catch (OutOfMemoryException)` every `MemoryError`, and `catch (IOException)` every `OSError` and `EOFError` (`EOFError` is no `OSError`, as in Python).
+
+Footguns, each the price of Python's hierarchy:
+
+- `OverflowError` is not .NET's `OverflowException`, and `ZeroDivisionError` is not `DivideByZeroException` (they are siblings under `ArithmeticException`): a `catch (OverflowException)` misses NumPy's overflow. NumSharp keeps .NET's `OverflowException` for its own limits only (a managed array past `int.MaxValue` elements, a `Char8` conversion, `decimal` arithmetic), and a `checked` conversion inside .NET still throws it.
+- `FileNotFoundError` is not .NET's `FileNotFoundException`, `PermissionError` is not `UnauthorizedAccessException`, and `TimeoutError` is not `TimeoutException`.
+- `NotImplementedError` is not .NET's `NotImplementedException`: NumSharp raises `NotImplementedError` where NumPy refuses an input, and keeps `NotImplementedException` / `NotSupportedException` for what NumSharp itself does not implement.
+- `KeyboardInterrupt`, `SystemExit` and `GeneratorExit` sit beside `Exception` under Python's `BaseException`, so `except Exception` does not catch them. C# has one root: `catch (Exception)` catches them.
+- An MSTest `Assert.ThrowsException<TypeError>` checks the exact type, and a ufunc refusal now throws one of the `UFuncTypeError` subclasses; `Assert.Throws<TypeError>` (or `catch (TypeError)`) accepts them.
+
+Python's `OSError(errno, ...)` and `BaseExceptionGroup(message, excs)` return a subclass chosen by their arguments (`OSError(2, ...)` is a `FileNotFoundError`); a C# constructor cannot, so `new OSError(2, ...)` builds an `OSError`, and `OSError.Create(errno, strerror, ...)` / `BaseExceptionGroup.Create(message, excs)` are Python's calls. The errno numbers are the operating system's own, as CPython's `errno` module has them: the same number can name different subclasses on Windows, Linux and macOS.
 
 ---
 
@@ -76,9 +123,20 @@ Exception
 | A write into a read-only view (a broadcast) | `ValueError` | `ValueError` | `assignment destination is read-only` |
 | A dtype with no loop (`np.sqrt` of text) | `TypeError` | `TypeError` | `ufunc 'sqrt' not supported for the input types, ...` |
 | A `dtype=` request with no loop | `IncorrectTypeException` | `TypeError` | `No loop matching the specified signature and casting was found for ufunc sqrt` |
-| A ufunc cast a casting rule refuses (an `out=` the result cannot reach, a `dtype=` loop an input cannot reach, `np.around` of a bool array) | `TypeError` | `UFuncTypeError` (a `TypeError`) | `Cannot cast ufunc 'add' output from dtype('float64') to dtype('int32') with casting rule 'same_kind'` |
+| A ufunc with no loop for its operands (`np.add` of text and numbers) | `UFuncNoLoopError` | `UFuncTypeError` (a `TypeError`) | `ufunc 'add' did not contain a loop with signature matching types (dtype('<U1'), dtype('int64')) -> None` |
+| Two text classes added (`S` and `U`) | `UFuncBinaryResolutionError` | `UFuncTypeError` | `ufunc 'add' cannot use operands with types dtype('S1') and dtype('<U1')` |
+| A ufunc cast a casting rule refuses (an `out=` the result cannot reach, a `dtype=` loop an input cannot reach, `np.around` of a bool array) | `UFuncOutputCastingError` / `UFuncInputCastingError` | `UFuncTypeError` | `Cannot cast ufunc 'add' output from dtype('float64') to dtype('int32') with casting rule 'same_kind'` |
 | Two dtypes with no common dtype | `DTypePromotionError` | `DTypePromotionError` | `The DTypes ... do not have a common DType. ...` |
-| An out-of-range Python-style integer | `OverflowException` | `OverflowError` | `Python integer 300 out of bounds for int8` |
+| An out-of-range Python-style integer | `OverflowError` | `OverflowError` | `Python integer 300 out of bounds for int8` |
+| A float infinity converted to an integer | `OverflowError` | `OverflowError` | `cannot convert float infinity to integer` |
+| Weights that sum to zero (`np.average`) | `ZeroDivisionError` | `ZeroDivisionError` | `Weights sum to zero, can't be normalized` |
+| An array the memory cannot hold | `ArrayMemoryError` | `MemoryError` | `Unable to allocate 8.00 GiB for an array with shape (2147483657,) and data type uint32` |
+| A `StringDType` cell that cannot be allocated | `MemoryError` | `MemoryError` | `Failed to allocate string in add` |
+| A missing file (`np.load`, `np.fromfile`, `np.save` into a missing directory) | `FileNotFoundError` | `FileNotFoundError` | `[Errno 2] No such file or directory: 'x.npy'` |
+| A file that cannot be opened (read-only, held, or a directory on Windows) | `PermissionError` | `PermissionError` | `[Errno 13] Permission denied: 'data'` |
+| A directory opened as a file (Linux, macOS) | `IsADirectoryError` | `IsADirectoryError` | `[Errno 21] Is a directory: 'data'` |
+| `np.load` of an empty file, or past the last array | `EOFError` | `EOFError` | `No data left in file` |
+| A missing member of an `.npz` archive (`npz["x"]`) | `KeyError` | `KeyError` | `'x is not a file in the archive'` |
 | A text that does not parse as a number | `ValueError` | `ValueError` | `invalid literal for int() with base 10: np.str_('x')` |
 | Non-ASCII text cast to `S` | `UnicodeEncodeError` | `UnicodeEncodeError` | `'ascii' codec can't encode character '\xe9' in position 0: ...` |
 | An unknown codec name | `LookupError` | `LookupError` | `unknown encoding: nope` |
@@ -92,11 +150,33 @@ Exception
 
 `AxisError` derives from `ArgumentOutOfRangeException`, so its `Message` ends with .NET's parameter suffix (`(Parameter 'axis')`); the first line is NumPy's text.
 
-`UnicodeEncodeError` and `UnicodeDecodeError` carry Python's attributes: `encoding`, `@object` (the element's text or bytes), `start`, `end` and `reason`. A `catch (UnicodeDecodeError e)` therefore reads where a codec failed without parsing the message. `start` and `end` count code points of the text, as Python's str indices do, or bytes of the bytes. Python's five-argument constructors exist too, and build CPython's message from the five values.
+The other NumPy-named classes are raised where NumPy raises them: `KeyError` for a key NumPy looks up and does not find (an unknown `flags` name, a `%(name)s` formatting key, a dtype field name, an `einsum_path` path name, an `.npz` member), `AttributeError` for an attribute NumPy refuses (an `.npz` archive's `npz.f.x` for a missing member), `BufferError` when a buffer cannot be exported in the requested form, `OSError` for a file operation NumPy refuses (`tofile` of a `StringDType` array in binary mode), `SystemError` for data no Python object can represent, `SyntaxError` for text that is not a valid Python literal, `TooHardError` when `np.shares_memory`'s bounded search exhausts `max_work`, `NotImplementedError` where NumPy declines an input (a masked array's `tofile`, numpy.ma's two-dimensional functions `compress_rows`, `compress_cols`, `compress_rowcols`, `mask_rowcols` and `notmasked_contiguous` on other ranks, a seedless `SeedSequence` asked for state), and `RuntimeError` / `AssertionError` / `NameError` where NumPy's own code raises them. The classes NumSharp has no situation for (`StopIteration`, `RecursionError`, `KeyboardInterrupt`, `ConverterError`, `LapackError`, the connection errors, the groups, ...) exist so ported code raises and catches them as in Python.
 
-The other NumPy-named classes are raised where NumPy raises them: `KeyError` for a key NumPy looks up and does not find (an unknown `flags` name, a `%(name)s` formatting key, a dtype field name, an `einsum_path` path name), `AttributeError` for an attribute NumPy refuses, `BufferError` when a buffer cannot be exported in the requested form, `OSError` for a file operation NumPy refuses (`tofile` of a `StringDType` array in binary mode), `SystemError` for data no Python object can represent, `SyntaxError` for text that is not a valid Python literal, `TooHardError` when `np.shares_memory`'s bounded search exhausts `max_work`, `NotImplementedError` where NumPy declines an input (a masked array's `tofile`, numpy.ma's two-dimensional functions `compress_rows`, `compress_cols`, `compress_rowcols`, `mask_rowcols` and `notmasked_contiguous` on other ranks, a seedless `SeedSequence` asked for state), and `RuntimeError` / `AssertionError` / `NameError` where NumPy's own code raises them. `MAError` and `MaskError` exist so code ported from `numpy.ma` can catch them, and `ImportError` / `ModuleNotFoundError` (with Python's `msg`, `name` and `path`) so ported code can raise and catch Python's import errors; NumSharp itself raises neither.
+NumSharp also raises .NET's own exceptions where they describe a failure of its own: `ArgumentNullException` for a `null` argument NumPy has no `None` meaning for, `InvalidCastException` for a cast that a casting rule refuses (`Cannot cast array data from dtype('float64') to dtype('int32') according to the rule 'safe'`), `ObjectDisposedException` for a disposed array or iterator, `OverflowException` for a limit of .NET itself (an axis longer than a managed array, `decimal` arithmetic out of range), and `OutOfMemoryException` when the runtime itself runs out of memory.
 
-NumSharp also raises .NET's own exceptions where they describe the failure: `ArgumentNullException` for a `null` argument NumPy has no `None` meaning for, `InvalidCastException` for a cast that a casting rule refuses (`Cannot cast array data from dtype('float64') to dtype('int32') according to the rule 'safe'`), `ObjectDisposedException` for a disposed array or iterator, and `OutOfMemoryException` for NumPy's `MemoryError`.
+---
+
+## Python's attributes
+
+Each class with attributes in Python takes Python's arguments and exposes them under Python's names, with CPython's text built from them:
+
+| Class | Constructor (Python's arguments) | Attributes | Text |
+|-------|----------------------------------|------------|------|
+| `OSError` and its subclasses | `(errno, strerror)`, `(errno, strerror, filename)`, `(errno, strerror, filename, winerror)`, `(errno, strerror, filename, winerror, filename2)` | `errno`, `strerror`, `filename`, `filename2`, `winerror` (Windows), `characters_written` (`BlockingIOError`) | `[Errno 2] No such file or directory: 'x.npy'`; on Windows a `winerror` maps to its errno (CPython's `winerror_to_errno`) and reads `[WinError 5] Access is denied: 'f'` |
+| `SyntaxError`, `IndentationError`, `TabError` | `(msg, filename, lineno, offset, text, end_lineno = null, end_offset = null)` | `msg`, `filename`, `lineno`, `offset`, `text`, `end_lineno`, `end_offset` | `invalid syntax (c.py, line 3)`, the file's base name at the platform's separator |
+| `NameError`, `UnboundLocalError` | `(message, name)` | `name` | the message |
+| `AttributeError` | `(message, name, obj)` | `name`, `obj` | the message |
+| `StopIteration` | `(value)` | `value` | Python's `str(value)` |
+| `SystemExit` | `(code)` | `code` | Python's `str(code)` |
+| `UnicodeEncodeError`, `UnicodeDecodeError` | `(encoding, object, start, end, reason)` | `encoding`, `@object`, `start`, `end`, `reason` | `'ascii' codec can't encode character '\xe9' in position 1: ordinal not in range(128)` |
+| `UnicodeTranslateError` | `(object, start, end, reason)` | the same, `encoding` always null | `can't translate character '\xe9' in position 1: reason` |
+| `ImportError`, `ModuleNotFoundError` | `(message, name, path)` | `msg`, `name`, `path` | the message |
+| `BaseExceptionGroup`, `ExceptionGroup` | `(message, exceptions)` | `message`, `exceptions`, and the methods `subgroup`, `split`, `derive` | `message (2 sub-exceptions)` |
+| `UFuncNoLoopError` | `(ufunc, nin, dtypes)` | `ufunc`, `dtypes` | `ufunc 'add' did not contain a loop with signature matching types (dtype('<U1'), dtype('int64')) -> None` |
+| `UFuncInputCastingError`, `UFuncOutputCastingError` | `(ufunc, nin or nout, casting, from_, to, i)` | `ufunc`, `casting`, `from_`, `to`, `in_i` / `out_i` | `Cannot cast ufunc 'add' input 0 from dtype('float64') to dtype('int64') with casting rule 'safe'` |
+| `ArrayMemoryError` | `(shape, dtype)` | `shape`, `dtype` | `Unable to allocate 7.45 GiB for an array with shape (1000000000,) and data type float64` |
+
+`start` and `end` of the Unicode errors count code points of the text, as Python's str indices do, or bytes of the bytes. A ufunc error's `ufunc` is the ufunc's name (`add`): NumSharp has no ufunc objects, and NumPy's texts only print the name; the ufunc's input or output count, which NumPy reads off the ufunc object, is a constructor argument. NumSharp's own raise sites fill the attributes too, so a `catch (FileNotFoundError e)` reads `e.filename` and a `catch (UFuncOutputCastingError e)` reads `e.to` without parsing the message.
 
 ---
 
@@ -116,8 +196,19 @@ catch (AxisError e)                      // NumPy's AxisError (also an ArgumentO
 catch (ValueError)                       // ValueError and its subclasses: UnicodeError, LinAlgError
 {
 }
+catch (UFuncTypeError e)                 // a ufunc refusal: no loop, or a cast the casting rule forbids
+{
+    Console.WriteLine(e.ufunc);          // add
+}
 catch (TypeError)                        // TypeError, IncorrectTypeException, DTypePromotionError
 {
+}
+catch (OverflowError)                    // NumPy's OverflowError (an ArithmeticException, not an OverflowException)
+{
+}
+catch (FileNotFoundError e)              // np.load of a missing file (an OSError, an IOException)
+{
+    Console.WriteLine(e.filename);
 }
 catch (Exception e) when (e is INumSharpException)
 {

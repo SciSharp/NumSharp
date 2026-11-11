@@ -97,7 +97,7 @@ namespace NumSharp
         /// <param name="src">The value.</param>
         /// <param name="casting">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</param>
         /// <param name="where">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</param>
-        /// <exception cref="OverflowException">A weak integer does not fit an integer destination: "Python integer 1000 out
+        /// <exception cref="OverflowError">A weak integer does not fit an integer destination: "Python integer 1000 out
         ///     of bounds for int8" (NumPy's OverflowError, raised before the mask is checked); a <c>ulong</c> past
         ///     <see cref="long.MaxValue"/> into an integer other than uint32/uint64: "Python int too large to convert to C
         ///     long" (the LP64 text NumSharp pins).</exception>
@@ -175,7 +175,7 @@ namespace NumSharp
         /// <param name="src">The integer.</param>
         /// <param name="casting">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</param>
         /// <param name="where">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</param>
-        /// <exception cref="OverflowException">The integer does not fit an integer destination (NumPy's OverflowError texts),
+        /// <exception cref="OverflowError">The integer does not fit an integer destination (NumPy's OverflowError texts),
         ///     or is past the double range for a float destination ("int too large to convert to float").</exception>
         /// <exception cref="TypeError">See <see cref="copyto{T}(NDArray, T, string, NDArray)"/>.</exception>
         /// <exception cref="ValueError">See <see cref="copyto(NDArray, NDArray, string, NDArray)"/>.</exception>

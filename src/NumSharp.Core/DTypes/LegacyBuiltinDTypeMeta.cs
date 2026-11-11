@@ -144,7 +144,7 @@ namespace NumSharp
         ///     a Python int range-checked with NumPy's texts, a float, a complex, a str parsed, None as NaN or False, a 0-d
         ///     array cast), then the swap of a non-native descriptor.
         /// </remarks>
-        /// <exception cref="OverflowException">An integer that does not fit this class, a float infinity into an integer
+        /// <exception cref="OverflowError">An integer that does not fit this class, a float infinity into an integer
         ///     class, a Python int past the float range (NumPy's <c>OverflowError</c> texts).</exception>
         /// <exception cref="ValueError">A float NaN into an integer class, an unparsable string, an array with dimensions
         ///     or a sequence.</exception>

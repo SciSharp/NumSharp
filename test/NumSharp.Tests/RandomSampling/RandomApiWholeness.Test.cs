@@ -233,7 +233,7 @@ namespace NumSharp.Tests.RandomSampling
             ((Action)(() => g.integers(0, np.array(new long[] { 256, 10 }), dtype: np.uint8, endpoint: true))).Should().Throw<ValueError>().WithMessage("high is out of bounds for uint8");
             ((Action)(() => g.integers(np.array(new long[] { -1, 0 }), 5, dtype: np.uint64))).Should().Throw<ValueError>().WithMessage("low is out of bounds for uint64");
             ((Action)(() => g.integers(np.array(new[] { double.NaN, 1.0 }), 5))).Should().Throw<ValueError>().WithMessage("cannot convert float NaN to integer");
-            ((Action)(() => g.integers(0, np.array(double.PositiveInfinity)))).Should().Throw<OverflowException>().WithMessage("cannot convert float infinity to integer");
+            ((Action)(() => g.integers(0, np.array(double.PositiveInfinity)))).Should().Throw<OverflowError>().WithMessage("cannot convert float infinity to integer");
             ((Action)(() => g.integers(np.zeros(3, np.int64), 10, size: 2))).Should().Throw<ValueError>()
                 .WithMessage("shape mismatch: objects cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 2 with shape (2,).");
             ((Action)(() => g.integers((NDArray)null))).Should().Throw<TypeError>()

@@ -89,7 +89,7 @@ namespace NumSharp
         ///     Footgun: <paramref name="start"/> and <paramref name="end"/> count CODE POINTS, as Python's str indices do; in
         ///     the UTF-16 <paramref name="object"/> they stop matching char indices once a character past <c>U+FFFF</c> (a
         ///     surrogate pair) precedes them. The one-character message (<c>end == start + 1</c>, start inside the text) quotes
-        ///     the code point at <paramref name="start"/> as <c>'\xe9'</c> / <c>'中'</c> / <c>'\U0001f600'</c>; any other
+        ///     the code point at <paramref name="start"/> as <c>'\xe9'</c> / <c>'&#x5C;u4e2d'</c> / <c>'\U0001f600'</c>; any other
         ///     range reads <c>characters in position 0-2</c>, as CPython prints it.
         /// </remarks>
         public UnicodeEncodeError(string encoding, string @object, long start, long end, string reason)
@@ -172,7 +172,9 @@ namespace NumSharp
         /// <param name="text">The text (null allowed: the message check reports it).</param>
         /// <param name="position">The code-point position.</param>
         /// <returns>The code point, or -1.</returns>
-        private static long CodePointAt(string text, long position)
+        /// <remarks>Shared with <see cref="UnicodeTranslateError"/>, whose message quotes the same character the same
+        ///     way.</remarks>
+        internal static long CodePointAt(string text, long position)
         {
             if (text is null || position < 0)
                 return -1;
@@ -306,5 +308,94 @@ namespace NumSharp
                 : string.Create(CultureInfo.InvariantCulture, $"UnicodeDecodeError({NumSharp.Backends.Printing.PyRepr.Str(encoding)}, " +
                   $"{NumSharp.Backends.Printing.PyRepr.Bytes(@object)}, {start}, {end}, " +
                   $"{NumSharp.Backends.Printing.PyRepr.Str(reason)})");
+    }
+
+    /// <summary>
+    ///     Python's <c>UnicodeTranslateError</c>: a character <c>str.translate</c>-style mapping could not translate
+    ///     (<c>can't translate character '\xe9' in position 1: reason</c>).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///     A subclass of <see cref="UnicodeError"/> and so of <see cref="ValueError"/>, as in Python. Like
+    ///     <see cref="UnicodeEncodeError"/> it carries <see cref="@object"/>, <see cref="start"/>, <see cref="end"/> and
+    ///     <see cref="reason"/>; its <see cref="encoding"/> is always null, as Python's is <c>None</c> (a translation has no
+    ///     codec).
+    ///     </para>
+    ///     <para>
+    ///     NumSharp never raises it (<c>np.strings.translate</c> maps through a table that cannot fail); the class exists
+    ///     so a port of code that raises or catches it compiles and behaves as in Python.
+    ///     </para>
+    /// </remarks>
+    public class UnicodeTranslateError : UnicodeError
+    {
+        /// <summary>
+        ///     Python's <c>UnicodeTranslateError(object, start, end, reason)</c>: the message is CPython's
+        ///     <c>UnicodeTranslateError.__str__</c> of the four values.
+        /// </summary>
+        /// <param name="object">The text being translated.</param>
+        /// <param name="start">The code-point position of the first untranslatable character.</param>
+        /// <param name="end">One past the last one.</param>
+        /// <param name="reason">The reason text.</param>
+        /// <exception cref="TypeError"><paramref name="object"/> or <paramref name="reason"/> is null (CPython:
+        ///     <c>argument 1 must be str, not None</c>, <c>argument 4 must be str, not None</c>).</exception>
+        /// <remarks>
+        ///     The one-character message (<c>end == start + 1</c>, start inside the text) quotes the code point at
+        ///     <paramref name="start"/> escaped, as CPython prints it: <c>'\xe9'</c>, <c>'&#x5C;u4e2d'</c>, <c>'\U0001f600'</c>; any
+        ///     other range reads <c>characters in position 0-1</c>, the bounds as given (CPython does not clamp them).
+        ///     Footgun, as for <see cref="UnicodeEncodeError"/>: <paramref name="start"/> and <paramref name="end"/> count
+        ///     code points, not UTF-16 units.
+        /// </remarks>
+        public UnicodeTranslateError(string @object, long start, long end, string reason)
+            : base(FormatMessage(@object, start, end, reason))
+        {
+            this.@object = @object;
+            this.start = start;
+            this.end = end;
+            this.reason = reason;
+        }
+
+        /// <summary>Always null: a translation names no codec (Python's <c>encoding</c> is <c>None</c>).</summary>
+        public string encoding => null;
+
+        /// <summary>The text being translated (Python's <c>object</c>).</summary>
+        public string @object { get; }
+
+        /// <summary>The code-point position of the first untranslatable character (Python's <c>start</c>).</summary>
+        public long start { get; }
+
+        /// <summary>One past the code-point position of the last one (Python's <c>end</c>).</summary>
+        public long end { get; }
+
+        /// <summary>The reason text (Python's <c>reason</c>).</summary>
+        public string reason { get; }
+
+        /// <summary>
+        ///     CPython's <c>UnicodeTranslateError.__str__</c> (<c>Objects/exceptions.c</c>), after its argument checks.
+        /// </summary>
+        /// <param name="object">The text.</param>
+        /// <param name="start">The first position.</param>
+        /// <param name="end">One past the last.</param>
+        /// <param name="reason">The reason.</param>
+        /// <returns>The message.</returns>
+        /// <exception cref="TypeError">A text argument is null.</exception>
+        private static string FormatMessage(string @object, long start, long end, string reason)
+        {
+            // CPython's PyArg_ParseTuple("UnnU") order: argument 1, then 4 (the positions are ints and cannot be None).
+            if (@object is null)
+                throw new TypeError("argument 1 must be str, not None");
+            if (reason is null)
+                throw new TypeError("argument 4 must be str, not None");
+            // A negative start never quotes a character: CPython's PyUnicode_ReadChar cannot read it, so the range form
+            // is the only text it can print there (on Windows it does; elsewhere CPython fails with a SystemError).
+            long bad = start >= 0 && end == start + 1 ? UnicodeEncodeError.CodePointAt(@object, start) : -1;
+            if (bad >= 0)
+            {
+                string escaped = bad <= 0xFF ? string.Create(CultureInfo.InvariantCulture, $"\\x{bad:x2}")
+                    : bad <= 0xFFFF ? string.Create(CultureInfo.InvariantCulture, $"\\u{bad:x4}")
+                    : string.Create(CultureInfo.InvariantCulture, $"\\U{bad:x8}");
+                return string.Create(CultureInfo.InvariantCulture, $"can't translate character '{escaped}' in position {start}: {reason}");
+            }
+            return string.Create(CultureInfo.InvariantCulture, $"can't translate characters in position {start}-{end - 1}: {reason}");
+        }
     }
 }

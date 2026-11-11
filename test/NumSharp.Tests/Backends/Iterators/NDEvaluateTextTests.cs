@@ -503,9 +503,9 @@ namespace NumSharp.Tests.Backends.Iterators
                 .ToArray<float>().Should().Equal(1.5f, -2000f, float.PositiveInfinity);
 
             new Action(() => np.evaluate(NDExpr.Cast(nums, NPTypeCode.SByte)))
-                .Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+                .Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
             new Action(() => np.evaluate(NDExpr.Cast(nums, NPTypeCode.Byte)))
-                .Should().Throw<OverflowException>().WithMessage("Python integer -3 out of bounds for uint8");
+                .Should().Throw<OverflowError>().WithMessage("Python integer -3 out of bounds for uint8");
             new Action(() => np.evaluate(NDExpr.Cast(U(), NPTypeCode.Int64)))
                 .Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: np.str_('')");
             using var tf = np.array(new object[] { "a", "", double.NaN, "b" }, np.dtypes.StringDType(na_object: double.NaN));

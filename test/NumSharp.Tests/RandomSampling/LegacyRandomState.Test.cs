@@ -143,8 +143,8 @@ namespace NumSharp.Tests.RandomSampling
                 int colon = expected.IndexOf(": ", StringComparison.Ordinal);
                 string type = expected.Substring(4, colon - 4);
                 string message = expected.Substring(colon + 2);
-                // NumPy's OverflowError is .NET's OverflowException (NumSharp has no OverflowError type).
-                string expectedType = type == "OverflowError" ? nameof(OverflowException) : type;
+                // NumPy's class name IS NumSharp's: the generators raise Python's OverflowError / ValueError by name.
+                string expectedType = type;
                 try
                 {
                     draw();

@@ -84,7 +84,7 @@ namespace NumSharp
         /// <exception cref="ValueError">The checks of <see cref="putmask(NDArray, NDArray, NDArray)"/>; a ragged list
         ///     (NumPy's inhomogeneous-shape text), a NaN into an integer array, a text value that does not parse into a
         ///     numeric array.</exception>
-        /// <exception cref="OverflowException">A Python int outside an integer array's range (<c>Python integer 1000 out of
+        /// <exception cref="OverflowError">A Python int outside an integer array's range (<c>Python integer 1000 out of
         ///     bounds for int8</c>).</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
         /// <exception cref="UnicodeDecodeError">Byte values that are not ASCII into a <c>U</c> array.</exception>

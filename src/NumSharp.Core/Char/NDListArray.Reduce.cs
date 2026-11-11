@@ -434,7 +434,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A mask in the object loop (add has no identity for it); a list stored into a float or
         ///     text <paramref name="out"/> or <paramref name="dtype"/> (<c>setting an array element with a sequence.</c>);
         ///     NumPy's out= checks (read-only, rank, shape).</exception>
-        /// <exception cref="DivideByZeroException">An empty slice along an axis (NumPy's ZeroDivisionError, <c>division by
+        /// <exception cref="ZeroDivisionError">An empty slice along an axis (NumPy's ZeroDivisionError, <c>division by
         ///     zero</c>).</exception>
         /// <exception cref="AxisError">An axis outside the array (a 0-d array has none).</exception>
         /// <exception cref="NotSupportedException">NumPy's result is an object array (an empty result along an
@@ -514,7 +514,7 @@ namespace NumSharp
         ///     <c>ufunc 'divide' not supported ...</c> (a 0-d array of a non-empty list); a list converted to an integer or
         ///     complex <paramref name="dtype"/>; a refused or loop-less <paramref name="dtype"/>; std's sqrt of an object
         ///     result.</exception>
-        /// <exception cref="DivideByZeroException">An empty slice (NumPy's ZeroDivisionError, <c>division by zero</c>).</exception>
+        /// <exception cref="ZeroDivisionError">An empty slice (NumPy's ZeroDivisionError, <c>division by zero</c>).</exception>
         /// <exception cref="ValueError">A mask (the object loop has no identity for it); a list converted to a float
         ///     <paramref name="dtype"/>; NumPy's out= checks.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="mean"/> does not broadcast with the array (<c>operands
@@ -555,7 +555,7 @@ namespace NumSharp
         /// <returns>NumPy's value for a list array whose deviations are empty, or <paramref name="out"/>.</returns>
         /// <exception cref="TypeError">See <see cref="var"/>; and <c>loop of ufunc does not support argument 0 of type float
         ///     which has no callable sqrt method</c> (the square root of an object array of floats).</exception>
-        /// <exception cref="DivideByZeroException">An empty slice (NumPy's ZeroDivisionError).</exception>
+        /// <exception cref="ZeroDivisionError">An empty slice (NumPy's ZeroDivisionError).</exception>
         /// <exception cref="ValueError">See <see cref="var"/>.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="mean"/> does not broadcast with the array.</exception>
         /// <exception cref="TypeError">An integer or bool <paramref name="out"/> or array result (NumPy's
@@ -622,7 +622,7 @@ namespace NumSharp
                         if (outputs > 0)
                         {
                             if (rcount == 0)
-                                throw new DivideByZeroException("division by zero");
+                                throw new ZeroDivisionError("division by zero");
                             throw new TypeError("unsupported operand type(s) for /: 'list' and 'int'");
                         }
                         deviations = (long[])Ids.Shape.dimensions.Clone();
@@ -675,7 +675,7 @@ namespace NumSharp
         /// <exception cref="ValueError">NumPy's out= checks.</exception>
         /// <exception cref="TypeError">A refused or loop-less <paramref name="dtype"/>; a text or StringDType
         ///     <paramref name="out"/>; std's sqrt of an object array of floats.</exception>
-        /// <exception cref="DivideByZeroException">An object array divided by 0.</exception>
+        /// <exception cref="ZeroDivisionError">An object array divided by 0.</exception>
         /// <exception cref="ArgumentException">std's sqrt into an integer or bool array.</exception>
         /// <exception cref="NotSupportedException">NumPy's result is an object array.</exception>
         private NDArray EmptyDeviations(long[] deviations, int? axis, DType dtype, NDArray @out, bool keepdims, NDArray mask,
@@ -729,7 +729,7 @@ namespace NumSharp
                 foreach (var d in outDims)
                     outputs *= d;
                 if (outputs > 0 && divisor == 0)
-                    throw new DivideByZeroException("division by zero");
+                    throw new ZeroDivisionError("division by zero");
                 if (sqrt && outputs > 0)
                     throw new TypeError("loop of ufunc does not support argument 0 of type float which has no callable sqrt method");
                 throw new NotSupportedException(
@@ -1237,7 +1237,7 @@ namespace NumSharp
         /// <param name="slices">The slices.</param>
         /// <param name="start">The fold's start.</param>
         /// <returns>The heap (one reference, the caller's).</returns>
-        /// <exception cref="OutOfMemoryException">The result's size passes what an array can address (MemoryError).</exception>
+        /// <exception cref="MemoryError">The result's size passes what an array can address (MemoryError).</exception>
         private NDListHeap ReservedSumHeap(SliceSet slices, Start start)
         {
             var lists = new ListPointers(Heap);
@@ -1938,8 +1938,7 @@ namespace NumSharp
         private static void CheckObjectOutLoop(NDArray @out, string ufunc)
         {
             if (@out.dtype.Meta is VStringDTypeMeta)
-                throw new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types " +
-                                    "(<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.ObjectDType'>) -> None");
+                throw new UFuncNoLoopError(ufunc, 2, DTypeRegistry.VString, PyDescrPlaceholder.ObjectDTypeClass, null);
         }
 
         /// <summary>
@@ -1955,8 +1954,7 @@ namespace NumSharp
         {
             if (dtype.kind is 'U' or 'S' or 'V' || (dtype.kind == 'M' && ufunc == "positive"))
                 return new TypeError($"No loop matching the specified signature and casting was found for ufunc {ufunc}");
-            return new TypeError($"Cannot cast ufunc '{ufunc}' {(nin == 1 ? "input" : "input 0")} from dtype('O') to " +
-                                 $"{dtype.ToString(true)} with casting rule 'same_kind'");
+            return new UFuncInputCastingError(ufunc, nin, "same_kind", PyDescrPlaceholder.ObjectDescr, dtype, 0);
         }
 
         /// <summary>
@@ -2083,7 +2081,7 @@ namespace NumSharp
             if (outputs == 0)
                 return new NotSupportedException($"NumPy's {name} of this list array is an empty object array, which NumSharp has no type for");
             if (count == 0)
-                return new DivideByZeroException("division by zero");
+                return new ZeroDivisionError("division by zero");
             _ = keptDims;
             return new TypeError("unsupported operand type(s) for /: 'list' and 'int'");
         }

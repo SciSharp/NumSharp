@@ -108,7 +108,7 @@ namespace NumSharp
         ///     The unique values, sorted. NumPy returns its hash set's order for integer, complex and text values (a
         ///     platform-specific order; the same set).
         /// </returns>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>
         ///     An override replaces <c>np.unique_values</c> for every array whose engine it is. New in 0.80.0 (the np-layer
         ///     dtype plan, phase PE); it was the internal class <c>UniqueEngine</c>.
@@ -124,7 +124,7 @@ namespace NumSharp
         /// <param name="x">The operand, a plain array (only read).</param>
         /// <returns><c>[values, counts]</c>: the values sorted, the counts int64.</returns>
         /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>
         ///     <c>np.unique_counts</c> wraps the result in <c>np.UniqueCountsResult</c>. An override replaces it for every
         ///     array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE); it was the internal class
@@ -142,7 +142,7 @@ namespace NumSharp
         ///     view; <c>()</c> for a 0-d operand), so <c>np.take(values, inverse_indices)</c> rebuilds the operand.
         /// </returns>
         /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>
         ///     <c>np.unique_inverse</c> wraps the result in <c>np.UniqueInverseResult</c>. An override replaces it for every
         ///     array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE); it was the internal class
@@ -161,7 +161,7 @@ namespace NumSharp
         ///     <paramref name="x"/>'s shape (a view; <c>()</c> for a 0-d operand).
         /// </returns>
         /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>
         ///     <c>np.unique_all</c> wraps the result in <c>np.UniqueAllResult</c>. An override replaces it for every array
         ///     whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE); it was the internal class

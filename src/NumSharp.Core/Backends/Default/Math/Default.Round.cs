@@ -131,7 +131,7 @@ namespace NumSharp.Backends
             if (Strings.NDStringUfuncs.IsVString(nd))
                 throw decimals == 0 ? Strings.NDStringUfuncs.UnaryError("rint", nd, typeCode)
                     : Strings.NDStringUfuncs.VStringNoLoop(decimals > 0 ? "multiply" : "divide",
-                        new[] { nd.dtype.Meta.ToString(), DTypeRegistry.PyFloat.ToString() });
+                        new object[] { nd.dtype.Meta, DTypeRegistry.PyFloat });
             if (Strings.NDStringUfuncs.IsString(nd))
                 throw decimals == 0 ? Strings.NDStringUfuncs.UnaryError("rint", nd, typeCode)
                     : decimals > 0 ? Strings.NDStringUfuncs.NoLoop("multiply", nd.dtype, np.float64)
@@ -157,8 +157,7 @@ namespace NumSharp.Backends
             // a float64 that fails the same_kind cast back to bool. Reproduced verbatim (probed 2.4.2). A dtype
             // override escapes this (the caller asked for a float/complex loop), so it is gated on !typeCode.
             if (inputType == NPTypeCode.Boolean && !typeCode.HasValue)
-                throw new TypeError(
-                    $"Cannot cast ufunc '{op1Name}' output from dtype('float64') to dtype('bool') with casting rule 'same_kind'");
+                throw new UFuncOutputCastingError(op1Name, 1, "same_kind", DType.Double, DType.Boolean, 2);
 
             // Integer/char with POSITIVE decimals is an IDENTITY (no fractional part to remove, and — unlike the
             // negative branch — no float round-trip, so a huge int64 is returned untouched). Preserves the integer
@@ -270,7 +269,7 @@ namespace NumSharp.Backends
         /// an integer input.</param>
         /// <returns>A fresh, contiguous, writeable array of dtype <paramref name="work"/> holding the rounded values.</returns>
         /// <exception cref="NotSupportedException"><paramref name="work"/> is not a float/complex/decimal dtype.</exception>
-        /// <exception cref="OverflowException">A Decimal magnitude beyond decimal's exact range whose rescaled result
+        /// <exception cref="OverflowError">A Decimal magnitude beyond decimal's exact range whose rescaled result
         /// no longer fits (an edge with no NumPy analog).</exception>
         private unsafe NDArray RoundScaleCore(NDArray nd, int decimals, NPTypeCode work)
         {
@@ -379,7 +378,7 @@ namespace NumSharp.Backends
         /// <param name="x">The value to round.</param>
         /// <param name="decimals">Non-zero decimals.</param>
         /// <returns>The rounded decimal.</returns>
-        /// <exception cref="OverflowException">A negative-decimals rescale whose product exceeds
+        /// <exception cref="OverflowError">A negative-decimals rescale whose product exceeds
         /// <see cref="decimal.MaxValue"/> (an extreme with no NumPy analog).</exception>
         private static decimal RoundDecimalScalar(decimal x, int decimals)
         {

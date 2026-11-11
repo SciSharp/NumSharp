@@ -133,7 +133,7 @@ namespace NumSharp.Tests.Math
         {
             void AssertCannotCast(Func<NDArray> act, string from, string to)
             {
-                var ex = Assert.ThrowsException<TypeError>(() => act());
+                var ex = Assert.ThrowsException<UFuncInputCastingError>(() => act());
                 Assert.AreEqual(
                     $"Cannot cast ufunc 'absolute' input from dtype('{from}') to dtype('{to}') with casting rule 'same_kind'",
                     ex.Message);
@@ -159,7 +159,7 @@ namespace NumSharp.Tests.Math
         {
             void AssertNoLoop(Func<NDArray> act, string fromClass)
             {
-                var ex = Assert.ThrowsException<TypeError>(() => act());
+                var ex = Assert.ThrowsException<UFuncNoLoopError>(() => act());
                 Assert.AreEqual(
                     "ufunc 'absolute' did not contain a loop with signature matching types " +
                     $"<class 'numpy.dtypes.{fromClass}'> -> <class 'numpy.dtypes.Complex128DType'>",
@@ -195,7 +195,7 @@ namespace NumSharp.Tests.Math
             // dtype= any other real/int/bool → complex→X is never same_kind → "Cannot cast…"
             void AssertCannotCast(NPTypeCode dt, string to)
             {
-                var ex = Assert.ThrowsException<TypeError>(() => np.abs(z, dtype: dt));
+                var ex = Assert.ThrowsException<UFuncInputCastingError>(() => np.abs(z, dtype: dt));
                 Assert.AreEqual(
                     $"Cannot cast ufunc 'absolute' input from dtype('complex128') to dtype('{to}') with casting rule 'same_kind'",
                     ex.Message);
@@ -509,7 +509,7 @@ namespace NumSharp.Tests.Math
 
             // float64 abs into an int32 out is NOT a same_kind write-back → rejected
             var oi = np.zeros(new Shape(1), np.int32);
-            Assert.ThrowsException<TypeError>(() => np.abs(np.array(new double[] { -1.5 }), oi));
+            Assert.ThrowsException<UFuncOutputCastingError>(() => np.abs(np.array(new double[] { -1.5 }), oi));
 
             // in-place: out aliases the input
             var a = np.array(new long[] { -1, -2, -3, -4 });

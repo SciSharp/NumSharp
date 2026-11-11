@@ -655,10 +655,51 @@ namespace NumSharp.Tests.Fuzz
                 "AxisOutOfRangeException", "ArgumentOutOfRangeException", "ArgumentException",
                 "IndexOutOfRangeException"
             },
-            ["OverflowError"] = new[] { "OverflowException", "ArgumentException" },
-            ["ZeroDivisionError"] = new[] { "DivideByZeroException", "ArithmeticException" },
+            // NumPy's OverflowError / ZeroDivisionError / MemoryError / UFuncTypeError are NumSharp classes of the same name
+            // (Exceptions/), matched through the class chain (ClassChainHas). An EMPTY entry pins the class: a key absent
+            // from this map accepts any .NET type, so these keys must stay, or a regression to .NET's OverflowException /
+            // DivideByZeroException (or a plain TypeError for a ufunc refusal) would pass unseen. .NET's own allocation
+            // failure (not translated to MemoryError) still stands for NumPy's MemoryError.
+            ["OverflowError"] = Array.Empty<string>(),
+            ["ZeroDivisionError"] = Array.Empty<string>(),
+            ["UFuncTypeError"] = Array.Empty<string>(),
             ["MemoryError"] = new[] { "OutOfMemoryException" },
             ["NotImplementedError"] = new[] { "NotImplementedException", "NotSupportedException" },
+        };
+
+        /// <summary>
+        ///     Whether NumSharp's exception is NumPy's class or a subclass of it: some class of its .NET base chain bears
+        ///     <paramref name="numpyType"/>'s name. NumPy records <c>type(e).__name__</c>, which its private subclasses
+        ///     display as their base (<c>_UFuncNoLoopError</c> is <c>UFuncTypeError</c>, <c>_ArrayMemoryError</c> is
+        ///     <c>MemoryError</c>), so NumSharp's <see cref="UFuncNoLoopError"/> / <see cref="ArrayMemoryError"/> match
+        ///     through their bases, as <c>except UFuncTypeError</c> catches NumPy's.
+        /// </summary>
+        /// <param name="caught">NumSharp's exception.</param>
+        /// <param name="numpyType">NumPy's recorded class name.</param>
+        /// <returns>True when the chain holds the name.</returns>
+        internal static bool ClassChainHas(Exception caught, string numpyType)
+        {
+            for (Type t = caught.GetType(); t != null; t = t.BaseType)
+                if (t.Name == numpyType)
+                    return true;
+            return false;
+        }
+
+        /// <summary>
+        ///     The name NumPy records for the class of <paramref name="caught"/>: <c>type(e).__name__</c>, which NumPy's
+        ///     <c>_display_as_base</c> makes its private subclasses report as their base — NumSharp's
+        ///     <see cref="UFuncNoLoopError"/>, <see cref="UFuncBinaryResolutionError"/>, <see cref="UFuncCastingError"/>,
+        ///     <see cref="UFuncInputCastingError"/> and <see cref="UFuncOutputCastingError"/> read <c>UFuncTypeError</c>,
+        ///     <see cref="ArrayMemoryError"/> reads <c>MemoryError</c>; every other class its own name. The strict tiers
+        ///     compare this name exactly, as NumPy's own class (not a subclass) is their contract.
+        /// </summary>
+        /// <param name="caught">NumSharp's exception.</param>
+        /// <returns>The name NumPy would print.</returns>
+        internal static string NumPyDisplayedName(Exception caught) => caught switch
+        {
+            UFuncTypeError => nameof(UFuncTypeError),
+            ArrayMemoryError => nameof(MemoryError),
+            _ => caught.GetType().Name,
         };
 
         /// <summary>
@@ -719,6 +760,10 @@ namespace NumSharp.Tests.Fuzz
             // TypeError), with the BCL types the house uses for three Python classes.
             bool polyClass = c.Valueclass == "polyclass";
             bool typeOk = gotType == c.Error.Type
+                          // NumPy's displayed name (its private subclasses report their base's), exactly; the lenient tiers
+                          // take NumPy's class anywhere in NumSharp's chain (a UFunc* refusal is a TypeError).
+                          || NumPyDisplayedName(caught) == c.Error.Type
+                          || (!strictType && ClassChainHas(caught, c.Error.Type))
                           || (polyClass && PolyClassErrorMatches(caught, c.Error.Type))
                           || (!strictType && !polyClass && (!ErrorTypeMap.TryGetValue(c.Error.Type, out var allowed)
                                                             || allowed.Contains(gotType)))
@@ -748,12 +793,11 @@ namespace NumSharp.Tests.Fuzz
 
         /// <summary>
         ///     The series-class tier's exception-class rule: NumPy's class name is NumSharp's exception class or one of its
-        ///     base classes, or the BCL class the house raises for it — <c>OverflowError</c> → <see cref="OverflowException"/>,
-        ///     <c>ZeroDivisionError</c> → <see cref="DivideByZeroException"/>, <c>MemoryError</c> →
-        ///     <see cref="OutOfMemoryException"/>, a broadcasting <c>ValueError</c> → <see cref="IncorrectShapeException"/>
-        ///     (the library-wide shape error), and np.dot's alignment <c>ValueError</c> → <see cref="ArgumentException"/> (the
-        ///     class two of np.dot's branches raise it with). A ufunc casting <c>TypeError</c> (NumPy's UFuncTypeError) is
-        ///     NumSharp's <see cref="TypeError"/> itself, matched by name. Texts are compared verbatim either way.
+        ///     base classes (<c>OverflowError</c>, <c>ZeroDivisionError</c>, <c>MemoryError</c> and <c>UFuncTypeError</c> are
+        ///     NumSharp classes of those names), or the house class for it — a broadcasting <c>ValueError</c> →
+        ///     <see cref="IncorrectShapeException"/> (the library-wide shape error), and np.dot's alignment <c>ValueError</c>
+        ///     → <see cref="ArgumentException"/> (the class two of np.dot's branches raise it with). Texts are compared
+        ///     verbatim either way.
         /// </summary>
         /// <param name="caught">NumSharp's exception.</param>
         /// <param name="numpyType">NumPy's recorded class name.</param>
@@ -765,16 +809,13 @@ namespace NumSharp.Tests.Fuzz
                     return true;
             return numpyType switch
             {
-                "OverflowError" => caught is OverflowException,
-                "ZeroDivisionError" => caught is DivideByZeroException,
-                "MemoryError" => caught is OutOfMemoryException,
                 // np.dot's alignment check (`shapes (5,5) and (6,) not aligned: ...`) is the library's ArgumentException in two
                 // of its branches and IncorrectShapeException in the others; both stand for NumPy's ValueError.
                 "ValueError" => caught is IncorrectShapeException
                                 || (caught is ArgumentException && caught.Message.Contains(" not aligned: ", StringComparison.Ordinal)),
                 // No TypeError arm: NumPy's UFuncTypeError for a ufunc casting rule (`Cannot cast ufunc 'multiply' output
-                // from ...`) is NumSharp's TypeError, which the class-name walk above already matched; an ArgumentException
-                // carrying that text is a regression and fails here.
+                // from ...`) is NumSharp's UFuncOutputCastingError, which the class-name walk above already matched; an
+                // ArgumentException carrying that text is a regression and fails here.
                 _ => false,
             };
         }

@@ -146,7 +146,7 @@ namespace NumSharp
         ///     text, x's shape first).</exception>
         /// <exception cref="TypeError">A str operand (NumPy's no-loop text), or a bare None meeting an element (CPython's
         ///     <c>unsupported operand type(s) for -</c> text).</exception>
-        /// <exception cref="OverflowException">A Python int x too large for the loop's float dtype (CPython's
+        /// <exception cref="OverflowError">A Python int x too large for the loop's float dtype (CPython's
         ///     <c>int too large to convert to float</c>).</exception>
         /// <exception cref="NotSupportedException">NumPy's result is an object array, or its object arithmetic meets an
         ///     item NumSharp cannot read as a number (see the file header).</exception>
@@ -325,7 +325,7 @@ namespace NumSharp
         /// <exception cref="TypeError">CPython's text where a bare None meets an element.</exception>
         /// <exception cref="NotSupportedException">NumPy's result is an object array, or the arithmetic meets an operand
         ///     NumSharp cannot name or read as a number.</exception>
-        /// <exception cref="OverflowException">A Python int item too large for a float meets a float (CPython's text).</exception>
+        /// <exception cref="OverflowError">A Python int item too large for a float meets a float (CPython's text).</exception>
         private static NDArray ObjectFromRoots(object x, in RootArg xo, object r, in RootArg ro, bool expand)
         {
             // np.subtract broadcasts its operands before the object loop runs a single element.
@@ -372,7 +372,7 @@ namespace NumSharp
         /// <returns>A fresh 0-d array of the result's discovered dtype.</returns>
         /// <exception cref="NotSupportedException">An item NumSharp cannot read as a number (None, a str — CPython's TypeError
         ///     in NumPy), or a Python int result past uint64 (an object scalar).</exception>
-        /// <exception cref="OverflowException">CPython's float conversion of a too-large Python int.</exception>
+        /// <exception cref="OverflowError">CPython's float conversion of a too-large Python int.</exception>
         private static NDArray ObjectRootProduct(object x, in RootArg xo, object r)
         {
             // x as the object loop receives it: a Python value as is; a NumPy scalar or 0-d array cast to the object dtype,
@@ -469,7 +469,7 @@ namespace NumSharp
         /// <param name="expand">r gains x's rank of trailing unit axes (tensor with an ndarray x).</param>
         /// <returns>The fresh result.</returns>
         /// <exception cref="IncorrectShapeException"><c>tensor=False</c> and the shapes do not broadcast.</exception>
-        /// <exception cref="OverflowException">A weak Python int x does not convert to the loop's float dtype.</exception>
+        /// <exception cref="OverflowError">A weak Python int x does not convert to the loop's float dtype.</exception>
         private static NDArray NumericFromRoots(in RootArg xo, NDArray ra, Shape rLayout, bool expand)
         {
             bool weak = xo.Kind == RootArgKind.Weak;
@@ -531,7 +531,7 @@ namespace NumSharp
         /// <param name="yLayout">The result layout (a fresh dense shape, 0-d for a scalar x with a 1-D r).</param>
         /// <param name="form">The reduction loop NumPy's np.prod runs (complex128 / float16 only).</param>
         /// <returns>The result.</returns>
-        /// <exception cref="OverflowException">A weak Python int x does not convert to the loop dtype.</exception>
+        /// <exception cref="OverflowError">A weak Python int x does not convert to the loop dtype.</exception>
         private static NDArray EvaluateRoots(NDArray xa, PyScalar xw, PolyXMode xMode, NDArray rr, bool expand, Shape yLayout,
             PolyRootForm form)
         {

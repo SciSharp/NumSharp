@@ -64,7 +64,7 @@ like `polyroots_parity` (the BLAS identity in the tier's `.host.jsonl`); without
   chebpts1 returns an empty float64 array (an empty OBJECT array from 2^63 + 2: `NotSupportedException`), chebpts2 raises
   linspace's `IndexError: index -1 is out of bounds for axis 0 with size 0`, chebgauss np.ones' `Maximum allowed
   dimension exceeded` (or `array is too big` below 2^63); past the band `Maximum allowed size exceeded`; a count below
-  the byte limit the machine cannot hold is NumPy's MemoryError, `OutOfMemoryException`.
+  the byte limit the machine cannot hold is NumPy's MemoryError (`ArrayMemoryError` from the allocation).
 - Gates: `polypts.jsonl` (errors, empty results, flags, Char) and `polypts_host.jsonl` (values, `RunHostLibmCorpus`),
   `Polynomial/PolynomialChebPointsTests.cs`.
 
@@ -78,7 +78,7 @@ like `polyroots_parity` (the BLAS identity in the tier's `.host.jsonl`); without
   is one zero) or an np.uint16 (a C# char) repeats the list; a 0-d integer ARRAY does not (`[0] * arr` is
   `np.multiply`), so c is `[1]` and the companion raises `Series must have maximum degree of at least 1.`; a count past
   2^63 − 1 is CPython's `OverflowError: cannot fit 'int' into an index-sized integer`, and one of 2^60 − 1 or more its
-  list size limit (an empty MemoryError raised before any allocation: `OutOfMemoryException("")`).
+  list size limit (an empty `MemoryError()` raised before any allocation).
 - hermgauss / hermegauss (`HermiteGauss`): `_as_int`, `c = np.array([0] * deg + [1], dtype=np.float64)` (the dtype is
   unobservable: the companion's as_series turns an int64 series into float64 anyway), the companion, eigvalsh, the
   normalised recurrence three times (`dy`, then `df` scaled by `sqrt(2·deg)` / `sqrt(deg)`, then `fm` at the

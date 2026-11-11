@@ -60,7 +60,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast
         ///     against <paramref name="a"/>.</exception>
-        /// <exception cref="OverflowException"><paramref name="initial"/> does not fit an integer loop ("Python integer 1000
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop ("Python integer 1000
         ///     out of bounds for int8").</exception>
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain (non-matrix) <paramref name="out"/>:
         ///     NumPy's matrix method computes into it and then calls <c>out._collapse</c>.</exception>

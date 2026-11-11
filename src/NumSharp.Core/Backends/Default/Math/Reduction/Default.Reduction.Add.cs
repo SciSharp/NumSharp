@@ -40,7 +40,7 @@ namespace NumSharp.Backends
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast
         /// against the input (NumPy's "remapped shapes" text).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">A C# scalar as <paramref name="out"/>, a complex <paramref name="initial"/> for a real
         /// loop, or NumPy's text refusals.</exception>
         /// <remarks>

@@ -205,7 +205,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
-        /// <exception cref="OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain (non-matrix) <paramref name="out"/>.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.prod.html. With <paramref name="initial"/> or

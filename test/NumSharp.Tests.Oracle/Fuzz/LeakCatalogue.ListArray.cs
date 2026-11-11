@@ -369,7 +369,7 @@ namespace NumSharp.Tests.Fuzz
                 using (var z = np.@char.split(zt))
                 {
                     Swallow<TypeError>(() => lists.var());
-                    Swallow<DivideByZeroException>(() => empty.var());
+                    Swallow<ZeroDivisionError>(() => empty.var());
                     return z.var();
                 }
             });

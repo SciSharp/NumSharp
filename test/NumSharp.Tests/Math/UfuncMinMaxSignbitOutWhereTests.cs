@@ -74,7 +74,7 @@ namespace NumSharp.Tests.Math
         public void Maximum_OutCastError_NamesUfunc()
         {
             // NumPy: UFuncTypeError naming 'maximum' (f64 -> i32 is not same_kind).
-            var ex = Assert.ThrowsException<TypeError>(() =>
+            var ex = Assert.ThrowsException<UFuncOutputCastingError>(() =>
                 np.maximum(A(), B(), np.empty(new Shape(4), np.int32)));
             Assert.AreEqual(
                 "Cannot cast ufunc 'maximum' output from dtype('float64') to dtype('int32') " +

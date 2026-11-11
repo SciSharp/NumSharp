@@ -290,7 +290,7 @@ namespace NumSharp.Backends.Sorting
 
         /// <summary>NumPy's <c>_compare</c> refusal of a corrupt cell (its <c>MemoryError</c>).</summary>
         /// <returns>The exception (not thrown).</returns>
-        internal static OutOfMemoryException CorruptCellError() => new OutOfMemoryException("Failed to load string in string comparison");
+        internal static MemoryError CorruptCellError() => new MemoryError("Failed to load string in string comparison");
 
         /// <summary>
         ///     The 8 bytes of a text from <paramref name="offset"/> on, read big-endian and zero-padded past the text's end:
@@ -720,7 +720,7 @@ namespace NumSharp.Backends.Sorting
             /// </summary>
             /// <param name="cells">The line's cell 0.</param>
             /// <exception cref="ValueError">A None-like NA (<see cref="NullCompareError"/>).</exception>
-            /// <exception cref="OutOfMemoryException">A corrupt cell (<see cref="CorruptCellError"/>).</exception>
+            /// <exception cref="MemoryError">A corrupt cell (<see cref="CorruptCellError"/>).</exception>
             private void Load(byte* cells)
             {
                 long n = _n, t = 0, na = 0;

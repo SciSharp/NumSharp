@@ -25,7 +25,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds (<c>axis: axis 2 is out of bounds for array
         ///     of dimension 2</c>).</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero, or an empty average without weights (NumPy's
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero, or an empty average without weights (NumPy's
         ///     ZeroDivisionError).</exception>
         /// <exception cref="DTypePromotionError">An operand and weights with no common DType: <c>StringDType</c> beside a
         ///     number or beside S.</exception>
@@ -59,7 +59,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError">An axis is out of bounds (<c>axis: axis 9 is out of bounds for array of dimension
         ///     2</c>).</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero, or an empty average without weights (NumPy's
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero, or an empty average without weights (NumPy's
         ///     ZeroDivisionError).</exception>
         /// <exception cref="DTypePromotionError">An operand and weights with no common DType: <c>StringDType</c> beside a
         ///     number or beside S.</exception>
@@ -93,7 +93,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds (<c>axis: axis 2 is out of bounds for array
         ///     of dimension 2</c>).</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero, or an empty average without weights (NumPy's
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero, or an empty average without weights (NumPy's
         ///     ZeroDivisionError).</exception>
         /// <exception cref="DTypePromotionError">An operand and weights with no common DType: <c>StringDType</c> beside a
         ///     number or beside S.</exception>
@@ -127,7 +127,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError">An axis is out of bounds (<c>axis: axis 9 is out of bounds for array of dimension
         ///     2</c>).</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero, or an empty average without weights (NumPy's
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero, or an empty average without weights (NumPy's
         ///     ZeroDivisionError).</exception>
         /// <exception cref="DTypePromotionError">An operand and weights with no common DType: <c>StringDType</c> beside a
         ///     number or beside S.</exception>

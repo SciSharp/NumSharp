@@ -119,7 +119,7 @@ namespace NumSharp
             ///     <c>StringDType()</c> (0-d, or 1-d with at most <c>np.getbufsize()</c> elements: <c>Can only create a
             ///     chararray from string data.</c>).</exception>
             /// <exception cref="UnicodeEncodeError">A non-ASCII fill for an <c>S</c> operand.</exception>
-            /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
+            /// <exception cref="OverflowError">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
             public static NDArray center(NDArray a, NDArray width, NDArray fillchar = null)
             {
                 return Justify("_center", NDTextElements.Center, a, width, fillchar);
@@ -139,7 +139,7 @@ namespace NumSharp
             /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA its rule refuses; the trivial-loop
             ///     copy of a chararray operand (see <see cref="center"/>).</exception>
             /// <exception cref="UnicodeEncodeError">A non-ASCII fill for an <c>S</c> operand.</exception>
-            /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
+            /// <exception cref="OverflowError">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
             public static NDArray ljust(NDArray a, NDArray width, NDArray fillchar = null)
             {
                 return Justify("_ljust", NDTextElements.Left, a, width, fillchar);
@@ -159,7 +159,7 @@ namespace NumSharp
             /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA its rule refuses; the trivial-loop
             ///     copy of a chararray operand (see <see cref="center"/>).</exception>
             /// <exception cref="UnicodeEncodeError">A non-ASCII fill for an <c>S</c> operand.</exception>
-            /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
+            /// <exception cref="OverflowError">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
             public static NDArray rjust(NDArray a, NDArray width, NDArray fillchar = null)
             {
                 return Justify("_rjust", NDTextElements.Right, a, width, fillchar);
@@ -262,7 +262,7 @@ namespace NumSharp
             /// <exception cref="TypeError">A non-text operand (NumPy's no-loop text).</exception>
             /// <exception cref="TypeError">A tab size that cannot reach int64 by a same_kind cast (a float).</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-            /// <exception cref="OverflowException">An expanded string longer than 2^31 - 1 (<c>new string is too
+            /// <exception cref="OverflowError">An expanded string longer than 2^31 - 1 (<c>new string is too
             ///     long</c>).</exception>
             /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA whose NA object is not a string.</exception>
             public static NDArray expandtabs(NDArray a, NDArray tabsize = null)
@@ -451,7 +451,7 @@ namespace NumSharp
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             /// <exception cref="TypeError">A non-text operand; a <c>StringDType</c> NA.</exception>
             /// <exception cref="TypeError">A stop that cannot reach int64 by a same_kind cast.</exception>
-            /// <exception cref="OverflowException">A stop literal past int64.</exception>
+            /// <exception cref="OverflowError">A stop literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             public static NDArray slice(NDArray a, NDArray stop)
                 => SliceCore(a, null, stop, null);
@@ -465,7 +465,7 @@ namespace NumSharp
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             /// <exception cref="TypeError">A non-text operand; a <c>StringDType</c> NA.</exception>
             /// <exception cref="TypeError">A bound that cannot reach int64 by a same_kind cast.</exception>
-            /// <exception cref="OverflowException">A bound literal past int64.</exception>
+            /// <exception cref="OverflowError">A bound literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             public static NDArray slice(NDArray a, NDArray start, NDArray stop)
                 => SliceCore(a, start, stop, null);
@@ -484,7 +484,7 @@ namespace NumSharp
             ///     operand 'step'</c>); a non-text operand; a <c>StringDType</c> NA (<c>Cannot slice null string</c>).</exception>
             /// <exception cref="ValueError">A zero step (<c>slice step cannot be zero</c>).</exception>
             /// <exception cref="TypeError">A bound that cannot reach int64 by a same_kind cast.</exception>
-            /// <exception cref="OverflowException">A bound literal past int64.</exception>
+            /// <exception cref="OverflowError">A bound literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             public static NDArray slice(NDArray a, NDArray start, NDArray stop, NDArray step)
                 => SliceCore(a, start, stop, step);
@@ -503,7 +503,7 @@ namespace NumSharp
             /// <exception cref="TypeError">See <see cref="slice(NDArray, NDArray, NDArray, NDArray)"/>.</exception>
             /// <exception cref="ValueError">A zero step.</exception>
             /// <exception cref="ArgumentException">A bound that cannot reach int64.</exception>
-            /// <exception cref="OverflowException">A bound literal past int64.</exception>
+            /// <exception cref="OverflowError">A bound literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             [ArrayWrap("a")]
             private static NDArray SliceCore(NDArray a, NDArray start, NDArray stop, NDArray step)

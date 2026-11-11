@@ -81,8 +81,8 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException">The mask or the out does not broadcast against <paramref name="arr"/>.</exception>
-        /// <exception cref="OverflowException"><paramref name="initial"/> does not fit an integer loop; a decimal result
-        ///     leaves decimal's range.</exception>
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="OverflowException">A decimal result leaves decimal's range.</exception>
         /// <remarks><see cref="NDAnchoredAttribute"/>: the iterator reads raw addresses of the input, the mask and the out, and
         ///     the engine members reach this method without a scope of their own; the weaver roots the operands until it
         ///     returns, so a caller's temporary operand or mask cannot be collected under the loop.</remarks>

@@ -47,7 +47,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>The result.</returns>
         /// <exception cref="TypeError">An NA whose object is not a str (<c>descriptor 'upper' for 'str' objects doesn't apply
         ///     to a 'float' object</c>).</exception>
-        /// <exception cref="OutOfMemoryException">A result no string can hold (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">A result no string can hold (NumPy's MemoryError).</exception>
         internal static NDArray CaseMap(int map, NDArray a)
         {
             // _vec_string allocates PyArray_SimpleNewFromDescr: C order whatever a's layout, cells all zero.

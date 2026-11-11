@@ -29,7 +29,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast.</exception>
-        /// <exception cref="OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <remarks>The member keeps the plain-array meaning for a numpy.matrix object reached through an
         ///     <see cref="NDArray"/> reference (an <see cref="NDMatrix"/> reference binds <see cref="NDMatrix.sum(int?, DType, NDMatrix)"/>).</remarks>
         [PlainReceiver]
