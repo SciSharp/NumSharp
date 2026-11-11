@@ -55,7 +55,8 @@ namespace NumSharp
         ///     <see cref="NDArray.WasPythonLiteral"/>) is NumPy's Python scalar: with a <paramref name="dtype"/> it is packed
         ///     with NumPy's range checks into a new array, not cast.</param>
         /// <param name="dtype">Requested dtype. <c>null</c> keeps the input dtype.</param>
-        /// <param name="order">'C' (row-major), 'F' (column-major), 'A' (any contiguous), 'K' (keep — default). 'A'/'K' never force a copy on layout grounds.</param>
+        /// <param name="order">'C' (row-major), 'F' (column-major), 'A' (any contiguous), 'K' (keep); <c>null</c> (NumPy's
+        ///     <c>None</c>, the default) is 'K'. 'A'/'K' never force a copy on layout grounds.</param>
         /// <param name="copy">Tri-state: <c>null</c> = copy only if needed (default), <c>true</c> = always copy, <c>false</c> = never copy (raises if a copy would be required).</param>
         /// <param name="like">Reference array for array-function dispatch — accepted for NumPy parity but has no observable effect in NumSharp.</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted.</param>
@@ -79,7 +80,7 @@ namespace NumSharp
         public static NDArray asarray(
             NDArray a,
             DType dtype = null,
-            char order = 'K',
+            char? order = null,
             bool? copy = null,
             NDArray like = null,
             string device = null)
@@ -94,7 +95,8 @@ namespace NumSharp
             // no array-subclass dispatch, so the value is accepted but never read.
             _ = like;
 
-            return NDArray.asarray(a, dtype, order, copy);
+            // order=None is NumPy's 'K' for asarray (PyArray_OrderConverter leaves NPY_KEEPORDER in place).
+            return NDArray.asarray(a, dtype, order ?? 'K', copy);
         }
 
         /// <summary>
@@ -106,15 +108,20 @@ namespace NumSharp
         /// </summary>
         /// <param name="buffer">A <see cref="MemoryView"/> over an array.</param>
         /// <param name="dtype">Requested dtype. <c>null</c> keeps the source dtype.</param>
-        /// <param name="order">'C', 'F', 'A', or 'K' (default).</param>
+        /// <param name="order">'C', 'F', 'A', or 'K'; <c>null</c> (NumPy's <c>None</c>, the default) is 'K'.</param>
         /// <param name="copy">Tri-state copy: <c>null</c> = if-needed, <c>true</c> = always, <c>false</c> = never (raises).</param>
         /// <param name="like">Reference for array-function dispatch — accepted for parity, no effect.</param>
         /// <param name="device">Only <c>"cpu"</c> or <c>null</c>.</param>
+        /// <returns>The array the memory view exposes (a view sharing its memory), or a copy when the dtype / order /
+        ///     copy request forces one.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is null.</exception>
+        /// <exception cref="ValueError">An unsupported <paramref name="device"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="copy"/> is <c>false</c> and a copy is required.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
         public static NDArray asarray(
             MemoryView buffer,
             DType dtype = null,
-            char order = 'K',
+            char? order = null,
             bool? copy = null,
             NDArray like = null,
             string device = null)
@@ -127,13 +134,25 @@ namespace NumSharp
         /// <summary>
         ///     Convert a <see cref="MemoryView"/> to an ndarray, taking a NumPy-style dtype string
         ///     (e.g. <c>"float32"</c>, <c>"&lt;i4"</c>). See
-        ///     <see cref="asarray(MemoryView, DType, char, bool?, NDArray, string)"/>.
+        ///     <see cref="asarray(MemoryView, DType, char?, bool?, NDArray, string)"/>.
         /// </summary>
+        /// <param name="buffer">A <see cref="MemoryView"/> over an array.</param>
+        /// <param name="dtype">The requested dtype as NumPy's dtype string (parsed as <c>np.dtype(string)</c> does).</param>
+        /// <param name="order">'C', 'F', 'A', or 'K'; <c>null</c> (NumPy's <c>None</c>, the default) is 'K'.</param>
+        /// <param name="copy">Tri-state copy: <c>null</c> = if-needed, <c>true</c> = always, <c>false</c> = never (raises).</param>
+        /// <param name="like">Reference for array-function dispatch — accepted for parity, no effect.</param>
+        /// <param name="device">Only <c>"cpu"</c> or <c>null</c>.</param>
+        /// <returns>The array the memory view exposes (a view sharing its memory), or a copy when the dtype / order /
+        ///     copy request forces one.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is not a dtype string NumPy understands.</exception>
+        /// <exception cref="ValueError">An unsupported <paramref name="device"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="copy"/> is <c>false</c> and a copy is required.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
         public static NDArray asarray(
             MemoryView buffer,
             string dtype,
-            char order = 'K',
+            char? order = null,
             bool? copy = null,
             NDArray like = null,
             string device = null)

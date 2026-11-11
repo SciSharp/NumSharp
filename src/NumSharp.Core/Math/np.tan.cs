@@ -58,5 +58,47 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray arctan2(NDArray y, NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => x.TensorEngine.ATan2(y, x, dtype, @out, where);
+
+        /// <summary>
+        ///     Trigonometric inverse tangent, element-wise (NumPy's <c>np.atan</c>,
+        ///     the Array-API name NumPy 2.0 added: <c>np.atan is np.arctan</c>, the
+        ///     same ufunc object, so this forwards to <see cref="arctan"/> and answers bit for bit as it does).
+        /// </summary>
+        /// <param name="x">Input array (a C# scalar converts to a 0-d array marked as the Python scalar it stands for).</param>
+        /// <param name="out">A location into which the result is stored (NumPy ufunc <c>out=</c>); <c>null</c> allocates the
+        ///     result.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed / written (NumPy ufunc <c>where=</c>);
+        ///     <c>null</c> is NumPy's <c>where=True</c>.</param>
+        /// <param name="dtype">The loop dtype (NumPy ufunc <c>dtype=</c>); only non-integer dtypes have a loop.</param>
+        /// <returns>The result of <see cref="arctan"/>: <paramref name="out"/> itself when it was given.</returns>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atan.html
+        ///     <para>One signature, the ufunc form of the original's; the original's own extra overloads (if any) are not
+        ///     copied, so the alias never carries a second overload.</para></remarks>
+        public static NDArray atan(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => arctan(x, @out, where, dtype);
+
+        /// <summary>
+        ///     Element-wise arc tangent of y/x choosing the quadrant correctly (NumPy's <c>np.atan2</c>,
+        ///     the Array-API name NumPy 2.0 added: <c>np.atan2 is np.arctan2</c>, the
+        ///     same ufunc object, so this forwards to <see cref="arctan2(NDArray, NDArray, NDArray, NDArray, DType)"/> and
+        ///     answers bit for bit as it does).
+        /// </summary>
+        /// <param name="y">The y-coordinates (NumPy's positional <c>x1</c>).</param>
+        /// <param name="x">The x-coordinates (NumPy's positional <c>x2</c>); broadcast against <paramref name="y"/>.</param>
+        /// <param name="out">A location into which the result is stored (NumPy ufunc <c>out=</c>); <c>null</c> allocates the
+        ///     result.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed / written (NumPy ufunc <c>where=</c>);
+        ///     <c>null</c> is NumPy's <c>where=True</c>.</param>
+        /// <param name="dtype">The loop dtype (NumPy ufunc <c>dtype=</c>); only non-integer dtypes have a loop.</param>
+        /// <returns>The result of <see cref="arctan2(NDArray, NDArray, NDArray, NDArray, DType)"/>: <paramref name="out"/>
+        ///     itself when it was given.</returns>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atan2.html
+        ///     <para>One signature, the ufunc form of the original's. A C# literal operand converts to a 0-d array marked as
+        ///     the Python scalar it stands for, so NEP 50's weak-scalar promotion holds without the original's
+        ///     <c>object</c> overload (<c>np.atan2(int32_array, 2)</c> stays int32, as NumPy's).</para></remarks>
+        public static NDArray atan2(NDArray y, NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => arctan2(y, x, @out, where, dtype);
     }
 }

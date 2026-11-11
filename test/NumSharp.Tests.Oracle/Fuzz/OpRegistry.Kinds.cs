@@ -192,6 +192,11 @@ namespace NumSharp.Tests.Fuzz
         ///     Ops returning N arrays. The corpus records every slot, so ARITY is asserted too —
         ///     which the older which/piece params (one slot per case) structurally cannot do.
         /// </summary>
+        /// <param name="op">The corpus op key of a tuple-valued call (<c>divmod</c>, <c>frexp</c>, <c>nonzero</c>, ...).</param>
+        /// <param name="p">The case's params.</param>
+        /// <param name="ops">The case's operands.</param>
+        /// <returns>Every result slot, in NumPy's tuple order.</returns>
+        /// <exception cref="NotSupportedException">The op key is not wired here.</exception>
         public static NDArray[] ApplyTuple(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
             // ndarray.* tuple keys — a.nonzero() plus the IN-PLACE mutators whose two slots are
@@ -469,7 +474,7 @@ namespace NumSharp.Tests.Fuzz
                 case "out_round":
                 {
                     var target = ops[1];
-                    var returned = np.round_(ops[0], p["decimals"].GetInt32(), target);
+                    var returned = np.round(ops[0], p["decimals"].GetInt32(), target);
                     return new[] { returned, BaseBuffer(target) };
                 }
                 case "out_clip":

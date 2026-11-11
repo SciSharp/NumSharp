@@ -55,6 +55,29 @@ namespace NumSharp
             => x1.TensorEngine.Power(x1, x2, dtype, @out, where);
 
         /// <summary>
+        ///     First array elements raised to powers from second array, element-wise (NumPy's <c>np.pow</c>,
+        ///     the Array-API name NumPy 2.0 added: <c>np.pow is np.power</c>, the
+        ///     same ufunc object, so this forwards to <see cref="power(NDArray, NDArray, NDArray, NDArray, DType)"/> and
+        ///     answers bit for bit as it does).
+        /// </summary>
+        /// <param name="x1">The bases.</param>
+        /// <param name="x2">The exponents; broadcast against <paramref name="x1"/>.</param>
+        /// <param name="out">A location into which the result is stored (NumPy ufunc <c>out=</c>); <c>null</c> allocates the
+        ///     result.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed / written (NumPy ufunc <c>where=</c>);
+        ///     <c>null</c> is NumPy's <c>where=True</c>.</param>
+        /// <param name="dtype">The loop dtype (NumPy ufunc <c>dtype=</c>): the computation runs in this dtype.</param>
+        /// <returns>The result of <see cref="power(NDArray, NDArray, NDArray, NDArray, DType)"/>: <paramref name="out"/>
+        ///     itself when it was given.</returns>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.pow.html
+        ///     <para>One signature, the ufunc form of the original's. A C# literal operand converts to a 0-d array marked as
+        ///     the Python scalar it stands for, so NEP 50's weak-scalar promotion holds without the original's
+        ///     <c>object</c> overload (<c>np.pow(int32_array, 2)</c> stays int32, as NumPy's).</para></remarks>
+        public static NDArray pow(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => power(x1, x2, @out, where, dtype);
+
+        /// <summary>
         ///     First array elements raised to powers from second array, element-wise.
         ///     Supports broadcasting between x1 and x2.
         /// </summary>

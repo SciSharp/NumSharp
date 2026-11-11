@@ -53,7 +53,7 @@ namespace NumSharp.Tests
         //  passing.
         // ============================================================================
         /// <summary>
-        ///     <c>np.round_(int32, -1)</c> rounds to tens in the integer dtype: <c>[127, 153, 248]</c> →
+        ///     <c>np.round(int32, -1)</c> rounds to tens in the integer dtype: <c>[127, 153, 248]</c> →
         ///     <c>[130, 150, 250]</c>, without the ArgumentOutOfRangeException that <c>Math.Round</c> throws for a
         ///     negative digit count.
         /// </summary>
@@ -62,7 +62,7 @@ namespace NumSharp.Tests
         {
             var a = np.array(new int[] { 127, 153, 248 });
             NDArray r = null;
-            Action act = () => r = np.round_(a, -1);
+            Action act = () => r = np.round(a, -1);
             act.Should().NotThrow("NumPy round([127,153,248], -1) = [130,150,250]; NumSharp throws " +
                                   "ArgumentOutOfRangeException (Math.Round rejects negative digits).");
             ((int)r.GetValue(0)).Should().Be(130);
@@ -81,14 +81,14 @@ namespace NumSharp.Tests
         //  passing.
         // ============================================================================
         /// <summary>
-        ///     <c>np.round_(float16, 1)</c> rounds the float16 value itself, as NumPy does: <c>2.75</c> → <c>2.80078</c>
+        ///     <c>np.round(float16, 1)</c> rounds the float16 value itself, as NumPy does: <c>2.75</c> → <c>2.80078</c>
         ///     (the float16 nearest 2.8) and <c>0.05</c> → <c>0</c>.
         /// </summary>
         [TestMethod]
         public void Round_Float16_Fractional_Diverges()
         {
             var a = np.array(new float[] { 2.75f, 0.05f }).astype(NPTypeCode.Half);
-            var r = np.round_(a, 1);
+            var r = np.round(a, 1);
             ((double)(Half)r.GetValue(0)).Should().BeApproximately(2.80078, 0.01,
                 "NumPy rounds float16 2.75 -> 2.80078 (banker's); NumSharp diverges.");
             ((double)(Half)r.GetValue(1)).Should().BeApproximately(0.0, 0.01,

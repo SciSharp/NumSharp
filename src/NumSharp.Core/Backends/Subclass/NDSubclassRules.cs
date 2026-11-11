@@ -404,18 +404,42 @@ namespace NumSharp
         #region Math and statistics
 
         /// <summary>
-        ///     <c>np.round(x, decimals, out)</c> / <c>np.around</c>: <c>_wrapfunc(a, 'round', ...)</c> is <c>ndarray.round</c>,
+        ///     <c>np.cumulative_sum</c> / <c>np.cumulative_prod</c> (NumPy's <c>_cumulative_func</c>): the class depends on the
+        ///     route. Without <c>include_initial</c> the result is <c>func.accumulate(x, out=out)</c>, a ufunc's (wrapped by
+        ///     the operand's class, or out's own); with it and no out, NumPy prepends <c>np.full_like(res, identity, ...)</c>
+        ///     (subok, so both pieces have <c>res</c>'s class) with <c>np.concat</c>, whose <c>PyArray_GetSubType</c> keeps a
+        ///     matrix and drops a chararray; with it and an out, NumPy's own <c>return out</c> hands the caller's object back.
+        /// </summary>
+        /// <param name="result">The cumulative result computed on the plain view (the caller's <c>out</c> when given).</param>
+        /// <param name="x">The caller's operand (bound by NAME to the public function's <c>x</c>).</param>
+        /// <param name="out">The caller's out, or <c>null</c>.</param>
+        /// <param name="include_initial">The caller's include_initial.</param>
+        /// <returns>NumPy's answer for the route the call took.</returns>
+        /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
+        internal static NDArray Cumulative(NDArray result, NDArray x, NDArray @out, bool include_initial)
+        {
+            // out + include_initial: `return out` - the caller's object itself, not a ufunc's wrap of it.
+            if (@out is not null && include_initial)
+                return @out;
+            return include_initial
+                ? NDSubclass.GetSubType(result, null, new[] { x, x })      // concat([full_like(res), res]): both as x's class
+                : NDSubclass.ArrayWrap(result, @out, x, null, null);       // func.accumulate(x, ..., out=out)
+        }
+
+        /// <summary>
+        ///     <c>np.round(a, decimals, out)</c> / <c>np.around</c>: <c>_wrapfunc(a, 'round', ...)</c> is <c>ndarray.round</c>,
         ///     whose <c>decimals=0</c> route is the <c>rint</c> ufunc (wrapped by the operand's class); any other
         ///     <c>decimals</c> runs multiply / rint / true_divide into a result NumPy returns as a plain array (probed 2.4.2).
         /// </summary>
         /// <param name="result">The rounded array computed on the plain view (or the caller's <c>out</c>).</param>
-        /// <param name="x">The caller's operand.</param>
+        /// <param name="a">The caller's operand (bound by NAME to np.round's / np.around's <c>a</c>: a rename there
+        ///     must rename this, or NumSharp.Build silently binds null and a matrix operand comes back plain).</param>
         /// <param name="decimals">The caller's decimals.</param>
         /// <param name="out">The caller's out, or <c>null</c>.</param>
         /// <returns>The wrapped result for <c>decimals=0</c>, otherwise a plain array (a matrix out's plain view).</returns>
         /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
-        internal static NDArray Round(NDArray result, NDArray x, int decimals, NDArray @out)
-            => decimals == 0 ? NDSubclass.ArrayWrap(result, @out, x, null, null) : NDSubclass.AsArray(result);
+        internal static NDArray Round(NDArray result, NDArray a, int decimals, NDArray @out)
+            => decimals == 0 ? NDSubclass.ArrayWrap(result, @out, a, null, null) : NDSubclass.AsArray(result);
 
         /// <summary>
         ///     <c>np.trapezoid(y, x, dx, axis)</c>: NumPy ends in <c>(d * (y[1:] + y[:-1]) / 2.0).sum(axis)</c> - for a matrix
@@ -496,11 +520,12 @@ namespace NumSharp
         ///     operand's class); any other dtype is a new <c>zeros(ax.shape, bool)</c>, plain.
         /// </summary>
         /// <param name="result">The mask computed on the plain view.</param>
-        /// <param name="a">The caller's operand.</param>
+        /// <param name="x">The caller's operand (bound by NAME to np.iscomplex's <c>x</c>: a rename there must rename
+        ///     this, or NumSharp.Build silently binds null and a complex matrix's mask comes back plain).</param>
         /// <returns>The wrapped mask of a complex operand, otherwise the plain mask.</returns>
-        internal static NDArray Iscomplex(NDArray result, NDArray a)
-            => a is not null && a.typecode == NPTypeCode.Complex
-                ? NDSubclass.ArrayWrap(result, null, a, null, null)
+        internal static NDArray Iscomplex(NDArray result, NDArray x)
+            => x is not null && x.typecode == NPTypeCode.Complex
+                ? NDSubclass.ArrayWrap(result, null, x, null, null)
                 : NDSubclass.AsArray(result);
 
         #endregion

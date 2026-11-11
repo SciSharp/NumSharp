@@ -147,12 +147,13 @@ namespace NumSharp.Tests.Backends
             ShouldThrowReadonly(() => np.add(a, a, ro, mask), "output array is read-only");
         }
 
+        /// <summary>np.round into a read-only out= raises NumPy's 'output array is read-only' instead of writing through.</summary>
         [TestMethod]
         public void Round_out_readonly_throws()
         {
             var a = (np.arange(3).astype(NPTypeCode.Double) + 0.4);
             var ro = Ro(np.zeros(new Shape(3)).astype(NPTypeCode.Double));
-            ShouldThrowReadonly(() => np.round_(a, 0, ro), "output array is read-only");
+            ShouldThrowReadonly(() => np.round(a, 0, ro), "output array is read-only");
         }
 
         [TestMethod]

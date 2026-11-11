@@ -100,11 +100,12 @@ namespace NumSharp.Tests.NumPyPortedTests
             Assert.AreEqual(np.float64, result.dtype);
         }
 
+        /// <summary>dtype=float32 makes an int32 cumsum accumulate and return float32, NumPy's values.</summary>
         [TestMethod]
         public void CumSum_WithExplicitDtype()
         {
             var arr = np.array(new int[] { 1, 2, 3, 4, 5, 6 });
-            var result = np.cumsum(arr, typeCode: NPTypeCode.Single);
+            var result = np.cumsum(arr, dtype: NPTypeCode.Single);
             Assert.AreEqual(np.float32, result.dtype);
             result.Should().BeOfValues(1f, 3f, 6f, 10f, 15f, 21f);
         }

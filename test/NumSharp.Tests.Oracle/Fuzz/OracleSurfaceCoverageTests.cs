@@ -28,9 +28,21 @@ namespace NumSharp.Tests.Fuzz
         internal static readonly Dictionary<string, string> EquivalentAliases = new()
         {
             ["absolute"] = "abs",
+            // NumPy 2.0's Array-API names ARE their originals (np.acos is np.arccos): np.acos & co. forward to them with
+            // the original's one ufunc signature (API-parity batch 1, 2026-11-11), so the original's corpus gates them.
+            ["acos"] = "arccos",
+            ["asin"] = "arcsin",
+            ["atan"] = "arctan",
+            ["atan2"] = "arctan2",
+            ["bitwise_invert"] = "invert",
+            ["bitwise_left_shift"] = "left_shift",
+            ["bitwise_right_shift"] = "right_shift",
+            ["pow"] = "power",
             ["amax"] = "max",
             ["amin"] = "min",
             ["around"] = "round_",
+            // np.round is NumPy 2.x's name of the function the corpus keys as round_ (np.round_ itself went with NumPy 2.0).
+            ["round"] = "round_",
             ["bitwise_not"] = "invert",
             ["broadcast"] = "broadcast_values",
             ["common_type_code"] = "common_type",

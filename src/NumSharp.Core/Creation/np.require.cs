@@ -29,7 +29,7 @@ namespace NumSharp
         /// <remarks>
         ///     Port of NumPy 2.x <c>numpy.require</c>. With no requirements this is exactly
         ///     <c>asanyarray(a, dtype)</c>. Otherwise it resolves an order ('A' by default, or 'C'/'F' when
-        ///     requested), routes through <see cref="asarray(NDArray, DType, char, bool?, NDArray, string)"/>,
+        ///     requested), routes through <see cref="asarray(NDArray, DType, char?, bool?, NDArray, string)"/>,
         ///     then makes a single copy (in the resolved order) if any of the remaining ALIGNED / WRITEABLE /
         ///     OWNDATA flags is not already satisfied: ALIGNED (false after <c>setflags(align=False)</c> or over
         ///     a caller's buffer at a misaligning byte offset), WRITEABLE (false for broadcast views) and

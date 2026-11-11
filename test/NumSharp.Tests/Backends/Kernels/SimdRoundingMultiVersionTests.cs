@@ -58,12 +58,18 @@ public class SimdRoundingMultiVersionTests
         _ => throw new ArgumentException(op),
     };
 
+    /// <summary>The rounding function <paramref name="op"/> called directly (the path the fused np.evaluate form is
+    ///     compared against).</summary>
+    /// <param name="op">"floor", "ceil", "trunc" or "round".</param>
+    /// <param name="a">The input.</param>
+    /// <returns>The function's result.</returns>
+    /// <exception cref="ArgumentException"><paramref name="op"/> is none of the four.</exception>
     private static NDArray Direct(string op, NDArray a) => op switch
     {
         "floor" => np.floor(a),
         "ceil" => np.ceil(a),
         "trunc" => np.trunc(a),
-        "round" => np.round_(a),
+        "round" => np.round(a),
         _ => throw new ArgumentException(op),
     };
 

@@ -383,7 +383,7 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's size rule for a buffer laid out from dimensions (<c>array_new</c>, as
-        ///     <see cref="np.ndarray(Shape, DType, object, long, long[], char)"/> follows it), for the wrap constructors: the
+        ///     <see cref="np.ndarray(Shape, DType, object, long, long[], char?)"/> follows it), for the wrap constructors: the
         ///     lone dimension <c>-1</c> takes every element; a buffer with fewer elements than the shape needs is refused;
         ///     a larger one is read from its start.
         /// </summary>

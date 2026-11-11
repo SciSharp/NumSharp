@@ -84,7 +84,7 @@ public class UnaryFamilyBenchmarks : TypedBenchmarkBase
     // unlike np.real, whose real-input result IS a view of _a and must NOT be disposed.
     [Benchmark(Description = "np.imag(a)")] public void Imag() { using var _ = np.imag(_a); }
     [Benchmark(Description = "np.rint(a)")] public NDArray Rint() => np.rint(_a);
-    [Benchmark(Description = "np.round(a)")] public NDArray Round() => np.round_(_a);
+    [Benchmark(Description = "np.round(a)")] public NDArray Round() => np.round(_a);
 }
 
 [BenchmarkCategory("Unary", "Modf")]

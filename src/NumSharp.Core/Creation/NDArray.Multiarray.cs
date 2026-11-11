@@ -763,7 +763,7 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>_array_fromobject_generic</c> (<c>multiarraymodule.c</c>) for an ARRAY operand, the body of
-        ///     <see cref="np.asarray(NDArray, DType, char, bool?, NDArray, string)"/> once the class boundaries, the device and
+        ///     <see cref="np.asarray(NDArray, DType, char?, bool?, NDArray, string)"/> once the class boundaries, the device and
         ///     <c>like=</c> were handled: Python's <c>None</c> (a new 0-d array of the dtype's setitem value), a C# literal
         ///     packed as the Python scalar it stands for (<c>PyArray_Pack</c>, with its range checks), then the request - the
         ///     array itself when its dtype and layout satisfy it, a view when the requested descriptor is an equal but
@@ -1144,7 +1144,7 @@ namespace NumSharp
         ///     NumPy's <c>_array_fromobject_generic</c> with <c>subok</c> for any C# value, the body of
         ///     <see cref="np.asanyarray(in object, DType, char, string)"/> once the device and the class boundaries were
         ///     checked: the order first (NumPy parses it with the arguments), then Python's <c>None</c>, an array
-        ///     (<see cref="np.asarray(NDArray, DType, char, bool?, NDArray, string)"/>), text arrays and sequences (the text
+        ///     (<see cref="np.asarray(NDArray, DType, char?, bool?, NDArray, string)"/>), text arrays and sequences (the text
         ///     array builder), Python lists - object arrays and grids, tuples and any other enumerable of objects - through
         ///     the coercion of a sequence (<see cref="UnmanagedStorage.FromSequence(object, DType)"/>: a C# int is a Python
         ///     int, int64; with a dtype every item is stored by its setitem), typed C# arrays, a str, typed sequences,

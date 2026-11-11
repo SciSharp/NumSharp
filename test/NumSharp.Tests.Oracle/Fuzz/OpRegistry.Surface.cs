@@ -90,20 +90,20 @@ namespace NumSharp.Tests.Fuzz
                 }
                 case "bmat": return Bmat(p, ops);
                 case "ndarray.shape": return np.array(ops[0].shape);
-                // numpy.shape(a): NumSharp has no top-level function; the inventory credits the shape property.
-                case "shape": return np.array(ops[0].shape);
+                // numpy.shape(a): NumSharp's np.shape, the tuple as an int64 array.
+                case "shape": return np.array(np.shape(ops[0]));
+                // numpy.ndim(a): NumSharp's np.ndim, the rank as an int64 0-d array.
+                case "ndim": return NDArray.Scalar((long)np.ndim(ops[0]));
                 case "cumulative_sum":
                 case "cumulative_prod":
                 {
-                    // NumSharp has no cumulative_sum / cumulative_prod: the coverage inventory aliases them to
-                    // np.cumsum / np.cumprod, and these cases gate that alias. include_initial has no counterpart, so
-                    // the port of a call that passes it has nothing to call.
-                    if (p.TryGetValue("include_initial", out var ii) && ii.GetBoolean())
-                        throw new NotSupportedException(
-                            $"numpy.{op}(include_initial=True) has no NumSharp counterpart (the alias is np.{(op == "cumulative_sum" ? "cumsum" : "cumprod")})");
+                    // NumSharp's own np.cumulative_sum / np.cumulative_prod (NumPy's _cumulative_func), keyword for keyword.
                     int? axis = SurfNullableInt(p, "axis");
                     DType dtype = SurfDType(p, "dtype");
-                    return op == "cumulative_sum" ? np.cumsum(ops[0], axis, dtype) : np.cumprod(ops[0], axis, dtype);
+                    bool include = p.TryGetValue("include_initial", out var ii) && ii.GetBoolean();
+                    return op == "cumulative_sum"
+                        ? np.cumulative_sum(ops[0], axis: axis, dtype: dtype, include_initial: include)
+                        : np.cumulative_prod(ops[0], axis: axis, dtype: dtype, include_initial: include);
                 }
                 case "ndarray.tofile":
                 {

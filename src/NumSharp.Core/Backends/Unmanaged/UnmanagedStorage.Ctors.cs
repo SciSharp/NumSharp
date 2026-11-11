@@ -395,7 +395,7 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     NumPy's <c>array_new</c> (<c>numpy/_core/src/multiarray/arrayobject.c</c>), the body of
-        ///     <see cref="np.ndarray(Shape, DType, object, long, long[], char)"/> once <c>None</c> was refused as the shape:
+        ///     <see cref="np.ndarray(Shape, DType, object, long, long[], char?)"/> once <c>None</c> was refused as the shape:
         ///     the default dtype, the unsized-string refusal, the buffer resolved (and pinned), the order, the strides'
         ///     length and their bounds, then an uninitialized allocation (<see cref="NdarrayAllocate"/>) or an array over
         ///     the buffer's bytes (<see cref="NdarrayOverBuffer"/>).
@@ -469,7 +469,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     The no-buffer branch of <see cref="np.ndarray(Shape, DType, object, long, long[], char)"/>: NumPy's
+        ///     The no-buffer branch of <see cref="np.ndarray(Shape, DType, object, long, long[], char?)"/>: NumPy's
         ///     <c>PyArray_NewFromDescr_int</c> with no data pointer.
         /// </summary>
         /// <param name="dims">The dimensions (not yet validated).</param>
@@ -528,7 +528,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     The buffer branch of <see cref="np.ndarray(Shape, DType, object, long, long[], char)"/>: NumPy's shape
+        ///     The buffer branch of <see cref="np.ndarray(Shape, DType, object, long, long[], char?)"/>: NumPy's shape
         ///     <c>-1</c> and too-small checks, the dimensions, NumSharp's exact bounds check, then a view over the bytes.
         /// </summary>
         /// <param name="buf">The resolved buffer; its pin is handed to the result or released by the caller.</param>

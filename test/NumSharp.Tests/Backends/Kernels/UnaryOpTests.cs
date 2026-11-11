@@ -339,6 +339,7 @@ public class UnaryOpTests
 
     #region Rounding Operations - Banker's Rounding
 
+    /// <summary>np.round rounds half to even, as NumPy: 0.5 -> 0, 1.5 -> 2, 2.5 -> 2, -0.5 -> -0.0, -2.5 -> -2.</summary>
     [TestMethod]
     public void Round_BankersRounding()
     {
@@ -346,7 +347,7 @@ public class UnaryOpTests
         // NumPy: round([0.0, 0.49, 0.5, 0.51, 1.5, 2.5, -0.5, -1.5, -2.5])
         //      = [0.0, 0.0, 0.0, 1.0, 2.0, 2.0, -0.0, -2.0, -2.0]
         var input = np.array(new double[] { 0.0, 0.49, 0.5, 0.51, 1.5, 2.5, -0.5, -1.5, -2.5 });
-        var result = np.round_(input);
+        var result = np.round(input);
 
         Assert.AreEqual(0.0, result.GetDouble(0));
         Assert.AreEqual(0.0, result.GetDouble(1));

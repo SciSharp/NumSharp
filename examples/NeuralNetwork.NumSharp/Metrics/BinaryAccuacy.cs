@@ -12,15 +12,22 @@ namespace NeuralNetwork.NumSharp.Metrics
     /// </summary>
     public class BinaryAccuracy : BaseMetric
     {
+        /// <summary>Creates the metric under the name Keras reports it as, <c>binary_accuracy</c>.</summary>
         public BinaryAccuracy() : base("binary_accuracy") { }
 
+        /// <summary>
+        ///     The fraction of predictions that round (half to even, after clipping to [0, 1]) to their label.
+        /// </summary>
+        /// <param name="preds">Sigmoid probabilities.</param>
+        /// <param name="labels">0 / 1 labels of the same shape.</param>
+        /// <returns>A 0-d float32 array: the mean of the per-element matches.</returns>
         public override NDArray Calculate(NDArray preds, NDArray labels)
         {
             // Clip first to guarantee preds are in [0, 1], then round — preds
             // fed directly from a sigmoid will already be in range, but a raw
             // logit or a probability that slipped slightly out of bounds would
             // otherwise round incorrectly.
-            NDArray rounded = np.round_(np.clip(preds, (NDArray)0f, (NDArray)1f));
+            NDArray rounded = np.round(np.clip(preds, (NDArray)0f, (NDArray)1f));
             NDArray matches = (rounded == labels).astype(NPTypeCode.Single);
             return np.mean(matches);
         }

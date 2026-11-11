@@ -347,48 +347,53 @@ namespace NumSharp.Tests.NumPyPortedTests
 
         // ===== [6] dtype= parameter ====================================================
 
+        /// <summary>cumsum(int32, dtype=float64) is NumPy's float64 [1, 3, 6].</summary>
         [TestMethod]
         public void CumSum_DtypeParam_IntToFloat()
         {
             // NumPy: cumsum([1,2,3], dtype=float64) -> [1.,3.,6.] float64
-            var r = np.cumsum(np.array(new int[] { 1, 2, 3 }), typeCode: NPTypeCode.Double);
+            var r = np.cumsum(np.array(new int[] { 1, 2, 3 }), dtype: NPTypeCode.Double);
             r.typecode.Should().Be(NPTypeCode.Double);
             AssertValues(r, 1, 3, 6);
         }
 
+        /// <summary>cumsum(float64, dtype=int32) truncates every running value into int32, NumPy's [1, 3, 6].</summary>
         [TestMethod]
         public void CumSum_DtypeParam_FloatToInt_Truncates()
         {
             // NumPy: cumsum([1.5,2.5,3.5], dtype=int32) -> [1,3,6] int32 (running value truncated)
-            var r = np.cumsum(np.array(new double[] { 1.5, 2.5, 3.5 }), typeCode: NPTypeCode.Int32);
+            var r = np.cumsum(np.array(new double[] { 1.5, 2.5, 3.5 }), dtype: NPTypeCode.Int32);
             r.typecode.Should().Be(NPTypeCode.Int32);
             AssertValues(r, 1, 3, 6);
         }
 
+        /// <summary>cumsum(int32, dtype=int8) wraps modulo 2^8 as NumPy's int8 loop does: [100, -56, 44].</summary>
         [TestMethod]
         public void CumSum_DtypeParam_NarrowInt_Wraps()
         {
             // NumPy: cumsum([100,100,100], dtype=int8) -> [100,-56,44] (int8 modular wrap)
-            var r = np.cumsum(np.array(new int[] { 100, 100, 100 }), typeCode: NPTypeCode.SByte);
+            var r = np.cumsum(np.array(new int[] { 100, 100, 100 }), dtype: NPTypeCode.SByte);
             r.typecode.Should().Be(NPTypeCode.SByte);
             AssertValues(r, 100, -56, 44);
         }
 
         // ===== [7] overflow / wraparound ==============================================
 
+        /// <summary>cumsum(int8, dtype=int8) keeps the narrow accumulator and wraps: [100, -56, 44].</summary>
         [TestMethod]
         public void CumSum_Int8DtypeParam_Wraps()
         {
             // NumPy: cumsum(int8[100,100,100], dtype=int8) = [100,-56,44]
-            var r = np.cumsum(np.array(new sbyte[] { 100, 100, 100 }), typeCode: NPTypeCode.SByte);
+            var r = np.cumsum(np.array(new sbyte[] { 100, 100, 100 }), dtype: NPTypeCode.SByte);
             AssertValues(r, 100, -56, 44);
         }
 
+        /// <summary>cumsum(uint8, dtype=uint8) wraps modulo 2^8: [200, 44].</summary>
         [TestMethod]
         public void CumSum_UInt8DtypeParam_Wraps()
         {
             // NumPy: cumsum(uint8[200,100], dtype=uint8) = [200,44]
-            var r = np.cumsum(np.array(new byte[] { 200, 100 }), typeCode: NPTypeCode.Byte);
+            var r = np.cumsum(np.array(new byte[] { 200, 100 }), dtype: NPTypeCode.Byte);
             AssertValues(r, 200, 44);
         }
 

@@ -929,7 +929,7 @@ namespace NumSharp.Tests.Backends.Strings
                 i0.GetDouble(0).Should().Be(1.0);
                 i0.GetDouble(1).Should().BeApproximately(1.2660658777520082, 1e-15);
             }
-            using (var cp = np.cumprod(np.array(new[] { "2", "3" }), typeCode: np.int64))
+            using (var cp = np.cumprod(np.array(new[] { "2", "3" }), dtype: np.int64))
                 cp.ToArray<long>().Should().Equal(2L, 6L);
             Action fill = () => np.ma.array(np.array(new[] { 1L, 2L }), fill_value: new byte[] { (byte)'x' });
             fill.Should().Throw<TypeError>().WithMessage("Cannot convert fill_value b'x' to dtype int64");

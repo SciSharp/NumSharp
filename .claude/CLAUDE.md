@@ -149,18 +149,20 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
   `unique_values`, `unstack`, `vsplit`, `vstack` → `creation-manipulation.md` (`unique.md` for `unique` and `unique_*`;
   every axis argument: `axis-arguments.md`).
 - Broadcasting: `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`.
-- Math, arithmetic: `abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`,
-  `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`,
-  `divide`, `divmod`, `exp`, `exp2`, `expm1`, `fabs`, `fix`, `float_power`, `floor`, `floor_divide`, `fmod`, `gcd`, `lcm`,
-  `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`,
-  `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinc`, `sinh`, `spacing`, `sqrt`, `square`, `subtract`, `tan`, `tanh`,
-  `true_divide`, `trunc` → `ufuncs.md` and `float-math.md`.
+- Math, arithmetic: `abs`, `absolute`, `acos`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`,
+  `arctan2`, `arctanh`, `asin`, `asinh`, `atan`, `atan2`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`,
+  `cosh`, `deg2rad`, `degrees`, `divide`, `divmod`, `exp`, `exp2`, `expm1`, `fabs`, `fix`, `float_power`, `floor`,
+  `floor_divide`, `fmod`, `gcd`, `lcm`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`,
+  `pow`, `power`, `rad2deg`, `radians`, `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinc`, `sinh`, `spacing`,
+  `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc` → `ufuncs.md` and `float-math.md` (`acos`, `asin`,
+  `atan`, `atan2`, `pow`: NumPy 2.0's Array-API names, forwarding to the originals).
 - Math, reductions: `all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `average_returned`, `count_nonzero`,
-  `cov`, `cumprod`, `cumsum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`, `percentile`, `prod`, `ptp`, `quantile`,
-  `std`, `sum`, `var` → `reductions.md` (median / percentile / quantile: `quantile.md`).
+  `cov`, `cumprod`, `cumsum`, `cumulative_prod`, `cumulative_sum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`,
+  `percentile`, `prod`, `ptp`, `quantile`, `std`, `sum`, `var` → `reductions.md` (median / percentile / quantile: `quantile.md`).
 - Math, NaN-aware: `nanmax`, `nanmean`, `nanmedian`, `nanmin`, `nanpercentile`, `nanprod`, `nanquantile`, `nanstd`,
   `nansum`, `nanvar` → `reductions.md` (the nan quantile forms: `quantile.md`).
-- Bitwise: `bitwise_and`, `bitwise_or`, `bitwise_xor`, `invert`, `left_shift`, `right_shift` → `ufuncs.md`.
+- Bitwise: `bitwise_and`, `bitwise_invert`, `bitwise_left_shift`, `bitwise_or`, `bitwise_right_shift`, `bitwise_xor`,
+  `invert`, `left_shift`, `right_shift` → `ufuncs.md`.
 - Comparison and logic: `all`, `allclose`, `any`, `array_equal`, `equal`, `fmax`, `fmin`, `greater`, `greater_equal`,
   `isclose`, `iscomplex`, `iscomplexobj`, `isfinite`, `isin`, `isinf`, `isnan`, `isreal`, `isrealobj`, `isscalar`,
   `iterable`, `less`, `less_equal`, `logical_and`, `logical_not`, `logical_or`, `logical_xor`, `maximum`, `minimum`,
@@ -207,7 +209,7 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
   `savez_compressed`, `tofile`; printing: `array2string`, `array_repr`, `array_str`, `format_float_positional`,
   `format_float_scientific`, `get_printoptions`, `printoptions`, `set_printoptions` → `io-printing.md` (the text
   functions: `text-io.md`).
-- Other: `around`, `asscalar`, `copyto` (`creation-manipulation.md`), `round_`, `size`, `multithreading`.
+- Other: `around`, `asscalar`, `copyto` (`creation-manipulation.md`), `ndim`, `round`, `shape`, `size`, `multithreading`.
 - Operators: arithmetic `+`, `-`, `*`, `/`, `%`, unary `-`; comparison `==`, `!=`, `<`, `>`, `<=`, `>=` (they return
   `NDArray<bool>`); logical `&`, `|`, `!`.
 - Indexing: integers and slice strings (`nd[0]`, `nd["1:3"]`, `nd["::-1"]`), boolean masks (`nd[mask]`, and

@@ -4,7 +4,7 @@ namespace NumSharp
     {
         /// <summary>
         ///     Return this array with each element rounded to the given number of decimals (round half to even).
-        ///     Refer to <see cref="np.around(NDArray, int, NDArray, DType)"/> for full documentation.
+        ///     Refer to <see cref="np.round(NDArray, int, NDArray)"/> for full documentation.
         /// </summary>
         /// <param name="decimals">Number of decimal places to round to (default 0). Negative values round to positions left of the decimal point.</param>
         /// <param name="out">Alternate output array in which to place the result. It must have the same shape as the expected output.</param>
@@ -13,7 +13,7 @@ namespace NumSharp
         [PlainReceiver]
         public NDArray round(int decimals = 0, NDArray @out = null)
         {
-            return np.around(this, decimals, @out);
+            return np.round(this, decimals, @out);
         }
     }
 }

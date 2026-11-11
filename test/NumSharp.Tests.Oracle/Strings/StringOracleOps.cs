@@ -480,7 +480,7 @@ namespace NumSharp.Tests.Strings
                 case "i0": return np.i0(x);
                 case "unwrap": return np.unwrap(x);
                 case "vander": return np.vander(x, 2);
-                case "round": return np.round_(x);
+                case "round": return np.round(x);
                 case "around": return np.around(x);
                 // NumPy's x[0] is a SCALAR (np.str_), whose descriptor is its own text length: NDArray.Scalar of the element.
                 case "clip": return np.clip(x, NDArray.Scalar(x.item(0)), NDArray.Scalar(x.item(1)));

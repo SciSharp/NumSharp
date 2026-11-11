@@ -33,13 +33,14 @@ namespace NumSharp.Tests.Math
             np.cumsum(arr).Should().Be(expected);
         }
 
+        /// <summary>np.cumsum of a 2-D int32 array with dtype=float32 flattens (axis None) and accumulates in float32, NumPy's result.</summary>
         [TestMethod]
         public void Cumsum2dDtype()
         {
             NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
             NDArray expected = new float[] {1, 3, 6, 10, 15, 21};
 
-            np.cumsum(arr, typeCode: NPTypeCode.Single).Should().Be(expected);
+            np.cumsum(arr, dtype: NPTypeCode.Single).Should().Be(expected);
         }
 
         [TestMethod]

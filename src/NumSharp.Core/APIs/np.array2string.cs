@@ -53,15 +53,29 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Return the string representation of an array (NumPy's <c>np.array_repr</c>).
+        ///     Return the string representation of an array (NumPy's <c>np.array_repr</c>): <c>array([1.12, 2.5 ])</c>,
+        ///     with the dtype appended when it is not implied by the values. Each option given here overrides the
+        ///     current print options for this one call only.
         /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array_repr.html</remarks>
-        public static string array_repr(NDArray a,
+        /// <param name="arr">The array to represent (NumPy's keyword <c>arr</c>).</param>
+        /// <param name="max_line_width">The line width at which the text wraps; <c>null</c> keeps the current
+        ///     <c>linewidth</c> print option (75 by default).</param>
+        /// <param name="precision">Floating point precision; <c>null</c> keeps the current <c>precision</c> print option
+        ///     (8 by default).</param>
+        /// <param name="suppress_small">Represent numbers very close to zero as zero; <c>null</c> keeps the current
+        ///     <c>suppress</c> print option.</param>
+        /// <returns>The <c>repr</c> text of <paramref name="arr"/>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> is null.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array_repr.html
+        ///     <para>NumPy's signature <c>array_repr(arr, max_line_width=None, precision=None, suppress_small=None)</c>,
+        ///     keyword for keyword (the array was <c>a</c> until 2026-11-11, so a ported named call did not
+        ///     compile).</para></remarks>
+        public static string array_repr(NDArray arr,
             int? max_line_width = null, int? precision = null, bool? suppress_small = null)
         {
-            if (a is null) throw new ArgumentNullException(nameof(a));
+            if (arr is null) throw new ArgumentNullException(nameof(arr));
             var opts = BuildOptions(max_line_width, precision, suppress_small, null, null, null, null);
-            return ArrayFormatter.ArrayRepr(a, opts);
+            return ArrayFormatter.ArrayRepr(arr, opts);
         }
 
         /// <summary>
