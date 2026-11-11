@@ -155,7 +155,7 @@ namespace NumSharp.Tests.Fuzz
                 case "vstack": return np.vstack(ops[0], ops[1]);
                 case "where3": return np.where(ops[0], ops[1], ops[2]);
                 case "clip": return np.clip(ops[0], ops[1], ops[2]);
-                case "round": return np.round_(a, p["decimals"].GetInt32());
+                case "round": return np.round(a, p["decimals"].GetInt32());
                 case "matmul": return np.matmul(ops[0], ops[1]);
                 case "dot": return np.dot(ops[0], ops[1]);
                 case "outer": return np.outer(ops[0], ops[1]);
@@ -353,7 +353,7 @@ namespace NumSharp.Tests.Fuzz
                 "min" => np.min(a, axis: axis, @out: o),
                 "trace" => np.trace(a, @out: o),
                 "clip" => np.clip(ops[0], ops[1], ops[2], o),
-                "round" => np.round_(a, p["decimals"].GetInt32(), o),
+                "round" => np.round(a, p["decimals"].GetInt32(), o),
                 "take" => np.take(ops[0], ops[1], axis, o),
                 "compress" => np.compress(ops[0], ops[1], axis, o),
                 "choose" => np.choose(ops[0], new[] { ops[1], ops[2] }, o),

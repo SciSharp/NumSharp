@@ -618,7 +618,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [ ] B6 `np.nanmean`: `dtype=`, `out=`, `where=`. (`dtype=` landed with A7.)
 - [ ] B7 `np.nanstd`, `np.nanvar`: `out=`, `where=`, `mean=`, `correction=`; NumPy's order. (`dtype=` landed with A3.)
 - [ ] B8 `np.argmax`, `np.argmin`, `ndarray.argmax`, `ndarray.argmin`: `out=`.
-- [ ] B9 `np.cumsum`, `np.cumprod`: parameter names `a` and `dtype` (today `arr` and `typeCode`).
+- [x] B9 `np.cumsum`, `np.cumprod`: parameter names `a` and `dtype` (were `arr` and `typeCode`; API-parity batch 1,
+  2026-11-11).
 - [ ] B10 `np.average`: `returned=` (one result type for NumPy's array-or-tuple return, as `np.unique` does).
 - [ ] B11 `np.percentile`, `np.quantile`, `np.nanpercentile`, `np.nanquantile`: `weights=`.
 
@@ -661,7 +662,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [ ] E1 `np.stack`: `out=`, `dtype=`, `casting=`.
 - [ ] E2 `np.hstack`, `np.vstack`: `dtype=`, `casting=`.
 - [ ] E3 `np.reshape`: `order=`, `copy=`; `ndarray.reshape`: `copy=`.
-- [ ] E4 `np.transpose`: parameter `axes` (today misspelled `premute`).
+- [x] E4 `np.transpose`: parameter `axes` (was misspelled `premute`); `ndarray` / `matrix` / `MaskedArray.transpose` take
+  NumPy's `*axes` as `params int[] axes` (API-parity batch 1, 2026-11-11).
 
 ### Phase F: ufunc-shaped functions
 
@@ -671,8 +673,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 ### Phase G: names and positions
 
-- [ ] G1 Parameter names: `np.around(a)`, `np.array_equal(a1, a2)`, `np.array_repr(arr)`,
-  `np.broadcast_to(array, shape)`, `np.can_cast(from_)`, `np.iinfo(int_type)`,
+- [ ] G1 Parameter names: `np.broadcast_to(array, shape)`, `np.can_cast(from_)`, `np.iinfo(int_type)`. Done by
+  API-parity batch 1 (2026-11-11): `np.around(a)`, `np.array_equal(a1, a2)`, `np.array_repr(arr)`,
   `np.iscomplex` / `np.isreal` / `np.iscomplexobj` / `np.isrealobj(x)`, `np.isscalar(element)`, `np.put(ind, v)`.
 - [ ] G2 `ndarray.astype`: NumPy's order `(dtype, order, casting, subok, copy)` (today `(dtype, copy, order, casting)`).
 - [ ] G3 `ndarray.dot`: `out=`.
@@ -2036,6 +2038,18 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    one, test the cases where the old one would answer differently.
 
 ## 7. State log
+
+- **2026-11-11**: API-parity batch 1 on `journey5` (the owner picked 13 of 15 fixes from `API_PARITY_DIFF.md`; branch
+  `api-parity/batch-01`): B9, E4 and most of G1 done (above); `np.put` and `np.squeeze` have one signature each (the
+  `(long, object)` put overload was CS0121-ambiguous for every literal call; `squeeze(Shape)` had no caller); `np.round`
+  exists and `np.round_` (removed by NumPy 2.0) is gone with around's NumSharp-only `dtype`; NumPy 2.0's Array-API names
+  `acos` / `asin` / `atan` / `atan2` / `pow` / `bitwise_invert` / `bitwise_left_shift` / `bitwise_right_shift` forward to
+  their originals; `np.cumulative_sum` / `np.cumulative_prod` (NumPy's `_cumulative_func`) and `np.ndim` / `np.shape`
+  are new; `order` (asarray, asarray_chkfinite, ndarray) and `density` (the three histograms) take `null` as NumPy's
+  None. Each fix was validated before (the NumPy-style call fails to compile at C# 12) and after (it compiles at C# 12
+  and answers as NumPy). Trap found: NumSharp.Build binds a `[SubclassRule]`'s parameters BY NAME to the public
+  function's and loads `null` for a missing name without an error, so the `Round` and `Iscomplex` rules had to follow
+  the renames (matrix-operand tests pin both). The surface oracle's SU36 / SU37 gaps closed.
 
 - **2026-10-27**: X22 done on `strings` by the np-layer dtype plan's logical-ufunc family
   (`docs/plans/np-layer-dtype-logic.md` section 9): a ufunc's shape errors with out= / where= list every operand and

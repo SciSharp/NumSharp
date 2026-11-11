@@ -200,7 +200,7 @@ public class StorePythonLiteralTests
         const string msg = "Python integer 1000 out of bounds for int8";
         Raises<OverflowError>(() => np.put(Z(NPTypeCode.SByte), np.array(new long[] { 0 }), 1000), msg);
         Raises<OverflowError>(() => np.put(Z(NPTypeCode.SByte), np.array(new long[0]), 1000), msg);
-        Raises<OverflowError>(() => np.put(Z(NPTypeCode.SByte), 0L, (object)1000), msg);
+        Raises<OverflowError>(() => np.put(Z(NPTypeCode.SByte), 0, 1000), msg);
 
         var a = Z(NPTypeCode.SByte);
         np.put(a, np.array(new long[] { 0 }), NDArray.Scalar(1000));

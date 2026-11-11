@@ -962,7 +962,7 @@
       if (!matchesSignatureFilter(row, filters.signature)) return false;
       if (!terms.length) return true;
       // Oracle keys/files are searchable so "polyeval.jsonl" or "rnd:normal" finds the APIs they prove;
-      // so are the signature's missing and foreign parameter names ("premute", "initial") and its C#
+      // so are the signature's missing and foreign parameter names ("indices", "initial") and its C#
       // spellings ("new NDArray", "NDArray<T>.reshape").
       const haystack = [row.id, apiLabel(row), row.name, row.surface, surfaceLabel(row.surface), row.category, row.kind, row.disposition, row.status, row.availability, row.numsharp_target, row.numpy_signature, row.notes, ...(row.numsharp_signatures || []), ...(row.oracle?.keys || []), ...(row.oracle?.files || []), row.oracle?.via?.id, ...(row.signature?.missing || []), ...(row.signature?.foreign || []), ...(row.signature?.spellings || []).map((spelling) => spelling.csharp)].join(" ").toLowerCase();
       return terms.every((term) => haystack.includes(term));

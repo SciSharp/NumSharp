@@ -14,6 +14,17 @@ namespace NumSharp.Tests.Fuzz
     /// </summary>
     public static partial class OpRegistry
     {
+        /// <summary>
+        ///     Runs the NumSharp side of one corpus case: the call the op key names (the twin of gen_oracle.py's NumPy
+        ///     call), with the case's params and operands. Namespaced keys go to their surfaces' dispatchers; a key this
+        ///     switch does not know falls through to <c>ApplyExtended</c>.
+        /// </summary>
+        /// <param name="op">The corpus op key (<c>add</c>, <c>round_</c>, <c>ndarray.sum</c>, ...).</param>
+        /// <param name="p">The case's params, as the generator wrote them.</param>
+        /// <param name="ops">The case's operands, rebuilt from their descriptors (layouts included).</param>
+        /// <returns>The single-array result the corpus compares against NumPy's.</returns>
+        /// <exception cref="NotSupportedException">The op key (or one of its params, such as an rnd distribution) is not
+        ///     wired in the registry.</exception>
         public static NDArray Apply(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
             // Namespaced surfaces route to their own dispatchers (OpRegistry.Instance.cs): the
@@ -867,7 +878,7 @@ namespace NumSharp.Tests.Fuzz
                 }
 
                 // Group A: rounding + flattened diff + nan order-statistics.
-                case "round_": return np.round_(ops[0], p["decimals"].GetInt32());
+                case "round_": return np.round(ops[0], p["decimals"].GetInt32());
                 case "ediff1d": return np.ediff1d(ops[0]);
                 case "nanpercentile": return np.nanpercentile(ops[0], p["q"].GetDouble(), ParseAxis(p), keepdims: ParseKeepdims(p));
                 case "nanquantile": return np.nanquantile(ops[0], p["q"].GetDouble(), ParseAxis(p), keepdims: ParseKeepdims(p));

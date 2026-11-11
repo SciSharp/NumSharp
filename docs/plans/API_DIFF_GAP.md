@@ -31,6 +31,11 @@ from 2026-10-17. Since then only the one-overload collapse of `sum` / `prod` / `
 removed marks; the validation refuted 19 findings that the reading of NumPy or of a class's own members got wrong (13 M,
 1 X, 5 Q, §11) and found 2 B marks that were artifacts of the probe file (a missing `using NumSharp.Backends;`, fixed).
 
+**Refresh 2026-11-11 (API-parity batch 1 on `journey5` at `3a615e2d`).** Regenerated on the batch's tree and, for the
+comparison, on its base: 1,293 → 1,306 NumPy names with a C# spelling (13 absent names gained), 719 → 748 with NumPy's
+signature, 574 → 558 to change; O 342 → 340, M 215 → 203, X 90 → 77, L 115 → 108, B 39 → 36, Q 73 and T 24 unchanged,
+absent 96 → 83. The fixes are recorded in [`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
 ---
 
 ## Contents

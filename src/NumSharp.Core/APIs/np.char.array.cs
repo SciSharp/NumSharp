@@ -58,7 +58,7 @@ namespace NumSharp
         ///     <c>null</c> for new memory. A C# <see cref="string"/> is NumPy's str FILLER: every element is set to it
         ///     (truncated to the width; an <c>S</c> chararray encodes it ASCII), and <paramref name="offset"/> /
         ///     <paramref name="strides"/> are ignored. Any other buffer is viewed without copying, exactly as
-        ///     <see cref="np.ndarray(Shape, DType, object, long, long[], char)"/> views it: a <c>byte[]</c> / <c>Memory&lt;byte&gt;</c>
+        ///     <see cref="np.ndarray(Shape, DType, object, long, long[], char?)"/> views it: a <c>byte[]</c> / <c>Memory&lt;byte&gt;</c>
         ///     writable (NumPy's <c>bytearray</c>), a <c>ReadOnlyMemory&lt;byte&gt;</c> read-only (NumPy's <c>bytes</c>), an
         ///     <see cref="NDArray"/> through its bytes.
         /// </param>

@@ -138,7 +138,7 @@ namespace NumSharp
         /// <param name="range">Optional <c>(lower, upper)</c> outer edges; defaults to <c>(a.min(), a.max())</c>.</param>
         /// <param name="density">
         ///     When true, return the probability density (<c>count / total / bin_width</c>) whose integral over
-        ///     the range is 1, instead of raw counts.
+        ///     the range is 1, instead of raw counts. <c>null</c> (NumPy's <c>None</c>, the default) is <c>false</c>.
         /// </param>
         /// <param name="weights">
         ///     Optional per-sample weights of the same shape as <paramref name="a"/>; each sample then contributes
@@ -149,10 +149,10 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.histogram.html <para>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</para></remarks>
         [NDScoped]
-        public static HistogramResult histogram(NDArray a, int bins = 10, (double, double)? range = null, bool density = false, NDArray weights = null)
+        public static HistogramResult histogram(NDArray a, int bins = 10, (double, double)? range = null, bool? density = null, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return a.TensorEngine.Histogram(a, bins, range, density, weights);
+            return a.TensorEngine.Histogram(a, bins, range, density ?? false, weights);
         }
 
         /// <summary>
@@ -162,17 +162,17 @@ namespace NumSharp
         /// <param name="a">Input data; the histogram is computed over the flattened array.</param>
         /// <param name="bins">The estimator name.</param>
         /// <param name="range">Optional <c>(lower, upper)</c> outer edges; also constrains the data the estimator sees.</param>
-        /// <param name="density">When true, return the probability density instead of raw counts.</param>
+        /// <param name="density">When true, return the probability density instead of raw counts. <c>null</c> (NumPy's <c>None</c>, the default) is <c>false</c>.</param>
         /// <param name="weights">Weighted data is not supported for automatic estimation.</param>
         /// <returns>A <see cref="HistogramResult"/> carrying the histogram values and the bin edges.</returns>
         /// <exception cref="TypeError"><paramref name="weights"/> is supplied together with an estimator name.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
         [NDScoped]
-        public static HistogramResult histogram(NDArray a, string bins, (double, double)? range = null, bool density = false, NDArray weights = null)
+        public static HistogramResult histogram(NDArray a, string bins, (double, double)? range = null, bool? density = null, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return a.TensorEngine.Histogram(a, bins, range, density, weights);
+            return a.TensorEngine.Histogram(a, bins, range, density ?? false, weights);
         }
 
         /// <summary>
@@ -181,7 +181,7 @@ namespace NumSharp
         /// <param name="a">Input data; the histogram is computed over the flattened array.</param>
         /// <param name="bins">The explicit bin edges (must increase monotonically).</param>
         /// <param name="range">Ignored when explicit edges are given (accepted for signature parity).</param>
-        /// <param name="density">When true, return the probability density instead of raw counts.</param>
+        /// <param name="density">When true, return the probability density instead of raw counts. <c>null</c> (NumPy's <c>None</c>, the default) is <c>false</c>.</param>
         /// <param name="weights">Optional per-sample weights (same shape as <paramref name="a"/>).</param>
         /// <returns>A <see cref="HistogramResult"/> carrying the histogram values and the bin edges.</returns>
         /// <exception cref="ValueError">The edges are not 1-D or not monotonically increasing.</exception>
@@ -191,10 +191,10 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
         [NDScoped]
-        public static HistogramResult histogram(NDArray a, NDArray bins, (double, double)? range = null, bool density = false, NDArray weights = null)
+        public static HistogramResult histogram(NDArray a, NDArray bins, (double, double)? range = null, bool? density = null, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return a.TensorEngine.Histogram(a, bins, range, density, weights);
+            return a.TensorEngine.Histogram(a, bins, range, density ?? false, weights);
         }
 
         /// <summary>
@@ -203,7 +203,7 @@ namespace NumSharp
         /// <param name="a">Input data.</param>
         /// <param name="bins">The explicit bin edges.</param>
         /// <param name="range">Ignored when explicit edges are given.</param>
-        /// <param name="density">When true, return the probability density instead of raw counts.</param>
+        /// <param name="density">When true, return the probability density instead of raw counts. <c>null</c> (NumPy's <c>None</c>, the default) is <c>false</c>.</param>
         /// <param name="weights">Optional per-sample weights.</param>
         /// <returns>A <see cref="HistogramResult"/> carrying the histogram values and the bin edges.</returns>
         /// <exception cref="ValueError">The edges are not monotonically increasing.</exception>
@@ -213,10 +213,10 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
         [NDScoped]
-        public static HistogramResult histogram(NDArray a, double[] bins, (double, double)? range = null, bool density = false, NDArray weights = null)
+        public static HistogramResult histogram(NDArray a, double[] bins, (double, double)? range = null, bool? density = null, NDArray weights = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return a.TensorEngine.Histogram(a, (NDArray)np.array(bins), range, density, weights);
+            return a.TensorEngine.Histogram(a, (NDArray)np.array(bins), range, density ?? false, weights);
         }
     }
 }

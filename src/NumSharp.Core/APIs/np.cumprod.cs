@@ -7,24 +7,25 @@ namespace NumSharp
         /// <summary>
         ///     Return the cumulative product of the elements along a given axis.
         /// </summary>
-        /// <param name="arr">Input array.</param>
+        /// <param name="a">Input array (NumPy's keyword <c>a</c>).</param>
         /// <param name="axis">Axis along which the cumulative product is computed. The default (None) is to compute the cumprod over the flattened array.</param>
-        /// <param name="typeCode">Type of the returned array and of the accumulator in which the elements are multiplied. If dtype is not specified, it defaults to the dtype of a, unless a has an integer dtype with a precision less than that of the default platform integer. In that case, the default platform integer is used.</param>
+        /// <param name="dtype">Type of the returned array and of the accumulator in which the elements are multiplied (NumPy's keyword <c>dtype</c>). If dtype is not specified, it defaults to the dtype of a, unless a has an integer dtype with a precision less than that of the default platform integer. In that case, the default platform integer is used.</param>
         /// <param name="out">Alternate output array in which to place the result. It must have the same shape and buffer length as the expected output, but its dtype may differ (the result is cast into it with NumPy's unsafe casting) and a reference to <paramref name="out"/> is returned.</param>
         /// <returns>A new array holding the result is returned unless out is specified, in which case a reference to out is returned. The result has the same size as a, and the same shape as a if axis is not None or a is a 1-d array.</returns>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a read-only <paramref name="out"/> (<c>output array is read-only</c>); text that a numeric <paramref name="typeCode"/> must parse that does not parse.</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a read-only <paramref name="out"/> (<c>output array is read-only</c>); text that a numeric <paramref name="dtype"/> must parse that does not parse.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the input (a 0-d input counts as 1-D).</exception>
-        /// <exception cref="TypeError">Text, or a string <paramref name="typeCode"/>: NumPy's refusal (its verbatim text; no multiply loop accumulates text).</exception>
+        /// <exception cref="TypeError">Text, or a string <paramref name="dtype"/>: NumPy's refusal (its verbatim text; no multiply loop accumulates text).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape: NumPy's text for the path its accumulate takes (parity QA-31): NpyIter's <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]: (4,3)-&gt;(4,3) (3,4)-&gt;(3,4) </c> and its siblings along an axis of an N-D input (or with another out dtype), <c>provided out is the wrong size for the accumulation.</c> on the direct 1-D path (the flattened form included).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumprod.html. The facade only calls <see
         ///     cref="TensorEngine.ReduceCumMul"/>, NumPy's whole call (its declaration answers for a subclass
-        ///     operand).</remarks>
+        ///     operand). NumPy's signature <c>cumprod(a, axis=None, dtype=None, out=None)</c>, keyword for keyword: the
+        ///     input and the dtype were <c>arr</c> and <c>typeCode</c> until 2026-11-11.</remarks>
         [NDScoped]
-        public static NDArray cumprod(NDArray arr, int? axis = null, DType typeCode = null, NDArray @out = null)
+        public static NDArray cumprod(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null)
         {
             // np.cumprod IS np.multiply.accumulate, and NumPy's whole call (the text routes, the parse of text under a numeric
             // dtype=, the loop resolution, out=) is the engine's: DefaultEngine.ReduceCumMul.
-            return arr.TensorEngine.ReduceCumMul(arr, axis, typeCode, @out);
+            return a.TensorEngine.ReduceCumMul(a, axis, dtype, @out);
         }
     }
 }

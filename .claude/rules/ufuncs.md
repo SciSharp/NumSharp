@@ -23,7 +23,7 @@ paths:
 - Every ufunc cast refusal raises NumPy's `UFuncInputCastingError` / `UFuncOutputCastingError` (both `UFuncCastingError`
   : `UFuncTypeError` : `TypeError`) with NumPy's text and attributes (parity QA-04): an input that cannot reach a `dtype=`
   loop, a loop result that cannot reach `out=` (`Cannot cast ufunc '<name>' output from ...`), a gufunc's text operand,
-  `round_`/`around`'s float64 composition cast back into a bool or integer array, on every route (the validators in
+  `round`/`around`'s float64 composition cast back into a bool or integer array, on every route (the validators in
   `DefaultEngine.UfuncOut.cs`, `GufuncGuard.cs`, the string loops, np.evaluate, fft, linalg, polynomial calculus); a
   missing loop for the operands' dtypes raises `UFuncNoLoopError` (its `dtypes` the classes or descriptors NumPy's
   resolver named), two text classes `UFuncBinaryResolutionError`. A Char / Decimal operand is named by the NumPy dtype it
@@ -36,15 +36,16 @@ paths:
 - `positive` is a full ufunc with identity loops at every dtype except bool: `positive(bool)` and `dtype: bool` raise the
   `did not contain a loop with signature matching types <class 'numpy.dtypes.XDType'> -> ...` texts;
   `positive(bool, dtype: f64)` works.
-- `round_`/`around` follow NumPy's non-ufunc shape `round(a, int decimals = 0, NDArray out = null)`: `out=` only, the
-  second positional is `decimals`, and a cast error at `decimals != 0` names ufunc 'multiply' (NumPy's composition).
+- `round`/`around` follow NumPy's non-ufunc shape `round(a, int decimals = 0, NDArray out = null)`, one overload each
+  (NumPy 2.0's removed `round_` and the NumSharp-only `dtype` are gone): `out=` only, the second positional is `decimals`,
+  and a cast error at `decimals != 0` names ufunc 'multiply' (NumPy's composition).
   Their `out=` follows `PyArray_Round` (parity QA-31): another SIZE is `invalid output shape` before anything else;
   integer data at `decimals >= 0` is `PyArray_AssignArray` (np.copyto's read-only, cast and broadcast texts); complex data
   assigns its parts (the assignment's broadcast text); float data is the rint ufunc at 0 decimals and
   `multiply(a, 10**d, out)` otherwise, whose refusal lists three operands (`(3,4) () (4,3) `).
 - `rint` is the true ufunc form of round-half-to-even: float-tier (bool/i8/u8 → f16, i16/u16 → f32, i32+ → f64; floats
   and complex keep their dtype), reusing `UnaryOp.Round`'s kernel (complex rounds both parts; `dtype=<int>` has no loop).
-  `round_`/`around` keep integer dtypes (np.round's integer path is an identity copy).
+  `round`/`around` keep integer dtypes (np.round's integer path is an identity copy).
 - floor/ceil/trunc have identity loops on every bool and integer dtype. The loop dtype comes from the input tier
   (`sinh(i1, out=f8)` stores float16-precision values). `reciprocal` of an integer 0 is the signed MinValue.
   `sign`/`positive` reject bool with the no-loop text. Bitwise and invert raise the no-loop TypeError for float inputs.

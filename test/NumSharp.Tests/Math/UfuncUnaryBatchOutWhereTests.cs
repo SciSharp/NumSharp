@@ -116,6 +116,7 @@ namespace NumSharp.Tests.Math
         // out-cast errors carry each op's NumPy ufunc name (S4)
         // =====================================================================
 
+        /// <summary>An out= cast refusal names each op's NumPy ufunc verbatim (floor, trunc, ...): UFuncOutputCastingError with NumPy's same_kind text.</summary>
         [TestMethod]
         public void OutCastErrors_UfuncNamesVerbatim()
         {
@@ -130,7 +131,7 @@ namespace NumSharp.Tests.Math
             var exTrunc = Assert.ThrowsException<UFuncOutputCastingError>(() => np.trunc(f, i4out));
             StringAssert.Contains(exTrunc.Message, "ufunc 'trunc'");
 
-            var exRint = Assert.ThrowsException<UFuncOutputCastingError>(() => np.round_(f, @out: i4out));
+            var exRint = Assert.ThrowsException<UFuncOutputCastingError>(() => np.round(f, @out: i4out));
             StringAssert.Contains(exRint.Message, "ufunc 'rint'");
 
             var exSinh = Assert.ThrowsException<UFuncOutputCastingError>(() => np.sinh(f, i4out));
@@ -304,6 +305,7 @@ namespace NumSharp.Tests.Math
         // integer identity loops (S26, probes §2.9/§2.11)
         // =====================================================================
 
+        /// <summary>floor / ceil / trunc / round of an int32 input keep int32 (NumPy's identity loops) and the values, where trunc / round once promoted to float64.</summary>
         [TestMethod]
         public void IdentityLoops_IntAndBool_DtypePreserved()
         {
@@ -312,7 +314,7 @@ namespace NumSharp.Tests.Math
             Assert.AreEqual(NPTypeCode.Int32, np.floor(I4()).typecode);
             Assert.AreEqual(NPTypeCode.Int32, np.ceil(I4()).typecode);
             Assert.AreEqual(NPTypeCode.Int32, np.trunc(I4()).typecode);
-            Assert.AreEqual(NPTypeCode.Int32, np.round_(I4()).typecode);
+            Assert.AreEqual(NPTypeCode.Int32, np.round(I4()).typecode);
 
             for (int i = 0; i < 4; i++)
                 Assert.AreEqual(i, np.trunc(I4()).GetInt32(i));
@@ -348,13 +350,14 @@ namespace NumSharp.Tests.Math
         // round_ / around — out= only (np.round is not a ufunc)
         // =====================================================================
 
+        /// <summary>np.round / np.around take out= only (they are not ufuncs): the values at decimals 1 and 0, a float32 out, an int32 out of an int32 input, and out returned itself.</summary>
         [TestMethod]
         public void Round_Decimals_OutIdentity_AndValues()
         {
             // NumPy: round([1.44,1.55,2.5,-2.5], 1, out) -> [1.4, 1.6, 2.5, -2.5], returns out.
             var x = np.array(new[] { 1.44, 1.55, 2.5, -2.5 });
             var o = np.empty(new Shape(4), np.float64);
-            var r = np.round_(x, 1, o);
+            var r = np.round(x, 1, o);
 
             Assert.IsTrue(ReferenceEquals(r, o));
             var expected = new[] { 1.4, 1.6, 2.5, -2.5 };
@@ -370,16 +373,17 @@ namespace NumSharp.Tests.Math
 
             // round(f8, 1, out=f4) -> float32 values.
             var o3 = np.empty(new Shape(4), np.float32);
-            np.round_(x, 1, o3);
+            np.round(x, 1, o3);
             Assert.AreEqual(1.6f, o3.GetSingle(1), 1e-6f);
 
             // round(i4, 1, out=i4) -> identity ints (probed).
             var oi = np.empty(new Shape(4), np.int32);
-            np.round_(I4(), 1, oi);
+            np.round(I4(), 1, oi);
             for (int i = 0; i < 4; i++)
                 Assert.AreEqual(i, oi.GetInt32(i));
         }
 
+        /// <summary>An int32 out refuses NumPy's way: decimals 0 is the rint ufunc ('rint' in the text), decimals 1 the multiply / rint / divide composition ('multiply').</summary>
         [TestMethod]
         public void Round_OutCast_NamesRintAndMultiply()
         {
@@ -388,7 +392,7 @@ namespace NumSharp.Tests.Math
             // decimals==0 -> the rint ufunc. (np.round's 2nd positional is
             // decimals per NumPy — out rides the 3rd slot or the name.)
             var exRint = Assert.ThrowsException<UFuncOutputCastingError>(() =>
-                np.round_(x, @out: np.empty(new Shape(4), np.int32)));
+                np.round(x, @out: np.empty(new Shape(4), np.int32)));
             Assert.AreEqual(
                 "Cannot cast ufunc 'rint' output from dtype('float64') to dtype('int32') " +
                 "with casting rule 'same_kind'", exRint.Message);
@@ -396,7 +400,7 @@ namespace NumSharp.Tests.Math
             // decimals!=0 is NumPy's multiply→rint→divide composition: the cast
             // error names ufunc 'multiply' (probed).
             var exMul = Assert.ThrowsException<UFuncOutputCastingError>(() =>
-                np.round_(x, 1, np.empty(new Shape(4), np.int32)));
+                np.round(x, 1, np.empty(new Shape(4), np.int32)));
             Assert.AreEqual(
                 "Cannot cast ufunc 'multiply' output from dtype('float64') to dtype('int32') " +
                 "with casting rule 'same_kind'", exMul.Message);

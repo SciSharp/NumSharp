@@ -1156,9 +1156,9 @@ NDArray.Scalar(value, typeCode);            // NOT np.array(value)
 ### Rounding
 
 ```csharp
-// NumSharp uses np.around or np.round_, NOT np.round
+// NumPy 2.x's np.round (np.around is its alias); np.round_ went with NumPy 2.0
+np.round(_a);
 np.around(_a);
-np.round_(_a);
 ```
 
 ### Power
@@ -1241,19 +1241,19 @@ _scalar = np.array(GetScalar(DType, 5.0)).astype(DType);
 _scalar = NDArray.Scalar(GetScalar(DType, 5.0), DType);
 ```
 
-### Build Error: CS0117 - 'np' does not contain definition for 'round'
+### Build Error: CS0117 - 'np' does not contain definition for 'round_'
 
-**Cause**: NumSharp uses `np.around` or `np.round_`, not `np.round`
+**Cause**: NumPy 2.0 removed `np.round_`, and NumSharp followed: the function is `np.round` (or its alias `np.around`)
 
 **Fix**:
 ```csharp
 // Wrong
-np.round(_a);
+np.round_(_a);
 
 // Correct
-np.around(_a);
+np.round(_a);
 // or
-np.round_(_a);
+np.around(_a);
 ```
 
 ### Build Error: File is locked

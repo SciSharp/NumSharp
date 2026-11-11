@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace NumSharp.Tests.NpApiOverloads;
 
 /// <summary>
@@ -240,13 +242,14 @@ public class NpApiOverloadTests_UnaryMath
 
     #endregion
 
-    #region Round_ - np.round_ (4 overloads)
+    #region Round - np.round (one signature: a, decimals, out)
 
+    /// <summary>np.round(a) binds NumPy's one signature and rounds half to even (1.5 -> 2, -2.3 -> -2, 3.7 -> 4).</summary>
     [TestMethod]
     public void Round_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
-        var result = np.round_(a);
+        var result = np.round(a);
         Assert.IsNotNull(result);
         // Banker's rounding: 1.5 rounds to 2, -2.3 to -2, 3.7 to 4
         Assert.AreEqual(2.0, result.GetDouble(0), Tolerance);
@@ -254,37 +257,33 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(4.0, result.GetDouble(2), Tolerance);
     }
 
+    /// <summary>np.round(a, 1) takes decimals as the second positional, NumPy's order.</summary>
     [TestMethod]
     public void Round_WithDecimals_Compiles()
     {
         var a = np.array(new double[] { 1.567, -2.345, 3.789 });
-        var result = np.round_(a, 1);
+        var result = np.round(a, 1);
         Assert.IsNotNull(result);
         Assert.AreEqual(1.6, result.GetDouble(0), Tolerance);
         Assert.AreEqual(3.8, result.GetDouble(2), Tolerance);
     }
 
+    /// <summary>
+    ///     NumPy's <c>round(a, decimals=0, out=None)</c> has no <c>dtype</c>: the NumSharp-only parameter is gone (2026-11-11),
+    ///     and the one public overload is NumPy's whole signature.
+    /// </summary>
     [TestMethod]
-    public void Round_WithType_Compiles()
+    public void Round_HasNumPysOneSignature()
     {
-        var a = np.array(new double[] { 1.5, -2.3, 3.7 });
-        var result = np.round_(a, dtype: typeof(float));
-        Assert.IsNotNull(result);
-        Assert.AreEqual(NPTypeCode.Single, result.typecode);
-    }
-
-    [TestMethod]
-    public void Round_WithDecimalsAndType_Compiles()
-    {
-        var a = np.array(new double[] { 1.567, -2.345, 3.789 });
-        var result = np.round_(a, 1, dtype: typeof(float));
-        Assert.IsNotNull(result);
-        Assert.AreEqual(NPTypeCode.Single, result.typecode);
+        var forms = typeof(np).GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(m => m.Name == "round").ToArray();
+        Assert.AreEqual(1, forms.Length);
+        CollectionAssert.AreEqual(new[] { "a", "decimals", "out" }, forms[0].GetParameters().Select(p => p.Name).ToArray());
     }
 
     #endregion
 
-    #region Around - np.around (4 overloads)
+    #region Around - np.around (one signature: a, decimals, out)
 
     [TestMethod]
     public void Around_NoParams_Compiles()
@@ -307,22 +306,17 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(3.8, result.GetDouble(2), Tolerance);
     }
 
+    /// <summary>
+    ///     NumPy's <c>around(a, decimals=0, out=None)</c> has no <c>dtype</c>: the NumSharp-only parameter is gone (2026-11-11),
+    ///     and the one public overload is NumPy's whole signature.
+    /// </summary>
     [TestMethod]
-    public void Around_WithType_Compiles()
+    public void Around_HasNumPysOneSignature()
     {
-        var a = np.array(new double[] { 1.5, -2.3, 3.7 });
-        var result = np.around(a, dtype: typeof(float));
-        Assert.IsNotNull(result);
-        Assert.AreEqual(NPTypeCode.Single, result.typecode);
-    }
-
-    [TestMethod]
-    public void Around_WithDecimalsAndType_Compiles()
-    {
-        var a = np.array(new double[] { 1.567, -2.345, 3.789 });
-        var result = np.around(a, 1, dtype: typeof(float));
-        Assert.IsNotNull(result);
-        Assert.AreEqual(NPTypeCode.Single, result.typecode);
+        var forms = typeof(np).GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(m => m.Name == "around").ToArray();
+        Assert.AreEqual(1, forms.Length);
+        CollectionAssert.AreEqual(new[] { "a", "decimals", "out" }, forms[0].GetParameters().Select(p => p.Name).ToArray());
     }
 
     #endregion

@@ -2628,23 +2628,25 @@ namespace NumSharp.Tests.View
             ((double)r[1, 1]).Should().BeApproximately(4.57, 1e-9);
         }
 
+        /// <summary>np.round of an F-contiguous 2-D array gives NumPy's values (around and round are one computation).</summary>
         [TestMethod]
         public void Round_FContig2D_Values_MatchNumPy()
         {
-            // NumPy: round_ is alias for around — same values and layout.
+            // NumPy: round and around are one computation — same values and layout.
             var f = np.array(new double[,] { { 1.345, 2.678 }, { 3.123, 4.567 } }).copy('F');
-            var r = np.round_(f, decimals: 1);
+            var r = np.round(f, decimals: 1);
             ((double)r[0, 0]).Should().BeApproximately(1.3, 1e-9);
             ((double)r[1, 1]).Should().BeApproximately(4.6, 1e-9);
         }
 
+        /// <summary>np.round of an F-contiguous 2-D array returns an F-contiguous result, as NumPy's.</summary>
         [TestMethod]
         public void Round_FContig2D_PreservesFContig()
         {
             var f = np.array(new double[,] { { 1.345, 2.678 }, { 3.123, 4.567 } }).copy('F');
-            var r = np.round_(f, decimals: 1);
+            var r = np.round(f, decimals: 1);
             r.Shape.IsFContiguous.Should().BeTrue(
-                "NumPy: round_ preserves F-contig layout (same as around)");
+                "NumPy: round preserves F-contig layout (same as around)");
         }
 
         [TestMethod]

@@ -244,15 +244,20 @@ namespace NumSharp
 
         #region Axes
 
-        /// <summary>The matrix with its axes permuted (NumPy's <c>m.transpose(axes)</c>); without an argument the
+        /// <summary>The matrix with its axes permuted (NumPy's <c>m.transpose(*axes)</c>); without an argument the
         ///     transpose.</summary>
-        /// <param name="premute">The permutation (<c>{1, 0}</c> or <c>{0, 1}</c>), or <c>null</c> to reverse the
+        /// <param name="axes">NumPy's <c>*axes</c>: the permutation as separate integers (<c>m.transpose(1, 0)</c>) or
+        ///     one array (<c>{1, 0}</c> or <c>{0, 1}</c>); no argument, an empty array or <c>null</c> reverses the
         ///     axes.</param>
         /// <returns>A view.</returns>
-        /// <exception cref="ArgumentException">The permutation does not match the matrix's axes.</exception>
+        /// <exception cref="ValueError">The permutation does not have one entry per axis (<c>axes don't match
+        ///     array</c>) or repeats an axis.</exception>
         /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        /// <remarks>One member, NumPy's call shapes: <c>params</c> makes <c>m.transpose(1, 0)</c> compile (the former
+        ///     <c>transpose(int[] premute = null)</c> refused it). It hides <see cref="NDArray.transpose(int[])"/>, whose
+        ///     parameter is the same array; the empty array reads as the no-argument call, as there.</remarks>
         [NDScoped]
-        public new NDMatrix transpose(int[] premute = null) => From(base.transpose(premute), this);
+        public new NDMatrix transpose(params int[] axes) => From(base.transpose(axes), this);
 
         /// <summary>The matrix with two axes exchanged (NumPy's <c>m.swapaxes(a, b)</c>).</summary>
         /// <param name="axis1">The first axis.</param>

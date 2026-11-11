@@ -32,8 +32,8 @@ namespace NumSharp.Tests
     //     missing keys (SU21), edgeitems=0 summarization (SU23), the datetime
     //     dtype.type (SU24), complex histogram edges (SU3).
     //
-    // Not reproduced here: SU36 / SU37 (numpy.cumulative_sum / cumulative_prod do not exist in NumSharp; the inventory
-    // aliases them to np.cumsum / np.cumprod, whose own contract differs). Two pooled-buffer leaks the sweep found are
+    // SU36 / SU37 (numpy.cumulative_sum / cumulative_prod, once aliased to np.cumsum / np.cumprod) are fixed: NumSharp
+    // has both functions since API-parity batch 1 (2026-11-11), and the surface tier replays them. Two pooled-buffer leaks the sweep found are
     // pinned in the oracle's KnownEscapes (np.MemoryView.tobytes of a non-contiguous array; np.array_equiv with an empty
     // operand).
     //

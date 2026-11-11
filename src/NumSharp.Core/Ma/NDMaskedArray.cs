@@ -1026,9 +1026,16 @@ namespace NumSharp
         /// <param name="shape">New dimensions (one may be -1).</param><returns>The reshaped masked array.</returns>
         public NDMaskedArray reshape(params int[] shape) => np.ma.reshape(this, shape);
 
-        /// <summary>Permute axes (mask transposed alike); reverses all axes when <paramref name="axes"/> is null.</summary>
-        /// <param name="axes">Permutation, or null to reverse.</param><returns>The transposed masked array.</returns>
-        public NDMaskedArray transpose(int[] axes = null) => np.ma.transpose(this, axes);
+        /// <summary>Permute axes (mask transposed alike), NumPy's <c>MaskedArray.transpose(*axes)</c>; reverses all axes
+        ///     without an argument.</summary>
+        /// <param name="axes">NumPy's <c>*axes</c>: the permutation as separate integers (<c>m.transpose(1, 0)</c>) or
+        ///     one array; no argument, an empty array or <c>null</c> reverses the axes (C# passes an empty array for the
+        ///     no-argument call, so the two read alike).</param>
+        /// <returns>The transposed masked array.</returns>
+        /// <exception cref="ValueError">The permutation does not have one entry per axis (<c>axes don't match
+        ///     array</c>) or repeats an axis.</exception>
+        /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        public NDMaskedArray transpose(params int[] axes) => np.ma.transpose(this, axes is { Length: > 0 } ? axes : null);
 
         /// <summary>Swap two axes (mask swapped alike).</summary>
         /// <param name="axis1">First axis.</param><param name="axis2">Second axis.</param><returns>The masked array with swapped axes.</returns>

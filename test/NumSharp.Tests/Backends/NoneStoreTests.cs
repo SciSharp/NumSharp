@@ -210,7 +210,7 @@ namespace NumSharp.Tests.Backends
             Action putRo = () => np.put(ro, np.array(new long[] { 0 }), (NDArray)null);
             putRo.Should().Throw<ValueError>().WithMessage("put: output array is read-only");
             var s = F(4);
-            np.put(s, 1, (object)null);
+            np.put(s, 1, null);
             Bits(s, 1).Should().Be(NpyNan64);
 
             Action badSize = () => np.putmask(I(4), np.array(new[] { true, false }), (NDArray)null);

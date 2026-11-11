@@ -619,6 +619,7 @@ namespace NumSharp.Tests.Math
         // round family — NumPy's round(a, decimals=0, out=None) single shape
         // =====================================================================
 
+        /// <summary>np.around / np.round answer NumPy's one shape round(a, decimals=0, out=None) by position and by name, out returned itself.</summary>
         [TestMethod]
         public void RoundFamily_SingleNumPyShape()
         {
@@ -635,7 +636,7 @@ namespace NumSharp.Tests.Math
 
             // out reachable by name without decimals (decimals defaults to 0)
             var o2 = np.zeros(new Shape(2));
-            Assert.IsTrue(ReferenceEquals(np.round_(x, @out: o2), o2));
+            Assert.IsTrue(ReferenceEquals(np.round(x, @out: o2), o2));
             Assert.AreEqual(6.0, o2.GetDouble(1));
         }
     }

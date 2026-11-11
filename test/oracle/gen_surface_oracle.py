@@ -7,7 +7,7 @@ oracle contract onto its API row. On 2026-10-08 it listed 40 headline APIs (and 
 NumSharp exposes but no contract proves: the np.linalg Array-API forms, the histogram family, array_equiv, the memory
 predicates, broadcast_shapes, apply_along_axis / apply_over_axes, bmat, the text formatters, the ndarray attributes and
 methods tolist / tofile / setfield / base / dtype / shape / device / to_device / data, the print and buffer options,
-frompyfunc, the cumulative_* aliases and numpy.shape, and the members of finfo, iinfo, dtype, ndarray.flags, poly1d,
+frompyfunc, numpy.cumulative_sum / cumulative_prod and numpy.shape, and the members of finfo, iinfo, dtype, ndarray.flags, poly1d,
 np.broadcast, flatiter and np.nditer. Most were classified "sibling-owned" because the operand corpus had no form for
 them (a tuple, a text, a shape list, a function argument, two views of one buffer, an object stepped k times); the
 harness has had tuple, text, scalar and dtype results for a while, and this generator supplies the rest through params:
@@ -1410,8 +1410,10 @@ def gen_objects():
 
 
 def gen_aliases():
-    """The rows the inventory credits through an alias or a property: numpy.cumulative_sum / cumulative_prod (aliased
-    to np.cumsum / np.cumprod) and numpy.shape (NDArray.shape) — the shared subset and the parameters the alias lacks."""
+    """numpy.cumulative_sum / cumulative_prod and numpy.shape (the family keeps its first name: the inventory once
+    credited them through np.cumsum / np.cumprod and NDArray.shape; NumSharp has the three functions since 2026-11-11):
+    every dtype and operand kind, the axis forms, include_initial on a 1-D input, dtype= and the refusals. The 2-D
+    include_initial rows are gen_cumulative_initial's (emitted last, so the earlier case ids keep their numbers)."""
     for op, fn in [("cumulative_sum", np.cumulative_sum), ("cumulative_prod", np.cumulative_prod)]:
         for dt in ALL13:
             x1 = values((5,), dt, 1, lo=-2, hi=3)
@@ -1440,6 +1442,31 @@ def gen_aliases():
                 ("zerod", operand(np.asarray(x.flat[1]), "c")[1])]:
             emit("aliases", "shape", f"{dt}:{kind}", [d], {}, "array",
                  lambda o: np.array(np.shape(o[0]), dtype=np.int64))
+
+
+def gen_cumulative_initial():
+    """numpy.cumulative_sum / cumulative_prod with include_initial along every axis of a 2-D operand, in every dtype and
+    2-D kind: the identity block NumPy concatenates in front (full_like + concat), the route gen_aliases' 1-D
+    include_initial row does not reach. Its own section, emitted after every other, so adding it renumbered no
+    existing case (API-parity batch 1, 2026-11-11)."""
+    for op, fn in [("cumulative_sum", np.cumulative_sum), ("cumulative_prod", np.cumulative_prod)]:
+        for dt in ALL13:
+            x2 = values((2, 3), dt, 2, lo=-2, hi=3)
+            for kind, d in kinds_of(x2, ["c", "f", "reversed", "strided", "bcast"]):
+                for axis in [0, 1, -1]:
+                    emit("aliases", op, f"{dt}:2d:{kind}:ax{axis}:initial", [d], {"axis": axis, "include_initial": True},
+                         "array", lambda o, fn=fn, axis=axis: fn(o[0], axis=axis, include_initial=True))
+
+
+def gen_ndim():
+    """numpy.ndim(a) over every dtype and the operand kinds of the shape rows (a 0-d operand included): the rank as an
+    int64 0-d result. Emitted after every other section, so adding it renumbered no existing case (API-parity batch 1,
+    2026-11-11, when NumSharp gained np.ndim)."""
+    for dt in ALL13:
+        x = values((2, 3), dt, 4)
+        for kind, d in kinds_of(x, ["c", "f", "strided", "bcast", "empty", "empty_view"]) + [
+                ("zerod", operand(np.asarray(x.flat[1]), "c")[1])]:
+            emit("aliases", "ndim", f"{dt}:{kind}", [d], {}, "array", lambda o: np.array(np.ndim(o[0]), dtype=np.int64))
 
 
 def _frompy(f, nin, nout, o):
@@ -1533,6 +1560,9 @@ def _with_bufsize(n, fn):
 # SU35 (the dtype name 'cdouble') matches NumPy since branch strings merged journey4 (f87de210, 2026-10-31): journey4's
 # np.dtype reads a name by the whole string, as NumPy's typeDict (0a96ddba), so 'cdouble' is complex128. Its rule is
 # dropped: the 'cdouble' cell of finfo.minexp falls to SU12 (complex128's minexp), the other twelve attributes are kept.
+# SU36 (include_initial) and SU37 (an N-D input without axis) match NumPy since NumSharp has np.cumulative_sum /
+# np.cumulative_prod themselves (API-parity batch 1, 2026-11-11: NumPy's _cumulative_func, no longer the np.cumsum /
+# np.cumprod alias). Their rules are dropped; the rows replay the real functions.
 GAPS = {
     "SU10": "ndarray.setfield with a Python int outside the field dtype's range wraps it (-1 into a uint8 field is "
             "255); NumPy raises OverflowError 'Python integer -1 out of bounds for uint8'",
@@ -1555,11 +1585,6 @@ GAPS = {
             "NumPy's _leading_trailing(a, 0) takes a[-0:] (the whole array), so 1e-9 and 1e5 make it scientific",
     "SU24": "dtype.type of a datetime64 / timedelta64 descriptor is null (no CLR element type before Stage C); NumPy's "
             "is numpy.datetime64 / numpy.timedelta64",
-    "SU36":"numpy.cumulative_sum / cumulative_prod are aliased to np.cumsum / np.cumprod, which have no "
-            "include_initial (NumPy prepends the identity: cumulative_sum([1, 2], include_initial=True) is [0, 1, 3])",
-    "SU37": "np.cumsum / np.cumprod (the cumulative_* aliases) flatten an N-D input without axis; numpy.cumulative_sum / "
-            "cumulative_prod raise ValueError 'For arrays which have more than one dimension ``axis`` argument is "
-            "required.'",
 }
 
 def _edge0_model(a, opts):
@@ -1617,11 +1642,6 @@ def _gap_of(case):
                 return "SU23"
     if op == "dtype.type" and p["dtype"][0] in "Mm":
         return "SU24"
-    if op in ("cumulative_sum", "cumulative_prod"):
-        if p.get("include_initial"):
-            return "SU36"
-        if err and err["text"].startswith("For arrays which have more than one dimension"):
-            return "SU37"
     return None
 
 
@@ -2237,7 +2257,7 @@ def _gen_dragon4_powers_of_two(fns):
 
 
 SECTIONS = [gen_linalg, gen_histogram, gen_equiv_memory_shapes, gen_apply_bmat, gen_text, gen_ndarray,
-            gen_attributes, gen_objects, gen_aliases, gen_scalar_types, gen_dragon4]
+            gen_attributes, gen_objects, gen_aliases, gen_scalar_types, gen_dragon4, gen_cumulative_initial, gen_ndim]
 
 
 def write_jsonl(path, cases):

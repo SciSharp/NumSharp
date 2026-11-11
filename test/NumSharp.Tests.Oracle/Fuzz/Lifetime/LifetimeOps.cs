@@ -57,7 +57,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
             ["conjugate"] = (a, c) => np.conjugate(a[0]()),
             ["real"] = (a, c) => np.real(a[0]()).copy(),
             ["nan_to_num"] = (a, c) => np.nan_to_num(a[0]()),
-            ["round"] = (a, c) => np.round_(a[0](), c.IntParam("decimals") ?? 0),
+            ["round"] = (a, c) => np.round(a[0](), c.IntParam("decimals") ?? 0),
             ["exp"] = (a, c) => np.exp(a[0]()),
             ["sin"] = (a, c) => np.sin(a[0]()),
             ["sqrt_out"] = (a, c) => { var o = a[1](); np.sqrt(a[0](), o); return o; },

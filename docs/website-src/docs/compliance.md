@@ -86,10 +86,11 @@ The additions that the previous version of this page listed as missing are imple
 | `ndarray.device` | Returns `"cpu"` |
 | `ndarray.to_device` | Accepts only the CPU device |
 
-Some reviewed mappings deliberately use an established NumSharp or C# spelling. `np.acos`,
-`np.asin`, and `np.atan` map to `np.arccos`, `np.arcsin`, and `np.arctan`; `np.pow` maps to
-`np.power`; and NumSharp's `np.round_` maps to current NumPy's `np.round`. The coverage dashboard
-labels these as aliases instead of pretending that their names are exact.
+NumPy 2.x's Array-API names exist under NumPy's spelling: `np.acos`, `np.asin`, `np.atan`,
+`np.atan2`, `np.pow`, `np.bitwise_invert`, `np.bitwise_left_shift` and `np.bitwise_right_shift` are
+the same functions as `np.arccos` … `np.right_shift` (in NumPy they are the same ufunc objects), and
+`np.round` is NumPy's name of rounding (`np.round_`, which NumPy 2.0 removed, is gone from NumSharp
+too). `np.cumulative_sum` / `np.cumulative_prod` and `np.ndim` / `np.shape` are NumPy's functions.
 
 Removed NumPy 1.x aliases are not counted as current NumPy 2.4.2 requirements. Ported code should
 prefer the current names such as `prod`, `any`, and `all`.

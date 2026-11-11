@@ -34,9 +34,9 @@ namespace NumSharp.Tests.Math
             using var big = np.array(new[,] { { 300.0, 1.0 } });
             using var inf = np.array(new[] { double.PositiveInfinity, 1.0 });
 
-            using var unsigned = np.cumsum(neg, axis: 0, typeCode: np.uint8);
-            using var signed = np.cumsum(big, axis: 1, typeCode: np.int8);
-            using var fromInf = np.cumsum(inf, axis: 0, typeCode: np.int16);
+            using var unsigned = np.cumsum(neg, axis: 0, dtype: np.uint8);
+            using var signed = np.cumsum(big, axis: 1, dtype: np.int8);
+            using var fromInf = np.cumsum(inf, axis: 0, dtype: np.int16);
 
             unsigned.ToArray<byte>().Should().Equal((byte)253, (byte)254);
             signed.ToArray<sbyte>().Should().Equal((sbyte)44, (sbyte)45);
