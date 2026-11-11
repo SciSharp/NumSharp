@@ -161,6 +161,11 @@ mapped memory ends. Two tools make it fail:
   reads straight into the array (a per-thread allocation count); no workflow runs the suite on Mono
   (`UseMonoRuntime=true`, a scan of `.github/workflows`). Its fourth finding, a memory map of a Fortran-ordered `.npy`
   that `Dispose` never releases, is `OpenBugs.Mmap_FortranOrder_DisposeReleasesTheFile` in `OpenBugs.cs`.
+  `OpenBugs.Consumers.OptunaSharp.cs` holds OptunaSharp's (moving its hand-ported NumPy math onto NumSharp,
+  2026-11-11): `np.percentile` / `np.nanpercentile` / `np.quantile` / `np.nanquantile` at q = 0.5 of
+  `[0.0, -0.0, -0.0, -1.0]` return `+0.0` where NumPy returns `-0.0`, QB43's root cause (the short-window insertion sort
+  in `Utilities/QuickSelect.cs` instead of `introselect_`'s dumb_select) seen through the default 'linear' method.
+  Disabling the value path's two window sorts turns it green (QB43's argpartition half also needs the index path's).
 - The LIFETIME OpenBugs (lost GC anchors) live in the Oracle project, because the bug exists only in optimized code and
   needs the lifetime child process (`oracle.md`): none is open; a new open gap gets a `Lifetime_LT<nn>_*` test beside the
   aggregate `Lifetime_KnownGaps` (and `LifetimeOracleTests.Scaled.cs`'s `LifetimeScaled_KnownGaps`).
