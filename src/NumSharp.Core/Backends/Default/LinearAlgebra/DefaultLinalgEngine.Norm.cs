@@ -22,7 +22,7 @@ namespace NumSharp.Backends
         {
             // NumPy's norm converts a non-inexact input with x.astype(float): a text array is parsed (each element by
             // float(), the first failing one raising NumPy's text), and the norm runs on the float64 numbers.
-            using var parsed = Backends.Strings.NDStringUfuncs.IsText(x) ? x.astype(np.float64, true, 'K', "unsafe") : null;
+            using var parsed = Backends.Strings.NDStringUfuncs.IsText(x) ? x.astype(np.float64) : null;
             if (parsed is not null)
                 x = parsed;
             var a = ToFloating(x);

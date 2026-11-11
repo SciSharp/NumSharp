@@ -16,7 +16,7 @@ namespace NumSharp.Backends
             if (x is null) throw new ArgumentNullException(nameof(x));
             // NumPy: `if x.dtype.kind != 'f': x = x.astype(float)` — a text array is parsed into float64 (each element by
             // float()), then I0 runs on the numbers.
-            using var parsed = Backends.Strings.NDStringUfuncs.IsText(x) ? x.astype(np.float64, true, 'K', "unsafe") : null;
+            using var parsed = Backends.Strings.NDStringUfuncs.IsText(x) ? x.astype(np.float64) : null;
             if (parsed is not null)
                 x = parsed;
 

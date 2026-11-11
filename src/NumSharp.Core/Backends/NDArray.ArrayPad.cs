@@ -1912,7 +1912,7 @@ namespace NumSharp
             if (value is string or byte[] && tc != NPTypeCode.String)
             {
                 using var text = Backends.UnmanagedStorage.FromAnyScalar(value, null);
-                using var cast = text.astype(DType.From(tc), true, 'K', "unsafe");
+                using var cast = text.astype(DType.From(tc));
                 return cast.GetAtIndex(0);
             }
             if (!NDArray.IsStoreScalar(value) || tc == NPTypeCode.String)

@@ -122,7 +122,7 @@ namespace NumSharp.Tests.Fuzz
                 case "imag": return m.imag;
                 case "astype":
                     return p.TryGetValue("copy", out var asCopy)
-                        ? m.astype(FuzzCorpus.DtypeToTC(p["dtype"].GetString()), asCopy.GetBoolean())
+                        ? m.astype(FuzzCorpus.DtypeToTC(p["dtype"].GetString()), copy: asCopy.GetBoolean())
                         : m.astype(FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
                 case "cumsum": return m.cumsum(MatrixAxis(p));
                 case "cumprod": return m.cumprod(MatrixAxis(p));

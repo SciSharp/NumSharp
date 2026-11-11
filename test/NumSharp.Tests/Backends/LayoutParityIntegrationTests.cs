@@ -478,7 +478,7 @@ namespace NumSharp.Tests.Backends
                          ("count_nonzero_0x3", np.count_nonzero(np.zeros(new Shape(0L, 3L)), 0)),
                          ("sum_0x3", np.sum(np.zeros(new Shape(0L, 3L)), 0)),
                          ("sum_empty_keepdims", np.sum(empty, 0, keepdims: true)),
-                         ("nansum_keepdims", np.nansum(np.array(new[] { 1.0, double.NaN }), 0, true)),
+                         ("nansum_keepdims", np.nansum(np.array(new[] { 1.0, double.NaN }), 0, keepdims: true)),
                          ("nansum_2x3", np.nansum(np.ones(new Shape(2L, 3L)), 0)),
                      })
             {

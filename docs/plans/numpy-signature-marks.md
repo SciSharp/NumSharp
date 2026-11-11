@@ -46,8 +46,8 @@ lists what failed, with the compiler's reason.
 
 | group | names with a NumPy counterpart | M ● | M ◦ only | X | O | T ● | T ◇ | B ● | B ◐ | L ● | L ◐ | L ◦ | Q | no mark | not compared | NumSharp-only names | of them O | of them T | NumPy names NumSharp lacks |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `np` | 379 | 24 | 119 | 28 | 136 | 5 | 9 | 14 | 0 | 12 | 2 | 1 | 22 | 132 | 0 | 17 | 9 | 8 | 34 |
-| `ndarray` | 57 | 5 | 1 | 4 | 16 | 1 | 3 | 2 | 0 | 0 | 0 | 0 | 10 | 28 | 0 | 83 | 45 | 15 | 3 |
+| `np` | 379 | 14 | 122 | 28 | 123 | 5 | 9 | 7 | 0 | 12 | 2 | 0 | 22 | 133 | 0 | 17 | 9 | 8 | 34 |
+| `ndarray` | 57 | 5 | 1 | 4 | 13 | 1 | 3 | 1 | 0 | 0 | 0 | 0 | 10 | 30 | 0 | 83 | 45 | 15 | 3 |
 | `np.char` | 53 | 0 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 42 | 0 | 1 | 0 | 0 | 0 |
 | `np.dtypes` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `np.emath` | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 0 | 0 |
@@ -67,9 +67,9 @@ lists what failed, with the compiler's reason.
 | `np.strings` | 46 | 0 | 17 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 27 | 0 | 0 | 0 | 0 | 0 |
 | `np.typing` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `ndarray (NDArray<T>)` | 2 | 2 | 0 | 1 | 2 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 1 | 0 | 3 |
-| `np.matrix` | 54 | 11 | 1 | 1 | 19 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 13 | 24 | 0 | 4 | 0 | 0 | 0 |
-| `np.char.chararray` | 61 | 2 | 1 | 2 | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 2 | 52 | 0 | 4 | 0 | 0 | 0 |
-| `np.ma.MaskedArray` | 60 | 30 | 0 | 0 | 2 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 13 | 27 | 0 | 2 | 1 | 0 | 17 |
+| `np.matrix` | 54 | 11 | 1 | 1 | 16 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 13 | 26 | 0 | 4 | 0 | 0 | 0 |
+| `np.char.chararray` | 61 | 2 | 1 | 2 | 5 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 53 | 0 | 4 | 0 | 0 | 0 |
+| `np.ma.MaskedArray` | 60 | 29 | 1 | 0 | 2 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 13 | 27 | 0 | 2 | 1 | 0 | 17 |
 | `np.dtype` | 4 | 1 | 0 | 0 | 2 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 5 | 3 | 2 | 0 |
 | `np.nditer` | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 8 | 0 | 3 | 0 | 0 | 0 |
 | `np.broadcast` | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 3 | 0 | 0 | 0 |
@@ -88,7 +88,7 @@ lists what failed, with the compiler's reason.
 | `np.random.PCG64DXSM` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 |
 | `np.random.Philox` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 |
 | `np.random.SFC64` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 10 | 0 | 0 | 0 |
-| **total** | 1306 | 207 | 153 | 70 | 331 | 9 | 14 | 35 | 0 | 16 | 19 | 73 | 78 | 639 | 0 | 239 | 62 | 26 | 83 |
+| **total** | 1306 | 196 | 157 | 70 | 310 | 9 | 14 | 25 | 0 | 16 | 19 | 72 | 78 | 645 | 0 | 239 | 62 | 26 | 83 |
 
 *no mark*: no M (● or ◦), X, O, T, B, L or Q: the name matches NumPy in every respect the table checks.
 
@@ -98,8 +98,8 @@ lists what failed, with the compiler's reason.
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `abs` | ◦ |  | 2 |  |  |  |  | `abs(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
-| `absolute` | ◦ |  | 2 |  |  |  |  | `absolute(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `abs` | ◦ |  |  |  |  |  |  | `abs(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `absolute` | ◦ |  |  |  |  |  |  | `absolute(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `acos` | ◦ |  |  |  |  |  |  | `acos(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `acosh` | ◦ |  |  |  |  |  |  | `acosh(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `add` | ◦ |  |  |  |  |  |  | `add(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
@@ -215,12 +215,12 @@ lists what failed, with the compiler's reason.
 | `einsum` |  |  | 3 |  |  |  |  | `einsum(*operands, out=None, optimize=False, dtype=..., order=..., casting=..., **kwargs)`<br>+ dtype (stub), order (stub), casting (stub) |  |  |  |  |
 | `einsum_path` | ◦ |  | 3 |  |  |  |  | `einsum_path(*operands, optimize='greedy', einsum_call=False)` | excluded: `einsum_call` |  |  |  |
 | `empty` | ◦ |  | 8 | ◇ | ● |  |  | `empty(shape, dtype=None, order='C', *, device=None, like=None)` | excluded: `like` |  | `<T>(int[] shape)`, `<T>(long[] shape)` | `device` alone: needs `dtype`<br>positionally up to `order`: no overload fits; the closest one wants `string` for argument 3 — `np.empty(new Shape(2), np.float64, 'C')` |
-| `empty_like` | ◦ |  | 2 |  | ● | ◦ |  | `empty_like(prototype, /, dtype=None, order='K', subok=True, shape=None, *, device=None)` | excluded: `subok` |  |  | `order` alone: needs `dtype`<br>`shape`: null -> `Shape` (`default` binds) |
+| `empty_like` | ◦ |  |  |  |  |  |  | `empty_like(prototype, /, dtype=None, order='K', subok=True, shape=None, *, device=None)` | excluded: `subok` |  |  |  |
 | `equal` | ◦ |  | 3 |  |  |  |  | `equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
-| `exp` | ◦ |  | 2 |  |  |  |  | `exp(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
-| `exp2` | ◦ |  | 2 |  |  |  |  | `exp2(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `exp` | ◦ |  |  |  |  |  |  | `exp(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `exp2` | ◦ |  |  |  |  |  |  | `exp2(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `expand_dims` |  |  | 3 |  |  |  |  | `expand_dims(a, axis)` |  |  |  |  |
-| `expm1` | ◦ |  | 2 |  |  |  |  | `expm1(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `expm1` | ◦ |  |  |  |  |  |  | `expm1(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `extract` |  |  |  |  |  |  |  | `extract(condition, arr)` |  |  |  |  |
 | `eye` | ◦ |  |  |  |  |  |  | `eye(N, M=None, k=0, dtype=<class 'float'>, order='C', *, device=None, like=None)` | excluded: `like` |  |  |  |
 | `fabs` | ◦ |  |  |  |  |  |  | `fabs(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
@@ -245,7 +245,7 @@ lists what failed, with the compiler's reason.
 | `frompyfunc` | ● |  |  |  |  |  |  | `frompyfunc(func, /, nin, nout, *, identity=None, **kwargs)`<br>+ identity (stub) | `identity` |  |  |  |
 | `fromstring` |  |  | 2 |  |  |  |  | `fromstring(string, dtype=float, count=-1, *, sep, like=None)` |  |  |  |  |
 | `full` | ● |  | 5 | ◇ |  |  |  | `full(shape, fill_value, dtype=None, order='C', *, device=None, like=None)` | `order`<br>excluded: `like` |  | `<T>(int[] shape, object fill_value)`, `<T>(long[] shape, object fill_value)` |  |
-| `full_like` | ● |  | 2 |  | ● |  |  | `full_like(a, fill_value, dtype=None, order='K', subok=True, shape=None, *, device=None)` | `shape`<br>excluded: `subok` |  |  | `order` alone: needs `dtype` |
+| `full_like` | ◦ |  |  |  |  |  |  | `full_like(a, fill_value, dtype=None, order='K', subok=True, shape=None, *, device=None)` | excluded: `subok` |  |  |  |
 | `gcd` | ◦ |  |  |  |  |  |  | `gcd(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `geomspace` |  |  | 4 |  |  |  |  | `geomspace(start, stop, num=50, endpoint=True, dtype=None, axis=0)` |  |  |  |  |
 | `get_printoptions` |  |  |  |  |  |  |  | `get_printoptions()` |  |  |  |  |
@@ -261,7 +261,7 @@ lists what failed, with the compiler's reason.
 | `histogram_bin_edges` |  |  | 4 |  |  |  |  | `histogram_bin_edges(a, bins=10, range=None, weights=None)` |  |  |  |  |
 | `histogramdd` |  |  | 8 |  |  |  |  | `histogramdd(sample, bins=10, range=None, density=None, weights=None)` |  |  |  |  |
 | `hsplit` |  | ● | 2 |  |  |  |  | `hsplit(ary, indices_or_sections)` |  | `indices` |  |  |
-| `hstack` | ● |  |  |  |  |  |  | `hstack(tup, *, dtype=None, casting='same_kind')` | `dtype`, `casting` |  |  |  |
+| `hstack` |  |  | 2 |  |  |  |  | `hstack(tup, *, dtype=None, casting='same_kind')` |  |  |  |  |
 | `hypot` | ◦ |  |  |  |  |  |  | `hypot(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `i0` |  |  |  |  |  |  |  | `i0(x)` |  |  |  |  |
 | `identity` | ◦ |  |  |  |  |  |  | `identity(n, dtype=None, *, like=None)` | excluded: `like` |  |  |  |
@@ -301,10 +301,10 @@ lists what failed, with the compiler's reason.
 | `linspace` |  |  | 2 |  |  |  |  | `linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis=0, *, device=None)` |  |  |  |  |
 | `load` |  | ● | 3 |  |  |  |  | `load(file, mmap_mode=None, allow_pickle=False, fix_imports=True, encoding='ASCII', *, max_header_size=10000)` |  | `bytes` |  |  |
 | `loadtxt` | ◦ | ● | 4 |  |  |  |  | `loadtxt(fname, dtype=<class 'float'>, comments='#', delimiter=None, converters=None, skiprows=0, usecols=None, unpack=False, ndmin=0, encoding=None, max_rows=None, *, quotechar=None, like=None)` | excluded: `like` | `lines`, `reader`, `stream` |  |  |
-| `log` | ◦ |  | 2 |  |  |  |  | `log(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
-| `log10` | ◦ |  | 2 |  |  |  |  | `log10(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
-| `log1p` | ◦ |  | 2 |  |  |  |  | `log1p(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
-| `log2` | ◦ |  | 2 |  |  |  |  | `log2(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `log` | ◦ |  |  |  |  |  |  | `log(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `log10` | ◦ |  |  |  |  |  |  | `log10(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `log1p` | ◦ |  |  |  |  |  |  | `log1p(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `log2` | ◦ |  |  |  |  |  |  | `log2(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `logaddexp` | ◦ |  |  |  |  |  |  | `logaddexp(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `logaddexp2` | ◦ |  |  |  |  |  |  | `logaddexp2(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `logical_and` | ◦ |  |  |  |  |  |  | `logical_and(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
@@ -337,15 +337,15 @@ lists what failed, with the compiler's reason.
 | `nancumprod` |  |  |  |  |  |  |  | `nancumprod(a, axis=None, dtype=None, out=None)` |  |  |  |  |
 | `nancumsum` |  |  |  |  |  |  |  | `nancumsum(a, axis=None, dtype=None, out=None)` |  |  |  |  |
 | `nanmax` |  |  |  |  |  |  | ● | `nanmax(a, axis=None, out=None, keepdims=<no value>, initial=<no value>, where=<no value>)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
-| `nanmean` | ● |  |  |  | ● |  | ● | `nanmean(a, axis=None, dtype=None, out=None, keepdims=<no value>, *, where=<no value>)` | `out`, `where` |  |  | positionally up to `dtype`: no overload fits; the closest one wants `bool` for argument 3 — `np.nanmean(a, 1, np.float64)`<br>`axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
+| `nanmean` |  |  |  |  |  |  | ● | `nanmean(a, axis=None, dtype=None, out=None, keepdims=<no value>, *, where=<no value>)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
 | `nanmedian` |  |  | 2 |  |  | ● |  | `nanmedian(a, axis=None, out=None, overwrite_input=False, keepdims=<no value>)` |  |  |  | `axis`: ambiguous: `np.nanmedian(NDArray, int?, NDArray, bool, bool)` / `np.nanmedian(NDArray, int[], NDArray, bool, bool)` |
 | `nanmin` |  |  |  |  |  |  | ● | `nanmin(a, axis=None, out=None, keepdims=<no value>, initial=<no value>, where=<no value>)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
 | `nanpercentile` |  |  | 6 |  |  | ● |  | `nanpercentile(a, q, axis=None, out=None, overwrite_input=False, method='linear', keepdims=<no value>, *, weights=None)` |  |  |  | `axis`: ambiguous: `np.nanpercentile(NDArray, double, int?, NDArray, bool, string, bool, NDArray)` / `np.nanpercentile(NDArray, double, int[], NDArray, bool, string, bool, NDArray)` |
-| `nanprod` | ● |  |  |  |  |  | ● | `nanprod(a, axis=None, dtype=None, out=None, keepdims=<no value>, initial=<no value>, where=<no value>)` | `dtype`, `out`, `initial`, `where` |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
+| `nanprod` |  |  |  |  |  |  | ● | `nanprod(a, axis=None, dtype=None, out=None, keepdims=<no value>, initial=<no value>, where=<no value>)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
 | `nanquantile` |  |  | 8 |  |  | ● |  | `nanquantile(a, q, axis=None, out=None, overwrite_input=False, method='linear', keepdims=<no value>, *, weights=None)` |  |  |  | `axis`: ambiguous: `np.nanquantile(NDArray, double, int?, NDArray, bool, string, bool, NDArray)` / `np.nanquantile(NDArray, double, int[], NDArray, bool, string, bool, NDArray)` |
-| `nanstd` | ● |  |  |  | ● |  | ● | `nanstd(a, axis=None, dtype=None, out=None, ddof=0, keepdims=<no value>, *, where=<no value>, mean=<no value>, correction=<no value>)` | `out`, `where`, `mean`, `correction` |  |  | positionally up to `dtype`: no overload fits; the closest one wants `bool` for argument 3 — `np.nanstd(a, 1, np.float64)`<br>`axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
-| `nansum` | ● |  |  |  |  |  | ● | `nansum(a, axis=None, dtype=None, out=None, keepdims=<no value>, initial=<no value>, where=<no value>)` | `dtype`, `out`, `initial`, `where` |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
-| `nanvar` | ● |  |  |  | ● |  | ● | `nanvar(a, axis=None, dtype=None, out=None, ddof=0, keepdims=<no value>, *, where=<no value>, mean=<no value>, correction=<no value>)` | `out`, `where`, `mean`, `correction` |  |  | positionally up to `dtype`: no overload fits; the closest one wants `bool` for argument 3 — `np.nanvar(a, 1, np.float64)`<br>`axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
+| `nanstd` |  |  |  |  |  |  | ● | `nanstd(a, axis=None, dtype=None, out=None, ddof=0, keepdims=<no value>, *, where=<no value>, mean=<no value>, correction=<no value>)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
+| `nansum` |  |  |  |  |  |  | ● | `nansum(a, axis=None, dtype=None, out=None, keepdims=<no value>, initial=<no value>, where=<no value>)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
+| `nanvar` |  |  |  |  |  |  | ● | `nanvar(a, axis=None, dtype=None, out=None, ddof=0, keepdims=<no value>, *, where=<no value>, mean=<no value>, correction=<no value>)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
 | `ndarray` |  |  | 2 |  |  |  |  | `ndarray(shape, dtype=None, buffer=None, offset=0, strides=None, order=None)` |  |  |  |  |
 | `ndenumerate` |  |  | 2 | ◇ |  |  |  | `ndenumerate(arr)` |  |  | `<T>(NDArray arr)` |  |
 | `ndim` |  |  |  |  |  |  |  | `ndim(a)` |  |  |  |  |
@@ -357,7 +357,7 @@ lists what failed, with the compiler's reason.
 | `nonzero` |  |  |  |  |  |  |  | `nonzero(a)` |  |  |  |  |
 | `not_equal` | ◦ |  | 3 |  |  |  |  | `not_equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `ones` | ◦ |  | 8 | ◇ | ● |  |  | `ones(shape, dtype=None, order='C', *, device=None, like=None)` | excluded: `like` |  | `<T>(int[] shape)` | `device` alone: needs `dtype`<br>positionally up to `order`: no overload fits; the closest one wants `string` for argument 3 — `np.ones(new Shape(2), np.float64, 'C')` |
-| `ones_like` | ● |  | 2 |  | ● |  |  | `ones_like(a, dtype=None, order='K', subok=True, shape=None, *, device=None)` | `shape`<br>excluded: `subok` |  |  | `order` alone: needs `dtype` |
+| `ones_like` | ◦ |  |  |  |  |  |  | `ones_like(a, dtype=None, order='K', subok=True, shape=None, *, device=None)` | excluded: `subok` |  |  |  |
 | `outer` |  |  |  |  |  |  |  | `outer(a, b, out=None)` |  |  |  |  |
 | `packbits` |  |  |  |  |  |  |  | `packbits(a, /, axis=None, bitorder='big')` |  |  |  |  |
 | `pad` |  |  | 10 |  |  |  |  | `pad(array, pad_width, mode='constant', *, stat_length=None, constant_values=0, end_values=0, reflect_type='even', **kwargs)`<br>+ stat_length (stub), constant_values (stub), end_values (stub), reflect_type (stub) |  |  |  |  |
@@ -388,13 +388,13 @@ lists what failed, with the compiler's reason.
 | `quantile` |  |  | 8 |  |  | ● |  | `quantile(a, q, axis=None, out=None, overwrite_input=False, method='linear', keepdims=False, *, weights=None)` |  |  |  | `axis`: ambiguous: `np.quantile(NDArray, double, int?, NDArray, bool, string, bool, NDArray)` / `np.quantile(NDArray, double, int[], NDArray, bool, string, bool, NDArray)` |
 | `rad2deg` | ◦ |  |  |  |  |  |  | `rad2deg(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `radians` | ◦ |  |  |  |  |  |  | `radians(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
-| `ravel` |  |  | 2 |  |  |  |  | `ravel(a, order='C')` |  |  |  |  |
+| `ravel` |  |  |  |  |  |  |  | `ravel(a, order='C')` |  |  |  |  |
 | `ravel_multi_index` |  | ● | 3 |  |  |  |  | `ravel_multi_index(multi_index, dims, mode='raise', order='C')` |  | `coords`, `modes` |  |  |
 | `real` |  |  |  |  |  |  |  | `real(val)` |  |  |  |  |
 | `real_if_close` |  |  |  |  |  |  |  | `real_if_close(a, tol=100)` |  |  |  |  |
 | `reciprocal` | ◦ |  |  |  |  |  |  | `reciprocal(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `remainder` | ◦ |  | 2 |  |  |  |  | `remainder(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
-| `repeat` |  |  | 5 |  |  |  |  | `repeat(a, repeats, axis=None)` |  |  |  |  |
+| `repeat` |  |  | 2 |  |  |  |  | `repeat(a, repeats, axis=None)` |  |  |  |  |
 | `require` |  |  | 2 |  |  |  |  | `require(a, dtype=None, requirements=None, *, like=None)` |  |  |  |  |
 | `reshape` | ● |  | 4 |  |  |  |  | `reshape(a, /, shape, order='C', *, copy=None)` | `order`, `copy` |  |  |  |
 | `resize` |  |  |  |  |  |  |  | `resize(a, new_shape)` |  |  |  |  |
@@ -429,7 +429,7 @@ lists what failed, with the compiler's reason.
 | `spacing` | ◦ |  |  |  |  |  |  | `spacing(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `split` |  | ● | 3 |  |  |  |  | `split(ary, indices_or_sections, axis=0)` |  | `indices` |  |  |
 | `sqrt` | ◦ |  |  |  |  |  |  | `sqrt(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
-| `square` | ◦ |  | 2 |  |  |  |  | `square(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `square` | ◦ |  |  |  |  |  |  | `square(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `squeeze` |  |  |  |  |  |  | ● | `squeeze(a, axis=None)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
 | `stack` |  |  |  |  |  |  |  | `stack(arrays, axis=0, out=None, *, dtype=None, casting='same_kind')` |  |  |  |  |
 | `std` |  |  |  |  |  |  | ● | `std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=<no value>, *, where=<no value>, mean=<no value>, correction=<no value>)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 2 |
@@ -473,10 +473,10 @@ lists what failed, with the compiler's reason.
 | `vecmat` | ◦ |  |  |  |  |  |  | `vecmat(x1, x2, /, out=None, *, axes=<no value>, axis=<no value>, keepdims=False, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `subok`, `signature` |  |  |  |
 | `vectorize` | ● |  | 12 |  |  |  |  | `vectorize(pyfunc=<no value>, otypes=None, doc=None, excluded=None, cache=False, signature=None)` | `doc`, `excluded`, `cache` |  |  |  |
 | `vsplit` |  | ● | 2 |  |  |  |  | `vsplit(ary, indices_or_sections)` |  | `indices` |  |  |
-| `vstack` | ● |  |  |  |  |  |  | `vstack(tup, *, dtype=None, casting='same_kind')` | `dtype`, `casting` |  |  |  |
+| `vstack` |  |  | 2 |  |  |  |  | `vstack(tup, *, dtype=None, casting='same_kind')` |  |  |  |  |
 | `where` |  |  | 5 |  |  |  |  | `where(condition, x=None, y=None, /)` |  |  |  |  |
 | `zeros` | ◦ |  | 8 | ◇ | ● |  |  | `zeros(shape, dtype=None, order='C', *, device=None, like=None)` | excluded: `like` |  | `<T>(int[] shape)`, `<T>(long[] shape)` | `device` alone: needs `dtype`<br>positionally up to `order`: no overload fits; the closest one wants `string` for argument 3 — `np.zeros(new Shape(2), np.float64, 'C')` |
-| `zeros_like` | ● |  | 2 |  | ● |  |  | `zeros_like(a, dtype=None, order='K', subok=True, shape=None, *, device=None)` | `shape`<br>excluded: `subok` |  |  | `order` alone: needs `dtype` |
+| `zeros_like` | ◦ |  |  |  |  |  |  | `zeros_like(a, dtype=None, order='K', subok=True, shape=None, *, device=None)` | excluded: `subok` |  |  |  |
 
 ### Names NumPy does not have (17)
 
@@ -522,7 +522,7 @@ lists what failed, with the compiler's reason.
 | `argmin` |  |  | 3 |  |  |  |  | `a.argmin(axis=None, out=None, *, keepdims=False)` |  |  |  |  |
 | `argpartition` |  |  | 3 |  |  |  |  | `a.argpartition(kth, axis=-1, kind='introselect', order=None)` |  |  |  |  |
 | `argsort` |  |  |  |  |  |  |  | `a.argsort(axis=-1, kind=None, order=None, *, stable=None)` |  |  |  |  |
-| `astype` | ◦ |  | 2 |  | ● |  |  | `a.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)` | excluded: `subok` |  |  | `order` alone: needs `copy`<br>`casting` alone: needs `copy`<br>positionally up to `order`: no overload fits; the closest one wants `bool` for argument 2 — `a.astype(np.float64, 'K')` |
+| `astype` | ◦ |  |  |  |  |  |  | `a.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)` | excluded: `subok` |  |  |  |
 | `byteswap` |  |  |  |  |  |  |  | `a.byteswap(inplace=False)` |  |  |  |  |
 | `choose` |  |  | 3 |  |  |  |  | `a.choose(choices, out=None, mode='raise')` |  |  |  |  |
 | `clip` |  |  |  |  |  |  |  | `a.clip(min=<no value>, max=<no value>, out=None, **kwargs)` |  |  |  |  |
@@ -545,8 +545,8 @@ lists what failed, with the compiler's reason.
 | `partition` |  |  | 3 |  |  |  |  | `a.partition(kth, axis=-1, kind='introselect', order=None)` |  |  |  |  |
 | `prod` |  |  |  |  |  |  | ● | `a.prod(axis=None, dtype=None, out=None, *, keepdims=<no value>, initial=<no value>, where=<no value>)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 1 |
 | `put` |  |  |  |  |  |  |  | `a.put(indices, values, mode='raise')` |  |  |  |  |
-| `ravel` |  |  | 2 |  |  |  |  | `a.ravel(order='C')` |  |  |  |  |
-| `repeat` |  |  | 3 |  |  |  |  | `a.repeat(repeats, axis=None)` |  |  |  |  |
+| `ravel` |  |  |  |  |  |  |  | `a.ravel(order='C')` |  |  |  |  |
+| `repeat` |  |  |  |  |  |  |  | `a.repeat(repeats, axis=None)` |  |  |  |  |
 | `reshape` | ● |  | 6 |  |  |  |  | `a.reshape(shape, /, *, order='C', copy=None)` | `copy` |  |  |  |
 | `resize` |  |  | 3 |  |  |  |  | `a.resize(new_shape, /, *, refcheck=True)` |  |  |  |  |
 | `round` |  |  |  |  |  |  |  | `a.round(decimals=0, out=None)` |  |  |  |  |
@@ -1554,7 +1554,7 @@ lists what failed, with the compiler's reason.
 | `argmin` |  |  | 2 |  |  |  | ● | `matrix.argmin(axis=None, out=None)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int` for argument 1 |
 | `argpartition` |  |  |  |  |  |  |  | `matrix.argpartition(kth, axis=-1, kind='introselect', order=None)` |  |  |  |  |
 | `argsort` | ● |  |  |  |  |  |  | `matrix.argsort(axis=-1, kind=None, order=None, *, stable=None)` | `kind`, `stable`<br>excluded: `order` |  |  |  |
-| `astype` | ◦ |  | 2 |  | ● |  |  | `matrix.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)` | excluded: `subok` |  |  | `order` alone: no overload takes 2 arguments<br>`casting` alone: no overload takes 2 arguments<br>positionally up to `order`: no overload fits; the closest one wants `bool` for argument 2 — `mx.astype(np.float64, 'K')` |
+| `astype` | ◦ |  |  |  |  |  |  | `matrix.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)` | excluded: `subok` |  |  |  |
 | `byteswap` |  |  |  |  |  |  |  | `matrix.byteswap(inplace=False)` |  |  |  |  |
 | `choose` | ● |  |  |  |  |  |  | `matrix.choose(choices, out=None, mode='raise')` | `out` |  |  |  |
 | `clip` | ● |  |  |  |  |  |  | `matrix.clip(min=<no value>, max=<no value>, out=None, **kwargs)` | `out` |  |  |  |
@@ -1578,8 +1578,8 @@ lists what failed, with the compiler's reason.
 | `min` |  |  | 2 |  |  |  | ● | `matrix.min(axis=None, out=None)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int` for argument 1 |
 | `prod` |  |  | 2 |  |  |  | ● | `matrix.prod(axis=None, dtype=None, out=None)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int` for argument 1 |
 | `ptp` |  |  | 2 |  |  |  | ● | `matrix.ptp(axis=None, out=None)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int` for argument 1 |
-| `ravel` |  |  | 2 |  |  |  |  | `matrix.ravel(order='C')` |  |  |  |  |
-| `repeat` |  |  | 3 |  |  |  |  | `matrix.repeat(repeats, axis=None)` |  |  |  |  |
+| `ravel` |  |  |  |  |  |  |  | `matrix.ravel(order='C')` |  |  |  |  |
+| `repeat` |  |  |  |  |  |  |  | `matrix.repeat(repeats, axis=None)` |  |  |  |  |
 | `reshape` | ● |  | 4 |  |  |  |  | `matrix.reshape(shape, /, *, order='C', copy=None)` | `copy` |  |  |  |
 | `round` |  |  | 2 |  |  |  |  | `matrix.round(decimals=0, out=None)` |  |  |  |  |
 | `squeeze` |  |  |  |  |  |  | ● | `matrix.squeeze(axis=None)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 1 |
@@ -1614,7 +1614,7 @@ lists what failed, with the compiler's reason.
 | `argmax` |  |  | 3 |  |  |  |  | `chararray.argmax(axis=None, out=None, *, keepdims=False)` |  |  |  |  |
 | `argmin` |  |  | 3 |  |  |  |  | `chararray.argmin(axis=None, out=None, *, keepdims=False)` |  |  |  |  |
 | `argpartition` |  |  |  |  |  |  |  | `chararray.argpartition(kth, axis=-1, kind='introselect', order=None)` |  |  |  |  |
-| `astype` | ◦ |  | 2 |  | ● |  |  | `chararray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)` | excluded: `subok` |  |  | `order` alone: no overload takes 2 arguments<br>`casting` alone: no overload takes 2 arguments<br>positionally up to `order`: no overload fits; the closest one wants `bool` for argument 2 — `ca.astype(np.float64, 'K')` |
+| `astype` | ◦ |  |  |  |  |  |  | `chararray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)` | excluded: `subok` |  |  |  |
 | `byteswap` |  |  |  |  |  |  |  | `chararray.byteswap(inplace=False)` |  |  |  |  |
 | `capitalize` |  |  |  |  |  |  |  | `chararray.capitalize()` |  |  |  |  |
 | `center` |  |  |  |  |  |  |  | `chararray.center(width, fillchar=' ')` |  |  |  |  |
@@ -1644,7 +1644,7 @@ lists what failed, with the compiler's reason.
 | `lower` |  |  |  |  |  |  |  | `chararray.lower()` |  |  |  |  |
 | `lstrip` |  |  |  |  |  |  |  | `chararray.lstrip(chars=None)` |  |  |  |  |
 | `partition` |  | ● | 4 |  |  |  |  | `chararray.partition(sep)` |  | `axis`, `kind`, `kth`, `order` |  |  |
-| `ravel` |  |  | 2 |  |  |  |  | `chararray.ravel(order='C')` |  |  |  |  |
+| `ravel` |  |  |  |  |  |  |  | `chararray.ravel(order='C')` |  |  |  |  |
 | `repeat` |  |  |  |  |  |  |  | `chararray.repeat(repeats, axis=None)` |  |  |  |  |
 | `replace` |  |  |  |  |  |  |  | `chararray.replace(old, new, count=None)` |  |  |  |  |
 | `reshape` | ● |  | 6 |  |  |  |  | `chararray.reshape(shape, /, *, order='C', copy=None)` | `copy` |  |  |  |
@@ -1693,7 +1693,7 @@ lists what failed, with the compiler's reason.
 | `argmin` | ● |  |  |  |  |  |  | `MaskedArray.argmin(axis=None, fill_value=None, out=None, *, keepdims=<no value>)` | `out`, `keepdims` |  |  |  |
 | `argpartition` |  |  |  |  |  |  |  | `MaskedArray.argpartition(kth, axis=-1, kind='introselect', order=None)` |  |  |  |  |
 | `argsort` | ● |  | 2 |  |  |  |  | `MaskedArray.argsort(axis=<no value>, kind=None, order=None, endwith=True, fill_value=None, *, stable=False)` | `kind`, `stable`<br>excluded: `order` |  |  |  |
-| `astype` | ● |  |  |  |  |  |  | `MaskedArray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)` | `order`, `casting`<br>excluded: `subok` |  |  |  |
+| `astype` | ◦ |  |  |  |  |  |  | `MaskedArray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)` | excluded: `subok` |  |  |  |
 | `byteswap` |  |  |  |  |  |  |  | `MaskedArray.byteswap(inplace=False)` |  |  |  |  |
 | `choose` | ● |  |  |  |  |  |  | `MaskedArray.choose(choices, out=None, mode='raise')` | `out` |  |  |  |
 | `clip` | ● |  |  |  |  |  |  | `MaskedArray.clip(min=<no value>, max=<no value>, out=None, **kwargs)` | `out` |  |  |  |

@@ -908,31 +908,16 @@ namespace NumSharp
         public IArraySlice CloneData() => Storage.CloneData();
 
         /// <summary>
-        ///     Copy of the array, cast to a specified type.
+        ///     Copy of the array, cast to a specified type and memory layout: NumPy's
+        ///     <c>a.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)</c>.
         /// </summary>
         /// <param name="dtype">
         ///     The dtype to cast this array to — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>
         ///     (<c>typeof(float)</c>), an <see cref="NPTypeCode"/>, a NumPy dtype string (<c>"f4"</c>, <c>"float32"</c>) or a
         ///     <see cref="DType"/> (<c>np.float32</c>, <c>other.dtype</c>) all convert implicitly. Null is NumPy's
-        ///     <c>astype(None)</c>: the default dtype, float64.
+        ///     <c>astype(None)</c>: the default dtype, float64 (a float64 array with <paramref name="copy"/> false comes back
+        ///     itself).
         /// </param>
-        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
-        /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
-        /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
-        [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray astype(DType dtype, bool copy = true) => astype(dtype, copy, 'K');
-
-        /// <summary>
-        ///     Copy of the array, cast to a specified type and memory layout.
-        /// </summary>
-        /// <param name="dtype">
-        ///     The dtype to cast this array to — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>,
-        ///     an <see cref="NPTypeCode"/>, a NumPy dtype string or a <see cref="DType"/> all convert implicitly. Null is
-        ///     NumPy's <c>astype(None)</c>: the default dtype, float64 (a float64 array with <paramref name="copy"/> false
-        ///     comes back itself).
-        /// </param>
-        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype requirement is already satisfied, the input array itself is returned instead of a copy; when a conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <param name="order">
         ///     Controls the memory layout: 'C' (row-major), 'F' (column-major),
         ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',
@@ -944,6 +929,9 @@ namespace NumSharp
         ///     A stricter rule raises <see cref="InvalidCastException"/> (NumPy's TypeError analogue)
         ///     when the source dtype cannot cast to <paramref name="dtype"/> under that rule.
         /// </param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false and the dtype
+        ///     (and the order) requirement is already satisfied, the input array itself is returned instead of a copy; when a
+        ///     conversion is needed a new array is still allocated and the input is never modified (NumPy semantics).</param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/> with the requested layout.</returns>
         /// <exception cref="NotSupportedException">The descriptor's class has no storage lane yet (a datetime64/timedelta64
         ///     descriptor before Stage C), or <paramref name="casting"/> is 'same_value' for a numeric cast between two storage
@@ -952,9 +940,14 @@ namespace NumSharp
         ///     '…')</c>), then an unknown <paramref name="casting"/> name (<c>casting must be one of 'no', 'equiv', 'safe',
         ///     'same_kind', 'unsafe', 'same_value' (got '…')</c>): NumPy's argument parsing, before anything else.</exception>
         /// <exception cref="InvalidCastException">The cast is not allowed under <paramref name="casting"/>.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html
+        ///     <para>One signature in NumPy's keyword order (API-parity batch 3, 2026-11-11): it replaces the former
+        ///     <c>astype(dtype, copy)</c> / <c>astype(dtype, copy, order, casting)</c> pair, so <c>a.astype(t, 'F')</c> reads as
+        ///     in NumPy and a <c>copy</c> is written <c>copy: false</c> (a bool in the order slot does not compile).
+        ///     <c>subok</c> stays out (the parity plan's exclusion).</para>
+        /// </remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray astype(DType dtype, bool copy, char order, string casting = "unsafe")
+        public NDArray astype(DType dtype, char order = 'K', string casting = "unsafe", bool copy = true)
         {
             // NumPy's astype(None): PyArray_DescrConverter reads None as the default descriptor, float64 (the same rule
             // np.dtype(None) follows), so a null dtype is a cast to float64, not an error.

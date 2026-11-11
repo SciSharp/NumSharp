@@ -177,7 +177,9 @@ namespace NumSharp
         /// <param name="dtype">The result's dtype, or null for <paramref name="a"/>'s. The fill value's own type never
         ///     selects it.</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>: the result's memory layout.</param>
-        /// <returns>A new array with <paramref name="a"/>'s dimensions and <paramref name="fill_value"/> cast into every
+        /// <param name="shapeOverride">NumPy's <c>shape=</c> override, or an empty (default) <see cref="Shape"/> for
+        ///     <paramref name="a"/>'s dimensions; <c>'K'</c> lays a shape of another rank out in C order.</param>
+        /// <returns>A new array with <paramref name="a"/>'s dimensions (or the override's) and <paramref name="fill_value"/> cast into every
         ///     element, labelled with a lane-sharing C-type class when that is the dtype (as NumPy's <c>empty_like</c> keeps
         ///     the descriptor).</returns>
         /// <exception cref="ArgumentException">An order other than C, F, A or K.</exception>
@@ -191,13 +193,15 @@ namespace NumSharp
         ///     view; a chararray), and a chararray operand's finalize rule runs on the result dtype here, where
         ///     <c>empty_like</c> allocates - after the order check, before the fill.</remarks>
         [NewSubtype("a")]
-        internal static NDArray full_like(NDArray a, object fill_value, DType dtype, char order)
+        internal static NDArray full_like(NDArray a, object fill_value, DType dtype, char order, Shape shapeOverride = default)
         {
             // NumPy's *_like contract preserves a.dtype unless dtype= is explicitly supplied.
             // fill_value is CAST into that dtype; its CLR type never selects the result dtype.
             var typeCode = dtype != null ? dtype.GetTypeCode() : a.typecode;
-            // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation, not merely C-or-F.
-            var shape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
+            // PyArray_NewLikeArrayWithShape's layout: order='K' keeps a's axis permutation (C when shape= changes the rank),
+            // not merely C-or-F; an empty (default) override is "no shape=".
+            var dims = shapeOverride.IsEmpty ? (long[])a.Shape.dimensions.Clone() : (long[])shapeOverride;
+            var shape = Shape.NewLikeLayout(a.Shape, order, dims);
             // empty_like allocates the result as a chararray operand's class (subok=True) at this point: its finalize rule
             // refuses a dtype that is not string data BEFORE the fill could raise its own error.
             if (NDSubclass.StandsForCharArray(a))
@@ -352,6 +356,8 @@ namespace NumSharp
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c> in either case (<c>'K'</c> keeps
         ///     <paramref name="a"/>'s axis order: a transposed operand gives a transposed result, a broadcast one an F
         ///     result).</param>
+        /// <param name="shape">NumPy's <c>shape=</c> override, or an empty (default) <see cref="Shape"/> for
+        ///     <paramref name="a"/>'s dimensions; <c>'K'</c> lays a shape of another rank out in C order.</param>
         /// <param name="device">Null or <c>"cpu"</c>.</param>
         /// <returns>A new, owned, writeable array of zeros (a text dtype's empty strings).</returns>
         /// <exception cref="ValueError"><paramref name="order"/> is not one of C, F, A, K (<c>order must be one of 'C', 'F',
@@ -361,16 +367,17 @@ namespace NumSharp
         ///     view; a chararray), and a chararray operand's finalize rule runs on the result dtype here, where
         ///     <c>empty_like</c> allocates - after the order and device checks, before the fill.</remarks>
         [NewSubtype("a")]
-        internal static NDArray zeros_like(NDArray a, DType dtype, char order, string device)
+        internal static NDArray zeros_like(NDArray a, DType dtype, char order, Shape shape, string device)
         {
             // NumPy's empty_like converts its arguments in order (npy_parse_arguments): the order's letter before the device,
             // so an unknown order is reported first (np.zeros_like(a, order='Z', device='cuda') raises the order's ValueError,
             // probed 2.4.2). The layout itself is resolved after the device, as before.
             OrderResolver.Convert(order);
             DeviceArguments.ValidateDevice(device);
-            // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation (a transposed a gives a transposed
-            // result, a broadcast one an F result), not merely C-or-F.
-            var resolvedShape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
+            // PyArray_NewLikeArrayWithShape's layout: order='K' keeps a's axis permutation (a transposed a gives a
+            // transposed result, a broadcast one an F result; C when shape= changes the rank), not merely C-or-F.
+            var dims = shape.IsEmpty ? (long[])a.Shape.dimensions.Clone() : (long[])shape;
+            var resolvedShape = Shape.NewLikeLayout(a.Shape, order, dims);
             // empty_like allocates the result as a chararray operand's class (subok=True) at this point: its finalize rule
             // refuses a dtype that is not string data before the fill.
             if (NDSubclass.StandsForCharArray(a))
@@ -390,6 +397,8 @@ namespace NumSharp
         ///     for <c>'K'</c>, its axis permutation.</param>
         /// <param name="dtype">The result dtype, or null for <paramref name="a"/>'s.</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c> in either case.</param>
+        /// <param name="shape">NumPy's <c>shape=</c> override, or an empty (default) <see cref="Shape"/> for
+        ///     <paramref name="a"/>'s dimensions; <c>'K'</c> lays a shape of another rank out in C order.</param>
         /// <param name="device">Null or <c>"cpu"</c>.</param>
         /// <returns>A new, owned, writeable array of ones, labelled with a requested lane-sharing C-type class.</returns>
         /// <exception cref="ValueError"><paramref name="order"/> is not one of C, F, A, K, checked before the device;
@@ -398,7 +407,7 @@ namespace NumSharp
         ///     view; a chararray), and a chararray operand's finalize rule runs on the result dtype here, where
         ///     <c>empty_like</c> allocates - after the order and device checks, before the fill.</remarks>
         [NewSubtype("a")]
-        internal static NDArray ones_like(NDArray a, DType dtype, char order, string device)
+        internal static NDArray ones_like(NDArray a, DType dtype, char order, Shape shape, string device)
         {
             // A string array (or dtype) is NumPy's empty_like + copyto(res, 1, casting='unsafe'): the text '1' in every
             // element, through ones' string route.
@@ -407,8 +416,10 @@ namespace NumSharp
             // probed 2.4.2). The layout itself is resolved after the device, as before.
             OrderResolver.Convert(order);
             DeviceArguments.ValidateDevice(device);
-            // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation, not merely C-or-F.
-            var resolvedShape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
+            // PyArray_NewLikeArrayWithShape's layout: order='K' keeps a's axis permutation (C when shape= changes the
+            // rank), not merely C-or-F.
+            var dims = shape.IsEmpty ? (long[])a.Shape.dimensions.Clone() : (long[])shape;
+            var resolvedShape = Shape.NewLikeLayout(a.Shape, order, dims);
             // empty_like allocates the result as a chararray operand's class (subok=True) at this point: its finalize rule
             // refuses a dtype that is not string data before the fill.
             if (NDSubclass.StandsForCharArray(a))

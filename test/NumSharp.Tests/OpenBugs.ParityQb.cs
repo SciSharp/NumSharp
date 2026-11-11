@@ -1319,8 +1319,11 @@ namespace NumSharp.Tests
         ///     (<c>np.empty_like(a, null, default, 'F')</c>). zeros_like / ones_like / full_like take the char as their order,
         ///     and np.empty / zeros / ones / full refuse it at compile time; the library already guards the same trap on
         ///     <c>np.ndarray(shape, dtype, buffer, 'F')</c> with an <c>[Obsolete(error: true)]</c> overload.
+        ///     <para>FIXED 2026-11-11 by API-parity batch 3: np.empty_like (and zeros_like / ones_like / full_like) is ONE
+        ///     signature in NumPy's order, <c>(prototype, dtype, order, shape, device)</c>, so the char is the order. The pin
+        ///     stays as the regression test.</para>
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB48")]
+        [TestMethod]
         public void ParityQb_QB48_EmptyLikeOrderChar_IsNotAShape()
         {
             using var a = np.zeros(new Shape(2, 3));

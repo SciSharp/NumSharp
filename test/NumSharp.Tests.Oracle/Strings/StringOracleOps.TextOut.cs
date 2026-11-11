@@ -100,9 +100,9 @@ namespace NumSharp.Tests.Strings
                     return axis is { } v ? np.var(a, v, dt, ddof: ddof ?? 0, keepdims: keepdims) : np.var(a, dtype: dt, ddof: ddof ?? 0, keepdims: keepdims);
                 case "std":
                     return axis is { } s ? np.std(a, s, dt, ddof: ddof ?? 0, keepdims: keepdims) : np.std(a, dtype: dt, ddof: ddof ?? 0, keepdims: keepdims);
-                case "nanmean": return np.nanmean(a, axis, keepdims, dt);
-                case "nanvar": return np.nanvar(a, axis, keepdims, ddof ?? 0, dt);
-                case "nanstd": return np.nanstd(a, axis, keepdims, ddof ?? 0, dt);
+                case "nanmean": return np.nanmean(a, axis, keepdims: keepdims, dtype: dt);
+                case "nanvar": return np.nanvar(a, axis, keepdims: keepdims, ddof: ddof ?? 0, dtype: dt);
+                case "nanstd": return np.nanstd(a, axis, keepdims: keepdims, ddof: ddof ?? 0, dtype: dt);
                 case var other:
                     throw new InvalidOperationException($"the string oracle has no out=/dtype= call '{other}'");
             }

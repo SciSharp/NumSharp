@@ -15,16 +15,24 @@ namespace NumSharp.Backends
         /// <param name="dtype">The loop of both sums (NumPy's <c>dtype=</c>), or null for the input's dtype.</param>
         /// <param name="ddof">Delta degrees of freedom.</param>
         /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
-        /// <returns>The variance of the non-NaN elements (see <see cref="NanVarStdNumPy"/>).</returns>
-        /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/>.</exception>
+        /// <param name="out">NumPy's <c>out=</c> (returned), or null.</param>
+        /// <param name="where">NumPy's <c>where=</c> mask, or null.</param>
+        /// <param name="mean">NumPy's <c>mean=</c> (keepdims-shaped), or null.</param>
+        /// <param name="correction">NumPy's <c>correction=</c> (ddof's Array-API name), or null.</param>
+        /// <returns>The variance of the non-NaN elements (see <see cref="NanVarStdNumPy"/>); <paramref name="out"/> itself
+        ///     when given.</returns>
+        /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/> or
+        ///     <paramref name="out"/>.</exception>
+        /// <exception cref="ValueError">A non-zero <paramref name="ddof"/> with <paramref name="correction"/>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
         /// <remarks>
         ///     A public entry point since the np-layer dtype plan's phase PE (E1), so it owns its scope: the count, the
         ///     NaN-zeroed copy, the deviations and the sums are reclaimed here even when no scoped facade called it.
         /// </remarks>
         [NDScoped] // every intermediate of nanvar is this call's own; the variance is yielded
-        public override NDArray NanVar(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false)
-            => NanVarStdNumPy(a, axis, keepdims, ddof, dtype, takeSqrt: false);
+        public override NDArray NanVar(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false,
+            NDArray @out = null, NDArray @where = null, NDArray mean = null, int? correction = null)
+            => NanVarStdNumPy(a, axis, keepdims, ddof, dtype, takeSqrt: false, @out, @where, mean, correction);
 
         /// <summary>
         ///     DefaultEngine's <see cref="TensorEngine.NanStd"/>: NumPy's <c>nanstd</c>, the square root of
@@ -35,13 +43,21 @@ namespace NumSharp.Backends
         /// <param name="dtype">The loop of both sums (NumPy's <c>dtype=</c>), or null for the input's dtype.</param>
         /// <param name="ddof">Delta degrees of freedom.</param>
         /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
-        /// <returns>The standard deviation of the non-NaN elements (see <see cref="NanVarStdNumPy"/>).</returns>
-        /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/>.</exception>
+        /// <param name="out">NumPy's <c>out=</c> (returned), or null.</param>
+        /// <param name="where">NumPy's <c>where=</c> mask, or null.</param>
+        /// <param name="mean">NumPy's <c>mean=</c> (keepdims-shaped), or null.</param>
+        /// <param name="correction">NumPy's <c>correction=</c> (ddof's Array-API name), or null.</param>
+        /// <returns>The standard deviation of the non-NaN elements (see <see cref="NanVarStdNumPy"/>);
+        ///     <paramref name="out"/> itself when given.</returns>
+        /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/> or
+        ///     <paramref name="out"/>.</exception>
+        /// <exception cref="ValueError">A non-zero <paramref name="ddof"/> with <paramref name="correction"/>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
         /// <remarks>A public entry point since the np-layer dtype plan's phase PE (E1), so it owns its scope.</remarks>
         [NDScoped] // every intermediate of nanstd is this call's own; the deviation is yielded
-        public override NDArray NanStd(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false)
-            => NanVarStdNumPy(a, axis, keepdims, ddof, dtype, takeSqrt: true);
+        public override NDArray NanStd(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false,
+            NDArray @out = null, NDArray @where = null, NDArray mean = null, int? correction = null)
+            => NanVarStdNumPy(a, axis, keepdims, ddof, dtype, takeSqrt: true, @out, @where, mean, correction);
 
         /// <summary>
         ///     NumPy 2.4.2's <c>nanvar</c> / <c>nanstd</c> (<c>numpy/lib/_nanfunctions_impl.py</c>) statement for
@@ -67,11 +83,19 @@ namespace NumSharp.Backends
         /// <param name="dtype">The loop of both sums (NumPy's <c>dtype=</c>), or null for the input's dtype. Must be inexact
         /// for an inexact input.</param>
         /// <param name="takeSqrt">True for nanstd: the square root of the variance, as <c>nanstd</c> takes it.</param>
+        /// <param name="out">NumPy's <c>out=</c> (returned); with <paramref name="where"/> / <paramref name="mean"/> it routes
+        ///     the call through <see cref="NanVarStdKeywords"/>.</param>
+        /// <param name="where">NumPy's <c>where=</c> mask, or null.</param>
+        /// <param name="mean">NumPy's <c>mean=</c> (keepdims-shaped), or null.</param>
+        /// <param name="correction">NumPy's <c>correction=</c>: folded into <paramref name="ddof"/> after the type checks
+        ///     (a non-zero ddof with it raises "ddof and correction can't be provided simultaneously.").</param>
         /// <returns>The variance (or standard deviation): the loop dtype, float64 for a complex input without
         /// <paramref name="dtype"/>; 0-d (NumPy's scalar) for a flat reduction without keepdims.</returns>
         /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/>: "If a is inexact, then
         /// dtype must be inexact" (raised before the axis is checked, as in NumPy).</exception>
         /// <exception cref="AxisError"><paramref name="axis_"/> outside the operand (a 0-d operand included).</exception>
+        /// <exception cref="ValueError">A non-zero <paramref name="ddof"/> with <paramref name="correction"/> ("ddof and
+        ///     correction can't be provided simultaneously.").</exception>
         /// <remarks>
         ///     <para>
         ///     How NumPy's statements decide the bits, all reproduced:
@@ -102,7 +126,8 @@ namespace NumSharp.Backends
         ///     statements instead — the same HALF loops, so the same bits.
         ///     </para>
         /// </remarks>
-        internal NDArray NanVarStdNumPy(NDArray a, int? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt)
+        internal NDArray NanVarStdNumPy(NDArray a, int? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt,
+            NDArray @out = null, NDArray @where = null, NDArray mean = null, int? correction = null)
         {
             // Text is not inexact, so _replace_nan leaves it alone and nanvar / nanstd ARE np.var / np.std: the delegation
             // below reaches VarStdNumPy's guard (the axis, then add.reduce's text, the same for both).
@@ -120,13 +145,26 @@ namespace NumSharp.Backends
             NPTypeCode inT = a.GetTypeCode;
             if (inT is not (NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex))
                 return takeSqrt
-                    ? engine.ReduceStd(a, axis_, keepdims, ddof, dtype)
-                    : engine.ReduceVar(a, axis_, keepdims, ddof, dtype);
+                    ? engine.ReduceStd(a, axis_, keepdims, ddof, dtype, @out, @where, mean, correction)
+                    : engine.ReduceVar(a, axis_, keepdims, ddof, dtype, @out, @where, mean, correction);
 
             // `if dtype is not None and not issubclass(dtype.type, np.inexact)` — checked before anything reads the axis,
             // so this TypeError wins over an AxisError. NumSharp's hierarchy counts Decimal as floating (inexact).
             if (dtype is not null && !(dtype.GetTypeCode().IsFloatingPoint() || dtype.GetTypeCode() == NPTypeCode.Complex))
                 throw new TypeError("If a is inexact, then dtype must be inexact");
+            // `if out is not None and not issubclass(out.dtype.type, np.inexact)`, the same message's out form.
+            if (@out is not null && !(@out.GetTypeCode.IsFloatingPoint() || @out.GetTypeCode == NPTypeCode.Complex))
+                throw new TypeError("If a is inexact, then out must be inexact");
+            // `if correction != np._NoValue: if ddof != 0: raise ...; else: ddof = correction` - after the two type checks.
+            if (correction is not null)
+            {
+                if (ddof != 0)
+                    throw new ValueError("ddof and correction can't be provided simultaneously.");
+                ddof = correction.Value;
+            }
+            // out= / where= / mean= run NumPy's statements as written; the keyword-free call keeps the fused routes below.
+            if (@out is not null || @where is not null || mean is not null)
+                return NanVarStdKeywords(a, axis_, keepdims, ddof, dtype, takeSqrt, @out, @where, mean);
 
             // cnt = np.sum(~mask, axis=axis, ...) is the first statement that reads the axis, so ufunc.reduce's rule
             // applies: on a 0-d operand axis 0 and -1 mean "every axis" (PyArray_ConvertMultiAxis) — a flat reduction,
@@ -252,6 +290,110 @@ namespace NumSharp.Backends
         /// <param name="avg">The mean: 0-d (a hoisted parameter) or the keepdims mean that broadcasts.</param>
         /// <param name="inT">The input's dtype: Single, Double or Complex.</param>
         /// <returns>The expression; float64 for a complex input, the input's dtype otherwise.</returns>
+        /// <summary>
+        ///     NumPy's <c>nanvar</c> (and <c>nanstd</c>, its square root) with <c>out=</c> / <c>where=</c> / <c>mean=</c>,
+        ///     statement for statement once the type and correction checks ran:
+        ///     <code>
+        ///     cnt = np.sum(~mask, axis, dtype=np.intp, keepdims=True, where=where)
+        ///     avg = mean, or _divide_by_count(np.sum(arr, axis, dtype=dtype, keepdims=True, where=where), cnt)
+        ///     np.subtract(arr, avg, out=arr, casting='unsafe', where=where); arr = _copyto(arr, 0, mask)
+        ///     sqr = np.multiply(arr, arr.conj(), out=arr, where=where).real  (np.multiply(arr, arr, ...) for a real arr)
+        ///     var = np.sum(sqr, axis, dtype=dtype, out=out, keepdims=keepdims, where=where)
+        ///     dof = cnt (squeezed to var's rank) - ddof; var = _divide_by_count(var, dof); var[dof &lt;= 0] = nan
+        ///     </code>
+        /// </summary>
+        /// <param name="a">The inexact array, any layout.</param>
+        /// <param name="axis_">The reduced axis, or null for every axis (np.sum's axis rules: the count reads it first).</param>
+        /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
+        /// <param name="ddof">The delta degrees of freedom (a correction already folded in).</param>
+        /// <param name="dtype">The loop of the sums, or null.</param>
+        /// <param name="takeSqrt">True for nanstd: <c>np.sqrt(var, out=var)</c>.</param>
+        /// <param name="out">The variance's sum and division destination (returned), or null.</param>
+        /// <param name="where">The bool mask every sum and the arithmetic read, or null.</param>
+        /// <param name="mean">The mean to subtract (keepdims-shaped), or null to compute it.</param>
+        /// <returns>The variance or deviation; <paramref name="out"/> itself when given; a 0-d scalar for a flat reduction
+        ///     without <paramref name="keepdims"/> and <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> outside the operand.</exception>
+        /// <remarks>The eager statements (no fused stream): NumPy's own order of operations, so every keyword combination
+        ///     gives its bits. The caller's scope reclaims the mask, the copy and the counts.</remarks>
+        private NDArray NanVarStdKeywords(NDArray a, int? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt,
+            NDArray @out, NDArray @where, NDArray mean)
+        {
+            var engine = a.TensorEngine;
+            NPTypeCode inT = a.GetTypeCode;
+
+            // arr, mask = _replace_nan(a, 0): the K-order copy with zeros at the NaNs.
+            var mask = engine.IsNan(a);
+            var arr0 = NewArray(inT, a.Shape.KeepOrder(), false);
+            UnmanagedStorage.Copyto(arr0, a, NPY_CASTING.NPY_SAME_KIND_CASTING);
+            ZeroWhereMask(arr0, mask);
+
+            // _keepdims = True (an ndarray): the count and the computed mean keep the reduced axes for the broadcast below.
+            var cnt = engine.ReduceAdd(engine.LogicalNot(mask), axis_, true, np.int64, null, null, @where);
+            NDArray avg = mean;
+            if (avg is null)
+            {
+                avg = engine.ReduceAdd(arr0, axis_, true, dtype, null, null, @where);
+                if (!avg.Shape.IsWriteable)
+                    avg = avg.copy();
+                DivideByCountsLikeNumPy(avg, cnt);
+            }
+
+            // np.subtract(arr, avg, out=arr, casting='unsafe', where=where): the loop is result_type(arr, avg), cast into arr
+            // unsafely - NumSharp's out= checks same_kind, so a loop that does not same_kind-cast back (a complex mean over a
+            // real copy) goes through a temporary and the unsafe copy, masked the same way.
+            var loopT = DTypePromotion.ResultType(arr0.dtype, avg.dtype);
+            if (DTypeCasting.CanCastTypeTo(loopT, arr0.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
+                engine.Subtract(arr0, avg, null, arr0, @where);
+            else
+                UnmanagedStorage.Copyto(arr0, engine.Subtract(arr0, avg), NPY_CASTING.NPY_UNSAFE_CASTING, @where);
+            // arr = _copyto(arr, 0, mask): the NaN slots back to zero, whatever the subtraction wrote there.
+            ZeroWhereMask(arr0, mask);
+
+            NDArray sqr;
+            if (inT == NPTypeCode.Complex)
+            {
+                // np.multiply(arr, arr.conj(), out=arr, where=where).real: the real lane of the complex copy.
+                engine.Multiply(arr0, engine.Conjugate(arr0), null, arr0, @where);
+                sqr = new NDArray(arr0.Storage.AliasComplexLane(imaginary: false));
+            }
+            else
+            {
+                engine.Multiply(arr0, arr0, null, arr0, @where);
+                sqr = arr0;
+            }
+
+            // var = np.sum(sqr, axis, dtype, out, keepdims, where): out joins this sum only.
+            var var = engine.ReduceAdd(sqr, axis_, keepdims, dtype, @out, null, @where);
+            bool scalarResult = @out is null && var.ndim == 0;
+            if (!var.Shape.IsWriteable)
+                var = var.copy();
+
+            // `if var_ndim < cnt.ndim: cnt = cnt.squeeze(axis)` - the kept-dims count reshaped to var's dimensions when the
+            // reduced axes were dropped; dof = cnt - ddof; var = _divide_by_count(var, dof), in place.
+            var cntOut = var.ndim < cnt.ndim ? cnt.reshape(new Shape(var.Shape.dimensions, copy: false)) : cnt;
+            var dof = engine.Subtract(cntOut, NewScalar((long)ddof));
+            DivideByCountsLikeNumPy(var, dof);
+
+            // isbad = dof <= 0: NaN, inf or a negative quotient are all replaced by np.nan - the POSITIVE quiet NaN (.NET's
+            // double.NaN is the negative one), cast into var's dtype.
+            var isbad = engine.LessEqual(dof, NewScalar(0L));
+            if (engine.Any(isbad))
+                UnmanagedStorage.Copyto(var, NewScalar(BitConverter.Int64BitsToDouble(0x7FF8000000000000L)), NPY_CASTING.NPY_UNSAFE_CASTING, isbad);
+
+            if (takeSqrt)
+            {
+                // nanstd: np.sqrt(var, out=var) for an array (out included), var.dtype.type(np.sqrt(var)) for a scalar.
+                if (@out is not null)
+                    engine.Sqrt(@out, null, @out);
+                else
+                    SqrtLikeNumPy(var, scalarResult);
+            }
+            if (@out is not null)
+                return @out;
+            return scalarResult ? var.MarkReductionScalar() : var;
+        }
+
         private static NDExpr SquaredNanDeviationExpr(NDArray a, NDArray avg, NPTypeCode inT)
         {
             var ae = NDExpr.Arr(a);

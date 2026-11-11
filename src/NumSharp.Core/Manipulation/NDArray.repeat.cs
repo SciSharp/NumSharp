@@ -3,34 +3,19 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        ///     Repeat each element of the array after itself. Refer to <see cref="np.repeat(NDArray, int, int?)"/>
-        ///     for full documentation.
-        /// </summary>
-        /// <param name="repeats">The number of repetitions for each element.</param>
-        /// <param name="axis">The axis along which to repeat values. The default (null) flattens the input array and returns a flat output array.</param>
-        /// <returns>Output array which has the same shape as this array, except along the given axis.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.repeat.html</remarks>
-        [PlainReceiver]
-        public NDArray repeat(int repeats, int? axis = null)
-        {
-            return np.repeat(this, repeats, axis);
-        }
-
-        /// <inheritdoc cref="repeat(int, int?)"/>
-        [PlainReceiver]
-        public NDArray repeat(long repeats, int? axis = null)
-        {
-            return np.repeat(this, repeats, axis);
-        }
-
-        /// <summary>
         ///     Repeat each element of the array by the per-element counts in <paramref name="repeats"/>. Refer to
         ///     <see cref="np.repeat(NDArray, NDArray, int?)"/> for full documentation.
         /// </summary>
         /// <param name="repeats">Per-element repetition counts, broadcast to the shape along the given axis.</param>
         /// <param name="axis">The axis along which to repeat values. The default (null) flattens the input array and returns a flat output array.</param>
         /// <returns>Output array which has the same shape as this array, except along the given axis.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.repeat.html</remarks>
+        /// <exception cref="ArgumentException">A negative count, or counts that do not match the axis.</exception>
+        /// <exception cref="TypeError">Counts that do not cast 'safely' to int64.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.repeat.html
+        ///     <para>One signature, NumPy's <c>a.repeat(repeats, axis=None)</c>: the <c>int</c> / <c>long</c> overloads
+        ///     went with API-parity batch 3 (2026-11-11); <c>a.repeat(3)</c> binds here (3 converts to a 0-d array).</para>
+        /// </remarks>
         [PlainReceiver]
         public NDArray repeat(NDArray repeats, int? axis = null)
         {

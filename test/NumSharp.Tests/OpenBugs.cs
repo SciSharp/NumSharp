@@ -2594,10 +2594,10 @@ namespace NumSharp.Tests
         [OpenBugs]
         public void Bug_Astype_SameValueCasting_NumericCastsHaveNoValueCheck()
         {
-            var exact = np.array(new[] { 2.0, 3.0 }).astype(np.int32, true, 'K', "same_value");
+            var exact = np.array(new[] { 2.0, 3.0 }).astype(np.int32, 'K', "same_value");
             exact.ToArray<int>().Should().Equal(2, 3);
 
-            Action lossy = () => np.array(new[] { 1.5 }).astype(np.int32, true, 'K', "same_value");
+            Action lossy = () => np.array(new[] { 1.5 }).astype(np.int32, 'K', "same_value");
             lossy.Should().Throw<ValueError>().WithMessage("could not cast 'same_value' double to *");
         }
 

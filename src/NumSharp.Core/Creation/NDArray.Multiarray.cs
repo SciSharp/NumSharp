@@ -1275,7 +1275,7 @@ namespace NumSharp
             }
 
             if (dtype != null && !Backends.UnmanagedStorage.SatisfiesRequest(ret, dtype))
-                ret = ret.astype(dtype, true);
+                ret = ret.astype(dtype);
 
             // Apply requested order (no-op for scalars / 1-D / already-matching layouts).
             char physical = OrderResolver.Resolve(order, ret.Shape);

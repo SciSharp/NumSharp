@@ -476,6 +476,6 @@ namespace NumSharp.Backends
         /// <returns><paramref name="x"/> or a new array of <paramref name="common"/>.</returns>
         /// <exception cref="UnicodeDecodeError">Bytes that are not ASCII converted to a <c>U</c> common descriptor.</exception>
         private static NDArray ConvertForTextSearch(NDArray x, DType common)
-            => x.dtype.Meta == common.Meta ? x : x.astype(common, true, 'K', "unsafe");
+            => x.dtype.Meta == common.Meta ? x : x.astype(common);
     }
 }

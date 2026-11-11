@@ -226,7 +226,7 @@ namespace NumSharp.Backends
                 // SetData's pack before it got here, and a 0-d text ARRAY converts nothing; formatting a number as text
                 // cannot fail, so a numeric value leaves nothing to report.
                 if (valueShape.IsScalar && value.Storage.IsString && IsString && value.dtype.Meta != Descr.Meta)
-                    value.astype(Descr, true, 'K', "unsafe").Dispose();
+                    value.astype(Descr).Dispose();
                 return;
             }
             Iteration.NDIter.Copy(target, source);

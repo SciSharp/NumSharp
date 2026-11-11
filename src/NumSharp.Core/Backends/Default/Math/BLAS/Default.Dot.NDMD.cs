@@ -23,6 +23,11 @@ namespace NumSharp.Backends
         /// on them, never slower, with the same bits, and reads a C-contiguous view at its own offset (an np.split /
         /// np.unstack child), which the former walker did not.
         /// </remarks>
+        /// <param name="lhs">The N-D left operand (its last axis is summed).</param>
+        /// <param name="rhs">The M-D right operand (its second-to-last axis is summed).</param>
+        /// <returns>A new array of shape <c>lhs.shape[:-1] + rhs.shape[:-2] + rhs.shape[-1:]</c> in the promoted dtype.</returns>
+        /// <exception cref="IncorrectShapeException">The summed axes differ in length (np.dot's "shapes not aligned").</exception>
+        /// <exception cref="NotSupportedException">A result dtype without a dot function.</exception>
         public NDArray DotNDMD(NDArray lhs, NDArray rhs)
         {
 #if MINIMAL
@@ -50,8 +55,8 @@ namespace NumSharp.Backends
             // then the dtype's dot function once per output element over the contracted axes (DotNDMDStrided). An operand
             // that already has the result dtype is used as it is - what astype(copy: false) returns too, without its
             // argument parsing, which a sub-microsecond dot would feel.
-            NDArray ap1 = lhs.typecode == result.typecode ? lhs : lhs.astype(result.dtype, false);
-            NDArray ap2 = rhs.typecode == result.typecode ? rhs : rhs.astype(result.dtype, false);
+            NDArray ap1 = lhs.typecode == result.typecode ? lhs : lhs.astype(result.dtype, copy: false);
+            NDArray ap2 = rhs.typecode == result.typecode ? rhs : rhs.astype(result.dtype, copy: false);
             try
             {
                 DotNDMDStrided(ap1, ap2, result, lshape, rshape, contractDim);

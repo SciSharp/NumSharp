@@ -13,16 +13,79 @@ namespace NumSharp.Backends
         /// <param name="axis">The reduced axis (negative counts from the end), or null for a flat reduction.</param>
         /// <param name="dtype">The loop of the sum (NumPy's <c>dtype=</c>), or null for the input's dtype.</param>
         /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
-        /// <returns>The mean of the non-NaN elements (see <see cref="NanMeanNumPy"/>).</returns>
-        /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/>.</exception>
+        /// <param name="out">NumPy's <c>out=</c> (returned), or null.</param>
+        /// <param name="where">NumPy's <c>where=</c> mask, or null.</param>
+        /// <returns>The mean of the non-NaN elements (see <see cref="NanMeanNumPy"/>); <paramref name="out"/> itself when
+        ///     given.</returns>
+        /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/> or
+        ///     <paramref name="out"/>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
         /// <remarks>
         ///     A public entry point since the np-layer dtype plan's phase PE (E1), so it owns its scope: the count, the
         ///     NaN-zeroed copy and the sums are reclaimed here even when no scoped facade called it.
         /// </remarks>
         [NDScoped] // the count, the K-order copy and the sum before the division are this call's own; the mean is yielded
-        public override NDArray NanMean(NDArray a, int? axis = null, DType dtype = null, bool keepdims = false)
-            => NanMeanNumPy(a, axis, keepdims, dtype);
+        public override NDArray NanMean(NDArray a, int? axis = null, DType dtype = null, bool keepdims = false,
+            NDArray @out = null, NDArray @where = null)
+            // out= / where= run NumPy's statements as written (NanMeanKeywords); the keyword-free call keeps the fused route.
+            => @out is null && @where is null ? NanMeanNumPy(a, axis, keepdims, dtype) : NanMeanKeywords(a, axis, keepdims, dtype, @out, @where);
+
+        /// <summary>
+        ///     NumPy's <c>nanmean</c> with <c>out=</c> / <c>where=</c>, statement for statement:
+        ///     <code>
+        ///     arr, mask = _replace_nan(a, 0)
+        ///     if mask is None: return np.mean(arr, axis, dtype, out, keepdims, where)
+        ///     (the dtype / out inexact checks)
+        ///     cnt = np.sum(~mask, axis, dtype=np.intp, keepdims=keepdims, where=where)
+        ///     tot = np.sum(arr, axis, dtype=dtype, out=out, keepdims=keepdims, where=where)
+        ///     avg = _divide_by_count(tot, cnt, out=out)
+        ///     </code>
+        /// </summary>
+        /// <param name="a">The array to reduce, any layout.</param>
+        /// <param name="axis">The reduced axis, or null for a flat reduction (np.sum's axis rules).</param>
+        /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
+        /// <param name="dtype">The loop of the sum, or null.</param>
+        /// <param name="out">The sum's and the division's destination (returned), or null.</param>
+        /// <param name="where">The bool mask both sums read, or null.</param>
+        /// <returns>The mean; <paramref name="out"/> itself when given; a 0-d scalar for a flat reduction without
+        ///     <paramref name="keepdims"/> and <paramref name="out"/>.</returns>
+        /// <exception cref="TypeError">A non-inexact <paramref name="dtype"/> or <paramref name="out"/> for an inexact
+        ///     input (NumPy's texts, before the axis is read).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> outside the operand (the count's np.sum).</exception>
+        /// <remarks>A slice without a non-NaN element is 0 / 0: NaN, which NumPy keeps (it only warns). The scope reclaims
+        ///     the mask, the copy and the count; the mean is yielded.</remarks>
+        [NDScoped]
+        private NDArray NanMeanKeywords(NDArray a, int? axis, bool keepdims, DType dtype, NDArray @out, NDArray @where)
+        {
+            var engine = a.TensorEngine;
+            NPTypeCode inT = a.GetTypeCode;
+            // _replace_nan's mask is None unless a is inexact, and then nanmean IS np.mean with every keyword.
+            if (inT is not (NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex))
+                return engine.ReduceMean(a, axis, keepdims, dtype, @out, @where);
+
+            // The two inexact checks, in NumPy's order, before anything reads the axis.
+            if (dtype is not null && !(dtype.GetTypeCode().IsFloatingPoint() || dtype.GetTypeCode() == NPTypeCode.Complex))
+                throw new TypeError("If a is inexact, then dtype must be inexact");
+            if (@out is not null && !(@out.GetTypeCode.IsFloatingPoint() || @out.GetTypeCode == NPTypeCode.Complex))
+                throw new TypeError("If a is inexact, then out must be inexact");
+
+            // arr = the K-order copy with zeros at the NaNs.
+            var mask = engine.IsNan(a);
+            var arr0 = NewArray(inT, a.Shape.KeepOrder(), false);
+            UnmanagedStorage.Copyto(arr0, a, NPY_CASTING.NPY_SAME_KIND_CASTING);
+            ZeroWhereMask(arr0, mask);
+
+            var cnt = engine.ReduceAdd(engine.LogicalNot(mask), axis, keepdims, np.int64, null, null, @where);
+            var tot = engine.ReduceAdd(arr0, axis, keepdims, dtype, @out, null, @where);
+
+            // avg = _divide_by_count(tot, cnt, out=out): in place into tot, which IS out when it was given. A 0-d sum can come
+            // back read-only (the reduction scalar); 0-d has no layout to keep, so a copy is exact.
+            bool scalarResult = @out is null && tot.ndim == 0;
+            if (!tot.Shape.IsWriteable)
+                tot = tot.copy();
+            DivideByCountsLikeNumPy(tot, cnt);
+            return scalarResult ? tot.MarkReductionScalar() : tot;
+        }
 
         /// <summary>
         ///     NumPy 2.4.2's <c>nanmean</c> (<c>numpy/lib/_nanfunctions_impl.py</c>) statement for statement, the engine

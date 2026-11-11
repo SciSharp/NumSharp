@@ -343,7 +343,7 @@ namespace NumSharp.Tests
         {
             using var parent = np.arange(12);
             using var s = parent["::2"];
-            using var r = s.astype(np.int64, false, 'C');
+            using var r = s.astype(np.int64, 'C', copy: false);
 
             ReferenceEquals(r, s).Should().BeFalse();
             r.flags.c_contiguous.Should().BeTrue();

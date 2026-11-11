@@ -750,7 +750,7 @@ var forced = np.array([300.0]).astype(NPTypeCode.Byte);
 // forced[0] == 44 (300 wrapped modulo 256)
 
 // Safe: casting "safe" checks the dtype pair, not the values: float64 never casts safely to uint8
-np.array([300.0]).astype(np.uint8, true, 'K', "safe");
+np.array([300.0]).astype(np.uint8, casting: "safe");   // NumPy's order: astype(dtype, order, casting, copy)
 // InvalidCastException (NumPy's TypeError): Cannot cast array data from dtype('float64') to dtype('uint8') according to the rule 'safe'
 ```
 

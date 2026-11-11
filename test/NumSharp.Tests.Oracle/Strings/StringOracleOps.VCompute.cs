@@ -90,9 +90,9 @@ namespace NumSharp.Tests.Strings
                 "nancumsum" => np.nancumsum(a, axis, dt, @out),
                 "cumprod" => np.cumprod(a, axis, dt, @out),
                 "nancumprod" => np.nancumprod(a, axis, dt, @out),
-                "nansum" => np.nansum(a, axis, keepdims),
+                "nansum" => np.nansum(a, axis, keepdims: keepdims),
                 "prod" => np.prod(a, axis, dt, keepdims: keepdims),
-                "nanprod" => np.nanprod(a, axis, keepdims),
+                "nanprod" => np.nanprod(a, axis, keepdims: keepdims),
                 var other => throw new InvalidOperationException($"the string oracle has no StringDType reduction '{other}'"),
             };
         }
@@ -126,15 +126,15 @@ namespace NumSharp.Tests.Strings
                 case "average":
                     return np.average(a, axis, weights, keepdims);
                 case "nanmean":
-                    return np.nanmean(a, axis, keepdims, dt);
+                    return np.nanmean(a, axis, keepdims: keepdims, dtype: dt);
                 case "var":
                     return axis is { } v ? np.var(a, v, dt, ddof: ddof ?? 0, keepdims: keepdims) : np.var(a, dtype: dt, ddof: ddof ?? 0, keepdims: keepdims);
                 case "std":
                     return axis is { } s ? np.std(a, s, dt, ddof: ddof ?? 0, keepdims: keepdims) : np.std(a, dtype: dt, ddof: ddof ?? 0, keepdims: keepdims);
                 case "nanvar":
-                    return np.nanvar(a, axis, keepdims, ddof ?? 0, dt);
+                    return np.nanvar(a, axis, keepdims: keepdims, ddof: ddof ?? 0, dtype: dt);
                 case "nanstd":
-                    return np.nanstd(a, axis, keepdims, ddof ?? 0, dt);
+                    return np.nanstd(a, axis, keepdims: keepdims, ddof: ddof ?? 0, dtype: dt);
                 case "ptp":
                     return np.ptp(a, axis, @out, keepdims);
                 case "median":

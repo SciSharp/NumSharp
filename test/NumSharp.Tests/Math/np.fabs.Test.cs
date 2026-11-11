@@ -8,7 +8,7 @@ namespace NumSharp.Tests.Math
     /// <summary>
     /// Tests for np.fabs — the FLOAT-ONLY element-wise absolute value. All expected values probed
     /// against NumPy 2.4.2 (the <c>fabs</c> ufunc, <c>TD(flts, f='fabs', astype={'e':'f'})</c>).
-    /// fabs is the float sibling of <see cref="np.absolute(NDArray)"/>: identical on the float loops
+    /// fabs is the float sibling of <see cref="np.absolute(NDArray, NDArray, NDArray, DType)"/>: identical on the float loops
     /// (clear the IEEE sign bit — bit-exact incl. NaN payload and -0.0→+0.0), but it PROMOTES
     /// integer/bool to float (NEP50 tier) and has NO complex loop (unlike abs, which maps complex→magnitude).
     /// </summary>

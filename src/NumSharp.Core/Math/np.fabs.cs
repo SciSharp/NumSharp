@@ -24,7 +24,7 @@ namespace NumSharp
         /// </param>
         /// <returns>
         ///     A float array (or <paramref name="out"/>) holding the absolute value of each element. Unlike
-        ///     <see cref="absolute(NDArray)"/> this ALWAYS returns a float: integer/bool input is promoted
+        ///     <see cref="absolute(NDArray, NDArray, NDArray, DType)"/> this ALWAYS returns a float: integer/bool input is promoted
         ///     (NEP50 tier — bool/int8/uint8→float16, int16/uint16→float32, int32/uint32/int64/uint64→float64),
         ///     while float16/float32/float64 are preserved.
         /// </returns>
@@ -32,7 +32,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/generated/numpy.fabs.html
         ///     <para>
         ///     Port of NumPy 2.4.2's <c>fabs</c> ufunc. It is the float-only counterpart of
-        ///     <see cref="absolute(NDArray)"/>: the operation is identical on the float loops (clear the
+        ///     <see cref="absolute(NDArray, NDArray, NDArray, DType)"/>: the operation is identical on the float loops (clear the
         ///     IEEE sign bit — so <c>-0.0 → +0.0</c>, <c>±inf → +inf</c>, and a negative NaN's sign bit is
         ///     cleared while its payload is preserved), but fabs promotes integer/bool to float and refuses
         ///     complex input (NumPy: "ufunc 'fabs' not supported for the input types").

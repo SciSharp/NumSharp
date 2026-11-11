@@ -254,7 +254,7 @@ namespace NumSharp.Backends
                 // member).
                 r = normX.ndim == 0
                     ? NDArray.Scalar(normX.astype(np.float64).GetDouble() * normInv.GetDouble()).astype(realT).MarkReductionScalar()
-                    : normX.TensorEngine.Multiply(normX, normInv).astype(realT, false);
+                    : normX.TensorEngine.Multiply(normX, normInv).astype(realT, copy: false);
             }
 
             return CondNanToInf(r, x);

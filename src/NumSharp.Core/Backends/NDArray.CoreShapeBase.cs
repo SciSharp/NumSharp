@@ -264,7 +264,10 @@ namespace NumSharp
         ///     return concatenate(arrs, 0)</c> - 1-d arrays become rows, and the arrays are joined along the first axis.
         /// </summary>
         /// <param name="tup">The arrays (the array itself not null; a null entry is NumPy's None, refused).</param>
-        /// <returns>A new array: <c>np.concatenate</c>'s result, in its promoted dtype and NumPy's layout vote.</returns>
+        /// <param name="dtype">NumPy's <c>dtype=</c>, handed to np.concatenate (null: the promoted dtype).</param>
+        /// <param name="casting">NumPy's <c>casting=</c>, handed to np.concatenate.</param>
+        /// <returns>A new array: <c>np.concatenate</c>'s result, in its promoted dtype (or <paramref name="dtype"/>) and
+        ///     NumPy's layout vote.</returns>
         /// <exception cref="ValueError">No array: <c>atleast_2d(*tup)</c> of nothing is the empty tuple, and concatenating it
         ///     is np.concatenate's <c>need at least one array to concatenate</c>, the text NumPy's vstack([]) raises.</exception>
         /// <exception cref="NullReferenceException">A null entry (read by atleast_2d).</exception>
@@ -277,7 +280,7 @@ namespace NumSharp
         ///     already taken (D18): <see cref="vstack(NDArray[])"/> is the array object's public instance method that
         ///     stacks the array with others.</remarks>
         [GetSubType("tup")]
-        internal static NDArray vstack_(NDArray[] tup)
+        internal static NDArray vstack_(NDArray[] tup, DType dtype = null, string casting = "same_kind")
         {
             if (tup.Length == 0)
                 throw new ValueError("need at least one array to concatenate");
@@ -285,7 +288,7 @@ namespace NumSharp
             var arrs = new NDArray[tup.Length];
             for (int i = 0; i < tup.Length; i++)
                 arrs[i] = atleast_2d(tup[i]);
-            return concatenate(arrs, 0, null, null, "same_kind");
+            return concatenate(arrs, 0, null, dtype, casting);
         }
 
         /// <summary>
@@ -294,7 +297,9 @@ namespace NumSharp
         ///     <c>concatenate(arrs, 1)</c> otherwise.
         /// </summary>
         /// <param name="tup">The arrays (the array itself not null; a null entry is refused).</param>
-        /// <returns>A new array: <c>np.concatenate</c>'s result.</returns>
+        /// <param name="dtype">NumPy's <c>dtype=</c>, handed to np.concatenate (null: the promoted dtype).</param>
+        /// <param name="casting">NumPy's <c>casting=</c>, handed to np.concatenate.</param>
+        /// <returns>A new array: <c>np.concatenate</c>'s result (in <paramref name="dtype"/> when given).</returns>
         /// <exception cref="ValueError">No array (np.concatenate's <c>need at least one array to concatenate</c>).</exception>
         /// <exception cref="NullReferenceException">A null entry (read by atleast_1d).</exception>
         /// <exception cref="AxisError">Joining 1-d-or-more arrays along axis 1 when the first is 2-d or more but another is
@@ -306,7 +311,7 @@ namespace NumSharp
         ///     already taken (D18): <see cref="hstack(NDArray[])"/> is the array object's public instance method that
         ///     stacks the array with others.</remarks>
         [GetSubType("tup")]
-        internal static NDArray hstack_(NDArray[] tup)
+        internal static NDArray hstack_(NDArray[] tup, DType dtype = null, string casting = "same_kind")
         {
             if (tup.Length == 0)
                 throw new ValueError("need at least one array to concatenate");
@@ -315,8 +320,8 @@ namespace NumSharp
             for (int i = 0; i < tup.Length; i++)
                 arrs[i] = atleast_1d(tup[i]);   // handles scalars
             return arrs[0].Shape.dimensions.Length == 1
-                ? concatenate(arrs, 0, null, null, "same_kind")
-                : concatenate(arrs, 1, null, null, "same_kind");
+                ? concatenate(arrs, 0, null, dtype, casting)
+                : concatenate(arrs, 1, null, dtype, casting);
         }
 
         // ---------------------------- np.stack / np.unstack ----------------------------

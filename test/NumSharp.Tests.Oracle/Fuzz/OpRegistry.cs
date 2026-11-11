@@ -1279,8 +1279,8 @@ namespace NumSharp.Tests.Fuzz
                     ? (DType)FuzzCorpus.DtypeToTC(vd.GetString())
                     : null;
                 return op == "nanvar"
-                    ? np.nanvar(a, ParseAxis(p), ParseKeepdims(p), ddof, loop)
-                    : np.nanstd(a, ParseAxis(p), ParseKeepdims(p), ddof, loop);
+                    ? np.nanvar(a, ParseAxis(p), keepdims: ParseKeepdims(p), ddof: ddof, dtype: loop)
+                    : np.nanstd(a, ParseAxis(p), keepdims: ParseKeepdims(p), ddof: ddof, dtype: loop);
             }
             // mean_loops.jsonl: np.mean with dtype= (a NumPy dtype name or null) — NumPy's _mean (plan
             // api-parameter-parity X9). No np.mean overload carries dtype= without an axis yet (plan item B3), so the flat
@@ -1301,13 +1301,21 @@ namespace NumSharp.Tests.Fuzz
                 DType loop = p["dtype"].ValueKind != JsonValueKind.Null
                     ? (DType)FuzzCorpus.DtypeToTC(p["dtype"].GetString())
                     : null;
-                return np.nanmean(a, ParseAxis(p), ParseKeepdims(p), loop);
+                return np.nanmean(a, ParseAxis(p), keepdims: ParseKeepdims(p), dtype: loop);
             }
             if (op == "sum" && p.TryGetValue("dtype", out var sumDtype))
                 return np.sum(a, ParseAxis(p), keepdims: ParseKeepdims(p), dtype: (DType)FuzzCorpus.DtypeToTC(sumDtype.GetString()));
             return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), a);
         }
 
+        /// <summary>The reductions without their own keyword route, by the corpus op name: one np.* call each with the case's
+        ///     axis and keepdims (named, so NumPy's positional order - dtype / out before keepdims - cannot rebind it).</summary>
+        /// <param name="op">The corpus op name (sum, prod, min, max, mean, std, var, argmax, argmin, all, any, the nan family).</param>
+        /// <param name="axis">The case's axis, or null for every axis.</param>
+        /// <param name="keepdims">The case's keepdims.</param>
+        /// <param name="a">The operand.</param>
+        /// <returns>The reduction.</returns>
+        /// <exception cref="NotSupportedException">An op name the switch does not list.</exception>
         private static NDArray ApplyReduce(string op, int? axis, bool keepdims, NDArray a)
         {
             switch (op)
@@ -1326,17 +1334,17 @@ namespace NumSharp.Tests.Fuzz
                 case "argmin": return axis.HasValue ? np.argmin(a, axis.Value, keepdims) : NDArray.Scalar(np.argmin(a));
                 case "all": return np.all(a, axis, null, keepdims);
                 case "any": return np.any(a, axis, null, keepdims);
-                case "nansum": return np.nansum(a, axis, keepdims);
-                case "nanprod": return np.nanprod(a, axis, keepdims);
+                case "nansum": return np.nansum(a, axis, keepdims: keepdims);
+                case "nanprod": return np.nanprod(a, axis, keepdims: keepdims);
                 case "nanmax": return np.nanmax(a, axis, keepdims: keepdims);
                 case "nanmin": return np.nanmin(a, axis, keepdims: keepdims);
                 // keepdims by NAME: positional slot 3 is now `out=` (an implicit bool->NDArray
                 // conversion exists, so a positional bool would silently bind the out parameter).
                 case "nanargmax": return np.nanargmax(a, axis, keepdims: keepdims);
                 case "nanargmin": return np.nanargmin(a, axis, keepdims: keepdims);
-                case "nanmean": return np.nanmean(a, axis, keepdims);
-                case "nanstd": return np.nanstd(a, axis, keepdims);
-                case "nanvar": return np.nanvar(a, axis, keepdims);
+                case "nanmean": return np.nanmean(a, axis, keepdims: keepdims);
+                case "nanstd": return np.nanstd(a, axis, keepdims: keepdims);
+                case "nanvar": return np.nanvar(a, axis, keepdims: keepdims);
                 case "nanmedian": return np.nanmedian(a, axis, keepdims: keepdims);
                 default: throw new NotSupportedException(op);
             }

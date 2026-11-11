@@ -551,8 +551,18 @@ namespace NumSharp
             return shapes;
         }
 
-        // Port of _create_arrays: one output per output-core-dim group. With `results` given, an
-        // absent otype takes that result's dtype (empty_like); otherwise otypes must supply them.
+        /// <summary>
+        ///     NumPy's <c>_create_arrays</c> (<c>numpy/lib/_function_base_impl.py</c>): one output per output-core-dim group,
+        ///     shaped as the broadcast shape plus the group's core dimensions. With <paramref name="results"/> given an absent
+        ///     otype takes that result's dtype (<c>empty_like(result, dtype, shape=...)</c>); otherwise the otypes supply them.
+        /// </summary>
+        /// <param name="broadcastShape">The loop dimensions every output starts with.</param>
+        /// <param name="dimSizes">The core dimension sizes by name.</param>
+        /// <param name="outputCoreDims">Each output's core dimension names.</param>
+        /// <param name="dtypes">The otypes (an entry may be null when <paramref name="results"/> is given), or null.</param>
+        /// <param name="results">The first call's results whose dtypes an absent otype takes, or null for the size-0 path.</param>
+        /// <returns>The uninitialized output arrays.</returns>
+        /// <remarks>empty_like's shape is passed by name: NumPy's positional order puts <c>order</c> before it.</remarks>
         private static NDArray[] CreateArrays(long[] broadcastShape, Dictionary<string, long> dimSizes,
             string[][] outputCoreDims, DType[] dtypes, NDArray[] results)
         {
@@ -562,7 +572,7 @@ namespace NumSharp
             {
                 DType dtype = dtypes?[j];
                 arrays[j] = results != null
-                    ? np.empty_like(results[j], dtype, new Shape(shapes[j], copy: false))
+                    ? np.empty_like(results[j], dtype, shape: new Shape(shapes[j], copy: false))
                     : np.empty(new Shape(shapes[j], copy: false), dtype);   // size-0 path: dtype is otypes[j], never null
             }
             return arrays;

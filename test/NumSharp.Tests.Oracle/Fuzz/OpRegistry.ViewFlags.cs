@@ -102,7 +102,7 @@ namespace NumSharp.Tests.Fuzz
                     return np.require(a, null, p["requirements"].EnumerateArray().Select(e => e.GetString()).ToArray());
                 case "asarray_chkfinite": return np.asarray_chkfinite(a);
                 case "ndarray.astype":
-                    return a.astype(VfDType(p), p["copy"].GetBoolean(), p.ContainsKey("order") ? VfChar(p, "order") : 'K');
+                    return a.astype(VfDType(p), p.ContainsKey("order") ? VfChar(p, "order") : 'K', copy: p["copy"].GetBoolean());
                 case "ndarray.view": return p.ContainsKey("dtype") ? a.view(VfDType(p)) : a.view();
                 case "ndarray.getfield": return a.getfield(VfDType(p), p["offset"].GetInt32());
                 case "ndarray.byteswap": return a.byteswap();
@@ -169,7 +169,7 @@ namespace NumSharp.Tests.Fuzz
                 case "empty_like":
                 {
                     // Uninitialized: the generator fills NumPy's result with 0 the same way.
-                    var r = p.ContainsKey("order") ? np.empty_like(a, null, default, VfChar(p, "order")) : np.empty_like(a);
+                    var r = p.ContainsKey("order") ? np.empty_like(a, null, VfChar(p, "order")) : np.empty_like(a);
                     r.fill(0);
                     return r;
                 }
@@ -552,7 +552,7 @@ namespace NumSharp.Tests.Fuzz
                          : np.indices(I(), dt);
                 case "empty_like":
                 {
-                    var r = np.empty_like(a, null, S());
+                    var r = np.empty_like(a, null, shape: S());
                     r.fill(0);
                     return r;
                 }

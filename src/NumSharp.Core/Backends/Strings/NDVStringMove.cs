@@ -429,8 +429,8 @@ namespace NumSharp.Backends.Strings
                 cond = condition.typecode == NPTypeCode.Boolean ? condition.view()
                     : condition.Storage.IsFixedString ? NDStringTruth.Truth(condition, NDStringTruth.Flavor.Cast)
                     : condition.astype(NPTypeCode.Boolean);
-                xt = x.Storage.IsVString ? x : x.astype(descr, true, 'K', "unsafe");
-                yt = y.Storage.IsVString ? y : y.astype(descr, true, 'K', "unsafe");
+                xt = x.Storage.IsVString ? x : x.astype(descr);
+                yt = y.Storage.IsVString ? y : y.astype(descr);
 
                 using var xc = CellArray(xt);
                 using var yc = CellArray(yt);
@@ -546,7 +546,7 @@ namespace NumSharp.Backends.Strings
                     var packed = NDArray.PackForVStringStore(nd, descr);
                     if (!ReferenceEquals(packed, nd))
                         return packed;
-                    return nd.Storage.IsVString && nd.dtype.Equals(descr) ? nd : nd.astype(descr, true, 'K', "unsafe");
+                    return nd.Storage.IsVString && nd.dtype.Equals(descr) ? nd : nd.astype(descr);
                 }
                 case null:
                     return NDArray.PackForVStringStore(null, descr);

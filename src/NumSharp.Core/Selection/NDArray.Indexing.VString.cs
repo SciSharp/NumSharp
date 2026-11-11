@@ -111,6 +111,6 @@ namespace NumSharp
         /// <exception cref="Exception">The cast's errors (a non-UTF-8 <c>S</c> value, a non-text value under
         ///     <c>coerce=False</c>).</exception>
         private NDArray ConvertForVStringStore(NDArray value)
-            => value.astype(dtype, true, 'K', "unsafe");
+            => value.astype(dtype);
     }
 }

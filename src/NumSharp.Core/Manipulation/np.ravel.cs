@@ -6,14 +6,6 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Return a contiguous flattened array. A 1-D array, containing the elements of the input, is returned
-        /// </summary>
-        /// <param name="a">Input array. The elements in a are read in the order specified by order, and packed as a 1-D array.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel.html</remarks>
-        /// <remarks><br></br>If this array's <see cref="Shape"/> is a sliced or broadcasted, the a copy will be made.</remarks>
-        public static NDArray ravel(NDArray a) => ravel(a, 'C');
-
-        /// <summary>
         ///     Return a contiguous flattened array. A 1-D array, containing the elements of the input, is returned — a
         ///     VIEW whenever the requested reading order walks the input's memory front to back, otherwise a copy
         ///     (NumPy's <c>PyArray_Ravel</c>, <c>numpy/_core/src/multiarray/shape.c</c>).
@@ -32,8 +24,11 @@ namespace NumSharp
         ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
         ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <exception cref="ArgumentException">An order code other than C, F, A or K.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel.html</remarks>
-        public static NDArray ravel(NDArray a, char order)
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel.html
+        ///     <para>One signature, NumPy's <c>ravel(a, order='C')</c>: the one-argument overload went with API-parity batch
+        ///     3 (2026-11-11), so <c>np.ravel(a)</c> binds here with the default 'C'.</para>
+        /// </remarks>
+        public static NDArray ravel(NDArray a, char order = 'C')
         {
             return NDArray.ravel(a, order);
         }

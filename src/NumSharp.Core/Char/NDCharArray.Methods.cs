@@ -29,26 +29,14 @@ namespace NumSharp
     {
         #region Conversion and copies
 
-        /// <summary>A copy of the chararray cast to <paramref name="dtype"/>, as a chararray (NumPy's <c>c.astype(dtype)</c>).</summary>
+        /// <summary>A copy of the chararray cast to <paramref name="dtype"/> with a memory order and a casting rule, as a
+        ///     chararray (NumPy's <c>c.astype(dtype, order='K', casting='unsafe', copy=True)</c>).</summary>
         /// <param name="dtype">The target dtype: a string dtype (an unsized <c>"U"</c> / <c>"S"</c> keeps the element width), or
         ///     <c>int8</c> (the one numeric dtype the finalize rule accepts).</param>
-        /// <param name="copy"><c>false</c> returns this chararray ITSELF when it already has the dtype.</param>
-        /// <returns>A new chararray that owns its data, or this chararray.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is <c>null</c>.</exception>
-        /// <exception cref="ValueError">The dtype is not string data (<c>Can only create a chararray from string data.</c>),
-        ///     raised BEFORE any element is converted, as NumPy allocates the subclass result before its cast loop.</exception>
-        /// <exception cref="UnicodeEncodeError">A <c>U</c> → <c>S</c> cast of a non-ASCII character.</exception>
-        /// <exception cref="UnicodeDecodeError">An <c>S</c> → <c>U</c> cast of a byte above 0x7F.</exception>
-        [NDScoped]
-        public new NDCharArray astype(DType dtype, bool copy = true) => astype(dtype, copy, 'K');
-
-        /// <summary>A copy of the chararray cast to <paramref name="dtype"/> with a memory order and a casting rule, as a
-        ///     chararray.</summary>
-        /// <param name="dtype">The target dtype (see <see cref="astype(DType, bool)"/>).</param>
-        /// <param name="copy"><c>false</c> returns this chararray itself when nothing has to change.</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
         /// <param name="casting">NumPy's casting rule name (<c>"unsafe"</c>, <c>"same_kind"</c>, <c>"safe"</c>,
         ///     <c>"equiv"</c>, <c>"no"</c>).</param>
+        /// <param name="copy"><c>false</c> returns this chararray itself when nothing has to change.</param>
         /// <returns>A new chararray that owns its data, or this chararray.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is <c>null</c>.</exception>
         /// <exception cref="InvalidCastException">The cast is not allowed under <paramref name="casting"/> (checked first,
@@ -57,8 +45,14 @@ namespace NumSharp
         ///     any element is converted), or an unknown order / casting name.</exception>
         /// <exception cref="UnicodeEncodeError">A <c>U</c> → <c>S</c> cast of a non-ASCII character.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> → <c>U</c> cast of a byte above 0x7F.</exception>
+        /// <remarks>
+        ///     <para>One signature in NumPy's keyword order (API-parity batch 3, 2026-11-11): it replaces the former
+        ///     <c>astype(dtype, copy)</c> / <c>astype(dtype, copy, order, casting)</c> pair, so <c>a.astype(t, 'F')</c> reads as
+        ///     in NumPy and a <c>copy</c> is written <c>copy: false</c> (a bool in the order slot does not compile).
+        ///     <c>subok</c> stays out (the parity plan's exclusion).</para>
+        /// </remarks>
         [NDScoped]
-        public new NDCharArray astype(DType dtype, bool copy, char order, string casting = "unsafe")
+        public new NDCharArray astype(DType dtype, char order = 'K', string casting = "unsafe", bool copy = true)
         {
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
@@ -80,7 +74,7 @@ namespace NumSharp
                 return this;
             ValidateAstypeCasting(dtype.GetTypeCode(), rule);
             Finalize(dtype);
-            return From(base.astype(dtype, copy, order, casting), this);
+            return From(base.astype(dtype, order, casting, copy: copy), this);
         }
 
         /// <summary>A copy of the chararray, as a chararray (NumPy's <c>c.copy(order)</c>).</summary>
@@ -284,18 +278,14 @@ namespace NumSharp
         [NDScoped]
         public new NDCharArray reshape(params ReadOnlySpan<long> shape) => From(base.reshape(shape), this);
 
-        /// <summary>The elements as one axis, as a chararray (NumPy's <c>c.ravel()</c>): a VIEW when the layout allows it,
-        ///     a copy otherwise.</summary>
+        /// <summary>The elements as one axis, as a chararray (NumPy's <c>c.ravel(order='C')</c>): a VIEW when the layout
+        ///     allows it, a copy otherwise. One signature: <c>c.ravel()</c> binds here with the default 'C'.</summary>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
         /// <returns>A 1-d chararray.</returns>
         /// <exception cref="ValueError">This chararray holds data that is not string data.</exception>
-        [NDScoped]
-        public new NDCharArray ravel() => From(base.ravel(), this);
-
-        /// <inheritdoc cref="ravel()"/>
-        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
         /// <exception cref="ArgumentException">An unknown order.</exception>
         [NDScoped]
-        public new NDCharArray ravel(char order) => From(base.ravel(order), this);
+        public new NDCharArray ravel(char order = 'C') => From(base.ravel(order), this);
 
         /// <summary>A COPY of the elements as one axis, as a chararray (NumPy's <c>c.flatten(order)</c>).</summary>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>

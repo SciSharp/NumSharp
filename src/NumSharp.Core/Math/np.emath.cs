@@ -85,7 +85,7 @@ namespace NumSharp
 
         /// <summary>
         ///     Compute the natural logarithm of <paramref name="x"/>, returning the complex principal value
-        ///     for negative real inputs (unlike <see cref="np.log(NDArray)"/>, which returns <c>nan</c>).
+        ///     for negative real inputs (unlike <see cref="np.log(NDArray, NDArray, NDArray, DType)"/>, which returns <c>nan</c>).
         ///     Port of NumPy 2.4.2 <c>numpy.emath.log</c>.
         /// </summary>
         /// <param name="x">The value(s) whose natural log is required. A scalar or C# array converts implicitly.</param>

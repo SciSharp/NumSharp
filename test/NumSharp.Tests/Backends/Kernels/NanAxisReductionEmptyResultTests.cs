@@ -61,7 +61,7 @@ namespace NumSharp.Tests.Backends.Kernels
         /// <param name="keepdims">NumPy's keepdims.</param>
         /// <returns>The reduction's result.</returns>
         private static NDArray Reduce(bool product, NDArray a, int axis, bool keepdims)
-            => product ? np.nanprod(a, axis, keepdims) : np.nansum(a, axis, keepdims);
+            => product ? np.nanprod(a, axis, keepdims: keepdims) : np.nansum(a, axis, keepdims: keepdims);
 
         /// <summary>
         ///     Checks a result against NumPy's: the input's dtype, the expected shape, and the identity in every element.

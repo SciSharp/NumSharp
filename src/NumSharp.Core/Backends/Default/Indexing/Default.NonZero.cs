@@ -324,7 +324,7 @@ namespace NumSharp.Backends
             // layout — the reduce iterator's allocation in the input's memory order, F for an F input (plan
             // api-parameter-parity X10) — and np.sum's bool axis-count routes; the per-output scalar loop it replaces
             // wrote C order and ran 15-100x slower than these routes at 100K-1M elements.
-            NDArray truth = nd.typecode == NPTypeCode.Boolean ? nd : nd.astype(np.@bool, false);
+            NDArray truth = nd.typecode == NPTypeCode.Boolean ? nd : nd.astype(np.@bool, copy: false);
             try
             {
                 return Sum(truth, axis, np.int64, keepdims);
