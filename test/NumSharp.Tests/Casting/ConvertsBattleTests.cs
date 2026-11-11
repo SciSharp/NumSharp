@@ -1342,11 +1342,16 @@ namespace NumSharp.Tests.Casting
         // np.asanyarray(Half) now creates a Half NDArray, so both entry paths reach
         // the same validator and produce the same TypeError.
 
+        /// <summary>
+        ///     A float16 shift count is refused with NumPy's TypeError when it arrives as a C# <see cref="Half"/> (a NumPy
+        ///     float16 scalar); the "as object" entry this test once used is gone with np.left_shift's object overload
+        ///     (API-parity batch 2), so the literal route stands in for it.
+        /// </summary>
         [TestMethod]
-        public void LeftShift_HalfShiftAmount_AsObject_NotSupported()
+        public void LeftShift_HalfShiftAmount_AsLiteral_NotSupported()
         {
             var arr = np.array(new[] { 1, 2, 4, 8 });
-            var act = () => np.left_shift(arr, (object)(Half)2);
+            var act = () => np.left_shift(arr, (Half)2);
             act.Should().Throw<TypeError>().WithMessage("*left_shift*not supported*");
         }
 

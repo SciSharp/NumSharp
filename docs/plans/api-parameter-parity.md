@@ -659,7 +659,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 ### Phase E: manipulation
 
-- [ ] E1 `np.stack`: `out=`, `dtype=`, `casting=`.
+- [x] E1 `np.stack`: `out=`, `dtype=`, `casting=`, handed to np.concatenate as NumPy's stack does (API-parity batch
+  2, 2026-11-11; `ndarray.stack` too). np.concatenate's refusals keep .NET types, pinned in `OpenBugs.ApiParity.cs`.
 - [ ] E2 `np.hstack`, `np.vstack`: `dtype=`, `casting=`.
 - [ ] E3 `np.reshape`: `order=`, `copy=`; `ndarray.reshape`: `copy=`.
 - [x] E4 `np.transpose`: parameter `axes` (was misspelled `premute`); `ndarray` / `matrix` / `MaskedArray.transpose` take
@@ -667,9 +668,13 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 ### Phase F: ufunc-shaped functions
 
-- [ ] F1 `np.frexp`, `np.modf`: NumPy's `out=(o1, o2)` tuple form (today `out1`/`out2`, `outFrac`/`outIntegral`);
-  `np.frexp` `dtype=`.
-- [ ] F2 `np.ldexp`: `dtype=`.
+- [x] F1 `np.frexp`, `np.modf`: NumPy's `out=(o1, o2)` tuple form (were `out1`/`out2`, `outFrac`/`outIntegral`);
+  `np.frexp` `dtype=`, which NumPy refuses for every dtype ("No loop matching ...": one dtype would fix both outputs and
+  every loop's exponent is int32). API-parity batch 2, 2026-11-11. NumPy's legacy positional outs (`np.frexp(x, m, e)`)
+  have no C# spelling: the pair is the tuple, as `np.divmod`'s.
+- [x] F2 `np.ldexp`: `dtype=` (API-parity batch 2, 2026-11-11): the float16 / float32 / float64 loops, reached when x1
+  casts 'safe' to the dtype and x2 to int64 (probed over 288 x1 / x2 / dtype triples); anything else is NumPy's "No
+  loop matching the specified signature and casting was found for ufunc ldexp".
 
 ### Phase G: names and positions
 
@@ -677,7 +682,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   API-parity batch 1 (2026-11-11): `np.around(a)`, `np.array_equal(a1, a2)`, `np.array_repr(arr)`,
   `np.iscomplex` / `np.isreal` / `np.iscomplexobj` / `np.isrealobj(x)`, `np.isscalar(element)`, `np.put(ind, v)`.
 - [ ] G2 `ndarray.astype`: NumPy's order `(dtype, order, casting, subok, copy)` (today `(dtype, copy, order, casting)`).
-- [ ] G3 `ndarray.dot`: `out=`.
+- [x] G3 `ndarray.dot`: `out=` (API-parity batch 2, 2026-11-11; np.dot's out path).
 - [ ] G4 A bare `null` axis (NumPy's positional `None`) is ambiguous (CS0121) where an `int?` and an `int[]` overload
   share the position: `np.average`, `np.average_returned`, `np.flip`, `np.gradient`, `np.median`, `np.nanmedian`,
   `np.percentile`, `np.quantile`, `np.nanpercentile`, `np.nanquantile`, `np.ptp`, `np.trim_zeros` (found by A1, which
@@ -2038,6 +2043,28 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    one, test the cases where the old one would answer differently.
 
 ## 7. State log
+
+- **2026-11-11**: API-parity batch 2 on `journey5` (the owner approved all 15 picks from `API_PARITY_DIFF.md`; branch
+  `api-parity/batch-02`): E1, F1, F2 and G3 done (above). One signature each, the extra overloads deleted and their
+  callers moved: `np.take` / `ndarray.take` (the `long` index overload: a C# literal index converts to the same 0-d
+  array, compared over 40 calls), `np.divmod`, `np.left_shift` and `np.right_shift` (the `object` overloads: a C#
+  literal still converts to a weak NEP 50 scalar), `np.power` (the `object`, two-argument and `in` overloads),
+  `np.promote_types` (the `NPTypeCode` / `Type` / `<T1, T2>` forms: both convert to `DType`, and all 256 code pairs
+  answer as the frozen table did) and `np.argsort` / `ndarray.argsort` (the generic `<T>` forms).
+  `np.ma.default_fill_value`'s parameter is NumPy's `obj` (the owner kept the typed `DType` overload beside it),
+  `np.ma.size(obj, axis=None)` takes NumPy's names, `MaskedArray.clip(min, max)` NumPy 2.x's, and
+  `MaskedArray.resize(newshape, refcheck, order)` raises NumPy's `ValueError` (was `NotSupportedException`, same
+  text). Refuted at implementation: fix 3, removing `out` from `ndarray.conj` / `conjugate`. NumPy's C methods refuse
+  `out` as a keyword but take it by position (`a.conj(o)` writes `o`), so the parameter stays, and
+  `validate_findings.py` now tries a refused keyword at its position before it confirms an X (it refutes the X marks
+  of `conj` and `conjugate`; frexp's and modf's second outs, refuted the same way before the fix, are the tuple now). Corrected at implementation: fix 2's page said NumPy
+  refuses every ldexp `dtype=`; the 288-triple probe showed the float loops (F2). Found on the way and pinned:
+  np.concatenate / np.stack raise `InvalidCastException` / `ArgumentException` where NumPy raises `TypeError`
+  (`OpenBugs.ApiParity.cs`). Traps: NumSharp.Build gives a `TensorEngine` member the ufunc mechanism only in the ufunc
+  parameter order (inputs, `dtype`, `out`, `where` last; `SubclassWeaver.UfuncShaped`), so `Ldexp`'s `dtype` after
+  `where` silently dropped np.ldexp's matrix wrap until the oracle's MatrixOperand gate caught it; the `Frexp` / `Modf`
+  `[SubclassRule]` methods take `@out` as the tuple, bound by name like batch 1's renames; and an engine file reaches
+  `DTypeCasting.CanCastTypeTo`, never `np.can_cast` (the layering ratchet).
 
 - **2026-11-11**: API-parity batch 1 on `journey5` (the owner picked 13 of 15 fixes from `API_PARITY_DIFF.md`; branch
   `api-parity/batch-01`): B9, E4 and most of G1 done (above); `np.put` and `np.squeeze` have one signature each (the

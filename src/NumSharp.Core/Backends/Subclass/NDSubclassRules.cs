@@ -358,31 +358,33 @@ namespace NumSharp
         #region Ufuncs with several outputs
 
         /// <summary>
-        ///     <c>np.frexp(x, out1, out2)</c>: a two-output ufunc - each output wrapped by <paramref name="x"/>'s class, except a
-        ///     caller's out array, which comes back itself.
+        ///     <c>np.frexp(x, out=(o1, o2))</c>: a two-output ufunc - each output wrapped by <paramref name="x"/>'s class,
+        ///     except a caller's out array, which comes back itself.
         /// </summary>
         /// <param name="result">The mantissa and exponent computed on the plain views.</param>
         /// <param name="x">The caller's input.</param>
-        /// <param name="out1">The caller's mantissa out, or <c>null</c>.</param>
-        /// <param name="out2">The caller's exponent out, or <c>null</c>.</param>
+        /// <param name="out">The caller's pair of out arrays (<c>default</c> when none). Bound by NAME to np.frexp's
+        ///     <c>out</c>: a rename there must rename this, or NumSharp.Build silently binds <c>default</c> and a caller's
+        ///     out array no longer comes back itself.</param>
         /// <returns>NumPy's pair.</returns>
         /// <exception cref="ValueError">A matrix output with more than two axes longer than 1.</exception>
-        internal static (NDArray, NDArray) Frexp((NDArray, NDArray) result, NDArray x, NDArray out1, NDArray out2)
-            => (NDSubclass.ArrayWrap(result.Item1, out1, x, null, null), NDSubclass.ArrayWrap(result.Item2, out2, x, null, null));
+        internal static (NDArray, NDArray) Frexp((NDArray, NDArray) result, NDArray x, (NDArray, NDArray) @out = default)
+            => (NDSubclass.ArrayWrap(result.Item1, @out.Item1, x, null, null),
+                NDSubclass.ArrayWrap(result.Item2, @out.Item2, x, null, null));
 
         /// <summary>
-        ///     <c>np.modf(x, outFrac, outIntegral)</c>: a two-output ufunc - each output wrapped by <paramref name="x"/>'s class,
+        ///     <c>np.modf(x, out=(o1, o2))</c>: a two-output ufunc - each output wrapped by <paramref name="x"/>'s class,
         ///     except a caller's out array, which comes back itself.
         /// </summary>
         /// <param name="result">The fractional and integral parts computed on the plain views.</param>
         /// <param name="x">The caller's input.</param>
-        /// <param name="outFrac">The caller's fractional out, or <c>null</c>.</param>
-        /// <param name="outIntegral">The caller's integral out, or <c>null</c>.</param>
+        /// <param name="out">The caller's pair of out arrays (<c>default</c> when none). Bound by NAME to np.modf's
+        ///     <c>out</c>, as <see cref="Frexp"/>'s.</param>
         /// <returns>NumPy's pair.</returns>
         /// <exception cref="ValueError">A matrix output with more than two axes longer than 1.</exception>
-        internal static (NDArray, NDArray) Modf((NDArray, NDArray) result, NDArray x, NDArray outFrac, NDArray outIntegral)
-            => (NDSubclass.ArrayWrap(result.Item1, outFrac, x, null, null),
-                NDSubclass.ArrayWrap(result.Item2, outIntegral, x, null, null));
+        internal static (NDArray, NDArray) Modf((NDArray, NDArray) result, NDArray x, (NDArray, NDArray) @out = default)
+            => (NDSubclass.ArrayWrap(result.Item1, @out.Item1, x, null, null),
+                NDSubclass.ArrayWrap(result.Item2, @out.Item2, x, null, null));
 
         /// <summary>
         ///     <c>np.divmod(x1, x2, out)</c>: a two-output ufunc - each output wrapped by the input chosen by priority, except a
@@ -390,7 +392,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="result">The quotient and remainder computed on the plain views.</param>
         /// <param name="x1">The caller's first input.</param>
-        /// <param name="x2">The caller's second input (<c>null</c> when an overload takes it as a Python object).</param>
+        /// <param name="x2">The caller's second input.</param>
         /// <param name="out">The caller's pair of out arrays (<c>default</c> when the overload has none).</param>
         /// <returns>NumPy's pair.</returns>
         /// <exception cref="ValueError">A matrix output with more than two axes longer than 1.</exception>

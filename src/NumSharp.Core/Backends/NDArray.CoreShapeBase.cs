@@ -328,17 +328,24 @@ namespace NumSharp
         /// </summary>
         /// <param name="arrays">The arrays (the array itself not null; a null entry is refused).</param>
         /// <param name="axis">The result's new axis (negative counts from the end of the RESULT's rank).</param>
-        /// <returns>A new array of <c>(len(arrays),)</c> inserted into the arrays' shape at <paramref name="axis"/>.</returns>
+        /// <param name="out">The destination handed to np.concatenate (NumPy's <c>out=</c>), or null.</param>
+        /// <param name="dtype">The result dtype handed to np.concatenate (NumPy's <c>dtype=</c>), or null.</param>
+        /// <param name="casting">The casting rule handed to np.concatenate (NumPy's <c>casting=</c>).</param>
+        /// <returns>A new array of <c>(len(arrays),)</c> inserted into the arrays' shape at <paramref name="axis"/>, or
+        ///     <paramref name="out"/> itself.</returns>
         /// <exception cref="ValueError">No array (<c>need at least one array to stack</c>), or shapes that differ (<c>all
         ///     input arrays must have the same shape</c>, checked for every array before the axis).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> outside the result's rank.</exception>
         /// <exception cref="NullReferenceException">A null entry.</exception>
-        /// <exception cref="InvalidCastException">An array that does not cast to the result dtype (np.concatenate's
-        ///     refusal).</exception>
+        /// <exception cref="InvalidCastException">An array that does not cast to the result dtype under
+        ///     <paramref name="casting"/> (np.concatenate's refusal; NumPy's type is TypeError, an [OpenBugs] pin).</exception>
+        /// <exception cref="ArgumentException">Both <paramref name="out"/> and <paramref name="dtype"/> (np.concatenate's
+        ///     refusal; NumPy's TypeError, the same pin).</exception>
         /// <remarks>It sees plain arrays only: the woven public function hands it the plain view of a subclass operand
         ///     and answers for the class itself (NDSubclass).</remarks>
         [GetSubType("arrays")]
-        internal static NDArray stack(NDArray[] arrays, int axis)
+        internal static NDArray stack(NDArray[] arrays, int axis, NDArray @out = null, DType dtype = null,
+            string casting = "same_kind")
         {
             // `if not arrays: raise ValueError('need at least one array to stack')`.
             if (arrays.Length == 0)
@@ -359,7 +366,8 @@ namespace NumSharp
             for (int i = 0; i < arrays.Length; i++)
                 expanded[i] = expand_dims(arrays[i], axis);
 
-            return concatenate(expanded, axis, null, null, "same_kind");
+            // `return _nx.concatenate(expanded_arrays, axis=axis, out=out, dtype=dtype, casting=casting)`.
+            return concatenate(expanded, axis, @out, dtype, casting);
         }
 
         /// <summary>

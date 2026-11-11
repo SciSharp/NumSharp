@@ -7,49 +7,22 @@ namespace NumSharp
     {
         /// <summary>
         ///     First array elements raised to powers from second array, element-wise.
-        /// </summary>
-        /// <param name="x1">The bases.</param>
-        /// <param name="x2">The exponents (scalar or array-like).</param>
-        /// <param name="dtype">The dtype of the returned NDArray</param>
-        /// <returns>The bases in x1 raised to the exponents in x2. This is a scalar NDArray if both x1 and x2 are scalars.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
-        // Scope: the object overloads mint an np.asanyarray(x2) temp for a scalar/array-like
-        // exponent (the same leftover the a**obj operator carries); [NDScoped] reclaims it while
-        // an NDArray-input passthrough stays untracked. The (NDArray, NDArray) overloads below own
-        // no temp and stay unscoped.
-
-        /// <summary>
-        ///     First array elements raised to powers from second array, element-wise.
-        /// </summary>
-        /// <param name="x1">The bases.</param>
-        /// <param name="x2">The exponents (scalar or array-like).</param>
-        /// <returns>The bases in x1 raised to the exponents in x2. This is a scalar NDArray if both x1 and x2 are scalars.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        [NDScoped]
-        public static NDArray power(NDArray x1, object x2) => x1.TensorEngine.Power(x1, np.asanyarray(x2), (Type)null);
-
-        /// <summary>
-        ///     First array elements raised to powers from second array, element-wise.
-        ///     Supports broadcasting between x1 and x2.
-        /// </summary>
-        /// <param name="x1">The bases.</param>
-        /// <param name="x2">The exponents (array).</param>
-        /// <returns>The bases in x1 raised to the exponents in x2.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        public static NDArray power(NDArray x1, NDArray x2) => x1.TensorEngine.Power(x1, x2, (Type)null);
-
-        /// <summary>
-        ///     First array elements raised to powers from second array, element-wise.
         ///     Mirrors NumPy's ufunc signature: <c>power(x1, x2, /, out=None, *, where=True, dtype=None)</c>.
         /// </summary>
         /// <param name="x1">The bases.</param>
         /// <param name="x2">The exponents (array).</param>
-        /// <param name="@out">A location into which the result is stored (joins the broadcast without being stretched, must be same_kind-castable from the loop dtype; returned as-is).</param>
+        /// <param name="out">A location into which the result is stored (joins the broadcast without being stretched, must be same_kind-castable from the loop dtype; returned as-is).</param>
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the computation runs in this dtype (power(2, -1, dtype: float64) = 0.5; inputs must be same_kind-castable to it).</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
+        /// <returns>The bases in x1 raised to the exponents in x2 (<paramref name="out"/> itself when given).</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html
+        ///     <para>One signature, NumPy's ufunc form (2026-11-11): the former overload that took the second operand as an
+        ///     <c>object</c> read a boxed number as a STRONG array (parity QA-QB30); a C# literal converts to a 0-d array
+        ///     marked as the Python scalar it stands for, so NEP 50's weak-scalar rule holds without it, and a value held in
+        ///     an <c>object</c> variable goes through <see cref="np.asanyarray(in object, DType, string)"/>.</para>
+        ///     <para>The former two-argument and <c>in</c> overloads called the same engine method with no out / where /
+        ///     dtype, so <c>np.power(a, b)</c> computes exactly as before through this one.</para>
+        /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray power(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => x1.TensorEngine.Power(x1, x2, dtype, @out, where);
@@ -77,16 +50,6 @@ namespace NumSharp
         public static NDArray pow(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => power(x1, x2, @out, where, dtype);
 
-        /// <summary>
-        ///     First array elements raised to powers from second array, element-wise.
-        ///     Supports broadcasting between x1 and x2.
-        /// </summary>
-        /// <param name="x1">The bases.</param>
-        /// <param name="x2">The exponents (array).</param>
-        /// <returns>The bases in x1 raised to the exponents in x2.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.power.html</remarks>
-        public static NDArray power(in NDArray x1, in NDArray x2)
-            => x1.TensorEngine.Power(x1, x2, (Type)null);
 
         /// <summary>
         ///     Return the element-wise square of the input.
@@ -102,9 +65,10 @@ namespace NumSharp
         ///     Mirrors NumPy's ufunc signature: <c>square(x, /, out=None, *, where=True, dtype=None)</c>.
         /// </summary>
         /// <param name="x">Input data.</param>
-        /// <param name="@out">A location into which the result is stored (joins the broadcast without being stretched, must be same_kind-castable from the loop dtype; returned as-is).</param>
+        /// <param name="out">A location into which the result is stored (joins the broadcast without being stretched, must be same_kind-castable from the loop dtype; returned as-is).</param>
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the input must be same_kind-castable to it.</param>
+        /// <returns>Element-wise <c>x*x</c> (<paramref name="out"/> itself when given).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.square.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray square(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)

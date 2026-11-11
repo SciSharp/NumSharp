@@ -1643,13 +1643,14 @@ namespace NumSharp.Tests.View
         // Section 39: argsort / unique / np.outer
         // ============================================================================
 
+        /// <summary>np.argsort of an F-contiguous input along axis 0 returns a C-contiguous result, as NumPy's.</summary>
         [TestMethod]
         public void ArgSort_FContig_ProducesCContig()
         {
             // NumPy: argsort of F-contig produces C-contig output.
-            // np.arange returns Int64, so argsort<long> matches the source dtype.
+            // np.arange returns Int64 (the source dtype np.argsort reads).
             var fArr = np.arange(12).reshape(3, 4).T;
-            var r = np.argsort<long>(fArr, axis: 0);
+            var r = np.argsort(fArr, axis: 0);
             r.Shape.IsContiguous.Should().BeTrue();
         }
 

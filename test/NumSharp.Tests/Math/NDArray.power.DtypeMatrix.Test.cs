@@ -97,25 +97,27 @@ public class NDArray_Power_DtypeMatrix
     {
         var bases = np.array(new sbyte[] { 2, 3 });
         var exps = new System.Collections.Generic.List<sbyte> { 2, 3 };
-        Action act = () => np.power(bases, exps);
+        Action act = () => np.power(bases, np.asanyarray(exps));
         act.Should().NotThrow();
     }
 
+    /// <summary>A float16 base with a <c>List&lt;Half&gt;</c> exponent (through np.asanyarray, as NumPy reads a list) computes without throwing.</summary>
     [TestMethod]
     public void Power_HalfList_DoesNotThrow()
     {
         var bases = np.array(new Half[] { (Half)2.0f, (Half)3.0f });
         var exps = new System.Collections.Generic.List<Half> { (Half)2.0f, (Half)1.5f };
-        Action act = () => np.power(bases, exps);
+        Action act = () => np.power(bases, np.asanyarray(exps));
         act.Should().NotThrow();
     }
 
+    /// <summary>A complex base with a <c>List&lt;Complex&gt;</c> exponent (through np.asanyarray) computes without throwing.</summary>
     [TestMethod]
     public void Power_ComplexList_DoesNotThrow()
     {
         var bases = np.array(new Complex[] { new Complex(2, 1), new Complex(3, 0) });
         var exps = new System.Collections.Generic.List<Complex> { new Complex(2, 0), new Complex(1, 0) };
-        Action act = () => np.power(bases, exps);
+        Action act = () => np.power(bases, np.asanyarray(exps));
         act.Should().NotThrow();
     }
 

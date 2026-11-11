@@ -594,7 +594,7 @@ namespace NumSharp.Tests.Backends.Strings
             NDArray.AsStringArray(np.clip(f, 0, 2, np.zeros(new Shape(2), "U32"))).Should().Equal("1.0", "2.0");
             NDArray.AsStringArray(np.matmul(np.array(new long[,] { { 1, 2 } }), np.array(new long[,] { { 3 }, { 4 } }),
                 np.zeros(new Shape(1, 1), "U3"))).Should().Equal("11");
-            var (frac, whole) = np.modf(f, np.zeros(new Shape(2), "U5"), np.zeros(new Shape(2), "U5"));
+            var (frac, whole) = np.modf(f, (np.zeros(new Shape(2), "U5"), np.zeros(new Shape(2), "U5")));
             NDArray.AsStringArray(frac).Should().Equal("0.0", "0.5");
             NDArray.AsStringArray(whole).Should().Equal("1.0", "2.0");
         }
@@ -877,7 +877,7 @@ namespace NumSharp.Tests.Backends.Strings
             var (q, r) = np.divmod(np.array(new[] { 7 }), np.array(new[] { 2 }), (np.empty(new Shape(1), "U5"), np.empty(new Shape(1), "U5")));
             NDArray.AsStringArray(q).Should().Equal("3");
             NDArray.AsStringArray(r).Should().Equal("1");
-            var (frac, integral) = np.modf(np.array(new[] { 2.5 }), np.empty(new Shape(1), "U5"), np.empty(new Shape(1), "U5"));
+            var (frac, integral) = np.modf(np.array(new[] { 2.5 }), (np.empty(new Shape(1), "U5"), np.empty(new Shape(1), "U5")));
             NDArray.AsStringArray(frac).Should().Equal("0.5");
             NDArray.AsStringArray(integral).Should().Equal("2.0");
             using var clipped = np.clip(np.array(new[] { 1, 2 }), null, null, @out: np.empty(new Shape(2), "U3"));
@@ -996,7 +996,7 @@ namespace NumSharp.Tests.Backends.Strings
                 complexText.dtype.str.Should().Be("<U96");
                 NDArray.AsStringArray(complexText).Should().Equal("(1+2j)1.5");
             }
-            var (mantissa, exponent) = np.frexp(np.array(new[] { 4.0 }), np.empty(new Shape(1), "U5"), np.empty(new Shape(1), "U5"));
+            var (mantissa, exponent) = np.frexp(np.array(new[] { 4.0 }), (np.empty(new Shape(1), "U5"), np.empty(new Shape(1), "U5")));
             NDArray.AsStringArray(mantissa).Should().Equal("0.5");
             NDArray.AsStringArray(exponent).Should().Equal("3");
             using (var text = np.array(new[] { "2", "3" }))

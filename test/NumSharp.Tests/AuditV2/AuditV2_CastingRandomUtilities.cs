@@ -127,13 +127,13 @@ public class AuditV2_CastingRandomUtilities
     [TestMethod]
     public void T1_32_Modf_TupleElementNameTypo()
     {
-        // The modf signature gained the ufunc out=/where=/dtype= parameters
-        // (NDArray outFrac, NDArray outIntegral, NDArray where, DType dtype); look it up by that shape.
+        // The modf signature is NumPy's ufunc one: (NDArray x, (NDArray, NDArray) out, NDArray where, DType dtype), the
+        // out= pair as one tuple (API-parity batch 2); look it up by that shape.
         var modf = typeof(np).GetMethod(
             nameof(np.modf),
             BindingFlags.Public | BindingFlags.Static,
             null,
-            new[] { typeof(NDArray), typeof(NDArray), typeof(NDArray), typeof(NDArray), typeof(DType) },
+            new[] { typeof(NDArray), typeof((NDArray, NDArray)), typeof(NDArray), typeof(DType) },
             null);
         modf.Should().NotBeNull();
 

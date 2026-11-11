@@ -1110,7 +1110,7 @@ namespace NumSharp.Tests
         //
         //  SEVERITY: High — the function is non-functional for 2D+.
         //
-        //  NDArray.argsort<T>() throws InvalidOperationException:
+        //  NDArray.argsort() throws InvalidOperationException:
         //  "Failed to compare two elements in the array" for ANY 2D
         //  array, whether broadcast or not. The function works correctly
         //  for 1D arrays.
@@ -1141,7 +1141,7 @@ namespace NumSharp.Tests
             var a = np.array(new int[,] { { 3, 1, 2 }, { 6, 4, 5 } });
 
             NDArray result = null;
-            new Action(() => result = a.argsort<int>())
+            new Action(() => result = a.argsort())
                 .Should().NotThrow(
                     "NumPy: argsort([[3,1,2],[6,4,5]]) returns [[1,2,0],[1,2,0]]. " +
                     "NumSharp throws InvalidOperationException: 'Failed to compare two " +
@@ -1176,7 +1176,7 @@ namespace NumSharp.Tests
             var a = np.array(new double[,] { { 3.0, 1.0, 2.0 } });
 
             NDArray result = null;
-            new Action(() => result = a.argsort<double>())
+            new Action(() => result = a.argsort())
                 .Should().NotThrow(
                     "NumPy: argsort([[3.0,1.0,2.0]]) returns [[1,2,0]]. " +
                     "NumSharp throws InvalidOperationException for any 2D array, " +

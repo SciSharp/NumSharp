@@ -188,55 +188,60 @@ namespace NumSharp.Tests.Math
         }
 
         // ------------------------------------------------------------------ out= / where=
+        /// <summary>frexp(a, out=(m, e)) writes the mantissas and exponents and returns m and e themselves.</summary>
         [TestMethod]
         public void Frexp_Out_WritesBothOutputs_AndReturnsThem()
         {
             var a = np.array(new double[] { 1.0, 2.0, 4.0, 8.0 });
             var m = np.empty(new Shape(4));
             var e = np.empty(new Shape(4)).astype(np.int32);
-            var (rm, re) = np.frexp(a, m, e);
+            var (rm, re) = np.frexp(a, (m, e));
             ReferenceEquals(rm, m).Should().BeTrue();     // the supplied out arrays are returned
             ReferenceEquals(re, e).Should().BeTrue();
             m.ToArray<double>().Should().BeEquivalentTo(new double[] { 0.5, 0.5, 0.5, 0.5 });
             e.ToArray<int>().Should().BeEquivalentTo(new[] { 1, 2, 3, 4 });
         }
 
+        /// <summary>where=[T, F, T, F] writes both outputs at the mask-true slots only; the others keep -9.</summary>
         [TestMethod]
         public void Frexp_Where_MasksBothOutputs_MaskedOffKeepPrior()
         {
             var a = np.array(new double[] { 1.0, 2.0, 4.0, 8.0 });
             var m = np.full(new Shape(4), -9.0);
             var e = np.full(new Shape(4), -9).astype(np.int32);
-            np.frexp(a, m, e, np.array(new bool[] { true, false, true, false }));
+            np.frexp(a, (m, e), np.array(new bool[] { true, false, true, false }));
             m.ToArray<double>().Should().BeEquivalentTo(new double[] { 0.5, -9.0, 0.5, -9.0 });
             e.ToArray<int>().Should().BeEquivalentTo(new[] { 1, -9, 3, -9 });     // masked-off keep prior contents
         }
 
+        /// <summary>A float32 mantissa up-casts into a float64 out and the int32 exponent into an int64 one (same_kind).</summary>
         [TestMethod]
         public void Frexp_Out_SameKindUpcast_MantF64_ExpI64()
         {
             var a = np.array(new float[] { 1.0f, 2.0f });
             var m = np.empty(new Shape(2));                 // float64 out from a float32 mantissa loop
             var e = np.empty(new Shape(2)).astype(np.int64); // int64 out from the int32 exponent loop
-            np.frexp(a, m, e);
+            np.frexp(a, (m, e));
             m.ToArray<double>().Should().BeEquivalentTo(new double[] { 0.5, 0.5 });
             e.ToArray<long>().Should().BeEquivalentTo(new long[] { 1, 2 });
         }
 
+        /// <summary>A float mantissa does not same_kind-cast into an int32 out: NumPy's 'Cannot cast ufunc 'frexp' output' text.</summary>
         [TestMethod]
         public void Frexp_MantOutInt32_Throws_SameKind()
         {
             // A float mantissa cannot same_kind-cast into an int32 out (NumPy UFuncTypeError, verbatim shape).
             Action act = () => np.frexp(np.array(new double[] { 1, 2 }),
-                np.empty(new Shape(2)).astype(np.int32), np.empty(new Shape(2)).astype(np.int32));
+                (np.empty(new Shape(2)).astype(np.int32), np.empty(new Shape(2)).astype(np.int32)));
             act.Should().Throw<Exception>().Where(ex => ex.Message.Contains("Cannot cast ufunc 'frexp' output"));
         }
 
+        /// <summary>A non-bool where= mask is refused with NumPy's safe-cast text.</summary>
         [TestMethod]
         public void Frexp_WhereNonBool_Throws()
         {
-            Action act = () => np.frexp(np.array(new double[] { 1, 2 }), np.empty(new Shape(2)),
-                np.empty(new Shape(2)).astype(np.int32), np.array(new int[] { 1, 0 }));
+            Action act = () => np.frexp(np.array(new double[] { 1, 2 }), (np.empty(new Shape(2)),
+                np.empty(new Shape(2)).astype(np.int32)), np.array(new int[] { 1, 0 }));
             act.Should().Throw<Exception>().Where(ex => ex.Message.Contains("to dtype('bool') according to the rule 'safe'"));
         }
 

@@ -34,13 +34,15 @@ public class SortingBenchmarks : TypedBenchmarkBase
 
     // argsort is generic over the element type; switch to the right closed form.
     [Benchmark(Description = "np.argsort(a)")]
+    /// <summary>np.argsort of the benchmark's array in each dtype (one call shape: the generic forms are gone).</summary>
+    /// <returns>The indices.</returns>
     public NDArray ArgSort() => DType switch
     {
-        NPTypeCode.Int32 => np.argsort<int>(_a),
-        NPTypeCode.Int64 => np.argsort<long>(_a),
-        NPTypeCode.Single => np.argsort<float>(_a),
-        NPTypeCode.Double => np.argsort<double>(_a),
-        _ => np.argsort<double>(_a)
+        NPTypeCode.Int32 => np.argsort(_a),
+        NPTypeCode.Int64 => np.argsort(_a),
+        NPTypeCode.Single => np.argsort(_a),
+        NPTypeCode.Double => np.argsort(_a),
+        _ => np.argsort(_a)
     };
 
     [Benchmark(Description = "np.nonzero(a)")]

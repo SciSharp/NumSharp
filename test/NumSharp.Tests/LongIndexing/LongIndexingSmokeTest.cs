@@ -889,11 +889,12 @@ public class LongIndexingSmokeTest
     // SORTING & SEARCHING
     // ================================================================
 
+    /// <summary>np.argsort returns int64 indices of the input's size (the long-indexing smoke path).</summary>
     [TestMethod]
     public void NDArray_Argsort_WorksWithLargeArray()
     {
         var arr = np.array(new int[] { 3, 1, 4, 1, 5, 9, 2, 6 });
-        var result = np.argsort<int>(arr);
+        var result = np.argsort(arr);
         Assert.AreEqual(8, result.size);
         // argsort returns Int64 indices (NumPy behavior)
         Assert.AreEqual(typeof(long), result.dtype);
