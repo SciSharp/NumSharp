@@ -103,12 +103,28 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The dimensions of the array that could not be allocated (NumPy's <c>shape</c> attribute), as a fresh copy on
-        ///     every read: NumPy's is an immutable tuple, so a caller that changes the copy cannot change the error.
+        ///     Creates the error from a message and the exception that caused it, .NET's standard constructor every NumSharp
+        ///     exception has: the message is kept verbatim and <see cref="shape"/> / <see cref="dtype"/> are null.
         /// </summary>
-        public long[] shape => (long[])_shape.Clone();
+        /// <param name="message">The verbatim message.</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        /// <remarks>
+        ///     Python has no such constructor (NumPy's <c>_ArrayMemoryError</c> takes the shape and the dtype). NumSharp's
+        ///     raise sites always use the shape-and-dtype form, so a caught error carries both; this form is for code that
+        ///     holds a text only. Footgun: <c>new ArrayMemoryError(null, null)</c> does not compile (both two-argument
+        ///     constructors accept two nulls); cast the arguments to pick one.
+        /// </remarks>
+        public ArrayMemoryError(string message, Exception innerException) : base(message, innerException) { }
 
-        /// <summary>The dtype of the array that could not be allocated (NumPy's <c>dtype</c> attribute).</summary>
+        /// <summary>
+        ///     The dimensions of the array that could not be allocated (NumPy's <c>shape</c> attribute), as a fresh copy on
+        ///     every read: NumPy's is an immutable tuple, so a caller that changes the copy cannot change the error. Null
+        ///     when the error was built from a message alone.
+        /// </summary>
+        public long[] shape => (long[])_shape?.Clone();
+
+        /// <summary>The dtype of the array that could not be allocated (NumPy's <c>dtype</c> attribute); null when the error
+        ///     was built from a message alone.</summary>
         public DType dtype { get; }
 
         /// <summary>

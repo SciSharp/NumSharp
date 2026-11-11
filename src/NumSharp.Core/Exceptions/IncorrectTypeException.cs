@@ -20,5 +20,13 @@ namespace NumSharp
         /// <summary>Creates the exception with NumPy's verbatim ufunc/type message.</summary>
         /// <param name="message">The message, spelled exactly as NumPy 2.4.2 words it, so the differential-fuzz error tier matches byte-for-byte.</param>
         public IncorrectTypeException(string message) : base(message) { }
+
+        /// <summary>
+        ///     Creates the exception with the message and the exception that caused it, .NET's standard constructor every
+        ///     NumSharp exception has (Python's <c>raise TypeError(message) from innerException</c>).
+        /// </summary>
+        /// <param name="message">The message, kept verbatim (NumPy's text when it mirrors a NumPy failure).</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        public IncorrectTypeException(string message, System.Exception innerException) : base(message, innerException) { }
     }
 }

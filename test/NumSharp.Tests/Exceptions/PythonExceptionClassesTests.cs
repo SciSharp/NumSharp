@@ -98,6 +98,17 @@ namespace NumSharp.Tests.Exceptions
         [DataRow(typeof(PermissionError))]
         [DataRow(typeof(BrokenPipeError))]
         [DataRow(typeof(TimeoutError))]
+        [DataRow(typeof(UFuncTypeError))]
+        [DataRow(typeof(UFuncNoLoopError))]
+        [DataRow(typeof(UFuncBinaryResolutionError))]
+        [DataRow(typeof(UFuncCastingError))]
+        [DataRow(typeof(UFuncInputCastingError))]
+        [DataRow(typeof(UFuncOutputCastingError))]
+        [DataRow(typeof(ArrayMemoryError))]
+        [DataRow(typeof(UnicodeTranslateError))]
+        [DataRow(typeof(IncorrectSizeException))]
+        [DataRow(typeof(IncorrectTypeException))]
+        [DataRow(typeof(StringComputationNotSupportedException))]
         public void MessageAndCause_KeepsBoth(Type type)
         {
             ConstructorInfo ctor = type.GetConstructor(new[] { typeof(string), typeof(Exception) });
@@ -106,6 +117,108 @@ namespace NumSharp.Tests.Exceptions
             var error = (Exception)ctor.Invoke(new object[] { "outer", cause });
             error.Message.Should().Be("outer");
             error.InnerException.Should().BeSameAs(cause);
+        }
+
+        /// <summary>
+        ///     The gate: every public exception class NumSharp declares has .NET's standard <c>(string message, Exception
+        ///     innerException)</c> constructor, and it keeps both (a group keeps the exception as its one member, which
+        ///     <see cref="AggregateException"/> reports as <see cref="Exception.InnerException"/>). A new class without it
+        ///     fails here, whatever its Python constructor is.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, naming every class without the
+        ///     constructor or whose constructor loses the message or the cause.</exception>
+        [TestMethod]
+        public void EveryPublicException_TakesAMessageAndItsCause()
+        {
+            var types = typeof(np).Assembly.GetExportedTypes()
+                .Where(t => typeof(Exception).IsAssignableFrom(t) && !t.IsAbstract && !t.ContainsGenericParameters)
+                .OrderBy(t => t.FullName, StringComparer.Ordinal)
+                .ToArray();
+            types.Should().Contain(new[] { typeof(ValueError), typeof(UFuncNoLoopError), typeof(ExceptionGroup) },
+                "the scan reaches the exported exception classes");
+
+            var failures = new List<string>();
+            var cause = new InvalidOperationException("cause");
+            foreach (Type type in types)
+            {
+                ConstructorInfo ctor = type.GetConstructor(new[] { typeof(string), typeof(Exception) });
+                if (ctor is null)
+                {
+                    failures.Add($"{type.FullName}: no public (string, Exception) constructor");
+                    continue;
+                }
+                var error = (Exception)ctor.Invoke(new object[] { "outer", cause });
+                // A group appends its member count ("outer (1 sub-exception)"); every other class keeps the text verbatim.
+                if (!error.Message.StartsWith("outer", StringComparison.Ordinal))
+                    failures.Add($"{type.FullName}: Message is \"{error.Message}\"");
+                if (!ReferenceEquals(error.InnerException, cause))
+                    failures.Add($"{type.FullName}: InnerException is not the cause");
+            }
+            failures.Should().BeEmpty();
+        }
+
+        /// <summary>
+        ///     What the standard constructor leaves in Python's attributes for the classes whose Python constructor takes
+        ///     other arguments: null (no ufunc, no dtypes, no text), 0 for the indices and positions, as
+        ///     <see cref="UnicodeEncodeError"/>'s message form always did; a group gets the exception as its one member.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence.</exception>
+        [TestMethod]
+        public void MessageForms_LeaveThePythonAttributesEmpty()
+        {
+            var cause = new InvalidOperationException("cause");
+
+            // The one-string UFuncTypeError is NumPy's UFuncTypeError(ufunc); the two-argument form is the message.
+            new UFuncTypeError("add").Message.Should().Be("<ufunc 'add'>");
+            new UFuncTypeError("add").ufunc.Should().Be("add");
+            new UFuncTypeError("add", null).Message.Should().Be("add");
+            new UFuncTypeError("add", null).ufunc.Should().BeNull();
+
+            var noLoop = new UFuncNoLoopError("m", cause);
+            noLoop.ufunc.Should().BeNull();
+            noLoop.dtypes.Should().BeEmpty();
+            var binary = new UFuncBinaryResolutionError("m", cause);
+            binary.dtypes.Should().BeEmpty("NumPy's two-dtype assertion is for its own constructor");
+            var cast = new UFuncCastingError("m", cause);
+            cast.casting.Should().BeNull();
+            cast.from_.Should().BeNull();
+            cast.to.Should().BeNull();
+            new UFuncInputCastingError("m", cause).in_i.Should().Be(0);
+            new UFuncOutputCastingError("m", cause).out_i.Should().Be(0);
+            new UFuncOutputCastingError("m", cause).Should().BeAssignableTo<TypeError>();
+
+            var memory = new ArrayMemoryError("m", cause);
+            memory.shape.Should().BeNull();
+            memory.dtype.Should().BeNull();
+            memory.Should().BeAssignableTo<OutOfMemoryException>();
+
+            foreach (var translate in new[] { new UnicodeTranslateError("m"), new UnicodeTranslateError("m", cause) })
+            {
+                translate.Message.Should().Be("m");
+                translate.@object.Should().BeNull();
+                translate.reason.Should().BeNull();
+                translate.encoding.Should().BeNull();
+                translate.start.Should().Be(0);
+                translate.end.Should().Be(0);
+            }
+
+            // A group has no separate cause: the exception is its one member, as AggregateException(message, inner) has it.
+            var member = new ValueError("v");
+            var group = new ExceptionGroup("m", member);
+            group.Message.Should().Be("m (1 sub-exception)");
+            group.message.Should().Be("m");
+            group.exceptions.Should().Equal(member);
+            group.InnerException.Should().BeSameAs(member);
+            // The member is matched like any member (CPython derives a new group around it: only a group that matches as a
+            // whole is returned itself).
+            group.subgroup(typeof(ValueError)).exceptions.Should().Equal(member);
+            new BaseExceptionGroup("m", new KeyboardInterrupt()).exceptions.Should().ContainSingle();
+            Action nest = () => _ = new ExceptionGroup("m", new KeyboardInterrupt());
+            nest.Should().ThrowExactly<TypeError>().WithMessage("Cannot nest BaseExceptions in an ExceptionGroup");
+            Action nullMember = () => _ = new BaseExceptionGroup("m", (Exception)null);
+            nullMember.Should().ThrowExactly<ValueError>().WithMessage("Item 0 of second argument (exceptions) is not an exception");
+            Action nullMessage = () => _ = new ExceptionGroup(null, member);
+            nullMessage.Should().ThrowExactly<TypeError>().WithMessage("BaseExceptionGroup.__new__() argument 1 must be str, not None");
         }
 
         /// <summary>
@@ -437,7 +550,8 @@ namespace NumSharp.Tests.Exceptions
             nullItem.Should().ThrowExactly<ValueError>().WithMessage("Item 1 of second argument (exceptions) is not an exception");
             Action noMessage = () => _ = new ExceptionGroup(null, new Exception[] { new ValueError() });
             noMessage.Should().ThrowExactly<TypeError>().WithMessage("BaseExceptionGroup.__new__() argument 1 must be str, not None");
-            Action noSequence = () => _ = new ExceptionGroup("m", null);
+            // The cast picks the sequence constructor: a bare null would also fit the (message, innerException) one.
+            Action noSequence = () => _ = new ExceptionGroup("m", (IEnumerable<Exception>)null);
             noSequence.Should().ThrowExactly<TypeError>().WithMessage("second argument (exceptions) must be a sequence");
 
             var ve = new ValueError("v");
