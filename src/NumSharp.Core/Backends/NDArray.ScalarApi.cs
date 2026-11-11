@@ -92,5 +92,34 @@ namespace NumSharp
             }
             return this;
         }
+
+        /// <summary>
+        ///     NumPy's <c>out=...</c> for a FRESH ufunc result: the result stays an ARRAY - writeable, and an explicit 0-d
+        ///     array when it is 0-d - where the ufunc returns NumPy's scalar without it
+        ///     (<c>np.subtract(np.array(2.0), 1.0, out=...)</c> is <c>array(1.)</c>, not <c>np.float64(1.0)</c>).
+        /// </summary>
+        /// <returns>This array, writeable.</returns>
+        /// <remarks>
+        ///     <para>
+        ///     The library's NumPy ports call it exactly where NumPy passes <c>out=...</c> and then writes into the result
+        ///     (<c>_methods._var</c>: <c>x = um.subtract(arr, arrmean, out=...)</c>, then <c>um.square(x, out=x)</c>), so a
+        ///     0-d input does not meet a read-only scalar.
+        ///     </para>
+        ///     <para>
+        ///     <b>Footgun - the array must be the caller's own fresh ufunc result.</b> It undoes <see cref="PyArray_Return"/>
+        ///     in place: called on a scalar somebody else holds (<c>a.sum()</c> handed in by a caller, an
+        ///     <see cref="Scalar{T}(T)"/>), it would make that scalar writeable.
+        ///     </para>
+        /// </remarks>
+        internal NDArray AsArrayResult()
+        {
+            if (Shape.IsScalar)
+            {
+                if (!Shape.IsWriteable)
+                    Storage.SetShapeUnsafe(Shape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE));
+                MarkExplicitZeroDimArray();
+            }
+            return this;
+        }
     }
 }

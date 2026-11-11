@@ -97,7 +97,8 @@ namespace NumSharp.Backends
             // Handle scalar x scalar case
             if (y.Shape.IsScalar && x.Shape.IsScalar)
             {
-                return ExecuteATan2ScalarScalar(y, x, yType, xType, resultType);
+                // Two 0-d operands give NumPy's scalar (the ufunc's PyArray_Return; this route runs without out=).
+                return ExecuteATan2ScalarScalar(y, x, yType, xType, resultType).PyArray_Return();
             }
 
             // Broadcast shapes

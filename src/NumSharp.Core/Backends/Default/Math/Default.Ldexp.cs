@@ -46,13 +46,14 @@ namespace NumSharp.Backends
             // A fresh result takes NumPy's ufunc output layout (parity QA-36): the kernels write C, so a non-C K order of
             // the operands is computed over the operands transposed into it and relabelled. After every check above, so
             // NumPy's error order holds; a caller's out keeps its own layout.
+            // A fresh 0-d result is NumPy's scalar (the ufunc's PyArray_Return, a no-op for an array with dimensions).
             if (@out is null)
                 return KOrderBinary(x1, x2, (engine: this, floatType, where),
                     static (s, a, b) => s.engine.LdexpCompute(a, b, s.floatType, null, s.where),
                     // NumPy's ldexp loops read the float dtype and an int32 / int64 exponent ('fi->f', 'fl->f', ...): any
                     // other operand dtype is cast, which keeps an N-D operand off the trivial loop.
                     x1.GetTypeCode != floatType,
-                    x2.GetTypeCode != NPTypeCode.Int32 && x2.GetTypeCode != NPTypeCode.Int64);
+                    x2.GetTypeCode != NPTypeCode.Int32 && x2.GetTypeCode != NPTypeCode.Int64).PyArray_Return();
             return LdexpCompute(x1, x2, floatType, @out, where);
         }
 

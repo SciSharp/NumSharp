@@ -18,7 +18,9 @@ namespace NumSharp
         public static NDArray round_(NDArray x, int decimals = 0, NDArray @out = null, DType dtype = null)
             // ndarray.round is the engine's Round; a numpy.matrix operand's class follows decimals (the rint ufunc for 0,
             // a plain result otherwise: the computation's rule).
-            => x.TensorEngine.Round(x, decimals, dtype, @out);
+            // A fresh 0-d result is NumPy's scalar (ndarray.round ends in PyArray_Return: np.round(np.array(2.55), 1) is
+            // np.float64(2.5)); out= comes back as given.
+            => @out is null ? x.TensorEngine.Round(x, decimals, dtype, null).PyArray_Return() : x.TensorEngine.Round(x, decimals, dtype, @out);
 
         /// <summary>
         ///     Evenly round to the given number of decimals (alias of <see cref="round_"/>; NumPy: <c>np.around is np.round</c>).
@@ -33,6 +35,8 @@ namespace NumSharp
         public static NDArray around(NDArray x, int decimals = 0, NDArray @out = null, DType dtype = null)
             // ndarray.round is the engine's Round; a numpy.matrix operand's class follows decimals (the rint ufunc for 0,
             // a plain result otherwise: the computation's rule).
-            => x.TensorEngine.Round(x, decimals, dtype, @out);
+            // A fresh 0-d result is NumPy's scalar (ndarray.round ends in PyArray_Return: np.round(np.array(2.55), 1) is
+            // np.float64(2.5)); out= comes back as given.
+            => @out is null ? x.TensorEngine.Round(x, decimals, dtype, null).PyArray_Return() : x.TensorEngine.Round(x, decimals, dtype, @out);
     }
 }

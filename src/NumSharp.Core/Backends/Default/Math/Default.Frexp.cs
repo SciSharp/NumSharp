@@ -40,8 +40,9 @@ namespace NumSharp.Backends
         public override (NDArray Mantissa, NDArray Exponent) Frexp(NDArray x, NDArray out1 = null, NDArray out2 = null, NDArray where = null)
             // Fresh outputs take NumPy's K layout (the kernel writes C, so a non-C K order runs over the transposed input
             // and both results are relabelled); a caller's out keeps its own layout.
+            // Without outputs both fresh results of a 0-d input are NumPy's scalars (the ufunc's PyArray_Return).
             => out1 is null && out2 is null
-                ? KOrderUnaryPair(x, where, this, static (engine, a, w) => engine.FrexpCore(a, null, null, w))
+                ? ReturnPair(KOrderUnaryPair(x, where, this, static (engine, a, w) => engine.FrexpCore(a, null, null, w)))
                 : FrexpCore(x, out1, out2, where);
 
         /// <summary>

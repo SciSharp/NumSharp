@@ -520,7 +520,17 @@ namespace NumSharp
             // NEW chararray view (chararray.__array_wrap__).
             if (@out is not null && ReferenceEquals(result, @out))
                 return KindOf(@out) == NDSubclassKind.None ? @out : @out.__array_wrap__(@out);
-            return WrapBy(result, FindWrap(x1, x2, x3));
+            var wrapper = FindWrap(x1, x2, x3);
+            // npy_apply_wrap converts a 0-d result into NumPy's scalar only when NO subclass wraps it: a subclass's
+            // __array_wrap__ receives the ARRAY (chararray's views a text one as a 0-d chararray). The engine's ufuncs already
+            // made a fresh 0-d result NumSharp's scalar (PyArray_Return; they cannot know a wrap follows), so a result about to
+            // be wrapped is made an array again (NumPy's out=...) - only a FRESH one: it owns its buffer and is none of the
+            // operands, so no caller's scalar or view of one is ever made writeable here.
+            if (wrapper is not null && result.ndim == 0 && result.IsNumPyScalar && !result.Shape.IsWriteable
+                && result.Storage.OwnsData && !ReferenceEquals(result, x1) && !ReferenceEquals(result, x2)
+                && !ReferenceEquals(result, x3) && KindOf(result) == NDSubclassKind.None)
+                result.AsArrayResult();
+            return WrapBy(result, wrapper);
         }
 
         /// <summary>

@@ -118,8 +118,9 @@ namespace NumSharp.Backends
             var t2 = x2.GetTypeCode;
             NPTypeCode resultType = typeCode ?? PromoteATan2Binary(x1, x2);
 
+            // Two 0-d operands give NumPy's scalar (the ufunc's PyArray_Return; this plain route runs without out=).
             if (x1.Shape.IsScalar && x2.Shape.IsScalar)
-                return ExecuteFloatTierScalarScalar(x1, x2, op, t1, t2, resultType);
+                return ExecuteFloatTierScalarScalar(x1, x2, op, t1, t2, resultType).PyArray_Return();
 
             var (s1, s2) = Broadcast(x1.Shape, x2.Shape);
             var resultShape = s1.Clean();

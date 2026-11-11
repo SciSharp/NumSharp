@@ -52,8 +52,9 @@ namespace NumSharp.Backends
             NDArray outFrac = null, NDArray outIntegral = null, NDArray where = null)
             // Fresh outputs take NumPy's K layout (the kernel writes C, so a non-C K order runs over the transposed input
             // and both results are relabelled); a caller's out keeps its own layout.
+            // Without outputs both fresh results of a 0-d input are NumPy's scalars (the ufunc's PyArray_Return).
             => outFrac is null && outIntegral is null
-                ? KOrderUnaryPair(nd, where, (engine: this, dtype), static (s, a, w) => s.engine.ModFCore(a, s.dtype, null, null, w))
+                ? ReturnPair(KOrderUnaryPair(nd, where, (engine: this, dtype), static (s, a, w) => s.engine.ModFCore(a, s.dtype, null, null, w)))
                 : ModFCore(nd, dtype, outFrac, outIntegral, where);
 
         /// <summary>

@@ -58,7 +58,13 @@ namespace NumSharp
         public static NDArray nan_to_num(NDArray x, bool copy = true, object nan = null, object posinf = null, object neginf = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            return x.TensorEngine.NanToNum(x, copy, nan, posinf, neginf);
+            var result = x.TensorEngine.NanToNum(x, copy, nan, posinf, neginf);
+            // NumPy ends in `return x[()] if isscalar else x`: a 0-d result is handed back as a SCALAR. With copy=False the
+            // result is the caller's own 0-d array (written in place), so the scalar is a read-only copy of it; a fresh
+            // result becomes the scalar itself.
+            if (result.ndim != 0)
+                return result;
+            return ReferenceEquals(result, x) ? x.copy().PyArray_Return() : result.PyArray_Return();
         }
     }
 }

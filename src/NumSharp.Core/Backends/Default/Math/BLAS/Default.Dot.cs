@@ -80,8 +80,9 @@ namespace NumSharp.Backends
             }
 
             var result = DotProduct(left, right);
+            // array_matrixproduct's PyArray_Return: a fresh 0-d product (two 0-d or two 1-D operands) is NumPy's scalar.
             if (@out is null)
-                return result;
+                return result.PyArray_Return();
 
             // Port of NumPy's new_array_for_sum (numpy/_core/src/multiarray/common.c): the ndim,
             // dtype and C-array checks fire together as one message; only then is each dimension
@@ -112,8 +113,8 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="r">The out= call's result: out itself, or the multiply ufunc's return (which is out).</param>
         /// <returns><paramref name="r"/> when it has at least one dimension, else a fresh read-only 0-d copy of it.</returns>
-        /// <remarks>Without out= a 0-d product stays the writeable 0-d array the product routes return: NumPy's scalar there
-        ///     too, the library-wide gap VF01 of the view-flags tier.</remarks>
+        /// <remarks>Without out= the fresh product itself goes through <see cref="NDArray.PyArray_Return"/> (no copy
+        ///     needed: nobody else holds it).</remarks>
         private static NDArray ScalarReturn(NDArray r) => r.ndim == 0 ? r.copy().PyArray_Return() : r;
 
         /// <summary>

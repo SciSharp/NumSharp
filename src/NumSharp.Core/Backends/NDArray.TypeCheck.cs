@@ -77,6 +77,11 @@ namespace NumSharp
             bool fortran = val.Shape.IsFContiguous && !val.Shape.IsContiguous;
             var zeros = new NDArray(val.dtype, new Shape(val.Shape.dimensions, fortran ? 'F' : 'C', copy: false), true);
             zeros.Storage.SetShapeUnsafe(zeros.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
+            // The imaginary part of an ARRAY is an ndarray even when 0-d (np.array(2.5).imag is array(0.), read-only), so
+            // it is marked explicit: read-only and unmarked would read as NumPy's scalar. Only a NumPy scalar's imaginary
+            // part is a scalar (np.float64(2.5).imag is np.float64(0.0)).
+            if (zeros.ndim == 0 && !(val.IsNumPyScalar && !val.Shape.IsWriteable))
+                zeros.MarkExplicitZeroDimArray();
             return zeros;
         }
 

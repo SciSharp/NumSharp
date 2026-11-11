@@ -71,8 +71,10 @@ namespace NumSharp.Backends
             // before anything else, and with a string operand it either refuses (its text) or computes on text (the next
             // phase of the string support). Two typecode reads when no operand is a string.
             // (An empty broadcast of a computing string loop is decided by the shapes: BinaryGuard returns that result.)
+            // NumPy's ufunc returns a 0-d result without out= as a SCALAR (PyArray_Return: np.add(np.array(1), 1) is
+            // np.int64(2)): every exit below routes a fresh result through it; out= comes back as given.
             if (Strings.NDStringUfuncs.BinaryGuard(UfuncName(op), lhs, rhs, @out, dtype, where) is { } textResult)
-                return textResult;
+                return @out is null ? textResult.PyArray_Return() : textResult;
 
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
@@ -176,11 +178,13 @@ namespace NumSharp.Backends
             {
                 var patches = NumPyFMaxFMinPatches(lhs, rhs, op == BinaryOp.FMax, resultType, @out, where);
                 var result = ExecuteBinaryOpResolved(lhs, rhs, op, lhsType, rhsType, resultType, @out, where);
+                // The positions are written into the result first; only then does a 0-d one become the scalar.
                 patches?.ApplyTo(result, this);
-                return result;
+                return @out is null ? result.PyArray_Return() : result;
             }
 
-            return ExecuteBinaryOpResolved(lhs, rhs, op, lhsType, rhsType, resultType, @out, where);
+            var resolved = ExecuteBinaryOpResolved(lhs, rhs, op, lhsType, rhsType, resultType, @out, where);
+            return @out is null ? resolved.PyArray_Return() : resolved;
         }
 
         /// <summary>

@@ -3027,6 +3027,9 @@ namespace NumSharp
                 NPTypeCode.String => b.astype(np.@bool),
                 _ => np.not_equal(b, NDArray.PythonLiteral(0)),
             };
+            // make_mask's np.array(..., dtype=MaskType): the mask is an ARRAY, 0-d included, where the comparison's 0-d
+            // answer is NumPy's scalar; the fresh answer is made an array again (NumPy's out=...).
+            mask = mask.AsArrayResult();
             return (shrink && !np.any(mask)) ? nomask : mask;
         }
 
@@ -3102,6 +3105,9 @@ namespace NumSharp
                 // array; the view holds its own counted reference on the buffer.)
                 r = r.view();
             }
+            // make_mask(...)'s np.array: the mask is an ARRAY, 0-d included, where logical_or's 0-d answer is NumPy's scalar;
+            // r is this call's fresh result (or a view of it), so it is made an array again (NumPy's out=...).
+            r = r.AsArrayResult();
             return shrink && !np.any(r) ? nomask : r;
         }
 

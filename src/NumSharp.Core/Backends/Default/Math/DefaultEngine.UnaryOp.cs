@@ -127,7 +127,9 @@ namespace NumSharp.Backends
             // Handle scalar case
             if (nd.Shape.IsScalar)
             {
-                return ExecuteScalarUnary(nd, op, outputType);
+                // NumPy's ufunc returns a 0-d result without out= as a SCALAR (PyArray_Return: np.sqrt(np.array(4.0)) is
+                // np.float64(2.0)).
+                return ExecuteScalarUnary(nd, op, outputType).PyArray_Return();
             }
 
             // NumPy's ufunc output layout (parity QA-36): the result follows the operand's K order. A C-contiguous operand,

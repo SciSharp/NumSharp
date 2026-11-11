@@ -501,6 +501,12 @@ np.isscalar(s);                 // True
 np.isscalar(np.array(5));       // False: np.array(x) builds a 0-d ARRAY, not a scalar
 ```
 
+Scalars come back where NumPy returns them: a full reduction (`a.sum()`), every ufunc and operator whose operands are
+all 0-d (`np.add(np.array(1), 1)`, `np.sqrt(np.array(4.0))`, `a0 < b0`), and `np.clip`, `np.round`, `np.dot` / `np.vdot`
+/ `np.inner`, `np.sinc`, `np.nan_to_num` and `np.interp` of 0-d input. A result written into `out=` is that array, as
+given. Functions that build an array keep a 0-d ndarray: `np.where`, `np.copy`, `astype` and the views (`np.squeeze`,
+`.real`, `.T`, `view`).
+
 Every NumPy scalar class with a NumSharp dtype has a call: `np.bool` / `np.bool_`, `np.int8` … `np.int64`, `np.uint8` …
 `np.uint64`, the C-type names (`np.byte`, `np.short`, `np.intc`, `np.int_`, `np.long`, `np.longlong`, `np.intp` and their
 unsigned twins `np.ubyte` … `np.uintp`), `np.float16` / `np.half`, `np.float32` / `np.single`, `np.float64` /

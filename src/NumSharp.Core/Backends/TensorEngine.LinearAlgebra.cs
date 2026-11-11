@@ -63,9 +63,11 @@ namespace NumSharp
             // needs a fixed item size. Before the BLAS hook, which never takes text.
             var right = (a.ndim >= 1 && b.ndim >= 2) ? SwapAxes(b, -1, -2) : b;
             Backends.Strings.NDStringUfuncs.ThrowIfProduct(a, right);
+            // A fresh 0-d product is NumPy's scalar (np.inner ends in PyArray_Return): the backend's result goes through the
+            // seam here, Dot's own result through Dot's.
             var blas = Blas;
             if (blas != null && blas.TryInner(a, b, out var accelerated))
-                return accelerated;
+                return accelerated.PyArray_Return();
 
             return Dot(a, right);
         }
@@ -91,9 +93,11 @@ namespace NumSharp
                     b.reshape(new long[] {n});
                 throw Backends.Strings.NDStringUfuncs.NoItemsize();
             }
+            // np.vdot's answer is always 0-d, and always NumPy's scalar (array_vdot ends in PyArray_Return): every exit below
+            // returns a fresh product through the seam.
             var blas = Blas;
             if (blas != null && blas.TryVdot(a, b, out var accelerated))
-                return accelerated;
+                return accelerated.PyArray_Return();
 
             // NumPy's array_vdot reshapes BOTH operands with one reused PyArray_Dims buffer whose
             // single entry starts at -1. _fix_unknown_dimension writes the resolved length back into
@@ -126,8 +130,8 @@ namespace NumSharp
             // result is whichever NaN that order kept. Only the in-place read gives NumPy's NaN, so a NaN result (rare:
             // one compare per call otherwise) is computed again there; the first result is the scope's to reclaim.
             if (engineCopy && HasNaNScalar(result))
-                return VdotFunction1D(a.reshape(new long[] {-1}), right);
-            return result;
+                return VdotFunction1D(a.reshape(new long[] {-1}), right).PyArray_Return();
+            return result.PyArray_Return();
         }
 
         /// <summary>Whether a 0-d result of np.vdot holds a NaN (either part of a complex one).</summary>

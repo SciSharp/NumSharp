@@ -372,7 +372,10 @@ namespace NumSharp.Backends
             {
                 for (int i = 0; i < operands.Length; i++)
                     args[i] = ResolveStageOperand(plan, operands[i], inputs, results, out made[2 * i], out made[2 * i + 1]);
-                return result = intoKeywords ? stage.ExecuteInto(this, args, @out, where) : stage.Execute(this, args);
+                // A stage's fresh result is an ARRAY in np.evaluate's model, 0-d included (NumPy's reference reads a 0-d text
+                // answer as its array result): the engine's ufuncs made a 0-d one NumSharp's scalar, so it is made an array
+                // again (NumPy's out=...; the result is this call's own). out= comes back as given.
+                return result = intoKeywords ? stage.ExecuteInto(this, args, @out, where) : stage.Execute(this, args).AsArrayResult();
             }
             finally
             {

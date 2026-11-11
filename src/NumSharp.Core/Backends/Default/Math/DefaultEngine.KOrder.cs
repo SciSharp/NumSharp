@@ -406,6 +406,16 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     NumPy's ufunc return step for a two-output ufunc called without outputs (np.modf, np.frexp): each fresh result
+        ///     goes through <see cref="NDArray.PyArray_Return"/>, so a 0-d input gives a tuple of NumPy's scalars
+        ///     (<c>np.modf(np.array(2.5))</c> is <c>(np.float64(0.5), np.float64(2.0))</c>) and arrays pass untouched.
+        /// </summary>
+        /// <param name="pair">The two FRESH results of the route (never a caller's out=).</param>
+        /// <returns>The pair, each 0-d member made the read-only scalar.</returns>
+        internal static (NDArray, NDArray) ReturnPair((NDArray, NDArray) pair)
+            => (pair.Item1.PyArray_Return(), pair.Item2.PyArray_Return());
+
+        /// <summary>
         ///     Runs a unary two-output route that writes C-ordered results (np.frexp, np.modf) so that both fresh outputs
         ///     come out in NumPy's ufunc output order (parity QA-36): when the K order of the input (and of a mask, which
         ///     votes like any NpyIter operand) is not C, <paramref name="compute"/> runs over the operands transposed into
