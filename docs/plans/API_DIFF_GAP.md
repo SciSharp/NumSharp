@@ -44,6 +44,14 @@ Two entries stay on purpose: `np.ma.default_fill_value` keeps its typed `DType` 
 confirms an X (`ndarray.conj` / `conjugate` take `out` positionally). The fixes are recorded in
 [`api-parameter-parity.md`](api-parameter-parity.md) §7.
 
+**Refresh 2026-11-11 (API-parity batch 3 on `journey5` at `6e14235c`).** Regenerated on the batch's tree: 767 → 791
+NumPy names with NumPy's signature, 539 → 515 to change; O 331 → 310, M 195 → 184, B 35 → 25, L 108 → 107, X 67, T 21,
+Q 73 and the 83 absent names unchanged; the coverage artifact's headline with NumPy's exact signature 285 → 298. Three
+entries stay on purpose, the owner's calls: `np.repeat` [O2] (the generic scalar form with `NDArray repeats`),
+`np.hstack` / `np.vstack` [O2] (the `params` form beside NumPy's `(tup, dtype, casting)`). The nan reductions keep only
+their Q mark (a tuple axis), which OD1's decision (§8: the `NDAxis` struct) unblocks. The fixes are recorded in
+[`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
 ---
 
 ## Contents
@@ -765,7 +773,7 @@ void dtype; [`dtype-system.md`](dtype-system.md)).
 
 | id | question | options | affects |
 |---|---|---|---|
-| **OD1** | The axis parameter type (NumPy: `int`, a tuple of ints, or None) | (a) an axis type with implicit conversions from `int`, `int[]`, C# tuples and `null` (a class so `null` binds; or a `struct?`, probe that `axis: 0` and `axis: null` both bind); (b) `object axis`; (c) keep `int?` and add a second parameter (breaks NumPy's one signature) | AD1 (all axis overloads), AD9b, AD10, plan G4, B1–B8 |
+| **OD1** | The axis parameter type (NumPy: `int`, a tuple of ints, or None) | **DECIDED 2026-11-11 (API-parity batch 3): (a)**, a `readonly struct NDAxis` taken as `NDAxis? axis = null`, with implicit conversions from `int`, `int[]`, `(int, int)` and `(int, int, int)`; probed at C# 12 / net8.0 (`np.sum(a)`, `(a, null)`, `axis: -1`, `(0, 1)`, `new[] {0, 1}`, an `int` and an `int?` variable all bind; a float axis is refused). Rejected: (b) `object axis`; (c) `int?` plus an `int[]` overload. | AD1 (all axis overloads), AD9b, AD10, plan G4, B1–B8 |
 | **OD2** | array_like / scalar parameters (NumPy takes lists, tuples, scalars, arrays) | (a) `NDArray` (C# arrays and scalars convert implicitly; Python-style nested lists do not); (b) `object` + NumPy's coercion (the polynomial package's `PolySequence` model: nested `object[]`, `ITuple`, typed collections, NEP 50 kinds); per parameter | AD1 (`np.array` 33, `np.asarray`, `np.arange`, `insert`, `pad`, ...), AD5 kind 2 |
 | **OD3** | file parameters (NumPy takes a path or a file-like object) | one `object file` parameter that dispatches on `string` / `Stream` / `TextReader` / `TextWriter` / `byte[]`; or keep typed overloads as a documented exception | `np.load`, `np.loadtxt`, `np.savetxt`, `np.save`, `np.savez`, `np.savez_compressed`, `np.fromfile`, `ndarray.tofile` |
 | **OD4** | `size=None` of the samplers | (a) keep `Shape size = default` (documented idiom; `null` refused); (b) `Shape? size = null` everywhere (every spelling binds) | AD9d (73 names), AD9e, AD1 for `np.random` |

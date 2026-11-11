@@ -60,7 +60,7 @@ namespace NumSharp.Backends
                              && left.ndim <= 2 && right.ndim <= 2;
                 if (!cblas)
                 {
-                    NDArray ap1 = left.astype(common, false), ap2 = right.astype(common, false);
+                    NDArray ap1 = left.astype(common, copy: false), ap2 = right.astype(common, copy: false);
                     try
                     {
 #pragma warning disable NDW012 // not a leak: the multiply with out= returns the caller's out itself, which the caller owns
@@ -130,7 +130,7 @@ namespace NumSharp.Backends
         private NDArray MultiplyInCommonDtype(NDArray left, NDArray right)
         {
             var common = DTypePromotion.PromoteTypes(left.dtype, right.dtype);
-            NDArray ap1 = left.astype(common, false), ap2 = right.astype(common, false);
+            NDArray ap1 = left.astype(common, copy: false), ap2 = right.astype(common, copy: false);
             try
             {
                 return Multiply(ap1, ap2);

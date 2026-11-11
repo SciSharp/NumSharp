@@ -99,7 +99,7 @@ namespace NumSharp.Backends
             // The source in the destination's descriptor: a StringDType source is copied as it is (the copy core applies the
             // NA rules between two StringDType descriptors), any other one is converted (without a mask every source element
             // reaches some destination element, so each is converted, as NumPy's transfer converts it).
-            NDArray value = from.Meta.HasReferences ? src : src.astype(to, true, 'K', "unsafe");
+            NDArray value = from.Meta.HasReferences ? src : src.astype(to);
             try
             {
                 if (@where is null)
@@ -177,7 +177,7 @@ namespace NumSharp.Backends
                 if (positions.size == positionCount)
                 {
                     // Everything selected: the whole source converted once, as the unmasked copy converts it.
-                    using var all = src.astype(to, true, 'K', "unsafe");
+                    using var all = src.astype(to);
                     NDVStringMove.ScatterMarks(dst, marks, all);
                     return;
                 }
@@ -185,7 +185,7 @@ namespace NumSharp.Backends
                 using var sourceNumbers = TakeFrom(flatMarks, positions, null, null, ClipModes.ClipModeRaise);
                 using var flatSource = NDArray.ravel(src, 'C');
                 using var picked = TakeFrom(flatSource, sourceNumbers, null, null, ClipModes.ClipModeRaise);
-                using var converted = picked.astype(to, true, 'K', "unsafe");
+                using var converted = picked.astype(to);
                 // Destination position -> its converted value's number (0 .. k-1), then the strings moved in.
                 using var slots = NDVStringMove.NewMarks(dst);
                 using (var ramp = NDVStringMove.ValueIndex(converted))
@@ -220,7 +220,7 @@ namespace NumSharp.Backends
             {
                 // Every source element reaches a selected position: one conversion of the whole source, scattered by the
                 // marks (flat C-order source numbers: the converted array's own flat indices).
-                using var all = src.astype(to, true, 'K', "unsafe");
+                using var all = src.astype(to);
                 NDVStringMove.ScatterMarks(dst, marks, all);
                 return;
             }
@@ -229,7 +229,7 @@ namespace NumSharp.Backends
             // source's length (its other cells are never read), which the original marks then scatter.
             using var flatSrc = NDArray.ravel(src, 'C');
             using var namedValues = TakeFrom(flatSrc, numbers, null, null, ClipModes.ClipModeRaise);
-            using var convertedNamed = namedValues.astype(to, true, 'K', "unsafe");
+            using var convertedNamed = namedValues.astype(to);
             using var value = new NDArray(to, Shape.Vector(sourceCount), true);
             using (var valueSlots = NDVStringMove.NewMarks(value))
             {
@@ -275,7 +275,7 @@ namespace NumSharp.Backends
                 // the mask, whose checks the numeric copy of the converted value then makes.
                 if (dst.size > 1)
                 {
-                    using var once = src.astype(to, true, 'K', "unsafe");
+                    using var once = src.astype(to);
                     CopytoAssignArray(dst, once, @where, NPY_CASTING.NPY_UNSAFE_CASTING);
                     return;
                 }
@@ -285,7 +285,7 @@ namespace NumSharp.Backends
                 // broadcasts into one element has one element).
                 if (dst.size == 0 || (@where is not null && !(bool)@where.GetAtIndex(0)))
                     return;
-                using var single = src.astype(to, true, 'K', "unsafe");
+                using var single = src.astype(to);
                 CopytoAssignArray(dst, single, null, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return;
             }
@@ -305,7 +305,7 @@ namespace NumSharp.Backends
 
             if (@where is null)
             {
-                using var converted = src.astype(to, true, 'K', "unsafe");
+                using var converted = src.astype(to);
                 CopytoAssignArray(dst, converted, null, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return;
             }
@@ -324,7 +324,7 @@ namespace NumSharp.Backends
             using var sourceNumbers = TakeFrom(flatMarks, positions, null, null, ClipModes.ClipModeRaise);
             using var flatSource = NDArray.ravel(src, 'C');
             using var picked = TakeFrom(flatSource, sourceNumbers, null, null, ClipModes.ClipModeRaise);
-            using var values = picked.astype(to, true, 'K', "unsafe");
+            using var values = picked.astype(to);
             // The values at their destination positions (a C-ordered staging array), written back under the same selection.
             using var staged = new NDArray(to, new Shape(dst.Shape.dimensions, copy: false), true);
             PutTo(staged, positions, values, "raise");

@@ -667,11 +667,11 @@ C# compound assignment reassigns the variable; it doesn't mutate. See [Compound 
 
 | Method | Description |
 |--------|-------------|
-| `astype(type, copy)` | Cast to different dtype (copy by default) |
+| `astype(dtype, order, casting, copy)` | Cast to a different dtype, NumPy's order (`order='K'`, `casting="unsafe"`, a copy by default; `copy: false` hands back the array itself when nothing changes) |
 | `copy()` | Deep copy |
 | `Clone()` | Same as `copy()` (ICloneable) |
 | `reshape(...)` | Reshape (view if possible) |
-| `ravel()` | Flatten to 1-D (view if contiguous) |
+| `ravel(order)` | Flatten to 1-D (view if contiguous; `order='C'` by default) |
 | `flatten()` | Flatten to 1-D (always copy) |
 | `transpose(...)` | Permute axes |
 | `view(dtype)` | Reinterpret bytes as a different dtype (no copy) |

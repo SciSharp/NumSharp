@@ -53,15 +53,6 @@ namespace NumSharp
 
         /// <summary>
         ///     Return the element-wise square of the input.
-        /// </summary>
-        /// <param name="x">Input data.</param>
-        /// <returns>Element-wise x*x, of the same shape and dtype as x. Returns scalar if x is a scalar.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        public static NDArray square(NDArray x) => x.TensorEngine.Square(x, (Type)null);
-
-        /// <summary>
-        ///     Return the element-wise square of the input.
         ///     Mirrors NumPy's ufunc signature: <c>square(x, /, out=None, *, where=True, dtype=None)</c>.
         /// </summary>
         /// <param name="x">Input data.</param>
@@ -69,7 +60,11 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the input must be same_kind-castable to it.</param>
         /// <returns>Element-wise <c>x*x</c> (<paramref name="out"/> itself when given).</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.square.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.square.html
+        ///     <para>One signature, NumPy's ufunc form: the one-argument overload went with API-parity batch 3 (2026-11-11), so
+        ///     <c>np.square(x)</c> binds here with the defaults (the same loop, bits and dtype). A method group needs a lambda now
+        ///     (<c>xs.Select(x => np.square(x))</c>), as for every other ufunc.</para>
+        /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray square(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => x.TensorEngine.Square(x, dtype, @out, where);

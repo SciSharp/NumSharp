@@ -1199,8 +1199,9 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     NumPy's <c>PyArray_Repeat</c> (<c>item_selection.c</c>) for a scalar count: the count's sign, the
-        ///     <c>StringDType</c> route, then the flat or the along-axis tiling. The body of
-        ///     <see cref="np.repeat(NDArray, long, int?)"/> once its class boundaries and its null check have run.
+        ///     <c>StringDType</c> route, then the flat or the along-axis tiling. It was the body of the former
+        ///     <c>np.repeat(NDArray, long, int?)</c>; since API-parity batch 3 every np.repeat call takes the per-element
+        ///     route (<see cref="Repeat(NDArray, NDArray, int?)"/>), whose 0-d count runs the same tiling kernel.
         /// </summary>
         /// <param name="a">The source array, not null; any layout (the tiling reads a C-contiguous copy or view).</param>
         /// <param name="repeats">How many times each element repeats.</param>
@@ -1523,7 +1524,11 @@ namespace NumSharp.Backends
         ///     NumPy "safe" casting check for the repeats dtype (target int64).
         ///     Integers that fit in int64 + boolean pass; uint64/float/complex/decimal reject.
         /// </summary>
-        private static bool IsSafeToInt64(NPTypeCode code)
+        /// <param name="code">The repeats' dtype.</param>
+        /// <returns>True when the dtype casts 'safely' to int64 (bool, char and the integers up to int64 / uint32).</returns>
+        /// <remarks>Internal since API-parity batch 3: np.repeat's generic scalar form reads a 0-d count by the same rule
+        ///     before its direct fill.</remarks>
+        internal static bool IsSafeToInt64(NPTypeCode code)
         {
             switch (code)
             {

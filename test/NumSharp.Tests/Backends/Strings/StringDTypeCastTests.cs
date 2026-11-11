@@ -182,7 +182,7 @@ namespace NumSharp.Tests.Backends.Strings
             {
                 Action parse = () => a.astype(np.dtype("i8"));
                 parse.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: 'é'");
-                Action sameKind = () => a.astype(np.dtype("i8"), true, 'K', "same_kind");
+                Action sameKind = () => a.astype(np.dtype("i8"), 'K', "same_kind");
                 sameKind.Should().Throw<Exception>().WithMessage("Cannot cast array data from StringDType() to dtype('int64') according to the rule 'same_kind'");
             }
             using (var f8 = np.array(new[] { double.NaN, 1.5 }))

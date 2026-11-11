@@ -175,7 +175,7 @@ namespace NumSharp.Backends
             // buffered cast of the input to the loop dtype is done up front, in the input's own memory order. The
             // result's layout still follows the original operand: `order` was resolved from its shape above.
             NDArray complexInput = retTypeCode == NPTypeCode.Complex && arr.GetTypeCode != NPTypeCode.Complex
-                ? arr.astype(NPTypeCode.Complex, true, 'K')
+                ? arr.astype(NPTypeCode.Complex)
                 : null;
             if (complexInput is not null)
                 arr = complexInput;
@@ -379,10 +379,18 @@ namespace NumSharp.Backends
             }
         }
 
+        /// <summary>
+        ///     The flat cumulative sum of <paramref name="arr"/> (<see cref="cumsum_elementwise"/>), cast to
+        ///     <paramref name="typeCode"/> when the accumulation came back in another dtype.
+        /// </summary>
+        /// <typeparam name="T">The element type the caller dispatched on (kept for the call sites' generic form).</typeparam>
+        /// <param name="arr">The array.</param>
+        /// <param name="typeCode">The requested result dtype, or null for the accumulation's.</param>
+        /// <returns>The 1-D running sums.</returns>
         public NDArray CumSumElementwise<T>(NDArray arr, NPTypeCode? typeCode) where T : unmanaged
         {
             var ret = cumsum_elementwise(arr, typeCode);
-            return typeCode.HasValue && typeCode.Value != ret.typecode ? ret.astype(typeCode.Value, true) : ret;
+            return typeCode.HasValue && typeCode.Value != ret.typecode ? ret.astype(typeCode.Value) : ret;
         }
 
         protected unsafe NDArray cumsum_elementwise(NDArray arr, NPTypeCode? typeCode)

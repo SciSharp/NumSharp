@@ -87,7 +87,7 @@ namespace NumSharp.Tests.Strings
 
                 // ---- casts ----
                 case "astype":
-                    return a.astype(Dt(p, "dtype"), p["copy"].GetBoolean(), Str(p, "order")[0], Str(p, "casting"));
+                    return a.astype(Dt(p, "dtype"), Str(p, "order")[0], Str(p, "casting"), p["copy"].GetBoolean());
 
                 // ---- views ----
                 case "transpose": return np.transpose(a);

@@ -162,7 +162,7 @@ namespace NumSharp.Backends
         private static unsafe void CopytoParseTextScalar(NDArray text, NPTypeCode dstType, Span<byte> element)
         {
             // One element: the array cast's own parse (its NumPy-scalar error texts), then the element copied out.
-            using var parsed = text.astype((DType)dstType, true, 'K', "unsafe");
+            using var parsed = text.astype((DType)dstType);
             int size = dstType.SizeOf();
             fixed (byte* e = element)
                 Buffer.MemoryCopy((byte*)parsed.Address + parsed.Shape.offset * size, e, element.Length, size);

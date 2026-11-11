@@ -241,7 +241,7 @@ namespace NumSharp.Backends
                 // descriptor formats numbers or recasts text; it keeps the result's layout (K order).
                 if (options.HasDtype)
                 {
-                    var cast = current.astype(options.DtypeDescr, true, 'K', "unsafe");
+                    var cast = current.astype(options.DtypeDescr);
                     if (currentOwned)
                         current.Dispose();
                     current = cast;

@@ -129,8 +129,8 @@ namespace NumSharp.Tests.Lifetime
         [DataRow("LT29", "StringArraySlice", "GetIndex", "Int64")]
         [DataRow("LT29", "StringArraySlice", "GetItems", "Int64,Int64,Span`1")]
         [DataRow("LT29", "StringArraySlice", "ToArray", "")]
-        [DataRow("LT30", "DefaultEngine", "NanSum", "NDArray,Nullable`1,Boolean")]
-        [DataRow("LT30", "DefaultEngine", "NanProd", "NDArray,Nullable`1,Boolean")]
+        [DataRow("LT30", "DefaultEngine", "NanSum", "NDArray,Nullable`1,Boolean,DType,NDArray,Object,NDArray")]
+        [DataRow("LT30", "DefaultEngine", "NanProd", "NDArray,Nullable`1,Boolean,DType,NDArray,Object,NDArray")]
         [DataRow("LT30", "DefaultEngine", "NanMinMax", "NDArray,Nullable`1,Boolean,MinMaxOp")]
         // LT31 (2026-11-07, PR #633's CI: the lifetime oracle's polyval / chebval cases on Linux and macOS): every {p}val
         // reaches its recurrence kernel through this overload.

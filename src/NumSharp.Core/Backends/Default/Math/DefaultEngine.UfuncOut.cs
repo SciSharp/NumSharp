@@ -535,7 +535,7 @@ namespace NumSharp.Backends
         {
             if (where is null || @out is null || @out.typecode != NPTypeCode.String)
                 return;
-            using var read = @out.astype((DType)loop, true, 'K', "unsafe");
+            using var read = @out.astype((DType)loop);
         }
 
         /// <summary>

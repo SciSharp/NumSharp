@@ -462,7 +462,7 @@ namespace NumSharp.Tests.Fuzz
                 // only adds coverage). The vehicle keys' families are labelled op:fn (FamilyOp), so each entry
                 // names one API; "op [layout]" entries name one family. Probed through public calls
                 // (escaped = pooled buffers left out of the pool after the result is disposed):
-                //   * ndarray.astype(dtype, copy, order) with an order that differs from the input's layout (a C
+                //   * ndarray.astype(dtype, order, copy: copy) with an order that differs from the input's layout (a C
                 //     input with order='F', an F / transposed input with order='C', a permuted input with 'C' or
                 //     'F'), and the 0-d / broadcast inputs: 1 per call.
                 ["viewflags:ndarray.astype"] = 1,

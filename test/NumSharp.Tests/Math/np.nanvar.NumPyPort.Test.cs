@@ -41,9 +41,9 @@ namespace NumSharp.Tests.Math
             var fails = new List<string>();
             var v = np.array(new[] { 1.0, 2.0, 3.0 });
             Check(fails, "nanstd f64 [1,2,3] axis0", () => np.nanstd(v, 0), "float64 () 3fea20bd700c2c3e");
-            Check(fails, "nanvar f64 [1,2,3] axis0 keepdims", () => np.nanvar(v, 0, true), "float64 (1,) 3fe5555555555555");
+            Check(fails, "nanvar f64 [1,2,3] axis0 keepdims", () => np.nanvar(v, 0, keepdims: true), "float64 (1,) 3fe5555555555555");
             Check(fails, "nanstd f64 [5] keepdims", () => np.nanstd(np.array(new[] { 5.0 }), keepdims: true), "float64 (1,) 0000000000000000");
-            Check(fails, "nanvar f64 [5] axis0 keepdims", () => np.nanvar(np.array(new[] { 5.0 }), 0, true), "float64 (1,) 0000000000000000");
+            Check(fails, "nanvar f64 [5] axis0 keepdims", () => np.nanvar(np.array(new[] { 5.0 }), 0, keepdims: true), "float64 (1,) 0000000000000000");
             AssertNoMismatch(fails, "NumPy reduces the only axis of a 1-D array to a 0-d result");
         }
 
@@ -165,7 +165,7 @@ namespace NumSharp.Tests.Math
         {
             var fails = new List<string>();
             Check(fails, "nanvar 0-d f64 axis0", () => np.nanvar(NDArray.Scalar(2.5), 0), "float64 () 0000000000000000");
-            Check(fails, "nanvar 0-d f64 axis-1 keepdims", () => np.nanvar(NDArray.Scalar(2.5), -1, true), "float64 () 0000000000000000");
+            Check(fails, "nanvar 0-d f64 axis-1 keepdims", () => np.nanvar(NDArray.Scalar(2.5), -1, keepdims: true), "float64 () 0000000000000000");
             Check(fails, "nanstd 0-d f32 nan axis0", () => np.nanstd(NDArray.Scalar(float.NaN), 0), "float32 () nan");
             AssertNoMismatch(fails, "ufunc.reduce reads axis 0 / -1 of a 0-d array as every axis");
             ExpectMessage(() => np.nanvar(NDArray.Scalar(2.5), 1), "axis 1 is out of bounds for array of dimension 0");
@@ -183,7 +183,7 @@ namespace NumSharp.Tests.Math
             var i = np.array(new[,] { { 1, 2, 3 }, { 4, 6, 9 } });
             var fails = new List<string>();
             Check(fails, "nanvar i32 keepdims", () => np.nanvar(i, keepdims: true), "float64 (1,1) 401c8e38e38e38e3");
-            Check(fails, "nanvar i32 axis1 keepdims", () => np.nanvar(i, 1, true), "float64 (2,1) 3fe5555555555555 4010e38e38e38e39");
+            Check(fails, "nanvar i32 axis1 keepdims", () => np.nanvar(i, 1, keepdims: true), "float64 (2,1) 3fe5555555555555 4010e38e38e38e39");
             Check(fails, "nanvar i32 dtype=f32", () => np.nanvar(i, dtype: np.float32), "float32 () 40e471c8");
             Check(fails, "nanstd i32 dtype=i32 (scalar: truncated)", () => np.nanstd(i, dtype: np.int32), "int32 () 2");
             Check(fails, "nanvar bool", () => np.nanvar(np.array(new[] { true, false, true })), "float64 () 3fcc71c71c71c71d");

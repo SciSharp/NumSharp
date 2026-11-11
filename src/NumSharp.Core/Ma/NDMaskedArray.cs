@@ -652,13 +652,23 @@ namespace NumSharp
         public static NDMaskedArray operator >=(NDArray a, NDMaskedArray b) => np.ma.ComparisonOperator(b, a, (x, y) => np.less_equal(x, y));
 
         /// <summary>
-        ///     Casts the DATA to <paramref name="dtype"/>, PRESERVING the mask (NumPy's <c>MaskedArray.astype</c>
-        ///     — the mask is boolean and dtype-independent, so it rides through unchanged). Returns a
-        ///     <see cref="NDMaskedArray"/>, unlike the underlying <see cref="NDArray.astype(DType,bool)"/>.
+        ///     Casts the DATA to <paramref name="dtype"/>, PRESERVING the mask (NumPy's <c>MaskedArray.astype</c>, which is
+        ///     ndarray's <c>astype(dtype, order='K', casting='unsafe', copy=True)</c> plus the subclass's
+        ///     <c>__array_finalize__</c>). Returns a <see cref="NDMaskedArray"/>, unlike the underlying
+        ///     <see cref="NDArray.astype(DType, char, string, bool)"/>.
         /// </summary>
         /// <param name="dtype">Target element dtype.</param>
-        /// <param name="copy">Copy the data even when the dtype already matches (NumPy default true).</param>
-        /// <returns>A masked array of the new dtype with the same mask.</returns>
+        /// <param name="order">The data's layout: <c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c> (ndarray.astype's). The
+        ///     new mask is laid out like the new data (C when it is C-contiguous, F when F-contiguous, else K), as
+        ///     <c>__array_finalize__</c> casts it.</param>
+        /// <param name="casting">ndarray.astype's casting rule name, checked before anything is allocated.</param>
+        /// <param name="copy">Copy the data even when the dtype and the layout already match (NumPy default true); false
+        ///     returns this array itself when nothing has to change.</param>
+        /// <returns>A masked array of the new dtype with the same mask, or this array.</returns>
+        /// <exception cref="ValueError">An unknown <paramref name="order"/> or <paramref name="casting"/> name (NumPy's
+        ///     argument parse, before anything else).</exception>
+        /// <exception cref="InvalidCastException">The cast is not allowed under <paramref name="casting"/> (checked before
+        ///     the fill conversion, as array_astype checks it before it allocates the result; NumPy's TypeError).</exception>
         /// <exception cref="TypeError">The stored fill does not convert to the new dtype (<c>Cannot convert fill_value zz to
         ///     dtype float64</c>; checked BEFORE the data is cast, see the remarks).</exception>
         /// <exception cref="ValueError">A text element of the data that does not parse into a numeric <paramref name="dtype"/>
@@ -680,18 +690,34 @@ namespace NumSharp
         ///     <c>__array_finalize__</c> converts the fill) BEFORE it copies the data into it, so a fill that does not convert
         ///     is reported even when the data would not convert either (probed: <c>['ab', '1']</c> with fill <c>'zz'</c> raises
         ///     the fill's TypeError; with fill <c>'3'</c> the data's ValueError). The result's mask is a COPY of this array's
-        ///     and its hard-mask flag is this array's; with <paramref name="copy"/> false and an equivalent dtype the array
-        ///     itself is returned (no new array, so no fill conversion).
+        ///     and its hard-mask flag is this array's; with <paramref name="copy"/> false, a layout the order accepts and an
+        ///     equivalent dtype the array itself is returned (no new array, so no fill conversion).
         ///     </para>
+        ///     <para>One signature in NumPy's keyword order (API-parity batch 3, 2026-11-11; was <c>astype(dtype, copy)</c>):
+        ///     a positional <c>copy</c> is written <c>copy: false</c>.</para>
         /// </remarks>
-        public NDMaskedArray astype(DType dtype, bool copy = true)
+        public NDMaskedArray astype(DType dtype, char order = 'K', string casting = "unsafe", bool copy = true)
         {
+            // array_astype's npy_parse_arguments: the order's letter, then the casting name, before anything else - an
+            // unknown one raises even for a call that would change nothing.
+            OrderResolver.Resolve(order, _data.Shape);
+            var rule = DTypeCasting.ParseCastingSameValue(casting, out _);
             // The descriptor the new array is allocated with (an unsized string request takes the data's width, NumPy's
             // PyArray_AdaptDescriptorToArray), which is the dtype `__array_finalize__` converts the fill to.
             var to = DTypePromotion.AdaptDescriptorToArray(_data.dtype, dtype);
-            // ndarray.astype(copy=False) of an equivalent dtype returns the array ITSELF: no new array, no `__array_finalize__`.
-            bool sameArray = !copy && DTypeCasting.GetCastInfo(to, _data.dtype, null, out long viewOffset) == NPY_CASTING.NPY_NO_CASTING
+            // array_astype's view shortcut: copy=False, a layout the order accepts (K always; A a C- or F-contiguous array;
+            // C / F that contiguity) and an equivalent dtype return the array ITSELF - no new array, no `__array_finalize__`.
+            bool layoutKept = order is 'K' or 'k'
+                              || (order is 'A' or 'a' && (_data.Shape.IsContiguous || _data.Shape.IsFContiguous))
+                              || (order is 'C' or 'c' && _data.Shape.IsContiguous)
+                              || (order is 'F' or 'f' && _data.Shape.IsFContiguous);
+            bool sameArray = !copy && layoutKept
+                             && DTypeCasting.GetCastInfo(to, _data.dtype, null, out long viewOffset) == NPY_CASTING.NPY_NO_CASTING
                              && viewOffset != ArrayMethod.NoView;
+            // array_astype checks the casting rule BEFORE PyArray_NewLikeArray allocates the result, so a refusal wins over
+            // the fill conversion that allocation's `__array_finalize__` makes ('unsafe', astype's default, allows all).
+            if (!sameArray && !DTypeCasting.CanCastTypeTo(_data.dtype, to, rule))
+                throw DTypeCasting.InvalidCastError(_data.dtype, to, rule, _data.ndim == 0);
             // `__array_finalize__`: `_check_fill_value(self._fill_value, self.dtype)` converts a stored fill to the new dtype
             // (a copy: 7.5 becomes int64 7, the read default 1e20 becomes long.MinValue, 'qrs' becomes 'q' in <U1); an
             // array with nothing stored passes None on, so the result materializes ITS default when read. It runs before
@@ -700,7 +726,7 @@ namespace NumSharp
             NDArray data;
             try
             {
-                data = _data.astype(dtype, copy);
+                data = _data.astype(dtype, order, casting, copy);
             }
             catch
             {
@@ -714,9 +740,11 @@ namespace NumSharp
                 fill?.Dispose();
                 return this;
             }
-            // `__array_finalize__` over a NEW buffer: the mask is copied (`_mask.astype(...)`, so a masked write through
-            // the result never reaches this array) and the hard-mask flag carries over (`_update_from(obj)`).
-            return new NDMaskedArray(data, _mask?.copy(), fill) { _hardmask = _hardmask };
+            // `__array_finalize__` over a NEW buffer: the mask is copied (`_mask.astype(_mask_dtype, order)`, so a masked write
+            // through the result never reaches this array) in the new data's layout - 'C' when it is C-contiguous, 'F' when
+            // F-contiguous, else 'K' - and the hard-mask flag carries over (`_update_from(obj)`).
+            char maskOrder = data.Shape.IsContiguous ? 'C' : data.Shape.IsFContiguous ? 'F' : 'K';
+            return new NDMaskedArray(data, _mask?.astype(_mask.dtype, maskOrder), fill) { _hardmask = _hardmask };
         }
 
         // ── Arithmetic operators — compose the np.ma.* binary ufuncs; masks propagate (OR). ──
@@ -2291,7 +2319,7 @@ namespace NumSharp
             if (!discovered)
             {
                 if (dtype != null)
-                    d = d.astype(dtype, copy);
+                    d = d.astype(dtype, copy: copy);
                 else if (copy)
                     d = d.copy();
             }

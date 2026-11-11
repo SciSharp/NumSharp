@@ -916,8 +916,8 @@ namespace NumSharp.Tests.Backends.Strings
         public void Astype_NoCopy_OnlyForTheSameDescriptor()
         {
             using var t = A("a", L('b'));
-            ReferenceEquals(t.astype(t.dtype, false), t).Should().BeTrue();
-            using var copy = t.astype(T, false);
+            ReferenceEquals(t.astype(t.dtype, copy: false), t).Should().BeTrue();
+            using var copy = t.astype(T, copy: false);
             ReferenceEquals(copy, t).Should().BeFalse();
             copy.Storage.VStringSlice.Allocator.Should().NotBeSameAs(t.Storage.VStringSlice.Allocator);
         }

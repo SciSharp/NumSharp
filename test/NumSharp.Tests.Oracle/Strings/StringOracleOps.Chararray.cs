@@ -321,7 +321,7 @@ namespace NumSharp.Tests.Strings
                 "diagonal" => c.diagonal(),
                 "view" => args.Length == 0 ? c.view() : MemberView(c, args[0]),
                 "astype" => kw is JsonElement ck && ck.TryGetProperty("copy", out var copy)
-                    ? c.astype(np.dtype(args[0].GetProperty("dtype").GetString()), copy.GetBoolean())
+                    ? c.astype(np.dtype(args[0].GetProperty("dtype").GetString()), copy: copy.GetBoolean())
                     : c.astype(np.dtype(args[0].GetProperty("dtype").GetString())),
                 "getfield" => c.getfield(np.dtype(args[0].GetProperty("dtype").GetString()), args[1].GetInt32()),
                 "byteswap" => c.byteswap(),

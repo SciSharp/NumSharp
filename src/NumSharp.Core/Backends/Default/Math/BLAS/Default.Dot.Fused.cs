@@ -200,7 +200,7 @@ namespace NumSharp.Backends
         /// <remarks>A method of its own so that <see cref="VdotFunction1D"/> carries no exception-handling region.</remarks>
         private NDArray VdotComplexMixed(NDArray left, NDArray right)
         {
-            NDArray ap1 = left.astype(NPTypeCode.Complex, false), ap2 = right.astype(NPTypeCode.Complex, false);
+            NDArray ap1 = left.astype(NPTypeCode.Complex, copy: false), ap2 = right.astype(NPTypeCode.Complex, copy: false);
             try
             {
                 return VdotFunction1D(ap1, ap2);
@@ -228,7 +228,7 @@ namespace NumSharp.Backends
         private NDArray DotFunction1DMixed(NDArray left, NDArray right)
         {
             var common = DTypePromotion.PromoteTypes(left.dtype, right.dtype);
-            NDArray ap1 = left.astype(common, false), ap2 = right.astype(common, false);
+            NDArray ap1 = left.astype(common, copy: false), ap2 = right.astype(common, copy: false);
             try
             {
                 return DotFunction1D(ap1, ap2);
@@ -306,7 +306,7 @@ namespace NumSharp.Backends
                     return NewScalar(ConvertedDot1D<Complex>(left, right, n, NPTypeCode.Complex, &Dot1DComplex));
             }
 
-            NDArray ap1 = left.astype(common, false), ap2 = right.astype(common, false);
+            NDArray ap1 = left.astype(common, copy: false), ap2 = right.astype(common, copy: false);
             try
             {
                 return DotInner1D(ap1, ap2);

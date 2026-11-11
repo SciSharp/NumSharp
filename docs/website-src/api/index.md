@@ -49,9 +49,9 @@ Functions for creating new arrays.
 |----------|-------------|
 | `np.array(data)` | Create array from existing data |
 | `np.zeros(shape)` | Array filled with zeros |
-| `np.zeros_like(a)` | Array of zeros with same shape as `a` |
+| `np.zeros_like(a, dtype, order, shape)` | Array of zeros with same shape as `a` (or `shape:`) |
 | `np.ones(shape)` | Array filled with ones |
-| `np.ones_like(a)` | Array of ones with same shape as `a` |
+| `np.ones_like(a, dtype, order, shape)` | Array of ones with same shape as `a` (or `shape:`) |
 | `np.empty(shape)` | Uninitialized array |
 | `np.full(shape, value)` | Array filled with a constant value |
 | `np.eye(N)` | Identity matrix |
@@ -72,8 +72,8 @@ Functions for combining multiple arrays.
 |----------|-------------|
 | `np.concatenate(arrays, axis)` | Join arrays along an existing axis |
 | `np.stack(arrays, axis)` | Join arrays along a new axis |
-| `np.vstack(arrays)` | Stack arrays vertically (row-wise) |
-| `np.hstack(arrays)` | Stack arrays horizontally (column-wise) |
+| `np.vstack(arrays)` | Stack arrays vertically (row-wise); `np.vstack(new[] { a, b }, dtype:, casting:)` |
+| `np.hstack(arrays)` | Stack arrays horizontally (column-wise); `np.hstack(new[] { a, b }, dtype:, casting:)` |
 | `np.dstack(arrays)` | Stack arrays depth-wise (along 3rd axis) |
 
 ---

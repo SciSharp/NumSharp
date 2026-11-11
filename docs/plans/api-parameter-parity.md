@@ -614,9 +614,13 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [x] B4 `np.std`, `np.var`, `ndarray.std`, `ndarray.var`: `out=`, `where=`, `mean=`, `correction=`; NumPy's order
   `(a, axis, dtype, out, ddof, keepdims)`. Done 2026-11-02 (`38bcad09`, with B1; the methods have no `correction=`,
   as NumPy's do not).
-- [ ] B5 `np.nansum`, `np.nanprod`: `dtype=`, `out=`, `initial=`, `where=`.
-- [ ] B6 `np.nanmean`: `dtype=`, `out=`, `where=`. (`dtype=` landed with A7.)
-- [ ] B7 `np.nanstd`, `np.nanvar`: `out=`, `where=`, `mean=`, `correction=`; NumPy's order. (`dtype=` landed with A3.)
+- [x] B5 `np.nansum`, `np.nanprod`: `dtype=`, `out=`, `initial=`, `where=`; NumPy's order (API-parity batch 3,
+  2026-11-11: `_replace_nan` then np.sum / np.prod with every keyword; the keyword-free call keeps its fused route).
+- [x] B6 `np.nanmean`: `dtype=`, `out=`, `where=`; NumPy's order (`dtype=` landed with A7; `out=` / `where=` and the
+  order with API-parity batch 3, 2026-11-11, NumPy's statements as written).
+- [x] B7 `np.nanstd`, `np.nanvar`: `out=`, `where=`, `mean=`, `correction=`; NumPy's order (`dtype=` landed with A3;
+  the rest with API-parity batch 3, 2026-11-11). A `numpy.matrix` operand with `where=` / `initial=` still computes
+  where NumPy raises the matrix method's keyword TypeError (`[OpenBugs]` in `OpenBugs.ApiParity.cs`).
 - [ ] B8 `np.argmax`, `np.argmin`, `ndarray.argmax`, `ndarray.argmin`: `out=`.
 - [x] B9 `np.cumsum`, `np.cumprod`: parameter names `a` and `dtype` (were `arr` and `typeCode`; API-parity batch 1,
   2026-11-11).
@@ -631,7 +635,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 ### Phase D: creation
 
 - [ ] D1 `np.empty`, `np.zeros`, `np.ones`, `np.full`: `order=` at NumPy's position `(shape, dtype, order)`.
-- [ ] D2 `np.empty_like`, `np.zeros_like`, `np.ones_like`, `np.full_like`: `shape=`; `order=` at NumPy's position.
+- [x] D2 `np.empty_like`, `np.zeros_like`, `np.ones_like`, `np.full_like`: `shape=` (`Shape? shape = null`, None
+  included); `order=` at NumPy's position; one signature each (API-parity batch 3, 2026-11-11).
 - [x] D3 `np.linspace`: `retstep=` (array-or-tuple result type), `axis=`. Done with NumPy's array_like ends (the owner's
   choice, 2026-11-10): `NDArray linspace(NDArray start, NDArray stop, long num = 50, bool endpoint = true, DType dtype =
   null, int axis = 0, string device = null)` replaced the four scalar overloads, and NumPy's whole signature over
@@ -661,7 +666,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 - [x] E1 `np.stack`: `out=`, `dtype=`, `casting=`, handed to np.concatenate as NumPy's stack does (API-parity batch
   2, 2026-11-11; `ndarray.stack` too). np.concatenate's refusals keep .NET types, pinned in `OpenBugs.ApiParity.cs`.
-- [ ] E2 `np.hstack`, `np.vstack`: `dtype=`, `casting=`.
+- [x] E2 `np.hstack`, `np.vstack`: `dtype=`, `casting=` (API-parity batch 3, 2026-11-11), as NumPy's
+  `(tup, dtype, casting)` beside the `params NDArray[]` form the owner kept ("But keep the params").
 - [ ] E3 `np.reshape`: `order=`, `copy=`; `ndarray.reshape`: `copy=`.
 - [x] E4 `np.transpose`: parameter `axes` (was misspelled `premute`); `ndarray` / `matrix` / `MaskedArray.transpose` take
   NumPy's `*axes` as `params int[] axes` (API-parity batch 1, 2026-11-11).
@@ -681,7 +687,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [ ] G1 Parameter names: `np.broadcast_to(array, shape)`, `np.can_cast(from_)`, `np.iinfo(int_type)`. Done by
   API-parity batch 1 (2026-11-11): `np.around(a)`, `np.array_equal(a1, a2)`, `np.array_repr(arr)`,
   `np.iscomplex` / `np.isreal` / `np.iscomplexobj` / `np.isrealobj(x)`, `np.isscalar(element)`, `np.put(ind, v)`.
-- [ ] G2 `ndarray.astype`: NumPy's order `(dtype, order, casting, subok, copy)` (today `(dtype, copy, order, casting)`).
+- [x] G2 `ndarray.astype`: NumPy's order `(dtype, order, casting, copy)` - one overload on NDArray, NDMatrix,
+  NDCharArray and NDMaskedArray (API-parity batch 3, 2026-11-11; `subok` stays excluded).
 - [x] G3 `ndarray.dot`: `out=` (API-parity batch 2, 2026-11-11; np.dot's out path).
 - [ ] G4 A bare `null` axis (NumPy's positional `None`) is ambiguous (CS0121) where an `int?` and an `int[]` overload
   share the position: `np.average`, `np.average_returned`, `np.flip`, `np.gradient`, `np.median`, `np.nanmedian`,
@@ -2043,6 +2050,24 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    one, test the cases where the old one would answer differently.
 
 ## 7. State log
+
+- **2026-11-11**: API-parity batch 3 on `journey5` (branch `api-parity/batch-03`; the owner approved 8 of 15 picks
+  and decided OD1): B5, B6, B7, D2, E2 and G2 done (above); one signature for the ten unary ufuncs (`abs`, `absolute`,
+  `exp`, `exp2`, `expm1`, `log`, `log2`, `log10`, `log1p`, `square`: the one-argument overloads went, a method group
+  needs a lambda as for every other ufunc), for np.ravel / ndarray.ravel (`order='C'`) and for np.repeat /
+  ndarray.repeat (the count as an array; the owner kept the generic scalar form as `repeat<T>(T a, NDArray repeats)`).
+  MaskedArray.astype follows ndarray's statements (argument parse, view shortcut, the casting check before the fill
+  conversion) and lays the new mask out like the new data, as `__array_finalize__` does. Deferred by the owner: the
+  binary ufuncs' scalar overloads (which would fix QB-29 / QB-30), the comparisons' object overloads (0 callers),
+  partition's kth, broadcast_arrays + an NDArray[] Deconstruct, the split family's `indices_or_sections`,
+  broadcast_to's names ("no change") and polyint's k. Decided: OD1, the axis type, is an `NDAxis` struct taken as
+  `NDAxis? axis = null` (implicit from int, int[], (int, int), (int, int, int); probed at C# 12: every NumPy spelling
+  binds, `int?` callers keep compiling, a float axis is refused). Pinned `[OpenBugs]`: np.repeat's refusals raise
+  ArgumentException where NumPy raises ValueError (and a negative scalar count's text), a C# double literal count is
+  refused where NumPy truncates a Python float, and the nan reductions' `where=` / `initial=` on a numpy.matrix compute
+  where NumPy raises (NumSharp.Build's `[ReducesThrough]` check knows only keepdims). Caller migration: 131 positional
+  `astype` copies, 26 positional nan-reduction keepdims / ddof / dtype, 7 positional `device` arguments, 4 positional
+  empty_like shapes (NumPy's order puts `order` first).
 
 - **2026-11-11**: API-parity batch 2 on `journey5` (the owner approved all 15 picks from `API_PARITY_DIFF.md`; branch
   `api-parity/batch-02`): E1, F1, F2 and G3 done (above). One signature each, the extra overloads deleted and their

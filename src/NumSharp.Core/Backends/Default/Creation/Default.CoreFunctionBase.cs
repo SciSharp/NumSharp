@@ -27,7 +27,7 @@ namespace NumSharp.Backends
                 // The cast to text always copies (float64 is never a text dtype), so the float64 samples - a view of
                 // the fill's buffer for two or more samples - are released here, whatever astype does.
                 using NDArray samples = LinspaceCore(start, stop, num, endpoint, NPTypeCode.Double);
-                return samples.astype(dtype, false);
+                return samples.astype(dtype, copy: false);
             }
             return LinspaceCore(start, stop, num, endpoint, dtype?.GetTypeCode() ?? NPTypeCode.Double);
         }
@@ -146,7 +146,7 @@ namespace NumSharp.Backends
 
                 // y = conv.wrap(y.astype(dtype, copy=False)): the wrap is this member's [ArrayWrap] declaration, which the
                 // woven np.linspace applies to a subclass operand's result.
-                NDArray result = y.astype(dtype, false);
+                NDArray result = y.astype(dtype, copy: false);
                 if (!ReferenceEquals(result, y))
                     y.Dispose();
                 return result;
@@ -621,7 +621,7 @@ namespace NumSharp.Backends
             if (dtype == null || result.GetTypeCode == dtype.GetTypeCode())
                 return result;
             // A genuine dtype change always allocates fresh storage; copy:false mirrors NumPy's copy=False.
-            NDArray cast = result.astype(dtype, false);
+            NDArray cast = result.astype(dtype, copy: false);
             // The computation-domain array is now a dead intermediate: every caller passes a fresh array
             // it owns and returns only what this method hands back. Release it now, or its pooled buffer
             // waits for the finalizer (the FuzzMatrix scope audit caught exactly one escaped buffer per

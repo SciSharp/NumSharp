@@ -331,9 +331,9 @@ namespace NumSharp.Backends.Strings
             if (x.dtype == loop)
                 return null;
             if (seen == x.dtype)
-                return x.astype(loop, true, 'K', "unsafe");
-            using var widened = x.astype(seen, true, 'K', "unsafe");
-            return widened.astype(loop, true, 'K', "unsafe");
+                return x.astype(loop);
+            using var widened = x.astype(seen);
+            return widened.astype(loop);
         }
 
         /// <summary>
@@ -1227,7 +1227,7 @@ namespace NumSharp.Backends.Strings
             PreReduceDTypeCheck(op, dtype);
             ValidateReduceAxis(op, a.ndim, axis);
             PostReduceDTypeCheck(op, dtype);
-            return a.astype(dtype, true, 'K', "unsafe");
+            return a.astype(dtype);
         }
 
         /// <summary>

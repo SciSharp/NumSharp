@@ -142,8 +142,8 @@ namespace NumSharp.Backends
             // KEEPORDER copy (an F-ordered matrix stays F, which decides which outputs a matrix's per-line zaxpy sends
             // through the kernel), and PyArray_NewCopy(NPY_ANYORDER) copies a negative or zero stride over more than one
             // element (in C order: such a view is neither C- nor F-contiguous).
-            NDArray a1 = vec.typecode == tc ? vec : vec.astype(tc, true);
-            NDArray a2 = sca.typecode == tc ? sca : sca.astype(tc, true);
+            NDArray a1 = vec.typecode == tc ? vec : vec.astype(tc);
+            NDArray a2 = sca.typecode == tc ? sca : sca.astype(tc);
             if (HasBadStrides(a1))
             {
                 var copy = a1.copy('C');

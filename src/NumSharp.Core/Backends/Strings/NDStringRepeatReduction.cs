@@ -153,7 +153,7 @@ namespace NumSharp.Backends.Strings
             if (counts.Shape.dimensions[axis] < 2)
                 return;
             // The fill's read of the out into the loop's text, the repeat in that text, the write-back through its cast.
-            NDArray text = outLanes.astype(loopText, true, 'K', "unsafe");
+            NDArray text = outLanes.astype(loopText);
             RunLanes(counts, axis, text);
             UnmanagedStorage.Copyto(outLanes, text, NPY_CASTING.NPY_UNSAFE_CASTING);
         }
@@ -204,7 +204,7 @@ namespace NumSharp.Backends.Strings
             long n = counts.Shape.dimensions[axis];
             // The later counts as the loop reads them: int64 (a uint64 count's bits read as int64 — the fixed-width loop's
             // cast; the StringDType uint64 loop reads the same 64 bits as size_t, which is what the fold does with them).
-            NDArray counts64 = counts.typecode == NPTypeCode.Int64 ? counts : counts.astype(np.int64, true, 'K', "unsafe");
+            NDArray counts64 = counts.typecode == NPTypeCode.Int64 ? counts : counts.astype(np.int64);
             NDArray @out = outLanes;
             bool vstring = NDStringUfuncs.IsVString(@out);
             var ctx = new RepeatContext

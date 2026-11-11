@@ -52,10 +52,10 @@ Console.WriteLine("--- behavior fixes ---");
 // astype(copy:false) no longer mutates; same-dtype returns self
 {
     var a = np.ones(new Shape(3, 3), np.int32);
-    var b = a.astype(np.int64, false);
+    var b = a.astype(np.int64, copy: false);
     Check("astype conv returns new", !ReferenceEquals(b, a) && b.typecode == NPTypeCode.Int64);
     Check("astype input untouched", a.typecode == NPTypeCode.Int32);
-    var c = a.astype(np.int32, false);
+    var c = a.astype(np.int32, copy: false);
     Check("astype same-dtype returns self", ReferenceEquals(c, a));
 }
 

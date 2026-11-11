@@ -649,7 +649,7 @@ namespace NumSharp.Backends
             if (values.ndim == 0)
             {
                 var packed = NDArray.PackForStore(values, src.typecode, pyArrayPackRoute: false);
-                NDArray numeric = ReferenceEquals(packed, values) ? values.astype(src.dtype, true, 'K', "unsafe") : packed;
+                NDArray numeric = ReferenceEquals(packed, values) ? values.astype(src.dtype) : packed;
                 try
                 {
                     MapIterSet(src, indices, numeric);
@@ -667,7 +667,7 @@ namespace NumSharp.Backends
                 if (!proxy.TensorEngine.Any(proxy))
                     return;
             }
-            using var converted = values.astype(src.dtype, true, 'K', "unsafe");
+            using var converted = values.astype(src.dtype);
             MapIterSet(src, indices, converted);
         }
 

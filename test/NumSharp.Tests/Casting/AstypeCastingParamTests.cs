@@ -22,49 +22,53 @@ namespace NumSharp.Tests.Casting
             np.array(new double[] { 1.9 }).astype(NPTypeCode.Int32).GetInt32(0).Should().Be(1);
         }
 
+        /// <summary>casting='safe' (NumPy's positional order: dtype, order, casting): int32 widens to int64 and float64, refuses int16 and float32; float to int is never safe.</summary>
         [TestMethod]
         public void Astype_Safe_AllowsWidening_RejectsNarrowingAndCrossKind()
         {
             var i32 = np.array(new int[] { 1, 2, 3 });
             // widening within signed ints is safe
-            i32.astype(NPTypeCode.Int64, true, 'K', "safe").typecode.Should().Be(NPTypeCode.Int64);
+            i32.astype(NPTypeCode.Int64, 'K', "safe").typecode.Should().Be(NPTypeCode.Int64);
             // narrowing is NOT safe
-            new Action(() => i32.astype(NPTypeCode.Int16, true, 'K', "safe")).Should().Throw<InvalidCastException>();
+            new Action(() => i32.astype(NPTypeCode.Int16, 'K', "safe")).Should().Throw<InvalidCastException>();
             // int32 -> float32 is NOT safe (precision), int32 -> float64 IS safe
-            new Action(() => i32.astype(NPTypeCode.Single, true, 'K', "safe")).Should().Throw<InvalidCastException>();
-            i32.astype(NPTypeCode.Double, true, 'K', "safe").typecode.Should().Be(NPTypeCode.Double);
+            new Action(() => i32.astype(NPTypeCode.Single, 'K', "safe")).Should().Throw<InvalidCastException>();
+            i32.astype(NPTypeCode.Double, 'K', "safe").typecode.Should().Be(NPTypeCode.Double);
             // float -> int is never safe
-            new Action(() => np.array(new double[] { 1.5 }).astype(NPTypeCode.Int32, true, 'K', "safe"))
+            new Action(() => np.array(new double[] { 1.5 }).astype(NPTypeCode.Int32, 'K', "safe"))
                 .Should().Throw<InvalidCastException>();
         }
 
+        /// <summary>casting='same_kind': int32 narrows to int16 and goes to float32, but not to uint32; float to int is refused.</summary>
         [TestMethod]
         public void Astype_SameKind_MatchesNumPyDirectionalRule()
         {
             var i32 = np.array(new int[] { 1, 2, 3 });
             // int -> narrower int and int -> float are same_kind
-            i32.astype(NPTypeCode.Int16, true, 'K', "same_kind").typecode.Should().Be(NPTypeCode.Int16);
-            i32.astype(NPTypeCode.Single, true, 'K', "same_kind").typecode.Should().Be(NPTypeCode.Single);
+            i32.astype(NPTypeCode.Int16, 'K', "same_kind").typecode.Should().Be(NPTypeCode.Int16);
+            i32.astype(NPTypeCode.Single, 'K', "same_kind").typecode.Should().Be(NPTypeCode.Single);
             // signed -> unsigned is NOT same_kind
-            new Action(() => i32.astype(NPTypeCode.UInt32, true, 'K', "same_kind")).Should().Throw<InvalidCastException>();
+            new Action(() => i32.astype(NPTypeCode.UInt32, 'K', "same_kind")).Should().Throw<InvalidCastException>();
             // float -> int is NOT same_kind
-            new Action(() => np.array(new double[] { 1.5 }).astype(NPTypeCode.Int32, true, 'K', "same_kind"))
+            new Action(() => np.array(new double[] { 1.5 }).astype(NPTypeCode.Int32, 'K', "same_kind"))
                 .Should().Throw<InvalidCastException>();
         }
 
+        /// <summary>The default casting='unsafe' converts float64 to int32 and uint8 without a check.</summary>
         [TestMethod]
         public void Astype_Unsafe_AllowsEverything()
         {
             var f64 = np.array(new double[] { 1.9, -2.9, 300.5 });
-            f64.astype(NPTypeCode.Int32, true, 'K', "unsafe").typecode.Should().Be(NPTypeCode.Int32);
-            f64.astype(NPTypeCode.Byte, true, 'K', "unsafe").typecode.Should().Be(NPTypeCode.Byte);
+            f64.astype(NPTypeCode.Int32).typecode.Should().Be(NPTypeCode.Int32);
+            f64.astype(NPTypeCode.Byte).typecode.Should().Be(NPTypeCode.Byte);
         }
 
+        /// <summary>A refused cast raises NumPy's text: Cannot cast array data from dtype('int32') to dtype('int16') according to the rule 'safe'.</summary>
         [TestMethod]
         public void Astype_RejectedCast_MessageMatchesNumPyShape()
         {
             var i32 = np.array(new int[] { 1, 2, 3 });
-            new Action(() => i32.astype(NPTypeCode.Int16, true, 'K', "safe"))
+            new Action(() => i32.astype(NPTypeCode.Int16, 'K', "safe"))
                 .Should().Throw<InvalidCastException>()
                 .WithMessage("Cannot cast array data from dtype('int32') to dtype('int16') according to the rule 'safe'");
         }
@@ -79,41 +83,44 @@ namespace NumSharp.Tests.Casting
         public void Astype_RejectedCast_ZeroDimSource_SaysScalar()
         {
             var scalar = np.array((short)5);
-            new Action(() => scalar.astype(np.int8, true, 'K', "safe"))
+            new Action(() => scalar.astype(np.int8, 'K', "safe"))
                 .Should().Throw<InvalidCastException>()
                 .WithMessage("Cannot cast scalar from dtype('int16') to dtype('int8') according to the rule 'safe'");
-            new Action(() => np.array(new short[] { 5 }).astype(np.int8, true, 'K', "safe"))
+            new Action(() => np.array(new short[] { 5 }).astype(np.int8, 'K', "safe"))
                 .Should().Throw<InvalidCastException>()
                 .WithMessage("Cannot cast array data from dtype('int16') to dtype('int8') according to the rule 'safe'");
             // np.array(5, np.int8).astype(np.float64, casting='no'): the stricter rules word it the same way.
-            new Action(() => np.array((sbyte)5).astype(np.float64, true, 'K', "no"))
+            new Action(() => np.array((sbyte)5).astype(np.float64, 'K', "no"))
                 .Should().Throw<InvalidCastException>()
                 .WithMessage("Cannot cast scalar from dtype('int8') to dtype('float64') according to the rule 'no'");
         }
 
+        /// <summary>A C# Type converts to the dtype parameter and the casting rule still applies (short refused, long allowed under 'safe').</summary>
         [TestMethod]
         public void Astype_TypeOverload_AlsoValidatesCasting()
         {
             var i32 = np.array(new int[] { 1, 2, 3 });
-            new Action(() => i32.astype(typeof(short), true, 'K', "safe")).Should().Throw<InvalidCastException>();
-            i32.astype(typeof(long), true, 'K', "safe").typecode.Should().Be(NPTypeCode.Int64);
+            new Action(() => i32.astype(typeof(short), 'K', "safe")).Should().Throw<InvalidCastException>();
+            i32.astype(typeof(long), 'K', "safe").typecode.Should().Be(NPTypeCode.Int64);
         }
 
+        /// <summary>A cast to the array's own dtype passes every rule, 'no' included.</summary>
         [TestMethod]
         public void Astype_SameDtype_AnyCasting_IsNoOpAllowed()
         {
             // from == to is allowed under every rule (including 'no').
             var i32 = np.array(new int[] { 1, 2, 3 });
-            i32.astype(NPTypeCode.Int32, true, 'K', "no").typecode.Should().Be(NPTypeCode.Int32);
-            i32.astype(NPTypeCode.Int32, true, 'K', "safe").typecode.Should().Be(NPTypeCode.Int32);
+            i32.astype(NPTypeCode.Int32, 'K', "no").typecode.Should().Be(NPTypeCode.Int32);
+            i32.astype(NPTypeCode.Int32, 'K', "safe").typecode.Should().Be(NPTypeCode.Int32);
         }
 
+        /// <summary>An allowed cast under 'same_kind' writes the same bytes as the unsafe default (int64 to int32, wrapping included).</summary>
         [TestMethod]
         public void Astype_AllowedCast_StillProducesCorrectValues()
         {
             // The gate must not change the produced bytes for an allowed cast.
             var i64 = np.array(new long[] { 1, 5_000_000_000L, -1 });
-            var strict = i64.astype(NPTypeCode.Int32, true, 'K', "same_kind");
+            var strict = i64.astype(NPTypeCode.Int32, 'K', "same_kind");
             var unsafe_ = i64.astype(NPTypeCode.Int32);
             Convert.ToHexString(strict.tobytes()).Should().Be(Convert.ToHexString(unsafe_.tobytes()));
         }

@@ -32,12 +32,12 @@ namespace NumSharp.Backends
         /// </remarks>
         private NDArray LogicalAccumulate(NDArray arr, int? axis_, bool logicalAnd)
         {
-            NDArray truth = arr.typecode == NPTypeCode.Boolean ? arr : arr.astype(np.@bool, true, 'K', "unsafe");
+            NDArray truth = arr.typecode == NPTypeCode.Boolean ? arr : arr.astype(np.@bool);
             try
             {
                 // The bool input takes the scans' own bool -> int64 route (True as 1, False as 0).
                 using NDArray counts = logicalAnd ? ReduceCumMul(truth, axis_, np.int64) : ReduceCumAdd(truth, axis_, np.int64);
-                return counts.astype(np.@bool, true, 'K', "unsafe");
+                return counts.astype(np.@bool);
             }
             finally
             {
@@ -58,11 +58,11 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range (the int64 product's own check).</exception>
         private NDArray LogicalProduct(NDArray arr, int? axis_, bool keepdims)
         {
-            NDArray truth = arr.typecode == NPTypeCode.Boolean ? arr : arr.astype(np.@bool, true, 'K', "unsafe");
+            NDArray truth = arr.typecode == NPTypeCode.Boolean ? arr : arr.astype(np.@bool);
             try
             {
                 using NDArray product = ReduceProduct(truth, axis_, keepdims, np.int64);
-                NDArray result = product.astype(np.@bool, true, 'K', "unsafe");
+                NDArray result = product.astype(np.@bool);
                 // A full reduction answers with NumPy's scalar, NumSharp's read-only 0-d array.
                 return axis_ is null ? result.PyArray_Return() : result;
             }

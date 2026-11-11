@@ -2645,7 +2645,7 @@ namespace NumSharp
                     // float32 buffer: x itself, or its C-order float32 copy (astype's default 'K' would keep an
                     // F-ordered x F-ordered).
                     bool direct = x.typecode == NPTypeCode.Single && x.Shape.IsContiguous;
-                    temp = direct ? null : x.astype(NPTypeCode.Single, true, 'C');
+                    temp = direct ? null : x.astype(NPTypeCode.Single, 'C');
                     float* xp = direct ? (float*)((byte*)x.Storage.Address + x.Shape.offset * 4) : (float*)temp.Storage.Address;
                     Complex s = Complex64Of(scl);
                     if (addC64)
@@ -2676,7 +2676,7 @@ namespace NumSharp
                 }
                 // Same C-contiguous float32 requirement for the product (a float16 product widens exactly).
                 bool productDirect = product.typecode == NPTypeCode.Single && product.Shape.IsContiguous;
-                temp = productDirect ? null : product.astype(NPTypeCode.Single, true, 'C');
+                temp = productDirect ? null : product.astype(NPTypeCode.Single, 'C');
                 NDArray values = temp ?? product;
                 float* vp = (float*)((byte*)values.Storage.Address + values.Shape.offset * 4);
                 Complex oo = Complex64Of(off);

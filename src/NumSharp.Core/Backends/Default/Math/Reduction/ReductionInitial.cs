@@ -551,7 +551,7 @@ namespace NumSharp.Backends
             // copied into the slot. The temporary is disposed here: it never escapes the pack.
             if (Strings.NDStringUfuncs.IsText(nd))
             {
-                using var parsed = nd.astype(DType.From(loop), true, 'K', "unsafe");
+                using var parsed = nd.astype(DType.From(loop));
                 byte* q = (byte*)parsed.Address + parsed.Shape.offset * parsed.dtypesize;
                 fixed (byte* d = slot)
                     Buffer.MemoryCopy(q, d, slot.Length, parsed.dtypesize);

@@ -158,7 +158,7 @@ namespace NumSharp.Tests.Fuzz
                 catch (ValueError)
                 {
                 }
-                return c.astype(np.int8, true, 'C', "unsafe");
+                return c.astype(np.int8, 'C');
             });
             E(l, "NDCharArray.copy", "C and F", f =>
             {

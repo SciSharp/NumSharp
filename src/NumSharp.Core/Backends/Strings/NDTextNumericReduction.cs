@@ -129,9 +129,9 @@ namespace NumSharp.Backends.Strings
             // operands in order) — '' does not parse, so NumPy's zeros-initialized text outs refuse here. The converted
             // values themselves are overwritten (the accumulation copies each lane's first element): only the errors count.
             if (!IsLoopDtype(target, loop.GetTypeCode()))
-                target.astype(loop, true, 'K', "unsafe");
+                target.astype(loop);
             // COPY: the input in the loop dtype (a text input parses here).
-            NDArray inLoop = src.astype(loop, true, 'K', "unsafe");
+            NDArray inLoop = src.astype(loop);
             // The accumulation in the loop dtype (NumPy's elementwise loop along the axis), cast back into the out.
             NDArray acc = loop.GetTypeCode() == NPTypeCode.Boolean
                 ? LogicalAccumulate(ufunc, inLoop, ax)

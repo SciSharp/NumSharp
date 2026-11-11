@@ -142,41 +142,37 @@ namespace NumSharp
         public new NDMatrix flatten(char order = 'C') => From(base.flatten(order), this);
 
         /// <summary>NumPy's <c>matrix.ravel(order='C')</c>: the elements as one row <c>(1, size)</c>, a VIEW
-        ///     when the memory layout allows it and a copy otherwise.</summary>
-        /// <returns>A <c>(1, size)</c> matrix; writes reach this matrix when it is a view.</returns>
-        [NDScoped]
-        public new NDMatrix ravel() => From(base.ravel(), this);
-
-        /// <inheritdoc cref="ravel()"/>
+        ///     when the memory layout allows it and a copy otherwise. One signature: <c>m.ravel()</c> binds here with the
+        ///     default 'C'.</summary>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
+        /// <returns>A <c>(1, size)</c> matrix; writes reach this matrix when it is a view.</returns>
         /// <exception cref="ArgumentException"><paramref name="order"/> is not one of the four codes.</exception>
         [NDScoped]
-        public new NDMatrix ravel(char order) => From(base.ravel(order), this);
+        public new NDMatrix ravel(char order = 'C') => From(base.ravel(order), this);
 
         #endregion
 
         #region Conversion and copies
 
-        /// <summary>Copy of the matrix cast to <paramref name="dtype"/>, as a matrix.</summary>
-        /// <param name="dtype">The target dtype.</param>
-        /// <param name="copy"><c>false</c> returns this matrix ITSELF when it already has the dtype.</param>
-        /// <returns>A new matrix that owns its data, or this matrix.</returns>
-        [NDScoped]
-        public new NDMatrix astype(DType dtype, bool copy = true) => From(base.astype(dtype, copy), this);
-
         /// <summary>Copy of the matrix cast to <paramref name="dtype"/> with a memory order and a casting
-        ///     rule, as a matrix.</summary>
+        ///     rule, as a matrix (NumPy's <c>m.astype(dtype, order='K', casting='unsafe', copy=True)</c>).</summary>
         /// <param name="dtype">The target dtype.</param>
-        /// <param name="copy"><c>false</c> returns this matrix itself when nothing has to change.</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
         /// <param name="casting">NumPy's casting rule name (<c>"unsafe"</c>, <c>"same_kind"</c>, <c>"safe"</c>,
         ///     <c>"equiv"</c>, <c>"no"</c>).</param>
+        /// <param name="copy"><c>false</c> returns this matrix itself when nothing has to change.</param>
         /// <returns>A new matrix that owns its data, or this matrix.</returns>
         /// <exception cref="InvalidCastException">The cast is not allowed under <paramref name="casting"/>.</exception>
-        /// <exception cref="ArgumentException">An unknown order or casting name.</exception>
+        /// <exception cref="ValueError">An unknown order or casting name.</exception>
+        /// <remarks>
+        ///     <para>One signature in NumPy's keyword order (API-parity batch 3, 2026-11-11): it replaces the former
+        ///     <c>astype(dtype, copy)</c> / <c>astype(dtype, copy, order, casting)</c> pair, so <c>a.astype(t, 'F')</c> reads as
+        ///     in NumPy and a <c>copy</c> is written <c>copy: false</c> (a bool in the order slot does not compile).
+        ///     <c>subok</c> stays out (the parity plan's exclusion).</para>
+        /// </remarks>
         [NDScoped]
-        public new NDMatrix astype(DType dtype, bool copy, char order, string casting = "unsafe")
-            => From(base.astype(dtype, copy, order, casting), this);
+        public new NDMatrix astype(DType dtype, char order = 'K', string casting = "unsafe", bool copy = true)
+            => From(base.astype(dtype, order, casting, copy), this);
 
         /// <summary>A copy of the matrix, as a matrix (NumPy's <c>m.copy(order)</c>).</summary>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
@@ -386,16 +382,9 @@ namespace NumSharp
         /// <returns>A new matrix that owns its data.</returns>
         /// <exception cref="ValueError">A negative count, or counts that do not match the axis.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <remarks>One signature (API-parity batch 3): <c>m.repeat(2)</c> binds here, 2 converting to a 0-d array.</remarks>
         [NDScoped]
         public new NDMatrix repeat(NDArray repeats, int? axis = null) => From(base.repeat(repeats, axis), this);
-
-        /// <inheritdoc cref="repeat(NDArray, int?)"/>
-        [NDScoped]
-        public new NDMatrix repeat(int repeats, int? axis = null) => From(base.repeat(repeats, axis), this);
-
-        /// <inheritdoc cref="repeat(NDArray, int?)"/>
-        [NDScoped]
-        public new NDMatrix repeat(long repeats, int? axis = null) => From(base.repeat(repeats, axis), this);
 
         #endregion
 

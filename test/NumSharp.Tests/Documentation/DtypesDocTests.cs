@@ -301,7 +301,7 @@ namespace NumSharp.Tests.Documentation
             np.ones_like(template).ToString(true).Should().Be("array(['1', '1'], dtype='<U8')");
 
             np.array([300.0]).astype(NPTypeCode.Byte).ToArray<byte>().Should().Equal((byte)44);
-            Action safe = () => np.array([300.0]).astype(np.uint8, true, 'K', "safe");
+            Action safe = () => np.array([300.0]).astype(np.uint8, 'K', "safe");
             safe.Should().Throw<InvalidCastException>()
                 .WithMessage("Cannot cast array data from dtype('float64') to dtype('uint8') according to the rule 'safe'");
         }
