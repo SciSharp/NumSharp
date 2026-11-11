@@ -276,7 +276,7 @@ That's NEP 50 coercion - weak scalars range-check, strong arrays wrap. See [Gett
 
 | Form | Example | Kind | Result |
 |------|---------|------|--------|
-| Integer | `x[1, 3]` | basic | element → 0-d view |
+| Integer | `x[1, 3]` | basic | the element: NumPy's scalar, a read-only copy (`x[1, 3, ...]` is a 0-d view) |
 | Integer (partial) | `x[0]` | basic | sub-array view |
 | Slice string | `x["1:3, :2"]` | basic | view |
 | Ellipsis / newaxis | `x["..., 0]"`, `x[np.newaxis]` | basic | view |

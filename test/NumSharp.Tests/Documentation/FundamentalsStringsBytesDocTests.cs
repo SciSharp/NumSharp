@@ -102,7 +102,8 @@ namespace NumSharp.Tests.Documentation
             names.item(1).Should().Be("dog");
             ((byte[])names.astype("S4").item(1)).Should().Equal((byte)'d', (byte)'o', (byte)'g');
             NDArray.AsStringArray(names).Should().Equal("cat", "dog", "bird");
-            names[1].ToString(true).Should().Be("array('dog', dtype='<U4')");
+            // The item is NumPy's scalar: a read-only copy as wide as its text (NumPy's PyArray_Scalar trims the itemsize).
+            names[1].ToString(true).Should().Be("array('dog', dtype='<U3')");
             ((System.Collections.IEnumerable)names.tolist()).Cast<object>().Should().Equal("cat", "dog", "bird");
 
             names[1] = "zebras";

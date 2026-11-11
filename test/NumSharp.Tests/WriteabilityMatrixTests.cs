@@ -13,17 +13,12 @@ namespace NumSharp.Tests
     ///     files); the identical propagation for a read-only <c>'r'</c> memmap — including the
     ///     memory-safety angle (writes must throw, not segfault) — lives in <c>IO/NpyMemmapTests</c>.
     ///
-    ///     Two entries differ from NumPy and are NOT propagation bugs — NumSharp returns a different KIND
-    ///     of object and its flag is correct for that object; both are pre-existing, memory-safe design
-    ///     choices, marked <see cref="MISALIGNED"/> below:
-    ///       • <c>a[i,j]</c> → a writeable 0-d VIEW (NumPy returns an immutable scalar, WRITEABLE=False).
-    ///       • <c>squeeze</c> of a broadcast → a writeable COPY via reshape (NumPy returns a read-only view).
+    ///     <c>a[i,j]</c> is NumPy's scalar: a read-only COPY of the element whatever the source's writeability (it
+    ///     was a writeable 0-d view until the scalar plan's step S2, the last entry that differed from NumPy here).
     /// </remarks>
     [TestClass]
     public class WriteabilityMatrixTests
     {
-        private const bool MISALIGNED = true; // marks an intentional, memory-safe divergence from NumPy
-
         private static NDArray Owned() => np.arange(24).astype(NPTypeCode.Int32).reshape(4, 6);
         private static NDArray Broadcast() => np.broadcast_to(np.arange(6).astype(NPTypeCode.Int32), new Shape(4, 6));
 
@@ -37,7 +32,7 @@ namespace NumSharp.Tests
             yield return ("slice_rev",    a => a["::-1"],                              true,  false);
             yield return ("slice_2d",     a => a["1:3, 1:3"],                          true,  false);
             yield return ("index_row",    a => a["0"],                                 true,  false);
-            yield return ("index_elem",   a => a["0, 0"],                              true,  false); // 0-d view (see MISALIGNED note)
+            yield return ("index_elem",   a => a["0, 0"],                              false, false); // NumPy's scalar: a read-only copy
             yield return ("T",            a => a.T,                                    true,  false);
             yield return ("swapaxes",     a => np.swapaxes(a, 0, 1),                   true,  false);
             yield return ("moveaxis",     a => np.moveaxis(a, 0, 1),                   true,  false);
@@ -95,8 +90,8 @@ namespace NumSharp.Tests
         [TestMethod]
         public void Documented_Divergences_AreStable()
         {
-            // (1) a[i,j] is a writeable 0-d view (NumPy: immutable scalar, WRITEABLE=False).
-            Assert.IsTrue(MISALIGNED && Owned()["1, 2"].Shape.IsWriteable);
+            // (1) RESOLVED to parity (the scalar plan's S2): a[i,j] is NumPy's immutable scalar, a read-only copy.
+            Assert.IsFalse(Owned()["1, 2"].Shape.IsWriteable);
             // (2) RESOLVED to parity (flags-oracle wave 2): squeeze is now a stride-dropping VIEW,
             // so squeezing a broadcast yields a READ-ONLY broadcast view exactly like NumPy —
             // the old reshape-based squeeze materialized a writeable copy here.

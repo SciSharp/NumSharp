@@ -1486,7 +1486,9 @@ namespace NumSharp.Backends.Strings
             var slices = new Slice[@out.ndim];
             for (int i = 0; i < slices.Length; i++)
                 slices[i] = i < ndim ? Slice.All : Slice.Index(0);
-            return @out[slices];
+            // The storage-level view, not the indexer: for a 0-d input every axis is indexed, which the indexer reads as an
+            // item (NumPy's scalar copy) - the reduction would write into the copy instead of out.
+            return @out.BasicIndexView(slices);
         }
 
         /// <summary>The view of the first <paramref name="count"/> cells of an array along one axis.</summary>

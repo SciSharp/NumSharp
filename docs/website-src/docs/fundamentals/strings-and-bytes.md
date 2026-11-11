@@ -122,7 +122,7 @@ A cast never splits: `astype("c")` and `np.asarray(existingArray, "c")` keep eac
 names.item(1);                     // "dog" - a C# string
 names.astype("S4").item(1);        // byte[] { 100, 111, 103 } - b'dog'
 NDArray.AsStringArray(names);      // { "cat", "dog", "bird" }
-names[1];                          // array('dog', dtype='<U4') - a 0-d view
+names[1];                          // array('dog', dtype='<U3') - NumPy's scalar np.str_('dog'), a copy as wide as its text
 names[1] = "zebras";               // the array is now ['cat', 'zebr', 'bird']: cut to 4 characters
 names[2] = null;                   // NumPy's None is stored as its str(): ['cat', 'zebr', 'None']
 ```

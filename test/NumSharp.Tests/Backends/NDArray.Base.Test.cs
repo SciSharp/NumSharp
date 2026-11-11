@@ -529,7 +529,10 @@ namespace NumSharp.Tests.Backends
         #region Edge Cases
 
         /// <summary>
-        /// Scalar arrays should work correctly.
+        ///     A scalar and a 0-d array own their data, and their <c>[...]</c> are views with a base: a 0-d ARRAY's view
+        ///     has the array as its base (<c>np.array(42)[...].base is z</c>), while a NumPy scalar's <c>[...]</c> views
+        ///     a COPY of its value (<c>gentype_subscript</c>: <c>np.int32(42)[...].base</c> is a fresh <c>array(42)</c>,
+        ///     never the scalar). Probed NumPy 2.4.2.
         /// </summary>
         [TestMethod]
         public void Base_Scalar_Works()
@@ -538,9 +541,15 @@ namespace NumSharp.Tests.Backends
 
             scalar.@base.Should().BeNull(); // Owns its data
 
-            var view = scalar["..."];   // NumPy-valid 0-d view (scalar[:] raises "too many indices")
+            var zeroD = np.array(42);
+            var view = zeroD["..."];   // NumPy-valid 0-d view (z[:] raises "too many indices")
             view.@base.Should().NotBeNull();
-            view.@base!.Storage.Should().BeSameAs(scalar.Storage);
+            view.@base!.Storage.Should().BeSameAs(zeroD.Storage);
+
+            var scalarView = scalar["..."];
+            scalarView.@base.Should().NotBeNull();
+            scalarView.@base!.Storage.Should().NotBeSameAs(scalar.Storage);
+            ((int)scalarView).Should().Be(42);
         }
 
         /// <summary>

@@ -1847,9 +1847,10 @@ _ARRAY_JOB_NUMPY = {
 # read-only copy, so VF01 matches NumPy and VF02 keeps only element access (a[i, j], z[()], np.flip(z)). VF01's GAPS entry
 # and rule are dropped, VF02's narrowed, and their 72 cases (VF01 71, VF02 1) moved back into view_flags.jsonl the same
 # way (no regeneration).
+# 2026-11-11 (the scalar plan's S2b, same branch): a full integer index is NumPy's item (array_item / PyArray_Scalar), a
+# read-only 0-d COPY of the element, so a[i, j], z[()] and np.flip(z) of a 0-d z (whose indexer is z[()]) match NumPy.
+# VF02's GAPS entry and rule are dropped, and its 12 cases moved back into view_flags.jsonl the same way (no regeneration).
 GAPS = {
-    "VF02": "element access that NumPy answers with a scalar COPY (a[i, j], z[()], np.flip(z) of a 0-d z) returns a "
-            "writeable 0-d VIEW of the operand",
     "VF04": "np.squeeze / ndarray.squeeze with no length-1 axis return a new view where NumPy returns the operand itself",
     "VF08": "np.nanmedian along an axis of an F or permuted 3-D input returns a C-ordered result that owns its data; "
             "NumPy's (numpy.ma's median of the sorted K-order copy, then MaskedArray.filled's _data view) keeps the "
@@ -1908,10 +1909,7 @@ def _gap_of(tier, case):
     if case.get("expects_throw"):
         return None
     if tier == "views":
-        scalar = _is_scalar_result(e)
         axis = p.get("axis")
-        if fn in ("getitem", "flip") and scalar:
-            return "VF02"
         if fn in ("squeeze", "ndarray.squeeze") and "axis" not in p and e["mem"]["same"][0]:
             return "VF04"
         if fn == "nanmedian" and axis is not None and (

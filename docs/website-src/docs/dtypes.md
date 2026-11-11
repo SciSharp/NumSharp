@@ -432,7 +432,7 @@ NDArray s3 = new Complex(1, 2); // 0-d complex128 scalar
 Explicit casts back to .NET scalars require a 0-dimensional array (`ndim == 0`):
 
 ```csharp
-var scalar = np.array([42])[0];  // 0-d view
+var scalar = np.array([42])[0];  // the element: NumPy's scalar (a read-only 0-d copy)
 int x = (int)scalar;                     // works
 
 var oneD = np.array([42]);
@@ -506,6 +506,21 @@ all 0-d (`np.add(np.array(1), 1)`, `np.sqrt(np.array(4.0))`, `a0 < b0`), and `np
 / `np.inner`, `np.sinc`, `np.nan_to_num` and `np.interp` of 0-d input. A result written into `out=` is that array, as
 given. Functions that build an array keep a 0-d ndarray: `np.where`, `np.copy`, `astype` and the views (`np.squeeze`,
 `.real`, `.T`, `view`).
+
+An element is a scalar too: an integer for every axis (`a[1, 2]`, `a[0]` of a 1-D array, `z[()]` of a 0-d array, a
+matrix's `m[0, 1]`) reads a COPY of the element, which a later write to the array does not reach; write an element
+through the setter (`a[1, 2] = v`). Any other index stays a view, and a 0-d view (`a[1, 2, ...]`, `z[...]`) is an array
+that writes through. Indexing a scalar indexes a copy of its value, as NumPy's scalar does: `s[...]` is a writeable 0-d
+array, `s[np.newaxis]` a 1-element array, and a key a 0-d array refuses raises `IndexError: invalid index to scalar
+variable.`
+
+```csharp
+var a = np.arange(5.0);
+var x = a[2];                   // 2.0, read-only
+a[2] = 99.0;                    // x is still 2.0
+var s = a.sum();
+var v = s[Slice.Ellipsis];      // a writeable 0-d array over a copy of s
+```
 
 Every NumPy scalar class with a NumSharp dtype has a call: `np.bool` / `np.bool_`, `np.int8` … `np.int64`, `np.uint8` …
 `np.uint64`, the C-type names (`np.byte`, `np.short`, `np.intc`, `np.int_`, `np.long`, `np.longlong`, `np.intp` and their
@@ -614,9 +629,9 @@ Rules worth knowing:
   because `"float"` is float64. Families are classes (`np.floating`), never strings.
 - **`np.isdtype` compares classes by identity**, not by subclass: `np.isdtype(np.int64, np.integer)` is False. Use
   `np.issubdtype` for the hierarchy, or `np.isdtype`'s kind names (`"integral"`, `"real floating"`, ...).
-- **A C# value is a NumPy scalar and a Python object.** NumSharp has no scalar objects, so `__instancecheck__` treats a
-  C# value of a dtype's element type as a scalar of that dtype (a `double` is a `numpy.float64`), and a 0-d array that
-  NumSharp computed (`a.sum()`, `a[0]`) as well. A C# value is also the Python object it stands for (an `int` is a Python
+- **A C# value is a NumPy scalar and a Python object.** NumSharp's scalars are 0-d arrays, not objects of scalar classes,
+  so `__instancecheck__` treats a C# value of a dtype's element type as a scalar of that dtype (a `double` is a
+  `numpy.float64`), and a 0-d array that is NumPy's scalar (`a.sum()`, an element `a[0]`, `NDArray.Scalar(...)`) as well. A C# value is also the Python object it stands for (an `int` is a Python
   `int`, a `double` a `float`, a `string` a `str`), so `NDScalarType.PyFloat.__instancecheck__(1.5)` is True. A 0-d
   array follows NumPy's classes exactly: a float64 scalar is a Python `float`, an int64 one is not an `int`. An explicit
   `np.array(5)` is a 0-d ndarray, not a scalar, exactly as in NumPy.

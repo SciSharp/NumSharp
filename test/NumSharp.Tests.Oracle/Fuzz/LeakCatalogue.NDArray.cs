@@ -310,7 +310,13 @@ namespace NumSharp.Tests.Fuzz
             E(l, "ndarray.op_Implicit", "scalar -> 0-d", f => { NDArray x = 5.5; return x; });
             E(l, "ndarray.op_Implicit", "managed array -> NDArray", f => { NDArray x = new[] { 1.0, 2.0, 3.0 }; return x; });
             E(l, "ndarray.op_Implicit", "string -> 0-d <U3", f => { NDArray x = "abc"; return x; });
-            E(l, "ndarray.op_Explicit", "0-d -> scalar", f => Box((double)f.M["0, 0"]));
+            E(l, "ndarray.op_Explicit", "0-d -> scalar", f =>
+            {
+                // The element is NumPy's scalar: a read-only 0-d COPY that owns one pooled buffer, the caller's to release
+                // (an item dropped undisposed waits for the finalizer), so the entry disposes it after the cast.
+                using var e = f.M["0, 0"];
+                return Box((double)e);
+            });
             E(l, "ndarray.op_Explicit", "NDArray -> managed array", f => (Array)f.MT);
 
             // ---- NDArray<T> ----
@@ -321,9 +327,9 @@ namespace NumSharp.Tests.Fuzz
             E(l, "NDArray<T>.op_Implicit", "NDArray<T> -> ArraySlice<T>", f => { ArraySlice<double> s = f.GM; return Box(s.Count); });
             E(l, "NDArray<T>.Item", "typed element get/set by int and long coordinates", f =>
             {
-                // An element read is a 0-d typed VIEW of the fixture's buffer (no pooled buffer is taken), and the
+                // An element read is NumPy's scalar, a read-only 0-d typed COPY (one pooled buffer), and the
                 // write-back of the same value (leaving the fixture unchanged) stores a 0-d array the T value
-                // converts to: both are disposed here, so the entry must read zero pool traffic.
+                // converts to: both are disposed here, so the entry must leave no buffer out of the pool.
                 double v;
                 using (var e = f.GM[1, 2])
                     v = (double)e;

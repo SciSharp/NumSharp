@@ -60,7 +60,8 @@ namespace NumSharp
     ///     <para>
     ///     <b>Members and indexers follow the static type.</b> They are chosen by the compiler when the expression is typed
     ///     <see cref="NDCharArray"/>. The same object through an <see cref="NDArray"/> reference is a plain string array:
-    ///     its indexer returns an unstripped 0-d view and its members return plain arrays.
+    ///     its indexer returns an element as NumPy's scalar (a read-only copy, trailing NULs trimmed, whitespace kept, as
+    ///     <c>np.asarray(c)[0]</c> is an <c>np.str_</c>) and its members return plain arrays.
     ///     </para>
     ///     <para>
     ///     <b>Element access strips.</b> An index that names one element (an integer per axis) returns a READ-ONLY 0-d

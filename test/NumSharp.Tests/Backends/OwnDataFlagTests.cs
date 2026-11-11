@@ -196,7 +196,10 @@ namespace NumSharp.Tests.Backends
         {
             var b2 = np.arange(12).reshape(3, 4);
             AssertView(b2[0], "a row sub-array is a view (NumPy num=1283)");
-            AssertView(b2[0][0], "a 0-d element view shares storage (NumSharp GetData view; NumPy a[0,0] is a scalar)");
+            // The element is NumPy's scalar: a read-only COPY that owns its value (np.arange(12).reshape(3, 4)[0][0] is
+            // np.int64(0), flags.num 263).
+            AssertOwns(b2[0][0], "an element is NumPy's scalar, a copy that owns its value");
+            b2[0][0].flags.num.Should().Be(263);
         }
 
         // ---- views: axis movers -----------------------------------------------------------------

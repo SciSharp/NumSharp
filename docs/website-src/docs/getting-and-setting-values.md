@@ -21,7 +21,8 @@ c[0] = 0;                // a[2] stays 999
 
 | Access | Returns | Write-through? |
 |--------|---------|----------------|
-| Plain slice - `a["1:3"]`, `a[0]`, `a["..., -1"]`, `a.T` | **view** | yes - mutates the parent |
+| Plain slice - `a["1:3"]`, `a[0]` of an N-D `a`, `a["..., -1"]`, `a.T` | **view** | yes - mutates the parent |
+| Element - an integer per axis: `a[1, 2]`, `a[0]` of a 1-D `a` | **copy** (NumPy's scalar, read-only) | no - write the element with the setter, `a[1, 2] = v` |
 | Fancy index (read) - `a[idx]` | **copy** | no - but `a[idx] = v` (the setter) *does* touch the parent |
 | Boolean mask (read) - `a[mask]` | **copy** | no - but `a[mask] = v` (the setter) *does* touch the parent |
 | Broadcasted view - `np.broadcast_to(a, shape)` | **read-only view** | writes throw (`assignment destination is read-only`) |
@@ -92,7 +93,7 @@ Reading one element has five entry points, chosen by how many indices you have a
 ```csharp
 var a = np.arange(12).reshape(3, 4);   // int64 (NumPy 2.x default integer)
 
-// 1. Indexer - returns a 0-d NDArray (a single element is still an array, like NumPy 2.x)
+// 1. Indexer - NumPy's scalar: a read-only 0-d NDArray holding a COPY of the element (NumPy 2.x's a[1, 2] is an np.int64)
 NDArray elem = a[1, 2];
 long v = (long)elem;                    // cast the 0-d out → converts
 
@@ -118,7 +119,7 @@ double y = a.GetDouble(1, 2);           // 6.0: the int64 element, converted as 
 
 | Accessor | Indices | Converts? | Use when |
 |----------|---------|-----------|----------|
-| `a[i, j]` (indexer) | N-D | yes (cast the 0-d out) | NumPy-like ergonomics; you don't mind the 0-d detour |
+| `a[i, j]` (indexer) | N-D | yes (cast the 0-d out) | NumPy-like ergonomics; you don't mind the 0-d detour (a fresh read-only copy, about 0.5 µs) |
 | `a.item<T>(i)` / `a.item(i)` | flat | **yes** | porting NumPy code; reading across dtypes |
 | `a.GetValue<T>(...)` | N-D | yes (NumPy's cast to `T`) | coordinate access in typed code |
 | `a.GetAtIndex<T>(i)` | flat | yes (NumPy's cast to `T`) | hot loops - fastest, no Shape math |
@@ -273,13 +274,13 @@ When a scalar is written to an array (`fill`, `flatiter` set, scalar indexer ass
 - **A C# primitive is a *weak* scalar** (NumSharp's analog of a Python literal).
   - Into an **integer** dtype it is **range-checked**: an out-of-range value **raises** `OverflowError` (`"Python integer 300 out of bounds for int8"`) rather than wrapping. A float source truncates toward zero first, then the truncated value is checked; `NaN` raises `ValueError`, `±inf` raises `OverflowException`, a complex source raises `TypeError`.
   - Into a **float/complex** dtype it casts, saturating to `±inf` on overflow (`float32.fill(1e300)` → `inf`).
-- **A 0-d `NDArray` is a *strong* scalar** - it **wraps** on cast, as NumPy's 0-d array does (`a.fill(np.array(300, np.int32))` stores 44). Use `NDArray.Scalar<T>(v)` when you need the wrapping cast. NumPy 2.4.2 range-checks its scalar objects (`np.int32(300)`) like Python ints here; NumSharp has no scalar objects, and its C# primitive takes that role.
+- **A 0-d `NDArray` is a *strong* scalar** - it **wraps** on cast, as NumPy's 0-d array does (`a.fill(np.array(300, np.int32))` stores 44). Use `np.array(v)` (a 0-d array of the C# value's type: `np.array(300)` is int32) when you need the wrapping cast. NumPy 2.4.2 range-checks its scalar objects (`np.int32(300)`, an element `b[j]`) like Python ints here (`OverflowError: Python integer 300 out of bounds for int8`); NumSharp's scalars (`NDArray.Scalar(...)`, an element, a reduction's result) still store with the 0-d array's wrapping cast, and a C# primitive takes the range-checking role.
 - A **higher-rank array** assigned as a scalar is a sequence → `ValueError("setting an array element with a sequence.")`.
 
 ```csharp
 var a = np.zeros(3, dtype: np.int8);
 a.fill(300);                       // OverflowError - weak int out of range for int8
-a.fill(NDArray.Scalar<int>(300)); // OK - strong scalar wraps → stores 44
+a.fill(np.array(300));            // OK - a 0-d int32 array wraps → stores 44
 ```
 
 ---
@@ -340,7 +341,7 @@ You're writing into a broadcasted view (a stride-0 dimension), which is read-onl
 The typed accessors (`GetDouble`/`SetDouble`/`GetInt32`/…, `GetValue<T>`, `GetAtIndex<T>`, `SetAtIndex<T>`) convert with NumPy's cast when `T` is not the array's own type: `GetInt32` of a float64 `2.9` is `2`, and `SetDouble(3.5, …)` into an int64 array stores `3`. Read and write with the dtype's own type (`a.dtype.type`) to keep values exact.
 
 ### "`OverflowError: Python integer … out of bounds`"
-A weak C# scalar didn't fit the target integer dtype. That's NumPy 2.x behavior - weak scalars range-check instead of wrapping. Pass a strong scalar to wrap: `a.fill(NDArray.Scalar<int>(v))`, or widen the dtype.
+A weak C# scalar didn't fit the target integer dtype. That's NumPy 2.x behavior - weak scalars range-check instead of wrapping. Pass a 0-d array to wrap: `a.fill(np.array(v))`, or widen the dtype.
 
 ### "`a += 1` didn't update another reference"
 C# compound assignment rebinds the variable; it doesn't mutate. Use `a[":"] = a + 1` for in-place. See [In-place vs. reassignment](#in-place-vs-reassignment).

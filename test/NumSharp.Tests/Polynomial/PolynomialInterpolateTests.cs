@@ -405,8 +405,9 @@ namespace NumSharp.Tests.Polynomial
                     NDArray x = cheb.chebpts1(deg + 1);
                     NDArray m = cheb.chebvander(x, deg);
                     NDArray c = np.dot(m.T, (NDArray)f(x, Array.Empty<object>()));
-                    NDArray head = c[0], tail = c[new Slice(1, null)];
-                    np.divide(head, NDArray.Scalar(deg + 1L), @out: head);
+                    // c[0] /= order is c[0] = c[0] / order (the item of a 1-D c is NumPy's scalar copy); c[1:] /= ... is in place.
+                    c[0] = np.divide(c[0], NDArray.Scalar(deg + 1L));
+                    NDArray tail = c[new Slice(1, null)];
                     np.divide(tail, NDArray.Scalar(0.5 * (deg + 1)), @out: tail);
                     Assert.AreEqual(Hex(c), Hex(cheb.chebinterpolate(f, deg)), $"degree {deg}");
                 }

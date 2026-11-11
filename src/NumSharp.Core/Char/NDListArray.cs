@@ -262,7 +262,9 @@ namespace NumSharp
         {
             ThrowIfDisposed();
             slices ??= Array.Empty<Slice>();
-            var view = Over(Ids[slices]);
+            // The id slots' storage-level VIEW, not the indexer: an element index names one slot, which the indexer reads
+            // as an item (NumPy's scalar copy of the id) - the stand-in must keep pointing at the array's own slot.
+            var view = Over(Ids.BasicIndexView(slices));
             if (IsElementIndex(slices))
                 view.MarkStandIn();
             return view;

@@ -215,8 +215,14 @@ namespace NumSharp.Tests
 
         // --------------------------------------------------------------------------------------------- NDArray<T>
 
+        /// <summary>
+        ///     A typed array's selections are typed, and its element is NumPy's scalar as for every array: a read-only
+        ///     COPY (<c>a[1, 2]</c> of a float64 array is <c>np.float64(5.0)</c>, <c>flags.writeable</c> False, unchanged
+        ///     by a later <c>a[1, 2] = 50</c>), indexed as a scalar (<c>np.float64(5.0)[0]</c> raises
+        ///     <c>IndexError: invalid index to scalar variable.</c>). Probed NumPy 2.4.2.
+        /// </summary>
         [TestMethod]
-        public void TypedArray_EverySelectionIsTyped_AndAnElementIsA0dView()
+        public void TypedArray_EverySelectionIsTyped_AndAnElementIsAScalarCopy()
         {
             NDArray<double> a = np.arange(6.0).reshape(2, 3).MakeGeneric<double>();
             NDArray<double> row = a[1];
@@ -224,10 +230,13 @@ namespace NumSharp.Tests
             NDArray<double> element = a[1, 2];
             element.ndim.Should().Be(0);
             ((double)element).Should().Be(5.0);
-            element.SetAtIndex(50.0, 0);
-            ((double)a[1, 2]).Should().Be(50.0, "an element is a VIEW, as for every array");
+            element.Shape.IsWriteable.Should().BeFalse("NumPy's scalar is immutable");
+            new Action(() => element.SetAtIndex(50.0, 0)).Should().Throw<ValueError>();
+            a[1, 2] = 50.0;
+            ((double)a[1, 2]).Should().Be(50.0);
+            ((double)element).Should().Be(5.0, "an element is a COPY: it does not change with the array");
             new Action(() => _ = element[0]).Should().Throw<IndexError>()
-                .WithMessage("too many indices for array: array is 0-dimensional, but 1 were indexed");
+                .WithMessage("invalid index to scalar variable.");
         }
 
         [TestMethod]

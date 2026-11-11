@@ -151,9 +151,12 @@ namespace NumSharp.Tests.Selection
         public void Uint64AndScalarArrayIndices_AreFullIntegerIndices()
         {
             var u = np.array(new[] { "ab", "cd", "ef" });
-            var view = u[1UL];
-            view.flags.owndata.Should().BeFalse("a uint64 index is basic: a view");
-            view.flags.writeable.Should().BeTrue();
+            // A uint64 index is a basic integer index: on a 1-D array the ITEM, NumPy's scalar np.str_('cd') - a read-only
+            // copy that owns its value (no view of u).
+            var item = u[1UL];
+            item.flags.owndata.Should().BeTrue("a uint64 index of a 1-D array is the item: NumPy's scalar, a copy");
+            item.flags.writeable.Should().BeFalse();
+            item.Storage.GetAtIndex(0).Should().Be("cd");
             Action ulongStore = () => u[1UL] = np.zeros(new Shape(1), np.dtype("U5"));
             ulongStore.Should().Throw<ValueError>().Where(e => e.Message == "setting an array element with a sequence");
 

@@ -8628,14 +8628,19 @@ namespace NumSharp
                 // index), not the flat positions put writes.
                 var hidden = x._mask[indices];
 
-                // indices = narray(indices, copy=None) is the index array itself; values = narray(values, copy=None,
-                // subok=True); values.resize(indices.shape) — zero-padded or truncated, never cycled.
-                var resized = ResizeValuesForHardPut(values, indices);
+                // indices = narray(indices, copy=None): the index array itself, or the 0-d ARRAY of a NumPy scalar index
+                // (np.array(np.int64(0), copy=None) is array(0)), which the next statements index as an array - indexing
+                // the scalar would raise NumPy's "invalid index to scalar variable." instead of the array's text.
+                var indexArray = np.asarray(indices);
+
+                // values = narray(values, copy=None, subok=True); values.resize(indices.shape) — zero-padded or
+                // truncated, never cycled.
+                var resized = ResizeValuesForHardPut(values, indexArray);
 
                 // indices = indices[~mask]; values = values[~mask]. For an N-D mask `hidden` has more dimensions than the
                 // index array, so the first statement is the IndexError NumPy raises (the boolean indexer's too-many text).
                 var keep = np.logical_not(hidden);
-                dataIndices = indices[keep];
+                dataIndices = indexArray[keep];
                 dataValues = resized[keep];
             }
 

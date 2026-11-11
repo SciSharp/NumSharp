@@ -32,8 +32,14 @@ paths:
   - `NDArray<T>` overrides the GETTER only, returning `NDArray<T>` (C# lets an override narrow its type only without a
     setter, CS1715); the setter is `NDArray`'s, so through an `NDArray<T>` variable the value must be an `NDArray<T>` or a
     `T` (`implicit operator NDArray<T>(T)`: `typed[0] = 3.14`, `mask[m] = false`); assign an untyped value through an
-    `NDArray` reference or `__setitem__`. There is no scalar indexer: an element is a 0-d view, read with a cast
-    (`(double)typed[0]`) or, in a hot loop, `GetValue<T>(…)` (the view costs about 0.4 µs). Virtual dispatch reaches the
+    `NDArray` reference or `__setitem__`. There is no scalar indexer: an element is NumPy's scalar, a read-only 0-d
+    COPY (`ItemScalar` / the typed `TypedItemScalar`: `array_item`, copied from the element's offset), read with a cast
+    (`(double)typed[0]`) or, in a hot loop, `GetValue<T>(…)` (about 9 ns; the item costs about 0.55 µs disposed and 1.3 µs
+    left to the finalizer, most of it the 0-d allocation). Library code that needs a VIEW of an index that may name every
+    axis calls `BasicIndexView(slices)`, never the indexer (a write into the item would be lost, and an undisposed item
+    leaves a pooled buffer to the finalizer, which the scope gates count). Every key of a read-only NumPy scalar indexes
+    a copy of its value (`gentype_subscript`: `s[...]` is a writeable 0-d array, a refused key is `IndexError: invalid
+    index to scalar variable.`). Virtual dispatch reaches the
     override through an `NDArray` reference too, so a typed array's selection is an `NDArray<T>` at run time. Trap: an
     advanced result is wrapped over its OWN storage object (`new NDArray<T>(result.Storage)`, then the untyped wrapper
     disposed), never `MakeGeneric`: an alias reads as a view, so the gather would lose `flags.owndata`.
@@ -150,7 +156,7 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   overload, which therefore treats null as None). Divergences: `np.pad(constant_values: null)` is the omitted default (C#
   cannot tell an explicit null). Gates: the string oracle's `storenone` section, `Backends/NoneStoreTests.cs`.
 - Kept as casts: `SetValue` / `itemset` (NumSharp's low-level typed setters; `itemset` is gone from NumPy 2.0), an
-  unmarked 0-d array everywhere, and a 0-d view from integer indexing (`a[i] = b[j]`: NumPy's `b[j]` is a NumPy scalar,
+  unmarked 0-d array everywhere, and an item from integer indexing (`a[i] = b[j]`: NumPy's `b[j]` is a NumPy scalar,
   which a SIGNED integer destination would range-check: `[Misaligned]`). Text into a numeric store is parsed like NumPy's
   setitem of a Python `str` (`float64.fill("5.5")` is 5.5, `int32[0] = "hello"` raises `invalid literal for int() with
   base 10: 'hello'`).

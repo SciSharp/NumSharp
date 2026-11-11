@@ -112,6 +112,8 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
   `m + 1.5` and `m[mask] = 0` compile and bind the `(NDMatrix, NDMatrix)` operators; `*` with a 0-d operand scales.
   Members whose NumPy result is always a scalar return a 0-d `NDArray` (`m[0, 0]`, `m.sum()`); the general indexer
   (`this[params object[]]`, the one C# form of `matrix.__getitem__`) returns a 0-d `NDMatrix` for a full integer index.
+  Both element forms are NumPy's item: a read-only 0-d COPY of the element (`ElementScalar`, and `GetBasic`'s item
+  branch through `PyArray_Scalar`), unchanged by a later write to the matrix; write an element through the setter.
 - An explicit 0-d ARRAY is not a scalar to `*`. NumPy's `matrix.__mul__` tests `isinstance(other, ndarray)` before
   `isscalar(other)`, so `m * np.array(2)` is `np.dot(m, asmatrix(np.array(2)))`, the product with a 1 × 1 matrix:
   `ValueError: shapes (2,3) and (1,1) not aligned` unless `m` has one column. NumSharp has one 0-d type for both roles,
