@@ -271,14 +271,14 @@ t.flatiter[new[] {0, 2}] = np.array([7, 8]); // fancy assignment
 When a scalar is written to an array (`fill`, `flatiter` set, scalar indexer assignment), NumSharp coerces it to the dtype with NumPy 2.x's weak/strong scalar rules:
 
 - **A C# primitive is a *weak* scalar** (NumSharp's analog of a Python literal).
-  - Into an **integer** dtype it is **range-checked**: an out-of-range value **raises** `OverflowException` (`"Python integer 300 out of bounds for int8"`) rather than wrapping. A float source truncates toward zero first, then the truncated value is checked; `NaN` raises `ValueError`, `±inf` raises `OverflowException`, a complex source raises `TypeError`.
+  - Into an **integer** dtype it is **range-checked**: an out-of-range value **raises** `OverflowError` (`"Python integer 300 out of bounds for int8"`) rather than wrapping. A float source truncates toward zero first, then the truncated value is checked; `NaN` raises `ValueError`, `±inf` raises `OverflowException`, a complex source raises `TypeError`.
   - Into a **float/complex** dtype it casts, saturating to `±inf` on overflow (`float32.fill(1e300)` → `inf`).
 - **A 0-d `NDArray` is a *strong* scalar** - it **wraps** on cast, as NumPy's 0-d array does (`a.fill(np.array(300, np.int32))` stores 44). Use `NDArray.Scalar<T>(v)` when you need the wrapping cast. NumPy 2.4.2 range-checks its scalar objects (`np.int32(300)`) like Python ints here; NumSharp has no scalar objects, and its C# primitive takes that role.
 - A **higher-rank array** assigned as a scalar is a sequence → `ValueError("setting an array element with a sequence.")`.
 
 ```csharp
 var a = np.zeros(3, dtype: np.int8);
-a.fill(300);                       // OverflowException - weak int out of range for int8
+a.fill(300);                       // OverflowError - weak int out of range for int8
 a.fill(NDArray.Scalar<int>(300)); // OK - strong scalar wraps → stores 44
 ```
 
@@ -339,7 +339,7 @@ You're writing into a broadcasted view (a stride-0 dimension), which is read-onl
 ### "`GetInt32` / `SetDouble` changed my value"
 The typed accessors (`GetDouble`/`SetDouble`/`GetInt32`/…, `GetValue<T>`, `GetAtIndex<T>`, `SetAtIndex<T>`) convert with NumPy's cast when `T` is not the array's own type: `GetInt32` of a float64 `2.9` is `2`, and `SetDouble(3.5, …)` into an int64 array stores `3`. Read and write with the dtype's own type (`a.dtype.type`) to keep values exact.
 
-### "`OverflowException: Python integer … out of bounds`"
+### "`OverflowError: Python integer … out of bounds`"
 A weak C# scalar didn't fit the target integer dtype. That's NumPy 2.x behavior - weak scalars range-check instead of wrapping. Pass a strong scalar to wrap: `a.fill(NDArray.Scalar<int>(v))`, or widen the dtype.
 
 ### "`a += 1` didn't update another reference"

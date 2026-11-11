@@ -336,8 +336,8 @@ The same philosophy, a separate corpus, and a stronger claim: NumSharp's writer 
   (crashes NumPy 2.4.2).
 - The `fromedges` grid exists because a random text fails on an early token before an overflowing value is read, so two
   planted scanner bugs (fromfile's saturation by sign, the `0xFF` a signed `char` loses) survived the random sections.
-  Error classes: only `OverflowError` → `OverflowException` is aliased; every other error the corpus records is raised
-  under NumPy's own class name.
+  Error classes: none is aliased; every error the corpus records is raised under NumPy's own class name (or a NumSharp
+  subclass of it, a `UFunc*` refusal for `TypeError`).
 - Trap: a temp file costs ~2.4 ms in the user's `%TEMP%` (~6 ms inside the test host: the antivirus scans a new file on
   its first open) against ~0.6 ms in the build output on K:, so the replay writes beside the test assembly
   (`TextIO/tmp_<pid>`).

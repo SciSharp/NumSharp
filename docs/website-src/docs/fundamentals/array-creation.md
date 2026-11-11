@@ -85,7 +85,7 @@ NumPy raises when a Python *list* literal overflows the requested dtype (`np.arr
 np.array([127, 128, 129], np.int8);  // [127, -128, -127]  ← wraps (strong array)
 ```
 
-A *weak* C# scalar assigned into an integer array **does** range-check and raise (`OverflowException`). The full rules are in [Getting & Setting Values → Value coercion](../getting-and-setting-values.md#value-coercion-on-assignment-nep50).
+A *weak* C# scalar assigned into an integer array **does** range-check and raise (`OverflowError`). The full rules are in [Getting & Setting Values → Value coercion](../getting-and-setting-values.md#value-coercion-on-assignment-nep50).
 
 ---
 

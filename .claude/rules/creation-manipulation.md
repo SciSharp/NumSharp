@@ -26,7 +26,7 @@ paths:
   bounds for int8`), and the rest is filled by its `fill` slot in the dtype's own arithmetic (bool's fill refuses more
   than two elements).
 - NumPy's dtype checks run first (a text dtype is NumPy's TypeError "arange() not supported for inputs with DType …"),
-  then Python's ZeroDivisionError for a zero step (`DivideByZeroException`); a NaN length is "arange: cannot compute
+  then Python's `ZeroDivisionError` for a zero step; a NaN length is "arange: cannot compute
   length", a length past int64 "Maximum allowed size exceeded".
 - Gates: the `arange_full` oracle tier (zero excuses) and `Creation/np.arange.NumPyPort.Test.cs`.
 
@@ -102,7 +102,7 @@ They are NumPy's coercion of a Python list (`NDArray.asanyarray` in `Creation/ND
   or an `NDArray` an ndarray item, `Half` / `char` / `decimal` NumPy scalars.
 - Without a dtype NumPy's dtype is discovered (`[1, 2]` int64, `[1, 2.5]` float64, `[2**64-1, 1]` float64; None or a
   Python int past 64 bits is NumPy's object array, refused). With one, every scalar item is stored by the class's
-  `setitem` (NumPy's `PyArray_Pack`: 300 into int8 raises `OverflowException`, a complex into float64 `TypeError`, None
+  `setitem` (NumPy's `PyArray_Pack`: 300 into int8 raises `OverflowError`, a complex into float64 `TypeError`, None
   NaN or `int()`'s TypeError) and every array item is cast.
 - Two walks serve it. Lists holding text (or under a text request) take the text builder
   (`UnmanagedStorage.Coercion.Text.cs`: discovery through `DiscoverDTypeFromPyObject` / `FindScalarDescriptor` /
@@ -330,8 +330,9 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
 - `AllocationGuard` (`Exceptions/AllocationGuard.cs`) is the dimension-check block of `PyArray_NewFromDescr_int`. A size
   computed by multiplication cannot be trusted until its overflow is checked, and the failure is silent by construction:
   a wrapped byte count looks like a small allocation, not an error. The running product starts at itemSize (the
-  quantity checked is bytes, so `np.zeros(2^60)` float64 is rejected while the same shape of int8 is merely
-  `OutOfMemoryException`, NumPy's `MemoryError`), and a zero dimension does not short-circuit the scan
+  quantity checked is bytes, so `np.zeros(2^60)` float64 is rejected while the same shape of int8 is merely NumPy's
+  `ArrayMemoryError` when the memory is not there, raised by `UnmanagedStorage.Allocate` around the allocator's
+  `OutOfMemoryException`), and a zero dimension does not short-circuit the scan
   (`np.zeros((0, 2^62))` float64 still reports "array is too big"). Dims are scanned left to right, so the error follows
   NumPy's order (`(-1, 2^62)` is `negative dimensions are not allowed`, `(2^62, -1)` is `array is too big; ...`). There
   are two wrap points, the byte count (`(2^31, 2^31)`) and the element count itself (`(2^62, 2^62)`), so the guard keys
@@ -414,6 +415,6 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   for a multi-axis destination or an opposite-direction 1-D one; otherwise NumPy's raw 1-D order
   (`DirectILKernelGenerator.AssignRaw1D`), which reads its own writes when the strides differ (`a[3:19:2] = a[6:14]`).
 - Divergences (house conventions): the exception types (TypeError → `ArgumentException` for the mask,
-  `InvalidCastException` for casts; OverflowError → `OverflowException`); a 0-d non-bool mask always raises (NumPy takes
+  `InvalidCastException` for casts); a 0-d non-bool mask always raises (NumPy takes
   `where=1`); LP64 texts for a Python int past int64; one complex width.
 - Gates: `copyto_full.jsonl` (zero excuses) and `Manipulation/np.copyto.NumPyPort.Test.cs`.

@@ -143,7 +143,7 @@ before promoting, as NumPy's unfused sequence does.
   (`ExactSumArray`); both sums stream (`TryStreamWeightedAverage` over `AvgNumeratorProgram`/`AvgDenominatorProgram`, no
   temporaries). The result dtype is keyed on the VALUES tree (int/bool → `result_type(values, weights, float64)`, else
   `result_type(values, weights)`; always float or complex, so an int·int product is float64). A zero total weight (an
-  empty input included) raises `DivideByZeroException("Weights sum to zero, can't be normalized")`; a NaN weight gives
+  empty input included) raises `ZeroDivisionError("Weights sum to zero, can't be normalized")`; a NaN weight gives
   NaN. float16 and decimal results are refused.
 - `axis=None` + `keepdims` exists for every reduction kind: each flat factory has a `keepdims` overload (a REQUIRED
   `bool`, so `Sum(x)` stays 0-d and `Sum(x, keepdims: true)` is `(1,)*ndim`), relabelling the 0-d result (it keeps

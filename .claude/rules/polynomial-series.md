@@ -316,7 +316,7 @@ sequence makes them exact; byte dumps per dtype family; kernel structure), `Poly
     `{p}val(lbnd, tmp)` (Python's left-to-right `k[i] - {p}val(…)`), so a bad lbnd wins over a bad later constant; a str
     lbnd is refused only where NumPy evaluates at it (never for m == 0, the one-coefficient zero branch, or before a later
     argument's own error); a `BigInteger` past float64 raises CPython's `int too large to convert to float`
-    (`OverflowException`), one within float64 but past float32/float16 is inf.
+    (`OverflowError`), one within float64 but past float32/float16 is inf.
   - A conversion is the call's intermediate, released however the call ends: `{p}val` disposes an x it converted,
     `_valnd`/`_gridnd` dispose a partial result when a later pass fails, `mapdomain(object x)` its converted points; the
     additive and calculus facades are `[NDScoped]`, the evaluation facades dispose by hand. A pool-balance probe

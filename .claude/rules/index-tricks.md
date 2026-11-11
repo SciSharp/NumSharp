@@ -53,7 +53,7 @@ in the `manip` tier. Sources `Creation/np.{r_,c_}.cs`, `Indexing/np.{ix_,s_}.cs`
   is the Python literal); `char`, `Half`, `decimal` and every `NDArray` (0-d included) are strong
   (`np.r_[i8, NDArray.Scalar(1L)]` is int64, `np.r_[i8, 1L]` int8). A weak entry is stored by the adopted dtype's setitem
   (`NDArray.AsStoreValue`, NumPy's `PyArray_Pack` with the LP64 texts): an integer that does not fit raises
-  `OverflowException("Python integer 1000 out of bounds for int8")`, past the C long "Python int too large to convert to
+  `OverflowError("Python integer 1000 out of bounds for int8")`, past the C long "Python int too large to convert to
   C long" (`np.r_[i8, ulong.MaxValue]`); a weak float saturates to ±inf. An all-literal key whose integer does not fit
   int64 lifts the default to uint64. One complex width: `result_type(float32, 1j)` is complex128. The result dtype is
   one `result_type` over every array and scalar (`NDExprTypeRules.PromoteStrongSequence`, never a left fold:

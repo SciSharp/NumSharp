@@ -189,7 +189,7 @@ are `long` (intp), and every step yields a fresh index array.
   fancy (`int[]`/`long[]`/`NDArray`) and slice-string (`"1:4"`, `"::2"`) get/set, the `index`/`coords` cursor (past the
   end `coords` leaves the slowest axis unwrapped: index == size on `(2,3)` → `(2,0)`), `Base`, `size`, `copy()`, and
   C-order iteration sharing the cursor (a second pass resumes). Scalar assignment into an integer dtype: an in-range
-  value truncates toward zero, an out-of-range WEAK scalar (a C# primitive) raises `OverflowException` ("Python integer
+  value truncates toward zero, an out-of-range WEAK scalar (a C# primitive) raises `OverflowError` ("Python integer
   300 out of bounds for int8"; floats truncate first, NaN/inf raise; a bool target never raises), a STRONG scalar (an
   `NDArray`, the fancy/slice setters) wraps. Into float/complex/decimal it uses `Convert`.
 - `np.flat<T>(a, writeable=false)` / `a.flatiter.AsTyped<T>(writeable=false)` → `np.FlatRefIter<T>` yields `ref T` in

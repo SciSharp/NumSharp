@@ -169,7 +169,7 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   check that an array is not empty.``, both before any element check.
 - Integer targets (`char` included): CPython's `int()` of the element as an exact integer (`PythonIntOf`: a float or
   decimal truncated toward zero, a text parsed by `int()`), then a CHECKED fit into the C# type (`ToCheckedInteger`): a
-  float NaN raises `ValueError: cannot convert float NaN to integer`, an infinity `OverflowException: cannot convert float
+  float NaN raises `ValueError: cannot convert float NaN to integer`, an infinity `OverflowError: cannot convert float
   infinity to integer`, and a value the type cannot hold raises with NumPy's LP64 pack texts (`Python integer 3000000000
   out of bounds for int32`; past the 64-bit C long, into anything but uint32 / uint64, `Python int too large to convert
   to C long`). Python's int is unbounded, so the fixed-width C# type is where the range is enforced: nothing wraps
