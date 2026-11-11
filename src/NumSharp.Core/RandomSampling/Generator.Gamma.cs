@@ -43,7 +43,7 @@ namespace NumSharp
                 if (IsNoSize(size))
                     // size=None returns a float64 scalar even for dtype=float32 (NumPy cont_f returns the C
                     // float, which Python widens to a float); only sized/()/out= stay float32.
-                    return f32 ? NDArray.Scalar((double)NextStandardGammaF(shapeF)) : NDArray.Scalar(NextStandardGamma(shape));
+                    return f32 ? NDArray.WritableScalar((double)NextStandardGammaF(shapeF)) : NDArray.WritableScalar(NextStandardGamma(shape));
 
                 return f32
                     ? FillFloatDist(size, () => NextStandardGammaF(shapeF))
@@ -71,7 +71,7 @@ namespace NumSharp
             lock (_bitGenerator.@lock)
             {
                 if (IsNoSize(size))
-                    return NDArray.Scalar(scale * NextStandardGamma(shape));
+                    return NDArray.WritableScalar(scale * NextStandardGamma(shape));
 
                 return FillDoubleDist(size, () => scale * NextStandardGamma(shape));
             }

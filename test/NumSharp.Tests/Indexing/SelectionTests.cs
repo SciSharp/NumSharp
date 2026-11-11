@@ -637,7 +637,7 @@ public class SelectionTests
     public void Place_0d_Arr_WritesScalar()
     {
         // NumPy accepts 0-d arrays — np.place(np.array(5), True, [99]) → 99.
-        var a = NDArray.Scalar(5);
+        var a = np.array(5);
         np.place(a, NDArray.Scalar(true), np.array(new int[] { 99 }));
         a.GetInt32(0).Should().Be(99);
     }

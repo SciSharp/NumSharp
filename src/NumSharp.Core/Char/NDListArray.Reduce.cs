@@ -832,7 +832,7 @@ namespace NumSharp
             try
             {
                 DefaultEngine.DivideByCountLikeNumPy(ret, counts);
-                return ret.ndim == 0 ? ret.MarkReductionScalar() : ret;
+                return ret.ndim == 0 ? ret.PyArray_Return() : ret;
             }
             catch
             {
@@ -1667,7 +1667,9 @@ namespace NumSharp
             var slices = new Slice[outIds.ndim];
             for (int d = 0; d < outIds.ndim; d++)
                 slices[d] = d >= nd ? Slice.Index(0) : d == ax && o[d] != s[d] ? new Slice(0, s[d]) : Slice.All;
-            return outIds[slices];
+            // The storage-level view, not the indexer: when every axis is an extra one (a 0-d input) the index names one
+            // element, which the indexer reads as an item (NumPy's scalar copy) - the written region must be out's memory.
+            return outIds.BasicIndexView(slices);
         }
 
         /// <summary>

@@ -15,13 +15,13 @@ namespace NumSharp.Examples.MaterialLab.Simulation
     public sealed class SolverParams : IDisposable
     {
         /// <summary>The substep Δt.</summary>
-        public NDArray Dt { get; } = NDArray.Scalar(1e-4f);
+        public NDArray Dt { get; } = np.array(1e-4f);
 
         /// <summary>
         /// The MLS-MPM stress scale −Δt·V₀·4/Δx², which reduces to −Δt because every particle starts with volume
         /// V₀ = (Δx/2)² (2×2 particles per cell).
         /// </summary>
-        public NDArray StressScale { get; } = NDArray.Scalar(-1e-4f);
+        public NDArray StressScale { get; } = np.array(-1e-4f);
 
         /// <summary>Per-material effective viscosity, clamped to the explicit stability limit at the current Δt (index = <see cref="MaterialId"/>).</summary>
         public NDArray[] Viscosity { get; }
@@ -36,8 +36,8 @@ namespace NumSharp.Examples.MaterialLab.Simulation
             ViscosityCap = new NDArray[Materials.Count];
             for (int i = 0; i < Viscosity.Length; i++)
             {
-                Viscosity[i] = NDArray.Scalar(0f);
-                ViscosityCap[i] = NDArray.Scalar(0f);
+                Viscosity[i] = np.array(0f);
+                ViscosityCap[i] = np.array(0f);
             }
         }
 

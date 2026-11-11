@@ -27,8 +27,14 @@ namespace NumSharp
         public NDArray tomaxint(Shape size)
         {
             if (IsScalarDraw(size))
+            {
+                long draw;
                 lock (randomizer.@lock)
-                    return NDArray.Scalar((long)(randomizer.NextUInt64() >> 1));
+                    draw = (long)(randomizer.NextUInt64() >> 1);
+                // A fresh writeable 0-d array, the random module's form of a single draw for size=() (NumPy's 0-d array)
+                // and size=None (NumPy's Python int) alike.
+                return NDArray.WritableScalar(draw);
+            }
 
             var ret = LegacyOutput(NPTypeCode.Int64, size);
             unsafe

@@ -53,7 +53,13 @@ namespace NumSharp.Backends
             // empty result compares nothing); any other pair with a string operand has no comparison loop (NumPy's
             // class-named UFuncTypeError).
             if (Strings.NDStringUfuncs.BinaryGuard(UfuncName(op), lhs, rhs) is { } textResult)
-                return textResult.AsGeneric<bool>();
+            {
+                // A 0-d comparison is NumPy's np.True_ / np.False_ scalar (PyArray_Return); the typed wrapper keeps its own
+                // reference while the seam returns the same object.
+                var typed = textResult.AsGeneric<bool>();
+                typed.PyArray_Return();
+                return typed;
+            }
 
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
@@ -61,7 +67,10 @@ namespace NumSharp.Backends
             // Handle scalar × scalar case
             if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
             {
-                return ExecuteComparisonScalarScalar(lhs, rhs, op);
+                // NumPy's comparison of two 0-d operands is its np.True_ / np.False_ scalar (PyArray_Return).
+                var scalar = ExecuteComparisonScalarScalar(lhs, rhs, op);
+                scalar.PyArray_Return();
+                return scalar;
             }
 
             // NumPy's ufunc output layout (parity QA-36): the bool result follows the operands' K order. The routes below

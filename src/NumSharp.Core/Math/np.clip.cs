@@ -108,7 +108,10 @@ namespace NumSharp
             if (@out is not null)
                 NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
 
-            return a.TensorEngine.ClipNDArray(a, lo, hi, dtype, @out, where);
+            // np.clip is the clip ufunc: a fresh 0-d result is NumPy's scalar (PyArray_Return; np.clip(np.array(2.5), 0, 1)
+            // is np.float64(1.0)); out= comes back as given.
+            var clipped = a.TensorEngine.ClipNDArray(a, lo, hi, dtype, @out, where);
+            return @out is null ? clipped.PyArray_Return() : clipped;
         }
     }
 }

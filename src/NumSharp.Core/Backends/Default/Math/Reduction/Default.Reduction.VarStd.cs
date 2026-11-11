@@ -219,7 +219,7 @@ namespace NumSharp.Backends
             DivideByCountLikeNumPy(ret, Math.Max(rcount - ddof, 0));
             if (takeSqrt)
                 SqrtLikeNumPy(ret, scalarResult);
-            return scalarResult ? ret.MarkReductionScalar() : ret;
+            return scalarResult ? ret.PyArray_Return() : ret;
         }
 
         /// <summary>

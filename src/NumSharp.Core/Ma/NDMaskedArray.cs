@@ -2536,11 +2536,13 @@ namespace NumSharp
         {
             // `if ndtype.kind == "u": fill_value = np.uint(fill_value)`: the unsigned default is a uint64 scalar, so it stays
             // a same-kind cast into an unsigned array (NumPy 2.0's cast-safety change).
+            // The stored fill is an ARRAY (np.array(...)), written in place by a later fill_value assignment, so it is built
+            // writeable (WritableScalar), never as a read-only NumPy scalar.
             if (ndtype.typecode != NPTypeCode.String && ndtype.kind == 'u')
-                return NDArray.Scalar(999999UL);
+                return NDArray.WritableScalar(999999UL);
             // `return np.array(fill_value)`: True -> bool, 999999 -> int64, 1e20 -> float64, (1e20+0j) -> complex128, the
             // text default at its own width.
-            return NDArray.Scalar(np.ma.default_fill_value(ndtype));
+            return NDArray.WritableScalar(np.ma.default_fill_value(ndtype));
         }
 
         /// <summary>
@@ -3048,6 +3050,9 @@ namespace NumSharp
                 NPTypeCode.String => b.astype(np.@bool),
                 _ => np.not_equal(b, NDArray.PythonLiteral(0)),
             };
+            // make_mask's np.array(..., dtype=MaskType): the mask is an ARRAY, 0-d included, where the comparison's 0-d
+            // answer is NumPy's scalar; the fresh answer is made an array again (NumPy's out=...).
+            mask = mask.AsArrayResult();
             return (shrink && !np.any(mask)) ? nomask : mask;
         }
 
@@ -3123,6 +3128,9 @@ namespace NumSharp
                 // array; the view holds its own counted reference on the buffer.)
                 r = r.view();
             }
+            // make_mask(...)'s np.array: the mask is an ARRAY, 0-d included, where logical_or's 0-d answer is NumPy's scalar;
+            // r is this call's fresh result (or a view of it), so it is made an array again (NumPy's out=...).
+            r = r.AsArrayResult();
             return shrink && !np.any(r) ? nomask : r;
         }
 
@@ -3906,11 +3914,12 @@ namespace NumSharp
         /// <summary>
         ///     Normalizes any accepted operand to its data <see cref="NDArray"/>: unwraps a
         ///     <see cref="NDMaskedArray"/>, passes an <see cref="NDArray"/> through (a <c>numpy.matrix</c> or a
-        ///     <c>numpy.char.chararray</c> as a new plain view: numpy.ma's base class is not modelled), and converts a C#
-        ///     scalar or array-like via <see cref="np.asarray(object,DType,char)"/>.
+        ///     <c>numpy.char.chararray</c> as a new plain view: numpy.ma's base class is not modelled), converts a NumPy
+        ///     scalar (a read-only 0-d array that is no explicit array) into a new writeable 0-d array as NumPy's
+        ///     <c>getdata</c> does, and converts a C# scalar or array-like into a new writeable array.
         /// </summary>
         /// <param name="a">The operand.</param>
-        /// <returns>The operand's data as an <see cref="NDArray"/>.</returns>
+        /// <returns>The operand's data as an <see cref="NDArray"/>: the operand, a view of it, or a new array.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         private static NDArray AsData(object a)
         {
@@ -3918,12 +3927,18 @@ namespace NumSharp
             {
                 case null: throw new ArgumentNullException(nameof(a));
                 case NDMaskedArray m: return m._data;
+                // A NumPy SCALAR (a read-only 0-d array that is no explicit array: a reduction's result, NDArray.Scalar)
+                // has no _data: getdata's `np.array(a, copy=None)` builds a NEW writeable 0-d array of it, which the masked
+                // array may write into (np.ma.array(np.int64(5)).put(0, 9) works, probed 2.4.2). np.asarray is that
+                // conversion; the copy is the calling function's temporary like the views below.
+                case NDArray nd when nd.IsNumPyScalar && !nd.Shape.IsWriteable && !nd.WasScalarArgument: return np.asarray(nd);
                 // A numpy.matrix or numpy.char.chararray operand is read as its plain view: numpy.ma's base class is
                 // not modelled (NDMaskedArray's constructor), so the module computes with plain-array semantics
                 // throughout. The view is the calling function's temporary (its scope reclaims it).
                 case NDArray nd: return NDSubclass.PlainView(nd);
                 case Array arr: return np.array(arr); // C# array-like (double[], int[,], …)
-                default: return NDArray.Scalar(a);    // boxed C# scalar (int/double/bool/…)
+                // A boxed C# scalar (int/double/bool/…): np.array(a) of the Python scalar, a writeable 0-d ARRAY.
+                default: return NDArray.WritableScalar(a);
             }
         }
 
@@ -8636,14 +8651,19 @@ namespace NumSharp
                 // index), not the flat positions put writes.
                 var hidden = x._mask[indices];
 
-                // indices = narray(indices, copy=None) is the index array itself; values = narray(values, copy=None,
-                // subok=True); values.resize(indices.shape) — zero-padded or truncated, never cycled.
-                var resized = ResizeValuesForHardPut(values, indices);
+                // indices = narray(indices, copy=None): the index array itself, or the 0-d ARRAY of a NumPy scalar index
+                // (np.array(np.int64(0), copy=None) is array(0)), which the next statements index as an array - indexing
+                // the scalar would raise NumPy's "invalid index to scalar variable." instead of the array's text.
+                var indexArray = np.asarray(indices);
+
+                // values = narray(values, copy=None, subok=True); values.resize(indices.shape) — zero-padded or
+                // truncated, never cycled.
+                var resized = ResizeValuesForHardPut(values, indexArray);
 
                 // indices = indices[~mask]; values = values[~mask]. For an N-D mask `hidden` has more dimensions than the
                 // index array, so the first statement is the IndexError NumPy raises (the boolean indexer's too-many text).
                 var keep = np.logical_not(hidden);
-                dataIndices = indices[keep];
+                dataIndices = indexArray[keep];
                 dataValues = resized[keep];
             }
 

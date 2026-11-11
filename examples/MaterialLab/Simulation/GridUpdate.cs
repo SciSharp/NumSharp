@@ -48,23 +48,23 @@ namespace NumSharp.Examples.MaterialLab.Simulation
         private readonly NDArray _lane1, _lane2;
 
         /// <summary>Gravity x (units/s²), a 0-d parameter.</summary>
-        public NDArray GravityX { get; } = NDArray.Scalar(0f);
+        public NDArray GravityX { get; } = np.array(0f);
         /// <summary>Gravity y (units/s²), a 0-d parameter.</summary>
-        public NDArray GravityY { get; } = NDArray.Scalar(-100f);
+        public NDArray GravityY { get; } = np.array(-100f);
         /// <summary>Stir center x.</summary>
-        public NDArray StirX { get; } = NDArray.Scalar(0f);
+        public NDArray StirX { get; } = np.array(0f);
         /// <summary>Stir center y.</summary>
-        public NDArray StirY { get; } = NDArray.Scalar(0f);
+        public NDArray StirY { get; } = np.array(0f);
         /// <summary>Stir target velocity x (the mouse drag velocity).</summary>
-        public NDArray StirVX { get; } = NDArray.Scalar(0f);
+        public NDArray StirVX { get; } = np.array(0f);
         /// <summary>Stir target velocity y.</summary>
-        public NDArray StirVY { get; } = NDArray.Scalar(0f);
+        public NDArray StirVY { get; } = np.array(0f);
         /// <summary>1/R² of the stir disk.</summary>
-        public NDArray StirInvR2 { get; } = NDArray.Scalar(1f);
+        public NDArray StirInvR2 { get; } = np.array(1f);
         /// <summary>Per-substep blend factor toward the stir velocity at the stir center (0 = off).</summary>
-        public NDArray StirStrength { get; } = NDArray.Scalar(0f);
+        public NDArray StirStrength { get; } = np.array(0f);
         /// <summary>Coulomb friction coefficient of every wall.</summary>
-        public NDArray Friction { get; } = NDArray.Scalar(0.5f);
+        public NDArray Friction { get; } = np.array(0.5f);
 
         /// <summary>Compiles the five kernels over <paramref name="grid"/>'s lanes.</summary>
         /// <param name="grid">The grid (its lane views are captured).</param>

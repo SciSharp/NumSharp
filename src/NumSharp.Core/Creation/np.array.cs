@@ -29,7 +29,8 @@ namespace NumSharp
         ///     <see cref="asarray(NDArray, DType, char?, bool?, NDArray, string)"/>.</param>
         /// <returns>A new array object, a plain array whatever <paramref name="nd"/>'s class (NumPy's <c>subok=False</c>).
         ///     A 0-d source that was built as an explicit 0-d ARRAY (<see cref="NDArray.IsExplicitZeroDimArray"/>) gives an
-        ///     explicit 0-d array again, as NumPy's <c>np.array(np.array(2))</c> is a 0-d array.</returns>
+        ///     explicit 0-d array again, as NumPy's <c>np.array(np.array(2))</c> is a 0-d array; so does the copy of a NumPy
+        ///     scalar (a read-only 0-d array that is no explicit array), as <c>np.array(np.float64(1.5))</c> is.</returns>
         /// <exception cref="NullReferenceException"><paramref name="nd"/> is <c>null</c>.</exception>
         /// <remarks>
         ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.array.html</para>
@@ -45,8 +46,11 @@ namespace NumSharp
             var result = copy
                 ? np.copy(nd, 'K')
                 : new NDArray(nd.Storage) { TensorEngine = nd.TensorEngine };
-            // The mark is per object, so a new object must receive it explicitly.
-            return nd.IsExplicitZeroDimArray ? result.MarkExplicitZeroDimArray() : result;
+            // The mark is per object, so a new object must receive it explicitly. A copy of a NumPy SCALAR (a read-only 0-d
+            // array that is no explicit array: a reduction's result, NDArray.Scalar(...)) is an explicit 0-d ARRAY too:
+            // np.array(np.float64(1.5)) is array(1.5), which np.isscalar rejects (probed 2.4.2).
+            bool explicitResult = nd.IsExplicitZeroDimArray || (copy && nd.IsNumPyScalar && !nd.Shape.IsWriteable);
+            return explicitResult ? result.MarkExplicitZeroDimArray() : result;
         }
 
         /// <summary>
@@ -87,7 +91,7 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         [MethodImpl(OptimizeAndInline)]
-        public static NDArray array<T>(T scalar) where T : unmanaged => NDArray.Scalar(scalar).MarkExplicitZeroDimArray();
+        public static NDArray array<T>(T scalar) where T : unmanaged => NDArray.WritableScalar(scalar).MarkExplicitZeroDimArray();
 
         /// <summary>
         ///     Creates an <see cref="NDArray"/> from an array with an unknown size or dtype.

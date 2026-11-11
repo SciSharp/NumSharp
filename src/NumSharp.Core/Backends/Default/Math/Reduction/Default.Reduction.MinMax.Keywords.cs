@@ -1557,7 +1557,7 @@ namespace NumSharp.Backends
                 if (fast is not null)
                 {
                     if (@out is null)
-                        return fast.MarkReductionScalar();
+                        return fast.PyArray_Return();
                     try
                     {
                         UnmanagedStorage.Copyto(@out, fast, NPY_CASTING.NPY_SAME_KIND_CASTING);
@@ -1856,7 +1856,7 @@ namespace NumSharp.Backends
                     return @out;
                 var r = result;
                 result = null;   // handed to the caller: not disposed below
-                return r.ndim == 0 ? r.MarkReductionScalar() : r;
+                return r.ndim == 0 ? r.PyArray_Return() : r;
             }
             finally
             {

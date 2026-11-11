@@ -66,7 +66,16 @@ namespace NumSharp
             foreach (var s in slices)
                 element &= s is not null && s.IsIndex;
 
-            using var target = Ids[slices];
+            // The element is written through a 0-d VIEW: an item index alone (Ids[i]) is NumPy's read-only scalar copy, so the
+            // index gets a trailing ellipsis, which selects the same element as a view of Ids.
+            Slice[] targetKey = slices;
+            if (element)
+            {
+                targetKey = new Slice[slices.Length + 1];
+                Array.Copy(slices, targetKey, slices.Length);
+                targetKey[slices.Length] = Slice.Ellipsis;
+            }
+            using var target = Ids[targetKey];
             if (element)
             {
                 // HAS_INTEGER: PyArray_Pack of the value itself into the element — a list is stored, an array would be.

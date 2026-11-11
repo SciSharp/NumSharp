@@ -185,7 +185,7 @@ namespace NumSharp.Backends
             }
 
             // The engine marks a 0-d axis result (a 1-D child reduced over its only axis) as a reduction scalar.
-            return result.MarkReductionScalar();
+            return result.PyArray_Return();
         }
 
         /// <summary>Whether the argmax stream serves <paramref name="t"/>: the dtypes the fast fold's rules cover.</summary>

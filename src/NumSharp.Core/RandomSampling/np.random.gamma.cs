@@ -50,7 +50,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyGamma(ref one, in setup, scale));
+                        return NDArray.WritableScalar(LegacyGamma(ref one, in setup, scale));
                 }
             }
 

@@ -108,7 +108,8 @@ namespace NumSharp
         public static NDArray sinc(NDArray x)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            return x.TensorEngine.Sinc(x);
+            // NumPy's sin(y)/y is a ufunc result: a fresh 0-d one is its scalar (PyArray_Return).
+            return x.TensorEngine.Sinc(x).PyArray_Return();
         }
     }
 }

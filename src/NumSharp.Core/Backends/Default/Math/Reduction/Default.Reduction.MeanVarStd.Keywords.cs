@@ -197,8 +197,9 @@ namespace NumSharp.Backends
             }
 
             // x = subtract(arr, arrmean, out=...): NumPy's ufunc result, laid out over both operands as its iterator lays it
-            // out (the next sum walks x in that order, so a different layout would add in a different order).
-            var x = Subtract(arr, arrmean);
+            // out (the next sum walks x in that order, so a different layout would add in a different order). out=... keeps
+            // a 0-d result an ARRAY (AsArrayResult), which the square below writes into.
+            var x = Subtract(arr, arrmean).AsArrayResult();
             x = InUfuncLayout(x, arr, arrmean);
 
             // The square in NumPy's three forms, by the INPUT's kind.
@@ -252,7 +253,7 @@ namespace NumSharp.Backends
 
             if (@out is not null)
                 return @out;
-            return scalarResult ? ret.MarkReductionScalar() : ret;
+            return scalarResult ? ret.PyArray_Return() : ret;
         }
 
         /// <summary>

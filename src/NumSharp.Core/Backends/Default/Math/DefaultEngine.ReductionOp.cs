@@ -161,7 +161,9 @@ namespace NumSharp.Backends
             // handles strided/offset views correctly and fast (coalesce + axis-permute by
             // stride). The sub-word strided-prod overflow a copy used to dodge is now fixed at
             // its root (NDIter.DetermineAccumulatorType delegates to GetAccumulatingType).
-            return arr[slices];
+            // The storage-level view, not the indexer: a broadcast of a 0-d value indexes EVERY axis, which the indexer
+            // reads as an item (NumPy's scalar copy, a pooled buffer this caller never disposes).
+            return arr.BasicIndexView(slices);
         }
 
         /// <summary>

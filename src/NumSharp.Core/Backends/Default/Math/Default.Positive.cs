@@ -39,11 +39,12 @@ namespace NumSharp.Backends
             // dtype-only: the identity loop at the requested dtype IS a cast-copy
             // (positive(i32, dtype=f64) ≡ astype(f64), probed); the operand is cast, so NumPy's
             // iterator, not its trivial loop, lays the result out.
+            // Both exits below are fresh results: a 0-d one is NumPy's scalar (the ufunc's PyArray_Return).
             if (typeCode.HasValue && typeCode.Value != nd.GetTypeCode)
-                return IdentityLoopResult(nd, typeCode.Value, inputCast: true);
+                return IdentityLoopResult(nd, typeCode.Value, inputCast: true).PyArray_Return();
 
             // Plain +x: the identity loop into a fresh array.
-            return IdentityLoopResult(nd, nd.GetTypeCode, inputCast: false);
+            return IdentityLoopResult(nd, nd.GetTypeCode, inputCast: false).PyArray_Return();
         }
 
         /// <summary>

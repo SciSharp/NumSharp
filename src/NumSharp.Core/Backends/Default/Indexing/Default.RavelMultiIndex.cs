@@ -48,7 +48,7 @@ namespace NumSharp.Backends
             if (ndim == 0)
             {
                 var zero = NewArray<long>(Shape.NewScalar(), true);
-                zero.MarkReductionScalar();
+                zero.PyArray_Return();
                 return zero;
             }
 
@@ -119,7 +119,7 @@ namespace NumSharp.Backends
 
             // NumPy's PyArray_Return: an all-0-d result is a numpy scalar — read-only, owning its value.
             if (result.ndim == 0)
-                result.MarkReductionScalar();
+                result.PyArray_Return();
             return result;
         }
 

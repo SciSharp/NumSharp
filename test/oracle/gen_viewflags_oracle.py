@@ -1841,11 +1841,16 @@ _ARRAY_JOB_NUMPY = {
 # view at a non-zero offset (VA05). VF14's and VA05's GAPS entries and rules are dropped, VF08's narrowed to
 # np.nanmedian (whose numpy.ma chain is still open), and their 17 cases (VF14 2, VF08 14, VA05 1) moved back into
 # view_flags.jsonl / array_args.jsonl the same way (no regeneration).
+# 2026-11-11 (the scalar plan's S2a, branch feat/numpy-scalars): every ufunc and the functions NumPy ends in PyArray_Return
+# (clip, round, nan_to_num, conj, dot / inner / kron of 0-d or 1-D pairs) hand a fresh 0-d result back as NumSharp's
+# scalar (a read-only 0-d array, NDArray.PyArray_Return), and np.nan_to_num(z, copy=False) of a 0-d z hands back a
+# read-only copy, so VF01 matches NumPy and VF02 keeps only element access (a[i, j], z[()], np.flip(z)). VF01's GAPS entry
+# and rule are dropped, VF02's narrowed, and their 72 cases (VF01 71, VF02 1) moved back into view_flags.jsonl the same
+# way (no regeneration).
+# 2026-11-11 (the scalar plan's S2b, same branch): a full integer index is NumPy's item (array_item / PyArray_Scalar), a
+# read-only 0-d COPY of the element, so a[i, j], z[()] and np.flip(z) of a 0-d z (whose indexer is z[()]) match NumPy.
+# VF02's GAPS entry and rule are dropped, and its 12 cases moved back into view_flags.jsonl the same way (no regeneration).
 GAPS = {
-    "VF01": "a NumPy SCALAR result (ufuncs, clip, round, nan_to_num, conj, dot / inner / kron of 0-d or 1-D pairs) "
-            "comes back as a WRITEABLE 0-d array",
-    "VF02": "element access that NumPy answers with a scalar COPY (a[i, j], z[()], np.flip(z), np.nan_to_num(z, "
-            "copy=False) of a 0-d z) returns a writeable 0-d VIEW of the operand",
     "VF04": "np.squeeze / ndarray.squeeze with no length-1 axis return a new view where NumPy returns the operand itself",
     "VF08": "np.nanmedian along an axis of an F or permuted 3-D input returns a C-ordered result that owns its data; "
             "NumPy's (numpy.ma's median of the sorted K-order copy, then MaskedArray.filled's _data view) keeps the "
@@ -1872,11 +1877,6 @@ GAPS = {
             "in NumSharp returns a new view where NumPy returns the array itself (VF04)",
 }
 
-# The ufuncs of the tier (unary and binary), for the rules keyed on "a ufunc".
-_UFUNC_FNS = set(UNARY_K) | set(BINARY_K) | {"invert", "bitwise_and"}
-# The fns whose 0-d result NumPy hands back as a scalar and NumSharp as a writeable 0-d array (VF01).
-_VF01_FNS = _UFUNC_FNS | {"clip", "round", "conj", "conjugate", "ndarray.conj", "ndarray.conjugate", "dot", "inner",
-                          "kron"}
 
 
 def _is_scalar_result(expected):
@@ -1909,14 +1909,7 @@ def _gap_of(tier, case):
     if case.get("expects_throw"):
         return None
     if tier == "views":
-        scalar = _is_scalar_result(e)
         axis = p.get("axis")
-        if fn in _VF01_FNS and scalar and not (fn == "nan_to_num"):
-            return "VF01"
-        if fn == "nan_to_num" and scalar:
-            return "VF01" if p.get("copy") else "VF02"
-        if fn in ("getitem", "flip") and scalar:
-            return "VF02"
         if fn in ("squeeze", "ndarray.squeeze") and "axis" not in p and e["mem"]["same"][0]:
             return "VF04"
         if fn == "nanmedian" and axis is not None and (

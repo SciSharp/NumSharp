@@ -190,7 +190,7 @@ namespace NumSharp
                 return new PyOperand(PyOperandKind.Str, nd.PythonStrText, default, null, "str");
             if (nd.WasPythonBytes)
                 return new PyOperand(PyOperandKind.Str, nd, default, null, "bytes");
-            if (nd.WasNumPyScalar || (nd.ndim == 0 && !nd.IsExplicitZeroDimArray))
+            if (nd.WasNumPyScalar || nd.IsNumPyScalar)
             {
                 // NumPy's np.str_ is a str (concatenation, repetition and formatting all behave as a str's).
                 if (nd.typecode == NPTypeCode.String)

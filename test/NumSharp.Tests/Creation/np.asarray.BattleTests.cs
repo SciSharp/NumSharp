@@ -266,9 +266,31 @@ public class np_asarray_BattleTests
     [TestMethod]
     public void Asarray_ZeroD_CopyFalse_ReturnsSame()
     {
-        var s = NDArray.Scalar(5);
+        // NumPy: np.asarray(np.array(5), copy=False) is the 0-d array itself.
+        var s = np.array(5);
         var b = np.asarray(s, copy: false);
         ReferenceEquals(s.Storage, b.Storage).Should().BeTrue();
+    }
+
+    /// <summary>
+    ///     A NumPy scalar (NumSharp's read-only 0-d array) is a Python object to NumPy, not an ndarray: np.asarray converts it
+    ///     into a NEW writeable explicit 0-d array, and copy=False cannot be satisfied. Guards the rule that keeps code writing
+    ///     through np.asarray(x) from meeting a read-only scalar.
+    /// </summary>
+    [TestMethod]
+    public void Asarray_NumPyScalar_IsANewWriteableArray_AndRefusesCopyFalse()
+    {
+        // NumPy 2.4.2: a scalar is no ndarray, so np.asarray(np.int32(5)) builds a NEW writeable 0-d array (an ndarray:
+        // np.isscalar of it is False), and np.asarray(np.int32(5), copy=False) raises "Unable to avoid copy".
+        var s = NDArray.Scalar(5);
+        var b = np.asarray(s);
+        ReferenceEquals(s.Storage, b.Storage).Should().BeFalse();
+        b.flags.writeable.Should().BeTrue();
+        np.isscalar(b).Should().BeFalse();
+        b.GetInt32().Should().Be(5);
+
+        Action noCopy = () => np.asarray(s, copy: false);
+        noCopy.Should().Throw<ArgumentException>().WithMessage("Unable to avoid copy*");
     }
 
     [TestMethod]

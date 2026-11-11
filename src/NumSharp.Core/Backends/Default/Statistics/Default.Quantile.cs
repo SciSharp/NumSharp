@@ -810,7 +810,7 @@ namespace NumSharp.Backends
             }
             // A fresh 0-d result (scalar q, axis=None — the np.median/percentile/quantile flat
             // forms) is a numpy SCALAR at the boundary: read-only (PyArray_Return semantics).
-            return result.MarkReductionScalar();
+            return result.PyArray_Return();
         }
 
         /// <summary>
@@ -967,7 +967,7 @@ namespace NumSharp.Backends
             }
             // A fresh 0-d result (scalar q, axis=None — the np.median/percentile/quantile flat
             // forms) is a numpy SCALAR at the boundary: read-only (PyArray_Return semantics).
-            return result.MarkReductionScalar();
+            return result.PyArray_Return();
         }
 
         // ── helpers ─────────────────────────────────────────────────────────────────

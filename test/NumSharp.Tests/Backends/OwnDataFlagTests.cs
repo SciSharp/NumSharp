@@ -86,8 +86,12 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void Creation_ZeroDim_And_Empty_Own()
         {
-            AssertOwns(NDArray.Scalar(5), "a 0-d scalar array owns its buffer (NumPy np.array(5): num=1287)");
-            NDArray.Scalar(5).flags.num.Should().Be(1287);
+            // NumPy's scalar owns its value and is read-only: np.int32(5).flags.num is 263 (C | F | OWNDATA | ALIGNED).
+            AssertOwns(NDArray.Scalar(5), "a NumPy scalar owns its value (NumPy np.int32(5): num=263)");
+            NDArray.Scalar(5).flags.num.Should().Be(263);
+            // The 0-d ARRAY np.array(5) owns a writeable buffer: num=1287 (WRITEABLE added).
+            AssertOwns(np.array(5), "a 0-d array owns its buffer (NumPy np.array(5): num=1287)");
+            np.array(5).flags.num.Should().Be(1287);
 
             AssertOwns(np.zeros(new Shape(0, 3)), "an empty array still owns its (zero-length) buffer");
         }
@@ -192,7 +196,10 @@ namespace NumSharp.Tests.Backends
         {
             var b2 = np.arange(12).reshape(3, 4);
             AssertView(b2[0], "a row sub-array is a view (NumPy num=1283)");
-            AssertView(b2[0][0], "a 0-d element view shares storage (NumSharp GetData view; NumPy a[0,0] is a scalar)");
+            // The element is NumPy's scalar: a read-only COPY that owns its value (np.arange(12).reshape(3, 4)[0][0] is
+            // np.int64(0), flags.num 263).
+            AssertOwns(b2[0][0], "an element is NumPy's scalar, a copy that owns its value");
+            b2[0][0].flags.num.Should().Be(263);
         }
 
         // ---- views: axis movers -----------------------------------------------------------------

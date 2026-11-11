@@ -23,7 +23,7 @@ namespace NumSharp
             // to dereference the null and throw NullReferenceException).
             if (shape is null || shape.Length == 0)
                 lock (randomizer.@lock)
-                    return NDArray.Scalar(randomizer.NextDouble());
+                    return NDArray.WritableScalar(randomizer.NextDouble());
             return rand(new Shape(shape));
         }
 

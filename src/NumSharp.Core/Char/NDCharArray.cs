@@ -60,7 +60,8 @@ namespace NumSharp
     ///     <para>
     ///     <b>Members and indexers follow the static type.</b> They are chosen by the compiler when the expression is typed
     ///     <see cref="NDCharArray"/>. The same object through an <see cref="NDArray"/> reference is a plain string array:
-    ///     its indexer returns an unstripped 0-d view and its members return plain arrays.
+    ///     its indexer returns an element as NumPy's scalar (a read-only copy, trailing NULs trimmed, whitespace kept, as
+    ///     <c>np.asarray(c)[0]</c> is an <c>np.str_</c>) and its members return plain arrays.
     ///     </para>
     ///     <para>
     ///     <b>Element access strips.</b> An index that names one element (an integer per axis) returns a READ-ONLY 0-d
@@ -367,7 +368,7 @@ namespace NumSharp
             // A chararray over int8 / char data, or one a view(dtype) left with another dtype: NumPy returns the NumPy
             // scalar of the element. A 0-d copy of the element stands for it.
             var scalar = new NDCharArray(element.Alias().Clone()) { IsScalarStandIn = true };
-            scalar.MarkReductionScalar();   // read-only, as the immutable Python value it stands for
+            scalar.PyArray_Return();   // read-only, as the immutable Python value it stands for
             return scalar;
         }
 
@@ -427,7 +428,7 @@ namespace NumSharp
             // stand-in holds its own counted reference on the storage.
             using var built = Backends.UnmanagedStorage.FromAnyScalar(value, null);
             var scalar = new NDCharArray(built.Storage) { IsScalarStandIn = true };
-            scalar.MarkReductionScalar();
+            scalar.PyArray_Return();
             return scalar;
         }
 

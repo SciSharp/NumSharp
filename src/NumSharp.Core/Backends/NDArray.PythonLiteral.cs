@@ -218,7 +218,9 @@ namespace NumSharp
         /// <returns>A new 0-d bool array holding <paramref name="value"/>.</returns>
         internal static NDArray PythonBoolLiteral(bool value)
         {
-            var nd = Scalar(value);
+            // Writeable, as every literal's array always was: it stands for an immutable Python value, but it is no NumPy
+            // scalar (np.asarray keeps it and its mark, where it converts a read-only NumPy scalar into a new array).
+            var nd = WritableScalar(value);
             nd.WasPythonBool = true;
             return nd;
         }
@@ -246,7 +248,8 @@ namespace NumSharp
         /// <returns>A new 0-d <c>S</c> array holding <paramref name="value"/>.</returns>
         internal static NDArray PythonBytesLiteral(byte[] value)
         {
-            var nd = Scalar(value);
+            // Writeable like every literal's array (see PythonBoolLiteral).
+            var nd = WritableScalar(value);
             nd.WasPythonBytes = true;
             return nd;
         }
@@ -261,7 +264,8 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static NDArray NumPyScalarLiteral<T>(T value) where T : unmanaged
         {
-            var nd = Scalar(value);
+            // Writeable like every literal's array (see PythonBoolLiteral).
+            var nd = WritableScalar(value);
             nd.WasNumPyScalar = true;
             return nd;
         }
@@ -314,7 +318,8 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static NDArray PythonLiteral<T>(T value) where T : unmanaged
         {
-            var nd = Scalar(value);
+            // Writeable like every literal's array (see PythonBoolLiteral).
+            var nd = WritableScalar(value);
             nd.WasPythonLiteral = true;
             return nd;
         }

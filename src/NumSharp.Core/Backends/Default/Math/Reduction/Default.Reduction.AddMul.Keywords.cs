@@ -248,7 +248,7 @@ namespace NumSharp.Backends
                     return @out;
                 var r = result;
                 result = null;   // handed to the caller: not disposed below
-                return r.ndim == 0 ? r.MarkReductionScalar() : r;
+                return r.ndim == 0 ? r.PyArray_Return() : r;
             }
             finally
             {

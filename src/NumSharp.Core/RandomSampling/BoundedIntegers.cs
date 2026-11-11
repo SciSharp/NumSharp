@@ -89,7 +89,7 @@ namespace NumSharp
                     // NumPy fills a 1-element buffer (fresh sub-word buffer) and returns it as a scalar.
                     using var one = new NDArray(resultType, Shape.Vector(1));
                     Fill(bg, one, 1, width, off, rng, useMasked);
-                    return NDArray.Scalar(one.GetAtIndex(0), tc);
+                    return NDArray.WritableScalar(one.GetAtIndex(0), tc);
                 }
 
                 // NumPy's np.empty(size, dtype), from `size`'s dimensions only (AsClean): the fill writes nd.size values in

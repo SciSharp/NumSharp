@@ -42,7 +42,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyPareto(ref one, a));
+                        return NDArray.WritableScalar(LegacyPareto(ref one, a));
                 }
             }
 

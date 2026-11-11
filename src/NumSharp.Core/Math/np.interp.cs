@@ -44,7 +44,8 @@ namespace NumSharp
             double? left = null, double? right = null, double? period = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            return x.TensorEngine.Interp(x, xp, fp, left, right, period);
+            // NumPy's compiled interp returns a 0-d x's value as its scalar (PyArray_Return of the fresh result).
+            return x.TensorEngine.Interp(x, xp, fp, left, right, period).PyArray_Return();
         }
 
         /// <summary>
@@ -79,7 +80,8 @@ namespace NumSharp
             Complex? left, Complex? right = null, double? period = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
-            return x.TensorEngine.Interp(x, xp, fp, left, right, period);
+            // NumPy's compiled interp returns a 0-d x's value as its scalar (PyArray_Return of the fresh result).
+            return x.TensorEngine.Interp(x, xp, fp, left, right, period).PyArray_Return();
         }
     }
 }

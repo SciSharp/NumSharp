@@ -143,7 +143,7 @@ namespace NumSharp.Backends
             double* p = (double*)nan.Address;
             for (long i = 0; i < nan.size; i++)
                 p[i] = double.NaN;
-            return dims.Length == 0 ? nan.MarkReductionScalar() : nan;
+            return dims.Length == 0 ? nan.PyArray_Return() : nan;
         }
 
         /// <summary>
@@ -199,7 +199,7 @@ namespace NumSharp.Backends
 
             // A reduction over every axis without keepdims (np.sum's flat sum of a broadcast operand) is NumPy's scalar;
             // anything with a dimension left is an array.
-            return result.ndim == 0 ? result.MarkReductionScalar() : result;
+            return result.ndim == 0 ? result.PyArray_Return() : result;
         }
     }
 

@@ -249,7 +249,7 @@ namespace NumSharp.Statistics
             if (!keepdims)
                 // A 0-d take is NumPy's scalar (a np.str_ / np.bytes_, or a StringDType element's Python object): read-only,
                 // as NumSharp's 0-d reduction results are.
-                return result.MarkReductionScalar();
+                return result.PyArray_Return();
             if (result.ndim == 0)
             {
                 // NumPy's take returned a scalar, and _ureduce indexes it with a tuple: Python's refusal for the object —

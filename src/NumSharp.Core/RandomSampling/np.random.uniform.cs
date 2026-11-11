@@ -55,7 +55,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(Distributions.RandomUniform(ref one, low, range));
+                        return NDArray.WritableScalar(Distributions.RandomUniform(ref one, low, range));
                 }
             }
 

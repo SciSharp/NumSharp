@@ -863,7 +863,7 @@ namespace NumSharp.Tests.Backends.Iterators
         {
             var a = np.array(new double[] { 3, 9, 4, 9, 5 });
 
-            var o = NDArray.Scalar(0L);                              // 0-d int64
+            var o = np.array(0L);                                    // 0-d int64 ARRAY (a NumPy scalar is no out=)
             var r = np.evaluate(NDExpr.ArgMax((NDExpr)a * 1.0), @out: o);
             Assert.IsTrue(ReferenceEquals(r, o));                    // returns the out instance
             Assert.AreEqual(1L, o.GetInt64(0));

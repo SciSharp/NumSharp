@@ -27,7 +27,7 @@ namespace NumSharp
             lock (_bitGenerator.@lock)
             {
                 if (IsNoSize(size))
-                    return NDArray.Scalar(low + range * _bitGenerator.NextDouble());
+                    return NDArray.WritableScalar(low + range * _bitGenerator.NextDouble());
 
                 // One bulk uniform fill, then low + range * u in place — NumPy's per-element expression. The output is
                 // np.empty(size) from `size`'s dimensions only (AsClean): the fill writes in memory order.

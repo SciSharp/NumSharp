@@ -107,7 +107,7 @@ namespace NumSharp.Backends
                 r ??= NewScalar(min_elementwise_il(arr, typeCode));
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
-                return r.MarkReductionScalar();
+                return r.PyArray_Return();
             }
 
             var axis = NormalizeAxis(axis_.Value, arr.ndim);
@@ -128,7 +128,7 @@ namespace NumSharp.Backends
                     if (keepdims)
                         ExpandReducedAxis(exact, arr.Shape, axis);
                     // Same PyArray_Return rule as ExecuteAxisReduction: a fresh 0-d result is a read-only scalar.
-                    return exact.MarkReductionScalar();
+                    return exact.PyArray_Return();
                 }
             }
 

@@ -227,14 +227,14 @@ namespace NumSharp.Backends
         ///     <para>The scalar step is NumPy's <c>replace_with_wrapped_result_and_return</c> (ufunc_object.c): it calls
         ///     <c>npy_apply_wrap</c> with <c>return_scalar</c> set when the output is 0-d and no <c>out=</c> was given,
         ///     which is <c>PyArray_Return</c>. NumSharp has no scalar type, so the 0-d array takes the scalar's flags
-        ///     (<see cref="NDArray.MarkReductionScalar"/>, the reductions' rule; probed 2.4.2:
+        ///     (<see cref="NDArray.PyArray_Return"/>, the reductions' rule; probed 2.4.2:
         ///     <c>np.matmul(a, b).flags</c> of two vectors and <c>np.vecdot(a, b).flags</c> are C, F, OWNDATA and not
         ///     WRITEABLE). A given <c>out=</c> clears <c>return_scalar</c>, so a 0-d out comes back itself, writeable.</para>
         /// </remarks>
         internal static NDArray Deliver(NDArray result, NDArray @out)
         {
             if (@out is null)
-                return result.MarkReductionScalar();   // no-op unless 0-d
+                return result.PyArray_Return();   // no-op unless 0-d
 
             UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_UNSAFE_CASTING);   // cast already validated
             return @out;

@@ -3140,8 +3140,10 @@ namespace NumSharp
             var stacked = new NDArray(descr, new Shape(dims, copy: false), false);
             for (int i = 0; i < arrays.Length; i++)
             {
-                // A row view of the result receives the entry through the house cast (a number becomes its str()).
-                using var row = stacked[i];
+                // A row view of the result receives the entry through the house cast (a number becomes its str()). The
+                // trailing ellipsis keeps it a VIEW for 1-D stacked (scalar entries): stacked[i] alone would be the item,
+                // NumPy's read-only scalar copy.
+                using var row = stacked[Slice.Index(i), Slice.Ellipsis];
                 np.copyto(row, arrays[i], casting: "unsafe");
             }
             return stacked;

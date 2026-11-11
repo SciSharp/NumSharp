@@ -44,7 +44,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Distributions.RandomBinomial(ref one, p, n, _binomial));
+                        return NDArray.WritableScalar(Distributions.RandomBinomial(ref one, p, n, _binomial));
                 }
             }
 
@@ -114,7 +114,7 @@ namespace NumSharp
                     ulong word;
                     var one = new DrawBuffer64(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(NegativeBinomial(ref one, in gamma, scale));
+                        return NDArray.WritableScalar(NegativeBinomial(ref one, in gamma, scale));
                 }
             }
 
@@ -160,7 +160,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Distributions.RandomPoisson(ref one, in setup));
+                        return NDArray.WritableScalar(Distributions.RandomPoisson(ref one, in setup));
                 }
             }
 
@@ -205,7 +205,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Zipf(ref one, in setup, null));
+                        return NDArray.WritableScalar(Zipf(ref one, in setup, null));
                 }
             }
 
@@ -262,11 +262,11 @@ namespace NumSharp
                         {
                             double word;
                             var one = new DrawBufferDouble(_bitGenerator, &word, 1);
-                            return NDArray.Scalar(Distributions.RandomGeometricSearch(ref one, p));
+                            return NDArray.WritableScalar(Distributions.RandomGeometricSearch(ref one, p));
                         }
                         ulong unit;
                         var one64 = new DrawBuffer64(_bitGenerator, &unit, 1);
-                        return NDArray.Scalar(GeometricInversion(ref one64, log1pNegP));
+                        return NDArray.WritableScalar(GeometricInversion(ref one64, log1pNegP));
                     }
                 }
             }
@@ -339,7 +339,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Hypergeometric(ref one, _bitGenerator, ngood, nbad, nsample));
+                        return NDArray.WritableScalar(Hypergeometric(ref one, _bitGenerator, ngood, nbad, nsample));
                 }
             }
 
@@ -402,7 +402,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Logseries(ref one, p, r));
+                        return NDArray.WritableScalar(Logseries(ref one, p, r));
                 }
             }
 

@@ -204,7 +204,7 @@ namespace NumSharp.Backends
                 }
             }
 
-            return tot.ndim == 0 ? tot.MarkReductionScalar() : tot;
+            return tot.ndim == 0 ? tot.PyArray_Return() : tot;
         }
 
         /// <summary>
@@ -395,7 +395,7 @@ namespace NumSharp.Backends
                             r.Storage.Reshape(new Shape(ks, copy: false));
                         }
 
-                        return r.MarkReductionScalar();
+                        return r.PyArray_Return();
                     }
                 }
 
@@ -417,7 +417,7 @@ namespace NumSharp.Backends
                     if (keepdims)
                         ExpandReducedAxis(exact, arr.Shape, ax);
                     // Same PyArray_Return rule as ReduceAMax: a fresh 0-d result is a read-only scalar.
-                    return exact.MarkReductionScalar();
+                    return exact.PyArray_Return();
                 }
             }
 
@@ -489,7 +489,7 @@ namespace NumSharp.Backends
                         keepdimsShape[i] = 1;
                     r.Storage.Reshape(new Shape(keepdimsShape, copy: false));
                 }
-                return r.MarkReductionScalar();
+                return r.PyArray_Return();
             }
             else
             {
@@ -527,7 +527,7 @@ namespace NumSharp.Backends
                     keepdimsShape[i] = 1;
                 r.Storage.Reshape(new Shape(keepdimsShape, copy: false));
             }
-            return r.MarkReductionScalar();
+            return r.PyArray_Return();
         }
 
         private static float NanReduceScalarFloat(NDArray arr, ReductionOp op)
@@ -698,7 +698,7 @@ namespace NumSharp.Backends
                 ExpandReducedAxis(result, arr.Shape, axis);
             // A 1-D input along its only axis leaves a 0-d result, which NumPy returns as a scalar (np.nansum(v, axis=0)
             // is np.float64, empty or not); this exit returned it writeable. A no-op for an array result.
-            return result.MarkReductionScalar();
+            return result.PyArray_Return();
         }
 
         /// <summary>
@@ -787,7 +787,7 @@ namespace NumSharp.Backends
             if (keepdims)
                 ExpandReducedAxis(result, arr.Shape, axis);
             // The 0-d result of a 1-D input is NumPy's scalar, as in ExecuteNanAxisReduction; a no-op for an array.
-            return result.MarkReductionScalar();
+            return result.PyArray_Return();
         }
 
         /// <summary>
@@ -983,7 +983,7 @@ namespace NumSharp.Backends
                     for (int i = 0; i < arr.ndim; i++) ks[i] = 1;
                     r.Storage.Reshape(new Shape(ks, copy: false));
                 }
-                return r.MarkReductionScalar();
+                return r.PyArray_Return();
             }
 
             // Axis reduction: NumPy's own structure, np.sum(where(isnan(a), 0, a), axis, keepdims). The per-slice

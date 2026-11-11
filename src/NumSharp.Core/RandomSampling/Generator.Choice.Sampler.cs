@@ -143,7 +143,7 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public NDArray choice(long a, Shape? size = null, bool replace = true, NDArray p = null, int axis = 0, bool shuffle = true)
-            => choice(NDArray.Scalar(a), size, replace, p, axis, shuffle);
+            => choice(NDArray.WritableScalar(a), size, replace, p, axis, shuffle);
 
         /// <summary>
         ///     NumPy's <c>pop_size = operator.index(a.item())</c> for a 0-d population.

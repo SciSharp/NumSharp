@@ -39,8 +39,8 @@ namespace NumSharp
                     // size=None returns a float64 scalar even for dtype=float32 (NumPy float_fill widens
                     // the float32 draw to a Python float); only sized/()/out= stay float32.
                     return tc == NPTypeCode.Single
-                        ? NDArray.Scalar((double)NextStandardNormalF())
-                        : NDArray.Scalar(NextStandardNormal());
+                        ? NDArray.WritableScalar((double)NextStandardNormalF())
+                        : NDArray.WritableScalar(NextStandardNormal());
 
                 // NumPy's np.empty(size, dtype), from `size`'s dimensions only (AsClean): the fill writes in memory order,
                 // so a view's Shape must not reach the allocation.
@@ -73,7 +73,7 @@ namespace NumSharp
             lock (_bitGenerator.@lock)
             {
                 if (IsNoSize(size))
-                    return NDArray.Scalar(loc + scale * NextStandardNormal());
+                    return NDArray.WritableScalar(loc + scale * NextStandardNormal());
 
                 // loc + scale * z for each standard normal z — the same expression per element as NumPy's cont(), into
                 // np.empty(size) built from `size`'s dimensions only (AsClean): the fill writes in memory order.

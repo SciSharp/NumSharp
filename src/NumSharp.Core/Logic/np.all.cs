@@ -44,7 +44,7 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(nd));
 
             var reduced = nd.TensorEngine.All(nd, axis, keepdims);
-            reduced.MarkReductionScalar(); // 1-D input reduced to 0-d -> numpy scalar (read-only)
+            reduced.PyArray_Return(); // 1-D input reduced to 0-d -> numpy scalar (read-only)
             return reduced;
         }
 
@@ -75,7 +75,7 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(axis));
 
             var reduced = nd.TensorEngine.All(nd, axis, keepdims);
-            reduced.MarkReductionScalar(); // every axis reduced away -> numpy scalar (read-only)
+            reduced.PyArray_Return(); // every axis reduced away -> numpy scalar (read-only)
             return reduced;
         }
 

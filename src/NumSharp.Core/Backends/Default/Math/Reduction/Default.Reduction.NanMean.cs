@@ -137,7 +137,7 @@ namespace NumSharp.Backends
             if (!tot.Shape.IsWriteable)
                 tot = tot.copy();
             DivideByCountsLikeNumPy(tot, cnt);
-            return scalarResult ? tot.MarkReductionScalar() : tot;
+            return scalarResult ? tot.PyArray_Return() : tot;
         }
     }
 }

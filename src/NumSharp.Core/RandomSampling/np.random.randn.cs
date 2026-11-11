@@ -89,7 +89,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyNormal(ref one, loc, scale));
+                        return NDArray.WritableScalar(LegacyNormal(ref one, loc, scale));
                 }
             }
 
@@ -139,7 +139,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyGauss(ref one));
+                        return NDArray.WritableScalar(LegacyGauss(ref one));
                 }
             }
 

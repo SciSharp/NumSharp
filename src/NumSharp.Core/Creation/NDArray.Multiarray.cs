@@ -784,7 +784,9 @@ namespace NumSharp
         /// <exception cref="ValueError">A NaN literal into an integer dtype, or an unknown <paramref name="order"/>.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype, or None into an integer (or decimal) one.</exception>
         /// <remarks>An explicit 0-d array (<see cref="NDArray.IsExplicitZeroDimArray"/>) stays one through the copy, the cast
-        ///     and the view: the mark is per object, so every new object receives it.</remarks>
+        ///     and the view: the mark is per object, so every new object receives it. A NumPy scalar (a read-only 0-d array
+        ///     <see cref="NDArray.IsNumPyScalar"/> calls one) is never returned as itself: NumPy converts the scalar object
+        ///     into a NEW writeable explicit 0-d array, and refuses <paramref name="copy"/> = false for it.</remarks>
         [AsArray]
         internal static NDArray asarray(NDArray a, DType dtype, char order, bool? copy)
         {
@@ -823,6 +825,21 @@ namespace NumSharp
             // A string request is satisfied only by a string array of that class AND width (an unsized 'U' adapts to the
             // array first); the storage lane alone would let a <U4 array pass for 'S' or 'U2'.
             bool typeMatches = dtype == null || Backends.UnmanagedStorage.SatisfiesRequest(a, dtype);
+
+            // A NumPy SCALAR - a read-only 0-d array that is no explicit array: a reduction's result, NDArray.Scalar(...) -
+            // is a Python object to NumPy, not an ndarray, so PyArray_FromAny builds a NEW 0-d ARRAY of it: writeable, an
+            // explicit array (np.isscalar(np.asarray(np.float64(1.5))) is False), never the scalar itself, and copy=False
+            // cannot be satisfied (probed 2.4.2: "Unable to avoid copy"). A writeable 0-d array (np.zeros(()), an out=
+            // operand) is an ndarray here, returned as itself below, so code that writes through np.asarray(out) still
+            // writes into the caller's array.
+            if (a.IsNumPyScalar && !a.Shape.IsWriteable && !a.WasScalarArgument)
+            {
+                if (copy == false)
+                    throw new ArgumentException(UnableToAvoidCopyText, nameof(copy));
+                NDArray fresh = typeMatches ? a.copy() : a.astype(dtype, copy: true);
+                return fresh.MarkExplicitZeroDimArray();
+            }
+
             bool layoutMatches = LayoutAlreadyOK(a.Shape, order);
             bool noCopyNeeded = typeMatches && layoutMatches;
 
@@ -1236,7 +1253,17 @@ namespace NumSharp
                     //is it a scalar
                     if (type.IsPrimitive || type == typeof(decimal) || type == typeof(Half) || type == typeof(System.Numerics.Complex))
                     {
-                        ret = NDArray.Scalar(a);
+                        // With a dtype, NumPy's PyArray_FromAny stores a PYTHON scalar (a C# bool, integer, float, double or
+                        // Complex in the boundary map) with the dtype's setitem (PyArray_Pack): a Python int is range-checked
+                        // (np.asanyarray(300, np.int8) raises OverflowError, where a cast wraps to 44) and an unsized text
+                        // class takes the width of the value's str() (np.asanyarray(5, np.str_) is <U1). A NumPy scalar
+                        // (Half, NumSharp's char and decimal) is CAST like a 0-d array by the dtype request below. Without a
+                        // dtype, np.asanyarray(5) is an ndarray: a fresh WRITEABLE 0-d array, never the read-only scalar.
+                        bool pythonScalar = a is bool or sbyte or byte or short or ushort or int or uint or long or ulong
+                            or float or double or System.Numerics.Complex;
+                        ret = dtype is not null && pythonScalar
+                            ? Backends.UnmanagedStorage.FromAnyScalar(a, dtype)
+                            : NDArray.WritableScalar(a);
                         break;
                     }
 

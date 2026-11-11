@@ -18,7 +18,7 @@ namespace NumSharp
         ///     2.4.2).</param>
         /// <returns>An array of the same dtype as <paramref name="a"/>, containing the rounded values (an integer input is
         ///     an identity copy for <c>decimals &gt;= 0</c>). Unless <paramref name="out"/> was specified, a new array is
-        ///     created; with it, <paramref name="out"/> itself is returned. The real and imaginary parts of complex numbers
+        ///     created (NumPy's read-only scalar for a 0-d input); with it, <paramref name="out"/> itself is returned. The real and imaginary parts of complex numbers
         ///     are rounded separately.</returns>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <remarks>
@@ -31,7 +31,11 @@ namespace NumSharp
         public static NDArray round(NDArray a, int decimals = 0, NDArray @out = null)
             // ndarray.round is the engine's Round; a numpy.matrix operand's class follows decimals (the rint ufunc for 0,
             // a plain result otherwise: the computation's rule).
-            => a.TensorEngine.Round(a, decimals, dtype: null, @out: @out);
+            // A fresh 0-d result is NumPy's scalar (ndarray.round ends in PyArray_Return: np.round(np.array(2.55), 1) is
+            // np.float64(2.5)); out= comes back as given.
+            => @out is null
+                ? a.TensorEngine.Round(a, decimals, dtype: null, @out: null).PyArray_Return()
+                : a.TensorEngine.Round(a, decimals, dtype: null, @out: @out);
 
         /// <summary>
         ///     Evenly round to the given number of decimals (NumPy's <c>np.around</c>, the documented alias of
@@ -42,8 +46,8 @@ namespace NumSharp
         ///     value rounds to positions left of the decimal point.</param>
         /// <param name="out">A location into which the result is stored; must be the correct shape, returned as-is (out=
         ///     only — see <see cref="round"/>).</param>
-        /// <returns>An array of the same dtype as <paramref name="a"/>, containing the rounded values; <paramref name="out"/>
-        ///     itself when it was given. The real and imaginary parts of complex numbers are rounded separately.</returns>
+        /// <returns>An array of the same dtype as <paramref name="a"/>, containing the rounded values (NumPy's
+        ///     read-only scalar for a 0-d input); <paramref name="out"/> itself when it was given. The real and imaginary parts of complex numbers are rounded separately.</returns>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.around.html
@@ -51,7 +55,10 @@ namespace NumSharp
         ///     and a NumSharp-only <c>dtype</c> parameter followed <c>out</c> until 2026-11-11.</para>
         /// </remarks>
         public static NDArray around(NDArray a, int decimals = 0, NDArray @out = null)
-            // The same engine call as np.round: NumPy's around and round are two functions with one body.
-            => a.TensorEngine.Round(a, decimals, dtype: null, @out: @out);
+            // The same engine call as np.round: NumPy's around and round are two functions with one body. A fresh 0-d
+            // result is NumPy's scalar (ndarray.round ends in PyArray_Return); out= comes back as given.
+            => @out is null
+                ? a.TensorEngine.Round(a, decimals, dtype: null, @out: null).PyArray_Return()
+                : a.TensorEngine.Round(a, decimals, dtype: null, @out: @out);
     }
 }

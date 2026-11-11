@@ -100,7 +100,7 @@ namespace NumSharp
         private static NDArray Collapse(NDArray kept)
         {
             NDArray element = kept.reshape(Shape.NewScalar());
-            return element.copy().MarkReductionScalar();
+            return element.copy().PyArray_Return();
         }
 
         /// <summary>
@@ -664,7 +664,7 @@ namespace NumSharp
             if (axis is null)
                 // matrix._collapse(None) made res a NumPy scalar, not an ndarray: `a = a.dtype.type(val)` is a NEW scalar, and
                 // a matrix out keeps the -inf / +inf the method stored.
-                return NDArray.Scalar(positiveNaN, res.dtype).MarkReductionScalar();
+                return NDArray.Scalar(positiveNaN, res.dtype).PyArray_Return();
 
             // An ndarray (the row / column, or the matrix out itself): np.copyto(res, np.nan, where=mask, casting='unsafe')
             // sets the all-NaN slices in place - through the plain view, as this class's own code never hands a matrix on.

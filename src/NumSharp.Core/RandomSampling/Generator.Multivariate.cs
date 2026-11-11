@@ -36,8 +36,8 @@ namespace NumSharp
         {
             // NumPy converts pvals first; None becomes a 0-d array, which fails the dimension test below. Both wrappers are
             // private to this call (the core returns a fresh array and retains neither).
-            using var on = NDArray.Scalar(n);
-            using var parr = pvals is null ? NDArray.Scalar(double.NaN) : np.array(pvals);
+            using var on = NDArray.WritableScalar(n);
+            using var parr = pvals is null ? NDArray.WritableScalar(double.NaN) : np.array(pvals);
             return MultinomialCore(on, parr, castMessage: false, size);
         }
 
@@ -52,7 +52,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="pvals"/> is complex (not safely castable to float64).</exception>
         public NDArray multinomial(long n, NDArray pvals, Shape size = default)
         {
-            using var on = NDArray.Scalar(n); // private to this call: the result is a fresh array
+            using var on = NDArray.WritableScalar(n); // private to this call: the result is a fresh array
             return multinomial(on, pvals, size);
         }
 
@@ -97,7 +97,7 @@ namespace NumSharp
                 if (pvals is null)
                 {
                     ownParr = true;
-                    parr = NDArray.Scalar(double.NaN);
+                    parr = NDArray.WritableScalar(double.NaN);
                     return MultinomialCore(on, parr, castMessage: false, size);
                 }
                 RandomConstraints.CheckSafeCast(pvals, NPTypeCode.Double);

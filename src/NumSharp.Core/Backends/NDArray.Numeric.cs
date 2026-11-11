@@ -658,20 +658,28 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>np.isscalar</c> (<c>numeric.py</c>: <c>isinstance(element, generic) or type(element) in ScalarType
-        ///     or isinstance(element, numbers.Number)</c>) over C# values: a 0-d one-element NDArray (NumSharp's stand-in for
-        ///     a NumPy scalar), a <see cref="System.Numerics.Complex"/>, a string, a bool, a primitive, a decimal, and the C#
-        ///     spellings of the other NumPy and Python scalars — a <see cref="Half"/> (<c>np.float16</c>), a
-        ///     <see cref="BigInteger"/> (a Python int of any size), a <see cref="Char8"/> (<c>np.bytes_</c> / <c>bytes</c> of
-        ///     length 1) and a <see cref="DateTime64"/> (<c>np.datetime64</c>).
+        ///     or isinstance(element, numbers.Number)</c>) over C# values: a NumPy scalar (a 0-d NDArray that
+        ///     <see cref="NDArray.IsNumPyScalar"/> calls one), a <see cref="System.Numerics.Complex"/>, a string, a bool, a
+        ///     primitive, a decimal, and the C# spellings of the other NumPy and Python scalars — a <see cref="Half"/>
+        ///     (<c>np.float16</c>), a <see cref="BigInteger"/> (a Python int of any size), a <see cref="Char8"/>
+        ///     (<c>np.bytes_</c> / <c>bytes</c> of length 1) and a <see cref="DateTime64"/> (<c>np.datetime64</c>).
         /// </summary>
         /// <param name="obj">Any object, null included.</param>
-        /// <returns>True for the scalars above; false for null, any other NDArray, a C# array, a <see cref="Type"/> and any
-        ///     other object.</returns>
+        /// <returns>True for the scalars above; false for null, an explicit 0-d array (<c>np.array(5)</c>,
+        ///     <c>np.asarray(5)</c>), any NDArray with dimensions, a C# array, a <see cref="Type"/> and any other
+        ///     object.</returns>
         /// <remarks>
+        ///     <para>
         ///     A <see cref="Type"/> is a class object, never a scalar: <c>isscalar(typeof(int))</c> is False, as NumPy's
         ///     <c>isscalar(int)</c> and <c>isscalar(np.float64)</c> are (a class is neither a <c>generic</c> nor a
-        ///     <c>numbers.Number</c>). A 0-d NDArray answers True where NumPy's 0-d array does not: NumSharp has no scalar
-        ///     objects, so a 0-d array is what a NumPy scalar becomes.
+        ///     <c>numbers.Number</c>).
+        ///     </para>
+        ///     <para>
+        ///     NumSharp's NumPy scalar is a 0-d array, so the answer for an NDArray is <see cref="NDArray.IsNumPyScalar"/>:
+        ///     <c>np.isscalar(a.sum())</c> and <c>np.isscalar(NDArray.Scalar(1.5))</c> are True and
+        ///     <c>np.isscalar(np.array(5))</c> is False, as in NumPy. The accepted difference: a 0-d array built another way
+        ///     (<c>np.zeros(())</c>, <c>x.reshape(())</c>) answers True, where NumPy's ndarray answers False.
+        ///     </para>
         /// </remarks>
         internal static bool isscalar(object obj)
         {
@@ -690,8 +698,10 @@ namespace NumSharp
             if (type == typeof(string) || type == typeof(Complex) || type == typeof(decimal) || type == typeof(Half)
                 || type == typeof(BigInteger) || type == typeof(Char8) || type == typeof(DateTime64))
                 return true;
+            // A 0-d NDArray is NumPy's scalar unless np.array(x) / np.asarray(x) built it as an explicit 0-d ARRAY, which
+            // NumPy's isinstance(element, generic) rejects (np.isscalar(np.array(5)) is False). IsNumPyScalar is that rule.
             if (obj is NDArray nd)
-                return nd.ndim == 0 && nd.size == 1;
+                return nd.IsNumPyScalar;
 
             // Everything else: a C# array (a Python list), any other object, and a Type - a class object, which NumPy's
             // isscalar(int) answers False for. A Type used to be read as the type it names, so typeof(int) answered True

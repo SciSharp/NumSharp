@@ -38,7 +38,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyStandardCauchy(ref one));
+                        return NDArray.WritableScalar(LegacyStandardCauchy(ref one));
                 }
             }
 

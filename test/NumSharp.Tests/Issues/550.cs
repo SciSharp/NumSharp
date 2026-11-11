@@ -19,7 +19,9 @@ namespace NumSharp.Tests.Issues
         [TestMethod]
         public void ZeroRankArray_AsInTheAnswer()
         {
-            var x = NDArray.Scalar(5L);
+            // The answer's x is np.array(5), a 0-d ARRAY: NDArray.Scalar(5L) is NumPy's scalar np.int64(5), whose x[...]
+            // views a COPY of its value (gentype_subscript), so it would share no memory with x.
+            var x = np.array(5L);
 
             x.shape.Should().BeEmpty();
             x.ndim.Should().Be(0);
@@ -58,7 +60,9 @@ namespace NumSharp.Tests.Issues
         [TestMethod]
         public void ZeroRankArray_Refusals_UseNumPysTexts()
         {
-            var x = NDArray.Scalar(5L);
+            // The answer's 0-d ARRAY (np.array(5)): NumPy's scalar np.int64(5) answers x[0] with "invalid index to scalar
+            // variable." instead (gentype_subscript).
+            var x = np.array(5L);
 
             new Action(() => x.__len__()).Should().Throw<TypeError>().WithMessage("len() of unsized object");
             new Action(() => np.take(x, 1)).Should().Throw<IndexError>().WithMessage("index 1 is out of bounds for axis 0 with size 1");

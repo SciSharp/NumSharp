@@ -864,7 +864,7 @@ namespace NumSharp.Backends
             var r = NewFlatReductionResult(loopType, arr.ndim, keepdims);
             int size = loopType.SizeOf();
             Buffer.MemoryCopy(slot, (byte*)r.Address, size, size);
-            return r.MarkReductionScalar();
+            return r.PyArray_Return();
         }
 
         /// <summary>
@@ -920,7 +920,7 @@ namespace NumSharp.Backends
             var r = dims.Length == 0 ? NewArray(loopType, Shape.NewScalar(), false) : NewArray(loopType, new Shape(dims, copy: false), false); // dims is built above
             int size = loopType.SizeOf();
             Buffer.MemoryCopy(slot, (byte*)r.Address, size, size);
-            return dims.Length == 0 ? r.MarkReductionScalar() : r;
+            return dims.Length == 0 ? r.PyArray_Return() : r;
         }
 
         /// <summary>
@@ -1009,7 +1009,7 @@ namespace NumSharp.Backends
                     *(ushort*)dst = DirectILKernelGenerator.DoubleToHalfBits(q);
             }
 
-            return r.MarkReductionScalar();
+            return r.PyArray_Return();
         }
 
         /// <summary>

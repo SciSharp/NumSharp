@@ -271,16 +271,15 @@ namespace NumSharp.Tests.Logic
         }
 
         [TestMethod]
-        [Misaligned]
-        public void IntIndexZeroD_SharesInNumSharp_ButNumPyReturnsScalarCopy()
+        public void IntIndexZeroD_IsAScalarCopy_AsInNumPy()
         {
-            // DELIBERATE indexing-semantics divergence (NOT a shares_memory difference): a single-int index
-            // returns a 0-d VIEW in NumSharp (shares storage) but a scalar COPY in NumPy (shares nothing).
-            // The comparable 0-d VIEW built via reshape(()) shares in BOTH libraries.
+            // A single-int index of a 1-D array is the ITEM: NumPy's scalar, a COPY that shares nothing with the array (it
+            // was a 0-d view until the scalar plan's step S2). The comparable 0-d VIEW built via reshape(()) shares in both
+            // libraries.
             var a = np.arange(24);
-            var zi = a["3"];                                       // NumSharp: 0-d view; NumPy a[3]: scalar copy
+            var zi = a["3"];                                       // NumPy a[3]: np.int64(3), a scalar copy
             Assert.AreEqual(0, zi.ndim);
-            Assert.IsTrue(np.shares_memory(zi, a));                // NumSharp view shares; NumPy scalar would be False
+            Assert.IsFalse(np.shares_memory(zi, a));
             var zv = a["3:4"].reshape(new int[] { });             // 0-d view -> shares in NumPy too
             Assert.IsTrue(np.shares_memory(zv, a));
         }

@@ -78,7 +78,7 @@ namespace NumSharp
 
             // `if high is None: high = low; low = 0` — the Python int 0, whose np.asarray is a 0-d int64.
             bool oneArg = high is null;
-            using var zero = oneArg ? NDArray.Scalar(0L) : null;
+            using var zero = oneArg ? NDArray.WritableScalar(0L) : null;
             NDArray lo = oneArg ? zero : low;
             NDArray hi = oneArg ? low : high;
 
@@ -448,7 +448,7 @@ namespace NumSharp
         private static NDArray ScalarOf(Int128 value, NPTypeCode tc)
         {
             // Every bound fits a 64-bit carrier; the 0-d array then takes the dtype through NumPy's own cast.
-            using var carrier = value < 0 ? NDArray.Scalar((long)value) : NDArray.Scalar((ulong)value);
+            using var carrier = value < 0 ? NDArray.WritableScalar((long)value) : NDArray.WritableScalar((ulong)value);
             return carrier.astype(tc);
         }
 

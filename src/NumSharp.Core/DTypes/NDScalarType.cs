@@ -541,8 +541,8 @@ namespace NumSharp
             {
                 case NDArray nd:
                     // NumPy's scalars come back from NumSharp as 0-d arrays; the explicit np.array(x) form is the one 0-d
-                    // array that NumPy keeps as an ndarray (NDArray.IsExplicitZeroDimArray marks exactly that spelling).
-                    if (nd.ndim != 0 || nd.IsExplicitZeroDimArray)
+                    // array that NumPy keeps as an ndarray (NDArray.IsNumPyScalar is false for exactly that spelling).
+                    if (!nd.IsNumPyScalar)
                         return false;
                     return Of(nd.dtype.Meta).IsSubclassOf(this);
                 case NDScalarType _:

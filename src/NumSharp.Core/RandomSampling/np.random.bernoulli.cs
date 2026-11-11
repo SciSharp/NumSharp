@@ -29,8 +29,13 @@ namespace NumSharp
         public NDArray bernoulli(double p, Shape size)
         {
             if (IsScalarDraw(size))
+            {
+                double draw;
                 lock (randomizer.@lock)
-                    return NDArray.Scalar(randomizer.NextDouble() < p ? 1.0 : 0.0);
+                    draw = randomizer.NextDouble() < p ? 1.0 : 0.0;
+                // A fresh writeable 0-d array, the random module's form of a single draw for size=() and size=None alike.
+                return NDArray.WritableScalar(draw);
+            }
 
             var result = LegacyOutput(NPTypeCode.Double, size);
             unsafe
