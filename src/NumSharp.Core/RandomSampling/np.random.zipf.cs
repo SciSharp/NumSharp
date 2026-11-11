@@ -54,7 +54,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyZipf(ref one, in setup, null));
+                        return NDArray.WritableScalar(LegacyZipf(ref one, in setup, null));
                 }
             }
 

@@ -253,7 +253,7 @@ namespace NumSharp.Backends
                 // widens exactly) and astype keeps a scalar; a stack's are arrays, multiplied by the ufunc (np.multiply's
                 // member).
                 r = normX.ndim == 0
-                    ? NDArray.Scalar(normX.astype(np.float64).GetDouble() * normInv.GetDouble()).astype(realT).MarkReductionScalar()
+                    ? NDArray.Scalar(normX.astype(np.float64).GetDouble() * normInv.GetDouble()).astype(realT).PyArray_Return()
                     : normX.TensorEngine.Multiply(normX, normInv).astype(realT, false);
             }
 
@@ -388,7 +388,7 @@ namespace NumSharp.Backends
             // new scalar of r's dtype, or r itself when the matrix held the NaN.
             if (r.ndim == 0)
                 return apply.GetBoolean()
-                    ? NDArray.Scalar(double.PositiveInfinity).astype(r.typecode).MarkReductionScalar()
+                    ? NDArray.Scalar(double.PositiveInfinity).astype(r.typecode).PyArray_Return()
                     : r;
 
             return NDArray.where(apply, NDArray.Scalar(double.PositiveInfinity).astype(r.typecode), r);

@@ -52,7 +52,9 @@ namespace NumSharp.Tests.Strings
                     var dt = Dt(p, "dtype");
                     if (v is string s)
                         return dt is null ? np.array(s) : np.array(s, dt);
-                    return dt is null ? NDArray.Scalar(v) : NDArray.Scalar(v, dt);
+                    // NumPy's np.array(value, dtype) is a writeable 0-d ARRAY: the value is built as NumSharp's scalar
+                    // (NDArray.Scalar's conversion), then copied into the array np.array returns.
+                    return np.array(dt is null ? NDArray.Scalar(v) : NDArray.Scalar(v, dt));
                 }
                 case "zeros": return np.zeros(ShapeOf(p, "shape"), Dt(p, "dtype"));
                 case "empty": return np.empty(ShapeOf(p, "shape"), Dt(p, "dtype"));

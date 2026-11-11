@@ -57,7 +57,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(Distributions.RandomGumbel(ref one, loc, scale));
+                        return NDArray.WritableScalar(Distributions.RandomGumbel(ref one, loc, scale));
                 }
             }
 

@@ -86,7 +86,7 @@ namespace NumSharp.Backends
                 // scl = avg_as_array.dtype.type(a.size / avg_as_array.size): only a NaN-like NA mean (np.float64) returns,
                 // always 0-d (an axis or keepdims meets the divide's refusal first), so the count is NumPy's float64 SCALAR
                 // (NumSharp's stand-in: a read-only 0-d owner) and needs no broadcast.
-                var sclValue = NewScalar((double)a.size / avg.size).MarkReductionScalar();
+                var sclValue = NewScalar((double)a.size / avg.size).PyArray_Return();
                 return (scope.Returns(avg), scope.Returns(sclValue));
             }
             if (Backends.Strings.NDStringUfuncs.IsString(a))
@@ -117,7 +117,7 @@ namespace NumSharp.Backends
                 // stand-in: a read-only 0-d owner); `np.broadcast_to(scl, avg_as_array.shape).copy()` then makes it a fresh
                 // array wherever the mean has dimensions.
                 double count = (double)a.size / avg.size;
-                NDArray scl = NewScalar(count).astype(avg.typecode).MarkReductionScalar();
+                NDArray scl = NewScalar(count).astype(avg.typecode).PyArray_Return();
                 if (!scl.Shape.dimensions.SequenceEqual(avg.Shape.dimensions))
                     scl = NDArray.broadcast_to(scl, avg.Shape).copy();
                 return (scope.Returns(avg), scope.Returns(scl));
@@ -244,7 +244,7 @@ namespace NumSharp.Backends
         private NDArray Quotient(NDArray num, NDArray scl)
         {
             if (num.ndim == 0 && scl.ndim == 0)
-                return num.TensorEngine.Divide(num, scl, null, null, null).MarkReductionScalar();
+                return num.TensorEngine.Divide(num, scl, null, null, null).PyArray_Return();
             var r = UfuncResultBuffer(num.GetTypeCode, num, scl);
             num.TensorEngine.Divide(num, scl, null, r, null);
             return r;

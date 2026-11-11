@@ -832,7 +832,7 @@ namespace NumSharp
             try
             {
                 DefaultEngine.DivideByCountLikeNumPy(ret, counts);
-                return ret.ndim == 0 ? ret.MarkReductionScalar() : ret;
+                return ret.ndim == 0 ? ret.PyArray_Return() : ret;
             }
             catch
             {

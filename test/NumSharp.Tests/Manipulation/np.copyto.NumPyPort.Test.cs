@@ -152,11 +152,12 @@ namespace NumSharp.Tests.Manipulation
         [TestMethod]
         public void ZeroDimensionalOperands()
         {
-            var d0 = NDArray.Scalar(5.0);
+            // The destinations are 0-d ARRAYS (np.array(5.0)); a NumPy scalar is read-only, no destination.
+            var d0 = np.array(5.0);
             np.copyto(d0, np.array(new[,] { { 7.0 } }));
             d0.GetDouble().Should().Be(7.0);
 
-            var kept = NDArray.Scalar(5.0);
+            var kept = np.array(5.0);
             np.copyto(kept, NDArray.Scalar(7.0), where: NDArray.Scalar(false));
             kept.GetDouble().Should().Be(5.0);
 

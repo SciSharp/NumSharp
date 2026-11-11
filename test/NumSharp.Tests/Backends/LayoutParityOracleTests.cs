@@ -434,7 +434,7 @@ namespace NumSharp.Tests.Backends
 
                     static NDArray SumIntoOut()
                     {
-                        var o = NDArray.Scalar(0L);
+                        var o = np.array(0L);   // NumPy's out=np.array(0): a 0-d ARRAY
                         var a = np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4);
                         return a.TensorEngine.ReduceAdd(a, null, false, null, o);
                     }

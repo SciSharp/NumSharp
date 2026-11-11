@@ -49,7 +49,7 @@ namespace NumSharp.Backends
         ///     stack a writeable array of one determinant per matrix.</returns>
         /// <remarks>
         ///     NumPy's det is the gufunc <c>_umath_linalg.det</c>, and the ufunc machinery returns a 0-d output as a numpy
-        ///     scalar; <see cref="NDArray.MarkReductionScalar"/> is that step for both routes (a no-op for a stack's 1-d or
+        ///     scalar; <see cref="NDArray.PyArray_Return"/> is that step for both routes (a no-op for a stack's 1-d or
         ///     larger result). The managed LU is allclose to NumPy's blocked LAPACK, not bit-exact: a matrix whose zero
         ///     pivot only appears after several eliminations can give a tiny determinant where LAPACK cancels to 0.
         /// </remarks>
@@ -58,8 +58,8 @@ namespace NumSharp.Backends
             // One read of the settable property (see CholeskyKernel).
             var blas = a.TensorEngine.Blas;
             if (blas != null && blas.TryDet(a, out var result))
-                return result.MarkReductionScalar();
-            return ManagedLu.Det(a).MarkReductionScalar();
+                return result.PyArray_Return();
+            return ManagedLu.Det(a).PyArray_Return();
         }
 
         /// <summary>
@@ -71,16 +71,16 @@ namespace NumSharp.Backends
         ///     the gufunc's return step), writeable arrays for a stack. A singular matrix gives <c>(0, -inf)</c>.</returns>
         /// <remarks>
         ///     NumPy's slogdet is the gufunc <c>_umath_linalg.slogdet</c>: both 0-d outputs come back as numpy scalars
-        ///     (<see cref="NDArray.MarkReductionScalar"/>, a no-op for a stack's outputs).
+        ///     (<see cref="NDArray.PyArray_Return"/>, a no-op for a stack's outputs).
         /// </remarks>
         protected virtual (NDArray sign, NDArray logabsdet) SlogdetKernel(NDArray a)
         {
             // One read of the settable property (see CholeskyKernel).
             var blas = a.TensorEngine.Blas;
             if (blas != null && blas.TrySlogdet(a, out var sign, out var logabsdet))
-                return (sign.MarkReductionScalar(), logabsdet.MarkReductionScalar());
+                return (sign.PyArray_Return(), logabsdet.PyArray_Return());
             var (managedSign, managedLogabsdet) = ManagedLu.Slogdet(a);
-            return (managedSign.MarkReductionScalar(), managedLogabsdet.MarkReductionScalar());
+            return (managedSign.PyArray_Return(), managedLogabsdet.PyArray_Return());
         }
 
         /// <summary>
@@ -192,7 +192,7 @@ namespace NumSharp.Backends
         /// <exception cref="OpenBlasMissingBackendException">A non-empty coefficient matrix that no backend serves.</exception>
         /// <remarks>
         ///     NumPy's lstsq calls the gufunc <c>_umath_linalg.lstsq</c>, whose 0-d rank output the ufunc machinery returns
-        ///     as a numpy scalar (<c>np.intc</c>); <see cref="NDArray.MarkReductionScalar"/> is that step for both routes.
+        ///     as a numpy scalar (<c>np.intc</c>); <see cref="NDArray.PyArray_Return"/> is that step for both routes.
         /// </remarks>
         protected virtual (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) LstsqKernel(
             NDArray a, NDArray b, double rcond)
@@ -202,12 +202,12 @@ namespace NumSharp.Backends
             if (a.size == 0)
             {
                 var (emptyX, emptyRes, emptyRank, emptyS) = LinAlgEmpty.Lstsq(a, b);
-                return (emptyX, emptyRes, emptyRank.MarkReductionScalar(), emptyS);
+                return (emptyX, emptyRes, emptyRank.PyArray_Return(), emptyS);
             }
             // One read of the settable property (see CholeskyKernel).
             var blas = a.TensorEngine.Blas;
             if (blas != null && blas.TryLstsq(a, b, rcond, out var x, out var res, out var rank, out var s))
-                return (x, res, rank.MarkReductionScalar(), s);
+                return (x, res, rank.PyArray_Return(), s);
             throw MissingBackend(a, "np.linalg.lstsq", nameof(IBlasBackend.TryLstsq));
         }
 

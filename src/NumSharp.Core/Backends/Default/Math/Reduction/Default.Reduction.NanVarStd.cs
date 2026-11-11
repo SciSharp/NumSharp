@@ -239,7 +239,7 @@ namespace NumSharp.Backends
 
             if (takeSqrt)
                 SqrtLikeNumPy(var, scalarResult);
-            return scalarResult ? var.MarkReductionScalar() : var;
+            return scalarResult ? var.PyArray_Return() : var;
         }
 
         /// <summary>

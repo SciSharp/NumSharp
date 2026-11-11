@@ -160,8 +160,8 @@ namespace NumSharp
                     // (_common.pyx float_fill: `random_func(state, 1, &out_val); return out_val`, the C
                     // float auto-converting to a Python float). Only the sized/out= paths stay float32.
                     if (tc == NPTypeCode.Single)
-                        return NDArray.Scalar((double)_bitGenerator.NextFloat());
-                    return NDArray.Scalar(_bitGenerator.NextDouble());
+                        return NDArray.WritableScalar((double)_bitGenerator.NextFloat());
+                    return NDArray.WritableScalar(_bitGenerator.NextDouble());
                 }
 
                 return tc == NPTypeCode.Single ? FillFloats(size, _bitGenerator) : FillDoubles(size, _bitGenerator);

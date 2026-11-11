@@ -460,7 +460,7 @@ namespace NumSharp.Backends.Strings
                     UnmanagedStorage.Copyto(full, na, NPY_CASTING.NPY_UNSAFE_CASTING);
                 // `[()]` of a 0-d array is its Python object (the NA); of an array it is a VIEW of the whole array (NumPy's
                 // result does not own its data). The caller's scope reclaims `full`; the view keeps its storage.
-                return qShape.Length == 0 ? full.MarkReductionScalar() : full.view();
+                return qShape.Length == 0 ? full.PyArray_Return() : full.view();
             }
             // NumPy's _remove_nan_1d order, not a mask selection: the partition that picks the element sorts what is left,
             // and texts equal under NpyString_cmp (the same bytes up to a shared NUL) keep the order they arrive in.
@@ -621,7 +621,7 @@ namespace NumSharp.Backends.Strings
             NPTypeCode realType = precision is NPTypeCode.Half or NPTypeCode.Single ? precision : NPTypeCode.Double;
             if (target is null)
             {
-                var r = (complex ? NDArray.Scalar(value) : RealScalar(real, realType)).MarkReductionScalar();
+                var r = (complex ? NDArray.Scalar(value) : RealScalar(real, realType)).PyArray_Return();
                 return keepdims ? KeepdimsResult(r, nd, reduced) : r;
             }
 
@@ -907,7 +907,7 @@ namespace NumSharp.Backends.Strings
         private static NDArray ScalarElement(NDArray line, long index)
         {
             using var view = line.GetData(new[] { index });
-            return view.copy().MarkReductionScalar();
+            return view.copy().PyArray_Return();
         }
 
         /// <summary>
@@ -939,19 +939,19 @@ namespace NumSharp.Backends.Strings
                     // An unsized U discovers its width from the text (np.asanyarray('') is <U1).
                     return Backends.UnmanagedStorage.FromAnyScalar(s, null).MarkExplicitZeroDimArray();
                 case double d:
-                    return NDArray.Scalar(PyFloatValue(d)).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar(PyFloatValue(d)).MarkExplicitZeroDimArray();
                 case float f:
-                    return NDArray.Scalar(PyFloatValue(f)).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar(PyFloatValue(f)).MarkExplicitZeroDimArray();
                 case bool b:
-                    return NDArray.Scalar(b).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar(b).MarkExplicitZeroDimArray();
                 case long l:
-                    return NDArray.Scalar(l).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar(l).MarkExplicitZeroDimArray();
                 case int i:
-                    return NDArray.Scalar((long)i).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar((long)i).MarkExplicitZeroDimArray();
                 case Complex c:
-                    return NDArray.Scalar(c).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar(c).MarkExplicitZeroDimArray();
                 case BigInteger big when big >= long.MinValue && big <= long.MaxValue:
-                    return NDArray.Scalar((long)big).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar((long)big).MarkExplicitZeroDimArray();
             }
             throw new NotSupportedException(
                 $"np.apply_along_axis over a row whose result is {NDPyObject.Repr(element)} builds an object array in NumPy, a " +

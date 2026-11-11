@@ -89,7 +89,7 @@ namespace NumSharp.Backends
                 {
                     var r = NewScalar(nan, nanType);
                     if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
-                    return r.MarkReductionScalar();
+                    return r.PyArray_Return();
                 }
                 var axis = NormalizeAxis(axis_.Value, arr.ndim);
                 var resultShape = Shape.GetAxis(shape, axis);
@@ -106,7 +106,7 @@ namespace NumSharp.Backends
                     ExpandReducedAxis(result, arr.Shape, axis);
                 // A 1-D input along its only axis gives the 0-d NaN, which NumPy returns as a scalar like any 0-d mean
                 // (this exit returned it writeable); a no-op for an array result.
-                return result.MarkReductionScalar();
+                return result.PyArray_Return();
             }
 
             // ONE element per output — a one-element input reduced flat or over its only axis: NumPy's mean is
@@ -161,7 +161,7 @@ namespace NumSharp.Backends
                 var r = NewScalar(result);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
-                return r.MarkReductionScalar();
+                return r.PyArray_Return();
             }
 
             var axis2 = NormalizeAxis(axis_.Value, arr.ndim);
@@ -343,7 +343,7 @@ namespace NumSharp.Backends
                 ret.Dispose();
                 var h = NewArray(NPTypeCode.Half, Shape.Scalar, false);
                 unsafe { *(ushort*)h.Address = DirectILKernelGenerator.DoubleToHalfBits(q); }
-                return h.MarkReductionScalar();
+                return h.PyArray_Return();
             }
 
             // A 0-d sum is the read-only reduction scalar; 0-d has no layout to keep, so dividing a copy is exact.
@@ -372,7 +372,7 @@ namespace NumSharp.Backends
                 ret = narrowed;
             }
 
-            return scalar ? ret.MarkReductionScalar() : ret;
+            return scalar ? ret.PyArray_Return() : ret;
         }
 
         /// <summary>

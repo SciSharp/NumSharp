@@ -234,7 +234,7 @@ namespace NumSharp.Backends.Strings
             using var y = minIsArray ? null : PyOperand(minObj);
             NDArray minuend = x ?? max, subtrahend = y ?? min;
             var diff = minuend.TensorEngine.Subtract(minuend, subtrahend, null, @out);
-            return @out is null ? diff.MarkReductionScalar() : diff;
+            return @out is null ? diff.PyArray_Return() : diff;
         }
 
         // =============================================================================================================
@@ -339,7 +339,7 @@ namespace NumSharp.Backends.Strings
             }
             if (!TryPyNumber(value, out double real, out Complex complex, out bool isComplex))
                 throw new TypeError($"unsupported operand type(s) for /: '{PyTypeName(value)}' and 'int'");
-            return (isComplex ? NDArray.Scalar(complex / rcount) : NDArray.Scalar(real / rcount)).MarkReductionScalar();
+            return (isComplex ? NDArray.Scalar(complex / rcount) : NDArray.Scalar(real / rcount)).PyArray_Return();
         }
 
         /// <summary>

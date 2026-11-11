@@ -87,13 +87,13 @@ namespace NumSharp.Backends
             if (idxNdim == 0)
             {
                 // A 0-d index array: NumPy's PyArray_Return turns each 0-d view into a numpy SCALAR, which owns its value
-                // and cannot be written — fresh 0-d arrays with a scalar's flags (MarkReductionScalar: num=263).
+                // and cannot be written — fresh 0-d arrays with a scalar's flags (PyArray_Return: num=263).
                 long* row = (long*)coords.Storage.Address;
                 for (int j = 0; j < ndims; j++)
                 {
                     var scalar = NewArray<long>(Shape.NewScalar(), false);
                     *(long*)scalar.Storage.Address = row[j];
-                    scalar.MarkReductionScalar();
+                    scalar.PyArray_Return();
                     result[j] = scalar;
                 }
                 return result;

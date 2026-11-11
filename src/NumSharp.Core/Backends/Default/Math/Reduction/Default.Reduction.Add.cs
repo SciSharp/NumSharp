@@ -423,7 +423,7 @@ namespace NumSharp.Backends
                 ExpandReducedAxis(counts, arr.Shape, axis);
                 return counts;
             }
-            return counts.ndim == 0 ? counts.MarkReductionScalar() : counts;
+            return counts.ndim == 0 ? counts.PyArray_Return() : counts;
         }
 
         private NDArray HandleElementWiseSum(NDArray arr, bool keepdims, NPTypeCode? typeCode, NDArray @out)
@@ -433,7 +433,7 @@ namespace NumSharp.Backends
             var r = NewScalar(result);
             if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
             else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
-            return r.MarkReductionScalar();
+            return r.PyArray_Return();
         }
 
         private unsafe NDArray ExecuteAxisReduction(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out, ReductionOp op)
@@ -491,7 +491,7 @@ namespace NumSharp.Backends
                 ExpandReducedAxis(result, arr.Shape, axis);
             // A fresh 0-d result (1-D input reduced over its only axis) is a numpy SCALAR at the
             // boundary — read-only; an out= operand returns writeable (PyArray_Return semantics).
-            return @out is not null ? result : result.MarkReductionScalar();
+            return @out is not null ? result : result.PyArray_Return();
         }
 
         /// <summary>
@@ -738,7 +738,7 @@ namespace NumSharp.Backends
                 ExpandReducedAxis(result, arr.Shape, axis);
             // Same PyArray_Return rule as ExecuteAxisReduction's exit; the output was already
             // allocated in KEEPORDER (F for an F-contig input), so there is nothing to reorder.
-            return @out is not null ? result : result.MarkReductionScalar();
+            return @out is not null ? result : result.PyArray_Return();
         }
 
         /// <summary>
@@ -805,7 +805,7 @@ namespace NumSharp.Backends
                 if (@out is not null) { @out.SetAtIndex(defaultVal, 0); return @out; }
                 var r = NewScalar(defaultVal);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
-                return r.MarkReductionScalar();
+                return r.PyArray_Return();
             }
             var axis = NormalizeAxis(axis_.Value, arr.ndim);
             var resultShape = Shape.GetAxis(shape, axis);
@@ -819,7 +819,7 @@ namespace NumSharp.Backends
             // A 1-D input reduced along its only axis leaves a 0-d result, which NumPy hands back as a scalar
             // (PyArray_Return) exactly as it does for a non-empty input; this exit returned it writeable
             // (np.sum(np.zeros(0), -1), np.trapezoid of an empty integrand). A no-op for an array result.
-            return result.MarkReductionScalar();
+            return result.PyArray_Return();
         }
 
         /// <summary>
@@ -846,7 +846,7 @@ namespace NumSharp.Backends
             else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
             // A 0-d exit — including keepdims over a 0-d input, whose (1,)*0 reshape is still
             // 0-d — is a numpy SCALAR (read-only); (1,) keepdims results pass through writeable.
-            return r.MarkReductionScalar();
+            return r.PyArray_Return();
         }
 
         /// <summary>
@@ -873,7 +873,7 @@ namespace NumSharp.Backends
             {
                 var v = arr.GetAtIndex(0);
                 if (outputType != arr.GetTypeCode) v = Converts.ChangeType(v, outputType);
-                return NewScalar(v).MarkReductionScalar();
+                return NewScalar(v).PyArray_Return();
             }
             // KEEPORDER: reducing a size-1 axis of an F-contiguous input keeps F-contig; SetAtIndex
             // writes each element through the result's strides, so an F-order buffer fills correctly

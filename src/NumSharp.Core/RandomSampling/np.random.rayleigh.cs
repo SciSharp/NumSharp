@@ -55,7 +55,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyRayleigh(ref one, scale));
+                        return NDArray.WritableScalar(LegacyRayleigh(ref one, scale));
                 }
             }
 

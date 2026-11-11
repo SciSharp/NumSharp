@@ -64,7 +64,7 @@ namespace NumSharp.Backends
                 using NDArray product = ReduceProduct(truth, axis_, keepdims, np.int64);
                 NDArray result = product.astype(np.@bool, true, 'K', "unsafe");
                 // A full reduction answers with NumPy's scalar, NumSharp's read-only 0-d array.
-                return axis_ is null ? result.MarkReductionScalar() : result;
+                return axis_ is null ? result.PyArray_Return() : result;
             }
             finally
             {

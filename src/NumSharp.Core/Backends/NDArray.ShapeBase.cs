@@ -759,8 +759,8 @@ namespace NumSharp
         private static NDArray TextScalarAsArray(NDArray res)
         {
             // An explicit 0-d array (np.array<T>'s mark) is an ndarray in NumPy too: kept whole. A scalar stand-in of a number
-            // is its own dtype's array already.
-            if (res.ndim != 0 || res.IsExplicitZeroDimArray || res.dtype.kind is not ('U' or 'S' or 'T'))
+            // is its own dtype's array already. Only a NumPy scalar (IsNumPyScalar) of text is re-discovered.
+            if (!res.IsNumPyScalar || res.dtype.kind is not ('U' or 'S' or 'T'))
                 return res;
             // The value as NumPy's scalar holds it (trailing NULs stripped): a str for U and StringDType, bytes for S; the
             // coercion discovers its class and width as np.asanyarray does.

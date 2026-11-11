@@ -124,7 +124,7 @@ namespace NumSharp.Backends
                     var emptyType = typeCode ?? arr.typecode.GetAccumulatingType();
                     var r = NewScalar(emptyType.GetOneValue());
                     if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
-                    return r.MarkReductionScalar();
+                    return r.PyArray_Return();
                 }
                 var axis = NormalizeAxis(axis_.Value, arr.ndim);
                 var resultShape = Shape.GetAxis(shape, axis);
@@ -134,7 +134,7 @@ namespace NumSharp.Backends
                     ExpandReducedAxis(result, arr.Shape, axis);
                 // A 1-D input along its only axis gives the 0-d identity, NumPy's scalar as for a non-empty input (this
                 // exit returned it writeable); a no-op for an array result.
-                return result.MarkReductionScalar();
+                return result.PyArray_Return();
             }
 
             // Degenerate flat reduction (0-d scalar or single-element 1-D). NumPy still applies the
@@ -151,7 +151,7 @@ namespace NumSharp.Backends
                 var r = NewScalar(result);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
-                return r.MarkReductionScalar();
+                return r.PyArray_Return();
             }
 
             var axis2 = NormalizeAxis(axis_.Value, arr.ndim);

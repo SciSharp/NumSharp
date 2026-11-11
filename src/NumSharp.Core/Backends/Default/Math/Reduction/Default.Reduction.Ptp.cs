@@ -77,7 +77,7 @@ namespace NumSharp.Backends
             var diff = maxRes - minRes;
 
             // Fresh 0-d ptp is a numpy SCALAR (read-only).
-            return diff.MarkReductionScalar();
+            return diff.PyArray_Return();
         }
 
         /// <summary>

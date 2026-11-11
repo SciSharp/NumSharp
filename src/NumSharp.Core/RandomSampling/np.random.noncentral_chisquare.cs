@@ -49,7 +49,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyNoncentralChisquare(ref one, in setup));
+                        return NDArray.WritableScalar(LegacyNoncentralChisquare(ref one, in setup));
                 }
             }
 

@@ -247,7 +247,7 @@ namespace NumSharp
                 }
 
                 if (size.IsEmpty)
-                    return NDArray.Scalar(NextRaw());
+                    return NDArray.WritableScalar(NextRaw());
 
                 // NumPy's np.empty(size, np.uint64): `size` is a dims tuple, so only its dimensions count (AsClean); a view's
                 // Shape (strides, offset, F order) would put the raw words, written in memory order, out of C order.

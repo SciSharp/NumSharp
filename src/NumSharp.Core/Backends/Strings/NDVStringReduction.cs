@@ -352,7 +352,7 @@ namespace NumSharp.Backends.Strings
                     FillInitial(result, initial);
                 }
                 if (!castOut)
-                    return ReferenceEquals(result, @out) ? result : result.MarkReductionScalar();
+                    return ReferenceEquals(result, @out) ? result : result.PyArray_Return();
                 // The loop's StringDType result cast into the caller's U out (a reduction validates its output cast with
                 // NumPy's historic unsafe casting).
                 UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_UNSAFE_CASTING);
@@ -1153,7 +1153,7 @@ namespace NumSharp.Backends.Strings
                 }
                 var result = new NDArray(NPTypeCode.Int64, dims.Length == 0 ? Shape.Scalar : new Shape(dims, copy: false), true);
                 if (result.size == 0 || input.size == 0)
-                    return result.MarkReductionScalar();
+                    return result.PyArray_Return();
                 // The lanes write into the result viewed with the input's rank (the reduced axis at length 1).
                 NDArray outLanes;
                 if (axis is null || a.ndim == 0)
@@ -1169,7 +1169,7 @@ namespace NumSharp.Backends.Strings
                     if (!ReferenceEquals(outLanes, result))
                         outLanes.Dispose();
                 }
-                return result.MarkReductionScalar();
+                return result.PyArray_Return();
             }
             finally
             {

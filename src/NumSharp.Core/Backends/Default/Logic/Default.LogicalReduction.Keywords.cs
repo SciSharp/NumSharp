@@ -66,7 +66,7 @@ namespace NumSharp.Backends
             NDArray<bool> reduced = reduceAll ? All(effective, axis, keepdims) : Any(effective, axis, keepdims);
             // A fresh 0-d result is a numpy SCALAR (np.bool_) at the boundary: read-only (PyArray_Return semantics); out=
             // returns the writeable out array itself.
-            return @out is null ? reduced.MarkReductionScalar() : WriteLogicalToOut(reduced, @out);
+            return @out is null ? reduced.PyArray_Return() : WriteLogicalToOut(reduced, @out);
         }
 
         /// <summary>
@@ -110,7 +110,7 @@ namespace NumSharp.Backends
             NDArray effective = @where is null ? a : reduceAll ? ApplyWhereForAll(a, @where) : ApplyWhereForAny(a, @where);
             NDArray<bool> reduced = reduceAll ? All(effective, axis, keepdims) : Any(effective, axis, keepdims);
             // Every axis reduced away: a numpy SCALAR at the boundary (read-only); out= returns the out array itself.
-            return @out is null ? reduced.MarkReductionScalar() : WriteLogicalToOut(reduced, @out);
+            return @out is null ? reduced.PyArray_Return() : WriteLogicalToOut(reduced, @out);
         }
 
         /// <summary>

@@ -252,7 +252,7 @@ namespace NumSharp.Backends
 
             if (@out is not null)
                 return @out;
-            return scalarResult ? ret.MarkReductionScalar() : ret;
+            return scalarResult ? ret.PyArray_Return() : ret;
         }
 
         /// <summary>

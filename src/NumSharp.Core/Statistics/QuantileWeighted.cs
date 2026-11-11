@@ -431,7 +431,7 @@ namespace NumSharp.Statistics
             {
                 if (result.ndim == 0 && @out is null)
                     // `result = arr[-1]`: NumPy's scalar (read-only here), not the 0-d array.
-                    return last.copy().MarkReductionScalar();
+                    return last.copy().PyArray_Return();
                 np.copyto(result, last, where: slicesHavingNans);
             }
             return result;
@@ -522,7 +522,7 @@ namespace NumSharp.Statistics
             {
                 if (result.ndim == 0 && @out is null)
                     // `result = arr[-1]`: NumPy's scalar (read-only here), not the 0-d array; `last` is a fresh 0-d take.
-                    return last.MarkReductionScalar();
+                    return last.PyArray_Return();
                 np.copyto(result, last, where: slicesHavingNans);
             }
             return result;
@@ -953,7 +953,7 @@ namespace NumSharp.Statistics
                     np.copyto(full, nanLiteral, "unsafe");
             }
             if (q.ndim == 0)
-                return full.MarkReductionScalar();
+                return full.PyArray_Return();
             NDArray view = full.view();
             full.Dispose();
             return view;

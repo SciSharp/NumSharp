@@ -121,14 +121,16 @@ namespace NumSharp.Backends.Sorting
             if (axis is null || nd == 0)
             {
                 long index = FlatIndex(a, unit, width, max);
-                var flat = NDArray.Scalar(index);
+                // Writeable: a keepdims result is an ARRAY (relabelled in place below); only the 0-d exit becomes the
+                // read-only scalar, at PyArray_Return.
+                var flat = NDArray.WritableScalar(index);
                 if (keepdims && nd > 0)
                 {
                     var ones = new long[nd];
                     Array.Fill(ones, 1L);
                     flat.Storage.Reshape(new Shape(ones, copy: false));
                 }
-                return flat.MarkReductionScalar();
+                return flat.PyArray_Return();
             }
 
             int ax = axis.Value < 0 ? axis.Value + nd : axis.Value;
@@ -153,7 +155,7 @@ namespace NumSharp.Backends.Sorting
                         outDims[w++] = a.Shape.dimensions[d];
                 result.Storage.Reshape(outDims.Length == 0 ? Shape.NewScalar() : new Shape(outDims, copy: false));
             }
-            return result.MarkReductionScalar();
+            return result.PyArray_Return();
         }
 
         /// <summary>

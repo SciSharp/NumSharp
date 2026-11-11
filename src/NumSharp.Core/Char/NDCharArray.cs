@@ -367,7 +367,7 @@ namespace NumSharp
             // A chararray over int8 / char data, or one a view(dtype) left with another dtype: NumPy returns the NumPy
             // scalar of the element. A 0-d copy of the element stands for it.
             var scalar = new NDCharArray(element.Alias().Clone()) { IsScalarStandIn = true };
-            scalar.MarkReductionScalar();   // read-only, as the immutable Python value it stands for
+            scalar.PyArray_Return();   // read-only, as the immutable Python value it stands for
             return scalar;
         }
 
@@ -427,7 +427,7 @@ namespace NumSharp
             // stand-in holds its own counted reference on the storage.
             using var built = Backends.UnmanagedStorage.FromAnyScalar(value, null);
             var scalar = new NDCharArray(built.Storage) { IsScalarStandIn = true };
-            scalar.MarkReductionScalar();
+            scalar.PyArray_Return();
             return scalar;
         }
 

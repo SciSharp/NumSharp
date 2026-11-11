@@ -55,7 +55,7 @@ namespace NumSharp
                     ulong word;
                     var one = new DrawBuffer64(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Beta(ref one, in setup));
+                        return NDArray.WritableScalar(Beta(ref one, in setup));
                 }
             }
 
@@ -100,7 +100,7 @@ namespace NumSharp
                     ulong word;
                     var one = new DrawBuffer64(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Chisquare(ref one, in half));
+                        return NDArray.WritableScalar(Chisquare(ref one, in half));
                 }
             }
 
@@ -148,7 +148,7 @@ namespace NumSharp
                     ulong word;
                     var one = new DrawBuffer64(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(F(ref one, in halfNum, in halfDen, dfnum, dfden));
+                        return NDArray.WritableScalar(F(ref one, in halfNum, in halfDen, dfnum, dfden));
                 }
             }
 
@@ -196,7 +196,7 @@ namespace NumSharp
                     ulong word;
                     var one = new DrawBuffer64(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(NoncentralChisquare(ref one, in setup));
+                        return NDArray.WritableScalar(NoncentralChisquare(ref one, in setup));
                 }
             }
 
@@ -246,7 +246,7 @@ namespace NumSharp
                     ulong word;
                     var one = new DrawBuffer64(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(NoncentralF(ref one, in num, in halfDen, dfnum, dfden));
+                        return NDArray.WritableScalar(NoncentralF(ref one, in num, in halfDen, dfnum, dfden));
                 }
             }
 
@@ -287,7 +287,7 @@ namespace NumSharp
                     ulong word;
                     var one = new DrawBuffer64(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(StandardCauchy(ref one));
+                        return NDArray.WritableScalar(StandardCauchy(ref one));
                 }
             }
 
@@ -336,7 +336,7 @@ namespace NumSharp
                     ulong word;
                     var one = new DrawBuffer64(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(StandardT(ref one, in half, sqrtHalf));
+                        return NDArray.WritableScalar(StandardT(ref one, in half, sqrtHalf));
                 }
             }
 
@@ -383,7 +383,7 @@ namespace NumSharp
                     ulong word;
                     var one = new DrawBuffer64(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Vonmises(ref one, in setup));
+                        return NDArray.WritableScalar(Vonmises(ref one, in setup));
                 }
             }
 
@@ -426,7 +426,7 @@ namespace NumSharp
             lock (_bitGenerator.@lock)
             {
                 if (IsNoSize(size))
-                    return NDArray.Scalar(Expm1(NextStandardExponential() / a));
+                    return NDArray.WritableScalar(Expm1(NextStandardExponential() / a));
 
                 var ret = DistOutput(NPTypeCode.Double, size);
                 unsafe
@@ -461,7 +461,7 @@ namespace NumSharp
             lock (_bitGenerator.@lock)
             {
                 if (IsNoSize(size))
-                    return NDArray.Scalar(a == 0.0 ? 0.0 : Math.Pow(NextStandardExponential(), 1.0 / a));
+                    return NDArray.WritableScalar(a == 0.0 ? 0.0 : Math.Pow(NextStandardExponential(), 1.0 / a));
 
                 if (a == 0.0)
                     return np.zeros(size.AsClean(), NPTypeCode.Double); // random_weibull(0) draws nothing; dims only (NumPy's np.empty(size))
@@ -502,7 +502,7 @@ namespace NumSharp
             lock (_bitGenerator.@lock)
             {
                 if (IsNoSize(size))
-                    return NDArray.Scalar(Math.Pow(-Expm1(-NextStandardExponential()), 1.0 / a));
+                    return NDArray.WritableScalar(Math.Pow(-Expm1(-NextStandardExponential()), 1.0 / a));
 
                 var ret = DistOutput(NPTypeCode.Double, size);
                 unsafe
@@ -541,7 +541,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Distributions.RandomLaplace(ref one, loc, scale));
+                        return NDArray.WritableScalar(Distributions.RandomLaplace(ref one, loc, scale));
                 }
             }
 
@@ -585,7 +585,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Distributions.RandomGumbel(ref one, loc, scale));
+                        return NDArray.WritableScalar(Distributions.RandomGumbel(ref one, loc, scale));
                 }
             }
 
@@ -629,7 +629,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Distributions.RandomLogistic(ref one, loc, scale));
+                        return NDArray.WritableScalar(Distributions.RandomLogistic(ref one, loc, scale));
                 }
             }
 
@@ -670,7 +670,7 @@ namespace NumSharp
             lock (_bitGenerator.@lock)
             {
                 if (IsNoSize(size))
-                    return NDArray.Scalar(Math.Exp(mean + sigma * NextStandardNormal()));
+                    return NDArray.WritableScalar(Math.Exp(mean + sigma * NextStandardNormal()));
 
                 var ret = DistOutput(NPTypeCode.Double, size);
                 unsafe
@@ -704,7 +704,7 @@ namespace NumSharp
             lock (_bitGenerator.@lock)
             {
                 if (IsNoSize(size))
-                    return NDArray.Scalar(scale * Math.Sqrt(2.0 * NextStandardExponential()));
+                    return NDArray.WritableScalar(scale * Math.Sqrt(2.0 * NextStandardExponential()));
 
                 var ret = DistOutput(NPTypeCode.Double, size);
                 unsafe
@@ -744,7 +744,7 @@ namespace NumSharp
                     ulong word;
                     var one = new DrawBuffer64(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Wald(ref one, mean, scale));
+                        return NDArray.WritableScalar(Wald(ref one, mean, scale));
                 }
             }
 
@@ -795,7 +795,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Distributions.RandomTriangular(ref one, left, mode, right));
+                        return NDArray.WritableScalar(Distributions.RandomTriangular(ref one, left, mode, right));
                 }
             }
 

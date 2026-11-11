@@ -337,15 +337,15 @@ namespace NumSharp.Backends
             switch (ret.typecode)
             {
                 case NPTypeCode.Double:
-                    return NDArray.Scalar(Math.Pow(ret.GetDouble(), recip.GetDouble())).MarkReductionScalar();
+                    return NDArray.Scalar(Math.Pow(ret.GetDouble(), recip.GetDouble())).PyArray_Return();
                 case NPTypeCode.Single:
-                    return NDArray.Scalar(MathF.Pow(ret.GetSingle(), recip.GetSingle())).MarkReductionScalar();
+                    return NDArray.Scalar(MathF.Pow(ret.GetSingle(), recip.GetSingle())).PyArray_Return();
                 default:
                     // float16, the one other dtype |x| reduces to here (a complex operand's |x| is float64, decimal never
                     // arrives): the house casts are npy_half_to_float and npy_float_to_half bit for bit.
                     float b = ret.astype(np.float32).GetSingle();
                     float e = recip.astype(np.float32).GetSingle();
-                    return NDArray.Scalar(MathF.Pow(b, e)).astype(np.float16).MarkReductionScalar();
+                    return NDArray.Scalar(MathF.Pow(b, e)).astype(np.float16).PyArray_Return();
             }
         }
 

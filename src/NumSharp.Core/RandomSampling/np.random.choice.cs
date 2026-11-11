@@ -146,7 +146,7 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public NDArray choice(long a, Shape size = default, bool replace = true, NDArray p = null)
-            => choice(NDArray.Scalar(a), size, replace, p);
+            => choice(NDArray.WritableScalar(a), size, replace, p);
 
         /// <summary>
         ///     Generates a random sample from <c>np.arange(a)</c>.

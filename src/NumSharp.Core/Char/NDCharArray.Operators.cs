@@ -491,7 +491,7 @@ namespace NumSharp
             if (result.ndim == 0 && result.Storage.IsFixedString)
             {
                 var scalar = new NDCharArray(result.Storage.Alias()) { IsScalarStandIn = true, TensorEngine = result.TensorEngine };
-                scalar.MarkReductionScalar();   // read-only, as the immutable Python value it stands for
+                scalar.PyArray_Return();   // read-only, as the immutable Python value it stands for
                 return scalar;
             }
             return new NDCharArray(result.Storage.Alias()) { TensorEngine = result.TensorEngine };

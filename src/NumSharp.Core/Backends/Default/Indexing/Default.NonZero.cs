@@ -299,7 +299,7 @@ namespace NumSharp.Backends
                 // NumPy's count is a.astype(bool).sum(axis), so a 1-D input's 0-d count is the sum's scalar, as the
                 // non-empty route below returns it (np.linalg.matrix_rank of an empty matrix with a tolerance came back
                 // writeable through here). A no-op for an array result.
-                return empty.MarkReductionScalar();
+                return empty.PyArray_Return();
             }
             // Boundary scope: reclaims the cast copy of a failed call and the scalar path's temporaries; the result is yielded.
 
@@ -313,7 +313,7 @@ namespace NumSharp.Backends
                     throw new AxisError(axis, 0);
                 // The sum of a 0-d input is NumPy's scalar, keepdims or not (np.count_nonzero(np.array(5), axis=0) is
                 // np.int64(1)); NDArray.Scalar alone is a writeable 0-d array.
-                return NewScalar(CountNonZero(nd)).MarkReductionScalar();
+                return NewScalar(CountNonZero(nd)).PyArray_Return();
             }
 
             axis = Shape.check_and_adjust_axis(nd.ndim, axis);
