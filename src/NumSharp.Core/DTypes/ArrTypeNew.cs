@@ -63,8 +63,41 @@ namespace NumSharp
         {
             if (x is Missing)
                 return Zero(descr);
+
+            // Fast path: a C# value of exactly the class's storage type into the type's canonical descriptor is stored as it
+            // is - the dtype's setitem of a value that already is the dtype's value is the identity (no range check can fail,
+            // no rounding happens) - so the general discovery is skipped, and the value is unboxed into the typed
+            // constructor (the boxed one costs ~270 ns more per call, measured). A C-type class that shares the lane
+            // (np.longdouble, np.intc) keeps its own descriptor through the general path.
+            if (x is not null && x.GetType() == descr.type && ReferenceEquals(descr, DType.From(descr.typecode))
+                && ExactScalar(x) is { } exact)
+                return exact.PyArray_Return();
+
             return ToScalarOrArray(FromAnyForceCast(x, descr));
         }
+
+        /// <summary>
+        ///     A new writeable 0-d array of a boxed C# number's own type, built through the typed (unboxed) constructor.
+        /// </summary>
+        /// <param name="x">The boxed value.</param>
+        /// <returns>The 0-d array, or null for a type outside the numeric storage types (the caller's general path).</returns>
+        private static NDArray ExactScalar(object x) => x switch
+        {
+            bool v => NDArray.WritableScalar(v),
+            sbyte v => NDArray.WritableScalar(v),
+            byte v => NDArray.WritableScalar(v),
+            short v => NDArray.WritableScalar(v),
+            ushort v => NDArray.WritableScalar(v),
+            int v => NDArray.WritableScalar(v),
+            uint v => NDArray.WritableScalar(v),
+            long v => NDArray.WritableScalar(v),
+            ulong v => NDArray.WritableScalar(v),
+            Half v => NDArray.WritableScalar(v),
+            float v => NDArray.WritableScalar(v),
+            double v => NDArray.WritableScalar(v),
+            Complex v => NDArray.WritableScalar(v),
+            _ => null,
+        };
 
         /// <summary>
         ///     <c>bool_arrtype_new</c>: no argument is False, a C# bool is itself, anything else is

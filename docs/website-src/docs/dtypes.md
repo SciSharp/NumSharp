@@ -481,6 +481,63 @@ np.finfo(np.float64).max;              // double.MaxValue
 
 ---
 
+## NumPy Scalars
+
+A NumPy scalar (`np.float64(1.5)`, the result of `a.sum()`) is a 0-dimensional `NDArray` in NumSharp. It computes,
+promotes and prints as the array it is, and it follows NumPy's scalar rules: it is **read-only**, and it is not an
+explicit 0-d array.
+
+```csharp
+var s = np.float64(1.5);        // NumPy's class call: a read-only 0-d float64 scalar
+var t = np.int8("12");          // 12: text is parsed by Python's int()
+var c = np.complex128(1, 2);    // (1+2j)
+var u = np.str_(5);             // '5', a <U1 scalar
+var z = np.float64();           // 0.0: no argument is the zero
+var n = np.float64(null);       // nan: null is Python's None
+var arr = np.float64(new object[] { 1, 2 });   // a list gives the ndarray [1., 2.], as in NumPy
+
+s.flags.writeable;              // False (np.float64(1.5).flags.writeable is False)
+np.isscalar(s);                 // True
+np.isscalar(np.array(5));       // False: np.array(x) builds a 0-d ARRAY, not a scalar
+```
+
+Every NumPy scalar class with a NumSharp dtype has a call: `np.bool` / `np.bool_`, `np.int8` … `np.int64`, `np.uint8` …
+`np.uint64`, the C-type names (`np.byte`, `np.short`, `np.intc`, `np.int_`, `np.long`, `np.longlong`, `np.intp` and their
+unsigned twins `np.ubyte` … `np.uintp`), `np.float16` / `np.half`, `np.float32` / `np.single`, `np.float64` /
+`np.double`, `np.longdouble`, `np.complex128` / `np.cdouble`, `np.clongdouble`, `np.str_` and `np.bytes_`. Without
+parentheses each name is still the `DType` it always was (`np.zeros(3, np.float64)`).
+
+The conversion is NumPy's constructor:
+
+- A C# number is NumPy's Python scalar, stored with NEP 50's range check: `np.int8(300)` raises `OverflowError: Python
+  integer 300 out of bounds for int8`, and a float is truncated first (`np.int8(3.9)` is 3).
+- A NumPy scalar or an array is cast: `np.uint8(np.int64(-1))` is 255, `np.int8((Half)300)` is 44.
+- Text is parsed by Python's `int()` / `float()` / `complex()` grammar, with their errors.
+- `np.str_(x)` is Python's `str(x)` (`np.str_(new object[] { 1, 2 })` is `'[1, 2]'`); `np.bytes_(x)` is Python's
+  `bytes(x)` first (`np.bytes_(5)` is five NUL bytes) and NumPy's conversion where `bytes()` refuses (`np.bytes_(1.5)` is
+  `b'1.5'`). Both take Python's `encoding` / `errors` arguments.
+- `np.complex128(real, imag)` takes two real numbers.
+
+The call needs C# 14 at the call site (any target framework with the .NET 10 SDK). C# 12 code writes the class's own
+spelling, `NDScalarClassCalls.float64(x)`. The call is an extension member, so three forms do not compile: a bare
+`float64(x)` under `using static NumSharp.np;` (import `NDScalarClassCalls` instead), a method-group conversion
+`Func<object, NDArray> f = np.float64;` (use a lambda), and a `dynamic` argument (cast it to `object`).
+
+`NDArray.Scalar(value)` and `NDArray.Scalar(value, dtype)` build the same read-only scalar. A 0-d array you write into is
+an array: create it with `np.array(x)` or `np.zeros(Shape.Scalar, dtype)`. Converting a scalar into an array gives a new
+writeable array, as in NumPy: `np.asarray(s)` and `np.array(s)` copy it, and `np.asarray(s, copy: false)` raises.
+
+```csharp
+var dt = np.array(1e-4f);       // a mutable 0-d parameter (np.evaluate reads it per call)
+dt.SetValue(5e-5f);             // fine: an array
+NDArray.Scalar(1e-4f).SetValue(5e-5f);   // ValueError: assignment destination is read-only
+```
+
+A 0-d array that `np.array` / `np.asarray` did not build is read as a scalar (`np.isscalar(np.zeros(()))` is True, where
+NumPy's is False); it stays writeable.
+
+---
+
 ## Scalar Types and Type Checks
 
 NumPy's type tests are written against its scalar **classes**: `np.issubdtype(a.dtype, np.integer)`,
