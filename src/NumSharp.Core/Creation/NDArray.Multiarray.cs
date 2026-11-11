@@ -1253,8 +1253,17 @@ namespace NumSharp
                     //is it a scalar
                     if (type.IsPrimitive || type == typeof(decimal) || type == typeof(Half) || type == typeof(System.Numerics.Complex))
                     {
-                        // np.asanyarray(5) is an ndarray: a fresh WRITEABLE 0-d array, never the read-only NumPy scalar.
-                        ret = NDArray.WritableScalar(a);
+                        // With a dtype, NumPy's PyArray_FromAny stores a PYTHON scalar (a C# bool, integer, float, double or
+                        // Complex in the boundary map) with the dtype's setitem (PyArray_Pack): a Python int is range-checked
+                        // (np.asanyarray(300, np.int8) raises OverflowError, where a cast wraps to 44) and an unsized text
+                        // class takes the width of the value's str() (np.asanyarray(5, np.str_) is <U1). A NumPy scalar
+                        // (Half, NumSharp's char and decimal) is CAST like a 0-d array by the dtype request below. Without a
+                        // dtype, np.asanyarray(5) is an ndarray: a fresh WRITEABLE 0-d array, never the read-only scalar.
+                        bool pythonScalar = a is bool or sbyte or byte or short or ushort or int or uint or long or ulong
+                            or float or double or System.Numerics.Complex;
+                        ret = dtype is not null && pythonScalar
+                            ? Backends.UnmanagedStorage.FromAnyScalar(a, dtype)
+                            : NDArray.WritableScalar(a);
                         break;
                     }
 
