@@ -70,18 +70,20 @@ public class NpPromoteTypesBattleTests
 
     #endregion
 
-    #region Generic Overload
+    #region Generic Overload (gone: np.promote_types has NumPy's one DType signature; typeof converts)
 
+    /// <summary>The former generic form's question, int and long: typeof converts to DType and NumPy's answer is int64.</summary>
     [TestMethod]
     public void PromoteTypes_Generic_IntLong()
     {
-        np.promote_types<int, long>().Should().Be(NPTypeCode.Int64);
+        np.promote_types(typeof(int), typeof(long)).Should().Be(NPTypeCode.Int64);
     }
 
+    /// <summary>The former generic form's question, float and double: NumPy's float64.</summary>
     [TestMethod]
     public void PromoteTypes_Generic_FloatDouble()
     {
-        np.promote_types<float, double>().Should().Be(NPTypeCode.Double);
+        np.promote_types(typeof(float), typeof(double)).Should().Be(NPTypeCode.Double);
     }
 
     #endregion

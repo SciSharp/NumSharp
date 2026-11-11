@@ -680,7 +680,7 @@ namespace NumSharp.Tests.Exceptions
             (oc.casting, oc.out_i).Should().Be(("same_kind", 2));
 
             using var fracOut = np.empty(new Shape(1), np.int64);
-            Action modf = () => np.modf(floats, fracOut);
+            Action modf = () => np.modf(floats, (fracOut, null));
             modf.Should().ThrowExactly<UFuncOutputCastingError>()
                 .Which.Message.Should().Be("Cannot cast ufunc 'modf' output 1 from dtype('float64') to dtype('int64') with casting rule 'same_kind'");
         }

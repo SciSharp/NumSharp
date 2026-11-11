@@ -25,93 +25,101 @@ namespace NumSharp.Tests.Math
         // SHIFTS — out=, where=, dtype=, cast, error taxonomy
         // =====================================================================
 
+        /// <summary>left_shift([1, 2, 4, 8], 2, out=o) writes NumPy's [4, 8, 16, 32] into o and returns o itself.</summary>
         [TestMethod]
         public void LeftShift_Out_ReturnsSameInstance_WithValues()
         {
             // NumPy: left_shift([1,2,4,8], 2) -> [4,8,16,32].
             var a = np.array(new[] { 1, 2, 4, 8 });
             var o = np.zeros(new Shape(4), np.int32);
-            var r = np.left_shift(a, (object)2, @out: o);
+            var r = np.left_shift(a, 2, @out: o);
             Assert.IsTrue(ReferenceEquals(r, o), "out= must return the provided instance");
             var exp = new[] { 4, 8, 16, 32 };
             for (int i = 0; i < 4; i++)
                 Assert.AreEqual(exp[i], o.GetInt32(i));
         }
 
+        /// <summary>left_shift with where=[T, F, T, F] writes only the mask-true slots; the others keep out's prior 99.</summary>
         [TestMethod]
         public void LeftShift_Where_MaskedOffKeepPrior()
         {
             // NumPy: left_shift([1,2,4,8], 1, out=prior=99, where=[T,F,T,F]) -> [2,99,8,99].
             var a = np.array(new[] { 1, 2, 4, 8 });
             var o = np.full(new Shape(4), 99, np.int32);
-            np.left_shift(a, (object)1, @out: o, where: Mask4());
+            np.left_shift(a, 1, @out: o, where: Mask4());
             var exp = new[] { 2, 99, 8, 99 };
             for (int i = 0; i < 4; i++)
                 Assert.AreEqual(exp[i], o.GetInt32(i));
         }
 
+        /// <summary>dtype=int64 runs the int64 loop; an int16 out takes the int32 result by a same_kind cast.</summary>
         [TestMethod]
         public void LeftShift_Dtype_SelectsLoop_And_OutCast()
         {
             var a = np.array(new[] { 1, 2, 4, 8 });
             // dtype=int64 runs the int64 loop.
-            Assert.AreEqual(np.int64, np.left_shift(a, (object)1, dtype: np.int64).dtype);
+            Assert.AreEqual(np.int64, np.left_shift(a, 1, dtype: np.int64).dtype);
             // out=int16 accepts the same_kind cast from the int32 result.
             var o16 = np.zeros(new Shape(4), np.int16);
-            np.left_shift(a, (object)1, @out: o16);
+            np.left_shift(a, 1, @out: o16);
             var exp = new[] { 2, 4, 8, 16 };
             for (int i = 0; i < 4; i++)
                 Assert.AreEqual((short)exp[i], o16.GetInt16(i));
             // right_shift out=float64: int32 -> float64 is a safe (hence same_kind) cast.
             var of = np.zeros(new Shape(4), np.float64);
-            np.right_shift(a, (object)1, @out: of);
+            np.right_shift(a, 1, @out: of);
             var expF = new[] { 0.0, 1.0, 2.0, 4.0 };
             for (int i = 0; i < 4; i++)
                 Assert.AreEqual(expF[i], of.GetDouble(i));
         }
 
+        /// <summary>left_shift(1, 40, dtype=int64, out=int32) computes 2^40 in int64 and stores int32 0, as NumPy.</summary>
         [TestMethod]
         public void LeftShift_Dtype_ComputesInLoop_ThenTruncatesIntoOut()
         {
             // NumPy: left_shift(1, 40, dtype=int64, out=int32) computes 2^40 at int64, stores int32 -> 0.
             var one = np.array(new[] { 1 });
             var o = np.zeros(new Shape(1), np.int32);
-            np.left_shift(one, (object)40, dtype: np.int64, @out: o);
+            np.left_shift(one, 40, dtype: np.int64, @out: o);
             Assert.AreEqual(0, o.GetInt32(0));
         }
 
+        /// <summary>An int32 result does not same_kind-cast into a uint8 or bool out: NumPy's UFuncOutputCastingError.</summary>
         [TestMethod]
         public void LeftShift_OutCast_SameKindFail_Throws()
         {
             var a = np.array(new[] { 1, 2, 4, 8 });
             // int32 -> uint8 is not same_kind (signed->unsigned), NumPy UFuncTypeError.
             Assert.ThrowsException<UFuncOutputCastingError>(() =>
-                np.left_shift(a, (object)1, @out: np.zeros(new Shape(4), np.uint8)));
+                np.left_shift(a, 1, @out: np.zeros(new Shape(4), np.uint8)));
             // int32 -> bool is not same_kind either.
             Assert.ThrowsException<UFuncOutputCastingError>(() =>
-                np.left_shift(a, (object)1, @out: np.zeros(new Shape(4), np.@bool)));
+                np.left_shift(a, 1, @out: np.zeros(new Shape(4), np.@bool)));
         }
 
+        /// <summary>dtype=float64 names a loop left_shift does not have: NumPy's "No loop matching" TypeError.</summary>
         [TestMethod]
         public void LeftShift_FloatDtype_NoLoop_Throws()
         {
             var a = np.array(new[] { 1, 2, 4, 8 });
             // dtype=float64 has no shift loop -> "No loop matching the specified signature ...".
             var ex = Assert.ThrowsException<IncorrectTypeException>(() =>
-                np.left_shift(a, (object)1, dtype: np.float64));
+                np.left_shift(a, 1, dtype: np.float64));
             StringAssert.Contains(ex.Message, "No loop matching");
             StringAssert.Contains(ex.Message, "left_shift");
         }
 
+        /// <summary>A float value array or a float literal count has no shift loop: NumPy's "not supported for the input
+        /// types" TypeError (the literal reaches the one NDArray signature as a weak scalar, as in NumPy).</summary>
         [TestMethod]
         public void LeftShift_FloatOperand_NotSupported_Throws()
         {
             // A float value or a float count has no shift loop -> "not supported for the input types".
             var ex1 = Assert.ThrowsException<TypeError>(() =>
-                np.left_shift(np.array(new[] { 1.0, 2.0 }), (object)1));
+                np.left_shift(np.array(new[] { 1.0, 2.0 }), 1));
             StringAssert.Contains(ex1.Message, "not supported for the input types");
             var ex2 = Assert.ThrowsException<TypeError>(() =>
-                np.left_shift(np.array(new[] { 1, 2 }), (object)1.0));
+                np.left_shift(np.array(new[] { 1, 2 }), 1.0));
             StringAssert.Contains(ex2.Message, "not supported for the input types");
         }
 
@@ -332,6 +340,7 @@ namespace NumSharp.Tests.Math
             Assert.IsTrue(double.IsNegativeInfinity(i.GetDouble(3)));
         }
 
+        /// <summary>modf(m, out=(f, i)) writes both outputs and returns them themselves.</summary>
         [TestMethod]
         public void Modf_Out_ReturnsProvidedInstances()
         {
@@ -339,7 +348,7 @@ namespace NumSharp.Tests.Math
             var m = np.array(new[] { 1.5, -2.7, 3.0 });
             var of = np.zeros(new Shape(3), np.float64);
             var oi = np.zeros(new Shape(3), np.float64);
-            var (rf, ri) = np.modf(m, of, oi);
+            var (rf, ri) = np.modf(m, (of, oi));
             Assert.IsTrue(ReferenceEquals(rf, of));
             Assert.IsTrue(ReferenceEquals(ri, oi));
             Assert.AreEqual(0.5, of.GetDouble(0));
@@ -347,24 +356,26 @@ namespace NumSharp.Tests.Math
             Assert.AreEqual(-2.0, oi.GetDouble(1));
         }
 
+        /// <summary>One output given, the other fresh: (f, null) and (null, i), the C# spelling of NumPy's np.modf(x, out1) / out=(None, i).</summary>
         [TestMethod]
         public void Modf_PositionalFracOnly_And_IntegralOnly()
         {
             var m = np.array(new[] { 1.5, -2.7, 3.0 });
-            // modf(m, f): frac into f, integral fresh (matches NumPy's np.modf(x, out1)).
+            // modf(m, (f, null)): frac into f, integral fresh (NumPy's np.modf(x, out1), as the C# tuple).
             var of = np.zeros(new Shape(3), np.float64);
-            var (rf, ri) = np.modf(m, of);
+            var (rf, ri) = np.modf(m, (of, null));
             Assert.IsTrue(ReferenceEquals(rf, of));
             Assert.AreEqual(0.5, of.GetDouble(0));
             Assert.AreEqual(1.0, ri.GetDouble(0));                    // fresh integral computed
             // modf(m, null, i): integral into i, frac fresh.
             var oi = np.zeros(new Shape(3), np.float64);
-            var (rf2, ri2) = np.modf(m, null, oi);
+            var (rf2, ri2) = np.modf(m, (null, oi));
             Assert.IsTrue(ReferenceEquals(ri2, oi));
             Assert.AreEqual(1.0, oi.GetDouble(0));
             Assert.AreEqual(0.5, rf2.GetDouble(0));
         }
 
+        /// <summary>where=[T, F, T] writes both outputs at the mask-true slots only; the masked-off slots keep their prior 9.</summary>
         [TestMethod]
         public void Modf_Where_MasksBothOutputs()
         {
@@ -372,7 +383,7 @@ namespace NumSharp.Tests.Math
             var m = np.array(new[] { 1.5, -2.7, 3.0 });
             var of = np.full(new Shape(3), 9.0, np.float64);
             var oi = np.full(new Shape(3), 9.0, np.float64);
-            np.modf(m, of, oi, where: np.array(new[] { true, false, true }));
+            np.modf(m, (of, oi), where: np.array(new[] { true, false, true }));
             Assert.AreEqual(0.5, of.GetDouble(0));
             Assert.AreEqual(9.0, of.GetDouble(1));                    // masked-off keeps prior
             Assert.AreEqual(0.0, of.GetDouble(2));
@@ -381,13 +392,14 @@ namespace NumSharp.Tests.Math
             Assert.AreEqual(3.0, oi.GetDouble(2));
         }
 
+        /// <summary>A 0-d False mask writes nothing: both outputs keep their prior 7.</summary>
         [TestMethod]
         public void Modf_WhereScalarFalse_KeepsAllPrior()
         {
             var m = np.array(new[] { 1.5, -2.7, 3.0 });
             var of = np.full(new Shape(3), 7.0, np.float64);
             var oi = np.full(new Shape(3), 7.0, np.float64);
-            np.modf(m, of, oi, where: NDArray.Scalar(false));
+            np.modf(m, (of, oi), where: NDArray.Scalar(false));
             for (int k = 0; k < 3; k++)
             {
                 Assert.AreEqual(7.0, of.GetDouble(k));
@@ -395,6 +407,7 @@ namespace NumSharp.Tests.Math
             }
         }
 
+        /// <summary>dtype=float32 makes both outputs float32; with out=(f32, f64) each output is cast independently.</summary>
         [TestMethod]
         public void Modf_Dtype_And_OutCast()
         {
@@ -406,12 +419,13 @@ namespace NumSharp.Tests.Math
             // out=(f32,f64): each output cast independently from the float64 loop.
             var of = np.zeros(new Shape(3), np.float32);
             var oi = np.zeros(new Shape(3), np.float64);
-            np.modf(m, of, oi);
+            np.modf(m, (of, oi));
             Assert.AreEqual(np.float32, of.dtype);
             Assert.AreEqual(0.5f, of.GetSingle(0));
             Assert.AreEqual(1.0, oi.GetDouble(0));
         }
 
+        /// <summary>A (3,) input broadcasts up to (2, 3) outputs, as NumPy's ufunc does.</summary>
         [TestMethod]
         public void Modf_BroadcastsInputUpToBiggerOut()
         {
@@ -419,7 +433,7 @@ namespace NumSharp.Tests.Math
             var m = np.array(new[] { 1.5, -2.7, 3.0 });
             var of = np.zeros(new Shape(2, 3), np.float64);
             var oi = np.zeros(new Shape(2, 3), np.float64);
-            np.modf(m, of, oi);
+            np.modf(m, (of, oi));
             Assert.AreEqual(0.5, of.GetDouble(0, 0));
             Assert.AreEqual(0.5, of.GetDouble(1, 0));                 // repeated row
         }
@@ -434,47 +448,51 @@ namespace NumSharp.Tests.Math
             Assert.ThrowsException<IncorrectTypeException>(() => np.modf(m, dtype: np.complex128));
         }
 
+        /// <summary>A cast refusal names the output by its operand number (frac = output 1, integral = output 2), NumPy's text.</summary>
         [TestMethod]
         public void Modf_OutCast_ReportsOperandIndex()
         {
             // NumPy numbers the OPERAND: frac = output 1, integral = output 2.
             var m = np.array(new[] { 1.5, -2.7, 3.0 });
             var ex1 = Assert.ThrowsException<UFuncOutputCastingError>(() =>
-                np.modf(m, np.zeros(new Shape(3), np.int32), np.zeros(new Shape(3), np.float64)));
+                np.modf(m, (np.zeros(new Shape(3), np.int32), np.zeros(new Shape(3), np.float64))));
             StringAssert.Contains(ex1.Message, "output 1");
             StringAssert.Contains(ex1.Message, "modf");
             var ex2 = Assert.ThrowsException<UFuncOutputCastingError>(() =>
-                np.modf(m, np.zeros(new Shape(3), np.float64), np.zeros(new Shape(3), np.int32)));
+                np.modf(m, (np.zeros(new Shape(3), np.float64), np.zeros(new Shape(3), np.int32))));
             StringAssert.Contains(ex2.Message, "output 2");
         }
 
+        /// <summary>An output of another shape is NumPy's broadcast error naming every operand's shape.</summary>
         [TestMethod]
         public void Modf_OutWrongShape_BroadcastError()
         {
             // NumPy: "operands could not be broadcast together with shapes (3,) (5,) (3,) ".
             var m = np.array(new[] { 1.5, -2.7, 3.0 });
             var ex = Assert.ThrowsException<ArgumentException>(() =>
-                np.modf(m, np.zeros(new Shape(5), np.float64), np.zeros(new Shape(3), np.float64)));
+                np.modf(m, (np.zeros(new Shape(5), np.float64), np.zeros(new Shape(3), np.float64))));
             StringAssert.Contains(ex.Message, "could not be broadcast together with shapes");
             StringAssert.Contains(ex.Message, "(3,) (5,) (3,)");
         }
 
+        /// <summary>A read-only output (a broadcast view) is refused with NumPy's read-only ValueError.</summary>
         [TestMethod]
         public void Modf_ReadonlyOut_Throws()
         {
             var m = np.array(new[] { 1.5, -2.7, 3.0 });
             var ro = np.broadcast_to(np.array(0.0), new Shape(3));
             var ex = Assert.ThrowsException<ValueError>(() =>
-                np.modf(m, ro, np.zeros(new Shape(3), np.float64)));
+                np.modf(m, (ro, np.zeros(new Shape(3), np.float64))));
             StringAssert.Contains(ex.Message, "read-only");
         }
 
+        /// <summary>A non-bool where= mask is refused (NumPy's safe-cast text).</summary>
         [TestMethod]
         public void Modf_WhereMask_MustBeBool()
         {
             var m = np.array(new[] { 1.5, -2.7, 3.0 });
             Assert.ThrowsException<ArgumentException>(() =>
-                np.modf(m, np.zeros(new Shape(3), np.float64), np.zeros(new Shape(3), np.float64),
+                np.modf(m, (np.zeros(new Shape(3), np.float64), np.zeros(new Shape(3), np.float64)),
                     where: np.array(new[] { 1, 0, 1 })));
         }
 

@@ -1171,13 +1171,14 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: np.argsort
 
+    /// <summary>np.argsort([3, 1, 4, 1, 5]) is NumPy's [1, 3, 0, 2, 4] (int64 indices, ties in input order).</summary>
     [TestMethod]
     public void Argsort_1D_Int32()
     {
         // NUMPY: np.argsort([3,1,4,1,5]) = [1,3,0,2,4]
         // NumPy argsort always returns int64 indices
         var arr = np.array(new[] { 3, 1, 4, 1, 5 });
-        var result = np.argsort<int>(arr);
+        var result = np.argsort(arr);
 
         CollectionAssert.AreEqual(
             new long[] { 1, 3, 0, 2, 4 },

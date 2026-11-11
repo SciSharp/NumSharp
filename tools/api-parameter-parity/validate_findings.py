@@ -258,8 +258,66 @@ def keyword_outcome(call, keyword):
         np.set_printoptions(**saved)
 
 
+#: TypeError phrases with which a callable refuses one more POSITIONAL argument (C's PyArg_ParseTuple, Python's own).
+ARITY_REFUSAL = ("positional argument", "takes at most", "takes no arguments", "takes exactly", "takes from")
+
+
+def cs_param_names(best):
+    """The parameter names of a C# signature cell (``NDArray conj(NDArray out = null)`` -> ``["out"]``).
+
+    Args:
+        best: The CSV's ``best`` cell: the closest overload as ``Return name(Type p = default, ...)``.
+
+    Returns:
+        The names in declaration order (``@`` and modifiers dropped); an empty list when the cell has no parameters.
+    """
+    inside = best[best.index("(") + 1:best.rindex(")")] if "(" in best else ""
+    names, depth, current = [], 0, ""
+    for ch in inside + ",":
+        if ch in "<([{":
+            depth += 1
+        elif ch in ">)]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            declaration = current.split("=", 1)[0].strip()
+            if declaration:
+                names.append(declaration.split()[-1].lstrip("@"))
+            current = ""
+        else:
+            current += ch
+    return names
+
+
+def positional_outcome(func, placeholders):
+    """Whether NumPy takes one more POSITIONAL argument after ``placeholders`` positional ``None`` values.
+
+    A C method parsed with ``PyArg_ParseTuple`` (``ndarray.conj``'s ``"|O&:conjugate"``) can take an argument by position
+    that its docstring and its keyword parser do not show; the keyword probe alone reads it as absent.
+
+    Args:
+        func: The NumPy callable.
+        placeholders: How many positional values precede the probed one.
+
+    Returns:
+        ``(verdict, detail)``: ``"refused"`` when NumPy's arity check names the extra argument, else ``"accepted"``.
+    """
+    saved = np.get_printoptions()
+    try:
+        func(*([None] * placeholders), None)
+        return "accepted", "ok"
+    except Exception as error:  # noqa: BLE001  (anything but the arity refusal means the argument was taken)
+        text = str(error)
+        refused = isinstance(error, TypeError) and any(phrase in text for phrase in ARITY_REFUSAL)
+        return ("refused" if refused else "accepted"), f"{type(error).__name__}: {text[:150]}"
+    finally:
+        np.set_printoptions(**saved)
+
+
 def check_numpy_keywords(rows):
     """Validate M (must be accepted) and X (must be refused) against NumPy's runtime.
+
+    An X parameter must be refused as a keyword and, when its C# slot follows NumPy's positional parameters, as one more
+    positional argument too (:func:`positional_outcome`): a C method may take by position what it refuses by name.
 
     Args:
         rows: The CSV rows with a NumPy counterpart.
@@ -290,8 +348,18 @@ def check_numpy_keywords(rows):
                                             "x": names_in(row["numsharp_only_params"]) if row["mark_X"] == "●" else []})
                 continue
         if row["mark_X"] == "●":
+            positional = sum(1 for _, kind, _ in params if kind in ("pos_only", "pos_or_kw"))
+            cs_names = cs_param_names(row["best"])
             for name in names_in(row["numsharp_only_params"]):
                 verdict, detail = keyword_outcome(call, name)
+                # A keyword NumPy refuses may still be its parameter BY POSITION (a C method's undocumented optional
+                # argument): when the C# parameter sits right after NumPy's positional ones and NumPy has no *args, one
+                # more positional value tells (2026-11-11: ndarray.conj / conjugate take `out` so, a.conj(o) is o).
+                if (verdict == "refused" and not any(kind == "var_pos" for _, kind, _ in params)
+                        and name in cs_names and cs_names.index(name) == positional):
+                    taken, positional_detail = positional_outcome(func, positional)
+                    if taken == "accepted":
+                        verdict, detail = "accepted", f"refused as a keyword, accepted by position ({positional_detail})"
                 out["x_confirmed" if verdict == "refused" else "x_refuted"].append(
                     {"key": key, "param": name, "detail": detail})
         if row["mark_M"] == "●":

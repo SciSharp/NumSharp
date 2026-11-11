@@ -1409,12 +1409,13 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(M(flat).SequenceEqual(new[] { false, true, false, false }));
         }
 
-        /// <summary>Instance resize refuses in place exactly as NumPy does (a masked array does not own its data);
-        /// unshare_mask copies the mask so a later in-place mask write on a view cannot reach the source.</summary>
+        /// <summary>Instance resize refuses in place exactly as NumPy does (a masked array does not own its data): NumPy's
+        /// ValueError and verbatim text; unshare_mask copies the mask so a later in-place mask write on a view cannot reach
+        /// the source.</summary>
         [TestMethod]
         public void Resize_Raises_And_UnshareMask_Isolates()
         {
-            var ex = Assert.ThrowsException<NotSupportedException>(
+            var ex = Assert.ThrowsException<ValueError>(
                 () => np.ma.array(np.array(new int[] { 1, 2, 3 })).resize(new Shape(2, 3)));
             Assert.AreEqual(
                 "A masked array does not own its data and therefore cannot be resized.\n" +

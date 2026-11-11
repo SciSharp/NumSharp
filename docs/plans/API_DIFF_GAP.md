@@ -36,6 +36,14 @@ comparison, on its base: 1,293 → 1,306 NumPy names with a C# spelling (13 abse
 signature, 574 → 558 to change; O 342 → 340, M 215 → 203, X 90 → 77, L 115 → 108, B 39 → 36, Q 73 and T 24 unchanged,
 absent 96 → 83. The fixes are recorded in [`api-parameter-parity.md`](api-parameter-parity.md) §7.
 
+**Refresh 2026-11-11 (API-parity batch 2 on `journey5` at `0c26562b`).** Regenerated on the batch's tree: 748 → 767
+NumPy names with NumPy's signature, 558 → 539 to change; O 340 → 331, M 203 → 195, X 77 → 67, T 24 → 21, B 36 → 35, L
+108, Q 73 and the 83 absent names unchanged; the coverage artifact's headline with NumPy's exact signature 271 → 285.
+Two entries stay on purpose: `np.ma.default_fill_value` keeps its typed `DType` overload (the owner's call) and
+`MaskedArray.clip` still lacks `out=`. The validator now tries a keyword NumPy refuses at its position before it
+confirms an X (`ndarray.conj` / `conjugate` take `out` positionally). The fixes are recorded in
+[`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
 ---
 
 ## Contents

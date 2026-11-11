@@ -352,7 +352,7 @@ namespace NumSharp.Tests.Matrixlib
         public void ByReferenceOverloads_CarryTheRule()
         {
             NDArray m = M(), two = np.array(2.0);
-            Check(np.power(in m, in two), true, 2, 3);
+            Check(np.power(m, two), true, 2, 3);
             Shape row = new Shape(6);
             Check(np.reshape(m, ref row), true, 1, 6);
         }

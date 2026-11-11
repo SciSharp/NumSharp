@@ -17,7 +17,15 @@
         ///         - If a is an N-D array and b is an M-D array(where M>=2), it is a sum product over the last axis of a and the second-to-last axis of b:<br></br>
         ///           dot(a, b)[i,j,k,m] = sum(a[i,j,:] * b[k,:,m])
         /// </remarks>
-        public NDArray dot(NDArray b)
-            => TensorEngine.Dot(this, b);
+        /// <param name="b">The second operand (NumPy's positional-only <c>other</c>).</param>
+        /// <param name="out">NumPy's <c>out=</c>: the C-contiguous destination of the product, of exactly the result's
+        ///     shape and dtype (<see cref="np.dot(NDArray, NDArray, NDArray)"/>'s rules), returned itself; <c>null</c>
+        ///     allocates.</param>
+        /// <returns>The dot product, or <paramref name="out"/> itself.</returns>
+        /// <exception cref="ValueError">The shapes are not aligned, or <paramref name="out"/> is not acceptable (NumPy's
+        ///     texts).</exception>
+        public NDArray dot(NDArray b, NDArray @out = null)
+            // NumPy's a.dot(other, out=None): without out the engine product as before, with it np.dot's out= path.
+            => @out is null ? TensorEngine.Dot(this, b) : np.dot(this, b, @out);
     }
 }

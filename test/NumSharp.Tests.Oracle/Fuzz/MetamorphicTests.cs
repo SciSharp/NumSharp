@@ -241,6 +241,7 @@ namespace NumSharp.Tests.Fuzz
         }
 
         // argsort of an ascending array is the identity index vector 0..n-1
+        /// <summary>Metamorphic: argsort of an already sorted array (arange) is the identity permutation, in every dtype the cases list.</summary>
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Argsort_OfSorted_IsIdentity()
@@ -248,16 +249,16 @@ namespace NumSharp.Tests.Fuzz
             var cases = new List<(string, Func<bool>)>
             {
                 ("argsort(arange) int32", () => { var a = Arange(8, NPTypeCode.Int32);
-                    var idx = np.argsort<int>(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
+                    var idx = np.argsort(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
                 ("argsort(arange) double", () => { var a = Arange(8, NPTypeCode.Double);
-                    var idx = np.argsort<double>(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
+                    var idx = np.argsort(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
                 // G17: the untested tails (ascending => identity permutation holds for each).
                 ("argsort(arange) half", () => { var a = Arange(8, NPTypeCode.Half);
-                    var idx = np.argsort<System.Half>(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
+                    var idx = np.argsort(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
                 ("argsort(arange) decimal", () => { var a = Arange(8, NPTypeCode.Decimal);
-                    var idx = np.argsort<decimal>(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
+                    var idx = np.argsort(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
                 ("argsort(arange) complex", () => { var a = Arange(8, NPTypeCode.Complex);
-                    var idx = np.argsort<System.Numerics.Complex>(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
+                    var idx = np.argsort(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
             };
             Run("argsort of sorted is identity", cases);
         }

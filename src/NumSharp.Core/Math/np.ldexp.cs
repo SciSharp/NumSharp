@@ -5,7 +5,7 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Compute <c>x1 * 2^x2</c> element-wise — the inverse of <see cref="frexp(NDArray, NDArray, NDArray, NDArray)"/>. Given a
+        ///     Compute <c>x1 * 2^x2</c> element-wise — the inverse of <see cref="frexp"/>. Given a
         ///     mantissa and an integer power of two it reconstructs the value (<c>ldexp(*frexp(x)) == x</c>).
         ///     Mirrors NumPy's ufunc <c>ldexp(x1, x2)</c>.
         /// </summary>
@@ -25,7 +25,11 @@ namespace NumSharp
         /// <param name="where">Boolean mask (NumPy ufunc <c>where=</c>): only mask-true elements are written to
         /// <paramref name="out"/>; masked-off slots keep their prior contents. Must be boolean and broadcast to
         /// the result shape.</param>
-        /// <returns><c>x1 * 2^x2</c> in <paramref name="x1"/>'s float tier, broadcast to the common shape (a
+        /// <param name="dtype">NumPy's <c>dtype=</c>: the loop's float dtype (float16 / float32 / float64), or null for
+        /// <paramref name="x1"/>'s float tier. The operands must reach that float x int loop under 'safe' casting
+        /// (x1 to the dtype, x2 to int64); anything else is NumPy's "No loop matching the specified signature and
+        /// casting was found" TypeError.</param>
+        /// <returns><c>x1 * 2^x2</c> in <paramref name="x1"/>'s float tier (or <paramref name="dtype"/>), broadcast to the common shape (a
         /// scalar if both inputs are scalars). An F-contiguous input set yields an F-contiguous result.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.ldexp.html
@@ -34,8 +38,10 @@ namespace NumSharp
         ///     <c>ldexp(NaN, n) = NaN</c>, <c>ldexp(±0, n) = ±0</c>).</para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="IncorrectTypeException">No loop: a complex mantissa, a non-integer exponent, or a
+        ///     <paramref name="dtype"/> the operands do not reach under 'safe' casting.</exception>
         [NDScoped]
-        public static NDArray ldexp(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
-            => x1.TensorEngine.Ldexp(x1, x2, @out, where);
+        public static NDArray ldexp(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => x1.TensorEngine.Ldexp(x1, x2, dtype, @out, where);
     }
 }

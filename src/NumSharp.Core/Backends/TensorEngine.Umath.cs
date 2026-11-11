@@ -389,12 +389,38 @@ namespace NumSharp
         // (the two-output inverse of Ldexp). The mantissa carries x's float tier; the exponent is always int32.
         // out1/out2 are the ufunc's two output operands (NumPy's positional out1,out2 / out=(o1,o2)); where= masks
         // both (masked-off out slots keep prior contents). Each out takes a same_kind cast from its loop dtype.
+        /// <summary>NumPy's <c>np.frexp</c>: the (mantissa, int32 exponent) decomposition.</summary>
+        /// <param name="x">The input.</param>
+        /// <param name="out1">The mantissa output, or null.</param>
+        /// <param name="out2">The exponent output, or null.</param>
+        /// <param name="where">The bool write mask, or null.</param>
+        /// <param name="dtype">NumPy's <c>dtype=</c>: frexp has no loop for any explicit dtype (it would apply to both
+        ///     outputs, and the exponent is int32), so anything but null raises.</param>
+        /// <returns>The pair, or the given outputs.</returns>
+        /// <exception cref="IncorrectTypeException">A complex input, or any <paramref name="dtype"/>.</exception>
         [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Frexp))]
-        public abstract (NDArray Mantissa, NDArray Exponent) Frexp(NDArray x, NDArray out1 = null, NDArray out2 = null, NDArray where = null);
-        // np.ldexp — compose x1 * 2^x2 (the inverse of Frexp). x1 is the float mantissa (int/bool promote to a
-        // float tier), x2 an INTEGER exponent that does NOT widen x1's dtype; the result is x1's float tier.
-        // out=/where= follow the single-output ufunc contract (same_kind cast into out, masked write).
-        public abstract NDArray Ldexp(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null);
+        public abstract (NDArray Mantissa, NDArray Exponent) Frexp(NDArray x, NDArray out1 = null, NDArray out2 = null, NDArray where = null,
+            DType dtype = null);
+        /// <summary>
+        ///     NumPy's <c>np.ldexp</c>: <c>x1 * 2^x2</c>, the inverse of <see cref="Frexp"/>. x1 is the float mantissa
+        ///     (int / bool promote to a float tier), x2 an INTEGER exponent that does NOT widen x1's dtype; the result is
+        ///     x1's float tier, or <paramref name="dtype"/>.
+        /// </summary>
+        /// <param name="x1">The mantissas.</param>
+        /// <param name="x2">The integer exponents.</param>
+        /// <param name="dtype">The loop's float dtype (NumPy's <c>dtype=</c>: float16 / float32 / float64), or null for
+        ///     x1's tier. NumPy's loops pair a float with an int exponent and cast the operands 'safe', so x1 must cast
+        ///     safely to it and x2 to int64; anything else has no loop.</param>
+        /// <param name="out">The output (same_kind cast from the loop dtype), or null.</param>
+        /// <param name="where">The bool write mask, or null.</param>
+        /// <returns>The result, or <paramref name="out"/>.</returns>
+        /// <exception cref="IncorrectTypeException">No loop: a complex mantissa, a non-integer exponent, or a
+        ///     <paramref name="dtype"/> the operands do not reach (NumPy's "No loop matching ..." text).</exception>
+        /// <remarks>The parameter order is the ufunc shape (inputs, <c>dtype</c>, <c>out</c>, <c>where</c> last), which
+        ///     NumSharp.Build reads to give np.ldexp NumPy's <c>__array_wrap__</c> for a matrix operand: with
+        ///     <c>dtype</c> anywhere else the function would return a plain array. np.ldexp keeps NumPy's keyword
+        ///     order.</remarks>
+        public abstract NDArray Ldexp(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null);
 
         public abstract NDArray Tanh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Cosh(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);

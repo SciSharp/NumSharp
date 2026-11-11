@@ -8,12 +8,13 @@ namespace NumSharp.Tests.Extensions
     [TestClass]
     public class NdArrayArgSortTest
     {
+        /// <summary>a.argsort() of [3, 1, 2] is NumPy's [1, 2, 0] (int64 indices).</summary>
         [TestMethod]
         public void OneDimension()
         {
             // NumPy argsort always returns int64 indices
             var x = np.array(new int[] {3, 1, 2});
-            x = x.argsort<int>();
+            x = x.argsort();
             Assert.IsTrue(Enumerable.SequenceEqual(new long[] {1, 2, 0}, x.Data<long>()));
         }
 

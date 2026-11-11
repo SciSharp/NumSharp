@@ -1109,11 +1109,16 @@ namespace NumSharp
         /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
         public NDArray argsort(int? axis, bool endwith = true, object fill_value = null) => np.ma.argsort(this, axis, endwith, fill_value);
 
-        /// <summary>Clamps each element into <c>[a_min, a_max]</c>, preserving the mask (NumPy's <c>clip</c>).</summary>
-        /// <param name="a_min">Lower bound (array-like/scalar), or null for no lower clip.</param>
-        /// <param name="a_max">Upper bound, or null for no upper clip.</param>
+        /// <summary>Clamps each element into <c>[min, max]</c>, preserving the mask (NumPy's
+        ///     <c>MaskedArray.clip(min=None, max=None, ...)</c>).</summary>
+        /// <param name="min">Lower bound (array-like / scalar), or null (NumPy's None, the default) for no lower clip.</param>
+        /// <param name="max">Upper bound, or null (the default) for no upper clip; with both null the result is a copy,
+        ///     as NumPy's <c>m.clip()</c>.</param>
         /// <returns>The clamped masked array.</returns>
-        public NDMaskedArray clip(object a_min, object a_max) => np.ma.clip(this, a_min, a_max);
+        /// <remarks>NumPy 2.x's keywords since 2026-11-11 (were <c>a_min</c> / <c>a_max</c>, which NumPy's method refuses);
+        ///     the module function <see cref="MaskedArrayModule.clip(object, object, object)"/> keeps NumPy's
+        ///     <c>a_min</c> / <c>a_max</c>.</remarks>
+        public NDMaskedArray clip(object min = null, object max = null) => np.ma.clip(this, min, max);
 
         /// <summary>Rounds each element to <paramref name="decimals"/> places (half-to-even), preserving the mask.</summary>
         /// <param name="decimals">Decimal places.</param><returns>The masked, rounded array.</returns>
@@ -1703,11 +1708,12 @@ namespace NumSharp
         ///     does not own its data, so it cannot be resized in place. Use the module function
         ///     <see cref="MaskedArrayModule.resize(object,Shape)"/> (which returns a NEW tiled masked array).
         /// </summary>
-        /// <param name="new_shape">Ignored (NumPy's target shape).</param>
+        /// <param name="newshape">Ignored (NumPy's target shape, keyword <c>newshape</c>).</param>
         /// <param name="refcheck">Ignored (NumPy's reference-count check flag).</param>
-        /// <exception cref="NotSupportedException">Always — NumPy raises <c>ValueError</c> with this verbatim text
-        /// (the .NET exception type differs by the house convention; the message is byte-identical).</exception>
-        public void resize(Shape new_shape, bool refcheck = true) => throw new NotSupportedException(
+        /// <param name="order">Ignored (NumPy's <c>order=False</c>, which NumPy's own source calls broken).</param>
+        /// <exception cref="ValueError">Always, NumPy's type and verbatim text (since 2026-11-11; NumSharp raised
+        ///     <see cref="NotSupportedException"/> with the same text before it had Python's exception classes).</exception>
+        public void resize(Shape newshape, bool refcheck = true, bool order = false) => throw new ValueError(
             "A masked array does not own its data and therefore cannot be resized.\n" +
             "Use the numpy.ma.resize function instead.");
 
@@ -2421,8 +2427,10 @@ namespace NumSharp
         ///     <see cref="NDMaskedArray.filled(object)"/> and the <see cref="NDMaskedArray.fill_value"/> getter when the
         ///     array holds no fill of its own.
         /// </summary>
-        /// <param name="dtype">The data dtype to pick a fill for; null is NumPy's None (see remarks).</param>
-        /// <returns>A boxed scalar of a type castable into <paramref name="dtype"/>: a <see cref="string"/> for a
+        /// <param name="obj">NumPy's <c>obj</c>: the data dtype to pick a fill for; null is NumPy's None (see remarks).
+        ///     The owner's 2026-11-11 call keeps this typed overload beside NumPy's <c>default_fill_value(obj)</c>
+        ///     (<see cref="default_fill_value(object)"/>); both answer alike, and the parameter is NumPy's name.</param>
+        /// <returns>A boxed scalar of a type castable into <paramref name="obj"/>: a <see cref="string"/> for a
         ///     <c>U</c> dtype and a fresh <see cref="byte"/>[] for an <c>S</c> dtype.</returns>
         /// <remarks>
         ///     An INSTANCE method (like <see cref="minimum_fill_value"/>/<see cref="maximum_fill_value"/>), so
@@ -2441,12 +2449,12 @@ namespace NumSharp
         ///     <see cref="DType"/> variable therefore answers <c>"?"</c> rather than throwing.
         ///     </para>
         /// </remarks>
-        public object default_fill_value(DType dtype)
+        public object default_fill_value(DType obj)
         {
             // `default_filler['O'] = '?'`: None reaches NumPy's default_fill_value as an object (its 0-d object array).
-            if (dtype is null)
+            if (obj is null)
                 return "?";
-            switch (dtype.typecode)
+            switch (obj.typecode)
             {
                 case NPTypeCode.Boolean: return true;
                 // Complex fills as (1e20+0j): NumPy's default_fill_value(complex) is a COMPLEX scalar, not a
@@ -2458,7 +2466,7 @@ namespace NumSharp
                 case NPTypeCode.Double:
                 case NPTypeCode.Decimal: return 1e20d;
                 // default_filler['U'] = 'N/A', default_filler['S'] = b'N/A' (the dtype's kind picks the class).
-                case NPTypeCode.String: return dtype.kind == 'S' ? DefaultBytesFill() : "N/A";
+                case NPTypeCode.String: return obj.kind == 'S' ? DefaultBytesFill() : "N/A";
                 default: return 999999L; // every integer kind (signed/unsigned/char)
             }
         }
@@ -2858,12 +2866,20 @@ namespace NumSharp
             return AsData(a).shape;
         }
 
-        /// <summary>Total element count (NumPy's module-level <c>ma.size</c>).</summary>
-        /// <param name="a">Array-like/masked-array/scalar.</param>
-        /// <returns>The element count (1 for a scalar).</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): a scalar/array-like operand is materialized only to be measured.</remarks>
+        /// <summary>
+        ///     The element count, or the length of one axis (NumPy's module-level <c>ma.size(obj, axis=None)</c>:
+        ///     <c>np.size(getdata(obj), axis)</c>).
+        /// </summary>
+        /// <param name="obj">Array-like / masked array / scalar (NumPy's keyword <c>obj</c>).</param>
+        /// <param name="axis">NumPy's <c>axis</c>: <c>null</c> (None, the default) counts every element; an axis
+        ///     (negative counts from the end) gives that axis' length.</param>
+        /// <returns>The element count (1 for a scalar), or the axis' length.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the data's rank (a scalar has no axis:
+        ///     "axis 0 is out of bounds for array of dimension 0").</exception>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): a scalar/array-like operand is materialized only to be measured. NumPy's
+        ///     keywords since 2026-11-11 (the operand was <c>a</c>, and <c>axis</c> was missing).</remarks>
         [NDScoped]
-        public long size(object a) => AsData(a).size;
+        public long size(object obj, int? axis = null) => np.size(AsData(obj), axis);
 
         /// <summary>Deep copy of <paramref name="a"/> as a masked array (NumPy's module-level <c>ma.copy</c>, the
         /// <c>_arraymethod('copy')</c>): the data AND the mask are copied, so mutating either the source or the copy never
@@ -4051,7 +4067,7 @@ namespace NumSharp
             }
             NPTypeCode ea = sa ?? da.typecode;
             NPTypeCode eb = sb ?? db.typecode;
-            var td = np.promote_types(ea, eb);
+            var td = DTypePromotion.PromoteTypes(ea, eb); // the frozen NPTypeCode table, as before the facade's collapse
             // astype(copy:false) is a no-op when the dtype already matches, so no redundant allocation.
             da = da.astype(td, copy: false);
             db = db.astype(td, copy: false);
@@ -4090,7 +4106,7 @@ namespace NumSharp
                 return;
             if (da.typecode == db.typecode || da.typecode == NPTypeCode.String || db.typecode == NPTypeCode.String)
                 return;
-            var td = np.promote_types(da.typecode, db.typecode);
+            var td = DTypePromotion.PromoteTypes(da.typecode, db.typecode); // the frozen table, as before
             da = da.astype(td, copy: false);
             db = db.astype(td, copy: false);
         }

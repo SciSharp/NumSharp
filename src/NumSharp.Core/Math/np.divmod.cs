@@ -24,7 +24,12 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
         /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the loop computes in this dtype.</param>
         /// <returns>(quotient, remainder). Both are scalars if x1 and x2 are scalars.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.divmod.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.divmod.html
+        ///     <para>One signature, NumPy's ufunc form (2026-11-11): the former overload that took the second operand as an
+        ///     <c>object</c> read a boxed number as a STRONG array (parity QA-QB30); a C# literal converts to a 0-d array
+        ///     marked as the Python scalar it stands for, so NEP 50's weak-scalar rule holds without it, and a value held in
+        ///     an <c>object</c> variable goes through <see cref="np.asanyarray(in object, DType, string)"/>.</para>
+        /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="TypeError">A complex operand with no <paramref name="dtype"/>: divmod has no complex loop,
         ///     so NumPy's <c>ufunc 'divmod' not supported for the input types, ...</c> (parity QA-27); under a real
@@ -33,18 +38,5 @@ namespace NumSharp
         public static (NDArray Quotient, NDArray Remainder) divmod(NDArray x1, NDArray x2,
             (NDArray Quotient, NDArray Remainder) @out = default, NDArray where = null, DType dtype = null)
             => x1.TensorEngine.DivMod(x1, x2, dtype, @out, where);
-
-        /// <summary>
-        /// Scalar / array-like divisor convenience: <c>np.divmod(a, 3)</c>. The divisor is coerced via
-        /// <see cref="asanyarray"/> (the a // obj / a % obj analog).
-        /// </summary>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        /// <exception cref="TypeError">A complex operand: divmod has no complex loop, so NumPy's <c>ufunc 'divmod' not
-        ///     supported for the input types, ...</c> (parity QA-27).</exception>
-        // Scope: reclaims the np.asanyarray(x2) temp; the two result arrays are detached through the
-        // tuple carrier (same as np.modf's [NDScoped] two-array return).
-        [NDScoped]
-        public static (NDArray Quotient, NDArray Remainder) divmod(NDArray x1, object x2)
-            => x1.TensorEngine.DivMod(x1, np.asanyarray(x2));
     }
 }

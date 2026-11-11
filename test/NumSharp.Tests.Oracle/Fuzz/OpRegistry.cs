@@ -986,23 +986,29 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
+        /// <summary>The argsort op over every numeric dtype and char (np.argsort, NumPy's one signature): an unlisted dtype
+        ///     is refused, so a new dtype has to be wired here on purpose.</summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="axis">The axis.</param>
+        /// <returns>The int64 indices.</returns>
+        /// <exception cref="NotSupportedException">A dtype the switch does not list.</exception>
         private static NDArray ApplyArgsort(NDArray a, int axis) => a.typecode switch
         {
-            NPTypeCode.Byte => np.argsort<byte>(a, axis),
-            NPTypeCode.SByte => np.argsort<sbyte>(a, axis),
-            NPTypeCode.Int16 => np.argsort<short>(a, axis),
-            NPTypeCode.UInt16 => np.argsort<ushort>(a, axis),
-            NPTypeCode.Int32 => np.argsort<int>(a, axis),
-            NPTypeCode.UInt32 => np.argsort<uint>(a, axis),
-            NPTypeCode.Int64 => np.argsort<long>(a, axis),
-            NPTypeCode.UInt64 => np.argsort<ulong>(a, axis),
-            NPTypeCode.Char => np.argsort<char>(a, axis),
-            NPTypeCode.Single => np.argsort<float>(a, axis),
-            NPTypeCode.Double => np.argsort<double>(a, axis),
-            NPTypeCode.Half => np.argsort<Half>(a, axis),
-            NPTypeCode.Boolean => np.argsort<bool>(a, axis),
-            NPTypeCode.Decimal => np.argsort<decimal>(a, axis),
-            NPTypeCode.Complex => np.argsort<System.Numerics.Complex>(a, axis),
+            NPTypeCode.Byte => np.argsort(a, axis),
+            NPTypeCode.SByte => np.argsort(a, axis),
+            NPTypeCode.Int16 => np.argsort(a, axis),
+            NPTypeCode.UInt16 => np.argsort(a, axis),
+            NPTypeCode.Int32 => np.argsort(a, axis),
+            NPTypeCode.UInt32 => np.argsort(a, axis),
+            NPTypeCode.Int64 => np.argsort(a, axis),
+            NPTypeCode.UInt64 => np.argsort(a, axis),
+            NPTypeCode.Char => np.argsort(a, axis),
+            NPTypeCode.Single => np.argsort(a, axis),
+            NPTypeCode.Double => np.argsort(a, axis),
+            NPTypeCode.Half => np.argsort(a, axis),
+            NPTypeCode.Boolean => np.argsort(a, axis),
+            NPTypeCode.Decimal => np.argsort(a, axis),
+            NPTypeCode.Complex => np.argsort(a, axis),
             _ => throw new NotSupportedException($"argsort<{a.typecode}> not wired in OpRegistry")
         };
 
