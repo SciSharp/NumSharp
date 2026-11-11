@@ -31,5 +31,13 @@ namespace NumSharp
         /// <summary>Creates the exception with a message that names the refused node and the remedy.</summary>
         /// <param name="message">The message.</param>
         public StringComputationNotSupportedException(string message) : base(message) { }
+
+        /// <summary>
+        ///     Creates the exception with a message and the exception that caused it, .NET's standard constructor every
+        ///     NumSharp exception has.
+        /// </summary>
+        /// <param name="message">The message, kept verbatim (it should name the refused node and the remedy).</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        public StringComputationNotSupportedException(string message, Exception innerException) : base(message, innerException) { }
     }
 }

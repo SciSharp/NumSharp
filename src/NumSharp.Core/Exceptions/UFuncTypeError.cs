@@ -29,6 +29,11 @@ namespace NumSharp
     ///     NumPy's resolver hands them over; where NumPy names its object dtype, which NumSharp has no descriptor for, it is
     ///     a placeholder whose <see cref="object.ToString"/> is NumPy's text.
     ///     </para>
+    ///     <para>
+    ///     Every class of the family also takes .NET's standard <c>(message, innerException)</c>, which keeps the message
+    ///     verbatim and leaves the attributes empty (null, no dtypes, index 0): for code that wraps a failure in NumPy's
+    ///     class without a ufunc at hand. NumSharp's own raise sites always use NumPy's arguments.
+    ///     </para>
     /// </remarks>
     public class UFuncTypeError : TypeError
     {
@@ -38,7 +43,21 @@ namespace NumSharp
         /// </summary>
         /// <param name="ufunc">The ufunc's name.</param>
         /// <exception cref="ArgumentNullException"><paramref name="ufunc"/> is null.</exception>
+        /// <remarks>Footgun: the lone string is the ufunc's NAME, not a message (<c>new UFuncTypeError("add")</c> reads
+        ///     <c>&lt;ufunc 'add'&gt;</c>), while the two-argument <see cref="UFuncTypeError(string, Exception)"/> takes a
+        ///     message.</remarks>
         public UFuncTypeError(string ufunc) : this(ufunc, $"<ufunc '{ufunc}'>") { }
+
+        /// <summary>
+        ///     Creates the error from a message and the exception that caused it, .NET's standard constructor every NumSharp
+        ///     exception has: the message is kept verbatim and <see cref="ufunc"/> is null.
+        /// </summary>
+        /// <param name="message">The verbatim message.</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        /// <remarks>Python has no such constructor (NumPy's <c>UFuncTypeError</c> takes the ufunc alone). Footgun: here the
+        ///     string is the MESSAGE, while the one-argument <see cref="UFuncTypeError(string)"/> takes the ufunc's name;
+        ///     <c>new UFuncTypeError("add", null)</c> reads <c>add</c>.</remarks>
+        public UFuncTypeError(string message, Exception innerException) : base(message, innerException) { }
 
         /// <summary>
         ///     The subclasses' form: the ufunc and the subclass's own text (NumPy's subclasses override <c>__str__</c>).
@@ -68,7 +87,8 @@ namespace NumSharp
 
         /// <summary>
         ///     The ufunc's name (NumPy's <c>ufunc</c> attribute holds the ufunc object; NumSharp, which has none, keeps its
-        ///     <c>__name__</c>: <c>add</c>, <c>str_len</c>, <c>modf</c>).
+        ///     <c>__name__</c>: <c>add</c>, <c>str_len</c>, <c>modf</c>). Null when the error was built from a message alone
+        ///     (<see cref="UFuncTypeError(string, Exception)"/> and its subclasses' twins).
         /// </summary>
         public string ufunc { get; }
 
@@ -134,6 +154,21 @@ namespace NumSharp
         /// </remarks>
         public UFuncNoLoopError(string ufunc, int nin, params object[] dtypes)
             : this(ufunc, Copy(dtypes), FormatNoLoop(ufunc, nin, dtypes)) { }
+
+        /// <summary>
+        ///     Creates the error from a message and the exception that caused it, .NET's standard constructor every NumSharp
+        ///     exception has: the message is kept verbatim, <see cref="UFuncTypeError.ufunc"/> is null and
+        ///     <see cref="dtypes"/> is empty.
+        /// </summary>
+        /// <param name="message">The verbatim message.</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        /// <remarks>Python has no such constructor (NumPy's <c>_UFuncNoLoopError</c> takes the ufunc and its dtypes); for code
+        ///     that holds a text only.</remarks>
+        public UFuncNoLoopError(string message, Exception innerException) : base(message, innerException)
+        {
+            // No operands to report: an empty tuple, so dtypes reads as NumPy's () rather than failing on a null array.
+            _dtypes = Array.Empty<object>();
+        }
 
         /// <summary>
         ///     NumSharp's raise sites' form with a cause (Python's <c>raise _UFuncNoLoopError(...) from cause</c>): the
@@ -244,6 +279,18 @@ namespace NumSharp
         public UFuncBinaryResolutionError(string ufunc, params object[] dtypes)
             : base(ufunc, CheckTwo(dtypes), FormatBinary(ufunc, dtypes)) { }
 
+        /// <summary>
+        ///     Creates the error from a message and the exception that caused it, .NET's standard constructor every NumSharp
+        ///     exception has: the message is kept verbatim, <see cref="UFuncTypeError.ufunc"/> is null and
+        ///     <see cref="UFuncNoLoopError.dtypes"/> is empty (NumPy's assertion of two dtypes does not apply).
+        /// </summary>
+        /// <param name="message">The verbatim message.</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        /// <remarks>Python has no such constructor (NumPy's <c>_UFuncBinaryResolutionError</c> takes the ufunc and the two
+        ///     dtypes); for code that holds a text only. An <see cref="Exception"/>-typed second argument binds here, not as
+        ///     a lone dtype of the <c>params</c> form.</remarks>
+        public UFuncBinaryResolutionError(string message, Exception innerException) : base(message, innerException) { }
+
         /// <summary>NumPy's assertion: exactly two dtypes.</summary>
         /// <param name="dtypes">The caller's array.</param>
         /// <returns>A private copy.</returns>
@@ -289,6 +336,17 @@ namespace NumSharp
         public UFuncCastingError(string ufunc, string casting, object from_, object to)
             : this(ufunc, casting, from_, to,
                    $"(<ufunc '{ufunc}'>, {(casting is null ? "None" : PyRepr.Str(casting))}, {DescrRepr(from_)}, {DescrRepr(to)})") { }
+
+        /// <summary>
+        ///     Creates the error from a message and the exception that caused it, .NET's standard constructor every NumSharp
+        ///     exception has: the message is kept verbatim and <see cref="UFuncTypeError.ufunc"/>, <see cref="casting"/>,
+        ///     <see cref="from_"/> and <see cref="to"/> are null.
+        /// </summary>
+        /// <param name="message">The verbatim message.</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        /// <remarks>Python has no such constructor (NumPy's <c>_UFuncCastingError</c> takes the ufunc, the rule and the two
+        ///     dtypes); for code that holds a text only.</remarks>
+        public UFuncCastingError(string message, Exception innerException) : base(message, innerException) { }
 
         /// <summary>The subclasses' form: the four values and the subclass's own text.</summary>
         /// <param name="ufunc">The ufunc's name.</param>
@@ -361,7 +419,21 @@ namespace NumSharp
             in_i = i;
         }
 
-        /// <summary>The index of the input that cannot be cast (NumPy's <c>in_i</c>).</summary>
+        /// <summary>
+        ///     Creates the error from a message and the exception that caused it, .NET's standard constructor every NumSharp
+        ///     exception has: the message is kept verbatim, <see cref="UFuncTypeError.ufunc"/>,
+        ///     <see cref="UFuncCastingError.casting"/>, <see cref="UFuncCastingError.from_"/> and
+        ///     <see cref="UFuncCastingError.to"/> are null and <see cref="in_i"/> is 0.
+        /// </summary>
+        /// <param name="message">The verbatim message.</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        /// <remarks>Python has no such constructor (NumPy's <c>_UFuncInputCastingError</c> takes the ufunc, the rule, the two
+        ///     dtypes and the index); for code that holds a text only. Footgun: <see cref="in_i"/> reads 0, a valid index, as
+        ///     the Unicode errors' <c>start</c> does when built from a message.</remarks>
+        public UFuncInputCastingError(string message, Exception innerException) : base(message, innerException) { }
+
+        /// <summary>The index of the input that cannot be cast (NumPy's <c>in_i</c>); 0 when the error was built from a
+        ///     message alone.</summary>
         public int in_i { get; }
     }
 
@@ -394,7 +466,21 @@ namespace NumSharp
             out_i = i;
         }
 
-        /// <summary>The index of the output that cannot be cast, among all operands (NumPy's <c>out_i</c>).</summary>
+        /// <summary>
+        ///     Creates the error from a message and the exception that caused it, .NET's standard constructor every NumSharp
+        ///     exception has: the message is kept verbatim, <see cref="UFuncTypeError.ufunc"/>,
+        ///     <see cref="UFuncCastingError.casting"/>, <see cref="UFuncCastingError.from_"/> and
+        ///     <see cref="UFuncCastingError.to"/> are null and <see cref="out_i"/> is 0.
+        /// </summary>
+        /// <param name="message">The verbatim message.</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        /// <remarks>Python has no such constructor (NumPy's <c>_UFuncOutputCastingError</c> takes the ufunc, the rule, the two
+        ///     dtypes and the index); for code that holds a text only. Footgun: <see cref="out_i"/> reads 0, a valid operand
+        ///     index, as the Unicode errors' <c>start</c> does when built from a message.</remarks>
+        public UFuncOutputCastingError(string message, Exception innerException) : base(message, innerException) { }
+
+        /// <summary>The index of the output that cannot be cast, among all operands (NumPy's <c>out_i</c>); 0 when the error
+        ///     was built from a message alone.</summary>
         public int out_i { get; }
     }
 

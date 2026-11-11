@@ -354,19 +354,41 @@ namespace NumSharp
             this.reason = reason;
         }
 
+        /// <summary>
+        ///     Creates the error from a message alone: <see cref="@object"/> and <see cref="reason"/> are null and
+        ///     <see cref="start"/> / <see cref="end"/> are 0, as for <see cref="UnicodeEncodeError(string)"/>.
+        /// </summary>
+        /// <param name="message">The verbatim message.</param>
+        /// <remarks>Python has no such constructor (its <c>UnicodeTranslateError</c> takes the four arguments); this form is
+        ///     for code that holds a text only.</remarks>
+        public UnicodeTranslateError(string message) : base(message) { }
+
+        /// <summary>
+        ///     Creates the error from a message and the exception that caused it (Python's <c>raise ... from
+        ///     innerException</c>), .NET's standard constructor every NumSharp exception has: like the message-only form,
+        ///     <see cref="@object"/> and <see cref="reason"/> are null and <see cref="start"/> / <see cref="end"/> are 0.
+        /// </summary>
+        /// <param name="message">The verbatim message.</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        /// <remarks>Prefer the four-argument form when the untranslatable position is known, so a caller can read it without
+        ///     parsing the message.</remarks>
+        public UnicodeTranslateError(string message, Exception innerException) : base(message, innerException) { }
+
         /// <summary>Always null: a translation names no codec (Python's <c>encoding</c> is <c>None</c>).</summary>
         public string encoding => null;
 
-        /// <summary>The text being translated (Python's <c>object</c>).</summary>
+        /// <summary>The text being translated (Python's <c>object</c>); null when the error was built from a message.</summary>
         public string @object { get; }
 
-        /// <summary>The code-point position of the first untranslatable character (Python's <c>start</c>).</summary>
+        /// <summary>The code-point position of the first untranslatable character (Python's <c>start</c>); 0 when the error
+        ///     was built from a message.</summary>
         public long start { get; }
 
-        /// <summary>One past the code-point position of the last one (Python's <c>end</c>).</summary>
+        /// <summary>One past the code-point position of the last one (Python's <c>end</c>); 0 when the error was built from a
+        ///     message.</summary>
         public long end { get; }
 
-        /// <summary>The reason text (Python's <c>reason</c>).</summary>
+        /// <summary>The reason text (Python's <c>reason</c>); null when the error was built from a message.</summary>
         public string reason { get; }
 
         /// <summary>

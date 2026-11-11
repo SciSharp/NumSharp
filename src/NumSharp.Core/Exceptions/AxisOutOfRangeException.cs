@@ -32,5 +32,15 @@ namespace NumSharp
         /// <summary>A caller-given text.</summary>
         /// <param name="message">The text.</param>
         public AxisOutOfRangeException(string message) : base(message) { }
+
+        /// <summary>
+        ///     A caller-given text and the exception that caused it, .NET's standard constructor every NumSharp exception
+        ///     has, so code that wraps a failure in this legacy type keeps the cause in <see cref="Exception.InnerException"/>.
+        /// </summary>
+        /// <param name="message">The text, kept verbatim.</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        /// <remarks>Only for code that still raises the legacy type; new code raises <see cref="AxisError"/>, which takes the
+        ///     same two arguments.</remarks>
+        public AxisOutOfRangeException(string message, Exception innerException) : base(message, innerException) { }
     }
 }

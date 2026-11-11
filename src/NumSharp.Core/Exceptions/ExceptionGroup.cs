@@ -18,7 +18,8 @@ namespace NumSharp
     ///     It derives from .NET's <see cref="AggregateException"/>, the exception with the same meaning, so its members are
     ///     <see cref="AggregateException.InnerExceptions"/> (also <see cref="exceptions"/>) and a
     ///     <c>catch (AggregateException)</c> catches it. Footgun inherited from that base: <see cref="Exception.InnerException"/>
-    ///     is the FIRST member, not Python's <c>__cause__</c>; a group has no separate cause.
+    ///     is the FIRST member, not Python's <c>__cause__</c>; a group has no separate cause, so the standard
+    ///     <c>(message, innerException)</c> constructor builds a group of that one member, as <see cref="AggregateException"/>'s does.
     ///     </para>
     ///     <para>
     ///     Python's <c>BaseExceptionGroup(message, excs)</c> returns an <see cref="ExceptionGroup"/> when every member is
@@ -55,6 +56,24 @@ namespace NumSharp
         {
             _message = message;
         }
+
+        /// <summary>
+        ///     .NET's standard <c>(message, innerException)</c> constructor every NumSharp exception has, with
+        ///     <see cref="AggregateException"/>'s meaning: <paramref name="innerException"/> becomes the group's one member
+        ///     (Python's <c>BaseExceptionGroup(message, [innerException])</c>), reading <c>message (1 sub-exception)</c>.
+        /// </summary>
+        /// <param name="message">The group's message (Python's <c>message</c>).</param>
+        /// <param name="innerException">The group's only member.</param>
+        /// <exception cref="TypeError"><paramref name="message"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="innerException"/> is null (CPython's <c>Item 0 of second argument
+        ///     (exceptions) is not an exception</c>).</exception>
+        /// <remarks>
+        ///     A group has no separate cause (see the class remarks): the exception is a MEMBER, so <see cref="subgroup(Type[])"/>
+        ///     and <see cref="split(Type[])"/> match it. Footgun: <c>new BaseExceptionGroup("m", null)</c> does not compile
+        ///     (both two-argument constructors accept a null); cast it to <c>IEnumerable&lt;Exception&gt;</c> for Python's
+        ///     <c>BaseExceptionGroup("m", None)</c>.
+        /// </remarks>
+        public BaseExceptionGroup(string message, Exception innerException) : this(message, new[] { innerException }) { }
 
         /// <summary>
         ///     Python's <c>str()</c> of the group: <c>message (1 sub-exception)</c> / <c>message (n sub-exceptions)</c>,
@@ -330,5 +349,21 @@ namespace NumSharp
                         ? "Cannot nest BaseExceptions in an ExceptionGroup"
                         : $"Cannot nest BaseExceptions in '{GetType().Name}'");
         }
+
+        /// <summary>
+        ///     .NET's standard <c>(message, innerException)</c> constructor every NumSharp exception has, with
+        ///     <see cref="AggregateException"/>'s meaning: <paramref name="innerException"/> becomes the group's one member
+        ///     (Python's <c>ExceptionGroup(message, [innerException])</c>), reading <c>message (1 sub-exception)</c>.
+        /// </summary>
+        /// <param name="message">The group's message (Python's <c>message</c>).</param>
+        /// <param name="innerException">The group's only member.</param>
+        /// <exception cref="TypeError"><paramref name="message"/> is null, or <paramref name="innerException"/> is a member
+        ///     Python counts as a <c>BaseException</c> only (<c>Cannot nest BaseExceptions in an ExceptionGroup</c>).</exception>
+        /// <exception cref="ValueError"><paramref name="innerException"/> is null (CPython's <c>Item 0 of second argument
+        ///     (exceptions) is not an exception</c>).</exception>
+        /// <remarks>Goes through the sequence constructor, so every check of Python's class applies. Footgun:
+        ///     <c>new ExceptionGroup("m", null)</c> does not compile (both two-argument constructors accept a null); cast it
+        ///     to <c>IEnumerable&lt;Exception&gt;</c> for Python's <c>ExceptionGroup("m", None)</c>.</remarks>
+        public ExceptionGroup(string message, Exception innerException) : this(message, new[] { innerException }) { }
     }
 }
