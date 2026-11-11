@@ -26,7 +26,7 @@ namespace NumSharp
         /// <returns>A disposable <see cref="NDListArray"/> representing NumPy's object array of lists; the caller must
         ///     dispose the holder explicitly, even when array work runs inside an <see cref="NDScope"/>.</returns>
         /// <exception cref="TypeError">See <see cref="CharModule.split"/>.</exception>
-        /// <exception cref="System.OverflowException">A maxsplit past <c>Py_ssize_t</c>.</exception>
+        /// <exception cref="OverflowError">A maxsplit past <c>Py_ssize_t</c>.</exception>
         /// <exception cref="ValueError">An empty separator.</exception>
         /// <exception cref="SystemError">A one-unit <c>U</c> element, separator or word above U+10FFFF.</exception>
         /// <exception cref="IncorrectShapeException">The arguments do not broadcast.</exception>
@@ -41,7 +41,7 @@ namespace NumSharp
         /// <returns>A disposable <see cref="NDListArray"/> representing NumPy's object array of lists; the caller must
         ///     dispose the holder explicitly, even when array work runs inside an <see cref="NDScope"/>.</returns>
         /// <exception cref="TypeError">See <see cref="CharModule.rsplit"/>.</exception>
-        /// <exception cref="System.OverflowException">A maxsplit past <c>Py_ssize_t</c>.</exception>
+        /// <exception cref="OverflowError">A maxsplit past <c>Py_ssize_t</c>.</exception>
         /// <exception cref="ValueError">An empty separator.</exception>
         /// <exception cref="SystemError">A one-unit <c>U</c> element, separator or word above U+10FFFF.</exception>
         /// <exception cref="IncorrectShapeException">The arguments do not broadcast.</exception>

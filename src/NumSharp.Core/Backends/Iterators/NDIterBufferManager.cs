@@ -747,13 +747,13 @@ namespace NumSharp.Backends.Iteration
         /// <exception cref="ValueError">Text → number meets a text that is not a number of the numeric side's kind (NumPy's
         ///     <c>int()</c> / <c>float()</c> / <c>complex()</c> texts, quoting <c>np.str_('…')</c>), or a <c>StringDType</c> NA
         ///     element meets a numeric side.</exception>
-        /// <exception cref="OverflowException">Text → integer meets a value outside the numeric side.</exception>
+        /// <exception cref="OverflowError">Text → integer meets a value outside the numeric side.</exception>
         /// <exception cref="SystemError">A <c>U</c> text converted to a number is one unit above U+10FFFF.</exception>
         /// <exception cref="UnicodeEncodeError">A <c>U → S</c> element (or a <c>StringDType</c> text into <c>S</c>) holds a
         ///     code point at or above 128.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S → U</c> element holds a byte at or above <c>0x80</c>, or an
         ///     <c>S</c> text converted to complex is not UTF-8.</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> side cannot allocate a string (NumPy's
+        /// <exception cref="MemoryError">A <c>StringDType</c> side cannot allocate a string (NumPy's
         ///     <c>MemoryError</c> texts).</exception>
         internal static void CopyStringRun(ref NDIterState state, int op, NDCastInfo cast, byte* src, long srcElemStride,
                                            byte* dst, long dstElemStride, long count, bool toBuffer)

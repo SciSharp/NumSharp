@@ -265,7 +265,7 @@ namespace NumSharp.Tests.APIs
             using (var it = np.nditer(new[] { src, dst }, op_flags: new[] { new[] { "readonly" }, new[] { "readwrite" } }))
             {
                 var overflow = () => it[1] = 300;
-                overflow.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+                overflow.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
 
                 using var array300 = np.array(300L);
                 it[1] = array300;

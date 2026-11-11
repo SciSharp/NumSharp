@@ -111,7 +111,7 @@ namespace NumSharp
                         idx = ChoiceNoReplaceWeighted(pw, count, shape);
                     else if (popExceedsInt64)
                         // NumPy assigns pop_size to a C int64 here: OverflowError.
-                        throw new OverflowException("Python int too large to convert to C long");
+                        throw new OverflowError("Python int too large to convert to C long");
                     else
                         idx = ChoiceNoReplaceUniform(popSize, count, shuffle, shape);
                 }

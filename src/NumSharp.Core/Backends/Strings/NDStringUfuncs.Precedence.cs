@@ -169,8 +169,8 @@ namespace NumSharp.Backends.Strings
                 // Without a request the caller's own guard gives the loop answer (ThrowIfUnary / ThrowIfBinary).
                 ThrowIfOutWhereInvalid(@out, where);
                 if (request)
-                    throw VStringNoLoop(ufunc, x2 is null ? new[] { DispatchClass(x1) } : new[] { DispatchClass(x1), DispatchClass(x2) },
-                        dtype.Meta.ToString(), UfuncOutputs(ufunc));
+                    throw VStringNoLoop(ufunc, x2 is null ? new[] { DispatchMeta(x1) } : new[] { DispatchMeta(x1), DispatchMeta(x2) },
+                        dtype.Meta, UfuncOutputs(ufunc));
                 return;
             }
             if (!request && !IsString(x1) && !IsString(x2))
@@ -257,7 +257,7 @@ namespace NumSharp.Backends.Strings
             bool s1 = d1.Meta is StringDTypeMeta, s2 = d2.Meta is StringDTypeMeta;
             // Two strings of one class ignore the request (handled above); two classes are the promoter's refusal.
             if (s1 && s2)
-                throw new TypeError($"ufunc 'add' cannot use operands with types {d1.ToString(true)} and {d2.ToString(true)}");
+                throw new UFuncBinaryResolutionError("add", d1, d2);
             // resolve_descriptors: every operand's descriptor is cast to the loop's DType first (text of the requested class
             // stays, everything else is cast to the class) — the inputs, then out= (a StringDType out has no size in the
             // requested class) — and only then are the input casts checked, in input order.
@@ -270,9 +270,9 @@ namespace NumSharp.Backends.Strings
             if (!DTypeCasting.CanCastTypeTo(d2, c2, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 throw InputCastText("add", 1, d2, c2);
             var result = Concatenation(c1, c2);
+            // The output is operand 2 of the binary add (NumPy's out_i counts the inputs first).
             if (@out is not null && !DTypeCasting.CanCastTypeTo(result, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new TypeError(
-                    $"Cannot cast ufunc 'add' output from {result.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
+                throw new UFuncOutputCastingError("add", 1, "same_kind", result, @out.dtype, 2);
             var broadcast = BroadcastError(x1, x2, @out, where);
             if (broadcast is not null)
                 throw broadcast;
@@ -367,7 +367,7 @@ namespace NumSharp.Backends.Strings
             if (x2 is null)
             {
                 if (s_classNoLoop.Contains(ufunc) && !(ufunc == "absolute" && x1.typecode == NPTypeCode.Complex))
-                    return new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {x1.dtype.Meta} -> {req}");
+                    return new UFuncNoLoopError(ufunc, 1, x1.dtype.Meta, req);
                 return NoLoopForSignature(ufunc);
             }
 
@@ -382,7 +382,7 @@ namespace NumSharp.Backends.Strings
                 {
                     // The string add promoter keeps the operands' own class: add(S2, S2, dtype='U') is S4 (probed).
                     if (d1.Meta != d2.Meta)
-                        return new TypeError($"ufunc 'add' cannot use operands with types {d1.ToString(true)} and {d2.ToString(true)}");
+                        return new UFuncBinaryResolutionError("add", d1, d2);
                     return ComputeAnswer("add", x1, x2, @out, where, Concatenation(d1, d2)) ?? ComputingLoopMisrouted("add");
                 }
 
@@ -405,7 +405,7 @@ namespace NumSharp.Backends.Strings
             // The dispatcher names the operand CLASSES, a C# number literal as its Python scalar's abstract class (probed:
             // np.subtract(u, 2.0, dtype='U') names _PyFloatDType, np.subtract(u, np.float64(2), dtype='U') Float64DType).
             if (s_requestClassForm.Contains(ufunc))
-                return new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types ({DispatchClass(x1)}, {DispatchClass(x2)}) -> {req}");
+                return new UFuncNoLoopError(ufunc, 2, DispatchMeta(x1), DispatchMeta(x2), req);
             return NoLoopForSignature(ufunc);
         }
 
@@ -423,13 +423,12 @@ namespace NumSharp.Backends.Strings
         {
             var req = requested.Meta;
             if (min is null && max is null)
-                return new TypeError($"ufunc 'positive' did not contain a loop with signature matching types {a.dtype.Meta} -> {req}");
+                return new UFuncNoLoopError("positive", 1, a.dtype.Meta, req);
             if (min is null)
-                return new TypeError($"ufunc 'minimum' did not contain a loop with signature matching types ({a.dtype.Meta}, {max.dtype.Meta}) -> {req}");
+                return new UFuncNoLoopError("minimum", 2, a.dtype.Meta, max.dtype.Meta, req);
             if (max is null)
-                return new TypeError($"ufunc 'maximum' did not contain a loop with signature matching types ({a.dtype.Meta}, {min.dtype.Meta}) -> {req}");
-            return new TypeError(
-                $"ufunc 'clip' did not contain a loop with signature matching types ({a.dtype.Meta}, {min.dtype.Meta}, {max.dtype.Meta}) -> {req}");
+                return new UFuncNoLoopError("maximum", 2, a.dtype.Meta, min.dtype.Meta, req);
+            return new UFuncNoLoopError("clip", 3, a.dtype.Meta, min.dtype.Meta, max.dtype.Meta, req);
         }
 
         /// <summary>
@@ -442,9 +441,8 @@ namespace NumSharp.Backends.Strings
         /// <param name="x1">The first operand.</param>
         /// <param name="x2">The second operand.</param>
         /// <returns>The exception to throw (never null).</returns>
-        internal static TypeError GufuncDTypeLoopError(string gufunc, DType requested, NDArray x1, NDArray x2)
-            => new TypeError(
-                $"ufunc '{gufunc}' did not contain a loop with signature matching types ({x1.dtype.Meta}, {x2.dtype.Meta}) -> {requested.Meta}");
+        internal static UFuncNoLoopError GufuncDTypeLoopError(string gufunc, DType requested, NDArray x1, NDArray x2)
+            => new UFuncNoLoopError(gufunc, 2, x1.dtype.Meta, x2.dtype.Meta, requested.Meta);
 
         /// <summary>
         ///     The legacy type resolver's refusal of a <c>dtype=</c> signature: <c>No loop matching the specified signature
@@ -458,17 +456,16 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     NumPy's input-cast refusal of a resolved loop: <c>Cannot cast ufunc 'add' input 0 from dtype('&lt;U2') to
-        ///     dtype('S2') with casting rule 'same_kind'</c> (UFuncTypeError, raised as <see cref="TypeError"/>, its
-        ///     class).
+        ///     dtype('S2') with casting rule 'same_kind'</c> (NumPy's <see cref="UFuncInputCastingError"/>, for the binary
+        ///     add whose inputs it names).
         /// </summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
         /// <param name="index">The input's position.</param>
         /// <param name="from">The input's descriptor.</param>
         /// <param name="to">The loop's descriptor for that input.</param>
         /// <returns>The exception (not thrown).</returns>
-        private static TypeError InputCastText(string ufunc, int index, DType from, DType to)
-            => new TypeError(
-                string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc '{ufunc}' input {index} from {from.ToString(true)} to {to.ToString(true)} with casting rule 'same_kind'"));
+        private static UFuncInputCastingError InputCastText(string ufunc, int index, DType from, DType to)
+            => new UFuncInputCastingError(ufunc, 2, "same_kind", from, to, index);
 
         /// <summary>
         ///     The descriptor of a string concatenation: the class of the two (equal-class) inputs and the sum of their
@@ -541,9 +538,9 @@ namespace NumSharp.Backends.Strings
             // while a bool loop's output takes it (bool is not parametric).
             if (OutDescrCastError(@out, result) is { } outDescr)
                 return outDescr;
+            // The output's operand index follows the inputs: 1 after a unary ufunc's one input, 2 after a binary's two.
             if (@out is not null && !DTypeCasting.CanCastTypeTo(result, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                return new TypeError(
-                    $"Cannot cast ufunc '{ufunc}' output from {result.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
+                return new UFuncOutputCastingError(ufunc, 1, "same_kind", result, @out.dtype, x2 is null ? 1 : 2);
             // NumPy's trivial loop copies a short input its loop casts, keeping the input's class: a chararray input of the
             // user's call cast to bool (the logical ufuncs) or a chararray repeat count cast to int64 is refused by the
             // finalize rule here, between the output cast and the broadcast (NDCharArray.TrivialLoopCopyError).
@@ -1182,7 +1179,7 @@ namespace NumSharp.Backends.Strings
                 }
                 return TextOutReduce.Repeat;
             }
-            throw VStringNoLoop(ufunc, new[] { DispatchClass(@out), DispatchClass(a) });
+            throw VStringNoLoop(ufunc, new[] { DispatchMeta(@out), DispatchMeta(a) });
         }
 
         /// <summary>
@@ -1220,7 +1217,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">The dtype= class check NumPy makes first.</exception>
         /// <exception cref="AxisError">The axis is out of bounds (checked before any text is parsed).</exception>
         /// <exception cref="ValueError">A text element that does not parse into <paramref name="dtype"/>.</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer <paramref name="dtype"/>.</exception>
         internal static NDArray ParseForNumericReduce(string op, NDArray a, int? axis, DType dtype)
         {
             // A StringDType input never parses here: NumPy's dispatcher refuses the dtype= request first (no StringDType loop
@@ -1622,17 +1619,17 @@ namespace NumSharp.Backends.Strings
                 case "cumulative_prod":
                     return a.typecode == NPTypeCode.Int64
                         ? MultiplyRepeatAnswer(a, a, null, null)
-                        : new TypeError($"ufunc 'multiply' did not contain a loop with signature matching types ({req}, {d.Meta}) -> {req}");
+                        : new UFuncNoLoopError("multiply", 2, req, d.Meta, req);
                 case "max":
                 case "amax":
-                    return new TypeError($"ufunc 'maximum' did not contain a loop with signature matching types ({req}, {d.Meta}) -> {req}");
+                    return new UFuncNoLoopError("maximum", 2, req, d.Meta, req);
                 case "min":
                 case "amin":
-                    return new TypeError($"ufunc 'minimum' did not contain a loop with signature matching types ({req}, {d.Meta}) -> {req}");
+                    return new UFuncNoLoopError("minimum", 2, req, d.Meta, req);
                 case "nanmax":
-                    return new TypeError($"ufunc 'fmax' did not contain a loop with signature matching types ({req}, {d.Meta}) -> {req}");
+                    return new UFuncNoLoopError("fmax", 2, req, d.Meta, req);
                 case "nanmin":
-                    return new TypeError($"ufunc 'fmin' did not contain a loop with signature matching types ({req}, {d.Meta}) -> {req}");
+                    return new UFuncNoLoopError("fmin", 2, req, d.Meta, req);
                 default:
                     // sum, mean, var, std, the nan forms and trace: add.reduce over the input as text.
                     return AddNotCompatible(asText, "reduce");

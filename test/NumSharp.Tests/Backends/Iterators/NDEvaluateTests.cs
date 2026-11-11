@@ -155,7 +155,7 @@ namespace NumSharp.Tests.Backends.Iterators
         public void WeakScalars_OutOfBoundsLiteral_RaisesOverflow()
         {
             var u1 = np.ones(new Shape(3), np.uint8);
-            var ex = Assert.ThrowsException<OverflowException>(() => np.evaluate((NDExpr)u1 + 300));
+            var ex = Assert.ThrowsException<OverflowError>(() => np.evaluate((NDExpr)u1 + 300));
             Assert.AreEqual("Python integer 300 out of bounds for uint8", ex.Message);
         }
 
@@ -306,7 +306,7 @@ namespace NumSharp.Tests.Backends.Iterators
             var a = np.array(new double[] { 1.5, 2.5 });
             var outI4 = np.zeros(new Shape(2), np.int32);
 
-            var ex = Assert.ThrowsException<TypeError>(
+            var ex = Assert.ThrowsException<UFuncOutputCastingError>(
                 () => np.evaluate((NDExpr)a + 1.0, @out: outI4));
             StringAssert.Contains(ex.Message, "Cannot cast ufunc 'evaluate' output");
             StringAssert.Contains(ex.Message, "same_kind");
@@ -1109,19 +1109,19 @@ namespace NumSharp.Tests.Backends.Iterators
         {
             var v = np.array(new double[] { 1, 2, 3 });
             var w = np.array(new double[] { 1, -1, 0 });   // Σw == 0
-            var ex = Assert.ThrowsException<DivideByZeroException>(
+            var ex = Assert.ThrowsException<ZeroDivisionError>(
                 () => np.evaluate(NDExpr.Average((NDExpr)v, w)));
             Assert.AreEqual("Weights sum to zero, can't be normalized", ex.Message);
 
             // an empty input sums the weights to zero too → the same raise (the byte corpus can't reach this)
             var e = np.array(new double[] { });
-            Assert.ThrowsException<DivideByZeroException>(
+            Assert.ThrowsException<ZeroDivisionError>(
                 () => np.evaluate(NDExpr.Average((NDExpr)e, (NDExpr)e)));
 
             // an AXIS slab whose weights sum to zero raises as well (NumPy checks any slab)
             var m = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
             var wm = np.array(new double[,] { { 1, -1 }, { 1, 1 } });   // row 0 sums to 0
-            Assert.ThrowsException<DivideByZeroException>(
+            Assert.ThrowsException<ZeroDivisionError>(
                 () => np.evaluate(NDExpr.Average((NDExpr)m, wm, 1)));
         }
 
@@ -1494,28 +1494,28 @@ namespace NumSharp.Tests.Backends.Iterators
 
             // shift / fmod / copysign-family over a no-loop dtype → "not supported for the input types".
             StringAssert.Contains(
-                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.LeftShift(NDExpr.Arr(f), NDExpr.Arr(f)))).Message,
+                Assert.ThrowsException<TypeError>(() => np.evaluate(NDExpr.LeftShift(NDExpr.Arr(f), NDExpr.Arr(f)))).Message,
                 "ufunc 'left_shift' not supported for the input types");
             StringAssert.Contains(
-                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.Fmod(NDExpr.Arr(cx), NDExpr.Arr(cx)))).Message,
+                Assert.ThrowsException<TypeError>(() => np.evaluate(NDExpr.Fmod(NDExpr.Arr(cx), NDExpr.Arr(cx)))).Message,
                 "ufunc 'fmod' not supported for the input types");
             StringAssert.Contains(
-                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.CopySign(NDExpr.Arr(cx), NDExpr.Arr(cx)))).Message,
+                Assert.ThrowsException<TypeError>(() => np.evaluate(NDExpr.CopySign(NDExpr.Arr(cx), NDExpr.Arr(cx)))).Message,
                 "ufunc 'copysign' not supported for the input types");
 
             // uint64 + signed shift → float64 → no loop (the same "not supported" form).
             StringAssert.Contains(
-                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(
+                Assert.ThrowsException<TypeError>(() => np.evaluate(
                     NDExpr.LeftShift(NDExpr.Arr(np.array(new ulong[] { 1 })), NDExpr.Arr(np.array(new long[] { 1 }))))).Message,
                 "not supported for the input types");
 
             // gcd/lcm no-loop uses the signature-specific "did not contain a loop" form.
             StringAssert.Contains(
-                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(NDExpr.Gcd(NDExpr.Arr(f), NDExpr.Arr(f)))).Message,
+                Assert.ThrowsException<UFuncNoLoopError>(() => np.evaluate(NDExpr.Gcd(NDExpr.Arr(f), NDExpr.Arr(f)))).Message,
                 "ufunc 'gcd' did not contain a loop with signature matching types");
             // bool/bool gcd is a no-loop (unlike bool+integer) — the NumPy corner.
             StringAssert.Contains(
-                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(
+                Assert.ThrowsException<UFuncNoLoopError>(() => np.evaluate(
                     NDExpr.Lcm(NDExpr.Arr(np.array(new[] { true })), NDExpr.Arr(np.array(new[] { true }))))).Message,
                 "ufunc 'lcm' did not contain a loop with signature matching types");
         }
@@ -1544,7 +1544,7 @@ namespace NumSharp.Tests.Backends.Iterators
             Assert.AreEqual(NPTypeCode.Int32, np.evaluate(NDExpr.Positive(NDExpr.Arr(np.array(new[] { 5 })))).typecode);
 
             StringAssert.Contains(
-                Assert.ThrowsException<NotSupportedException>(() => np.evaluate(
+                Assert.ThrowsException<UFuncNoLoopError>(() => np.evaluate(
                     NDExpr.Positive(NDExpr.Arr(np.array(new[] { true }))))).Message,
                 "ufunc 'positive' did not contain a loop with signature matching types");
         }
@@ -2102,9 +2102,9 @@ namespace NumSharp.Tests.Backends.Iterators
             // bool + decimals == 0 → the existing Round node (float16), NOT a RoundNode.
             Assert.AreEqual(NPTypeCode.Half, np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { true, false })), 0)).typecode);
             // bool + decimals != 0 → throws, op-named (multiply for +, divide for -).
-            var exPos = Assert.ThrowsException<TypeError>(() => np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { true })), 1)));
+            var exPos = Assert.ThrowsException<UFuncOutputCastingError>(() => np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { true })), 1)));
             StringAssert.Contains(exPos.Message, "Cannot cast ufunc 'multiply' output from dtype('float64') to dtype('bool')");
-            var exNeg = Assert.ThrowsException<TypeError>(() => np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { true })), -1)));
+            var exNeg = Assert.ThrowsException<UFuncOutputCastingError>(() => np.evaluate(NDExpr.Round(NDExpr.Arr(np.array(new[] { true })), -1)));
             StringAssert.Contains(exNeg.Message, "Cannot cast ufunc 'divide' output from dtype('float64') to dtype('bool')");
         }
 
@@ -2415,7 +2415,7 @@ namespace NumSharp.Tests.Backends.Iterators
 
             // default same_kind: f64 → i32 out is float→int (NOT same_kind) → rejected.
             var outI = np.zeros(new Shape(2, 3), np.int32);
-            var sk = Assert.ThrowsException<TypeError>(() => np.evaluate((NDExpr)a + a, @out: outI));
+            var sk = Assert.ThrowsException<UFuncOutputCastingError>(() => np.evaluate((NDExpr)a + a, @out: outI));
             StringAssert.Contains(sk.Message, "'same_kind'");
 
             // casting='unsafe' admits it (values truncate into the i32 out).
@@ -2426,7 +2426,7 @@ namespace NumSharp.Tests.Backends.Iterators
 
             // casting='no' rejects even a same_kind float→float narrowing, naming 'no'.
             var outF = np.zeros(new Shape(2, 3), np.float32);
-            var no = Assert.ThrowsException<TypeError>(
+            var no = Assert.ThrowsException<UFuncOutputCastingError>(
                 () => np.evaluate((NDExpr)a + a, @out: outF, casting: "no"));
             StringAssert.Contains(no.Message, "'no'");
 
@@ -2469,7 +2469,7 @@ namespace NumSharp.Tests.Backends.Iterators
 
             // casting= threads into a reduction's out= validation: 'no' rejects f64 → i32, default ok f64 → f32.
             var rOutI = np.zeros(new Shape(), np.int32);
-            Assert.ThrowsException<TypeError>(
+            Assert.ThrowsException<UFuncOutputCastingError>(
                 () => np.evaluate(NDExpr.Sum((NDExpr)a + a), @out: rOutI, casting: "no"));
             var rOutF = np.zeros(new Shape(), np.float32);
             Assert.AreSame(rOutF, np.evaluate(NDExpr.Sum((NDExpr)a + a), @out: rOutF));

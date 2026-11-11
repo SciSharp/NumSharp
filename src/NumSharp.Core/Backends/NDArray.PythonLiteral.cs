@@ -345,7 +345,7 @@ namespace NumSharp
         ///     otherwise a NEW 0-d array of <paramref name="destination"/> holding the packed element. The caller disposes
         ///     a new array (<c>!ReferenceEquals(result, value)</c>), or creates it inside an <c>[NDScoped]</c> member.
         /// </returns>
-        /// <exception cref="OverflowException">A Python int out of the destination's integer range ("Python integer 1000
+        /// <exception cref="OverflowError">A Python int out of the destination's integer range ("Python integer 1000
         ///     out of bounds for int8"; past the C <c>long</c> the LP64 text "Python int too large to convert to C long"), a
         ///     float infinity into an integer ("cannot convert float infinity to integer"), or an int past the double range
         ///     into a float ("int too large to convert to float").</exception>
@@ -420,7 +420,7 @@ namespace NumSharp
         ///     errors of the typecode overload.</exception>
         /// <exception cref="ValueError"><c>None</c> into a <c>StringDType(coerce=False)</c> destination, or the literal
         ///     packing errors of the typecode overload.</exception>
-        /// <exception cref="OverflowException">See <see cref="PackForStore(NDArray, NPTypeCode, bool)"/>.</exception>
+        /// <exception cref="OverflowError">See <see cref="PackForStore(NDArray, NPTypeCode, bool)"/>.</exception>
         internal static NDArray PackForStore(NDArray value, DType destination, bool pyArrayPackRoute)
             => value is null ? NoneForStore(destination) : PackForStore(value, destination.typecode, pyArrayPackRoute);
 
@@ -553,7 +553,7 @@ namespace NumSharp
         ///     string dtype: <c>None</c> into text needs the destination's full descriptor (its width, its NA object), so
         ///     such a caller converts it with <see cref="NoneForStore"/> instead.</exception>
         /// <exception cref="TypeError"><c>None</c> into an integer or <c>decimal</c> destination.</exception>
-        /// <exception cref="OverflowException">See <see cref="PackForStore"/>; also a NumPy scalar (<see cref="Half"/>,
+        /// <exception cref="OverflowError">See <see cref="PackForStore"/>; also a NumPy scalar (<see cref="Half"/>,
         ///     <c>char</c>) whose int() does not fit a SIGNED integer destination.</exception>
         /// <exception cref="ValueError">See <see cref="PackForStore"/>.</exception>
         /// <exception cref="TypeError">See <see cref="PackForStore"/>.</exception>

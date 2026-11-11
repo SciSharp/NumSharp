@@ -127,7 +127,7 @@ namespace NumSharp.Backends
             if (x.typecode == NPTypeCode.Complex)
                 return x;
             if (NDStringUfuncs.IsText(x))
-                throw new TypeError($"ufunc 'absolute' did not contain a loop with signature matching types {x.dtype.Meta} -> None");
+                throw new UFuncNoLoopError("absolute", 1, x.dtype.Meta, null);
             bool big = EmathDomainScan.AnyAbsGreaterThanOne(x) ?? x.TensorEngine.Any(x.TensorEngine.Abs(x) > (NDArray)1);
             return big ? x.astype(np.complex128) : x;
         }
@@ -166,7 +166,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="x">The text array.</param>
         /// <returns>The exception (not thrown).</returns>
-        private static TypeError LessThanZeroTextError(NDArray x)
-            => new TypeError($"ufunc 'less' did not contain a loop with signature matching types ({x.dtype.Meta}, {DTypeRegistry.PyLong}) -> None");
+        private static UFuncNoLoopError LessThanZeroTextError(NDArray x)
+            => new UFuncNoLoopError("less", 2, x.dtype.Meta, DTypeRegistry.PyLong, null);
     }
 }

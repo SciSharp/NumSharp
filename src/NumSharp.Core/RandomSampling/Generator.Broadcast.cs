@@ -133,7 +133,7 @@ namespace NumSharp
         /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the broadcast shape of <c>low</c> and <c>high - low</c>.</param>
         /// <returns>The float64 draws; a 0-d array when both bounds are 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A bound does not cast to float64 under <c>'safe'</c> (complex).</exception>
-        /// <exception cref="OverflowException">An element of <c>high - low</c> is infinite or NaN — NumPy's
+        /// <exception cref="OverflowError">An element of <c>high - low</c> is infinite or NaN — NumPy's
         ///     <c>OverflowError('Range exceeds valid bounds')</c> (<c>'high - low range exceeds valid bounds'</c> on the scalar path).</exception>
         /// <exception cref="ValueError">The bounds do not broadcast (NumPy's <c>np.subtract</c> text: <c>operands could not be
         ///     broadcast together with shapes …</c>), an element of <c>high - low</c> has its sign bit set
@@ -154,7 +154,7 @@ namespace NumSharp
             using var rangeArr = RandomBroadcast.Ufunc(() => np.subtract(pHigh.Array, pLow.Array));
             using var pRange = RandomParam.Float64(rangeArr);
             if (!RandomBroadcast.AllInRange(pRange.Array, -double.MaxValue, double.MaxValue))
-                throw new OverflowException("Range exceeds valid bounds");
+                throw new OverflowError("Range exceeds valid bounds");
             RandomConstraints.CheckArray(pRange.Array, "high - low", ConstraintType.CONS_NON_NEGATIVE);
             var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pLow.Array, pRange.Array);
             unsafe

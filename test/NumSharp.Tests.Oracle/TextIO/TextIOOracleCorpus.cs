@@ -126,16 +126,11 @@ namespace NumSharp.Tests.TextIO
         ///     …, which carry every other error the corpus records).
         /// </summary>
         /// <remarks>
-        ///     Pinned to the pairs the corpus produces (measured 2026-10-15 by replaying it with this table empty: 95
-        ///     <c>OverflowError</c> cases, nothing else), so an error that regresses to a looser .NET class fails instead of
-        ///     passing on a broad alias. Add a pair only for a class NumSharp deliberately keeps.
+        ///     Empty since NumSharp raises Python's <see cref="OverflowError"/> itself (the 95 <c>OverflowError</c> cases the
+        ///     table once excused, measured 2026-10-15, are exact-name matches now), so an error that regresses to a looser
+        ///     .NET class fails instead of passing on a broad alias. Add a pair only for a class NumSharp deliberately keeps.
         /// </remarks>
-        private static readonly Dictionary<string, string[]> ErrorTypes = new()
-        {
-            // NumSharp's house type for Python's OverflowError (integer fields out of a dtype's range, a float() past the
-            // range of float16's double, ...); NumSharp has no class of that name.
-            ["OverflowError"] = new[] { "OverflowException" },
-        };
+        private static readonly Dictionary<string, string[]> ErrorTypes = new();
 
         /// <summary>Compares NumSharp's exception with NumPy's recorded one.</summary>
         /// <param name="want">NumPy's exception (<c>{"type", "msg"}</c>).</param>
@@ -147,10 +142,24 @@ namespace NumSharp.Tests.TextIO
             string wantText = Str(want.GetProperty("msg")).Trim();
             string gotType = got.GetType().Name;
             string gotText = Normalize(got.Message);
-            bool typeOk = gotType == wantType || (ErrorTypes.TryGetValue(wantType, out var allowed) && allowed.Contains(gotType));
+            // NumPy's class, or a NumSharp subclass of it (a UFunc* refusal for TypeError), or a pinned house pair.
+            bool typeOk = gotType == wantType || ClassChainHas(got, wantType)
+                          || (ErrorTypes.TryGetValue(wantType, out var allowed) && allowed.Contains(gotType));
             if (typeOk && gotText == wantText)
                 return null;
             return $"error mismatch\n      numpy:    {wantType}: {Shorten(wantText)}\n      numsharp: {gotType}: {Shorten(gotText)}";
+        }
+
+        /// <summary>Whether some class of <paramref name="got"/>'s .NET base chain bears NumPy's class name.</summary>
+        /// <param name="got">NumSharp's exception.</param>
+        /// <param name="numpyType">NumPy's recorded class name.</param>
+        /// <returns>True when the chain holds the name.</returns>
+        private static bool ClassChainHas(Exception got, string numpyType)
+        {
+            for (Type t = got.GetType(); t != null; t = t.BaseType)
+                if (t.Name == numpyType)
+                    return true;
+            return false;
         }
 
         /// <summary>The verdict for a call NumPy answered with a result while NumSharp raised.</summary>
@@ -363,12 +372,12 @@ namespace NumSharp.Tests.TextIO
                     case "x":
                     {
                         string type = v.GetProperty("type").GetString(), msg = Str(v.GetProperty("msg"));
-                        // The converter's own exception, as the C# class a ported converter would raise.
+                        // The converter's own exception, as the C# class a ported converter raises: Python's own.
                         throw type switch
                         {
-                            "ZeroDivisionError" => new DivideByZeroException(msg),
+                            "ZeroDivisionError" => new ZeroDivisionError(msg),
                             "ValueError" => new ValueError(msg),
-                            "OverflowError" => new OverflowException(msg),
+                            "OverflowError" => new OverflowError(msg),
                             "TypeError" => new TypeError(msg),
                             _ => new InvalidOperationException(type + ": " + msg),
                         };

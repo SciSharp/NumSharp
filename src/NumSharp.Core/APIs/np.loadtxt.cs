@@ -82,8 +82,11 @@ namespace NumSharp
         /// <exception cref="IndexError">A null comment element over an empty or whitespace-only line (<c>list index out of
         ///     range</c>, NumPy's <c>str.split(None, 1)[0]</c>).</exception>
         /// <exception cref="UnicodeDecodeError">Bytes the encoding cannot decode.</exception>
-        /// <exception cref="FileNotFoundException">No file named <paramref name="fname"/>, nor any of its compressed
-        ///     variants (NumPy's <c>&lt;path&gt; not found.</c>), reported before the encoding is looked up.</exception>
+        /// <exception cref="FileNotFoundError">No file named <paramref name="fname"/>, nor any of its compressed
+        ///     variants (NumPy's <c>&lt;path&gt; not found.</c>, no errno), reported before the encoding is looked
+        ///     up.</exception>
+        /// <exception cref="PermissionError">The file it found cannot be opened for reading (<c>[Errno 13] Permission
+        ///     denied</c>).</exception>
         /// <exception cref="LookupError">An unknown <paramref name="encoding"/> (CPython's <c>unknown encoding: name</c>),
         ///     or a codec that is not a text encoding (<c>'base64' is not a text encoding; use codecs.open() to handle
         ///     arbitrary codecs</c>).</exception>
@@ -107,7 +110,7 @@ namespace NumSharp
             // looks the encoding up. A name that finds nothing is FileNotFoundError("<path> not found."), reported ahead of an
             // unknown encoding. The file is read in chunks (stream_python_file), unless comments must be stripped line by
             // line first (then it is iterated).
-            string found = PyDataSource.FindFile(fname) ?? throw new FileNotFoundException($"{fname} not found.", fname);
+            string found = PyDataSource.FindFile(fname) ?? throw new FileNotFoundError($"{fname} not found.");
             Stream raw = PyDataSource.OpenRead(found);
             TextIOCodec codec;
             try

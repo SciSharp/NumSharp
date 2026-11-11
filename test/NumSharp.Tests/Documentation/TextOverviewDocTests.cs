@@ -129,7 +129,7 @@ namespace NumSharp.Tests.Documentation
                 CollectionAssert.AreEqual(new[] { true, false }, np.logical_and(text, text).ToArray<bool>());
                 CollectionAssert.AreEqual(new[] { true, false }, np.logical_or(text, text).ToArray<bool>());
                 CollectionAssert.AreEqual(new[] { false, false }, np.logical_xor(text, text).ToArray<bool>());
-                Assert.ThrowsException<TypeError>(() => np.logical_not(text));
+                Assert.Throws<TypeError>(() => np.logical_not(text));
             }
         }
 

@@ -317,7 +317,7 @@ namespace NumSharp.Tests.Backends
             Action intList = () => np.array(new object[] { 1, null }, np.int8);
             intList.Should().Throw<TypeError>().WithMessage(IntNone);
             Action firstWins = () => np.array(new object[] { 1e300, null }, np.int8);
-            firstWins.Should().Throw<OverflowException>();
+            firstWins.Should().Throw<OverflowError>();
 
             var c = np.asarray((NDArray)null, np.complex128);
             BitConverter.DoubleToInt64Bits(((Complex)c.GetAtIndex(0)).Imaginary).Should().Be(NpyNan64);

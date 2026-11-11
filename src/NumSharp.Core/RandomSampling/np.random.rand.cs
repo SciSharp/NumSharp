@@ -125,7 +125,7 @@ namespace NumSharp
         ///     <see cref="Shape.Scalar"/> is <c>size=()</c> (a 0-d array); anything else the array's dimensions.</param>
         /// <returns>The draws, one per element in C order (the stream <see cref="random_sample(long[])"/> consumes).</returns>
         /// <exception cref="ValueError">A dimension is negative, or the array is too big to address.</exception>
-        /// <exception cref="System.OutOfMemoryException">A valid size that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
+        /// <exception cref="MemoryError">A valid size that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
         /// <remarks>
         ///     NumPy's <c>random_sample(size=None)</c> takes one <c>size</c> — an int or a tuple — not the loose dimensions
         ///     <see cref="rand(long[])"/> takes; the <c>params long[]</c> overload is NumSharp's convenience spelling of the

@@ -45,7 +45,7 @@ namespace NumSharp
         ///     holds an NA whose NA object is neither a string nor NaN-like (<c>np.argmax</c>'s <c>Cannot compare null that is
         ///     not a nan-like value</c>).</exception>
         /// <exception cref="AxisError">Axis out of bounds (reports the original axis, like NumPy).</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand without <paramref name="out"/>: NumPy creates
         ///     the int64 index result as the subclass (<c>Can only create a chararray from string
         ///     data.</c>), after the argument checks; with <paramref name="out"/> the indices are
@@ -104,7 +104,7 @@ namespace NumSharp
         ///     holds an NA whose NA object is neither a string nor NaN-like (<c>np.argmax</c>'s <c>Cannot compare null that is
         ///     not a nan-like value</c>).</exception>
         /// <exception cref="AxisError">Axis out of bounds (reports the original axis, like NumPy).</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand without <paramref name="out"/>: NumPy creates
         ///     the int64 index result as the subclass (<c>Can only create a chararray from string
         ///     data.</c>), after the argument checks; with <paramref name="out"/> the indices are

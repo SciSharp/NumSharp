@@ -412,7 +412,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A value <see cref="setitem"/> refuses (a text that is not a number of a numeric
         ///     class's kind, a non-text value into a <c>coerce=False</c> <c>StringDType</c>).</exception>
         /// <exception cref="TypeError">A value the class cannot convert (None into an integer class).</exception>
-        /// <exception cref="OverflowException">A value that does not fit an integer class.</exception>
+        /// <exception cref="OverflowError">A value that does not fit an integer class.</exception>
         /// <exception cref="UnicodeEncodeError">A text the class cannot encode.</exception>
         /// <exception cref="UnicodeDecodeError">Bytes the class cannot decode.</exception>
         /// <remarks>

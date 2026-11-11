@@ -210,7 +210,7 @@ namespace NumSharp.Tests
             a[2].ToArray<long>().Should().Equal(-1, 5, 5, -1);
             // A C# literal is NumPy's Python scalar: range-checked, never wrapped.
             var i8 = np.zeros(new Shape(3), np.int8);
-            new Action(() => i8.__setitem__(0, 300)).Should().Throw<OverflowException>();
+            new Action(() => i8.__setitem__(0, 300)).Should().Throw<OverflowError>();
         }
 
         // --------------------------------------------------------------------------------------------- NDArray<T>

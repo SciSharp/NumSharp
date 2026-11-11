@@ -326,12 +326,12 @@ namespace NumSharp.Tests.Polynomial
         [TestMethod]
         public void ObjectStack_ErrorsInNumPysOrder()
         {
-            Raises<OverflowException>(() => Leg.legvander2d(BigInteger.Pow(2, 1024), 1.5, new[] { 1, 1 }), "int too large to convert to float");
-            Raises<OverflowException>(() => Leg.legvander2d(BigInteger.Pow(2, 1024) - BigInteger.Pow(2, 970), 1.5, new[] { 1, 1 }),
+            Raises<OverflowError>(() => Leg.legvander2d(BigInteger.Pow(2, 1024), 1.5, new[] { 1, 1 }), "int too large to convert to float");
+            Raises<OverflowError>(() => Leg.legvander2d(BigInteger.Pow(2, 1024) - BigInteger.Pow(2, 970), 1.5, new[] { 1, 1 }),
                 "int too large to convert to float");
             Leg.legvander2d(BigInteger.Pow(2, 1024) - BigInteger.Pow(2, 970) - 1, 1.5, new[] { 0, 0 }).GetDouble(0, 0).Should().Be(1.0,
                 "just below the tie rounds down to the largest double");
-            Raises<OverflowException>(() => Leg.legvander2d(BigInteger.Pow(2, 2000), null, new[] { 1, 1 }), "int too large to convert to float");
+            Raises<OverflowError>(() => Leg.legvander2d(BigInteger.Pow(2, 2000), null, new[] { 1, 1 }), "int too large to convert to float");
             Action noneFirst = () => Leg.legvander2d(null, BigInteger.Pow(2, 70), new[] { 1, 1 });
             noneFirst.Should().Throw<NotSupportedException>();
             Raises<ValueError>(() => Leg.legvander2d(BigInteger.Pow(2, 70), 1.5, new[] { 1, -1 }), "deg must be non-negative");

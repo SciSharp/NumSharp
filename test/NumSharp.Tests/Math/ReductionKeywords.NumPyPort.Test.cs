@@ -172,15 +172,15 @@ namespace NumSharp.Tests.Math
             Expect(np.sum(np.array(new[] { 1.0f }), initial: 0.1), "float32", new long[0], 1.100000023841858);
             Expect(np.sum(np.array(new[] { 1.0f }), initial: 1e40), "float32", new long[0], double.PositiveInfinity);
             new Action(() => np.sum(np.array(new sbyte[] { 1 }), dtype: np.int8, initial: 1000))
-                .Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+                .Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
             new Action(() => np.sum(np.array(new long[] { 1, 2 }), initial: double.NaN))
                 .Should().Throw<ValueError>().WithMessage("cannot convert float NaN to integer");
             new Action(() => np.sum(np.array(new[] { 1.0, 2.0 }), initial: new Complex(0, 1)))
                 .Should().Throw<TypeError>().WithMessage("float() argument must be a string or a real number, not 'complex'");
             new Action(() => np.sum(np.array(new byte[] { 1 }), initial: -1))
-                .Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint64");
+                .Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint64");
             new Action(() => np.sum(np.array(new byte[] { 1 }), dtype: np.uint8, initial: -1))
-                .Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+                .Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
             // An empty sum is the initial value.
             Expect(np.sum(np.array(new double[0]), initial: 5), "float64", new long[0], 5);
             Expect(np.sum(np.array(new int[0]), initial: 5), "int64", new long[0], 5);
@@ -279,7 +279,7 @@ namespace NumSharp.Tests.Math
             Expect(np.prod(F(), 0, where: false), "float64", new long[] { 3 }, 1, 1, 1);
             Expect(np.prod(np.array(new sbyte[] { 1 }), initial: 1000), "int64", new long[0], 1000);
             new Action(() => np.prod(np.array(new sbyte[] { 1 }), dtype: np.int8, initial: 1000))
-                .Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+                .Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
             Expect(np.prod(np.array(new[] { (Half)1.5, (Half)2.25, (Half)3 }), where: np.array(new[] { true, true, false }), initial: 2), "float16", new long[0], 6.75);
             var c = np.prod(np.array(new[] { new Complex(1, 2), new Complex(3, -1), new Complex(0, 5) }), where: np.array(new[] { true, true, false }));
             c.GetAtIndex<Complex>(0).Should().Be(new Complex(5, 5));

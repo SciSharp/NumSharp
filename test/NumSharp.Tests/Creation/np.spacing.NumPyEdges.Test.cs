@@ -183,15 +183,15 @@ namespace NumSharp.Tests.Creation
             new Action(() => np.geomspace(1.0, 1000.0, 4, dtype: T)).Should().Throw<DTypePromotionError>().WithMessage(stringDTypeFloat);
             new Action(() => np.geomspace(c1, c1000, 4, dtype: T)).Should().Throw<DTypePromotionError>().WithMessage(stringDTypeComplex);
             // np.geomspace(1.0, 1000.0, 4, dtype='U5' / 'S5') -> UFuncTypeError (NumSharp's TypeError), complex ends too
-            new Action(() => np.geomspace(1.0, 1000.0, 4, dtype: "U5")).Should().ThrowExactly<TypeError>().WithMessage(signStr);
-            new Action(() => np.geomspace(1.0, 1000.0, 4, dtype: "S5")).Should().ThrowExactly<TypeError>().WithMessage(signBytes);
-            new Action(() => np.geomspace(c1, c1000, 4, dtype: "U5")).Should().ThrowExactly<TypeError>().WithMessage(signStr);
+            new Action(() => np.geomspace(1.0, 1000.0, 4, dtype: "U5")).Should().ThrowExactly<UFuncNoLoopError>().WithMessage(signStr);
+            new Action(() => np.geomspace(1.0, 1000.0, 4, dtype: "S5")).Should().ThrowExactly<UFuncNoLoopError>().WithMessage(signBytes);
+            new Action(() => np.geomspace(c1, c1000, 4, dtype: "U5")).Should().ThrowExactly<UFuncNoLoopError>().WithMessage(signStr);
             // before the count and the axis: np.geomspace(1.0, 1000.0, -1, dtype=StringDType()), (..., 4, dtype='U5', axis=3),
             // (..., 0, dtype='U5')
             new Action(() => np.geomspace(1.0, 1000.0, -1, dtype: T)).Should().Throw<DTypePromotionError>().WithMessage(stringDTypeFloat);
-            new Action(() => np.geomspace(1.0, 1000.0, -1, dtype: "U5")).Should().ThrowExactly<TypeError>().WithMessage(signStr);
-            new Action(() => np.geomspace(1.0, 1000.0, 4, dtype: "U5", axis: 3)).Should().ThrowExactly<TypeError>().WithMessage(signStr);
-            new Action(() => np.geomspace(1.0, 1000.0, 0, dtype: "U5")).Should().ThrowExactly<TypeError>().WithMessage(signStr);
+            new Action(() => np.geomspace(1.0, 1000.0, -1, dtype: "U5")).Should().ThrowExactly<UFuncNoLoopError>().WithMessage(signStr);
+            new Action(() => np.geomspace(1.0, 1000.0, 4, dtype: "U5", axis: 3)).Should().ThrowExactly<UFuncNoLoopError>().WithMessage(signStr);
+            new Action(() => np.geomspace(1.0, 1000.0, 0, dtype: "U5")).Should().ThrowExactly<UFuncNoLoopError>().WithMessage(signStr);
             // after the zero check: np.geomspace(0.0, 1000.0, 4, dtype=StringDType()) -> the zero's ValueError
             new Action(() => np.geomspace(0.0, 1000.0, 4, dtype: T))
                 .Should().Throw<ValueError>().WithMessage("Geometric sequence cannot include zero");

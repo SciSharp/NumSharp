@@ -209,7 +209,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A non-text value into a descriptor with coercion off (<c>StringDType only allows
         ///     string data when string coercion is disabled.</c>).</exception>
         /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
-        /// <exception cref="OutOfMemoryException">The allocator cannot hold the text (NumPy's <c>MemoryError</c>).</exception>
+        /// <exception cref="MemoryError">The allocator cannot hold the text (NumPy's <c>MemoryError</c>).</exception>
         internal override unsafe void setitem(DType descr, object value, byte* item, IArraySlice buffer)
             => Cells(buffer, item, out long index).SetIndex(index, value);
 
@@ -228,7 +228,7 @@ namespace NumSharp
         ///     string data when string coercion is disabled.</c>).</exception>
         /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
         /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
-        /// <exception cref="OutOfMemoryException">The allocator cannot hold the texts (NumPy's <c>MemoryError</c>).</exception>
+        /// <exception cref="MemoryError">The allocator cannot hold the texts (NumPy's <c>MemoryError</c>).</exception>
         internal override unsafe void SetFreshItems(DType descr, IReadOnlyList<object> values, byte* first, IArraySlice buffer)
         {
             // An empty array has no cell to name (Cells refuses an index at or past the count) and nothing to store.
@@ -249,7 +249,7 @@ namespace NumSharp
         ///     allocator's lock.</remarks>
         /// <exception cref="ArgumentException"><paramref name="buffer"/> is not the <c>StringDType</c> buffer
         ///     <paramref name="item"/> is a cell of.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt cell (<c>Failed to load string in StringDType getitem</c>).</exception>
+        /// <exception cref="MemoryError">A corrupt cell (<c>Failed to load string in StringDType getitem</c>).</exception>
         internal override unsafe object getitem(DType descr, byte* item, IArraySlice buffer)
             => Cells(buffer, item, out long index).GetIndex(index);
 

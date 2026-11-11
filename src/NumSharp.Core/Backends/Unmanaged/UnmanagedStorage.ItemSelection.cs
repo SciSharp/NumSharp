@@ -426,7 +426,7 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">An index dtype that does not cast to int64 under <c>safe</c>.</exception>
         /// <exception cref="IndexError">A non-empty <paramref name="indices"/> into an empty <paramref name="a"/>, or an
         ///     out-of-bounds index under raise.</exception>
-        /// <exception cref="OverflowException">A C# literal out of <paramref name="a"/>'s range.</exception>
+        /// <exception cref="OverflowError">A C# literal out of <paramref name="a"/>'s range.</exception>
         /// <exception cref="NotSupportedException">No IL put kernel exists for the element width.</exception>
         /// <remarks>
         ///     <para>
@@ -515,7 +515,7 @@ namespace NumSharp.Backends
         /// <param name="a">The target, whose dtype the values take.</param>
         /// <returns>The caller's array when it already is C-contiguous of <paramref name="a"/>'s element type, else a new
         ///     array (released by the caller's scope).</returns>
-        /// <exception cref="OverflowException">A C# literal out of <paramref name="a"/>'s range.</exception>
+        /// <exception cref="OverflowError">A C# literal out of <paramref name="a"/>'s range.</exception>
         /// <exception cref="ValueError">A float NaN literal into an integer array.</exception>
         /// <exception cref="TypeError">A complex literal into a real array.</exception>
         /// <remarks>
@@ -618,7 +618,7 @@ namespace NumSharp.Backends
         ///     <paramref name="a"/> is an integer (or <c>decimal</c>) array.</exception>
         /// <exception cref="ValueError">See <see cref="np.putmask(NDArray, NDArray, NDArray)"/>; a list that is ragged, a
         ///     NaN of a list into an integer array, a text of a list that does not parse.</exception>
-        /// <exception cref="OverflowException">A Python int of a list outside an integer array's range (NumPy's
+        /// <exception cref="OverflowError">A Python int of a list outside an integer array's range (NumPy's
         ///     OverflowError).</exception>
         /// <exception cref="InvalidCastException">An ndarray of values that does not cast 'safely'.</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
@@ -762,7 +762,7 @@ namespace NumSharp.Backends
         ///     <paramref name="arr"/> is an integer (or <c>decimal</c>) array.</exception>
         /// <exception cref="ValueError">See <see cref="np.place(NDArray, NDArray, NDArray)"/>; a list that is ragged, a NaN
         ///     of a list into an integer array, a text of a list that does not parse.</exception>
-        /// <exception cref="OverflowException">A Python int of a list outside an integer array's range (NumPy's
+        /// <exception cref="OverflowError">A Python int of a list outside an integer array's range (NumPy's
         ///     OverflowError).</exception>
         /// <exception cref="InvalidCastException">An ndarray of values that does not cast 'safely'.</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
@@ -871,7 +871,7 @@ namespace NumSharp.Backends
         ///     error).</exception>
         /// <exception cref="TypeError">None (or a None item of a list) into an integer or decimal array (<c>int()</c>'s
         ///     text), an item the descriptor cannot convert.</exception>
-        /// <exception cref="OverflowException">A Python int of a list outside an integer array's range.</exception>
+        /// <exception cref="OverflowError">A Python int of a list outside an integer array's range.</exception>
         /// <exception cref="ValueError">A ragged list, a NaN item into an integer array, a text item that does not
         ///     parse.</exception>
         private static NDArray ValuesLikeNumPy(object values, NDArray target)
@@ -910,7 +910,7 @@ namespace NumSharp.Backends
         ///     exactly; owned by the calling scope.</returns>
         /// <exception cref="TypeError">An item the descriptor cannot convert (None into an integer array, a complex number
         ///     into a real one).</exception>
-        /// <exception cref="OverflowException">A Python int outside an integer array's range.</exception>
+        /// <exception cref="OverflowError">A Python int outside an integer array's range.</exception>
         /// <exception cref="ValueError">A ragged list, a NaN into an integer array, a text that does not parse.</exception>
         /// <exception cref="UnicodeEncodeError">A text item that is not ASCII into an <c>S</c> array.</exception>
         /// <remarks>
@@ -1108,7 +1108,7 @@ namespace NumSharp.Backends
         /// <returns>The converted values (C-contiguous, the target's dtype), or null when <paramref name="values"/> already
         ///     holds the target's element type.</returns>
         /// <exception cref="InvalidCastException">An array of values does not cast 'safely' (NumPy's TypeError text).</exception>
-        /// <exception cref="OverflowException">A C# literal out of the target's integer range (NumPy's OverflowError).</exception>
+        /// <exception cref="OverflowError">A C# literal out of the target's integer range (NumPy's OverflowError).</exception>
         /// <exception cref="ValueError">A float NaN literal into an integer target.</exception>
         /// <exception cref="TypeError">A complex literal into a real target.</exception>
         /// <exception cref="ValueError">A text value that does not parse into a numeric target (NumPy's <c>int()</c> /

@@ -177,7 +177,7 @@ namespace NumSharp.Tests.Backends.Iterators
 
             // np.array([1], int64) + 2**63 -> OverflowError
             var s = np.array(new long[] { 1L });
-            var ex = Assert.ThrowsException<OverflowException>(() => np.evaluate((NDExpr)s + 9223372036854775808UL));
+            var ex = Assert.ThrowsException<OverflowError>(() => np.evaluate((NDExpr)s + 9223372036854775808UL));
             Assert.AreEqual("Python integer 9223372036854775808 out of bounds for int64", ex.Message);
 
             // A float array adopts it as a value (no range check).
@@ -327,7 +327,7 @@ namespace NumSharp.Tests.Backends.Iterators
             // int8 [5] > 300 -> False ; int8 [5] < 300 -> True (arithmetic int8 + 300 still raises)
             Assert.IsFalse(np.evaluate(NDExpr.Greater(NDExpr.Arr(i1), NDExpr.Const(300))).GetBoolean(0));
             Assert.IsTrue(np.evaluate(NDExpr.Less(NDExpr.Arr(i1), NDExpr.Const(300))).GetBoolean(0));
-            Assert.ThrowsException<OverflowException>(() => np.evaluate((NDExpr)i1 + 300));
+            Assert.ThrowsException<OverflowError>(() => np.evaluate((NDExpr)i1 + 300));
 
             // In range: the literal adopts the array dtype as before.
             Assert.IsTrue(np.evaluate(NDExpr.Greater(NDExpr.Arr(i1), NDExpr.Const(4))).GetBoolean(0));

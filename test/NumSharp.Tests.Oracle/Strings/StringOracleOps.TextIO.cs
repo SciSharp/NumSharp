@@ -366,7 +366,7 @@ namespace NumSharp.Tests.Strings
             "arr0" => _ => np.array(5L),
             "arr0f" => _ => np.array(1.5),
             "arr1" => _ => np.array(new long[] { 5, 6 }),
-            "raise" => _ => throw new DivideByZeroException("integer division or modulo by zero"),
+            "raise" => _ => throw new ZeroDivisionError("integer division or modulo by zero"),
             "surrogate" => _ => "\ud800",
             "same" => s => s,
             "half" => _ => (Half)0.5,

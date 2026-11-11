@@ -420,8 +420,8 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="ValueError">An NA the loop's rule refuses; a chararray <paramref name="a"/> or
         ///     <paramref name="fillchar"/> of the user's call that NumPy's trivial loop copies into <c>StringDType()</c>
         ///     (<c>Can only create a chararray from string data.</c>).</exception>
-        /// <exception cref="OverflowException">A padded size past <c>sys.maxsize</c>.</exception>
-        /// <exception cref="OutOfMemoryException">A padded size no string can hold (NumPy's MemoryError).</exception>
+        /// <exception cref="OverflowError">A padded size past <c>sys.maxsize</c>.</exception>
+        /// <exception cref="MemoryError">A padded size no string can hold (NumPy's MemoryError).</exception>
         internal static NDArray Pad(string ufunc, int pos, NDArray a, NDArray width, NDArray fillchar)
         {
             if (!IsTextT(a) || !IsTextT(fillchar))
@@ -574,7 +574,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="tabsize">The tab sizes (<c>np.asanyarray</c>'d).</param>
         /// <returns>A fresh <c>StringDType</c> result.</returns>
         /// <exception cref="TypeError">A tab size that cannot reach int64 by a same_kind cast.</exception>
-        /// <exception cref="OverflowException">A tab-size literal past int64; an expansion past 2^31 - 1.</exception>
+        /// <exception cref="OverflowError">A tab-size literal past int64; an expansion past 2^31 - 1.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="ValueError">An NA under a non-string rule.</exception>
         [ArrayWrap("a")]
@@ -625,8 +625,7 @@ namespace NumSharp.Backends.Strings
         {
             string ufunc = back ? "_rpartition" : "_partition";
             if (!NDStringUfuncs.IsVString(a) || !NDStringUfuncs.IsVString(sep))
-                throw new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types " +
-                                    $"({NDStringUfuncs.DispatchClass(a)}, {NDStringUfuncs.DispatchClass(sep)}) -> (None, None, None)");
+                throw new UFuncNoLoopError(ufunc, 2, NDStringUfuncs.DispatchMeta(a), NDStringUfuncs.DispatchMeta(sep), null, null, null);
             CheckCompatibleNA(a.dtype, sep.dtype, out bool hasNA, out object na);
             var dims = NDTextLoop.BroadcastDims(a, sep);
             var descr = DTypeRegistry.VString.Descr(hasNA, na, a.dtype.VString.coerce && sep.dtype.VString.coerce);
@@ -830,17 +829,17 @@ namespace NumSharp.Backends.Strings
             VStringMethodError.ReplacePatternNull => new ValueError("Null values are not supported as search patterns or replacement strings for replace"),
             VStringMethodError.ReplaceSearchNull => new ValueError("Only string or NaN-like null strings can be used as search strings for replace"),
             VStringMethodError.ExpandTabsNull => new ValueError("Null values are not supported arguments for expandtabs"),
-            VStringMethodError.ExpandTabsOverflow => new OverflowException("new string is too long"),
+            VStringMethodError.ExpandTabsOverflow => new OverflowError("new string is too long"),
             VStringMethodError.PadNull => new ValueError($"Cannot {ufunc} null that is not a nan-like value"),
-            VStringMethodError.PadOverflow => new OverflowException($"Overflow encountered in {ufunc}"),
+            VStringMethodError.PadOverflow => new OverflowError($"Overflow encountered in {ufunc}"),
             VStringMethodError.ZFillNull => new TypeError("Cannot zfill null string that is not a nan-like value"),
             VStringMethodError.PartitionNull => new ValueError($"Null values are not supported in {ufunc}"),
             VStringMethodError.EmptySeparator => new ValueError("empty separator"),
             VStringMethodError.SliceNull => new TypeError("Cannot slice null string"),
-            VStringMethodError.Load => new OutOfMemoryException($"Failed to load string in {ufunc}"),
+            VStringMethodError.Load => new MemoryError($"Failed to load string in {ufunc}"),
             VStringMethodError.NotFound => new ValueError("substring not found"),
             VStringMethodError.PredicateNull => new ValueError($"Cannot use the {ufunc} function with a null that is not a nan-like value"),
-            _ => new OutOfMemoryException($"Failed to allocate string in {ufunc}"),
+            _ => new MemoryError($"Failed to allocate string in {ufunc}"),
         };
 
         // =============================================================================================================

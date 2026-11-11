@@ -132,7 +132,7 @@ namespace NumSharp
         ///     computes NumPy's plain result).</exception>
         /// <exception cref="UnicodeEncodeError">A non-ASCII fill for an <c>S</c> operand.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
+        /// <exception cref="OverflowError">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
         [NDScoped]
         public NDArray center(object a, object width, object fillchar = null)
             => np.strings.center(TextOperand(a, nameof(a)), TextOperand(width, nameof(width)), OptionalOperand(fillchar));
@@ -154,7 +154,7 @@ namespace NumSharp
         ///     data.</c>; a larger one computes NumPy's plain result).</exception>
         /// <exception cref="UnicodeEncodeError">A non-ASCII fill for an <c>S</c> operand.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
+        /// <exception cref="OverflowError">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
         [NDScoped]
         public NDArray ljust(object a, object width, object fillchar = null)
             => np.strings.ljust(TextOperand(a, nameof(a)), TextOperand(width, nameof(width)), OptionalOperand(fillchar));
@@ -176,7 +176,7 @@ namespace NumSharp
         ///     data.</c>; a larger one computes NumPy's plain result).</exception>
         /// <exception cref="UnicodeEncodeError">A non-ASCII fill for an <c>S</c> operand.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
+        /// <exception cref="OverflowError">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
         [NDScoped]
         public NDArray rjust(object a, object width, object fillchar = null)
             => np.strings.rjust(TextOperand(a, nameof(a)), TextOperand(width, nameof(width)), OptionalOperand(fillchar));
@@ -215,7 +215,7 @@ namespace NumSharp
         ///     cast ufunc '_expandtabs_length' input 1 from dtype('float64') to dtype('int64') with casting rule
         ///     'same_kind'</c>).</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="OverflowException">An expanded string longer than 2^31 - 1 (<c>new string is too
+        /// <exception cref="OverflowError">An expanded string longer than 2^31 - 1 (<c>new string is too
         ///     long</c>).</exception>
         /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA whose NA object is not a string.</exception>
         [NDScoped]

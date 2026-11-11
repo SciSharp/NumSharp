@@ -663,7 +663,7 @@ namespace NumSharp
         ///     dtype float64</c>; checked BEFORE the data is cast, see the remarks).</exception>
         /// <exception cref="ValueError">A text element of the data that does not parse into a numeric <paramref name="dtype"/>
         ///     (<c>could not convert string to float: np.str_('ab')</c>).</exception>
-        /// <exception cref="OverflowException">An integer text of the data outside an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="OverflowError">An integer text of the data outside an integer <paramref name="dtype"/>.</exception>
         /// <exception cref="UnicodeError">A text cast between the string classes that cannot encode or decode a character.</exception>
         /// <remarks>
         ///     NumPy's <c>__array_finalize__</c> re-checks a stored fill against the new dtype
@@ -1393,7 +1393,10 @@ namespace NumSharp
             {
                 var element = _data[indices];
                 if (element.ndim == 0)
-                    throw new AttributeError($"'{ElementPythonTypeName(element.GetAtIndex(0))}' object has no attribute 'size'");
+                {
+                    object scalar = element.GetAtIndex(0);
+                    throw new AttributeError($"'{ElementPythonTypeName(scalar)}' object has no attribute 'size'", "size", scalar);
+                }
             }
             NDArray savedMask = hard ? _mask.copy() : null;
             NDArray savedData = hard ? _data.copy() : null;
@@ -2669,7 +2672,7 @@ namespace NumSharp
                 // back as an array for the cast below.
                 converted = NDArray.AsStoreValue(fill_value, ndtype.typecode);
             }
-            catch (Exception e) when (e is OverflowException or ValueError)
+            catch (Exception e) when (e is OverflowError or OverflowException or ValueError)
             {
                 // `except (OverflowError, ValueError) as e: raise TypeError(err_msg % (fill_value, ndtype)) from e`: the text
                 // formats the fill with Python's %s (str), the dtype with its str ("int8").
@@ -2724,7 +2727,7 @@ namespace NumSharp
             {
                 return fill.astype(ndtype);
             }
-            catch (Exception e) when (e is OverflowException or ValueError)
+            catch (Exception e) when (e is OverflowError or OverflowException or ValueError)
             {
                 throw new TypeError($"Cannot convert fill_value {display} to dtype {ndtype}", e);
             }
@@ -2748,7 +2751,7 @@ namespace NumSharp
             {
                 ReductionInitial.TryPack(b, tc, new Span<byte>(slot, ReductionInitial.SlotBytes));
             }
-            catch (Exception e) when (e is OverflowException or ValueError)
+            catch (Exception e) when (e is OverflowError or OverflowException or ValueError)
             {
                 throw new TypeError($"Cannot convert fill_value {PyRepr.Bytes(b)} to dtype {ndtype}", e);
             }
@@ -3081,7 +3084,7 @@ namespace NumSharp
                 throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Incompatible dtypes '{(object)d1 ?? "None"}'<>'{(object)d2 ?? "None"}'"));
             // `dtype1.names` of two dtype-less operands.
             if (d1 is null)
-                throw new AttributeError("'NoneType' object has no attribute 'names'");
+                throw new AttributeError("'NoneType' object has no attribute 'names'", "names", null);
             // make_mask(umath.logical_or(m1, m2)): text operands are read by their truth values (non-empty is True); a
             // masked operand's slots are masked in the ufunc's result and make_mask reads them as True.
             var r = np.logical_or(AsData(m1), AsData(m2));
@@ -3418,7 +3421,7 @@ namespace NumSharp
                     CheckMaskFitsData(AsData(mask), source);
                 // np.isfinite's refusal: the dispatcher's class text for a StringDType, the legacy resolver's for S / U.
                 if (source.Storage.IsVString)
-                    throw NDStringUfuncs.VStringNoLoop("isfinite", new[] { source.dtype.Meta.ToString() });
+                    throw NDStringUfuncs.VStringNoLoop("isfinite", new object[] { source.dtype.Meta });
                 throw NDStringUfuncs.NotSupportedForInputTypes("isfinite");
             }
             // masked_array(a, copy=copy, mask=mask): the given mask ORs with a's own (keep_mask) after NumPy's shape rules,
@@ -6741,8 +6744,8 @@ namespace NumSharp
         /// <param name="first">The first operand's class.</param>
         /// <param name="second">The second operand's class.</param>
         /// <returns>The exception (not thrown).</returns>
-        private static TypeError ComparisonNoLoop(string ufunc, DTypeMeta first, DTypeMeta second)
-            => new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types ({first}, {second}) -> None");
+        private static UFuncNoLoopError ComparisonNoLoop(string ufunc, DTypeMeta first, DTypeMeta second)
+            => new UFuncNoLoopError(ufunc, 2, first, second, null);
 
         /// <summary>
         ///     Python's <c>a &lt; b</c> between two bounds of <see cref="masked_inside"/>/<see cref="masked_outside"/>: numbers
@@ -7612,7 +7615,7 @@ namespace NumSharp
                 // A 0-d product is a NumPy SCALAR in numpy.ma (`_MaskedBinaryOperation` returns the bare result), and
                 // `wgt.mask |= a.mask` then fails on it: NumPy's own AttributeError, naming the scalar's type.
                 if (!ReferenceEquals(weighted, NDMasked) && weighted._data.ndim == 0)
-                    throw new AttributeError($"'numpy.{weighted.dtype.name}' object has no attribute 'mask'");
+                    throw new AttributeError($"'numpy.{weighted.dtype.name}' object has no attribute 'mask'", "mask", weighted._data.GetAtIndex(0));
                 weighted._mask = Or(weighted._mask, mask);
                 wgt = weighted;
             }
@@ -8543,7 +8546,7 @@ namespace NumSharp
         ///     array: it does not own its data</c>) or of a non-contiguous layout (<c>resize only works on single-segment
         ///     arrays</c>). The house type of NumSharp's <c>ndarray.resize</c> errors; NumPy raises ValueError.</exception>
         /// <exception cref="TypeError">A float or complex index array (<c>ndarray.put</c>'s safe cast).</exception>
-        /// <exception cref="OverflowException">Without a hard mask: a C# literal out of the target's range (NumPy's
+        /// <exception cref="OverflowError">Without a hard mask: a C# literal out of the target's range (NumPy's
         ///     <c>PyArray_Pack</c>); under a hard mask the literal becomes an int64 / float64 array first and is cast.</exception>
         /// <remarks>
         ///     <para>

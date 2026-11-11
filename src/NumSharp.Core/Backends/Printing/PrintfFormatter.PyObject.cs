@@ -24,7 +24,7 @@ namespace NumSharp.Backends.Printing
         /// <exception cref="PrintfArgumentException">CPython's <c>TypeError</c> (the argument count, or a conversion the
         ///     object's type does not support: <c>%d format: a real number is required, not str</c>).</exception>
         /// <exception cref="ValueError"><c>cannot convert float NaN to integer</c>; a malformed format.</exception>
-        /// <exception cref="OverflowException">An infinity under an integer conversion, a <c>%c</c> argument outside
+        /// <exception cref="OverflowError">An infinity under an integer conversion, a <c>%c</c> argument outside
         ///     <c>range(0x110000)</c>, or an int too large for a float conversion.</exception>
         /// <exception cref="OutOfMemoryException">A result longer than .NET's longest string.</exception>
         public static string FormatPyObject(string format, object value) => Format(format, value, PercentFormat.PyObject);
@@ -64,7 +64,7 @@ namespace NumSharp.Backends.Printing
         /// <exception cref="PrintfArgumentException">The conversion does not apply to the object's type.</exception>
         /// <exception cref="ValueError">A NaN under an integer conversion; a decimal conversion of an int with more than
         ///     4300 digits (and its <c>%s</c> / <c>%r</c>).</exception>
-        /// <exception cref="OverflowException">An infinity under an integer conversion; a <c>%c</c> code point outside
+        /// <exception cref="OverflowError">An infinity under an integer conversion; a <c>%c</c> code point outside
         ///     <c>range(0x110000)</c>; an int whose float conversion overflows (<c>int too large to convert to float</c>);
         ///     <c>precision too large</c>.</exception>
         /// <exception cref="OutOfMemoryException">A result longer than .NET's longest string.</exception>
@@ -133,7 +133,7 @@ namespace NumSharp.Backends.Printing
                     {
                         d = NumSharp.PythonInt.ToDouble(big);
                         if (double.IsInfinity(d))
-                            throw new OverflowException("int too large to convert to float");
+                            throw new OverflowError("int too large to convert to float");
                     }
                     else if (!TryPyReal(value, out d))
                         throw new PrintfArgumentException($"must be real number, not {PyTypeName(value)}");
@@ -170,7 +170,7 @@ namespace NumSharp.Backends.Printing
         /// <exception cref="ValueError"><c>int()</c> / <c>float()</c> of a 0-d text element that spells no number
         ///     (<c>invalid literal for int() with base 10: 'x'</c>, <c>could not convert string to float: b'x'</c>); a NaN
         ///     under an integer conversion.</exception>
-        /// <exception cref="OverflowException">An infinity under an integer conversion; a <c>%c</c> code point outside
+        /// <exception cref="OverflowError">An infinity under an integer conversion; a <c>%c</c> code point outside
         ///     <c>range(0x110000)</c>.</exception>
         /// <remarks>
         ///     The element of a 0-d array is NumPy's <c>getitem</c> object (<c>PyArray_GETITEM</c>, not the NumPy scalar): a
@@ -263,7 +263,7 @@ namespace NumSharp.Backends.Printing
         ///     number or text.</returns>
         /// <exception cref="ValueError">A NaN element; text that is no int literal (<c>invalid literal for int() with base
         ///     10: 'x'</c>, quoting the Python str / bytes); a literal of more than 4300 digits.</exception>
-        /// <exception cref="OverflowException">An infinite element.</exception>
+        /// <exception cref="OverflowError">An infinite element.</exception>
         private static bool TryArrayInt(NDArray array, out BigInteger value)
         {
             value = BigInteger.Zero;
@@ -358,7 +358,7 @@ namespace NumSharp.Backends.Printing
         /// <param name="item">The element object.</param>
         /// <param name="value">Receives the value.</param>
         /// <returns>True for a real number.</returns>
-        /// <exception cref="OverflowException">A Python int too large for a float (<c>int too large to convert to
+        /// <exception cref="OverflowError">A Python int too large for a float (<c>int too large to convert to
         ///     float</c>).</exception>
         private static bool TryItemFloat(object item, out double value)
         {
@@ -366,7 +366,7 @@ namespace NumSharp.Backends.Printing
             {
                 value = NumSharp.PythonInt.ToDouble(big);
                 if (double.IsInfinity(value))
-                    throw new OverflowException("int too large to convert to float");
+                    throw new OverflowError("int too large to convert to float");
                 return true;
             }
             return TryPyReal(item, out value);

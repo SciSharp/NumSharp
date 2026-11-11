@@ -81,7 +81,7 @@ namespace NumSharp.Backends
             // loop's negative-exponent error (probed: power(i8, i8, out=['7', 'x', …], where=…) reports the 'x').
             if (@out is not null && @out.typecode == NPTypeCode.String && where is not null)
             {
-                ThrowIfTextOutCastFails("power", "output", promotedLoop, @out);
+                ThrowIfTextOutCastFails("power", 1, 2, promotedLoop, @out);
                 ResolveUfuncIterationShape(BroadcastUfuncInputs(lhs, rhs, @out, where).LeftShape.Clean(), new[] { lhs, rhs },
                     @out, where);
                 ReadMaskedTextOut(@out, promotedLoop, where);

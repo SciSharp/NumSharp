@@ -661,7 +661,7 @@ namespace NumSharp.Tests.Polynomial
             Assert.AreEqual(1.0, PyScalar.PowTwo(PyScalar.Float(-1.0)).F);
             Assert.AreEqual(0.0, PyScalar.PowTwo(PyScalar.Float(1e-200)).F, "an underflow to zero is no error");
             Assert.IsTrue(PyScalar.PowTwo(PyScalar.Float(1e-160)).F > 0, "a subnormal square is no error on ucrtbase");
-            var overflow = Assert.ThrowsException<OverflowException>(() => PyScalar.PowTwo(PyScalar.Float(1.4e154)));
+            var overflow = Assert.ThrowsException<OverflowError>(() => PyScalar.PowTwo(PyScalar.Float(1.4e154)));
             Assert.AreEqual("(34, 'Result too large')", overflow.Message);
 
             var inf2 = PyScalar.PowTwo(PyScalar.Cplx(new Complex(double.PositiveInfinity, 0)));
@@ -670,7 +670,7 @@ namespace NumSharp.Tests.Polynomial
             // default NaN (x86 negative, arm64 positive, HostCpu).
             Assert.AreEqual((long)HostCpu.DefaultNaN64Bits, BitConverter.DoubleToInt64Bits(inf2.C.Real), "(inf+0j)**2: default NaN");
             Assert.AreEqual((long)HostCpu.DefaultNaN64Bits, BitConverter.DoubleToInt64Bits(inf2.C.Imaginary));
-            var c = Assert.ThrowsException<OverflowException>(() => PyScalar.PowTwo(PyScalar.Cplx(new Complex(0, 1.4e154))));
+            var c = Assert.ThrowsException<OverflowError>(() => PyScalar.PowTwo(PyScalar.Cplx(new Complex(0, 1.4e154))));
             Assert.AreEqual("complex exponentiation", c.Message);
 
             Assert.AreEqual(BigInteger.Pow(2, 140), PyScalar.PowTwo(PyScalar.Int(BigInteger.Pow(2, 70))).I);

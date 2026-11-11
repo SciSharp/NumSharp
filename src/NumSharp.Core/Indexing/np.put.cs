@@ -41,7 +41,7 @@ namespace NumSharp
         /// <exception cref="IndexError"><paramref name="a"/> is empty while <paramref name="indices"/> is not
         ///     (<c>cannot replace elements of an empty array</c>), or an index is out of bounds under <c>mode="raise"</c>
         ///     (<c>index 9 is out of bounds for axis 0 with size 4</c>).</exception>
-        /// <exception cref="OverflowException">A C# literal value out of <paramref name="a"/>'s integer range (NumPy's
+        /// <exception cref="OverflowError">A C# literal value out of <paramref name="a"/>'s integer range (NumPy's
         ///     OverflowError: "Python integer 1000 out of bounds for int8"), checked after the indices.</exception>
         /// <exception cref="ValueError">A float NaN literal into an integer array ("cannot convert float NaN to
         ///     integer").</exception>
@@ -80,7 +80,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A bad <paramref name="mode"/>, then a read-only <paramref name="a"/>.</exception>
         /// <exception cref="IndexError"><paramref name="a"/> is empty, or <paramref name="index"/> is out of bounds under
         ///     <c>mode="raise"</c>.</exception>
-        /// <exception cref="OverflowException">A C# integer out of <paramref name="a"/>'s range, or a float infinity into an
+        /// <exception cref="OverflowError">A C# integer out of <paramref name="a"/>'s range, or a float infinity into an
         ///     integer array (NumPy's OverflowError texts).</exception>
         /// <exception cref="ValueError">A float NaN into an integer array.</exception>
         /// <exception cref="TypeError">A complex into a real array.</exception>

@@ -347,7 +347,7 @@ namespace NumSharp.Tests.IO
         {
             using var ms = new MemoryStream(Array.Empty<byte>());
 
-            var e = Assert.ThrowsException<EndOfStreamException>(() => np.load(ms));
+            var e = Assert.ThrowsException<EOFError>(() => np.load(ms));
             StringAssert.Contains(e.Message, "No data left in file");
         }
 

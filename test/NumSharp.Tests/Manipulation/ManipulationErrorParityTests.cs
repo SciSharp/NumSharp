@@ -179,7 +179,7 @@ namespace NumSharp.Tests.Manipulation
             // np.zeros((2**31, 2**31)), reached by a different route.
             var b = np.arange(6);
             new Action(() => b.resize(new Shape(new[] { 1L << 62, 1L << 62 })))
-                .Should().ThrowExactly<OutOfMemoryException>();
+                .Should().ThrowExactly<MemoryError>();
         }
 
         [TestMethod]

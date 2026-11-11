@@ -85,7 +85,7 @@ namespace NumSharp
         ///     complex.</exception>
         /// <exception cref="ValueError">A bound outside the dtype; an empty interval anywhere; a NaN bound; bounds that do not
         ///     broadcast, or a size they do not broadcast with; a negative size.</exception>
-        /// <exception cref="OverflowException">An infinite bound (NumPy's <c>OverflowError</c>).</exception>
+        /// <exception cref="OverflowError">An infinite bound (NumPy's <c>OverflowError</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.randint.html
         ///     <br/>

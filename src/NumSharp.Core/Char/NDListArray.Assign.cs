@@ -532,7 +532,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">NumPy's ValueErrors (house type): <c>resize only works on single-segment
         ///     arrays</c>, <c>negative dimensions not allowed</c>, <c>cannot resize this array: it does not own its data</c>,
         ///     <c>cannot resize an array that references or is referenced ...</c>.</exception>
-        /// <exception cref="OutOfMemoryException">A size whose product overflows (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">A size whose product overflows (NumPy's MemoryError).</exception>
         /// <exception cref="NotSupportedException">A growing resize (NumPy's new elements are ints).</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         /// <remarks>
@@ -592,11 +592,11 @@ namespace NumSharp
                 if (dims[i] < 0)
                     throw new IncorrectShapeException("negative dimensions not allowed");
                 if (dims[i] > long.MaxValue / newSize)
-                    throw new OutOfMemoryException();
+                    throw new MemoryError();
                 newSize *= dims[i];
             }
             if (newSize > long.MaxValue / 8)
-                throw new OutOfMemoryException();
+                throw new MemoryError();
             if (newSize != size)
             {
                 if (!Ids.Storage.OwnsData)
@@ -700,9 +700,13 @@ namespace NumSharp
         ///     not take (<c>%d format: a real number is required, not list</c>), or the wrong number of conversions.</exception>
         /// <exception cref="UnicodeEncodeError">A list whose text is not ASCII (NumPy 2.4.2 crashes the process there); a
         ///     lone surrogate in <paramref name="sep"/> or <paramref name="format"/>.</exception>
-        /// <exception cref="IOException">The file cannot be created (.NET's exception for NumPy's OSError).</exception>
-        /// <exception cref="UnauthorizedAccessException">The name is a directory or is not writable (NumPy's
-        ///     PermissionError).</exception>
+        /// <exception cref="FileNotFoundError">A directory on the name's path does not exist (CPython's <c>[Errno 2] No
+        ///     such file or directory</c>).</exception>
+        /// <exception cref="PermissionError">The name is not writable, or (Windows) is a directory (<c>[Errno 13]
+        ///     Permission denied</c>).</exception>
+        /// <exception cref="IsADirectoryError">The name is a directory (Linux and macOS: <c>[Errno 21] Is a
+        ///     directory</c>).</exception>
+        /// <exception cref="IOException">Any other refusal of the operating system, as .NET reports it.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         /// <remarks>One overload, NumPy's signature: NumPy's <c>fid</c> is "an open file object, or a string containing a
         ///     filename", so a name and a stream are two cases of one parameter.</remarks>
@@ -732,7 +736,7 @@ namespace NumSharp
                     return;
                 default:
                     // npy_PyFile_Dup2 calls fid.flush() first: any other object has no such method.
-                    throw new AttributeError($"'{NDPyObject.TypeName(fid)}' object has no attribute 'flush'");
+                    throw new AttributeError($"'{NDPyObject.TypeName(fid)}' object has no attribute 'flush'", "flush", fid);
             }
         }
 

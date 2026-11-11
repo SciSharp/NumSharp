@@ -130,7 +130,7 @@ namespace NumSharp.Backends
         /// <exception cref="IncorrectShapeException"><paramref name="self"/> is not single-segment; a dimension is
         ///     negative (checked up to the first zero dimension, as NumPy); or the byte size changes and
         ///     <paramref name="self"/> does not own its data or, under <paramref name="refcheck"/>, shares it.</exception>
-        /// <exception cref="OutOfMemoryException">The new element or byte count overflows (NumPy's
+        /// <exception cref="MemoryError">The new element or byte count overflows (NumPy's
         ///     <c>MemoryError</c>).</exception>
         /// <remarks>
         ///     <para>
@@ -174,14 +174,14 @@ namespace NumSharp.Backends
                 // wraps to a small (often zero) count and the array is relabelled over a buffer
                 // that was never allocated for it.
                 if (newDims[i] > long.MaxValue / newSize)
-                    throw new OutOfMemoryException();
+                    throw new MemoryError();
                 newSize *= newDims[i];
             }
 
             long oldSize = self.size;
             long oldBytes = oldSize * itemsize;
             if (itemsize > 0 && newSize > long.MaxValue / itemsize)
-                throw new OutOfMemoryException();
+                throw new MemoryError();
             long newBytes = newSize * itemsize;
 
             // The physical memory layout to preserve: F only when strictly F-contiguous (and not C),

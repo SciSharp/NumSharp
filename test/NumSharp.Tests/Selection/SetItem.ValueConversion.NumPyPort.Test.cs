@@ -61,7 +61,7 @@ namespace NumSharp.Tests.Selection
             {
                 var i = np.zeros(new Shape(3), np.dtype(dt));
                 Action store = () => i.__setitem__(0, Big);
-                store.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+                store.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
             }
         }
 
@@ -80,7 +80,7 @@ namespace NumSharp.Tests.Selection
             integerOut.Should().Throw<IndexError>().WithMessage("index 99 is out of bounds for axis 0 with size 3");
 
             Action fancyInt = () => np.zeros(new Shape(3), np.int32).__setitem__(new long[] { 0, 99 }, Big);
-            fancyInt.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            fancyInt.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
 
             Action fancyFloat = () => np.arange(3.0).__setitem__(new long[] { 0, 99 }, Big);
             fancyFloat.Should().Throw<IndexError>().WithMessage("index 99 is out of bounds for axis 0 with size 3");

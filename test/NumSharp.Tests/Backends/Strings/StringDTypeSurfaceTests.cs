@@ -391,7 +391,7 @@ namespace NumSharp.Tests.Backends.Strings
             np.max(np.zeros(3, np.@bool), initial: Ts("x").reshape(Array.Empty<long>())).GetBoolean().Should().BeTrue();
             np.max(np.zeros(3, np.@bool), initial: Ts("").reshape(Array.Empty<long>())).GetBoolean().Should().BeFalse();
             new Action(() => np.max(np.zeros(3, np.int8), initial: Ts("300").reshape(Array.Empty<long>()))).Should()
-                .Throw<OverflowException>().WithMessage("Integer 300 is out of bounds for byte");
+                .Throw<OverflowError>().WithMessage("Integer 300 is out of bounds for byte");
 
             using var f3 = np.zeros(3);
             f3.fill(np.array("4"));

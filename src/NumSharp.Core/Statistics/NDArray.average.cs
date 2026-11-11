@@ -17,7 +17,7 @@ namespace NumSharp
         /// <param name="keepdims">Keep the averaged axes with length 1.</param>
         /// <returns>A new array: the average (0-d over every axis).</returns>
         /// <exception cref="AxisError">An axis out of bounds.</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero, or an empty average without weights.</exception>
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero, or an empty average without weights.</exception>
         /// <exception cref="ValueError">A repeated axis; weights inconsistent with the averaged axes.</exception>
         /// <exception cref="TypeError">Weights of another shape without an axis; text the reduction refuses.</exception>
         /// <exception cref="DTypePromotionError">An operand and weights with no common DType.</exception>
@@ -45,7 +45,7 @@ namespace NumSharp
         /// <param name="keepdims">Keep the averaged axes with length 1.</param>
         /// <returns>The average and the sum of weights, both new arrays.</returns>
         /// <exception cref="AxisError">An axis out of bounds.</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero, or an empty average without weights.</exception>
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero, or an empty average without weights.</exception>
         /// <exception cref="ValueError">A repeated axis; weights inconsistent with the averaged axes.</exception>
         /// <exception cref="TypeError">Weights of another shape without an axis; text the reduction refuses.</exception>
         /// <exception cref="DTypePromotionError">An operand and weights with no common DType.</exception>

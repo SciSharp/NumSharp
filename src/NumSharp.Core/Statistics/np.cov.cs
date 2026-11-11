@@ -53,10 +53,11 @@ namespace NumSharp
         ///     (<c>result_type(m, y, float64)</c>), or a <c>StringDType</c> request with weights.</exception>
         /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/>: NumPy's in-place
         ///     <c>X -= avg[:, None]</c> cannot cast the float64 mean's difference back (its UFuncTypeError text).</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero (the weighted mean's "Weights sum to zero, can't
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero (the weighted mean's "Weights sum to zero, can't
         ///     be normalized"; NumPy's ZeroDivisionError).</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>, or decimal
-        ///     arithmetic out of decimal's range.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="OverflowException">Decimal arithmetic out of decimal's range (.NET's own, decimal has no NumPy
+        ///     dtype).</exception>
         /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
         /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cov.html</remarks>

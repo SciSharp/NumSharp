@@ -174,13 +174,13 @@ namespace NumSharp.Tests.Backends.Strings
         public void Multiply_Counts_AndNARules()
         {
             Action negative = () => np.multiply(A(TNaN, "ab", double.NaN, "c"), np.array(new long[] { 2, 3, -1 }));
-            negative.Should().Throw<OverflowException>().WithMessage("Overflow encountered in string multiply");
+            negative.Should().Throw<OverflowError>().WithMessage("Overflow encountered in string multiply");
             using var r = np.multiply(np.array(3L), A(TStr, "ab", "NA"));
             V(r).Should().Equal("ababab", "NANANA");
             Action none = () => np.multiply(A(TNone, "ab", null), np.array(2L));
             none.Should().Throw<TypeError>().WithMessage("Cannot multiply null that is not a nan-like value");
             Action huge = () => np.multiply(A(T, "ab"), np.array(1L << 62));
-            huge.Should().Throw<OverflowException>().WithMessage("Overflow encountered in string multiply");
+            huge.Should().Throw<OverflowError>().WithMessage("Overflow encountered in string multiply");
         }
 
         /// <summary>
@@ -664,7 +664,7 @@ namespace NumSharp.Tests.Backends.Strings
             using var first = np.multiply(np.array(long.MinValue), A(T, ""));
             V(first).Should().Equal("");
             Action nonEmpty = () => np.multiply(A(T, "a"), np.array(-1L));
-            nonEmpty.Should().Throw<OverflowException>().WithMessage("Overflow encountered in string multiply");
+            nonEmpty.Should().Throw<OverflowError>().WithMessage("Overflow encountered in string multiply");
         }
 
         /// <summary>

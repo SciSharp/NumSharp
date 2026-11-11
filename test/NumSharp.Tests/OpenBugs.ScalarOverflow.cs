@@ -55,7 +55,7 @@ namespace NumSharp.Tests
         {
             // NumPy: uint16 array + 70000 -> OverflowError (70000 > 65535).
             Action act = () => { var _ = np.array(new ushort[] { 1, 2 }) + 70000; };
-            act.Should().Throw<OverflowException>(
+            act.Should().Throw<OverflowError>(
                 "a Python int outside the uint16 range must raise, not wrap to [4465,4466]");
         }
 
@@ -65,7 +65,7 @@ namespace NumSharp.Tests
         {
             // Char is the uint16 masquerade -> same rule as uint16.
             Action act = () => { var _ = CharArr(1, 2) + 70000; };
-            act.Should().Throw<OverflowException>();
+            act.Should().Throw<OverflowError>();
         }
 
         /// <summary>Guards NEP 50's range check of a weak Python int against the array's integer loop.</summary>
@@ -74,10 +74,10 @@ namespace NumSharp.Tests
         {
             // NumPy: uint16 array * -1 -> OverflowError (-1 < 0 for unsigned).
             Action actU16 = () => { var _ = np.array(new ushort[] { 1, 2 }) * -1; };
-            actU16.Should().Throw<OverflowException>("-1 is out of range for an unsigned dtype");
+            actU16.Should().Throw<OverflowError>("-1 is out of range for an unsigned dtype");
 
             Action actByte = () => { var _ = np.array(new byte[] { 1, 2 }) + (-1); };
-            actByte.Should().Throw<OverflowException>("-1 is out of range for uint8");
+            actByte.Should().Throw<OverflowError>("-1 is out of range for uint8");
         }
 
         /// <summary>Guards NEP 50's range check of a weak Python int against the array's integer loop.</summary>
@@ -86,10 +86,10 @@ namespace NumSharp.Tests
         {
             // NumPy: int8 array + 200 -> OverflowError (200 > 127); int16 + 40000 -> OverflowError.
             Action actI8 = () => { var _ = np.array(new sbyte[] { 1 }) + 200; };
-            actI8.Should().Throw<OverflowException>("200 is out of range for int8");
+            actI8.Should().Throw<OverflowError>("200 is out of range for int8");
 
             Action actI16 = () => { var _ = np.array(new short[] { 1 }) + 40000; };
-            actI16.Should().Throw<OverflowException>("40000 is out of range for int16");
+            actI16.Should().Throw<OverflowError>("40000 is out of range for int16");
         }
 
         /// <summary>Guards NEP 50's range check of a weak Python int against the array's integer loop.</summary>
@@ -100,7 +100,7 @@ namespace NumSharp.Tests
             // BEFORE the negative-exponent rule. NumSharp instead computes a modular
             // inverse ([0, 43691]) — doubly wrong (no throw AND a nonsense value).
             Action act = () => { var _ = np.power(CharArr(2, 3), -1); };
-            act.Should().Throw<OverflowException>();
+            act.Should().Throw<OverflowError>();
         }
     }
 }

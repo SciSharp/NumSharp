@@ -38,13 +38,13 @@ namespace NumSharp.Tests.Manipulation
             // Within bounds the conversion errors stay NumPy's.
             // >>> np.insert(np.zeros(3, np.int8), 1, 1000)  OverflowError: Python integer 1000 out of bounds for int8
             Action overflow = () => np.insert(np.zeros(new Shape(3), np.int8), 1, (object)1000);
-            overflow.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+            overflow.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
             // >>> np.insert(np.zeros(3, np.int32), 1, 'x')  ValueError: invalid literal for int() with base 10: 'x'
             Action badText = () => np.insert(np.zeros(new Shape(3), np.int32), 1, (object)"x");
             badText.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: 'x'");
             // >>> np.insert(np.zeros(3, np.int8), [], 1000)  OverflowError: the empty index still converts the values
             Action emptyIndex = () => np.insert(np.zeros(new Shape(3), np.int8), Array.Empty<int>(), (object)1000);
-            emptyIndex.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+            emptyIndex.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
 
             // And a value that converts is stored as NumPy stores it.
             // >>> np.insert(np.zeros(3, np.int8), 1, 7)  array([0, 7, 0, 0], dtype=int8)
@@ -230,19 +230,19 @@ namespace NumSharp.Tests.Manipulation
             // UFuncTypeError: Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8') with casting rule 'same_kind'
             // (NumSharp's ufunc output-cast refusal is TypeError, the class of NumPy's UFuncTypeError, with its text.)
             Action unsigned = () => np.insert(np.arange(12L), np.array(new byte[] { 0, 2 }), v);
-            unsigned.Should().ThrowExactly<TypeError>().WithMessage(
+            unsigned.Should().ThrowExactly<UFuncOutputCastingError>().WithMessage(
                 "Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8') with casting rule 'same_kind'");
             Action emptyUnsigned = () => np.insert(np.arange(12L), np.array(new byte[0]), v);
-            emptyUnsigned.Should().ThrowExactly<TypeError>().WithMessage(
+            emptyUnsigned.Should().ThrowExactly<UFuncOutputCastingError>().WithMessage(
                 "Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8') with casting rule 'same_kind'");
             // >>> np.insert(np.arange(300), np.array([0, 2], np.uint8), [100, 200])
             // OverflowError: Python integer 300 out of bounds for uint8
             Action overflowU = () => np.insert(np.arange(300L), np.array(new byte[] { 0, 2 }), v);
-            overflowU.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for uint8");
+            overflowU.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for uint8");
             // >>> np.insert(np.arange(200), np.array([-1, 2], np.int8), [100, 200])
             // OverflowError: Python integer 200 out of bounds for int8
             Action overflowS = () => np.insert(np.arange(200L), np.array(new sbyte[] { -1, 2 }), v);
-            overflowS.Should().Throw<OverflowException>().WithMessage("Python integer 200 out of bounds for int8");
+            overflowS.Should().Throw<OverflowError>().WithMessage("Python integer 200 out of bounds for int8");
             // >>> np.insert(np.arange(12), np.array([3, 1], np.int32), [100, 200])
             // array([  0, 200,   1,   2, 100,   3,   4,   5,   6,   7,   8,   9,  10,  11])
             np.insert(np.arange(12L), np.array(new[] { 3, 1 }), v)

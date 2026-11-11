@@ -155,15 +155,16 @@ namespace NumSharp
         ///     A str or None step (Python's own <c>2. * ax_dx</c> refuses it: "can't multiply sequence by non-int of type
         ///     'float'" / "unsupported operand type(s) for *: 'float' and 'NoneType'").
         /// </exception>
-        /// <exception cref="DivideByZeroException">
+        /// <exception cref="ZeroDivisionError">
         ///     A zero step that is a Python number (a C# int, double, bool or Complex) with second-order edges: CPython's
         ///     ZeroDivisionError of <c>-1.5 / ax_dx</c>. A NumPy scalar or 0-d array zero step gives inf / nan, as in NumPy.
-        ///     Also a decimal input or step divided by zero (decimal has no inf).
         /// </exception>
-        /// <exception cref="OverflowException">
-        ///     A <c>BigInteger</c> step past the float range (CPython's "int too large to convert to float"), or a decimal
-        ///     result past decimal's range.
+        /// <exception cref="DivideByZeroException">A decimal input or step divided by zero (.NET's own: decimal has no
+        ///     inf).</exception>
+        /// <exception cref="OverflowError">
+        ///     A <c>BigInteger</c> step past the float range (CPython's "int too large to convert to float").
         /// </exception>
+        /// <exception cref="OverflowException">A decimal result past decimal's range.</exception>
         public static GradientResult gradient(NDArray f, object spacing = null, int? axis = null, int edge_order = 1)
         {
             if (f is null) throw new ArgumentNullException(nameof(f));

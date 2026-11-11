@@ -39,7 +39,7 @@ namespace NumSharp.Backends
         ///     "remapped shapes" text, under the house broadcast-error type).</exception>
         /// <exception cref="TypeError">NumPy's loop refusal for text (a text input, a text out or a string request without a
         ///     loop), or a detailed / new-style <c>dtype=</c> request.</exception>
-        /// <exception cref="OverflowException">A string repeat past <c>2^63 - 1</c> characters, or an integer text outside an
+        /// <exception cref="OverflowError">A string repeat past <c>2^63 - 1</c> characters, or an integer text outside an
         ///     integer loop or out.</exception>
         /// <remarks>
         ///     <para>The result is computed fresh in the loop dtype and copied into <paramref name="out"/> (NDIter's unsafe
@@ -100,7 +100,7 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError">The axis is out of bounds.</exception>
         /// <exception cref="TypeError">NumPy's loop refusal (its resolved-dtypes, no-loop and mixed-string texts), or a
         ///     detailed or new-style <c>dtype=</c>.</exception>
-        /// <exception cref="OverflowException">A repeat past <c>2^63 - 1</c> characters, or an integer text outside an
+        /// <exception cref="OverflowError">A repeat past <c>2^63 - 1</c> characters, or an integer text outside an
         ///     integer loop or out.</exception>
         private bool ReduceTextIntoOut(string op, NDArray arr, int? axis, bool keepdims, DType dtype, NDArray @out)
         {
@@ -270,7 +270,7 @@ namespace NumSharp.Backends
                     throw new ValueError("output array is read-only");
                 DType deviations = code == NPTypeCode.Complex ? np.float64 : arr.dtype;
                 throw Strings.NDStringUfuncs.IsVString(@out)
-                    ? Strings.NDStringUfuncs.VStringNoLoop("add", new[] { Strings.NDStringUfuncs.DispatchClass(@out), deviations.Meta.ToString() })
+                    ? Strings.NDStringUfuncs.VStringNoLoop("add", new[] { Strings.NDStringUfuncs.DispatchMeta(@out), deviations.Meta })
                     : Strings.NDStringUfuncs.ReduceOutError("add", deviations, @out.dtype, accumulate: false);
             }
 

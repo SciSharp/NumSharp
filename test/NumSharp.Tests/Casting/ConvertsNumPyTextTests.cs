@@ -133,9 +133,9 @@ namespace NumSharp.Tests.Casting
             Action badComplex = () => Converts.ToComplex("1+");
             badComplex.Should().Throw<ValueError>().WithMessage("complex() arg is a malformed string");
             Action outOfRange = () => Converts.ToByte("300");
-            outOfRange.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for uint8");
+            outOfRange.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for uint8");
             Action negativeUnsigned = () => Converts.ToUInt16("-1");
-            negativeUnsigned.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint16");
+            negativeUnsigned.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint16");
         }
 
         [TestMethod]
@@ -175,7 +175,7 @@ namespace NumSharp.Tests.Casting
             // NumSharp's char is NumPy's uint16 in every type rule.
             Converts.ChangeType((object)"97", NPTypeCode.Char).Should().Be('a');
             Action tooBig = () => Converts.ChangeType((object)"70000", NPTypeCode.Char);
-            tooBig.Should().Throw<OverflowException>().WithMessage("Python integer 70000 out of bounds for uint16");
+            tooBig.Should().Throw<OverflowError>().WithMessage("Python integer 70000 out of bounds for uint16");
 
             // A float beyond int32 reaches char through astype's int32 intermediate (NumPy's MSVC cast), 0 — the old int64
             // route gave 0xFFFF.

@@ -196,7 +196,7 @@ namespace NumSharp.Tests.Backends.Strings
             Action empty = () => np.@char.multiply(np.zeros(new Shape(0L), "U3"), 2);
             empty.Should().Throw<ValueError>().WithMessage("zero-size array to reduction operation maximum which has no identity");
             Action overflow = () => np.@char.multiply(np.array(new[] { "abc" }), long.MaxValue / 2);
-            overflow.Should().Throw<OverflowException>().WithMessage("Overflow encountered in string multiply");
+            overflow.Should().Throw<OverflowError>().WithMessage("Overflow encountered in string multiply");
         }
 
         /// <summary>

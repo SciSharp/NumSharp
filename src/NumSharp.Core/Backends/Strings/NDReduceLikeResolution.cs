@@ -738,7 +738,7 @@ namespace NumSharp.Backends.Strings
             {
                 // "We never supported flexible dtypes here": a string input has no loop, named by the descriptors.
                 if (IsFlexibleNum(ops[0].num) || IsFlexibleNum(ops[1].num))
-                    throw NDStringUfuncs.VStringNoLoop(ufunc, new[] { ops[0].ToString(true), ops[1].ToString(true) });
+                    throw NDStringUfuncs.VStringNoLoop(ufunc, new object[] { ops[0], ops[1] });
                 loop = DTypePromotion.PromoteTypes(ops[0], ops[1]);
             }
             else
@@ -979,19 +979,18 @@ namespace NumSharp.Backends.Strings
         /// <param name="ops">The operands' descriptors.</param>
         /// <param name="descrs">The loop's descriptors.</param>
         /// <param name="casting">The rule.</param>
-        /// <exception cref="TypeError">NumPy's UFuncTypeError texts (<c>Cannot cast ufunc 'add' input 0 from ... to
-        ///     ... with casting rule 'unsafe'</c>, <c>Cannot cast ufunc 'add' output from ... to ... with casting rule
-        ///     'unsafe'</c>), raised as TypeError, their class.</exception>
+        /// <exception cref="UFuncInputCastingError">An input's cast refused (<c>Cannot cast ufunc 'add' input 0 from ... to
+        ///     ... with casting rule 'unsafe'</c>).</exception>
+        /// <exception cref="UFuncOutputCastingError">The output's cast refused (<c>Cannot cast ufunc 'add' output from ...
+        ///     to ... with casting rule 'unsafe'</c>; the output is operand 2 of the binary loop).</exception>
         private static void ValidateCasting(string ufunc, DType[] ops, DType[] descrs, NPY_CASTING casting)
         {
             string rule = DTypeCasting.CastingToString(casting);
             for (int i = 0; i < 2; i++)
                 if (!DTypeCasting.CanCastTypeTo(ops[i], descrs[i], casting))
-                    throw new TypeError(
-                        string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc '{ufunc}' input {i} from {ops[i].ToString(true)} to {descrs[i].ToString(true)} with casting rule '{rule}'"));
+                    throw new UFuncInputCastingError(ufunc, 2, rule, ops[i], descrs[i], i);
             if (ops[2] is not null && !DTypeCasting.CanCastTypeTo(descrs[2], ops[2], casting))
-                throw new TypeError(
-                    $"Cannot cast ufunc '{ufunc}' output from {descrs[2].ToString(true)} to {ops[2].ToString(true)} with casting rule '{rule}'");
+                throw new UFuncOutputCastingError(ufunc, 1, rule, descrs[2], ops[2], 2);
         }
 
         // ---------------------------------------------------------------------------------------------
@@ -1113,14 +1112,16 @@ namespace NumSharp.Backends.Strings
         /// <param name="ufunc">The ufunc's name.</param>
         /// <param name="opDTypes">The operation DTypes as the dispatcher held them.</param>
         /// <param name="cause">The promotion error the refusal replaces, or null.</param>
-        /// <returns>The exception (the house type of NumPy's UFuncTypeError).</returns>
-        private static TypeError NoLoop(string ufunc, DTypeMeta[] opDTypes, Exception cause = null)
+        /// <returns>The exception: NumPy's <see cref="UFuncNoLoopError"/> over the three DTypes (a null slot is None),
+        ///     its cause kept as the inner exception.</returns>
+        private static UFuncNoLoopError NoLoop(string ufunc, DTypeMeta[] opDTypes, Exception cause = null)
         {
-            var e = NDStringUfuncs.VStringNoLoop(ufunc, new[] { Name(opDTypes[0]), Name(opDTypes[1]) }, Name(opDTypes[2]));
-            return cause is null ? e : new TypeError(e.Message, cause);
+            var dtypes = new object[] { opDTypes[0], opDTypes[1], opDTypes[2] };
+            return cause is null ? new UFuncNoLoopError(ufunc, 2, dtypes) : new UFuncNoLoopError(cause, ufunc, 2, dtypes);
         }
 
-        /// <summary>A DType's repr for an error text, or <c>None</c>.</summary>
+        /// <summary>A DType's repr for an error text, or <c>None</c> (the ambiguous-promoter <see cref="RuntimeError"/>
+        ///     lists the operation DTypes this way).</summary>
         /// <param name="meta">The DType, or null.</param>
         /// <returns>The text.</returns>
         private static string Name(DTypeMeta meta) => meta?.ToString() ?? "None";
@@ -1133,8 +1134,8 @@ namespace NumSharp.Backends.Strings
         /// <param name="a">The first operand's descriptor.</param>
         /// <param name="b">The second operand's descriptor.</param>
         /// <returns>The exception.</returns>
-        private static TypeError BinaryResolutionError(string ufunc, DType a, DType b)
-            => new TypeError($"ufunc '{ufunc}' cannot use operands with types {a.ToString(true)} and {b.ToString(true)}");
+        private static UFuncBinaryResolutionError BinaryResolutionError(string ufunc, DType a, DType b)
+            => new UFuncBinaryResolutionError(ufunc, a, b);
 
         /// <summary><c>NPY_DT_CALL_ensure_canonical</c>.</summary>
         /// <param name="d">The descriptor.</param>

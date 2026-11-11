@@ -153,7 +153,7 @@ namespace NumSharp
         /// <returns>The exact integer value.</returns>
         /// <exception cref="ValueError">A float NaN (<c>cannot convert float NaN to integer</c>, CPython's
         ///     <c>float.__int__</c>), or a text that is not an integer literal (CPython's texts).</exception>
-        /// <exception cref="OverflowException">A float infinity (<c>cannot convert float infinity to integer</c>), or an
+        /// <exception cref="OverflowError">A float infinity (<c>cannot convert float infinity to integer</c>), or an
         ///     integer literal past 64 bits (no C# integer holds it).</exception>
         /// <exception cref="InvalidCastException">An element of no numeric kind (unreachable: every storage lane but
         ///     complex, which is refused first, is handled).</exception>
@@ -188,14 +188,14 @@ namespace NumSharp
         /// <param name="value">The float element.</param>
         /// <returns>The truncated value, exact.</returns>
         /// <exception cref="ValueError"><paramref name="value"/> is NaN (<c>cannot convert float NaN to integer</c>).</exception>
-        /// <exception cref="OverflowException"><paramref name="value"/> is ±inf (<c>cannot convert float infinity to
+        /// <exception cref="OverflowError"><paramref name="value"/> is ±inf (<c>cannot convert float infinity to
         ///     integer</c>).</exception>
         private static BigInteger FloatToPythonInt(double value)
         {
             if (double.IsNaN(value))
                 throw new ValueError("cannot convert float NaN to integer");
             if (double.IsInfinity(value))
-                throw new OverflowException("cannot convert float infinity to integer");
+                throw new OverflowError("cannot convert float infinity to integer");
             return new BigInteger(Math.Truncate(value));
         }
 
@@ -214,7 +214,7 @@ namespace NumSharp
         ///     Python scalars</c>).</exception>
         /// <exception cref="TypeError">A complex element (CPython's <c>int()</c> text).</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
-        /// <exception cref="OverflowException">A float infinity; a value outside <typeparamref name="T"/>
+        /// <exception cref="OverflowError">A float infinity; a value outside <typeparamref name="T"/>
         ///     (<c>Python integer 3000000000 out of bounds for int32</c>; past the 64-bit C long, <c>Python int too large to
         ///     convert to C long</c>, except into the unsigned 32 / 64-bit types, which NumPy converts through C unsigned
         ///     long).</exception>
@@ -228,8 +228,8 @@ namespace NumSharp
                 // NumPy packs a Python int through PyLong_AsLong for every integer dtype but uint32 / uint64, so a value
                 // past the 64-bit C long reports CPython's text first; anything else is NumPy's own bounds text.
                 if (target != NPTypeCode.UInt32 && target != NPTypeCode.UInt64 && (value > long.MaxValue || value < long.MinValue))
-                    throw new OverflowException("Python int too large to convert to C long");
-                throw new OverflowException(
+                    throw new OverflowError("Python int too large to convert to C long");
+                throw new OverflowError(
                     $"Python integer {value.ToString(CultureInfo.InvariantCulture)} out of bounds for {target.AsNumpyDtypeName()}");
             }
 
@@ -252,7 +252,7 @@ namespace NumSharp
         /// <returns>The value for <see cref="Converts.ChangeType{T}(object)"/>.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's texts), or an integer
         ///     literal has more than 4300 digits.</exception>
-        /// <exception cref="OverflowException">An integer literal past 64 bits (no C# integer holds it).</exception>
+        /// <exception cref="OverflowError">An integer literal past 64 bits (no C# integer holds it).</exception>
         private static object ScalarValue(NDArray nd, NPTypeCode target)
         {
             object v = nd.Storage.GetAtIndex(0);
@@ -277,7 +277,7 @@ namespace NumSharp
                 return (long)big;
             if (big.Sign > 0 && big <= ulong.MaxValue)
                 return (ulong)big;
-            throw new OverflowException("Python int too large to convert to C long");
+            throw new OverflowError("Python int too large to convert to C long");
         }
 
         /// <summary>
@@ -313,7 +313,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
         ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
-        /// <exception cref="OverflowException">A float infinity, or a value outside int8.</exception>
+        /// <exception cref="OverflowError">A float infinity, or a value outside int8.</exception>
         public static explicit operator sbyte(NDArray nd) => ToCheckedInteger<sbyte>(nd, NPTypeCode.SByte);
 
         /// <summary>NumPy's <c>int(arr)</c> as a uint8, checked (see <see cref="ToCheckedInteger{T}"/>): a negative value
@@ -323,7 +323,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
         ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
-        /// <exception cref="OverflowException">A float infinity, or a value outside uint8.</exception>
+        /// <exception cref="OverflowError">A float infinity, or a value outside uint8.</exception>
         public static explicit operator byte(NDArray nd) => ToCheckedInteger<byte>(nd, NPTypeCode.Byte);
 
         /// <summary>NumPy's <c>int(arr)</c> as an int16, checked (see <see cref="ToCheckedInteger{T}"/>).</summary>
@@ -332,7 +332,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
         ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
-        /// <exception cref="OverflowException">A float infinity, or a value outside int16.</exception>
+        /// <exception cref="OverflowError">A float infinity, or a value outside int16.</exception>
         public static explicit operator short(NDArray nd) => ToCheckedInteger<short>(nd, NPTypeCode.Int16);
 
         /// <summary>NumPy's <c>int(arr)</c> as a uint16, checked (see <see cref="ToCheckedInteger{T}"/>).</summary>
@@ -341,7 +341,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
         ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
-        /// <exception cref="OverflowException">A float infinity, or a value outside uint16.</exception>
+        /// <exception cref="OverflowError">A float infinity, or a value outside uint16.</exception>
         public static explicit operator ushort(NDArray nd) => ToCheckedInteger<ushort>(nd, NPTypeCode.UInt16);
 
         /// <summary>NumPy's <c>int(arr)</c> as an int32, checked (see <see cref="ToCheckedInteger{T}"/>):
@@ -351,7 +351,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
         ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
-        /// <exception cref="OverflowException">A float infinity, or a value outside int32.</exception>
+        /// <exception cref="OverflowError">A float infinity, or a value outside int32.</exception>
         public static explicit operator int(NDArray nd) => ToCheckedInteger<int>(nd, NPTypeCode.Int32);
 
         /// <summary>NumPy's <c>int(arr)</c> as a uint32, checked (see <see cref="ToCheckedInteger{T}"/>).</summary>
@@ -360,7 +360,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
         ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
-        /// <exception cref="OverflowException">A float infinity, or a value outside uint32.</exception>
+        /// <exception cref="OverflowError">A float infinity, or a value outside uint32.</exception>
         public static explicit operator uint(NDArray nd) => ToCheckedInteger<uint>(nd, NPTypeCode.UInt32);
 
         /// <summary>NumPy's <c>int(arr)</c> as an int64, checked (see <see cref="ToCheckedInteger{T}"/>): uint64 max and
@@ -370,7 +370,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
         ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
-        /// <exception cref="OverflowException">A float infinity, or a value outside int64.</exception>
+        /// <exception cref="OverflowError">A float infinity, or a value outside int64.</exception>
         public static explicit operator long(NDArray nd) => ToCheckedInteger<long>(nd, NPTypeCode.Int64);
 
         /// <summary>NumPy's <c>int(arr)</c> as a uint64, checked (see <see cref="ToCheckedInteger{T}"/>).</summary>
@@ -379,7 +379,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
         ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
-        /// <exception cref="OverflowException">A float infinity, or a value outside uint64.</exception>
+        /// <exception cref="OverflowError">A float infinity, or a value outside uint64.</exception>
         public static explicit operator ulong(NDArray nd) => ToCheckedInteger<ulong>(nd, NPTypeCode.UInt64);
 
         /// <summary>NumPy's <c>int(arr)</c> as a UTF-16 code unit, checked against uint16's range (NumSharp's char lane;
@@ -389,7 +389,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="nd"/> is not 0-d (<c>only 0-dimensional arrays can be converted to
         ///     Python scalars</c>), or a complex element.</exception>
         /// <exception cref="ValueError">A float NaN, or a text that is not an integer literal.</exception>
-        /// <exception cref="OverflowException">A float infinity, or a value outside [0, 65535].</exception>
+        /// <exception cref="OverflowError">A float infinity, or a value outside [0, 65535].</exception>
         public static explicit operator char(NDArray nd) => ToCheckedInteger<char>(nd, NPTypeCode.Char);
 
         /// <summary>NumPy's <c>float(arr)</c> rounded to float32 (an out-of-range value is ±inf, as NumPy's float32 of a

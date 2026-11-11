@@ -149,7 +149,7 @@ namespace NumSharp.Tests.RandomSampling
             // n_children_spawned is NumPy's uint32_t: the parameter IS a uint, so the out-of-range values NumPy rejects at
             // assignment (-1, 2**32) do not compile, and the whole uint32 range is accepted.
             new SeedSequence(1, null, 4, uint.MaxValue).n_children_spawned.Should().Be(uint.MaxValue);
-            Throws<OverflowException>(() => new SeedSequence(1).spawn(-1), "can't convert negative value to uint32_t");
+            Throws<OverflowError>(() => new SeedSequence(1).spawn(-1), "can't convert negative value to uint32_t");
         }
 
         /// <summary>
@@ -162,7 +162,7 @@ namespace NumSharp.Tests.RandomSampling
         {
             var s = new SeedSequence(1, null, 4, uint.MaxValue);
             // LP64 NumPy's uint32_t conversion text (the Windows build says "Python int too large to convert to C unsigned long").
-            Throws<OverflowException>(() => s.spawn(2), "value too large to convert to uint32_t");
+            Throws<OverflowError>(() => s.spawn(2), "value too large to convert to uint32_t");
             s.n_children_spawned.Should().Be(uint.MaxValue);
         }
 
@@ -335,7 +335,7 @@ namespace NumSharp.Tests.RandomSampling
             kids.Length.Should().Be(2);
             kids[0].bit_generator.Should().BeOfType<PCG64>();
             D(kids[1].random(new Shape(3))).Should().Equal(0.4674907799518424, 0.04644889644868733, 0.5955100095961371);
-            Throws<OverflowException>(() => np.random.default_rng(1).spawn(-1), "can't convert negative value to uint32_t");
+            Throws<OverflowError>(() => np.random.default_rng(1).spawn(-1), "can't convert negative value to uint32_t");
         }
 
         // =====================================================================================
@@ -532,10 +532,10 @@ namespace NumSharp.Tests.RandomSampling
             new Philox(key: new object[] { p63 + 1, p63 + 3 }).state.key.Should().Equal(9223372036854775809UL, 9223372036854775811UL);
             new Philox(key: new object[] { -5, p63 + 1025 }).state.key.Should().Equal(18446744073709551611UL, 9223372036854777856UL);
             // LP64 NumPy's text (probed on Linux 2.4.2; the Windows build says "int too big to convert").
-            Throws<OverflowException>(() => new Philox(key: new object[] { p64, 1 }), "Python int too large to convert to C long");
-            Throws<OverflowException>(() => new Philox(key: new object[] { p64, -1 }), "Python int too large to convert to C long");
-            Throws<OverflowException>(() => new Philox(key: new object[] { -1, p64 }), "Python integer -1 out of bounds for uint64");
-            Throws<OverflowException>(() => new Philox(key: new object[] { -p63 - 1, 5 }), "Python int too large to convert to C long");
+            Throws<OverflowError>(() => new Philox(key: new object[] { p64, 1 }), "Python int too large to convert to C long");
+            Throws<OverflowError>(() => new Philox(key: new object[] { p64, -1 }), "Python int too large to convert to C long");
+            Throws<OverflowError>(() => new Philox(key: new object[] { -1, p64 }), "Python integer -1 out of bounds for uint64");
+            Throws<OverflowError>(() => new Philox(key: new object[] { -p63 - 1, 5 }), "Python int too large to convert to C long");
         }
 
         /// <summary>Philox's constructor errors, in NumPy's order (seed/key conflict, seed, key, counter).</summary>
@@ -555,7 +555,7 @@ namespace NumSharp.Tests.RandomSampling
             Throws<ValueError>(() => new Philox(key: new long[,] { { 1, 2 } }), "key must have 2 elements when using array form");
             Throws<ValueError>(() => new Philox(key: new object[] { new[] { 1 }, new[] { 2 } }), "key must have 2 elements when using array form");
             Throws<ValueError>(() => new Philox(key: double.NaN), "cannot convert float NaN to integer");
-            Throws<OverflowException>(() => new Philox(key: double.PositiveInfinity), "cannot convert float infinity to integer");
+            Throws<OverflowError>(() => new Philox(key: double.PositiveInfinity), "cannot convert float infinity to integer");
             Throws<TypeError>(() => new Philox(key: NDArray.Scalar(new Complex(1, 2))), "int() argument must be a string, a bytes-like object or a real number, not 'complex'");
             Throws<ValueError>(() => new Philox(key: "abc"), "invalid literal for int() with base 10: 'abc'");
             Throws<ValueError>(() => new Philox(key: "1__0"), "invalid literal for int() with base 10: '1__0'");

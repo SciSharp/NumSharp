@@ -559,14 +559,13 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="failures">Collects one line per unexcused mismatch.</param>
         /// <param name="documented">Counts the excused mismatches by reason.</param>
         /// <summary>
-        ///     The exception types a STRICT ma tier accepts besides NumPy's own name: OverflowError is .NET's
-        ///     <see cref="OverflowException"/> (the house type for NumPy's OverflowError), and a ValueError may be the
-        ///     house <see cref="IncorrectShapeException"/> that NumSharp's <c>ndarray.resize</c> raises with NumPy's texts.
-        ///     An IndexError or a TypeError must be NumSharp's <see cref="IndexError"/> / <see cref="TypeError"/>.
+        ///     The exception types a STRICT ma tier accepts besides NumPy's own name (or a subclass of it): a ValueError may
+        ///     be the house <see cref="IncorrectShapeException"/> that NumSharp's <c>ndarray.resize</c> raises with NumPy's
+        ///     texts. An OverflowError, an IndexError or a TypeError must be NumSharp's <see cref="OverflowError"/> /
+        ///     <see cref="IndexError"/> / <see cref="TypeError"/>.
         /// </summary>
         private static readonly Dictionary<string, string[]> StrictErrorTypes = new()
         {
-            ["OverflowError"] = new[] { "OverflowException" },
             ["ValueError"] = new[] { "IncorrectShapeException" },
         };
 
@@ -609,9 +608,9 @@ namespace NumSharp.Tests.Fuzz
             // An exception named after NumPy's (Exceptions/{ValueError,TypeError,AxisError}.cs) is the strongest match. The
             // strict tiers accept only NumPy's own type or the house type NumSharp documents for it (StrictErrorTypes).
             bool typeOk = sc.Valueclass is "maput" or "mafill"
-                ? gotType == sc.Error.Type || (StrictErrorTypes.TryGetValue(sc.Error.Type, out var strictAllowed)
-                                               && strictAllowed.Contains(gotType))
-                : gotType == sc.Error.Type
+                ? NumPyDisplayedName(caught) == sc.Error.Type || (StrictErrorTypes.TryGetValue(sc.Error.Type, out var strictAllowed)
+                                                                  && strictAllowed.Contains(gotType))
+                : ClassChainHas(caught, sc.Error.Type)
                   || !ErrorTypeMap.TryGetValue(sc.Error.Type, out var allowed)
                   || allowed.Contains(gotType);
             bool textOk = string.Equals(gotText, wantText, StringComparison.Ordinal);

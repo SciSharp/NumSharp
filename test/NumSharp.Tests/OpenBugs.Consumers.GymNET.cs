@@ -42,7 +42,7 @@ namespace NumSharp.Tests
 
             // np.asarray([300], dtype=np.int8): OverflowError: Python integer 300 out of bounds for int8 (today: NotSupportedException).
             Action overflow = () => np.asarray(new object[] { 300 }, np.int8);
-            overflow.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            overflow.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
 
             // np.asarray(['12', 'x'], dtype=np.int64): the setitem's text quotes the Python str (today: np.str_('x')).
             Action parse = () => np.asarray(new[] { "12", "x" }, np.int64);

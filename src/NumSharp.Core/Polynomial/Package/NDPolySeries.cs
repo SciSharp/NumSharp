@@ -1129,7 +1129,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>tol must be non-negative</c>, an empty / non-1-d series, no common type, or
         ///     a multi-element / empty tolerance array (NumPy's truth-value errors).</exception>
         /// <exception cref="TypeError">A Python complex tolerance (no ordering).</exception>
-        /// <exception cref="OverflowException">A Python int tolerance too large for the comparison dtype.</exception>
+        /// <exception cref="OverflowError">A Python int tolerance too large for the comparison dtype.</exception>
         public static NDArray TrimCoef(object c, in PolyNumber tol)
         {
             if (tol.LessZero())
@@ -1525,8 +1525,8 @@ namespace NumSharp
         /// <exception cref="IndexError">A domain shorter than 2, or a 0-d text domain.</exception>
         /// <exception cref="TypeError">A domain that is not subscriptable, a bool subtraction, or a text domain's subtraction
         ///     (<see cref="TextDomainError"/>).</exception>
-        /// <exception cref="DivideByZeroException">A zero-length domain given as Python numbers (ZeroDivisionError).</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length domain given as Python numbers (ZeroDivisionError).</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         public static (PolyNumber Off, PolyNumber Scl) MapParms(object old, object @new)
         {
             // A text domain: NumPy's `oldlen = old[1] - old[0]`, then `newlen = new[1] - new[0]`, over strings — old's
@@ -1645,8 +1645,8 @@ namespace NumSharp
         /// <returns><c>(off, scl)</c>, each of NumPy's kind.</returns>
         /// <exception cref="IndexError">A domain shorter than 2.</exception>
         /// <exception cref="TypeError">A domain that is not subscriptable, or a bool subtraction.</exception>
-        /// <exception cref="DivideByZeroException">A zero-length domain given as Python numbers.</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length domain given as Python numbers.</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         internal static (PolyNumber Off, PolyNumber Scl) MapParmsGeneral(object old, object @new)
         {
             // Python finishes `oldlen = old[1] - old[0]` before it touches `new`, so an index or arithmetic error in
@@ -1675,8 +1675,8 @@ namespace NumSharp
         /// <param name="new">The target domain.</param>
         /// <returns><c>(off, scl)</c>, each of NumPy's kind.</returns>
         /// <exception cref="TypeError">NumPy's bool subtraction (NumPy bool elements).</exception>
-        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers (ZeroDivisionError).</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length domain of Python numbers (ZeroDivisionError).</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         /// <exception cref="NotSupportedException">A null or string element (see <see cref="PolyNumber.FromObject"/>).</exception>
         public static (PolyNumber Off, PolyNumber Scl) MapParms<T0, T1, T2, T3>(in (T0, T1) old, in (T2, T3) @new)
         {
@@ -1702,8 +1702,8 @@ namespace NumSharp
         /// <param name="new">The target domain.</param>
         /// <returns><c>(off, scl)</c>, each of NumPy's kind.</returns>
         /// <exception cref="TypeError">NumPy's bool subtraction.</exception>
-        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length domain of Python numbers.</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         /// <exception cref="NotSupportedException">A null or string element.</exception>
         public static (PolyNumber Off, PolyNumber Scl) MapParmsSlow<T0, T1, T2, T3>(in (T0, T1) old, in (T2, T3) @new)
         {
@@ -1725,8 +1725,8 @@ namespace NumSharp
         /// <param name="oldlen"><c>old[1] - old[0]</c>.</param>
         /// <param name="newlen"><c>new[1] - new[0]</c>.</param>
         /// <returns><c>(off, scl)</c>.</returns>
-        /// <exception cref="DivideByZeroException">A zero Python <paramref name="oldlen"/>.</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="ZeroDivisionError">A zero Python <paramref name="oldlen"/>.</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         private static (PolyNumber Off, PolyNumber Scl) MapParmsFinish(in PolyNumber o1, in PolyNumber o0, in PolyNumber n1, in PolyNumber n0,
                                                                      in PolyNumber oldlen, in PolyNumber newlen)
         {
@@ -1991,7 +1991,7 @@ namespace NumSharp
         /// <param name="a">Dividend.</param>
         /// <param name="b">Divisor.</param>
         /// <returns>The quotient (a float or a complex).</returns>
-        /// <exception cref="DivideByZeroException">A zero divisor, with CPython 3.12's text for the operand kinds:
+        /// <exception cref="ZeroDivisionError">A zero divisor, with CPython 3.12's text for the operand kinds:
         ///     <c>division by zero</c> (two ints), <c>complex division by zero</c>, <c>float division by zero</c>
         ///     (-0.0 is a zero divisor).</exception>
         private static PyNum Div(in PyNum a, in PyNum b)
@@ -2021,7 +2021,7 @@ namespace NumSharp
         /// <param name="scl">The scale.</param>
         /// <returns>False when an int intermediate leaves <c>long</c> — nothing observable happened, and the caller
         ///     runs the general lane, which recomputes everything exactly.</returns>
-        /// <exception cref="DivideByZeroException">A zero-length old domain, raised by off's division exactly where
+        /// <exception cref="ZeroDivisionError">A zero-length old domain, raised by off's division exactly where
         ///     Python raises it (the subtractions and products before it cannot raise for Python numbers).</exception>
         private static bool TryMapParmsLane(in PyNum o1, in PyNum o0, in PyNum n1, in PyNum n0, out PyNum off, out PyNum scl)
         {
@@ -2048,7 +2048,7 @@ namespace NumSharp
         /// <param name="scl">The scale.</param>
         /// <returns>False when an element is not a lane number or an int intermediate leaves <c>long</c> (run the
         ///     general lane).</returns>
-        /// <exception cref="DivideByZeroException">A zero-length old domain (Python's ZeroDivisionError).</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length old domain (Python's ZeroDivisionError).</exception>
         public static bool TryMapParmsFast<T0, T1, T2, T3>(in (T0, T1) old, in (T2, T3) @new, out PyNum off, out PyNum scl)
         {
             off = scl = default;
@@ -2064,7 +2064,7 @@ namespace NumSharp
         /// <param name="off">The offset.</param>
         /// <param name="scl">The scale.</param>
         /// <returns>False when the lane does not apply (run the general lane).</returns>
-        /// <exception cref="DivideByZeroException">A zero-length old domain.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length old domain.</exception>
         public static bool TryMapParmsFast(object old, object @new, out PyNum off, out PyNum scl)
         {
             off = scl = default;
@@ -2098,7 +2098,7 @@ namespace NumSharp
         /// <param name="off">The offset (a NumPy scalar of the true-division dtype).</param>
         /// <param name="scl">The scale.</param>
         /// <returns>False when the domains are not two such arrays (run the general lane).</returns>
-        /// <exception cref="DivideByZeroException">A decimal domain of zero length (NumSharp's decimal division
+        /// <exception cref="ZeroDivisionError">A decimal domain of zero length (NumSharp's decimal division
         ///     raises; NumPy has no decimal dtype).</exception>
         public static bool TryMapParmsScalars(object old, object @new, out PolyNumber off, out PolyNumber scl)
         {
@@ -2137,8 +2137,8 @@ namespace NumSharp
         /// <exception cref="IndexError">A domain shorter than 2.</exception>
         /// <exception cref="TypeError">A domain that is not subscriptable, a text domain's subtraction, or text points
         ///     (their <c>scl * x</c>, after mapparms ran).</exception>
-        /// <exception cref="DivideByZeroException">A zero-length Python domain.</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length Python domain.</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         public static PolyNumber MapDomain(in PolyNumber x, object old, object @new)
         {
             var (off, scl) = MapParms(old, @new);
@@ -2158,10 +2158,10 @@ namespace NumSharp
         {
             if (text.Meta is VStringDTypeMeta)
             {
-                string sclClass = scl.IsPython
-                    ? (scl.Py.Kind switch { PyKind.Float => DTypeRegistry.PyFloat, PyKind.Complex => DTypeRegistry.PyComplex, _ => DTypeRegistry.PyLong }).ToString()
-                    : DType.From(scl.Dtype).Meta.ToString();
-                return Backends.Strings.NDStringUfuncs.VStringNoLoop("multiply", new[] { sclClass, text.Meta.ToString() });
+                DTypeMeta sclClass = scl.IsPython
+                    ? scl.Py.Kind switch { PyKind.Float => DTypeRegistry.PyFloat, PyKind.Complex => DTypeRegistry.PyComplex, _ => DTypeRegistry.PyLong }
+                    : DType.From(scl.Dtype).Meta;
+                return Backends.Strings.NDStringUfuncs.VStringNoLoop("multiply", new[] { sclClass, text.Meta });
             }
             DType sclDescr = scl.IsPython
                 ? scl.Py.Kind switch { PyKind.Float => DType.Double, PyKind.Complex => DType.Complex, _ => DType.Int64 }
@@ -2194,7 +2194,7 @@ namespace NumSharp
         ///     float32 off or scl then meets it in NumPy's complex64 loops, which run on the float32 kernels.</param>
         /// <returns>The mapped points (an array result laid out as NumPy's).</returns>
         /// <exception cref="IncorrectShapeException">Array operands that do not broadcast.</exception>
-        /// <exception cref="OverflowException">A Python int that does not fit its loop dtype.</exception>
+        /// <exception cref="OverflowError">A Python int that does not fit its loop dtype.</exception>
         /// <exception cref="TypeError">Text points: <c>scl * x</c> has no multiply loop (<see cref="TextScaleError"/>).</exception>
         /// <remarks>
         ///     <para><b>The layout, and why it is reached through a transposed view.</b> <c>scl * x</c> and
@@ -2270,7 +2270,7 @@ namespace NumSharp
         /// <param name="xIsComplex64">x carries NumPy complex64 values (see <see cref="MapDomainWith"/>).</param>
         /// <returns>A new C-contiguous array of <paramref name="xa"/>'s shape — the caller relabels it when NumPy's layout
         ///     differs (<see cref="NDArray.AdoptLayout"/> checks this contract instead of trusting it).</returns>
-        /// <exception cref="OverflowException">A Python int that does not fit its loop dtype.</exception>
+        /// <exception cref="OverflowError">A Python int that does not fit its loop dtype.</exception>
         private static NDArray MapDomainIntoC(NDArray xa, in PolyNumber off, in PolyNumber scl, NPTypeCode t1, NPTypeCode t2,
                                               NDArray sclP, NDArray offP, bool xIsComplex64 = false)
         {
@@ -2603,7 +2603,7 @@ namespace NumSharp
         /// <param name="mulC64">The product runs in complex64.</param>
         /// <param name="addC64">The sum runs in complex64.</param>
         /// <returns>A new complex128 array of x's shape (C-contiguous).</returns>
-        /// <exception cref="OverflowException">A Python value that does not fit its loop dtype.</exception>
+        /// <exception cref="OverflowError">A Python value that does not fit its loop dtype.</exception>
         /// <remarks>
         ///     x enters a complex64 product as float32 values: every dtype NEP 50 lets into that loop (bool, the 8/16-bit
         ///     integers, char, float16, float32) converts to float32 exactly, so a float32 copy of x (or x itself when it
@@ -2702,7 +2702,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="v">The operand.</param>
         /// <returns>The complex64 value in a <see cref="Complex"/> carrier.</returns>
-        /// <exception cref="OverflowException">A Python int too large for the loop.</exception>
+        /// <exception cref="OverflowError">A Python int too large for the loop.</exception>
         private static Complex Complex64Of(in PolyNumber v)
         {
             PolyRaw16 raw;
@@ -2732,7 +2732,7 @@ namespace NumSharp
         /// <param name="v">The scalar-sized value.</param>
         /// <param name="t">The parameter dtype.</param>
         /// <returns>The shared 0-d array.</returns>
-        /// <exception cref="OverflowException">A Python int that does not fit <paramref name="t"/>.</exception>
+        /// <exception cref="OverflowError">A Python int that does not fit <paramref name="t"/>.</exception>
         private static NDArray ParamArray(int which, in PolyNumber v, NPTypeCode t)
         {
             var cache = t_mapParams ??= new NDArray[2 * ParamSlots];
@@ -2762,7 +2762,7 @@ namespace NumSharp
         /// <returns>A new array of the dtype np.array discovers for the entries (<c>polyline(1, 2)</c> is int64).</returns>
         /// <exception cref="ValueError">An array scale with several elements or none, or entries of inhomogeneous shape.</exception>
         /// <exception cref="TypeError">NumPy's boolean negative (lagline of NumPy bools).</exception>
-        /// <exception cref="OverflowException">Python int overflow (hermline's <c>scl / 2</c>, NumPy's weak int ranges).</exception>
+        /// <exception cref="OverflowError">Python int overflow (hermline's <c>scl / 2</c>, NumPy's weak int ranges).</exception>
         /// <exception cref="NotSupportedException">An entry NumPy would store in an object array: a Python int beyond
         ///     uint64, null, or — with a text operand — a mix np.array cannot promote (a <c>StringDType</c> entry with a
         ///     number or an S entry; see <see cref="LinePython"/>).</exception>
@@ -2794,7 +2794,7 @@ namespace NumSharp
         /// <returns>The new series array.</returns>
         /// <exception cref="ValueError">See <see cref="Line"/>.</exception>
         /// <exception cref="TypeError">See <see cref="Line"/>.</exception>
-        /// <exception cref="OverflowException">See <see cref="Line"/>.</exception>
+        /// <exception cref="OverflowError">See <see cref="Line"/>.</exception>
         /// <exception cref="NotSupportedException">See <see cref="Line"/>.</exception>
         private static NDArray LineCore(PolyBasis basis, object off, object scl)
         {

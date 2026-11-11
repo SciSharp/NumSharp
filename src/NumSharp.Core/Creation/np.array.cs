@@ -272,7 +272,7 @@ namespace NumSharp
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
         /// <exception cref="ValueError">A numeric dtype and text that does not parse as that number (<c>could not convert
         ///     string to float: 'x'</c>, NumPy's <c>int()</c> / <c>float()</c> texts).</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer dtype's range.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer dtype's range.</exception>
         public static NDArray array(string value, DType dtype)
         {
             if (value == null)

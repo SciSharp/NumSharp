@@ -267,7 +267,7 @@ namespace NumSharp.Tests.Polynomial
         {
             var poly = np.polynomial.polynomial;
             Action zero = () => poly.polydiv(new object[] { 1 }, new object[] { 0 });
-            zero.Should().Throw<DivideByZeroException>().Which.Message.Should().BeEmpty();
+            zero.Should().Throw<ZeroDivisionError>().Which.Message.Should().BeEmpty();
             var (q1, r1) = poly.polydiv(new object[] { 2 }, new object[] { 2 });
             q1.ToArray<double>().Should().Equal(1.0);
             r1.ToArray<double>().Should().Equal(0.0);
@@ -502,11 +502,11 @@ namespace NumSharp.Tests.Polynomial
             void Raises<TException>(Action call, string message, string because) where TException : Exception
                 => call.Should().Throw<TException>(because).Which.Message.Should().Be(message, because);
 
-            Raises<DivideByZeroException>(() => P.polynomial.polydiv(one, new object[] { 0.0 }), "", "polydiv by [0.]");
+            Raises<ZeroDivisionError>(() => P.polynomial.polydiv(one, new object[] { 0.0 }), "", "polydiv by [0.]");
             Raises<ValueError>(() => P.polynomial.polypow(one, -1), "Power must be a non-negative integer.", "polypow(c, -1)");
             Raises<ValueError>(() => P.polynomial.polypow(one, 2.5), "Power must be a non-negative integer.", "polypow(c, 2.5)");
             Raises<ValueError>(() => P.polynomial.polypow(one, double.NaN), "cannot convert float NaN to integer", "polypow(c, nan)");
-            Raises<OverflowException>(() => P.polynomial.polypow(one, double.PositiveInfinity), "cannot convert float infinity to integer", "polypow(c, inf)");
+            Raises<OverflowError>(() => P.polynomial.polypow(one, double.PositiveInfinity), "cannot convert float infinity to integer", "polypow(c, inf)");
             Raises<ValueError>(() => P.chebyshev.chebpow(one, 17), "Power is too large", "chebpow(c, 17) at the default maxpower 16");
             Raises<ValueError>(() => P.chebyshev.chebpow(one, 3, maxpower: 2), "Power is too large", "chebpow(c, 3, maxpower=2)");
             Raises<TypeError>(() => P.polynomial.polyfromroots(2.5), "object of type 'float' has no len()", "polyfromroots(2.5)");

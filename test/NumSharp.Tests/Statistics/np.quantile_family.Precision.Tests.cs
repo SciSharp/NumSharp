@@ -203,10 +203,10 @@ public class np_quantile_family_Precision_Tests
         using var qu8 = np.array(new byte[] { 0, 1 });
         using var n300 = np.arange(300.0);
         Action overflowN = () => np.quantile(n300, qu8, method: "inverted_cdf");
-        overflowN.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for uint8");
+        overflowN.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for uint8");
         using var n255 = np.arange(255.0);
         Action overflowMinusOne = () => np.quantile(n255, qu8, method: "weibull");
-        overflowMinusOne.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+        overflowMinusOne.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
 
         using var five = np.arange(5.0);
         using var qu64 = np.array(new ulong[] { 0, 1 });
@@ -292,7 +292,7 @@ public class np_quantile_family_Precision_Tests
         using var big = np.array(new[] { 300.0, double.NaN, 500.0 });
         using var i8 = np.zeros(new Shape(), np.int8);
         Action range = () => np.nanquantile(big, 0.5, @out: i8);
-        range.Should().Throw<OverflowException>().WithMessage("Python integer 400 out of bounds for int8");
+        range.Should().Throw<OverflowError>().WithMessage("Python integer 400 out of bounds for int8");
         np.nanquantile(big, 0.5, @out: u8);
         u8.GetByte().Should().Be(144);
         using var negative = np.array(new[] { -7.5, double.NaN, -2.5 });

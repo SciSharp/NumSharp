@@ -44,7 +44,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A null <paramref name="sep"/> or <paramref name="format"/> (NumPy's <c>"s"</c>
         ///     converter: <c>tofile() argument 2 must be str, not None</c>, argument 3 for the format), or a conversion the
         ///     elements do not take (see the stream overload).</exception>
-        /// <exception cref="OverflowException">See the stream overload.</exception>
+        /// <exception cref="OverflowError">See the stream overload.</exception>
         /// <exception cref="OSError">Binary mode over a <c>StringDType</c> array.</exception>
         public void tofile(string fid, string sep = "", string format = "%s")
         {
@@ -97,7 +97,7 @@ namespace NumSharp
         ///     be str, not None</c>, argument 3 for the format), checked before anything is written; or CPython's
         ///     <c>TypeError</c> of <c>format % (item,)</c>, unwrapped as NumPy leaves it: <c>not enough arguments for format
         ///     string</c>, <c>%x format: an integer is required, not float</c>, <c>* wants int</c>.</exception>
-        /// <exception cref="OverflowException">CPython's <c>OverflowError</c>: an infinity under an integer conversion, a
+        /// <exception cref="OverflowError">CPython's <c>OverflowError</c>: an infinity under an integer conversion, a
         ///     <c>%c</c> code point out of range, a <c>*</c> width past a C <c>ssize_t</c>.</exception>
         /// <exception cref="OSError">Binary mode over a <c>StringDType</c> array.</exception>
         public void tofile(Stream stream, string sep = "", string format = "%s")

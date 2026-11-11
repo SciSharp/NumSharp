@@ -26,7 +26,7 @@ namespace NumSharp.Backends
         /// <param name="value">The value, in any of the C# forms <see cref="NDArray.fill"/> documents.</param>
         /// <exception cref="ValueError">The array is read-only, a NaN goes into an integer dtype, or the value is an array with
         ///     dimensions.</exception>
-        /// <exception cref="OverflowException">A value out of an integer dtype's range, or an infinity into one.</exception>
+        /// <exception cref="OverflowError">A value out of an integer dtype's range, or an infinity into one.</exception>
         /// <exception cref="TypeError">None or a complex into a dtype that cannot take it (Python's <c>int()</c> /
         ///     <c>float()</c> texts).</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into a bytes (<c>S</c>) array.</exception>
@@ -267,7 +267,7 @@ namespace NumSharp.Backends
         /// <returns>The element every slot receives.</returns>
         /// <exception cref="TypeError"><paramref name="value"/> is null and the dtype is an integer (or <c>decimal</c>) one:
         ///     Python's <c>int(None)</c>.</exception>
-        /// <exception cref="OverflowException">A Python int (any C# integer, or a C# literal's 0-d array) out of an integer
+        /// <exception cref="OverflowError">A Python int (any C# integer, or a C# literal's 0-d array) out of an integer
         ///     dtype's range — "Python integer 300 out of bounds for int8", or past the C <c>long</c> the LP64 text "Python int
         ///     too large to convert to C long" —; a float infinity into an integer ("cannot convert float infinity to
         ///     integer"); a NumPy scalar (<see cref="Half"/>, <c>char</c>) whose int() does not fit a SIGNED integer dtype.</exception>

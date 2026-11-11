@@ -63,11 +63,11 @@ namespace NumSharp.Tests.Creation
             np.arange(100, 150, 10, np.int8).ToArray<sbyte>().Should().Equal((sbyte)100, (sbyte)110, (sbyte)120, (sbyte)-126, (sbyte)-116);
             np.arange(5, -5, -2, np.uint8).ToArray<byte>().Should().Equal((byte)5, (byte)3, (byte)1, (byte)255, (byte)253);
 
-            new Action(() => np.arange(300, 310, 1, np.int8)).Should().Throw<OverflowException>()
+            new Action(() => np.arange(300, 310, 1, np.int8)).Should().Throw<OverflowError>()
                 .WithMessage("Python integer 300 out of bounds for int8");
-            new Action(() => np.arange(120, 140, 10, np.int8)).Should().Throw<OverflowException>()
+            new Action(() => np.arange(120, 140, 10, np.int8)).Should().Throw<OverflowError>()
                 .WithMessage("Python integer 130 out of bounds for int8");
-            new Action(() => np.arange(-1, 3, 1, np.uint8)).Should().Throw<OverflowException>()
+            new Action(() => np.arange(-1, 3, 1, np.uint8)).Should().Throw<OverflowError>()
                 .WithMessage("Python integer -1 out of bounds for uint8");
         }
 
@@ -108,8 +108,8 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void Errors_AreNumPys()
         {
-            new Action(() => np.arange(0, 5, 0)).Should().Throw<DivideByZeroException>().WithMessage("division by zero");
-            new Action(() => np.arange(0.0, 5.0, 0.0)).Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+            new Action(() => np.arange(0, 5, 0)).Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
+            new Action(() => np.arange(0.0, 5.0, 0.0)).Should().Throw<ZeroDivisionError>().WithMessage("float division by zero");
             new Action(() => np.arange(0.0, double.NaN, 1.0)).Should().Throw<ValueError>().WithMessage("arange: cannot compute length");
             new Action(() => np.arange(0.0, double.PositiveInfinity, 1.0)).Should().Throw<ValueError>()
                 .WithMessage("Maximum allowed size exceeded");

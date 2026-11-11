@@ -233,7 +233,7 @@ namespace NumSharp.Tests.Math
             using var q8 = np.empty(new Shape(1), np.int8);
             using var r8 = np.empty(new Shape(1), np.int8);
             Action overflow = () => np.divmod(i8, 1000, (q8, r8));
-            overflow.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+            overflow.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
         }
 
         // ---- values, partial outs, masks, casts --------------------------------------------------------------------
@@ -511,7 +511,7 @@ namespace NumSharp.Tests.Math
             new Action(() => np.divmod(c, two)).Should().ThrowExactly<TypeError>().WithMessage(notSupported);
             new Action(() => np.divmod(c, f, @out: (q, r))).Should().ThrowExactly<TypeError>().WithMessage(notSupported);
             new Action(() => np.divmod(c, f, where: boolMask)).Should().ThrowExactly<TypeError>().WithMessage(notSupported);
-            new Action(() => np.divmod(c, f, dtype: NPTypeCode.Double)).Should().ThrowExactly<TypeError>().WithMessage(
+            new Action(() => np.divmod(c, f, dtype: NPTypeCode.Double)).Should().ThrowExactly<UFuncInputCastingError>().WithMessage(
                 "Cannot cast ufunc 'divmod' input 0 from dtype('complex128') to dtype('float64') with casting rule 'same_kind'");
             new Action(() => np.divmod(f, f, dtype: NPTypeCode.Complex)).Should().Throw<TypeError>().WithMessage(
                 "No loop matching the specified signature and casting was found for ufunc divmod");

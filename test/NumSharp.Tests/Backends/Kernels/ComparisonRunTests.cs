@@ -267,7 +267,7 @@ namespace NumSharp.Tests.Backends.Kernels
         /// <param name="ta">Its dtype.</param>
         /// <param name="b">Right operand.</param>
         /// <param name="tb">Its dtype.</param>
-        /// <returns>True when the comparison must throw <see cref="OverflowException"/>.</returns>
+        /// <returns>True when the comparison must throw <see cref="OverflowError"/>.</returns>
         private static bool RaisesOverflow(NDArray a, NPTypeCode ta, NDArray b, NPTypeCode tb)
         {
             var weak = WeakOperand(a, b);
@@ -422,7 +422,7 @@ namespace NumSharp.Tests.Backends.Kernels
         /// <summary>
         ///     Compares two operands and checks the result against the reference, or, where NumPy raises before it
         ///     compares (a bool array against a Python int at or past 2^63, <see cref="RaisesOverflow"/>), checks that the
-        ///     comparison throws NumPy's <see cref="OverflowException"/>.
+        ///     comparison throws NumPy's <see cref="OverflowError"/>.
         /// </summary>
         /// <param name="what">Label for the failure message.</param>
         /// <param name="op">The comparison.</param>
@@ -435,7 +435,7 @@ namespace NumSharp.Tests.Backends.Kernels
             if (RaisesOverflow(a, ta, b, tb))
             {
                 Action call = () => Compare(op, a, b).Dispose();
-                call.Should().Throw<OverflowException>(what).WithMessage("Python int too large to convert to C long");
+                call.Should().Throw<OverflowError>(what).WithMessage("Python int too large to convert to C long");
                 return;
             }
             using var g = Compare(op, a, b);
@@ -785,8 +785,8 @@ namespace NumSharp.Tests.Backends.Kernels
                     {
                         Action right = () => Compare(op, a, s).Dispose();
                         Action left = () => Compare(op, s, a).Dispose();
-                        right.Should().Throw<OverflowException>($"{ta} array {op} {tv} {value}").WithMessage("Python int too large to convert to C long");
-                        left.Should().Throw<OverflowException>($"{tv} {value} {op} {ta} array").WithMessage("Python int too large to convert to C long");
+                        right.Should().Throw<OverflowError>($"{ta} array {op} {tv} {value}").WithMessage("Python int too large to convert to C long");
+                        left.Should().Throw<OverflowError>($"{tv} {value} {op} {ta} array").WithMessage("Python int too large to convert to C long");
                     }
                     continue;
                 }

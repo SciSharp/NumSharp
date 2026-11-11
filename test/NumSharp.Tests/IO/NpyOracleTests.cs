@@ -352,7 +352,7 @@ namespace NumSharp.Tests.IO
                         f.Add(c, $"[{i}] data: " + Diff(want.NsBytes, NpyOracleCorpus.RawBytes(arr)));
                 }
 
-                Assert.ThrowsException<EndOfStreamException>(() => np.load_npy(ms),
+                Assert.ThrowsException<EOFError>(() => np.load_npy(ms),
                     "reading past the last array must report EOF, as NumPy does");
             }
 

@@ -55,7 +55,7 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; an out or mask that does not
         ///     broadcast, or an out that would be stretched.</exception>
         /// <exception cref="IncorrectShapeException">The inputs do not broadcast together.</exception>
-        /// <exception cref="OverflowException">A C# integer literal operand (NumPy's Python int) outside the integer loop's
+        /// <exception cref="OverflowError">A C# integer literal operand (NumPy's Python int) outside the integer loop's
         /// range (<c>Python integer 1000 out of bounds for int8</c>).</exception>
         public override (NDArray Quotient, NDArray Remainder) DivMod(
             NDArray lhs, NDArray rhs, DType dtype = null,
@@ -213,7 +213,7 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">A complex operand with no <paramref name="dtype"/>: divmod has no complex loop
         ///     (NumPy's <c>ufunc 'divmod' not supported for the input types, ...</c>, parity QA-27), raised after the
         ///     outs and the mask are checked.</exception>
-        /// <exception cref="OverflowException">A weak C# integer literal outside the integer loop's range.</exception>
+        /// <exception cref="OverflowError">A weak C# integer literal outside the integer loop's range.</exception>
         /// <exception cref="IncorrectShapeException">The inputs do not broadcast together (every operand listed).</exception>
         /// <remarks>
         /// <para><b>Order of the checks</b> (NumPy's <c>ufunc_generic_fastcall</c>): both outputs' writeability (argument

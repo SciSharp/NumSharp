@@ -78,7 +78,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0 (NumPy's ValueError
         ///     <c>cannot reshape array of size 0 into shape (0,newaxis)</c>).</exception>
         /// <exception cref="InvalidCastException">A q array of a complex dtype.</exception>
-        /// <exception cref="OverflowException">An integer q array whose virtual indexes leave its dtype.</exception>
+        /// <exception cref="OverflowError">An integer q array whose virtual indexes leave its dtype.</exception>
         /// <remarks>
         ///     NumPy writes quantile in Python; DefaultEngine's override runs its statements in NumPy's order (the complex
         ///     check, q's checks, the weighted branch, the text routes, then <c>_ureduce</c> and the numeric quantile).
@@ -187,7 +187,7 @@ namespace NumSharp
         ///     NumPy names the argument).</exception>
         /// <exception cref="ValueError">An axis that appears twice (<c>repeated axis in `axis` argument</c>); weights not of
         ///     the reduced axes' shape.</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero (<c>Weights sum to zero, can't be
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero (<c>Weights sum to zero, can't be
         ///     normalized</c>), or a mean without weights whose result is empty (<c>division by zero</c>).</exception>
         /// <exception cref="TypeError">Weights of another shape without an axis (<c>Axis must be specified when shapes of a
         ///     and weights differ.</c>); the weight sum's refusal of a text result dtype; a text operand without weights (the
@@ -232,9 +232,10 @@ namespace NumSharp
         ///     <c>StringDType</c> request with weights.</exception>
         /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/> (the in-place centring's cast
         ///     refusal).</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero.</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>, or decimal
-        ///     arithmetic out of range.</exception>
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="OverflowException">Decimal arithmetic out of range (.NET's own, decimal has no NumPy
+        ///     dtype).</exception>
         /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
         /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <remarks>
@@ -273,8 +274,9 @@ namespace NumSharp
         /// <exception cref="DTypePromotionError"><c>StringDType</c> variables without <paramref name="dtype"/>.</exception>
         /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/> (cov's in-place centring refuses
         ///     the cast).</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>, or decimal
-        ///     arithmetic out of range.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="OverflowException">Decimal arithmetic out of range (.NET's own, decimal has no NumPy
+        ///     dtype).</exception>
         /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
         /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <remarks>
@@ -313,10 +315,12 @@ namespace NumSharp
         ///     <paramref name="f"/> with a scalar step or first-order edges (NumPy's boolean subtract); a text
         ///     <paramref name="f"/>; bool coordinates; a str or None step.</exception>
         /// <exception cref="IndexError">The coordinates of an empty axis.</exception>
-        /// <exception cref="DivideByZeroException">A zero step that is a Python number with second-order edges (CPython's
-        ///     ZeroDivisionError); a decimal input or step divided by zero.</exception>
-        /// <exception cref="OverflowException">A Python int step past the float range; a decimal result past decimal's
-        ///     range.</exception>
+        /// <exception cref="ZeroDivisionError">A zero step that is a Python number with second-order edges (CPython's
+        ///     ZeroDivisionError).</exception>
+        /// <exception cref="DivideByZeroException">A decimal input or step divided by zero (.NET's own: decimal has no
+        ///     inf).</exception>
+        /// <exception cref="OverflowError">A Python int step past the float range.</exception>
+        /// <exception cref="OverflowException">A decimal result past decimal's range.</exception>
         /// <remarks>
         ///     NumPy writes gradient in Python; DefaultEngine's override runs its statements, each in NumPy's dtype, so the
         ///     components are bit-identical to NumPy's. <c>np.gradient</c>'s overloads spread their spacings into one list
@@ -540,7 +544,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A 0-D <paramref name="p"/>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> out of range.</exception>
         /// <exception cref="TypeError">A complex <paramref name="p"/>.</exception>
-        /// <exception cref="OverflowException">On the integer path, a bound or the period that does not fit the input
+        /// <exception cref="OverflowError">On the integer path, a bound or the period that does not fit the input
         ///     dtype (NumPy's OverflowError).</exception>
         [AsArray]
         public abstract NDArray Unwrap(NDArray p, double? discont = null, int axis = -1, object period = null);

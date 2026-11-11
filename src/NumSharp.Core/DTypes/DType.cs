@@ -623,7 +623,7 @@ namespace NumSharp
             get
             {
                 if (_vstring is null || !_vstring.HasNAObject)
-                    throw new AttributeError($"'{Meta.FullName}' object has no attribute 'na_object'");
+                    throw new AttributeError($"'{Meta.FullName}' object has no attribute 'na_object'", "na_object", this);
                 return _vstring.na_object;
             }
         }
@@ -639,7 +639,7 @@ namespace NumSharp
             get
             {
                 if (_vstring is null)
-                    throw new AttributeError($"'{Meta.FullName}' object has no attribute 'coerce'");
+                    throw new AttributeError($"'{Meta.FullName}' object has no attribute 'coerce'", "coerce", this);
                 return _vstring.coerce;
             }
         }

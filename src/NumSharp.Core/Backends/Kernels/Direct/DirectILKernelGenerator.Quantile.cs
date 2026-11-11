@@ -207,7 +207,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="inexact">Whether the data is a float array.</param>
         /// <param name="raw">Receives the raw indexes (2 per quantile).</param>
         /// <param name="weight">Receives the weights (2 per quantile).</param>
-        /// <exception cref="OverflowException">An integer q: NumPy's conversion of <c>n</c> / <c>n - 1</c> into its dtype, or
+        /// <exception cref="OverflowError">An integer q: NumPy's conversion of <c>n</c> / <c>n - 1</c> into its dtype, or
         ///     the setitem of -1 into an unsigned index array (see <see cref="QuantileIndexes.IntegerPlan{TQ}"/>).</exception>
         internal static unsafe void QuantilePlan(NPTypeCode qType, QuantileMethod method, long n, double* q, int nQs,
             bool inexact, long* raw, double* weight)
@@ -467,7 +467,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="planCount">The kernel's record of that plan's partition-index count.</param>
         /// <exception cref="ValueError">The nan path's partition refuses an index of this row's plan (see
         ///     <see cref="Quantile"/>).</exception>
-        /// <exception cref="OverflowException">The nan path with an integer q: NumPy refuses the index arithmetic for this
+        /// <exception cref="OverflowError">The nan path with an integer q: NumPy refuses the index arithmetic for this
         ///     row's NaN-free length (see <see cref="QuantileIndexes.IntegerPlan{TQ}"/>).</exception>
         internal static unsafe void ProcessQuantileRow<T, TOut, TM, TQ>(
             void* srcRow, void* scratchBase, int n,
@@ -608,7 +608,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="planCount">The number of partition indexes of that plan in <paramref name="rowKScratch"/>.</param>
         /// <exception cref="ValueError">The slice's partition refuses an index (NumPy's <c>kth(=k) out of bounds (m)</c>):
         ///     only a float16 / float32 q over a slice long enough for q's rounding to reach m (or NaN).</exception>
-        /// <exception cref="OverflowException">An integer q whose index arithmetic NumPy refuses for this slice's length
+        /// <exception cref="OverflowError">An integer q whose index arithmetic NumPy refuses for this slice's length
         ///     (see <see cref="QuantileIndexes.IntegerPlan{TQ}"/>).</exception>
         /// <remarks>
         ///     A slice's plan depends on nothing but its NaN-free length m, so the slices of one call that share m share

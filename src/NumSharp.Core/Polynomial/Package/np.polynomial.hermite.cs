@@ -39,7 +39,7 @@ namespace NumSharp
         /// <exception cref="IndexError"><paramref name="c"/> is empty: <c>index -2 is out of bounds for axis 0 with size 0</c>.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="tensor"/> is false and the shapes do not broadcast
         ///     (NumPy's ValueError text).</exception>
-        /// <exception cref="System.OverflowException">A Python int of the recurrence does not fit an integer x dtype
+        /// <exception cref="OverflowError">A Python int of the recurrence does not fit an integer x dtype
         ///     (NumPy's OverflowError).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermval.html</remarks>
         public NDArray hermval(object x, object c, bool tensor = true) => NDPolyEval.Val(PolyBasis.Hermite, x, c, tensor);
@@ -187,7 +187,7 @@ namespace NumSharp
         /// <exception cref="ValueError">An array scale with several elements or none (NumPy's truth-value errors), or
         ///     entries of different shapes (<c>setting an array element with a sequence…</c>).</exception>
         /// <exception cref="TypeError">NumPy's boolean negative / subtract.</exception>
-        /// <exception cref="System.OverflowException">A Python int out of a NumPy integer dtype's range, or CPython's int/float overflow.</exception>
+        /// <exception cref="OverflowError">A Python int out of a NumPy integer dtype's range, or CPython's int/float overflow.</exception>
         /// <exception cref="System.NotSupportedException">An entry NumPy would store in an object array: a Python int beyond
         ///     uint64, null, a string.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermline.html</remarks>
@@ -241,7 +241,7 @@ namespace NumSharp
         /// <returns>The trimmed copy (<c>c[:1]*0</c> when nothing exceeds the tolerance).</returns>
         /// <exception cref="ValueError"><c>tol must be non-negative</c>, an empty or non-1-d series, or no common type.</exception>
         /// <exception cref="TypeError">A complex or null tolerance.</exception>
-        /// <exception cref="System.OverflowException">A Python int tolerance too large to convert.</exception>
+        /// <exception cref="OverflowError">A Python int tolerance too large to convert.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermtrim.html</remarks>
         [NDScoped]
         public NDArray hermtrim(object c, object tol) => NDPolySeries.TrimCoef(c, PolyUtilsModule.Tolerance(tol));
@@ -344,7 +344,7 @@ namespace NumSharp
         /// <exception cref="System.NotSupportedException">A null series, or one holding None, a non-numeric object or a Python int past
         ///     uint64 (NumPy's object array, a dtype NumSharp does not have) — raised where NumPy starts computing with
         ///     it, after every series check. A str series is NumPy's ValueError (no common type).</exception>
-        /// <exception cref="System.DivideByZeroException">The divisor is zero (all its coefficients, after trimming) —
+        /// <exception cref="ZeroDivisionError">The divisor is zero (all its coefficients, after trimming) —
         ///     NumPy's bare <c>ZeroDivisionError</c>, empty message.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermdiv.html</remarks>
         [NDScoped]
@@ -376,7 +376,7 @@ namespace NumSharp
         /// <returns>The power series.</returns>
         /// <exception cref="ValueError">The series' errors; <c>cannot convert float NaN to integer</c>;
         ///     <c>Power must be a non-negative integer.</c> (a fractional or negative power); <c>Power is too large</c>.</exception>
-        /// <exception cref="System.OverflowException"><c>cannot convert float infinity to integer</c>; a power beyond
+        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>; a power beyond
         ///     int64 with no limit (NumPy would run until memory is exhausted).</exception>
         /// <exception cref="System.NotSupportedException">An object series (see <see cref="hermmul"/>), raised after the power checks.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermpow.html</remarks>
@@ -398,7 +398,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A power int() refuses: a complex, null (None), a list or tuple (<c>int() argument must
         ///     be a string, a bytes-like object or a real number, not '…'</c>), an ndarray of one or more dims (<c>only
         ///     0-dimensional arrays can be converted to Python scalars</c>).</exception>
-        /// <exception cref="System.OverflowException"><c>cannot convert float infinity to integer</c>; a power beyond int64
+        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>; a power beyond int64
         ///     with no limit (NumPy would run until memory is exhausted).</exception>
         /// <exception cref="System.NotSupportedException">An object series (see <see cref="hermmul"/>), raised after the
         ///     power checks.</exception>
@@ -421,7 +421,7 @@ namespace NumSharp
         ///     no element or several (NumPy's truth-value texts).</exception>
         /// <exception cref="TypeError">A power int() refuses, or a limit that does not compare with an int: a complex, str,
         ///     list or tuple (<c>'&gt;' not supported between instances of 'int' and '…'</c>).</exception>
-        /// <exception cref="System.OverflowException"><c>cannot convert float infinity to integer</c>; a power the limit's
+        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>; a power the limit's
         ///     comparison dtype cannot hold (<c>int too large to convert to float</c> for a float limit ndarray or np.float16,
         ///     <c>int too big to convert</c> for a bool one); a power beyond int64 with no limit.</exception>
         /// <exception cref="System.NotSupportedException">An object series, raised after the power checks.</exception>
@@ -501,7 +501,7 @@ namespace NumSharp
         /// <param name="deg">The degree (≥ 0).</param>
         /// <returns>A view of shape <c>x.shape + (deg + 1,)</c> over a new array, the degree axis last (OWNDATA false).</returns>
         /// <exception cref="ValueError"><c>deg must be non-negative</c>; a ragged list x; <c>array is too big; …</c>.</exception>
-        /// <exception cref="System.OutOfMemoryException">The matrix cannot be allocated (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">The matrix cannot be allocated (NumPy's MemoryError).</exception>
         /// <exception cref="System.NotSupportedException">A null or str x, or a list NumPy makes a str / object array of.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermvander.html</remarks>
         [NDScoped]
@@ -537,8 +537,8 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>Expected 2 dimensions of degrees, got {len}</c>; points of different shapes;
         ///     <c>deg must be non-negative</c>; <c>array is too big; …</c>.</exception>
         /// <exception cref="IncorrectShapeException">No points (NumPy's reshape text).</exception>
-        /// <exception cref="System.OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated.</exception>
-        /// <exception cref="System.OverflowException">Scalar points with a Python int past the float range (NumPy's
+        /// <exception cref="MemoryError">A matrix NumPy allocates on the way cannot be allocated.</exception>
+        /// <exception cref="OverflowError">Scalar points with a Python int past the float range (NumPy's
         ///     <c>int too large to convert to float</c> at its per-element <c>+ 0.0</c>).</exception>
         /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str array, or into an object array it
         ///     computes with as Python objects or fails on. Scalar points that are all numbers but stack into an object array
@@ -560,8 +560,8 @@ namespace NumSharp
         /// <exception cref="TypeError">A deg without a length, or a non-integer degree.</exception>
         /// <exception cref="ValueError"><c>Expected 3 dimensions of degrees, got {len}</c>, and the 2-D form's other errors.</exception>
         /// <exception cref="IncorrectShapeException">No points (NumPy's reshape text).</exception>
-        /// <exception cref="System.OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated.</exception>
-        /// <exception cref="System.OverflowException">Scalar points with a Python int past the float range (NumPy's
+        /// <exception cref="MemoryError">A matrix NumPy allocates on the way cannot be allocated.</exception>
+        /// <exception cref="OverflowError">Scalar points with a Python int past the float range (NumPy's
         ///     <c>int too large to convert to float</c> at its per-element <c>+ 0.0</c>).</exception>
         /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str array, or into an object array it
         ///     computes with as Python objects or fails on. Scalar points that are all numbers but stack into an object array
@@ -588,7 +588,7 @@ namespace NumSharp
         ///     arithmetic does not raise — NumPy's result is an object matrix, a dtype NumSharp does not have; or one where NumPy's
         ///     object arithmetic reaches None or a str (CPython's TypeError there). A two-term object series of numbers computes:
         ///     NumPy's linear root of the items is a numeric 1x1 array. A str series is NumPy's ValueError (no common type).</exception>
-        /// <exception cref="System.OverflowException">An object series whose arithmetic meets a Python int too large for a
+        /// <exception cref="OverflowError">An object series whose arithmetic meets a Python int too large for a
         ///     float — CPython's <c>integer division result too large for a float</c> when it is divided by a Python int,
         ///     <c>int too large to convert to float</c> when it meets anything else — whichever NumPy's statements raise first.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermcompanion.html</remarks>
@@ -621,7 +621,7 @@ namespace NumSharp
         ///     uint64 among the terms) of one term — NumPy returns <c>np.array([], dtype=object)</c> — or one where NumPy's
         ///     object arithmetic reaches None or a str (CPython's TypeError there). A two-term object series of numbers
         ///     computes: NumPy's linear root of the items is a numeric array.</exception>
-        /// <exception cref="System.OverflowException">An object series whose arithmetic meets a Python int too large for a
+        /// <exception cref="OverflowError">An object series whose arithmetic meets a Python int too large for a
         ///     float — CPython's <c>integer division result too large for a float</c> when it is divided by a Python int,
         ///     <c>int too large to convert to float</c> when it meets anything else — whichever NumPy's statements raise first.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermroots.html</remarks>
@@ -650,9 +650,10 @@ namespace NumSharp
         ///     range (|x| ≥ 3037000500, where the square passes 2**63): NumPy's object loop, <c>loop of ufunc does not support argument 0
         ///     of type int which has no callable exp method</c>. A string array: <c>np.square</c>'s no-loop
         ///     error.</exception>
-        /// <exception cref="System.OverflowException">A Python float or complex whose square is past the float range:
-        ///     CPython's <c>(34, 'Result too large')</c> or <c>complex exponentiation</c>. Or a decimal x whose square is past
-        ///     decimal's range (decimal has no NumPy dtype and no infinity).</exception>
+        /// <exception cref="OverflowError">A Python float or complex whose square is past the float range:
+        ///     CPython's <c>(34, 'Result too large')</c> or <c>complex exponentiation</c>.</exception>
+        /// <exception cref="System.OverflowException">A decimal x whose square is past decimal's range (decimal has no NumPy
+        ///     dtype and no infinity: .NET's own).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermweight.html</remarks>
         [NDScoped]
         public NDArray hermweight(object x) => NDPolyWeight.Weight(PolyBasis.Hermite, x);
@@ -679,9 +680,9 @@ namespace NumSharp
         ///     formats it (<c>received 3.0</c>, <c>received True</c> for a 0-d bool array, <c>received [3]</c>).</exception>
         /// <exception cref="ValueError"><c>deg must be a positive integer</c>; for a 0-d array <paramref name="deg"/> the
         ///     companion's <c>Series must have maximum degree of at least 1.</c></exception>
-        /// <exception cref="System.OverflowException">A count past 2**63 - 1: CPython's <c>cannot fit 'int' into an
+        /// <exception cref="OverflowError">A count past 2**63 - 1: CPython's <c>cannot fit 'int' into an
         ///     index-sized integer</c> from the list repeat.</exception>
-        /// <exception cref="System.OutOfMemoryException">A count CPython's list cannot hold (2**60 - 1 or more: NumPy's empty
+        /// <exception cref="MemoryError">A count CPython's list cannot hold (2**60 - 1 or more: NumPy's empty
         ///     MemoryError), or a companion matrix the machine cannot hold.</exception>
         /// <exception cref="System.NotSupportedException">No LAPACK backend is installed: the eigenvalues are
         ///     <c>np.linalg.eigvalsh</c>'s, which needs <c>NumSharp.Interop.OpenBLAS</c> (bit-identical to NumPy with the
@@ -740,7 +741,7 @@ namespace NumSharp
         /// <exception cref="System.NotSupportedException">No LAPACK backend (<c>np.linalg.lstsq</c> needs
         ///     <c>NumSharp.Interop.OpenBLAS</c>); an argument NumPy computes with as Python objects; an rcond array with one or
         ///     more dimensions (NumPy broadcasts lstsq over it).</exception>
-        /// <exception cref="System.OutOfMemoryException">A design matrix the machine cannot hold (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">A design matrix the machine cannot hold (NumPy's MemoryError).</exception>
         /// <remarks>
         ///     <para>NumPy warns (<c>RankWarning: The fit may be poorly conditioned</c>) when the rank falls short of the number
         ///     of fitted terms and <paramref name="full"/> is false; NumSharp emits no warnings — read <c>rank</c> with

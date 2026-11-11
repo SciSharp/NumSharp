@@ -1603,7 +1603,7 @@ namespace NumSharp.Backends
             {
                 num.Dispose();
                 den.Dispose();
-                throw new DivideByZeroException("Weights sum to zero, can't be normalized");
+                throw new ZeroDivisionError("Weights sum to zero, can't be normalized");
             }
 
             NDArray computed = num / den;                      // rt/rt → rt (complex divide is bit-exact)

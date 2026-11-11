@@ -98,7 +98,7 @@ namespace NumSharp
         ///     0-d complex.</exception>
         /// <exception cref="ValueError">Non-native byte order; a bound outside the dtype; an empty interval anywhere; a NaN
         ///     bound; bounds that do not broadcast, or a size they do not broadcast with; a negative size.</exception>
-        /// <exception cref="OverflowException">An infinite bound (NumPy's <c>OverflowError</c>).</exception>
+        /// <exception cref="OverflowError">An infinite bound (NumPy's <c>OverflowError</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.integers.html
         ///     <br/>

@@ -172,7 +172,7 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void ComplexInput_WithDtypeFloat64_RaisesInputCast()
         {
-            var ex = Assert.ThrowsException<TypeError>(
+            var ex = Assert.ThrowsException<UFuncInputCastingError>(
                 () => np.float_power(np.array(new[] { new Complex(1, 1) }), np.array(new[] { 2.0 }),
                     dtype: (DType)NPTypeCode.Double));
             StringAssert.Contains(ex.Message,

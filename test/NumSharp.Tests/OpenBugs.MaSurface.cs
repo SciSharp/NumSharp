@@ -288,7 +288,7 @@ namespace NumSharp.Tests
         {
             Action act = () => np.ma.arange(0, 10, 0);
 
-            act.Should().Throw<DivideByZeroException>().WithMessage("division by zero");
+            act.Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
         }
 
         /// <summary>

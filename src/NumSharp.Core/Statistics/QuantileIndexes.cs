@@ -403,7 +403,7 @@ namespace NumSharp.Statistics
         /// <typeparam name="TQ">An integer type.</typeparam>
         /// <param name="value">The Python int.</param>
         /// <returns><paramref name="value"/>.</returns>
-        /// <exception cref="OverflowException">NumPy's <c>Python integer 200 out of bounds for int8</c>.</exception>
+        /// <exception cref="OverflowError">NumPy's <c>Python integer 200 out of bounds for int8</c>.</exception>
         private static long PyInt<TQ>(long value) where TQ : unmanaged
         {
             bool fits;
@@ -416,7 +416,7 @@ namespace NumSharp.Statistics
             else if (typeof(TQ) == typeof(ulong)) fits = value >= 0;
             else fits = true;
             if (!fits)
-                throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Python integer {value} out of bounds for {IntegerName<TQ>()}"));
+                throw new OverflowError(string.Create(CultureInfo.InvariantCulture, $"Python integer {value} out of bounds for {IntegerName<TQ>()}"));
             return value;
         }
 
@@ -462,7 +462,7 @@ namespace NumSharp.Statistics
         /// <param name="inexact">Whether the data is a float array (only the float64 virtual indexes read it).</param>
         /// <param name="raw">Receives the raw indexes (2 per quantile).</param>
         /// <param name="weight">Receives the weights (2 per quantile): integers of q's dtype for the integer methods.</param>
-        /// <exception cref="OverflowException"><c>n</c> (or <c>n - 1</c>) outside q's dtype; an unsigned q under weibull,
+        /// <exception cref="OverflowError"><c>n</c> (or <c>n - 1</c>) outside q's dtype; an unsigned q under weibull,
         ///     averaged_inverted_cdf or interpolated_inverted_cdf (NumPy's <c>previous_indexes[above] = -1</c>: <c>Python
         ///     integer -1 out of bounds for uint8</c>).</exception>
         internal static unsafe void IntegerPlan<TQ>(QuantileMethod method, long n, double* q, int nQs, bool inexact,
@@ -569,7 +569,7 @@ namespace NumSharp.Statistics
         /// <param name="next">The next index.</param>
         /// <param name="t">The weight, an integer of q's dtype.</param>
         /// <param name="oneMinusT"><c>1 - t</c> in q's dtype.</param>
-        /// <exception cref="OverflowException">An unsigned q whose virtual index reaches the last index (every one does,
+        /// <exception cref="OverflowError">An unsigned q whose virtual index reaches the last index (every one does,
         ///     q being 0 or 1): NumPy's <c>previous_indexes[indexes_above_bounds] = -1</c>, <c>Python integer -1 out of bounds
         ///     for uint8</c>.</exception>
         private static void IntegerNeighbours<TQ>(QuantileMethod method, long n, long virtualIndex,
@@ -582,7 +582,7 @@ namespace NumSharp.Statistics
             {
                 // A setitem of the Python int -1 into q's dtype.
                 if (IsUnsigned<TQ>())
-                    throw new OverflowException($"Python integer -1 out of bounds for {IntegerName<TQ>()}");
+                    throw new OverflowError($"Python integer -1 out of bounds for {IntegerName<TQ>()}");
                 low = -1;
                 high = -1;
             }

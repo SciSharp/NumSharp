@@ -144,7 +144,7 @@ namespace NumSharp.Backends.Strings
         /// <returns><paramref name="out"/> itself, or the fresh <c>StringDType</c> result.</returns>
         /// <exception cref="ValueError">An NA under the <c>None</c>-like rule (<c>Cannot add null that is not a nan-like
         ///     value</c>).</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts (<c>Failed to allocate string in add</c>,
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts (<c>Failed to allocate string in add</c>,
         ///     …).</exception>
         internal static NDArray Add(NDArray x1, NDArray x2, NDArray @out, NDArray where, DType output)
         {
@@ -320,7 +320,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="o">The output cell.</param>
         /// <param name="ctx">The call's context.</param>
         /// <exception cref="ValueError">An NA under the <c>None</c>-like rule: <c>Cannot add null that is not a nan-like value</c>.</exception>
-        /// <exception cref="OutOfMemoryException"><c>Failed to load string in add</c>, <c>Failed to deallocate string in add</c>,
+        /// <exception cref="MemoryError"><c>Failed to load string in add</c>, <c>Failed to deallocate string in add</c>,
         ///     <c>Failed to allocate string in add</c>, <c>Failed to pack output string in add</c>.</exception>
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static void AddSlow(byte* a, byte* b, byte* o, VStringWriteContext ctx)
@@ -328,14 +328,14 @@ namespace NumSharp.Backends.Strings
             int na = ctx.InA.load(a, out byte* ba, out long sa);
             int nb = ctx.InB.load(b, out byte* bb, out long sb);
             if (na < 0 || nb < 0)
-                throw new OutOfMemoryException("Failed to load string in add");
+                throw new MemoryError("Failed to load string in add");
             if (na != 0 || nb != 0)
             {
                 switch (ctx.Rule)
                 {
                     case VStringNARule.NaN:
                         if (ctx.Out.pack_null(o) < 0)
-                            throw new OutOfMemoryException("Failed to deallocate string in add");
+                            throw new MemoryError("Failed to deallocate string in add");
                         return;
                     case VStringNARule.Null:
                         throw new ValueError("Cannot add null that is not a nan-like value");
@@ -355,7 +355,7 @@ namespace NumSharp.Backends.Strings
             }
             long newsize = sa + sb;
             if (newsize < sa)
-                throw new OutOfMemoryException("Failed to allocate string in add");
+                throw new MemoryError("Failed to allocate string in add");
             if (ctx.InPlace)
             {
                 // The output allocator is an input's: packing may reallocate the arena under ba / bb, so the texts are
@@ -366,7 +366,7 @@ namespace NumSharp.Backends.Strings
                     Buffer.MemoryCopy(ba, tmp, newsize, sa);
                     Buffer.MemoryCopy(bb, tmp + sa, newsize - sa, sb);
                     if (ctx.Out.pack(o, tmp, newsize) < 0)
-                        throw new OutOfMemoryException("Failed to pack output string in add");
+                        throw new MemoryError("Failed to pack output string in add");
                 }
                 finally
                 {
@@ -431,16 +431,16 @@ namespace NumSharp.Backends.Strings
         /// <param name="allocator">The output's allocator (locked).</param>
         /// <param name="name">The ufunc NumPy names in the error.</param>
         /// <returns>The first byte of the new text (valid until the next allocation in <paramref name="allocator"/>).</returns>
-        /// <exception cref="OutOfMemoryException"><c>Failed to deallocate string in {name}</c>, <c>Failed to allocate string in
+        /// <exception cref="MemoryError"><c>Failed to deallocate string in {name}</c>, <c>Failed to allocate string in
         ///     {name}</c>, <c>Failed to load string in {name}</c>.</exception>
         private static byte* LoadNewString(byte* o, long size, VStringAllocator allocator, string name)
         {
             if (allocator.free(o) < 0)
-                throw new OutOfMemoryException($"Failed to deallocate string in {name}");
+                throw new MemoryError($"Failed to deallocate string in {name}");
             if (allocator.newemptysize(size, o) < 0)
-                throw new OutOfMemoryException($"Failed to allocate string in {name}");
+                throw new MemoryError($"Failed to allocate string in {name}");
             if (allocator.load(o, out byte* buf, out _) < 0)
-                throw new OutOfMemoryException($"Failed to load string in {name}");
+                throw new MemoryError($"Failed to load string in {name}");
             return buf;
         }
 
@@ -462,9 +462,9 @@ namespace NumSharp.Backends.Strings
         /// <returns><paramref name="out"/> itself, or the fresh result.</returns>
         /// <exception cref="TypeError">An NA under the <c>None</c>-like rule (<c>Cannot multiply null that is not a nan-like
         ///     value</c>).</exception>
-        /// <exception cref="OverflowException"><c>Overflow encountered in string multiply</c>: <c>size * count</c> past
+        /// <exception cref="OverflowError"><c>Overflow encountered in string multiply</c>: <c>size * count</c> past
         ///     <c>2^63 - 1</c> as unsigned 64-bit arithmetic.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         /// <remarks>An EMPTY text with a negative count makes NumPy's copy loop run <c>2^64 - k</c> times copying nothing (it
         ///     never returns); NumSharp writes the empty string at once (<c>[Misaligned]</c>).</remarks>
         internal static NDArray Multiply(NDArray x1, NDArray x2, NDArray @out, NDArray where, DType output)
@@ -501,7 +501,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="ctx">The call's context.</param>
         /// <param name="unsigned">True for the uint64 loop (an emit-time constant).</param>
         /// <exception cref="TypeError">See <see cref="MultiplySlow"/>.</exception>
-        /// <exception cref="OverflowException">See <see cref="MultiplySlow"/>.</exception>
+        /// <exception cref="OverflowError">See <see cref="MultiplySlow"/>.</exception>
         /// <exception cref="OutOfMemoryException">See <see cref="MultiplySlow"/>.</exception>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static void MultiplyElement(byte* s, byte* i, byte* o, VStringWriteContext ctx, bool unsigned)
@@ -533,7 +533,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="o">The output cell.</param>
         /// <param name="ctx">The call's context.</param>
         /// <exception cref="TypeError">See <see cref="MultiplySlow"/>.</exception>
-        /// <exception cref="OverflowException">See <see cref="MultiplySlow"/>.</exception>
+        /// <exception cref="OverflowError">See <see cref="MultiplySlow"/>.</exception>
         /// <exception cref="OutOfMemoryException">See <see cref="MultiplySlow"/>.</exception>
         /// <remarks>Out of line so the arena form's locals do not crowd the in-cell form's registers in the kernel.</remarks>
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -647,21 +647,21 @@ namespace NumSharp.Backends.Strings
         /// <param name="o">The output cell.</param>
         /// <param name="ctx">The call's context.</param>
         /// <exception cref="TypeError">An NA under the <c>None</c>-like rule: <c>Cannot multiply null that is not a nan-like value</c>.</exception>
-        /// <exception cref="OverflowException"><c>Overflow encountered in string multiply</c>.</exception>
-        /// <exception cref="OutOfMemoryException"><c>Failed to load string in multiply</c>, <c>Failed to deallocate string in
+        /// <exception cref="OverflowError"><c>Overflow encountered in string multiply</c>.</exception>
+        /// <exception cref="MemoryError"><c>Failed to load string in multiply</c>, <c>Failed to deallocate string in
         ///     multiply</c>, <c>Failed to allocate string in multiply</c>, <c>Failed to pack string in multiply</c>.</exception>
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static void MultiplySlow(byte* s, ulong factor, byte* o, VStringWriteContext ctx)
         {
             int isNull = ctx.InA.load(s, out byte* buf, out long size);
             if (isNull < 0)
-                throw new OutOfMemoryException("Failed to load string in multiply");
+                throw new MemoryError("Failed to load string in multiply");
             if (isNull != 0)
             {
                 if (ctx.Rule == VStringNARule.NaN)
                 {
                     if (ctx.Out.pack_null(o) < 0)
-                        throw new OutOfMemoryException("Failed to deallocate string in multiply");
+                        throw new MemoryError("Failed to deallocate string in multiply");
                     return;
                 }
                 if (ctx.Rule == VStringNARule.Null)
@@ -671,7 +671,7 @@ namespace NumSharp.Backends.Strings
             }
             ulong high = Math.BigMul((ulong)size, factor, out ulong newsize);
             if (high != 0 || newsize > long.MaxValue)
-                throw new OverflowException("Overflow encountered in string multiply");
+                throw new OverflowError("Overflow encountered in string multiply");
             if (ctx.InPlace)
             {
                 byte* tmp = (byte*)NativeMemory.Alloc((nuint)Math.Max(newsize, 1UL));
@@ -679,7 +679,7 @@ namespace NumSharp.Backends.Strings
                 {
                     FillRepeat(tmp, buf, size, (long)newsize);
                     if (ctx.Out.pack(o, tmp, (long)newsize) < 0)
-                        throw new OutOfMemoryException("Failed to pack string in multiply");
+                        throw new MemoryError("Failed to pack string in multiply");
                 }
                 finally
                 {
@@ -756,7 +756,7 @@ namespace NumSharp.Backends.Strings
         /// <returns><paramref name="out"/> itself, or the fresh result.</returns>
         /// <exception cref="ValueError">An NA under the <c>None</c>-like rule (<c>Cannot compare null that is not a nan-like
         ///     value</c>).</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         internal static NDArray MaximumMinimum(bool isMax, NDArray x1, NDArray x2, NDArray @out, NDArray where, DType output)
         {
             var resultDescr = BinaryOutputDescr(x1.dtype, x2.dtype);
@@ -776,7 +776,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="ctx">The call's context.</param>
         /// <param name="isMax">True for <c>maximum</c> (NumPy's <c>invert</c>).</param>
         /// <exception cref="ValueError">See <see cref="Compare"/>.</exception>
-        /// <exception cref="OutOfMemoryException">A failed duplicate (NumPy's <c>Failed to allocate string in maximum</c>, …).</exception>
+        /// <exception cref="MemoryError">A failed duplicate (NumPy's <c>Failed to allocate string in maximum</c>, …).</exception>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static void MaxMinElement(byte* a, byte* b, byte* o, VStringWriteContext ctx, bool isMax)
         {
@@ -936,7 +936,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="ctx">The context holding the rule and the default string.</param>
         /// <returns>Negative, zero or positive.</returns>
         /// <exception cref="ValueError"><c>Cannot compare null that is not a nan-like value</c>.</exception>
-        /// <exception cref="OutOfMemoryException"><c>Failed to load string in string comparison</c>.</exception>
+        /// <exception cref="MemoryError"><c>Failed to load string in string comparison</c>.</exception>
         internal static int Compare(byte* a, VStringAllocator aa, byte* b, VStringAllocator ab, VStringWriteContext ctx)
             => CompareCells(a, aa, b, ab, ctx.Rule, ctx.DefaultText, ctx.DefaultSize);
 
@@ -952,14 +952,14 @@ namespace NumSharp.Backends.Strings
         /// <param name="defaultSize">The default string's byte length.</param>
         /// <returns>Negative, zero or positive.</returns>
         /// <exception cref="ValueError"><c>Cannot compare null that is not a nan-like value</c>.</exception>
-        /// <exception cref="OutOfMemoryException"><c>Failed to load string in string comparison</c>.</exception>
+        /// <exception cref="MemoryError"><c>Failed to load string in string comparison</c>.</exception>
         internal static int CompareCells(byte* a, VStringAllocator aa, byte* b, VStringAllocator ab, VStringNARule rule,
                                          byte* defaultText, long defaultSize)
         {
             int na = aa.load(a, out byte* ba, out long sa);
             int nb = ab.load(b, out byte* bb, out long sb);
             if (na < 0 || nb < 0)
-                throw new OutOfMemoryException("Failed to load string in string comparison");
+                throw new MemoryError("Failed to load string in string comparison");
             if (na != 0 || nb != 0)
             {
                 if (rule == VStringNARule.NaN)

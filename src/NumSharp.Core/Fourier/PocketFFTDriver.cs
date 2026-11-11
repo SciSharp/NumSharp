@@ -111,12 +111,11 @@ namespace NumSharp
                 }
                 else
                 {
-                    // Verbatim NumPy ufunc-cast rejection (TypeError, the class of NumPy's UFuncTypeError, exactly
-                    // as DefaultEngine.UfuncOut.ValidateOutCast renders it — no trailing period).
-                    throw new TypeError(
-                        $"Cannot cast ufunc '{UfuncName(isReal, isForward, n)}' output from " +
-                        $"dtype('{outDtype.AsNumpyDtypeName()}') to " +
-                        $"dtype('{outTc.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+                    // NumPy's ufunc-cast rejection (its UFuncOutputCastingError, exactly as
+                    // DefaultEngine.UfuncOut.ValidateOutCast renders it). NumPy's pocketfft gufuncs take (a, fct) or
+                    // (a, fct, n): the output follows the inputs, which the text does not print.
+                    throw new UFuncOutputCastingError(UfuncName(isReal, isForward, n), 1, "same_kind", outDtype.AsNumpyDescr(),
+                        outTc.AsNumpyDescr(), 2);
                 }
             }
             else

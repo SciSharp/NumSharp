@@ -262,7 +262,7 @@ namespace NumSharp.Backends.Iteration
         ///     the copy's buffers empty (every cell the empty string) for a refill from the arrays — what NumPy's
         ///     <c>NpyIter_Copy</c> does, and what <see cref="NDIterRef.Copy"/> asks for.</param>
         /// <returns>The new context, attached to <paramref name="copy"/>.</returns>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         internal NDIterVStringContext CloneForCopy(ref NDIterState source, ref NDIterState copy, bool duplicateBufferStrings = true)
         {
             int nop = ArrayDescrs.Length;

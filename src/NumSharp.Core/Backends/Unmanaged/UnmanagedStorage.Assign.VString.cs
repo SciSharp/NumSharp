@@ -133,7 +133,7 @@ namespace NumSharp.Backends
         /// <param name="to">The destination's descriptor.</param>
         /// <exception cref="System.Exception">The cast's own errors for a SELECTED element (NumPy raises them too: an invalid
         ///     bool byte gives <c>invalid value encountered in bool to string cast</c>).</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts while the strings are allocated.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts while the strings are allocated.</exception>
         /// <remarks>
         ///     <para>NumPy's masked transfer (<c>PyArray_GetMaskedDTypeTransferFunction</c>) casts each run the mask selects, so
         ///     a masked-off element is never cast. Converting the whole source first, as the unmasked copy does, would cast them
@@ -253,7 +253,7 @@ namespace NumSharp.Backends
         ///     (<c>could not broadcast input array from shape (2,) into shape (3,)</c>, <c>… where mask …</c>), a converted text
         ///     is not a number of the destination's kind (<c>could not convert string to float: 'x'</c>), or a converted NA has
         ///     no value in the destination's dtype.</exception>
-        /// <exception cref="OverflowException">A converted integer text does not fit the destination.</exception>
+        /// <exception cref="OverflowError">A converted integer text does not fit the destination.</exception>
         /// <remarks>
         ///     <para><b>A 0-d source</b> (<c>PyArray_AssignRawScalar</c>): into a destination of more than one element the value
         ///     is converted ONCE, before the mask is read, so a bad text raises under any mask; into one element or none it is

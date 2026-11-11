@@ -144,7 +144,7 @@ namespace NumSharp.Backends.Strings
         ///     read-only 0-d array (NumPy's scalar) for a flat reduction without keepdims.</returns>
         /// <exception cref="ValueError">A lane of two or more elements with an NA under the <c>None</c>-like rule
         ///     (<c>Cannot add null that is not a nan-like value</c>).</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         internal static NDArray Sum(NDArray a, int? axis, bool keepdims, NDArray @out)
             => Reduce(ReduceKind.Sum, a, axis, keepdims, @out, null, null, "add");
 
@@ -236,12 +236,12 @@ namespace NumSharp.Backends.Strings
         ///     <c>coerce=False</c>, or an NA met by an add under the <c>None</c>-like rule (<c>Cannot add null that is not a
         ///     nan-like value</c>).</exception>
         /// <exception cref="IncorrectShapeException">The out or the mask does not broadcast.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         internal static NDArray SumNumPyKeywords(NDArray a, int? axis, NDArray @out, bool keepdims, object initial, NDArray where)
         {
             // A numeric (or fixed-width) input into a StringDType out: no loop pairs them with StringDType.
             if (!NDStringUfuncs.IsVString(a))
-                throw NDStringUfuncs.VStringNoLoop("add", new[] { NDStringUfuncs.DispatchClass(@out), NDStringUfuncs.DispatchClass(a) });
+                throw NDStringUfuncs.VStringNoLoop("add", new[] { NDStringUfuncs.DispatchMeta(@out), NDStringUfuncs.DispatchMeta(a) });
             if (NDStringUfuncs.VStringReduceLoopAnswer("sum", a, null, @out) is { } refusal)
                 throw refusal;
             int nd = a.ndim;
@@ -567,7 +567,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="ctx">The context.</param>
         /// <param name="input">The lane's first input cell.</param>
         /// <param name="output">The output cell.</param>
-        /// <exception cref="OutOfMemoryException">NumPy's cast <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's cast <c>MemoryError</c> texts.</exception>
         private static void CopyFirst(VStringReduceContext ctx, byte* input, byte* output)
         {
             if (VStringAllocator.share_memory(input, ctx.In, output, ctx.Out))
@@ -575,9 +575,9 @@ namespace NumSharp.Backends.Strings
             if (ctx.FirstNAAsText && VStringAllocator.isnull(input))
             {
                 if (ctx.Out.free(output) < 0)
-                    throw new OutOfMemoryException("Failed to deallocate string in string to string cast");
+                    throw new MemoryError("Failed to deallocate string in string to string cast");
                 if (ctx.Out.pack(output, ctx.FirstNAText, ctx.FirstNASize) < 0)
-                    throw new OutOfMemoryException("Failed to pack string in string to string cast.");
+                    throw new MemoryError("Failed to pack string in string to string cast.");
                 return;
             }
             VStringAllocator.FreeAndCopy(ctx.In, ctx.Out, input, output, "string to string cast");
@@ -620,7 +620,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="o">The output cell.</param>
         /// <param name="ctx">The context.</param>
         /// <exception cref="ValueError"><c>Cannot add null that is not a nan-like value</c>.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         private static void SumLane(byte* lane, byte* o, VStringReduceContext ctx)
         {
             long n = ctx.N, stride = ctx.InStride;
@@ -641,24 +641,24 @@ namespace NumSharp.Backends.Strings
                 if (ctx.Rule == VStringNARule.NaN)
                 {
                     if (ctx.Out.pack_null(o) < 0)
-                        throw new OutOfMemoryException("Failed to deallocate string in add");
+                        throw new MemoryError("Failed to deallocate string in add");
                     return;
                 }
                 if (ctx.Rule == VStringNARule.Null)
                     throw new ValueError("Cannot add null that is not a nan-like value");
             }
             if (ctx.Out.free(o) < 0)
-                throw new OutOfMemoryException("Failed to deallocate string in add");
+                throw new MemoryError("Failed to deallocate string in add");
             if (ctx.Out.newemptysize(total, o) < 0)
-                throw new OutOfMemoryException("Failed to allocate string in add");
+                throw new MemoryError("Failed to allocate string in add");
             if (ctx.Out.load(o, out byte* dst, out _) < 0)
-                throw new OutOfMemoryException("Failed to load string in add");
+                throw new MemoryError("Failed to load string in add");
             long pos = 0;
             for (long i = 0; i < n; i++)
             {
                 int isNull = ctx.In.load(lane + i * stride, out byte* buf, out long size);
                 if (isNull < 0)
-                    throw new OutOfMemoryException("Failed to load string in add");
+                    throw new MemoryError("Failed to load string in add");
                 if (isNull != 0)
                 {
                     // The first element's NA was cast to the input's na_name; a later one reads as the default string.
@@ -691,7 +691,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="mask">The lane's first mask byte, or null.</param>
         /// <param name="ctx">The context (<see cref="VStringReduceContext.InitialCell"/> is set).</param>
         /// <exception cref="ValueError">An NA met by an add under the <c>None</c>-like rule.</exception>
-        /// <exception cref="OutOfMemoryException">A failed allocation, load or free (NumPy's <c>MemoryError</c> texts).</exception>
+        /// <exception cref="MemoryError">A failed allocation, load or free (NumPy's <c>MemoryError</c> texts).</exception>
         private static void SumInitialLane(byte* lane, byte* o, byte* mask, VStringReduceContext ctx)
         {
             long n = ctx.N, stride = ctx.InStride, mstride = ctx.MaskStride;
@@ -719,7 +719,7 @@ namespace NumSharp.Backends.Strings
                 {
                     // A NaN-like NA propagates through every add (pack_null releases the cell's old text itself).
                     if (ctx.Out.pack_null(o) < 0)
-                        throw new OutOfMemoryException("Failed to deallocate string in add");
+                        throw new MemoryError("Failed to deallocate string in add");
                     return;
                 }
                 if (ctx.Rule == VStringNARule.Null)
@@ -728,11 +728,11 @@ namespace NumSharp.Backends.Strings
             // The output may hold the assigned initial text (a caller's out, or an earlier pass): released before the
             // concatenation is built in a fresh allocation of the exact size.
             if (ctx.Out.free(o) < 0)
-                throw new OutOfMemoryException("Failed to deallocate string in add");
+                throw new MemoryError("Failed to deallocate string in add");
             if (ctx.Out.newemptysize(total, o) < 0)
-                throw new OutOfMemoryException("Failed to allocate string in add");
+                throw new MemoryError("Failed to allocate string in add");
             if (ctx.Out.load(o, out byte* dst, out _) < 0)
-                throw new OutOfMemoryException("Failed to load string in add");
+                throw new MemoryError("Failed to load string in add");
             // The initial text, then each selected element's, every NA reading as the default string.
             long pos = AppendCell(ctx.InitialAllocator, init, dst, 0, total, ctx);
             for (long i = 0; i < n; i++)
@@ -754,12 +754,12 @@ namespace NumSharp.Backends.Strings
         /// <param name="total">The destination's size (the bound of the copy).</param>
         /// <param name="ctx">The context (its default string).</param>
         /// <returns>The position after the copied text.</returns>
-        /// <exception cref="OutOfMemoryException">The cell cannot be loaded (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">The cell cannot be loaded (NumPy's <c>MemoryError</c> text).</exception>
         private static long AppendCell(VStringAllocator alloc, byte* cell, byte* dst, long pos, long total, VStringReduceContext ctx)
         {
             int isNull = alloc.load(cell, out byte* buf, out long size);
             if (isNull < 0)
-                throw new OutOfMemoryException("Failed to load string in add");
+                throw new MemoryError("Failed to load string in add");
             if (isNull != 0)
             {
                 buf = ctx.DefaultText;
@@ -788,7 +788,7 @@ namespace NumSharp.Backends.Strings
         ///     keepdims).</returns>
         /// <exception cref="ValueError">A comparison with an NA under the <c>None</c>-like rule (<c>Cannot compare null that is
         ///     not a nan-like value</c>).</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         internal static NDArray MaxMin(bool isMax, NDArray a, int? axis, bool keepdims, NDArray @out, NDArray initial, NDArray where)
             => Reduce(isMax ? ReduceKind.Max : ReduceKind.Min, a, axis, keepdims, @out, initial, where, isMax ? "maximum" : "minimum");
 
@@ -821,7 +821,7 @@ namespace NumSharp.Backends.Strings
             string ufunc = NDStringUfuncs.ReduceUfuncOf(op, out _);
             // A numeric (or fixed-width) input into a StringDType out: no loop pairs them with StringDType.
             if (!NDStringUfuncs.IsVString(a))
-                throw NDStringUfuncs.VStringNoLoop(ufunc, new[] { NDStringUfuncs.DispatchClass(@out), NDStringUfuncs.DispatchClass(a) });
+                throw NDStringUfuncs.VStringNoLoop(ufunc, new[] { NDStringUfuncs.DispatchMeta(@out), NDStringUfuncs.DispatchMeta(a) });
             if (NDStringUfuncs.VStringReduceLoopAnswer(op, a, null, @out) is { } refusal)
                 throw refusal;
             int nd = a.ndim;
@@ -1026,7 +1026,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="ctx">The context.</param>
         /// <returns>Negative, zero or positive: the order of the accumulator against the element.</returns>
         /// <exception cref="ValueError">An NA under the <c>None</c>-like rule.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt cell (NumPy's <c>Failed to load string</c>).</exception>
+        /// <exception cref="MemoryError">A corrupt cell (NumPy's <c>Failed to load string</c>).</exception>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         private static int CompareWithAccumulator(ref ReduceAccumulator acc, byte* x, byte* inArena, VStringReduceContext ctx)
         {
@@ -1061,7 +1061,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="from">The first index left to check.</param>
         /// <param name="acc">The NA accumulator.</param>
         /// <param name="ctx">The context.</param>
-        /// <exception cref="OutOfMemoryException">A corrupt cell.</exception>
+        /// <exception cref="MemoryError">A corrupt cell.</exception>
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void ThrowOnCorruptCell(byte* lane, byte* mask, long from, ref ReduceAccumulator acc, VStringReduceContext ctx)
         {
@@ -1277,7 +1277,7 @@ namespace NumSharp.Backends.Strings
         ///     for the accumulation.</c> on NumPy's direct path, the iterator's texts on its iterator path (see the remarks);
         ///     NumPy's ValueError texts, the house shape exception.</exception>
         /// <exception cref="ValueError">A <c>None</c>-like NA met by an addition.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         /// <remarks>
         ///     <para>
         ///         NumPy's <c>PyUFunc_Accumulate</c> takes one of two paths, and they check an <c>out=</c> differently. The
@@ -1345,7 +1345,7 @@ namespace NumSharp.Backends.Strings
         /// <returns><paramref name="out"/> itself, or the fresh result.</returns>
         /// <exception cref="ValueError">The iterator's remapped-shapes error.</exception>
         /// <exception cref="IncorrectShapeException">The direct path's wrong size, or the iterator's op_axes error.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         private static NDArray CumSum(NDArray a, int? axis, NDArray @out, bool castInput)
         {
             NDArray flat = null, contiguous = null, overlapCopy = null, broadcastInput = null, outView = null, target = null;
@@ -1623,7 +1623,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="outLane">The lane's first output cell.</param>
         /// <param name="ctx">The context.</param>
         /// <exception cref="ValueError"><c>Cannot add null that is not a nan-like value</c>.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         private static void CumSumLane(byte* lane, byte* outLane, VStringReduceContext ctx)
         {
             long n = ctx.N, istride = ctx.InStride, ostride = ctx.OutStride;
@@ -1632,7 +1632,7 @@ namespace NumSharp.Backends.Strings
             CopyFirst(ctx, lane, outLane);
             int first = ctx.Out.load(outLane, out byte* buf0, out long size0);
             if (first < 0)
-                throw new OutOfMemoryException("Failed to load string in add");
+                throw new MemoryError("Failed to load string in add");
             bool accNA = first != 0;
             long running = 0;
             if (!accNA)
@@ -1643,7 +1643,7 @@ namespace NumSharp.Backends.Strings
                 byte* o = outLane + i * ostride;
                 int isNull = ctx.In.load(x, out byte* buf, out long size);
                 if (isNull < 0)
-                    throw new OutOfMemoryException("Failed to load string in add");
+                    throw new MemoryError("Failed to load string in add");
                 if (accNA || isNull != 0)
                 {
                     switch (ctx.Rule)
@@ -1651,7 +1651,7 @@ namespace NumSharp.Backends.Strings
                         case VStringNARule.NaN:
                             // NA + anything (and anything + NA) is NA, and stays so for every later output.
                             if (ctx.Out.pack_null(o) < 0)
-                                throw new OutOfMemoryException("Failed to deallocate string in add");
+                                throw new MemoryError("Failed to deallocate string in add");
                             accNA = true;
                             continue;
                         case VStringNARule.Null:
@@ -1676,9 +1676,9 @@ namespace NumSharp.Backends.Strings
                 fixed (byte* text = ctx.Scratch)
                 {
                     if (ctx.Out.free(o) < 0)
-                        throw new OutOfMemoryException("Failed to deallocate string in add");
+                        throw new MemoryError("Failed to deallocate string in add");
                     if (ctx.Out.newsize(text, running, o) < 0)
-                        throw new OutOfMemoryException("Failed to allocate string in add");
+                        throw new MemoryError("Failed to allocate string in add");
                 }
             }
         }
@@ -1695,7 +1695,7 @@ namespace NumSharp.Backends.Strings
             if (need > ctx.Scratch.Length)
             {
                 if (need > Array.MaxLength)
-                    throw new OutOfMemoryException("Failed to allocate string in add");
+                    throw new MemoryError("Failed to allocate string in add");
                 var grown = new byte[Math.Min(Math.Max(need, Math.Max(64L, ctx.Scratch.Length * 2L)), Array.MaxLength)];
                 Buffer.BlockCopy(ctx.Scratch, 0, grown, 0, (int)running);
                 ctx.Scratch = grown;

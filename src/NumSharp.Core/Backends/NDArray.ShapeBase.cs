@@ -312,7 +312,7 @@ namespace NumSharp
         /// <exception cref="IndexError">A non-integer index array, a non-axis dimension that does not broadcast, or an
         ///     index out of bounds (nothing is written then).</exception>
         /// <exception cref="TypeError">None into an integer array, or a complex literal into a real one.</exception>
-        /// <exception cref="OverflowException">A C# literal out of the destination's integer range.</exception>
+        /// <exception cref="OverflowError">A C# literal out of the destination's integer range.</exception>
         /// <exception cref="NotSupportedException">The IL kernels are unavailable.</exception>
         /// <remarks>Scoped: the <c>axis=None</c> reshape view, the index cast and the value cast or overlap snapshot are
         ///     temporaries of this call.</remarks>
@@ -384,7 +384,7 @@ namespace NumSharp
         /// <exception cref="ValueError">rank mismatch, or <paramref name="values"/> not broadcastable to the result shape.</exception>
         /// <exception cref="ValueError"><paramref name="arr"/> is read-only — NumPy's "assignment destination is read-only".</exception>
         /// <exception cref="NotSupportedException">the IL kernels are unavailable (e.g. codegen disabled).</exception>
-        /// <exception cref="OverflowException">A C# literal out of <paramref name="arr"/>'s integer range.</exception>
+        /// <exception cref="OverflowError">A C# literal out of <paramref name="arr"/>'s integer range.</exception>
         /// <exception cref="TypeError">A complex literal into a real <paramref name="arr"/>.</exception>
         private static unsafe void PutAlongAxisCore(NDArray arr, NDArray indices, NDArray values, int ax)
         {

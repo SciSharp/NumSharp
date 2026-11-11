@@ -62,7 +62,7 @@ namespace NumSharp.Backends.Strings
         ///     The gathered array. When <paramref name="select"/> returns a VIEW of the cell array (a basic selection), the
         ///     result is the matching view of <paramref name="source"/> (sharing its buffer and allocator), as NumPy's view.
         /// </returns>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to allocate string in string to string cast</c>.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>Failed to allocate string in string to string cast</c>.</exception>
         internal static NDArray Gather(NDArray source, Func<NDArray, NDArray> select, DType descr = null)
         {
             using var cells = CellArray(source);
@@ -121,7 +121,7 @@ namespace NumSharp.Backends.Strings
         ///     <paramref name="raw"/> is a VIEW of a temporary (a reshape of a fresh buffer, <c>np.resize</c>'s
         ///     <c>concatenate(...)[:n].reshape(shape)</c>), the same view over a fresh <c>StringDType</c> buffer of the
         ///     temporary's size (<see cref="RehomeView"/>), so OWNDATA, strides and offset are the numeric route's.</returns>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         internal static NDArray Rehome(NDArray raw, VStringArraySlice source, DType descr)
         {
             if (!raw.flags.owndata && !raw.Shape.IsBroadcasted)
@@ -173,7 +173,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="source">The slice whose allocator the raw cells refer to.</param>
         /// <param name="descr">The result descriptor.</param>
         /// <returns>The view over the new buffer (the buffer stays alive through the view's reference).</returns>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         /// <remarks>
         ///     Cells of the temporary that the view does not reach are left all-zero (the empty string), never copied: a
         ///     temporary may hold cells nobody wrote, and a cell of pool noise would read as an arena offset or a heap pointer.
@@ -242,7 +242,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="t">A <c>StringDType</c> array of any layout.</param>
         /// <param name="order"><c>'F'</c> for a column-major copy and walk; anything else row-major.</param>
         /// <returns>The new array (its own buffer and allocator); the caller disposes it.</returns>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         internal static NDArray Flatten(NDArray t, char order)
         {
             bool fortran = order == 'F' || order == 'f';
@@ -332,7 +332,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>The new array.</returns>
         /// <exception cref="ArgumentException"><paramref name="which"/> is not <c>int64</c>.</exception>
         /// <exception cref="IndexOutOfRangeException">A source index outside <paramref name="sources"/> (the caller's bug).</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         internal static NDArray RehomeMulti(NDArray raw, NDArray which, VStringArraySlice[] sources, DType descr, Shape? layout = null)
         {
             if (which.typecode != NPTypeCode.Int64)
@@ -404,7 +404,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="DTypePromotionError"><paramref name="x"/> and <paramref name="y"/> have no common DType.</exception>
         /// <exception cref="TypeError">Two <c>StringDType</c> descriptors with different NA objects (no common instance).</exception>
         /// <exception cref="System.Exception">The conversion of a <c>U</c> operand or of a text condition.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's string <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's string <c>MemoryError</c> texts.</exception>
         /// <remarks>
         ///     The selection runs twice through the numeric <c>np.where</c>: once on the operands' cell views (it picks the raw
         ///     cells, in NumPy's result layout) and once on two <c>int64</c> scalars (it records which operand each element came
@@ -463,7 +463,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="ValueError">A non-text value under <c>coerce=False</c>.</exception>
         /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
         /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
-        /// <exception cref="OutOfMemoryException">The copy loop's <c>MemoryError</c> texts: <c>Failed to deallocate string in
+        /// <exception cref="MemoryError">The copy loop's <c>MemoryError</c> texts: <c>Failed to deallocate string in
         ///     string to string cast</c> for an element whose old text cannot be freed (a corrupt cell), <c>Failed to allocate
         ///     string in string to string cast</c> when the memory is exhausted.</exception>
         /// <remarks>
@@ -499,7 +499,7 @@ namespace NumSharp.Backends.Strings
                         // free_and_copy: free the element first (a corrupt cell fails here), then duplicate the value into it
                         // (NpyString_dup of an NA source is pack_null; of a text, newsize).
                         if (allocator.free(d) < 0)
-                            throw new OutOfMemoryException("Failed to deallocate string in string to string cast");
+                            throw new MemoryError("Failed to deallocate string in string to string cast");
                         int status;
                         if (isNA)
                             status = allocator.pack_null(d);
@@ -507,7 +507,7 @@ namespace NumSharp.Backends.Strings
                             fixed (byte* b = utf8)
                                 status = allocator.newsize(b, utf8.Length, d);
                         if (status < 0)
-                            throw new OutOfMemoryException("Failed to allocate string in string to string cast");
+                            throw new MemoryError("Failed to allocate string in string to string cast");
                     }
                 });
             }
@@ -746,7 +746,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="ValueError"><paramref name="dst"/> is read-only.</exception>
         /// <exception cref="ArgumentException"><paramref name="marks"/> is not <c>int64</c>.</exception>
         /// <exception cref="IndexOutOfRangeException">A mark names no value element (the caller's marks are wrong).</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         internal static void ScatterMarks(NDArray dst, NDArray marks, NDArray values)
         {
             if (marks.typecode != NPTypeCode.Int64)
@@ -820,7 +820,7 @@ namespace NumSharp.Backends.Strings
         ///     it (a put in raise mode into a contiguous target that overlaps nothing): the marks written before the error are
         ///     scattered, then the error propagates. False: an error leaves the destination unchanged.</param>
         /// <exception cref="System.Exception">Whatever <paramref name="op"/> raises.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's string <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's string <c>MemoryError</c> texts.</exception>
         internal static void ScatterVia(NDArray dst, NDArray values, Action<NDArray, NDArray> op, bool keepPartialOnError = false)
         {
             using var marks = NewMarks(dst);

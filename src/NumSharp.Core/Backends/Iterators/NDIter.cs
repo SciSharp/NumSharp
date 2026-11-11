@@ -1329,7 +1329,7 @@ namespace NumSharp.Backends.Iteration
                 else
                 {
                     if (!NDIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize))
-                        throw new OutOfMemoryException("Could not allocate the iterator's buffers");
+                        throw new MemoryError("Could not allocate the iterator's buffers");
 
                     // The first fill: the position is the range start (the state's pointers are on the arrays).
                     NDIterBufferManager.CopyToBuffers(ref *_state, reusePrevious: false);
@@ -2941,8 +2941,8 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         /// <returns>True; false only when delayed buffers could not be allocated.</returns>
         /// <exception cref="ValueError">A string operand's conversion fails during the write-back or the fill.</exception>
-        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> transfer cannot allocate a string.</exception>
+        /// <exception cref="OverflowError">A text converted into an integer holds a number outside it.</exception>
+        /// <exception cref="MemoryError">A <c>StringDType</c> transfer cannot allocate a string.</exception>
         /// <remarks>
         ///     NumPy leaves a buffer that already starts at the range start (and lies inside the range) alone: writing it back
         ///     and refilling it would not be a no-op, because a write-only operand's buffer is never read from its array — after
@@ -2984,9 +2984,9 @@ namespace NumSharp.Backends.Iteration
         ///     the current position. A no-op unless buffer allocation is still pending. NumPy requires an explicit reset there;
         ///     NumSharp's execution entry points (ForEach, ExecuteGeneric, ExecuteReducing, ExecuteBinary) call this instead.
         /// </summary>
-        /// <exception cref="OutOfMemoryException">The buffers could not be allocated.</exception>
+        /// <exception cref="MemoryError">The buffers could not be allocated.</exception>
         /// <exception cref="ValueError">A string operand's conversion fails during the fill.</exception>
-        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
+        /// <exception cref="OverflowError">A text converted into an integer holds a number outside it.</exception>
         public void EnsureBuffersReady()
         {
             uint f = _state->ItFlags;
@@ -2994,7 +2994,7 @@ namespace NumSharp.Backends.Iteration
                 return;
 
             if (!NDIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize))
-                throw new OutOfMemoryException("Could not allocate the iterator's delayed buffers");
+                throw new MemoryError("Could not allocate the iterator's delayed buffers");
             _state->ItFlags &= ~(uint)NDIterFlags.DELAYBUF;
 
             // Reposition first: an iternext taken while the allocation was delayed left the buffered operands on their
@@ -3479,8 +3479,8 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         /// <returns>True while elements remain; false when the iteration is complete (the last buffer written back).</returns>
         /// <exception cref="ValueError">A string operand's conversion fails during a buffer transfer.</exception>
-        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> transfer cannot allocate a string.</exception>
+        /// <exception cref="OverflowError">A text converted into an integer holds a number outside it.</exception>
+        /// <exception cref="MemoryError">A <c>StringDType</c> transfer cannot allocate a string.</exception>
         /// <remarks>
         ///     A buffered reduction can run past the range end, as NumPy's does: when a range is set (or a reset kept the
         ///     buffer) while the current fill already reaches past the new end in its outer steps, the iteration ends with
@@ -3558,8 +3558,8 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         /// <param name="iterindex">The target iteration index (the callers check it against the range).</param>
         /// <exception cref="ValueError">A string operand's conversion fails during the write-back or the fill.</exception>
-        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> transfer cannot allocate a string.</exception>
+        /// <exception cref="OverflowError">A text converted into an integer holds a number outside it.</exception>
+        /// <exception cref="MemoryError">A <c>StringDType</c> transfer cannot allocate a string.</exception>
         /// <remarks>
         ///     A position inside a core starts the next fill there: it covers only the rest of that core (NumPy's core
         ///     offset), and in the reduce double loop such a fill writes every buffered operand's partial result back as
@@ -4456,7 +4456,7 @@ namespace NumSharp.Backends.Iteration
         ///     its own state and buffers and is advanced independently (dispose it separately).
         /// </summary>
         /// <returns>The copy (it owns its state; it shares the operand arrays).</returns>
-        /// <exception cref="OutOfMemoryException">The copy's state or buffers could not be allocated, or a <c>StringDType</c>
+        /// <exception cref="MemoryError">The copy's state or buffers could not be allocated, or a <c>StringDType</c>
         ///     fill cannot allocate a string.</exception>
         /// <exception cref="ValueError">A string operand's conversion fails while the copy's buffers are filled.</exception>
         /// <remarks>
@@ -4555,7 +4555,7 @@ namespace NumSharp.Backends.Iteration
                         // lane names no width); at least one element, as AllocateBuffers does.
                         var buffer = NDIterBufferManager.AllocateAligned(Math.Max(_state->BufferSize, 1), _state->ElementSizes[op]);
                         if (buffer == null)
-                            throw new OutOfMemoryException("Failed to allocate iterator copy buffer.");
+                            throw new MemoryError("Failed to allocate iterator copy buffer.");
                         newStatePtr->Buffers[op] = (long)buffer;
 
                         // A pointer into the source's buffer moves to the same offset of the copy's: the refill below
@@ -4613,7 +4613,7 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         /// <exception cref="ValueError">The success path's write-back of the held buffer does not convert (a number
         ///     into a text, or a text into a number); raised after the iterator's resources are released.</exception>
-        /// <exception cref="OverflowException">That write-back puts a text's number outside an integer
+        /// <exception cref="OverflowError">That write-back puts a text's number outside an integer
         ///     dtype.</exception>
         /// <exception cref="UnicodeEncodeError">That write-back puts a non-ASCII text into <c>S</c>.</exception>
         /// <exception cref="OutOfMemoryException">That write-back cannot allocate a <c>StringDType</c>

@@ -406,8 +406,8 @@ namespace NumSharp.Tests.Polynomial
             foreach (var b in Bases)
             {
                 string text = b.Name == "herm" ? "int too large to convert to float" : "integer division result too large for a float";
-                Raises<OverflowException>(() => b.Companion(new object[] { huge, 1 }), text, b.Name);
-                Raises<OverflowException>(() => b.Roots(new object[] { huge, 1 }), text, b.Name);
+                Raises<OverflowError>(() => b.Companion(new object[] { huge, 1 }), text, b.Name);
+                Raises<OverflowError>(() => b.Roots(new object[] { huge, 1 }), text, b.Name);
                 b.Invoking(x => x.Roots(new object[] { null, 1 })).Should().Throw<NotSupportedException>(b.Name);
             }
         }
@@ -452,8 +452,8 @@ namespace NumSharp.Tests.Polynomial
                          })
                 {
                     string text = hermFamily ? conv : plain;
-                    Raises<OverflowException>(() => b.Roots(c), text, b.Name);
-                    Raises<OverflowException>(() => b.Companion(c), text, b.Name);
+                    Raises<OverflowError>(() => b.Roots(c), text, b.Name);
+                    Raises<OverflowError>(() => b.Companion(c), text, b.Name);
                 }
                 // A too-large LEADING term only Hermite / HermiteE meet again (2.0 * c[-1], / c[-1]); a quotient that fits
                 // (2**1024 / 2) raises nowhere else.
@@ -461,7 +461,7 @@ namespace NumSharp.Tests.Polynomial
                              new object[] { BigInteger.Pow(2, 1024), 1, 2 } })
                 {
                     if (hermFamily)
-                        Raises<OverflowException>(() => b.Roots(c), conv, b.Name);
+                        Raises<OverflowError>(() => b.Roots(c), conv, b.Name);
                     else
                         Raises<TypeError>(() => b.Roots(c), isFinite, b.Name);
                 }

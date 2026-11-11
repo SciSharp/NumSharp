@@ -94,7 +94,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="scratch">A native block the caller must free with <see cref="NativeMemory.Free"/> after
         ///     the kernel returns (<see cref="IntPtr.Zero"/> when the cached table serves the call).</param>
         /// <returns>The address of the table of region base pointers.</returns>
-        /// <exception cref="OverflowException">A Python int out of bounds for its integer dtype — NumPy's
+        /// <exception cref="OverflowError">A Python int out of bounds for its integer dtype — NumPy's
         ///     <c>OverflowError: Python integer N out of bounds for int8</c> (e.g. lagval on int8 x with 70
         ///     coefficients reads <c>2*69 - 1 = 137</c>).</exception>
         public long Prepare(long rows, in PyScalar x, out IntPtr scratch)
@@ -153,7 +153,7 @@ namespace NumSharp.Backends.Kernels
         ///     does not fit its integer dtype.</summary>
         /// <param name="r">Region index.</param><param name="firstBad">First non-fitting row.</param>
         /// <param name="rows">The call's row count.</param><param name="x">The call's scalar x.</param>
-        /// <exception cref="OverflowException">The value read does not fit.</exception>
+        /// <exception cref="OverflowError">The value read does not fit.</exception>
         private void ThrowIfBad(int r, long firstBad, long rows, in PyScalar x)
         {
             if (firstBad == long.MaxValue) return;
@@ -164,7 +164,7 @@ namespace NumSharp.Backends.Kernels
             if (w.PerRow && row < 2) return;          // no step reads this region at this length
             if (row < firstBad) return;
             var v = w.Value(row, x);
-            throw new OverflowException($"Python integer {v} out of bounds for {t.AsNumpyDtypeName()}");
+            throw new OverflowError($"Python integer {v} out of bounds for {t.AsNumpyDtypeName()}");
         }
 
         /// <summary>Returns a cached snapshot with at least <paramref name="rows"/> rows, growing it geometrically.</summary>
@@ -209,7 +209,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="x">The call's scalar x (x-dependent constants only).</param>
         /// <param name="dst">Destination (rows elements of t, zeroed).</param>
         /// <returns>The first row whose value does not fit an integer <paramref name="t"/>, or long.MaxValue.</returns>
-        /// <exception cref="OverflowException">A Python int too large for a double (CPython's own error), or
+        /// <exception cref="OverflowError">A Python int too large for a double (CPython's own error), or
         ///     beyond a decimal's range.</exception>
         private static long Fill(PolyWeakConst w, NPTypeCode t, long rows, in PyScalar x, byte* dst)
         {
@@ -241,7 +241,7 @@ namespace NumSharp.Backends.Kernels
                     ints[i] = (long)bi;
                 }
                 if (bad != long.MaxValue && t == NPTypeCode.Decimal)
-                    throw new OverflowException("Python int too large to convert to a decimal value");
+                    throw new OverflowError("Python int too large to convert to a decimal value");
                 fixed (long* pi = ints) ConvertBuffer(pi, NPTypeCode.Int64, target, t, n);
                 if (t == NPTypeCode.Decimal) return long.MaxValue;
                 // Dtype-agnostic range check: a value survives the int64 round trip iff it fits t — except a

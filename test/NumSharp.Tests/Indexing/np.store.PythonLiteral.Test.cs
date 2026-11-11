@@ -66,18 +66,18 @@ public class StorePythonLiteralTests
     public void Setters_PythonInt_OutOfRange_RaisesNumPysOverflowError()
     {
         const string msg = "Python integer 1000 out of bounds for int8";
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte)[0] = 1000, msg);
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte)[":"] = 1000, msg);
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte)["..."] = 1000, msg);
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte)[new[] { 0, 2 }] = 1000, msg);
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte)[Mask()] = 1000, msg);
-        Raises<OverflowException>(() => np.zeros(new Shape(2, 2), NPTypeCode.SByte)[0] = 1000, msg);
-        Raises<OverflowException>(() => np.zeros(new Shape(2, 2), NPTypeCode.SByte)[":, 1"] = 1000, msg);
-        Raises<OverflowException>(() => np.zeros(new Shape(2, 2), NPTypeCode.SByte)[np.array(new[] { 0, 1 }), np.array(new[] { 1, 0 })] = 1000, msg);
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte)[0] = 1000, msg);
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte)[":"] = 1000, msg);
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte)["..."] = 1000, msg);
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte)[new[] { 0, 2 }] = 1000, msg);
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte)[Mask()] = 1000, msg);
+        Raises<OverflowError>(() => np.zeros(new Shape(2, 2), NPTypeCode.SByte)[0] = 1000, msg);
+        Raises<OverflowError>(() => np.zeros(new Shape(2, 2), NPTypeCode.SByte)[":, 1"] = 1000, msg);
+        Raises<OverflowError>(() => np.zeros(new Shape(2, 2), NPTypeCode.SByte)[np.array(new[] { 0, 1 }), np.array(new[] { 1, 0 })] = 1000, msg);
         // A float literal is truncated first (int(1000.5) is 1000), then range-checked.
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte)[Mask()] = 1000.5, msg);
-        Raises<OverflowException>(() => Z(NPTypeCode.Byte)[0] = -1, "Python integer -1 out of bounds for uint8");
-        Raises<OverflowException>(() => Z(NPTypeCode.UInt64)[0] = -1, "Python integer -1 out of bounds for uint64");
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte)[Mask()] = 1000.5, msg);
+        Raises<OverflowError>(() => Z(NPTypeCode.Byte)[0] = -1, "Python integer -1 out of bounds for uint8");
+        Raises<OverflowError>(() => Z(NPTypeCode.UInt64)[0] = -1, "Python integer -1 out of bounds for uint64");
 
         // The strong 0-d array of the same value is cast, as in NumPy.
         var a = Z(NPTypeCode.SByte);
@@ -94,8 +94,8 @@ public class StorePythonLiteralTests
     public void Setters_PackOrder_FollowsNumPysIndexKinds()
     {
         Assert.ThrowsException<IndexError>(() => Z(NPTypeCode.SByte)[5] = 1000);
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte)[new[] { 5 }] = 1000, "Python integer 1000 out of bounds for int8");
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte)["5:"] = 1000, "Python integer 1000 out of bounds for int8");
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte)[new[] { 5 }] = 1000, "Python integer 1000 out of bounds for int8");
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte)["5:"] = 1000, "Python integer 1000 out of bounds for int8");
     }
 
     /// <summary>
@@ -105,11 +105,11 @@ public class StorePythonLiteralTests
     [TestMethod]
     public void Setters_PythonScalarKinds_FollowPyArrayPack()
     {
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte)[0] = 9223372036854775808UL, "Python int too large to convert to C long");
-        Raises<OverflowException>(() => Z(NPTypeCode.Int64)[0] = 9223372036854775808UL, "Python int too large to convert to C long");
-        Raises<OverflowException>(() => Z(NPTypeCode.UInt32)[0] = 9223372036854775808UL, "Python integer 9223372036854775808 out of bounds for uint32");
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte)[0] = 9223372036854775808UL, "Python int too large to convert to C long");
+        Raises<OverflowError>(() => Z(NPTypeCode.Int64)[0] = 9223372036854775808UL, "Python int too large to convert to C long");
+        Raises<OverflowError>(() => Z(NPTypeCode.UInt32)[0] = 9223372036854775808UL, "Python integer 9223372036854775808 out of bounds for uint32");
         Raises<ValueError>(() => Z(NPTypeCode.Int32)[0] = double.NaN, "cannot convert float NaN to integer");
-        Raises<OverflowException>(() => Z(NPTypeCode.Int32)[0] = double.PositiveInfinity, "cannot convert float infinity to integer");
+        Raises<OverflowError>(() => Z(NPTypeCode.Int32)[0] = double.PositiveInfinity, "cannot convert float infinity to integer");
         Raises<TypeError>(() => Z(NPTypeCode.Double)[0] = new Complex(3, 4), "float() argument must be a string or a real number, not 'complex'");
         Raises<TypeError>(() => Z(NPTypeCode.SByte)[0] = new Complex(3, 4), "int() argument must be a string, a bytes-like object or a real number, not 'complex'");
 
@@ -152,10 +152,10 @@ public class StorePythonLiteralTests
     [TestMethod]
     public void Fill_IsPyArrayPack()
     {
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte).fill(1000), "Python integer 1000 out of bounds for int8");
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte).fill(9223372036854775808UL), "Python int too large to convert to C long");
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte).fill(1e300), "Python int too large to convert to C long");
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte).fill((Half)300), "Python integer 300 out of bounds for int8");
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte).fill(1000), "Python integer 1000 out of bounds for int8");
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte).fill(9223372036854775808UL), "Python int too large to convert to C long");
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte).fill(1e300), "Python int too large to convert to C long");
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte).fill((Half)300), "Python integer 300 out of bounds for int8");
 
         var f = Z(NPTypeCode.Single);
         f.fill(1152921573326323713L);
@@ -170,7 +170,7 @@ public class StorePythonLiteralTests
         Hex(strong).Should().Be("e8e8e8");
 
         NDArray literal = 1000;
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte).fill(literal), "Python integer 1000 out of bounds for int8");
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte).fill(literal), "Python integer 1000 out of bounds for int8");
     }
 
     /// <summary>
@@ -181,9 +181,9 @@ public class StorePythonLiteralTests
     [TestMethod]
     public void Full_IsCopytoUnsafe()
     {
-        Raises<OverflowException>(() => np.full(new Shape(3), 1000, np.int8), "Python integer 1000 out of bounds for int8");
-        Raises<OverflowException>(() => np.full(new Shape(3), -1, np.uint8), "Python integer -1 out of bounds for uint8");
-        Raises<OverflowException>(() => np.full_like(Z(NPTypeCode.SByte), 1000), "Python integer 1000 out of bounds for int8");
+        Raises<OverflowError>(() => np.full(new Shape(3), 1000, np.int8), "Python integer 1000 out of bounds for int8");
+        Raises<OverflowError>(() => np.full(new Shape(3), -1, np.uint8), "Python integer -1 out of bounds for uint8");
+        Raises<OverflowError>(() => np.full_like(Z(NPTypeCode.SByte), 1000), "Python integer 1000 out of bounds for int8");
         Hex(np.full(new Shape(3), 1.5, np.int8)).Should().Be("010101");
         Hex(np.full(new Shape(3), 1e300, np.int8)).Should().Be("000000");
         Hex(np.full(new Shape(3), new Complex(3, 4), np.int8)).Should().Be("030303");
@@ -198,9 +198,9 @@ public class StorePythonLiteralTests
     public void Put_PacksTheLiteral_BeforeTheIndices()
     {
         const string msg = "Python integer 1000 out of bounds for int8";
-        Raises<OverflowException>(() => np.put(Z(NPTypeCode.SByte), np.array(new long[] { 0 }), 1000), msg);
-        Raises<OverflowException>(() => np.put(Z(NPTypeCode.SByte), np.array(new long[0]), 1000), msg);
-        Raises<OverflowException>(() => np.put(Z(NPTypeCode.SByte), 0L, (object)1000), msg);
+        Raises<OverflowError>(() => np.put(Z(NPTypeCode.SByte), np.array(new long[] { 0 }), 1000), msg);
+        Raises<OverflowError>(() => np.put(Z(NPTypeCode.SByte), np.array(new long[0]), 1000), msg);
+        Raises<OverflowError>(() => np.put(Z(NPTypeCode.SByte), 0L, (object)1000), msg);
 
         var a = Z(NPTypeCode.SByte);
         np.put(a, np.array(new long[] { 0 }), NDArray.Scalar(1000));
@@ -215,10 +215,10 @@ public class StorePythonLiteralTests
     public void MaskedAndAlongAxisStores_PackTheLiteral()
     {
         const string msg = "Python integer 1000 out of bounds for int8";
-        Raises<OverflowException>(() => np.putmask(Z(NPTypeCode.SByte), Mask(), 1000), msg);
-        Raises<OverflowException>(() => np.putmask(Z(NPTypeCode.Byte), Mask(), -1), "Python integer -1 out of bounds for uint8");
-        Raises<OverflowException>(() => np.place(Z(NPTypeCode.SByte), Mask(), 1000), msg);
-        Raises<OverflowException>(() => np.put_along_axis(Z(NPTypeCode.SByte), np.array(new long[] { 0 }), 1000, 0), msg);
+        Raises<OverflowError>(() => np.putmask(Z(NPTypeCode.SByte), Mask(), 1000), msg);
+        Raises<OverflowError>(() => np.putmask(Z(NPTypeCode.Byte), Mask(), -1), "Python integer -1 out of bounds for uint8");
+        Raises<OverflowError>(() => np.place(Z(NPTypeCode.SByte), Mask(), 1000), msg);
+        Raises<OverflowError>(() => np.put_along_axis(Z(NPTypeCode.SByte), np.array(new long[] { 0 }), 1000, 0), msg);
 
         var p = Z(NPTypeCode.SByte);
         np.place(p, Mask(), 1.5);
@@ -233,11 +233,11 @@ public class StorePythonLiteralTests
     public void InsertAndFillDiagonal_PackTheLiteral()
     {
         const string msg = "Python integer 1000 out of bounds for int8";
-        Raises<OverflowException>(() => np.insert(Z(NPTypeCode.SByte), 1, 1000), msg);
-        Raises<OverflowException>(() => np.insert(Z(NPTypeCode.SByte), 1, (object)1000), msg);
-        Raises<OverflowException>(() => np.insert(Z(NPTypeCode.SByte), new[] { 1, 2 }, 1000), msg);
-        Raises<OverflowException>(() => np.fill_diagonal(np.zeros(new Shape(2, 2), NPTypeCode.SByte), 1000), msg);
-        Raises<OverflowException>(() => np.fill_diagonal(np.zeros(new Shape(0, 0), NPTypeCode.SByte), 1000), msg);
+        Raises<OverflowError>(() => np.insert(Z(NPTypeCode.SByte), 1, 1000), msg);
+        Raises<OverflowError>(() => np.insert(Z(NPTypeCode.SByte), 1, (object)1000), msg);
+        Raises<OverflowError>(() => np.insert(Z(NPTypeCode.SByte), new[] { 1, 2 }, 1000), msg);
+        Raises<OverflowError>(() => np.fill_diagonal(np.zeros(new Shape(2, 2), NPTypeCode.SByte), 1000), msg);
+        Raises<OverflowError>(() => np.fill_diagonal(np.zeros(new Shape(0, 0), NPTypeCode.SByte), 1000), msg);
         Hex(np.insert(Z(NPTypeCode.SByte), 1, 1.5)).Should().Be("00010000");
     }
 
@@ -249,7 +249,7 @@ public class StorePythonLiteralTests
     [TestMethod]
     public void Pad_StoresNumPyScalars()
     {
-        Raises<OverflowException>(() => np.pad(Z(NPTypeCode.SByte), 1, constant_values: 1000), "Python integer 1000 out of bounds for int8");
+        Raises<OverflowError>(() => np.pad(Z(NPTypeCode.SByte), 1, constant_values: 1000), "Python integer 1000 out of bounds for int8");
         Raises<ValueError>(() => np.pad(Z(NPTypeCode.SByte), 1, constant_values: double.NaN), "cannot convert float NaN to integer");
         Hex(np.pad(Z(NPTypeCode.Byte), 1, constant_values: 1000)).Should().Be("e8000000e8");
         Hex(np.pad(Z(NPTypeCode.SByte), 1, constant_values: new Complex(3, 4))).Should().Be("0300000003");
@@ -263,8 +263,8 @@ public class StorePythonLiteralTests
     [TestMethod]
     public void FlatIterator_PacksTheLiteral()
     {
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte).flatiter["0:2"] = 1000, "Python integer 1000 out of bounds for int8");
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte).flatiter["0:0"] = 1000, "Python integer 1000 out of bounds for int8");
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte).flatiter["0:2"] = 1000, "Python integer 1000 out of bounds for int8");
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte).flatiter["0:0"] = 1000, "Python integer 1000 out of bounds for int8");
         var ex = Assert.ThrowsException<ValueError>(() => Z(NPTypeCode.SByte).flatiter[0] = double.NaN);
         Assert.AreEqual("Error setting single item of array.", ex.Message);
         Assert.IsInstanceOfType(ex.InnerException, typeof(ValueError));
@@ -283,10 +283,10 @@ public class StorePythonLiteralTests
     {
         const string msg = "Python integer 300 out of bounds for int8";
         var h = (Half)300;
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte)[0] = h, msg);
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte)[":"] = h, msg);
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte).fill(h), msg);
-        Raises<OverflowException>(() => Z(NPTypeCode.SByte)[0] = (char)300, msg);
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte)[0] = h, msg);
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte)[":"] = h, msg);
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte).fill(h), msg);
+        Raises<OverflowError>(() => Z(NPTypeCode.SByte)[0] = (char)300, msg);
         Raises<ValueError>(() => Z(NPTypeCode.SByte)[0] = Half.NaN, "cannot convert float NaN to integer");
         Assert.ThrowsException<ValueError>(() => Z(NPTypeCode.SByte).flatiter[0] = h);
 
@@ -319,7 +319,7 @@ public class StorePythonLiteralTests
     [TestMethod]
     public void Asarray_LiteralWithDtype_Packs()
     {
-        Raises<OverflowException>(() => np.asarray(1000, np.int8), "Python integer 1000 out of bounds for int8");
+        Raises<OverflowError>(() => np.asarray(1000, np.int8), "Python integer 1000 out of bounds for int8");
         Raises<TypeError>(() => np.asarray(new Complex(3, 4), np.float64), "float() argument must be a string or a real number, not 'complex'");
         Hex(np.asarray(1.5, np.int8)).Should().Be("01");
         Hex(np.asarray(1152921573326323713L, np.float32)).Should().Be("0000805d");

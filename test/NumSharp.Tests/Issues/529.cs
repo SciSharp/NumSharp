@@ -55,9 +55,9 @@ namespace NumSharp.Tests.Issues
         {
             var u8 = np.array(new byte[] { 1 });
 
-            new Action(() => { var _ = u8 + 300; }).Should().Throw<OverflowException>()
+            new Action(() => { var _ = u8 + 300; }).Should().Throw<OverflowError>()
                 .WithMessage("Python integer 300 out of bounds for uint8");
-            new Action(() => { var _ = u8 + (-1); }).Should().Throw<OverflowException>()
+            new Action(() => { var _ = u8 + (-1); }).Should().Throw<OverflowError>()
                 .WithMessage("Python integer -1 out of bounds for uint8");
         }
     }

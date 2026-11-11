@@ -49,7 +49,7 @@ namespace NumSharp.Tests.Fuzz
                 {
                     np.@char.array("");
                 }
-                catch (DivideByZeroException)
+                catch (ZeroDivisionError)
                 {
                 }
                 return np.@char.array(new byte[] { 97, 98, 99, 100 }, 2);

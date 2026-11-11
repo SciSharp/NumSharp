@@ -124,7 +124,7 @@ public class ComparisonWeakScalarTests
     {
         var b = np.array(new[] { true, false });
         Action eq = () => np.equal(b, 9223372036854775808UL);
-        eq.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+        eq.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
         B(np.equal(b, long.MaxValue)).Should().Equal(false, false);
     }
 
@@ -217,15 +217,15 @@ public class BinaryUfuncWeakIntPackTests
     {
         var i8 = np.array(new sbyte[] { 1, 2 });
         Action add = () => _ = i8 + 1000;
-        add.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+        add.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
         Action sub = () => _ = np.array(new byte[] { 1, 2 }) + -1;
-        sub.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+        sub.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
         Action max = () => np.maximum(i8, 1000);
-        max.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+        max.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
         Action shl = () => np.left_shift(i8, 1000);
-        shl.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+        shl.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
         Action outRoute = () => np.add(i8, 1000, @out: np.zeros(new Shape(2), np.int8));
-        outRoute.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+        outRoute.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
         // In range: the array's dtype, no error.
         (i8 + 100).ToArray<sbyte>().Should().Equal((sbyte)101, (sbyte)102);
     }
@@ -237,7 +237,7 @@ public class BinaryUfuncWeakIntPackTests
         var i8 = np.array(new sbyte[] { 1, 2 });
         np.add(i8, 1000, dtype: np.int16).ToArray<short>().Should().Equal((short)1001, (short)1002);
         Action narrow = () => np.add(i8, 1000, dtype: np.int8);
-        narrow.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+        narrow.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
     }
 
     /// <summary>
@@ -248,7 +248,7 @@ public class BinaryUfuncWeakIntPackTests
     public void Power_PacksBeforeTheNegativePowerRule()
     {
         Action unsigned = () => np.power(np.array(new byte[] { 1, 2 }), -1);
-        unsigned.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+        unsigned.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
         Action signed = () => np.power(np.array(new sbyte[] { 1, 2 }), -1);
         signed.Should().Throw<ArgumentException>().WithMessage("Integers to negative integer powers are not allowed.");
     }
@@ -259,7 +259,7 @@ public class BinaryUfuncWeakIntPackTests
     {
         var b = np.array(new[] { true, false });
         Action add = () => _ = b + 9223372036854775808UL;
-        add.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+        add.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
     }
 
     /// <summary>An int64 / uint64 literal past 2^53 packs into a float32 loop through the double: two roundings.</summary>

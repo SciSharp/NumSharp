@@ -389,10 +389,10 @@ namespace NumSharp.Backends.Iteration
         ///     past the reduce operand's array.
         /// </remarks>
         /// <exception cref="ValueError">A text read into a number does not parse (a string operand's cast).</exception>
-        /// <exception cref="OverflowException">A text read into an integer holds a number outside it.</exception>
+        /// <exception cref="OverflowError">A text read into an integer holds a number outside it.</exception>
         /// <exception cref="UnicodeEncodeError">A text read into <c>S</c> is not ASCII.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> text read into <c>U</c> is not ASCII.</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> fill cannot allocate a string.</exception>
+        /// <exception cref="MemoryError">A <c>StringDType</c> fill cannot allocate a string.</exception>
         internal static void CopyToBuffers(ref NDIterState state, bool reusePrevious)
         {
             long transfersize = state.BufferSize;
@@ -516,9 +516,9 @@ namespace NumSharp.Backends.Iteration
         ///     </para>
         /// </remarks>
         /// <exception cref="ValueError">A number written into a text, or a text into a number, does not convert.</exception>
-        /// <exception cref="OverflowException">A text written into an integer holds a number outside it.</exception>
+        /// <exception cref="OverflowError">A text written into an integer holds a number outside it.</exception>
         /// <exception cref="UnicodeEncodeError">A text written into <c>S</c> is not ASCII.</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> write-back cannot allocate a string.</exception>
+        /// <exception cref="MemoryError">A <c>StringDType</c> write-back cannot allocate a string.</exception>
         internal static void CopyFromBuffers(ref NDIterState state)
         {
             long transfersize = state.BufTransferSize;
@@ -600,8 +600,8 @@ namespace NumSharp.Backends.Iteration
         /// <param name="transfersize">The fill's element count (for the write-back of the reduce loop, all its outer steps).</param>
         /// <param name="toBuffer">True for the fill (array to buffer), false for the write-back.</param>
         /// <exception cref="ValueError">A string operand's conversion fails (see <see cref="CopyStringRun"/>).</exception>
-        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> transfer cannot allocate a string.</exception>
+        /// <exception cref="OverflowError">A text converted into an integer holds a number outside it.</exception>
+        /// <exception cref="MemoryError">A <c>StringDType</c> transfer cannot allocate a string.</exception>
         private static void TransferBuffer(ref NDIterState state, int op, long transfersize, bool toBuffer)
         {
             var flags = state.GetOpFlags(op);
@@ -867,8 +867,8 @@ namespace NumSharp.Backends.Iteration
         /// <param name="state">The buffered iterator's state (not in the reduce double loop).</param>
         /// <returns>True while the iteration continues.</returns>
         /// <exception cref="ValueError">A string operand's conversion fails during a write-back or fill.</exception>
-        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> transfer cannot allocate a string.</exception>
+        /// <exception cref="OverflowError">A text converted into an integer holds a number outside it.</exception>
+        /// <exception cref="MemoryError">A <c>StringDType</c> transfer cannot allocate a string.</exception>
         internal static bool BufferedIternext(ref NDIterState state)
         {
             if ((state.ItFlags & (uint)NDIterFlags.EXLOOP) == 0)
@@ -910,8 +910,8 @@ namespace NumSharp.Backends.Iteration
         /// <param name="state">The buffered iterator's state, in the reduce double loop (<see cref="NDIterFlags.BUFREDUCE"/>).</param>
         /// <returns>True while the iteration continues.</returns>
         /// <exception cref="ValueError">A string operand's conversion fails during a write-back or fill.</exception>
-        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> transfer cannot allocate a string.</exception>
+        /// <exception cref="OverflowError">A text converted into an integer holds a number outside it.</exception>
+        /// <exception cref="MemoryError">A <c>StringDType</c> transfer cannot allocate a string.</exception>
         internal static bool BufferedReduceIternext(ref NDIterState state)
         {
             int nop = state.NOp;
@@ -978,8 +978,8 @@ namespace NumSharp.Backends.Iteration
         ///     anywhere inside it).</param>
         /// <returns>True while the iteration continues.</returns>
         /// <exception cref="ValueError">A string operand's conversion fails during a write-back or fill.</exception>
-        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> transfer cannot allocate a string.</exception>
+        /// <exception cref="OverflowError">A text converted into an integer holds a number outside it.</exception>
+        /// <exception cref="MemoryError">A <c>StringDType</c> transfer cannot allocate a string.</exception>
         internal static bool BufferedNextInnerLoop(ref NDIterState state)
         {
             // Past the inner loop (BufIterEnd marks its end in both loops).
@@ -1009,8 +1009,8 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         /// <param name="state">The buffered iterator's state.</param>
         /// <exception cref="ValueError">A string operand's conversion fails during the write-back.</exception>
-        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> write-back cannot allocate a string.</exception>
+        /// <exception cref="OverflowError">A text converted into an integer holds a number outside it.</exception>
+        /// <exception cref="MemoryError">A <c>StringDType</c> write-back cannot allocate a string.</exception>
         internal static void FinishBufferedLoop(ref NDIterState state)
         {
             if (state.BufTransferSize == 0)
@@ -1081,7 +1081,7 @@ namespace NumSharp.Backends.Iteration
         /// <exception cref="NotSupportedException">A WRITEMASKED operand the new setup buffers has a mask that is not bool or
         ///     uint8 (see <see cref="ValidateWriteMaskedTransfers"/>).</exception>
         /// <exception cref="ValueError">A string operand's conversion fails during the fill.</exception>
-        /// <exception cref="OverflowException">A text converted into an integer holds a number outside it.</exception>
+        /// <exception cref="OverflowError">A text converted into an integer holds a number outside it.</exception>
         /// <remarks>
         ///     The held fill is dropped, not written back: <c>RemoveMultiIndex</c> resets first and no element was visited since,
         ///     so a read operand's buffer holds only what its array holds and a write-only operand's holds nothing of it —
@@ -1096,7 +1096,7 @@ namespace NumSharp.Backends.Iteration
             FindBufferingSetup(ref state, state.MaxBufferSize);
             ValidateWriteMaskedTransfers(ref state);
             if (!AllocateBuffers(ref state, state.BufferSize))
-                throw new OutOfMemoryException("Could not allocate the iterator's buffers");
+                throw new MemoryError("Could not allocate the iterator's buffers");
             GotoIterIndex(ref state, state.IterStart);
             CopyToBuffers(ref state, reusePrevious: false);
         }

@@ -167,7 +167,7 @@ namespace NumSharp.Tests.Backends.Strings
                 .WithMessage("'numpy.str_' object cannot be interpreted as an integer");
             new Action(() => np.@char.split(u2, " ", new object[] { 1, null })).Should().Throw<TypeError>()
                 .WithMessage("'NoneType' object cannot be interpreted as an integer");
-            new Action(() => np.@char.split(u2, " ", 1UL << 63)).Should().Throw<OverflowException>()
+            new Action(() => np.@char.split(u2, " ", 1UL << 63)).Should().Throw<OverflowError>()
                 .WithMessage("Python int too large to convert to C ssize_t");
             using var huge = np.@char.split(np.array(new[] { "a b c" }), " ", long.MinValue);
             Words(huge)[0].Should().Equal("a", "b", "c");

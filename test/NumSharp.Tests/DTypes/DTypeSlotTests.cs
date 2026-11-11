@@ -257,11 +257,11 @@ namespace NumSharp.Tests.DTypes
                     .Which.Message.Should().Be(text);
             }
 
-            Throws<OverflowException>(np.int8, 1000, "Python integer 1000 out of bounds for int8");
-            Throws<OverflowException>(np.int8, -129, "Python integer -129 out of bounds for int8");
+            Throws<OverflowError>(np.int8, 1000, "Python integer 1000 out of bounds for int8");
+            Throws<OverflowError>(np.int8, -129, "Python integer -129 out of bounds for int8");
             Throws<TypeError>(np.int8, null, "int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
             Throws<ValueError>(np.int8, double.NaN, "cannot convert float NaN to integer");
-            Throws<OverflowException>(np.int8, double.PositiveInfinity, "cannot convert float infinity to integer");
+            Throws<OverflowError>(np.int8, double.PositiveInfinity, "cannot convert float infinity to integer");
             Throws<ValueError>(np.int8, "x", "invalid literal for int() with base 10: 'x'");
             Throws<TypeError>(np.int8, new Complex(1, 2), "int() argument must be a string, a bytes-like object or a real number, not 'complex'");
             Throws<TypeError>(np.float16, new Complex(1, 0), "float() argument must be a string or a real number, not 'complex'");

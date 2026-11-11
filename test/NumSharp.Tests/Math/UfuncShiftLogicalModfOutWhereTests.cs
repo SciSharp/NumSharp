@@ -85,10 +85,10 @@ namespace NumSharp.Tests.Math
         {
             var a = np.array(new[] { 1, 2, 4, 8 });
             // int32 -> uint8 is not same_kind (signed->unsigned), NumPy UFuncTypeError.
-            Assert.ThrowsException<TypeError>(() =>
+            Assert.ThrowsException<UFuncOutputCastingError>(() =>
                 np.left_shift(a, (object)1, @out: np.zeros(new Shape(4), np.uint8)));
             // int32 -> bool is not same_kind either.
-            Assert.ThrowsException<TypeError>(() =>
+            Assert.ThrowsException<UFuncOutputCastingError>(() =>
                 np.left_shift(a, (object)1, @out: np.zeros(new Shape(4), np.@bool)));
         }
 
@@ -439,11 +439,11 @@ namespace NumSharp.Tests.Math
         {
             // NumPy numbers the OPERAND: frac = output 1, integral = output 2.
             var m = np.array(new[] { 1.5, -2.7, 3.0 });
-            var ex1 = Assert.ThrowsException<TypeError>(() =>
+            var ex1 = Assert.ThrowsException<UFuncOutputCastingError>(() =>
                 np.modf(m, np.zeros(new Shape(3), np.int32), np.zeros(new Shape(3), np.float64)));
             StringAssert.Contains(ex1.Message, "output 1");
             StringAssert.Contains(ex1.Message, "modf");
-            var ex2 = Assert.ThrowsException<TypeError>(() =>
+            var ex2 = Assert.ThrowsException<UFuncOutputCastingError>(() =>
                 np.modf(m, np.zeros(new Shape(3), np.float64), np.zeros(new Shape(3), np.int32)));
             StringAssert.Contains(ex2.Message, "output 2");
         }

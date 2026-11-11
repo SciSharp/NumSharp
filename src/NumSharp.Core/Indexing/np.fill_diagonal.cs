@@ -36,7 +36,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>StringDType(coerce=False)</c> array given a value that is not text
         ///     (<c>None</c> included); a str that is not a number of a numeric array's kind (<c>invalid literal for
         ///     int() with base 10: 'x'</c>); a float NaN into an integer array.</exception>
-        /// <exception cref="OverflowException">A Python int (alone or in a list) out of an integer array's range
+        /// <exception cref="OverflowError">A Python int (alone or in a list) out of an integer array's range
         ///     (<c>Python integer 300 out of bounds for int8</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.fill_diagonal.html

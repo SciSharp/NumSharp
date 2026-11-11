@@ -10,7 +10,7 @@ namespace NumSharp
         /// <param name="low">Lower boundary of the output interval.</param>
         /// <param name="high">Upper boundary of the output interval.</param>
         /// <returns>A 0-d float64 array holding the draw.</returns>
-        /// <exception cref="OverflowException"><c>high - low</c> is not finite (NumPy's <c>OverflowError: Range exceeds valid bounds</c>).</exception>
+        /// <exception cref="OverflowError"><c>high - low</c> is not finite (NumPy's <c>OverflowError: Range exceeds valid bounds</c>).</exception>
         /// <remarks>
         ///     Every distribution argument given, no size: one draw (a 0-d array, NumPy's size <c>()</c>, which draws
         ///     exactly what <c>None</c> draws). NumPy's defaults live on the size overload, which carries NumPy's whole
@@ -27,7 +27,7 @@ namespace NumSharp
         /// <param name="high">Upper boundary of the output interval. All values generated will be &lt; high. Default is 1.0.</param>
         /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
         /// <returns>Drawn samples from the parameterized uniform distribution (float64).</returns>
-        /// <exception cref="OverflowException"><c>high - low</c> is infinite or NaN — NumPy's <c>OverflowError('Range exceeds
+        /// <exception cref="OverflowError"><c>high - low</c> is infinite or NaN — NumPy's <c>OverflowError('Range exceeds
         ///     valid bounds')</c>, raised before anything is drawn (a NaN bound included).</exception>
         /// <exception cref="ValueError"><paramref name="size"/> has a negative dimension.</exception>
         /// <remarks>
@@ -45,7 +45,7 @@ namespace NumSharp
         {
             double range = high - low;
             if (!double.IsFinite(range))
-                throw new OverflowException("Range exceeds valid bounds");
+                throw new OverflowError("Range exceeds valid bounds");
 
             if (IsScalarDraw(size))
             {

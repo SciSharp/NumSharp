@@ -41,11 +41,11 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">The dtype has no fill function (<c>S</c>, <c>U</c>, <c>StringDType</c>: <c>arange() not
         ///     supported for inputs with DType &lt;class 'numpy.dtypes.StrDType'&gt;.</c>), or it is bool and the result has
         ///     more than two elements (NumPy's <c>BOOL_fill</c>).</exception>
-        /// <exception cref="DivideByZeroException">A zero step (NumPy's <c>ZeroDivisionError: float division by zero</c>).</exception>
+        /// <exception cref="ZeroDivisionError">A zero step (NumPy's <c>ZeroDivisionError: float division by zero</c>).</exception>
         /// <exception cref="ValueError">A NaN length (<c>arange: cannot compute length</c>), a length past npy_intp
         ///     (<c>Maximum allowed size exceeded</c>), or an allocation past the byte limit (<see cref="AllocationGuard"/>'s
         ///     <c>array is too big</c>); a store's own ValueError (a NaN into an integer dtype).</exception>
-        /// <exception cref="OverflowException">The first or second element does not fit the dtype (NumPy's
+        /// <exception cref="OverflowError">The first or second element does not fit the dtype (NumPy's
         ///     <c>Python integer 130 out of bounds for int8</c>, an infinity into an integer dtype).</exception>
         internal static NDArray ArangeObj(double start, double stop, double step, DType dtype)
         {
@@ -69,10 +69,10 @@ namespace NumSharp.Backends
         /// <exception cref="NotSupportedException">The dtype's class has no NumSharp storage yet.</exception>
         /// <exception cref="TypeError">The dtype has no fill function, or it is bool and the result has more than two
         ///     elements.</exception>
-        /// <exception cref="DivideByZeroException">A zero step (NumPy's <c>ZeroDivisionError: division by zero</c>).</exception>
+        /// <exception cref="ZeroDivisionError">A zero step (NumPy's <c>ZeroDivisionError: division by zero</c>).</exception>
         /// <exception cref="ValueError">A length past npy_intp (<c>Maximum allowed size exceeded</c>), or an allocation past
         ///     the byte limit (<c>array is too big</c>).</exception>
-        /// <exception cref="OverflowException">The first or second element does not fit the dtype.</exception>
+        /// <exception cref="OverflowError">The first or second element does not fit the dtype.</exception>
         internal static NDArray ArangeObj(long start, long stop, long step, DType dtype)
         {
             var descr = ArangeDescr(dtype ?? NumSharp.DType.Int64);
@@ -108,7 +108,7 @@ namespace NumSharp.Backends
         /// <param name="stop">The stop.</param>
         /// <param name="step">The step.</param>
         /// <returns>The length; zero or negative means an empty array.</returns>
-        /// <exception cref="DivideByZeroException">A zero step (Python's <c>float division by zero</c>).</exception>
+        /// <exception cref="ZeroDivisionError">A zero step (Python's <c>float division by zero</c>).</exception>
         /// <exception cref="ValueError">A NaN quotient, or a ceiling outside npy_intp.</exception>
         private static long ArangeLength(double start, double stop, double step)
         {
@@ -131,7 +131,7 @@ namespace NumSharp.Backends
         /// <param name="stop">The stop.</param>
         /// <param name="step">The step.</param>
         /// <returns>The length; zero or negative means an empty array.</returns>
-        /// <exception cref="DivideByZeroException">A zero step (Python's <c>division by zero</c>).</exception>
+        /// <exception cref="ZeroDivisionError">A zero step (Python's <c>division by zero</c>).</exception>
         /// <exception cref="ValueError">A quotient past the float range or a ceiling outside npy_intp (NumPy re-raises both
         ///     OverflowErrors as <c>Maximum allowed size exceeded</c>).</exception>
         private static long ArangeLength(BigInteger start, BigInteger stop, BigInteger step)
@@ -142,7 +142,7 @@ namespace NumSharp.Backends
             {
                 value = PyScalar.IntTrueDivide(next, step);
             }
-            catch (OverflowException)
+            catch (OverflowError)
             {
                 // PyArray_ArangeObj turns any OverflowError of _calc_length into this ValueError.
                 throw new ValueError(ArangeMaxSize);
@@ -187,7 +187,7 @@ namespace NumSharp.Backends
         /// <param name="next">The second element's value, <c>start + step</c> (read only when the length is 2 or more).</param>
         /// <returns>The array.</returns>
         /// <exception cref="ValueError">The allocation is past the byte limit, or a store's ValueError.</exception>
-        /// <exception cref="OverflowException">A store does not fit the dtype.</exception>
+        /// <exception cref="OverflowError">A store does not fit the dtype.</exception>
         /// <exception cref="TypeError">A store's TypeError, or bool's fill.</exception>
         /// <remarks>The allocation is released when a store or the fill fails: nothing else holds it yet, as NumPy's
         ///     <c>Py_DECREF(range)</c> on its failure path.</remarks>
@@ -246,7 +246,7 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentNullException"><paramref name="typeCode"/> is <see cref="NPTypeCode.Empty"/>.</exception>
         /// <exception cref="ValueError">A negative dimension, or a byte count past the limit
         ///     (<see cref="AllocationGuard"/>).</exception>
-        /// <exception cref="OverflowException">A Python int out of the lane's integer range.</exception>
+        /// <exception cref="OverflowError">A Python int out of the lane's integer range.</exception>
         /// <exception cref="TypeError"><c>None</c> into a non-empty integer (or <c>decimal</c>) array.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
         internal static NDArray FullCore(Shape shape, object fill_value, NPTypeCode typeCode)
@@ -280,7 +280,7 @@ namespace NumSharp.Backends
         ///     write.</param>
         /// <returns>The boxed element; for a value that is not a scalar (a list, an array with dimensions), the house
         ///     conversion <see cref="Converts.ChangeType(object, NPTypeCode)"/> of it.</returns>
-        /// <exception cref="OverflowException">A Python int out of the dtype's integer range (NumPy's OverflowError texts):
+        /// <exception cref="OverflowError">A Python int out of the dtype's integer range (NumPy's OverflowError texts):
         ///     the copy is unsafe, but the Python scalar is packed first.</exception>
         /// <exception cref="TypeError"><c>None</c> into a non-empty integer (or <c>decimal</c>) array.</exception>
         /// <remarks>

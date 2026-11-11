@@ -56,7 +56,7 @@ namespace NumSharp.Backends.Iteration
         /// <exception cref="TypeError">NumPy has no loop for the operands (S with U, text with a number, any ufunc but add /
         ///     multiply), or an <c>S</c> / <c>U</c> repeat without <c>out=</c> ("The 'out' kwarg is necessary when using the
         ///     string multiply ufunc directly"), or a concatenation wider than 2^31 - 1 bytes: NumPy's texts.</exception>
-        /// <exception cref="OverflowException">A StringDType repeat by a negative count or one past 2^63 - 1 characters
+        /// <exception cref="OverflowError">A StringDType repeat by a negative count or one past 2^63 - 1 characters
         ///     (NumPy's "Overflow encountered in string multiply").</exception>
         /// <exception cref="ValueError">A StringDType NA the ufunc's rule refuses (<c>Cannot add null that is not a nan-like
         ///     value</c>), or two StringDType operands with incompatible NA objects.</exception>

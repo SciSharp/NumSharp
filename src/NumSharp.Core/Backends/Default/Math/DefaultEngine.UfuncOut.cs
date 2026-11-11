@@ -208,21 +208,23 @@ namespace NumSharp.Backends
         /// <param name="outType">The caller <c>out=</c> dtype the write must cast TO.</param>
         /// <param name="ufuncName">The ufunc name for the message ("evaluate" for the fused path).</param>
         /// <param name="casting">The cast rule to enforce; defaults to NumPy's ufunc <c>same_kind</c>.</param>
-        /// <exception cref="TypeError"><paramref name="resultType"/> is not castable to <paramref name="outType"/> under <paramref name="casting"/>.</exception>
+        /// <param name="nin">The ufunc's input count (2 by default): the output's operand index NumPy reports as
+        ///     <see cref="UFuncOutputCastingError.out_i"/> (it does not print for a single-output ufunc).</param>
+        /// <exception cref="UFuncOutputCastingError"><paramref name="resultType"/> is not castable to
+        ///     <paramref name="outType"/> under <paramref name="casting"/> (NumPy's text, Char and Decimal named by the
+        ///     NumPy dtype they stand in for).</exception>
         /// <remarks>Internal (not private) because a composition that writes a ufunc result back into an operand the way
         ///     NumPy's in-place operator does (<c>np.cov</c>'s <c>X -= avg[:, None]</c>) refuses with the same rule and
         ///     text.</remarks>
         internal static void ValidateOutCast(NPTypeCode resultType, NPTypeCode outType, string ufuncName,
-            NPY_CASTING casting = NPY_CASTING.NPY_SAME_KIND_CASTING)
+            NPY_CASTING casting = NPY_CASTING.NPY_SAME_KIND_CASTING, int nin = 2)
         {
             if (resultType == outType)
                 return;
             if (NDIterCasting.CanCast(resultType, outType, casting))
                 return;
-            throw new TypeError(
-                $"Cannot cast ufunc '{ufuncName}' output from " +
-                $"dtype('{resultType.AsNumpyDtypeName()}') to " +
-                $"dtype('{outType.AsNumpyDtypeName()}') with casting rule '{DTypeCasting.CastingToString(casting)}'");
+            throw new UFuncOutputCastingError(ufuncName, 1, DTypeCasting.CastingToString(casting),
+                resultType.AsNumpyDescr(), outType.AsNumpyDescr(), nin);
         }
 
         /// <summary>
@@ -234,16 +236,17 @@ namespace NumSharp.Backends
         /// The unary error names no input index; the binary one does
         /// ("input 0" / "input 1", probed via floor_divide).
         /// </summary>
+        /// <param name="inputType">The input's dtype.</param>
+        /// <param name="loopType">The requested loop dtype.</param>
+        /// <param name="ufuncName">The ufunc's name.</param>
+        /// <exception cref="UFuncInputCastingError">The input does not reach the loop by a same_kind cast.</exception>
         private static void ValidateUnaryInputCast(NPTypeCode inputType, NPTypeCode loopType, string ufuncName)
         {
             if (inputType == loopType)
                 return;
             if (NDIterCasting.CanCast(inputType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 return;
-            throw new TypeError(
-                $"Cannot cast ufunc '{ufuncName}' input from " +
-                $"dtype('{inputType.AsNumpyDtypeName()}') to " +
-                $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+            throw new UFuncInputCastingError(ufuncName, 1, "same_kind", inputType.AsNumpyDescr(), loopType.AsNumpyDescr(), 0);
         }
 
         /// <summary>
@@ -271,9 +274,9 @@ namespace NumSharp.Backends
             {
                 // The StringDType loops register with the new-style dispatcher: its refusal prints the operand classes.
                 var inputs = x2 is null
-                    ? new[] { Strings.NDStringUfuncs.DispatchClass(x1) }
-                    : new[] { Strings.NDStringUfuncs.DispatchClass(x1), Strings.NDStringUfuncs.DispatchClass(x2) };
-                throw Strings.NDStringUfuncs.VStringNoLoop(ufuncName, inputs, DTypeRegistry.FromTypeCode(dtype.Value).ToString());
+                    ? new[] { Strings.NDStringUfuncs.DispatchMeta(x1) }
+                    : new[] { Strings.NDStringUfuncs.DispatchMeta(x1), Strings.NDStringUfuncs.DispatchMeta(x2) };
+                throw Strings.NDStringUfuncs.VStringNoLoop(ufuncName, inputs, DTypeRegistry.FromTypeCode(dtype.Value));
             }
             throw new IncorrectTypeException(
                 $"No loop matching the specified signature and casting was found for ufunc {ufuncName}");
@@ -283,15 +286,9 @@ namespace NumSharp.Backends
         private static void ValidateBinaryInputCasts(NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode loopType, string ufuncName)
         {
             if (lhsType != loopType && !NDIterCasting.CanCast(lhsType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new TypeError(
-                    $"Cannot cast ufunc '{ufuncName}' input 0 from " +
-                    $"dtype('{lhsType.AsNumpyDtypeName()}') to " +
-                    $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+                throw new UFuncInputCastingError(ufuncName, 2, "same_kind", lhsType.AsNumpyDescr(), loopType.AsNumpyDescr(), 0);
             if (rhsType != loopType && !NDIterCasting.CanCast(rhsType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new TypeError(
-                    $"Cannot cast ufunc '{ufuncName}' input 1 from " +
-                    $"dtype('{rhsType.AsNumpyDtypeName()}') to " +
-                    $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+                throw new UFuncInputCastingError(ufuncName, 2, "same_kind", rhsType.AsNumpyDescr(), loopType.AsNumpyDescr(), 1);
         }
 
         /// <summary>
@@ -478,7 +475,7 @@ namespace NumSharp.Backends
         ///     texts).</exception>
         /// <exception cref="ValueError">With <paramref name="where"/>: an element of <paramref name="out"/> that does not
         ///     parse into the loop dtype (see the remarks).</exception>
-        /// <exception cref="OverflowException">With <paramref name="where"/>: an integer text of <paramref name="out"/> outside
+        /// <exception cref="OverflowError">With <paramref name="where"/>: an integer text of <paramref name="out"/> outside
         ///     an integer loop dtype.</exception>
         /// <remarks>
         ///     NumPy's checks come in its order: the output cast (while it resolves the loop), the broadcast (NpyIter), then
@@ -494,7 +491,7 @@ namespace NumSharp.Backends
         private static NDArray IntoTextOut(string ufunc, NPTypeCode loop, Shape inputBroadcast, NDArray[] inputs,
             NDArray @out, NDArray where, Func<NDArray, NDArray> compute)
         {
-            ThrowIfTextOutCastFails(ufunc, "output", loop, @out);
+            ThrowIfTextOutCastFails(ufunc, 1, inputs.Length, loop, @out);
             ResolveUfuncIterationShape(inputBroadcast.Clean(), inputs, @out, where);
             ReadMaskedTextOut(@out, loop, where);
             return Strings.NDStringArithmetic.CastInto(@out, where, () => compute(where));
@@ -505,19 +502,18 @@ namespace NumSharp.Backends
         ///     carries no width or class): NumPy's <c>validate_casting</c> under same_kind.
         /// </summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
-        /// <param name="outputLabel"><c>"output"</c> for a single-output ufunc, <c>"output 1"</c> / <c>"output 2"</c> for
-        ///     the outputs of a multi-output one (NumPy numbers them by operand position).</param>
+        /// <param name="nout">The ufunc's output count: NumPy prints the output's operand index only when it is not 1
+        ///     (<c>output</c> for a single-output ufunc, <c>output 1</c> / <c>output 2</c> for <c>modf</c>).</param>
+        /// <param name="outIndex">The output's operand index (after the inputs): NumPy's <c>out_i</c>.</param>
         /// <param name="loop">The loop's output dtype.</param>
         /// <param name="out">The text output.</param>
-        /// <exception cref="TypeError">The cast is not same_kind (NumPy's UFuncTypeError text; every number → text
-        ///     cast NumPy has is same_kind, so this guards the contract rather than a reachable case).</exception>
-        internal static void ThrowIfTextOutCastFails(string ufunc, string outputLabel, NPTypeCode loop, NDArray @out)
+        /// <exception cref="UFuncOutputCastingError">The cast is not same_kind (NumPy's text; every number → text cast
+        ///     NumPy has is same_kind, so this guards the contract rather than a reachable case).</exception>
+        internal static void ThrowIfTextOutCastFails(string ufunc, int nout, int outIndex, NPTypeCode loop, NDArray @out)
         {
             DType loopDescr = loop;
             if (!DTypeCasting.CanCastTypeTo(loopDescr, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new TypeError(
-                    $"Cannot cast ufunc '{ufunc}' {outputLabel} from {loopDescr.ToString(true)} to {@out.dtype.ToString(true)} " +
-                    "with casting rule 'same_kind'");
+                throw new UFuncOutputCastingError(ufunc, nout, "same_kind", loopDescr, @out.dtype, outIndex);
         }
 
         /// <summary>
@@ -531,7 +527,7 @@ namespace NumSharp.Backends
         /// <param name="where">The mask, or null (no mask: the out is WRITEONLY and never read).</param>
         /// <exception cref="ValueError">An element that does not parse into <paramref name="loop"/>
         ///     (<c>could not convert string to float: np.str_('x')</c>).</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="loop"/>.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer <paramref name="loop"/>.</exception>
         /// <remarks>NumPy reads per buffer of <c>np.getbufsize()</c> elements, so an unparsable element past the first
         ///     buffer is reported after the earlier buffers were written; here the whole out is read before anything is
         ///     written (the difference needs an out of more than 8,192 elements with an unparsable one).</remarks>
@@ -550,19 +546,18 @@ namespace NumSharp.Backends
         /// <param name="position">The output's position (1-based, after the inputs: NumPy's operand index).</param>
         /// <param name="loop">The loop's dtype for this output.</param>
         /// <param name="out">The provided output.</param>
-        /// <exception cref="TypeError">The cast is not same_kind (NumPy's UFuncTypeError text).</exception>
+        /// <exception cref="UFuncOutputCastingError">The cast is not same_kind (NumPy's text).</exception>
         private static void ValidateNumberedOutCast(string ufunc, int position, NPTypeCode loop, NDArray @out)
         {
+            // Every caller is a two-output ufunc (divmod, frexp): NumPy prints the operand index.
             if (@out.typecode == NPTypeCode.String)
             {
-                ThrowIfTextOutCastFails(ufunc, $"output {position}", loop, @out);
+                ThrowIfTextOutCastFails(ufunc, 2, position, loop, @out);
                 return;
             }
             if (loop == @out.typecode || NDIterCasting.CanCast(loop, @out.typecode, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 return;
-            throw new TypeError(
-                string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc '{ufunc}' output {position} from dtype('{loop.AsNumpyDtypeName()}') to " +
-                $"dtype('{@out.typecode.AsNumpyDtypeName()}') with casting rule 'same_kind'"));
+            throw new UFuncOutputCastingError(ufunc, 2, "same_kind", loop.AsNumpyDescr(), @out.typecode.AsNumpyDescr(), position);
         }
 
         // =====================================================================

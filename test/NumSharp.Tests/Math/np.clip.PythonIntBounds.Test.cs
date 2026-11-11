@@ -30,16 +30,17 @@ namespace NumSharp.Tests.Math
         /// <param name="text">NumPy's message, verbatim.</param>
         private static void ExpectOverflow(Func<object> call, string text)
         {
-            var e = Assert.ThrowsExactly<OverflowException>(() => call());
+            var e = Assert.ThrowsExactly<OverflowError>(() => call());
             e.Message.Should().Be(text);
         }
 
-        /// <summary>Asserts the call raises TypeError, the class of NumPy's UFuncTypeError, carrying NumPy's text.</summary>
+        /// <summary>Asserts the call raises NumPy's casting refusal (an input's or the output's
+        ///     <see cref="UFuncCastingError"/>), carrying NumPy's text.</summary>
         /// <param name="call">The clip call expected to raise.</param>
         /// <param name="text">NumPy's message, verbatim.</param>
         private static void ExpectCastError(Func<object> call, string text)
         {
-            var e = Assert.ThrowsExactly<TypeError>(() => call());
+            var e = Assert.Throws<UFuncCastingError>(() => call());
             e.Message.Should().Be(text);
         }
 
@@ -341,25 +342,25 @@ namespace NumSharp.Tests.Math
         public void NoBoundLeft_IsPositive()
         {
             var b = np.array(new[] { true, false });
-            var e1 = Assert.ThrowsExactly<TypeError>(() => np.clip(b));
+            var e1 = Assert.ThrowsExactly<UFuncNoLoopError>(() => np.clip(b));
             e1.Message.Should().Be("ufunc 'positive' did not contain a loop with signature matching types <class 'numpy.dtypes.BoolDType'> -> None");
-            Assert.ThrowsExactly<TypeError>(() => np.clip(b, null, null));
-            Assert.ThrowsExactly<TypeError>(() => b.clip());
+            Assert.ThrowsExactly<UFuncNoLoopError>(() => np.clip(b, null, null));
+            Assert.ThrowsExactly<UFuncNoLoopError>(() => b.clip());
 
-            var e2 = Assert.ThrowsExactly<TypeError>(() => np.clip(I8(), dtype: np.@bool));
+            var e2 = Assert.ThrowsExactly<UFuncNoLoopError>(() => np.clip(I8(), dtype: np.@bool));
             e2.Message.Should().Be("ufunc 'positive' did not contain a loop with signature matching types <class 'numpy.dtypes.Int8DType'> -> <class 'numpy.dtypes.BoolDType'>");
-            var e3 = Assert.ThrowsExactly<TypeError>(() => np.clip(b, dtype: np.@bool));
+            var e3 = Assert.ThrowsExactly<UFuncNoLoopError>(() => np.clip(b, dtype: np.@bool));
             e3.Message.Should().Be("ufunc 'positive' did not contain a loop with signature matching types <class 'numpy.dtypes.BoolDType'> -> <class 'numpy.dtypes.BoolDType'>");
 
             np.clip(b, dtype: np.float64).ToArray<double>().Should().Equal(1.0, 0.0);
             ExpectCastError(() => np.clip(I8(), dtype: np.uint8),
                 "Cannot cast ufunc 'positive' input from dtype('int8') to dtype('uint8') with casting rule 'same_kind'");
 
-            // Char has its own DType class (np.dtypes.CharDType), so its no-loop text names it; the oracle's uint16
+            // Char has its own DType class (numsharp.dtypes.CharDType, its DTypeMeta), so its no-loop text names it; the oracle's uint16
             // proxy would say UInt16DType, which is why gen_oracle.py carves these rows out of the char tier.
             var c = np.array(new[] { 'a', 'b' });
-            var e4 = Assert.ThrowsExactly<TypeError>(() => np.clip(c, dtype: np.@bool));
-            e4.Message.Should().Be("ufunc 'positive' did not contain a loop with signature matching types <class 'numpy.dtypes.CharDType'> -> <class 'numpy.dtypes.BoolDType'>");
+            var e4 = Assert.ThrowsExactly<UFuncNoLoopError>(() => np.clip(c, dtype: np.@bool));
+            e4.Message.Should().Be("ufunc 'positive' did not contain a loop with signature matching types <class 'numsharp.dtypes.CharDType'> -> <class 'numpy.dtypes.BoolDType'>");
             // The bool check only applies when nothing is left to clip with: clip(b, False, True) has a bool loop.
             np.clip(b, false, true).dtype.Should().Be(np.@bool);
         }

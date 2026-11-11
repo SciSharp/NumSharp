@@ -145,9 +145,9 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">The shapes do not broadcast.</exception>
         /// <exception cref="TypeError">Counts that are not integers (<c>can't multiply sequence by non-int of type
         ///     'float'</c>).</exception>
-        /// <exception cref="OverflowException">A count past a C ssize_t (<c>cannot fit 'int' into an index-sized
+        /// <exception cref="OverflowError">A count past a C ssize_t (<c>cannot fit 'int' into an index-sized
         ///     integer</c>).</exception>
-        /// <exception cref="OutOfMemoryException">A repetition that cannot be allocated (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">A repetition that cannot be allocated (NumPy's MemoryError).</exception>
         public static NDListArray operator *(NDListArray left, NDArray right) => Repeat(left, right, reflected: false);
 
         /// <summary>NumPy's <c>n * lists</c> (list.__rmul__): see the reflected form; a str / bytes array on the left is its
@@ -157,7 +157,7 @@ namespace NumSharp
         /// <returns>The repetitions.</returns>
         /// <exception cref="IncorrectShapeException">The shapes do not broadcast.</exception>
         /// <exception cref="TypeError">Counts that are not integers.</exception>
-        /// <exception cref="OverflowException">A count past a C ssize_t.</exception>
+        /// <exception cref="OverflowError">A count past a C ssize_t.</exception>
         /// <exception cref="OutOfMemoryException">A repetition that cannot be allocated.</exception>
         public static NDListArray operator *(NDArray left, NDListArray right) => Repeat(right, left, reflected: true);
 
@@ -168,7 +168,7 @@ namespace NumSharp
         /// <returns>The repetitions.</returns>
         /// <exception cref="IncorrectShapeException">The shapes do not broadcast.</exception>
         /// <exception cref="TypeError">A count that is not an integer.</exception>
-        /// <exception cref="OverflowException">A count past a C ssize_t.</exception>
+        /// <exception cref="OverflowError">A count past a C ssize_t.</exception>
         /// <exception cref="OutOfMemoryException">A repetition that cannot be allocated.</exception>
         /// <exception cref="NotSupportedException">The value has no NumSharp array form.</exception>
         public static NDListArray operator *(NDListArray left, object right) => MultiplyObject(left, right, reflected: false);
@@ -179,7 +179,7 @@ namespace NumSharp
         /// <returns>The repetitions.</returns>
         /// <exception cref="IncorrectShapeException">The shapes do not broadcast.</exception>
         /// <exception cref="TypeError">A count that is not an integer.</exception>
-        /// <exception cref="OverflowException">A count past a C ssize_t.</exception>
+        /// <exception cref="OverflowError">A count past a C ssize_t.</exception>
         /// <exception cref="OutOfMemoryException">A repetition that cannot be allocated.</exception>
         /// <exception cref="NotSupportedException">The value has no NumSharp array form.</exception>
         public static NDListArray operator *(object left, NDListArray right) => MultiplyObject(right, left, reflected: true);
@@ -217,7 +217,7 @@ namespace NumSharp
         ///     right datatype, number of dimensions, and be a C-Array)</c>, <c>output array has wrong dimensions</c>).</exception>
         /// <exception cref="TypeError">A product a list does not take (<c>can't multiply sequence by non-int of type
         ///     'list'</c>).</exception>
-        /// <exception cref="OverflowException">A count past a C ssize_t.</exception>
+        /// <exception cref="OverflowError">A count past a C ssize_t.</exception>
         /// <exception cref="OutOfMemoryException">A product that cannot be allocated.</exception>
         /// <exception cref="NotSupportedException">An empty contraction (NumPy's int 0 per output).</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
@@ -242,7 +242,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">See <see cref="dot"/>.</exception>
         /// <exception cref="ValueError">See <see cref="dot"/>.</exception>
         /// <exception cref="TypeError">See <see cref="dot"/>.</exception>
-        /// <exception cref="OverflowException">See <see cref="dot"/>.</exception>
+        /// <exception cref="OverflowError">See <see cref="dot"/>.</exception>
         /// <exception cref="OutOfMemoryException">See <see cref="dot"/>.</exception>
         /// <exception cref="NotSupportedException">See <see cref="dot"/>.</exception>
         private NDListArray DotCore(object b, NDListArray @out)
@@ -704,7 +704,7 @@ namespace NumSharp
                         for (long k = 0; k < n; k++, pl += sl, pc += sc, po += so, pv += sv)
                         {
                             if (pv is not null && *(bool*)pv)
-                                throw new OverflowException("cannot fit 'int' into an index-sized integer");
+                                throw new OverflowError("cannot fit 'int' into an index-sized integer");
                             long id = *(long*)pl, times = *(long*)pc;
                             CheckRepeatSize(lists0, id, times);
                             plan[2 * nx] = id;
@@ -761,7 +761,7 @@ namespace NumSharp
             // list_repeat's `len > PY_SSIZE_T_MAX / n` and its failed allocation, both MemoryError: the pieces' offsets
             // (8 bytes each) and code units must stay addressable.
             if (times > (long.MaxValue / 8) / pieces || (units > 0 && times > (long.MaxValue / 8) / units))
-                throw new OutOfMemoryException(string.Empty); // NumPy's MemoryError (PyErr_NoMemory) has no text
+                throw new MemoryError(string.Empty); // NumPy's MemoryError (PyErr_NoMemory) has no text
         }
 
         /// <summary>A result size plus one more list's: past what an array can address, the allocation's MemoryError (each
@@ -774,7 +774,7 @@ namespace NumSharp
         {
             long sum = total + more;
             if (sum > long.MaxValue / 8 || sum < total)
-                throw new OutOfMemoryException(string.Empty); // NumPy's MemoryError (PyErr_NoMemory) has no text
+                throw new MemoryError(string.Empty); // NumPy's MemoryError (PyErr_NoMemory) has no text
             return sum;
         }
 
@@ -806,7 +806,7 @@ namespace NumSharp
                         throw new ArgumentNullException(nameof(lists));
                     lists.ThrowIfDisposed();
                     if (lists.size > 0 && (big > long.MaxValue || big < long.MinValue))
-                        throw new OverflowException("cannot fit 'int' into an index-sized integer");
+                        throw new OverflowError("cannot fit 'int' into an index-sized integer");
                     using (var count = NDArray.Scalar((long)BigInteger.Max(BigInteger.Min(big, long.MaxValue), long.MinValue)))
                         return Repeat(lists, count, reflected);
             }
@@ -922,7 +922,7 @@ namespace NumSharp
                             for (long k = 0; k < length; k++)
                             {
                                 if (pv is not null && pv[j * length + k])
-                                    throw new OverflowException("cannot fit 'int' into an index-sized integer");
+                                    throw new OverflowError("cannot fit 'int' into an index-sized integer");
                                 long id = pa[i * length + k];
                                 long times = pb[j * length + k];
                                 CheckRepeatSize(src, id, times);

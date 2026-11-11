@@ -770,6 +770,27 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     The descriptor a NumPy-worded error names for a numeric storage code: the code's own descriptor, except that
+        ///     NumSharp's own dtypes answer with the NumPy dtype they stand in for, as <see cref="AsNumpyDtypeName"/> spells
+        ///     them (<see cref="NPTypeCode.Char"/> is uint16, <see cref="NPTypeCode.Decimal"/> float64). Its
+        ///     <c>ToString(true)</c> is <c>dtype('{AsNumpyDtypeName()}')</c>.
+        /// </summary>
+        /// <param name="typeCode">A numeric (or bool) storage code.</param>
+        /// <returns>The descriptor a ufunc error's <c>from_</c> / <c>to</c> holds for it.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="typeCode"/> is <see cref="NPTypeCode.String"/> or
+        ///     <see cref="NPTypeCode.Empty"/>, which have no single numeric descriptor (text names its own descriptor).</exception>
+        /// <remarks>Why the proxy: the oracle's Char tier replays NumPy's uint16 rows against Char, so a refusal that names a
+        ///     Char operand must print NumPy's <c>dtype('uint16')</c>, exactly as the name-based texts always did.</remarks>
+        internal static DType AsNumpyDescr(this NPTypeCode typeCode) => typeCode switch
+        {
+            NPTypeCode.Char => DType.UInt16,
+            NPTypeCode.Decimal => DType.Double,
+            NPTypeCode.String or NPTypeCode.Empty => throw new ArgumentOutOfRangeException(nameof(typeCode),
+                typeCode.ToString(), "A text or empty code has no numeric descriptor to name."),
+            _ => typeCode,
+        };
+
+        /// <summary>
         ///     Gets the dtype that is used as return type in case when statistics are computed with high decimal precision like <see cref="np.sin"/>
         /// </summary>
         /// <returns>dtype in case when statistics are computed like <see cref="np.mean"/></returns>

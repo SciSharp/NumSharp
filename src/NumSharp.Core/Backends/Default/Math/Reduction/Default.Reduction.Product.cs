@@ -37,7 +37,7 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast
         ///     against the input.</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <remarks>
         ///     A complex128 or float16 loop takes the keyword path's reduction iterator even without a keyword (whenever more
         ///     than one element meets an output), because NumPy's result there depends on which inner-loop calls its iterator

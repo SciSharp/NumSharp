@@ -43,7 +43,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements that holds an NA of a descriptor
         ///     whose NA object is neither a string nor NaN-like (NumPy's <c>Cannot compare null that is not a nan-like
         ///     value</c>).</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.argmax.html
         ///     <para>
@@ -115,7 +115,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements that holds an NA of a descriptor
         ///     whose NA object is neither a string nor NaN-like (NumPy's <c>Cannot compare null that is not a nan-like
         ///     value</c>).</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.argmin.html
         ///     <para>

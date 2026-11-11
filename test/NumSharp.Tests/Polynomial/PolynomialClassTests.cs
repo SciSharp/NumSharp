@@ -966,12 +966,12 @@ namespace NumSharp.Tests.Polynomial
         {
             using var p = new NDPolynomial(L(1, 2));
             Assert.AreEqual("ufunc 'subtract' did not contain a loop with signature matching types (dtype('<U1'), dtype('float64')) -> None",
-                Assert.ThrowsException<TypeError>(() => p.integ(2, L("a"))).Message);
+                Assert.ThrowsException<UFuncNoLoopError>(() => p.integ(2, L("a"))).Message);
             Assert.AreEqual("unsupported operand type(s) for -: 'NoneType' and 'float'",
                 Assert.ThrowsException<TypeError>(() => p.integ(2, L(new object[] { null }))).Message);
             using var zero = new NDPolynomial(L(0));
             Assert.AreEqual("ufunc 'add' did not contain a loop with signature matching types (dtype('float64'), dtype('<U2')) -> None",
-                Assert.ThrowsException<TypeError>(() => zero.integ(1, L("ab"))).Message);
+                Assert.ThrowsException<UFuncNoLoopError>(() => zero.integ(1, L("ab"))).Message);
             Assert.AreEqual("unsupported operand type(s) for +: 'float' and 'NoneType'",
                 Assert.ThrowsException<TypeError>(() => zero.integ(1, L(new object[] { null }))).Message);
         }

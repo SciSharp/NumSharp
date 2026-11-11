@@ -200,7 +200,7 @@ namespace NumSharp.Tests.Documentation
             Action badFloat = () => np.array(new[] { "1", "a" }).astype(np.float64);
             badFloat.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('a')");
             Action overflow = () => np.array(new[] { "300" }).astype(np.int8);
-            overflow.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            overflow.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
 
             var a = np.zeros(new Shape(3), np.int32);
             a[0] = "12";

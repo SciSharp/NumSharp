@@ -242,13 +242,13 @@ namespace NumSharp.Tests.Creation
         {
             // NumPy: OverflowError: Python integer 1000 out of bounds for int8
             new Action(() => _ = np.r_[np.array(new sbyte[] { 1, 2 }), 1000])
-                .Should().Throw<OverflowException>()
+                .Should().Throw<OverflowError>()
                 .WithMessage("Python integer 1000 out of bounds for int8*");
             new Action(() => _ = np.r_[np.array(new byte[] { 1, 2 }), -1])
-                .Should().Throw<OverflowException>()
+                .Should().Throw<OverflowError>()
                 .WithMessage("Python integer -1 out of bounds for uint8*");
             new Action(() => _ = np.r_[np.array(new long[] { 1 }), ulong.MaxValue])
-                .Should().Throw<OverflowException>();
+                .Should().Throw<OverflowError>();
         }
 
         [TestMethod]
@@ -454,7 +454,7 @@ namespace NumSharp.Tests.Creation
             np.r_[long.MinValue].typecode.Should().Be(NPTypeCode.Int64);
             // A strong operand still decides, and the literal is then range-checked against it.
             new Action(() => _ = np.r_[np.array(new byte[] { 1 }), ulong.MaxValue])
-                .Should().Throw<OverflowException>();
+                .Should().Throw<OverflowError>();
         }
 
         [TestMethod]
@@ -475,8 +475,8 @@ namespace NumSharp.Tests.Creation
         {
             np.r_[np.array(new sbyte[] { 1 }), 127].typecode.Should().Be(NPTypeCode.SByte);
             np.r_[np.array(new sbyte[] { 1 }), -128].typecode.Should().Be(NPTypeCode.SByte);
-            new Action(() => _ = np.r_[np.array(new sbyte[] { 1 }), 128]).Should().Throw<OverflowException>();
-            new Action(() => _ = np.r_[np.array(new sbyte[] { 1 }), -129]).Should().Throw<OverflowException>();
+            new Action(() => _ = np.r_[np.array(new sbyte[] { 1 }), 128]).Should().Throw<OverflowError>();
+            new Action(() => _ = np.r_[np.array(new sbyte[] { 1 }), -129]).Should().Throw<OverflowError>();
         }
 
         [TestMethod]

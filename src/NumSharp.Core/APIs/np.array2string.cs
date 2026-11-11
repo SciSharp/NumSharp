@@ -173,7 +173,7 @@ namespace NumSharp
         ///     mode `precision` must be supplied</c>); an <paramref name="x"/> that is not a real number (<c>must be real
         ///     number, not str</c>; an array of one or more dimensions: <c>only 0-dimensional arrays can be converted to
         ///     Python scalars</c>) — raised in that order, after the ValueErrors.</exception>
-        /// <exception cref="OverflowException">A Python int beyond the float range (<c>int too large to convert to
+        /// <exception cref="OverflowError">A Python int beyond the float range (<c>int too large to convert to
         ///     float</c>).</exception>
         /// <exception cref="RuntimeError">Zeros or padding beyond NumPy's 16384-character buffer (<c>Float formatting
         ///     result too large</c>).</exception>
@@ -232,7 +232,7 @@ namespace NumSharp
         ///     <paramref name="min_digits"/> above a positive precision; a 0-d text array that spells no float.</exception>
         /// <exception cref="TypeError">A bad trim; <paramref name="unique"/> false without a precision; an
         ///     <paramref name="x"/> that is not a real number — in that order, after the ValueErrors.</exception>
-        /// <exception cref="OverflowException">A Python int beyond the float range.</exception>
+        /// <exception cref="OverflowError">A Python int beyond the float range.</exception>
         /// <remarks>
         ///     NumPy's <c>arrayprint.format_float_scientific</c> and its C <c>dragon4_scientific</c>, statement for
         ///     statement. NumPy's zero padding does not count down its buffer, so a huge precision in exact mode returns a

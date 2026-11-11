@@ -50,7 +50,7 @@ namespace NumSharp
         ///     <c>prepare_index</c> texts).</exception>
         /// <exception cref="ValueError">SET: the array is read-only (checked first, as NumPy's setitem does), the value does
         ///     not broadcast to the selection, or a sequence is stored into one element.</exception>
-        /// <exception cref="OverflowException">SET: a C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
+        /// <exception cref="OverflowError">SET: a C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">SET: a complex number into a real array, or a value of two or more dimensions through a
         ///     mask of this array's own shape.</exception>
         /// <remarks>
@@ -238,9 +238,9 @@ namespace NumSharp
         ///     <c>StringDType</c> element then takes a Python object by setitem, as NumPy's <c>array_assign_item</c> does.</param>
         /// <exception cref="ValueError">The value does not broadcast to the selection (NumPy's AssignArray text, quoting the
         ///     value's shape after its leading unit dimensions were stripped), or a sequence into one element.</exception>
-        /// <exception cref="OverflowException">A C# literal out of this dtype's range.</exception>
+        /// <exception cref="OverflowError">A C# literal out of this dtype's range.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> store's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">A <c>StringDType</c> store's <c>MemoryError</c> texts.</exception>
         /// <remarks>
         ///     <para>
         ///     The view is wrapped in an <see cref="NDArray"/> for the assignment and disposed after it, exceptions included:
@@ -444,7 +444,7 @@ namespace NumSharp
         /// <exception cref="ValueError">The array is read-only, or the value does not fit the selection (NumPy's
         ///     <c>shape mismatch: value array of shape ... could not be broadcast to indexing result of shape ...</c>).</exception>
         /// <exception cref="IndexError">The index is invalid (NumPy's <c>prepare_index</c> texts).</exception>
-        /// <exception cref="OverflowException">A C# integer outside this array's integer dtype.</exception>
+        /// <exception cref="OverflowError">A C# integer outside this array's integer dtype.</exception>
         /// <exception cref="TypeError">A value of two or more dimensions through a lone Python bool on a 0-d array (NumPy's
         ///     boolean assignment, <see cref="ThrowIfBooleanSubscriptAssignMismatch"/>).</exception>
         /// <remarks>A lone Python bool is the 0-d mask's store (<see cref="SetMasked"/>), for every dtype, as a lone 0-d bool

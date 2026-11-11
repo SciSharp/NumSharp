@@ -295,7 +295,7 @@ namespace NumSharp.Tests.Backends.Strings
             Ints(np.histogram(data, edges).hist).Should().Equal(21846L, 43692L);
             Ints(np.histogram(data, edges, weights: (np.arange(65538) % 3).astype(np.int64)).hist).Should().Equal(0L, 65538L);
             Action boolWeights = () => np.histogram(U("a", "b"), U("a", "c"), weights: np.array(new[] { true, false }));
-            boolWeights.Should().ThrowExactly<TypeError>()
+            boolWeights.Should().ThrowExactly<UFuncOutputCastingError>()
                 .WithMessage("Cannot cast ufunc 'add' output from dtype('int64') to dtype('bool') with casting rule 'same_kind'");
         }
 

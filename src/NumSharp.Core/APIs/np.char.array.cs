@@ -130,7 +130,7 @@ namespace NumSharp
         /// <returns>The chararray. NumPy 2.4.2 returns a PLAIN ndarray when <paramref name="order"/> is given for a string
         ///     array (its <c>np.asarray</c> step drops the subclass); the C# result is a chararray with NumPy's data, layout and
         ///     flags.</returns>
-        /// <exception cref="DivideByZeroException">A string or bytes <paramref name="obj"/> with an itemsize of 0 (its own
+        /// <exception cref="ZeroDivisionError">A string or bytes <paramref name="obj"/> with an itemsize of 0 (its own
         ///     length 0 included): NumPy's <c>len(obj) // itemsize</c> raises <c>ZeroDivisionError</c>
         ///     (<c>integer division or modulo by zero</c>).</exception>
         /// <exception cref="ValueError">A negative or too large <paramref name="itemsize"/> (<c>invalid itemsize in generic
@@ -183,7 +183,7 @@ namespace NumSharp
         /// <param name="unicode"><c>true</c> for <c>U</c>, <c>false</c> for <c>S</c>, <c>null</c> to follow the input.</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>, or <c>null</c>.</param>
         /// <returns>The chararray (see <see cref="array"/> for the order quirk).</returns>
-        /// <exception cref="DivideByZeroException">A string or bytes <paramref name="obj"/> with an itemsize of 0.</exception>
+        /// <exception cref="ZeroDivisionError">A string or bytes <paramref name="obj"/> with an itemsize of 0.</exception>
         /// <exception cref="ValueError">A negative or too large <paramref name="itemsize"/>, an unknown order, or a ragged
         ///     list.</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
@@ -207,7 +207,7 @@ namespace NumSharp
         /// <param name="unicode">The class, or <c>null</c> for <c>U</c>.</param>
         /// <param name="order">The order, or <c>null</c> (C).</param>
         /// <returns>The filled chararray.</returns>
-        /// <exception cref="DivideByZeroException">The itemsize is 0.</exception>
+        /// <exception cref="ZeroDivisionError">The itemsize is 0.</exception>
         /// <exception cref="ValueError">A negative or too large itemsize, or an unknown order.</exception>
         /// <exception cref="UnicodeEncodeError">A non-ASCII str into <c>S</c>.</exception>
         private NDCharArray FromStr(string text, long? itemsize, bool? unicode, char? order)
@@ -226,7 +226,7 @@ namespace NumSharp
         /// <param name="unicode">The class, or <c>null</c> for <c>S</c>.</param>
         /// <param name="order">The order, or <c>null</c> (C).</param>
         /// <returns>The chararray view.</returns>
-        /// <exception cref="DivideByZeroException">The itemsize is 0.</exception>
+        /// <exception cref="ZeroDivisionError">The itemsize is 0.</exception>
         /// <exception cref="ValueError">A negative or too large itemsize, or an unknown order.</exception>
         /// <exception cref="TypeError">A <c>U</c> request the bytes are too short for.</exception>
         private NDCharArray FromBytes(byte[] bytes, long? itemsize, bool? unicode, char? order)
@@ -464,12 +464,12 @@ namespace NumSharp
         /// <param name="a">The dividend.</param>
         /// <param name="b">The divisor.</param>
         /// <returns>The floor quotient.</returns>
-        /// <exception cref="DivideByZeroException"><paramref name="b"/> is 0 (Python's <c>integer division or modulo by
+        /// <exception cref="ZeroDivisionError"><paramref name="b"/> is 0 (Python's <c>integer division or modulo by
         ///     zero</c>).</exception>
         private static long PythonFloorDivide(long a, long b)
         {
             if (b == 0)
-                throw new DivideByZeroException("integer division or modulo by zero");
+                throw new ZeroDivisionError("integer division or modulo by zero");
             long q = a / b;
             // C# truncates toward zero; Python floors: step down when the signs differ and the division is inexact.
             if ((a % b != 0) && ((a < 0) ^ (b < 0)))

@@ -74,7 +74,7 @@ namespace NumSharp.Tests.Manipulation
         {
             var a = np.zeros(new Shape(3), NPTypeCode.SByte);
             Action act = () => a.fill(300);
-            act.Should().Throw<OverflowException>().WithMessage("*Python integer 300 out of bounds for int8*");
+            act.Should().Throw<OverflowError>().WithMessage("*Python integer 300 out of bounds for int8*");
         }
 
         [TestMethod]
@@ -82,7 +82,7 @@ namespace NumSharp.Tests.Manipulation
         {
             var a = np.zeros(new Shape(3), NPTypeCode.Byte);
             Action act = () => a.fill(-1);
-            act.Should().Throw<OverflowException>().WithMessage("*Python integer -1 out of bounds for uint8*");
+            act.Should().Throw<OverflowError>().WithMessage("*Python integer -1 out of bounds for uint8*");
         }
 
         [TestMethod]
@@ -90,7 +90,7 @@ namespace NumSharp.Tests.Manipulation
         {
             var a = np.zeros(new Shape(3), NPTypeCode.SByte);
             Action act = () => a.fill(300.0);
-            act.Should().Throw<OverflowException>().WithMessage("*300 out of bounds for int8*");
+            act.Should().Throw<OverflowError>().WithMessage("*300 out of bounds for int8*");
         }
 
         [TestMethod]
@@ -113,9 +113,9 @@ namespace NumSharp.Tests.Manipulation
         {
             // NumPy 2.4.2: ±inf into an integer dtype is an OverflowError, message says "infinity" for BOTH signs.
             var a = np.zeros(new Shape(3), NPTypeCode.Int32);
-            ((Action)(() => a.fill(double.PositiveInfinity))).Should().Throw<OverflowException>()
+            ((Action)(() => a.fill(double.PositiveInfinity))).Should().Throw<OverflowError>()
                 .WithMessage("cannot convert float infinity to integer");
-            ((Action)(() => a.fill(double.NegativeInfinity))).Should().Throw<OverflowException>()
+            ((Action)(() => a.fill(double.NegativeInfinity))).Should().Throw<OverflowError>()
                 .WithMessage("cannot convert float infinity to integer");
         }
 
@@ -382,7 +382,7 @@ namespace NumSharp.Tests.Manipulation
             // NumPy packs the scalar before checking size, so an empty array still validates the value.
             var a = np.zeros(new Shape(0, 3), NPTypeCode.SByte);
             Action act = () => a.fill(300);
-            act.Should().Throw<OverflowException>().WithMessage("*out of bounds for int8*");
+            act.Should().Throw<OverflowError>().WithMessage("*out of bounds for int8*");
         }
 
         [TestMethod]

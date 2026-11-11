@@ -306,7 +306,7 @@ namespace NumSharp
         ///     sequence by non-int of type 'Polynomial'</c>, <c>operand 'Polynomial' does not support ufuncs
         ///     (__array_ufunc__=None)</c>, <c>not all arguments converted during string formatting</c>, ...</exception>
         /// <exception cref="ValueError"><c>Polynomial symbols differ</c>; the constructor's errors for a result.</exception>
-        /// <exception cref="DivideByZeroException">A zero divisor in <c>/ // % divmod</c> (NumPy's bare ZeroDivisionError).</exception>
+        /// <exception cref="ZeroDivisionError">A zero divisor in <c>/ // % divmod</c> (NumPy's bare ZeroDivisionError).</exception>
         /// <exception cref="NotSupportedException">An operand NumPy computes with as Python objects (see the file header).</exception>
         internal static object PyBinary(PyBinOp op, in PyOperand a, in PyOperand b)
         {
@@ -341,7 +341,7 @@ namespace NumSharp
         /// <returns>The result, or null (NotImplemented).</returns>
         /// <exception cref="TypeError"><c>_get_coefficients</c>'s texts; <c>/</c> by a non-number.</exception>
         /// <exception cref="ValueError"><c>Polynomial symbols differ</c>.</exception>
-        /// <exception cref="DivideByZeroException">A zero divisor (re-raised, as NumPy's __divmod__ does).</exception>
+        /// <exception cref="ZeroDivisionError">A zero divisor (re-raised, as NumPy's __divmod__ does).</exception>
         private object Forward(PyBinOp op, in PyOperand other)
         {
             switch (op)
@@ -408,7 +408,7 @@ namespace NumSharp
         /// <param name="op">The operator.</param>
         /// <param name="other">The left operand.</param>
         /// <returns>The result, or null (NotImplemented).</returns>
-        /// <exception cref="DivideByZeroException">A zero divisor (re-raised by NumPy's __rdivmod__).</exception>
+        /// <exception cref="ZeroDivisionError">A zero divisor (re-raised by NumPy's __rdivmod__).</exception>
         private object Reflected(PyBinOp op, in PyOperand other)
         {
             switch (op)
@@ -442,7 +442,7 @@ namespace NumSharp
         /// <summary>NumPy's <c>__divmod__</c>: <c>_div(self.coef, othercoef)</c>, both parts as new series.</summary>
         /// <param name="other">The divisor.</param>
         /// <returns>(quo, rem), or null (NotImplemented).</returns>
-        /// <exception cref="DivideByZeroException">A zero divisor.</exception>
+        /// <exception cref="ZeroDivisionError">A zero divisor.</exception>
         private (NDPolyBase quo, NDPolyBase rem)? DivModForward(in PyOperand other)
         {
             object oc = GetCoefficients(other);
@@ -451,7 +451,7 @@ namespace NumSharp
             {
                 (q, r) = NDPolyAlgebra.Div(Basis, Coef, oc);
             }
-            catch (DivideByZeroException)
+            catch (ZeroDivisionError)
             {
                 throw;
             }
@@ -467,7 +467,7 @@ namespace NumSharp
         /// <summary>NumPy's <c>__rdivmod__</c>: <c>_div(other, self.coef)</c>, both parts as new series.</summary>
         /// <param name="other">The dividend.</param>
         /// <returns>(quo, rem), or null (NotImplemented).</returns>
-        /// <exception cref="DivideByZeroException">A zero divisor (this series is zero).</exception>
+        /// <exception cref="ZeroDivisionError">A zero divisor (this series is zero).</exception>
         private (NDPolyBase quo, NDPolyBase rem)? DivModReflected(in PyOperand other)
         {
             NDArray q, r;
@@ -475,7 +475,7 @@ namespace NumSharp
             {
                 (q, r) = NDPolyAlgebra.Div(Basis, OperandArgument(other), Coef);
             }
-            catch (DivideByZeroException)
+            catch (ZeroDivisionError)
             {
                 throw;
             }
@@ -682,7 +682,7 @@ namespace NumSharp
         /// <exception cref="TypeError">int() refuses the power: <c>int() argument must be a string, a bytes-like object or a
         ///     real number, not 'complex'</c> (a series: its class name), <c>only 0-dimensional arrays can be converted to
         ///     Python scalars</c>.</exception>
-        /// <exception cref="OverflowException">An infinite power.</exception>
+        /// <exception cref="OverflowError">An infinite power.</exception>
         public virtual NDPolyBase __pow__(object power)
         {
             using var scope = NDScope.Open();
@@ -719,21 +719,21 @@ namespace NumSharp
         /// <param name="other">The divisor: a series of this class, a number, an array or a sequence of coefficients.</param>
         /// <returns>The quotient series.</returns>
         /// <exception cref="TypeError">See <see cref="PyBinary"/>.</exception>
-        /// <exception cref="DivideByZeroException">A zero divisor.</exception>
+        /// <exception cref="ZeroDivisionError">A zero divisor.</exception>
         public virtual NDPolyBase __floordiv__(object other) => (NDPolyBase)Binary(PyBinOp.FloorDiv, this, other);
 
         /// <summary>NumPy's <c>other // p</c> (<c>__rfloordiv__</c>): the quotient of <c>divmod(other, p)</c>.</summary>
         /// <param name="other">The dividend.</param>
         /// <returns>The quotient series.</returns>
         /// <exception cref="TypeError">See <see cref="PyBinary"/>.</exception>
-        /// <exception cref="DivideByZeroException">This series is zero.</exception>
+        /// <exception cref="ZeroDivisionError">This series is zero.</exception>
         public virtual NDPolyBase __rfloordiv__(object other) => (NDPolyBase)Binary(PyBinOp.FloorDiv, other, this);
 
         /// <summary>NumPy's <c>divmod(p, other)</c> (<c>__divmod__</c>): the quotient and the remainder.</summary>
         /// <param name="other">The divisor.</param>
         /// <returns>(quo, rem), two new series of this class.</returns>
         /// <exception cref="TypeError">See <see cref="PyBinary"/>.</exception>
-        /// <exception cref="DivideByZeroException">A zero divisor.</exception>
+        /// <exception cref="ZeroDivisionError">A zero divisor.</exception>
         public (NDPolyBase quo, NDPolyBase rem) __divmod__(object other)
             => ((NDPolyBase, NDPolyBase))Binary(PyBinOp.DivMod, this, other);
 
@@ -741,7 +741,7 @@ namespace NumSharp
         /// <param name="other">The dividend.</param>
         /// <returns>(quo, rem), two new series of this class.</returns>
         /// <exception cref="TypeError">See <see cref="PyBinary"/>.</exception>
-        /// <exception cref="DivideByZeroException">This series is zero.</exception>
+        /// <exception cref="ZeroDivisionError">This series is zero.</exception>
         public (NDPolyBase quo, NDPolyBase rem) __rdivmod__(object other)
             => ((NDPolyBase, NDPolyBase))Binary(PyBinOp.DivMod, other, this);
 

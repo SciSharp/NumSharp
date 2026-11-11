@@ -176,7 +176,7 @@ namespace NumSharp.Backends
         ///     NaN or infinite (INT64_MIN as intp), and an unsigned integer q's 0 makes inverted_cdf / closest_observation
         ///     take its dtype's maximum (<c>kth(=255) out of bounds (8)</c>) — for the nan forms per slice, at the first
         ///     slice in C order.</exception>
-        /// <exception cref="OverflowException">An integer q array: <c>n</c> or <c>n - 1</c> outside its dtype (<c>Python
+        /// <exception cref="OverflowError">An integer q array: <c>n</c> or <c>n - 1</c> outside its dtype (<c>Python
         ///     integer 200 out of bounds for int8</c>), or an unsigned q under weibull / averaged_inverted_cdf /
         ///     interpolated_inverted_cdf (<c>Python integer -1 out of bounds for uint8</c>) — before every other check of
         ///     the computation.</exception>
@@ -1374,8 +1374,7 @@ namespace NumSharp.Backends
             DType lerp = DType.From(lerpType);
             if (lerpType != target.typecode
                 && !DTypeCasting.CanCastTypeTo(lerp, target.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new TypeError($"Cannot cast ufunc 'add' output from {lerp.ToString(true)} to " +
-                                            $"{target.dtype.ToString(true)} with casting rule 'same_kind'");
+                throw new UFuncOutputCastingError("add", 1, "same_kind", lerp, target.dtype, 2);
 
             // NpyIter's broadcast of (a, diff_b_a * t, out): right-aligned, a dimension of 1 stretches; out may not stretch.
             long[] outDims = target.Shape.dimensions;
@@ -1557,7 +1556,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">A read-only out (<c>assignment destination is read-only</c>, checked first, as
         ///     NumPy's subscript assignment does), or a NaN into a signed integer out (<c>cannot convert float NaN to
         ///     integer</c>).</exception>
-        /// <exception cref="OverflowException">Into a signed integer out: an infinity (<c>cannot convert float infinity to
+        /// <exception cref="OverflowError">Into a signed integer out: an infinity (<c>cannot convert float infinity to
         ///     integer</c>), a value outside C long (<c>Python int too large to convert to C long</c>; C long is 64 bits here:
         ///     NumPy on Windows has a 32-bit long, and the LP64 (Linux / macOS) answer is the one pinned), or a value outside
         ///     the out's range (<c>Python integer 300 out of bounds for int8</c>).</exception>
@@ -1644,9 +1643,9 @@ namespace NumSharp.Backends
         ///     NumPy's out then holds the add's value at every position; NumSharp's holds the lerp, which differs from it only
         ///     in the last bits of the positions whose weight is at least 0.5 (where NumPy's subtract would have written).
         /// </remarks>
-        private static TypeError LerpTextOutError(NDArray a, NPTypeCode lerpType, NDArray target)
+        private static UFuncNoLoopError LerpTextOutError(NDArray a, NPTypeCode lerpType, NDArray target)
             => Backends.Strings.NDStringUfuncs.VStringNoLoop("subtract",
-                new[] { a.dtype.Meta.ToString(), DType.From(lerpType).Meta.ToString() }, target.dtype.Meta.ToString());
+                new[] { a.dtype.Meta, DType.From(lerpType).Meta }, target.dtype.Meta);
 
         /// <summary>NumPy's TypeError for <c>_lerp</c>'s <c>b - a</c> over bool data.</summary>
         /// <returns>The exception to throw.</returns>

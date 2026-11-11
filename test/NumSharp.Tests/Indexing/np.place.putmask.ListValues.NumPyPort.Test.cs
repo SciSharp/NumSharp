@@ -33,16 +33,16 @@ namespace NumSharp.Tests.Indexing
             foreach (var list in new Array[] { new object[] { 1000, 2 }, new[] { 1000, 2 } })
             {
                 Action place = () => np.place(np.zeros(new Shape(3), np.int8), Mask(), list);
-                place.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+                place.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
                 Action putmask = () => np.putmask(np.zeros(new Shape(3), np.int8), Mask(), list);
-                putmask.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+                putmask.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
             }
             foreach (var list in new Array[] { new object[] { -1, 2 }, new long[] { -1, 2 } })
             {
                 Action place = () => np.place(np.zeros(new Shape(3), np.uint8), Mask(), list);
-                place.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+                place.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
                 Action putmask = () => np.putmask(np.zeros(new Shape(3), np.uint8), Mask(), list);
-                putmask.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+                putmask.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
             }
         }
 
@@ -223,16 +223,16 @@ namespace NumSharp.Tests.Indexing
             {
                 string where = $"{count} items, the bad one at {at}";
                 Action past = () => StoreAll(np.zeros(new Shape(count), np.int8), Tile(new[] { 1.0 }, count, 128.0, at));
-                past.Should().Throw<OverflowException>(where).WithMessage("Python integer 128 out of bounds for int8");
+                past.Should().Throw<OverflowError>(where).WithMessage("Python integer 128 out of bounds for int8");
                 Action negative = () => StoreAll(np.zeros(new Shape(count), np.uint64), Tile(new long[] { 1 }, count, -1L, at));
-                negative.Should().Throw<OverflowException>(where).WithMessage("Python integer -1 out of bounds for uint64");
+                negative.Should().Throw<OverflowError>(where).WithMessage("Python integer -1 out of bounds for uint64");
                 // NumPy's text past 2**31 follows the platform's C long (Windows: "Python int too large to convert to C
                 // long"); the exception type is what both platforms share.
                 Action wide = () => StoreAll(np.zeros(new Shape(count), np.int32), Tile(new uint[] { 1 }, count, 4294967295u, at));
-                wide.Should().Throw<OverflowException>(where);
+                wide.Should().Throw<OverflowError>(where);
                 Action infinite = () => StoreAll(np.zeros(new Shape(count), np.int8),
                     Tile(new[] { 1.0 }, count, double.PositiveInfinity, at));
-                infinite.Should().Throw<OverflowException>(where).WithMessage("cannot convert float infinity to integer");
+                infinite.Should().Throw<OverflowError>(where).WithMessage("cannot convert float infinity to integer");
                 Action nan = () => StoreAll(np.zeros(new Shape(count), np.int8), Tile(new[] { 1.0 }, count, double.NaN, at));
                 nan.Should().Throw<ValueError>(where).WithMessage("cannot convert float NaN to integer");
             }
@@ -287,10 +287,10 @@ namespace NumSharp.Tests.Indexing
                          })
                 {
                     Action overflow = () => StoreAll(np.zeros(new Shape(count), np.dtype(dt)), Tile(list, count));
-                    overflow.Should().Throw<OverflowException>($"{dt} <- {list.GetValue(0)} x {count}");
+                    overflow.Should().Throw<OverflowError>($"{dt} <- {list.GetValue(0)} x {count}");
                 }
                 Action negative = () => StoreAll(np.zeros(new Shape(count), np.uint64), Tile(new[] { -1.0 }, count));
-                negative.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint64");
+                negative.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint64");
             }
         }
 

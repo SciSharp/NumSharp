@@ -203,7 +203,7 @@ namespace NumSharp
         /// <param name="n">len(c), at least 1.</param>
         /// <param name="stride">The byte step between coefficients.</param>
         /// <returns>NumPy's value.</returns>
-        /// <exception cref="OverflowException">A weak Python int past the float range (CPython's int-to-float error; the
+        /// <exception cref="OverflowError">A weak Python int past the float range (CPython's int-to-float error; the
         ///     recurrence's constants are small, so never in practice).</exception>
         private static double ValAtScalarF64(PolyEvalProgram prog, double x, byte* c, long n, long stride)
         {

@@ -114,7 +114,7 @@ namespace NumSharp.Tests.Creation
                 truncated.ToArray<sbyte>().Should().Equal((sbyte)1, (sbyte)2);
 
                 Action overflow = () => f(new object[] { 300 }, np.int8);
-                overflow.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+                overflow.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
 
                 var nan = f(new object[] { 1, null }, np.float64);
                 double.IsNaN(nan.ToArray<double>()[1]).Should().BeTrue();

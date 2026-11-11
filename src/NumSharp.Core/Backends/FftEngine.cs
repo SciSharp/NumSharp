@@ -302,7 +302,7 @@ namespace NumSharp
         /// <param name="d">The sample spacing.</param>
         /// <param name="device">null or <c>"cpu"</c> (the Array API's device argument).</param>
         /// <returns>A new float64 array of <paramref name="n"/> frequencies.</returns>
-        /// <exception cref="DivideByZeroException"><c>n * d</c> is zero (Python's <c>float division by zero</c>, checked
+        /// <exception cref="ZeroDivisionError"><c>n * d</c> is zero (Python's <c>float division by zero</c>, checked
         ///     first).</exception>
         /// <exception cref="ValueError">A device other than <c>"cpu"</c>, then a negative <paramref name="n"/>
         ///     (<c>negative dimensions are not allowed</c>).</exception>
@@ -316,7 +316,7 @@ namespace NumSharp
         /// <param name="d">The sample spacing.</param>
         /// <param name="device">null or <c>"cpu"</c>.</param>
         /// <returns>A new float64 array of <c>n // 2 + 1</c> frequencies.</returns>
-        /// <exception cref="DivideByZeroException"><c>n * d</c> is zero.</exception>
+        /// <exception cref="ZeroDivisionError"><c>n * d</c> is zero.</exception>
         /// <exception cref="ValueError">A device other than <c>"cpu"</c>.</exception>
         public abstract NDArray Rfftfreq(long n, double d = 1.0, string device = null);
     }

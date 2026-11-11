@@ -94,7 +94,7 @@ namespace NumSharp
         ///     size errors (<c>Maximum allowed dimension exceeded</c>, <c>array is too big; …</c>).</exception>
         /// <exception cref="NotSupportedException">An object array argument NumPy computes with as Python objects; no LAPACK
         ///     backend (<c>np.linalg.lstsq</c> needs <c>NumSharp.Interop.OpenBLAS</c>).</exception>
-        /// <exception cref="OutOfMemoryException">A Vandermonde matrix the machine cannot hold (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">A Vandermonde matrix the machine cannot hold (NumPy's MemoryError).</exception>
         public static NDPolyFitResult Fit(PolyBasis basis, object x, object y, object deg, object rcond, bool full, object w)
         {
             // x = np.asarray(x) + 0.0; y = np.asarray(y) + 0.0; deg = np.asarray(deg) — in NumPy's order, so a bad x is
@@ -405,8 +405,8 @@ namespace NumSharp
                     "an rcond array with one or more dimensions broadcasts NumPy's lstsq gufunc over it (every result gains its " +
                     "axes); NumSharp's lstsq takes a scalar cutoff");
             if (array.typecode is NPTypeCode.Complex or NPTypeCode.String)
-                throw new TypeError(
-                    $"Cannot cast ufunc 'lstsq' input 2 from {array.dtype.ToString(true)} to dtype('float64') with casting rule 'same_kind'");
+                // lstsq's gufunc takes (a, b, rcond): the cutoff is input 2 of 3.
+                throw new UFuncInputCastingError("lstsq", 3, "same_kind", array.dtype, DType.Double, 2);
             // The default rcond is a float64 or float32 0-d array: read it in place (both widen exactly); any other dtype
             // through the cast.
             return array.typecode switch

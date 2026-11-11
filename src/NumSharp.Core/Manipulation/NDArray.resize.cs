@@ -46,7 +46,7 @@ namespace NumSharp
         ///     If this array is not single-segment (contiguous); if growing/shrinking an array that does not own its data
         ///     or is referenced by another array; or if a dimension is negative.
         /// </exception>
-        /// <exception cref="OutOfMemoryException">The new element count overflows (NumPy's <c>MemoryError</c>).</exception>
+        /// <exception cref="MemoryError">The new element count overflows (NumPy's <c>MemoryError</c>).</exception>
         /// <remarks>
         ///     <c>a.resize()</c> binds this overload. An array argument binds <see cref="resize(long[])"/> instead, which
         ///     copies it. https://numpy.org/doc/stable/reference/generated/numpy.ndarray.resize.html

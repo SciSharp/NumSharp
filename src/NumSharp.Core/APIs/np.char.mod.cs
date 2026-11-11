@@ -46,7 +46,7 @@ namespace NumSharp
         ///     </exception>
         /// <exception cref="ValueError">A malformed format (<c>incomplete format</c>, <c>unsupported format character 'y'
         ///     (0x79) at index 1</c>); a NaN under an integer conversion; a ragged <paramref name="values"/> list.</exception>
-        /// <exception cref="OverflowException">An infinity under an integer conversion; a <c>%c</c> argument out of range;
+        /// <exception cref="OverflowError">An infinity under an integer conversion; a <c>%c</c> argument out of range;
         ///     an int too large for a float.</exception>
         /// <exception cref="IndexError">A <c>%(key)s</c> lookup on a NumPy scalar.</exception>
         /// <exception cref="KeyError">A <c>%(key)s</c> missing from a dict.</exception>

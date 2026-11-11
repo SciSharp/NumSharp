@@ -31,7 +31,7 @@ namespace NumSharp.Backends
             // NumPy's angle of a non-complex input is arctan2(0, z), which has no string loop: the Python int 0 is the
             // weak _PyLongDType in the StringDType refusal, the fixed-width classes take the legacy resolver's text.
             if (Strings.NDStringUfuncs.IsVString(z))
-                throw Strings.NDStringUfuncs.VStringNoLoop("arctan2", new[] { DTypeRegistry.PyLong.ToString(), z.dtype.Meta.ToString() });
+                throw Strings.NDStringUfuncs.VStringNoLoop("arctan2", new object[] { DTypeRegistry.PyLong, z.dtype.Meta });
             if (Strings.NDStringUfuncs.IsString(z))
                 throw Strings.NDStringUfuncs.NotSupportedForInputTypes("arctan2");
             NDArray a;

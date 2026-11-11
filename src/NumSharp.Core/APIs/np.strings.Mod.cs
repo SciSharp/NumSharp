@@ -56,7 +56,7 @@ namespace NumSharp
             ///     <c>unsupported format character 'y' (0x79) at index 1</c>, <c>width too big</c>, <c>precision too big</c>);
             ///     a NaN under an integer conversion (<c>cannot convert float NaN to integer</c>); a ragged
             ///     <paramref name="values"/> list.</exception>
-            /// <exception cref="OverflowException">An infinity under an integer conversion; a <c>%c</c> argument out of range
+            /// <exception cref="OverflowError">An infinity under an integer conversion; a <c>%c</c> argument out of range
             ///     (<c>%c arg not in range(0x110000)</c>, <c>%c arg not in range(256)</c>); an int too large for a float;
             ///     <c>precision too large</c>; an <c>S</c> format's unsupported conversion byte past 0x7F (<c>character
             ///     argument not in range(0x110000)</c>).</exception>

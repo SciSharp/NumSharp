@@ -386,7 +386,7 @@ namespace NumSharp.Tests.Backends.Strings
         {
             var o = U("U6", "k", "k", "k", "k", "k");
             Action act = () => np.multiply(U3(), NDArray.Scalar(1L << 62), o);
-            act.Should().Throw<OverflowException>().WithMessage("Overflow detected in string multiply");
+            act.Should().Throw<OverflowError>().WithMessage("Overflow detected in string multiply");
             Text(o).Should().Equal("k", "k", "", "k", "aaaaaa");
         }
 
@@ -561,9 +561,9 @@ namespace NumSharp.Tests.Backends.Strings
             number.Should().Throw<TypeError>().WithMessage(
                 "ufunc 'str_len' did not contain a loop with signature matching types <class 'numpy.dtypes.Int64DType'> -> None");
             Action overflow = () => np.strings.multiply(U3(), NDArray.Scalar(1L << 62));
-            overflow.Should().Throw<OverflowException>().WithMessage("Overflow encountered in string multiply");
+            overflow.Should().Throw<OverflowError>().WithMessage("Overflow encountered in string multiply");
             Action wrapped = () => np.strings.multiply(u, NDArray.Scalar((1UL << 63) + 1));
-            wrapped.Should().Throw<OverflowException>().WithMessage("Overflow encountered in string multiply");
+            wrapped.Should().Throw<OverflowError>().WithMessage("Overflow encountered in string multiply");
             Action unsigned = () => np.strings.multiply(u, NDArray.Scalar(2UL));
             unsigned.Should().Throw<TypeError>().WithMessage("data type 'U6.0' not understood");
             Action tooWide = () => np.strings.multiply(u, NDArray.Scalar(3074457345618258602L));

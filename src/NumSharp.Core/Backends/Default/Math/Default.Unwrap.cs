@@ -50,7 +50,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError"><paramref name="p"/> is 0-D.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="p"/>'s rank.</exception>
         /// <exception cref="TypeError"><paramref name="p"/> is complex.</exception>
-        /// <exception cref="OverflowException">An integer interval bound or the period does not fit the input
+        /// <exception cref="OverflowError">An integer interval bound or the period does not fit the input
         ///     dtype (NumPy's OverflowError, see the public overloads).</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>: <c>diff</c>, the fused correction, its cumulative sum, the
         ///     <c>p[1:]</c>/<c>up[1:]</c> views, the tail and its cast are released on return, and <c>up</c> is

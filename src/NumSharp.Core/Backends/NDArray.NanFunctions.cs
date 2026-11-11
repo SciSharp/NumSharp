@@ -79,7 +79,7 @@ namespace NumSharp
         ///     reduction operation fmax which has no identity</c>); a non-bool mask.</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, a mask without
         ///     <paramref name="initial"/>, an <paramref name="initial"/> the loop cannot hold.</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a complex <paramref name="initial"/> for a real loop.</exception>
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
         /// <remarks>
@@ -113,7 +113,7 @@ namespace NumSharp
         ///     reduction operation fmin which has no identity</c>); a non-bool mask.</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, a mask without
         ///     <paramref name="initial"/>, an <paramref name="initial"/> the loop cannot hold.</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a complex <paramref name="initial"/> for a real loop.</exception>
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
         /// <remarks><c>[SubclassAware]</c> for the reason of <see cref="NanMax"/>; like it, np.nanmin reaches the override of
@@ -137,7 +137,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">An empty reduction without <paramref name="initial"/>; a non-bool mask.</exception>
         /// <exception cref="ValueError">A read-only or misshapen out, a mask without an initial value, an initial value the
         ///     loop cannot hold.</exception>
-        /// <exception cref="OverflowException">An integer initial value past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer initial value past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a complex initial value for a real loop.</exception>
         /// <exception cref="IncorrectShapeException">The mask or the out does not broadcast.</exception>
         private NDArray FmaxFminReduce(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where, bool isMax)

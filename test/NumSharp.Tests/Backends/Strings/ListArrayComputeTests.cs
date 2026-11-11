@@ -395,7 +395,7 @@ namespace NumSharp.Tests.Backends.Strings
             using var e = E();
             using (var m = e.mean()) double.IsNaN(m.GetDouble()).Should().BeTrue();
             Action emptyVar = () => e.var();
-            emptyVar.Should().Throw<DivideByZeroException>().WithMessage("division by zero");
+            emptyVar.Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
             using var ze = np.@char.split(np.array(""));
             using (var v = ze.var()) v.GetDouble().Should().Be(0.0, "a 0-d empty list's deviations sum to 0");
         }
@@ -470,12 +470,12 @@ namespace NumSharp.Tests.Backends.Strings
             using (var big = NDArray.Scalar(1L << 62))
             {
                 Action memory = () => _ = one * big;
-                memory.Should().Throw<OutOfMemoryException>().Where(x => x.Message.Length == 0);
+                memory.Should().Throw<MemoryError>().Where(x => x.Message.Length == 0);
             }
             using (var huge = np.array(new ulong[] { 1UL << 63 }))
             {
                 Action overflow = () => _ = one * huge;
-                overflow.Should().Throw<OverflowException>().WithMessage("cannot fit 'int' into an index-sized integer");
+                overflow.Should().Throw<OverflowError>().WithMessage("cannot fit 'int' into an index-sized integer");
             }
             using var c1 = np.@char.array(new[] { "x", "y", "z", "w" });
             Action chararray = () => _ = r + c1;

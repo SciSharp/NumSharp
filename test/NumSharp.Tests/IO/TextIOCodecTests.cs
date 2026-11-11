@@ -346,7 +346,7 @@ namespace NumSharp.Tests.IO
                 Assert.ThrowsException<UnicodeDecodeError>(() => np.loadtxt(stem + ".GZ", np.dtypes.StringDType()));
                 File.WriteAllBytes(stem + ".txt.bz2", new byte[] { 0x42, 0x5A, 0x68 });
                 Assert.ThrowsException<NotSupportedException>(() => np.loadtxt(stem + ".txt.bz2", np.dtypes.StringDType()));
-                Throws<FileNotFoundException>(() => np.loadtxt(stem + ".nope", np.dtypes.StringDType()), $"{stem}.nope not found.");
+                Throws<FileNotFoundError>(() => np.loadtxt(stem + ".nope", np.dtypes.StringDType()), $"{stem}.nope not found.");
             }
             finally
             {

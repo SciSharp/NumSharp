@@ -254,7 +254,7 @@ namespace NumSharp.Tests.Ma
             h.data.flatten().ToArray<sbyte>().Should().Equal(44, 2, 3, 4);
 
             var s = Int8(false);
-            s.Invoking(v => v.put(np.array(new[] { 0 }), 300)).Should().Throw<OverflowException>()
+            s.Invoking(v => v.put(np.array(new[] { 0 }), 300)).Should().Throw<OverflowError>()
                 .WithMessage("Python integer 300 out of bounds for int8");
             s.data.flatten().ToArray<sbyte>().Should().Equal(1, 2, 3, 4);
 

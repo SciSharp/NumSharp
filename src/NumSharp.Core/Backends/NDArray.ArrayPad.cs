@@ -839,10 +839,10 @@ namespace NumSharp
             object start = strong ? startArray : WeakStartClass(startArray);
             // result_type(start, stop, ensure_inexact): raises NumPy's DTypePromotionError when no common DType exists.
             DType promoted = DTypePromotion.ResultType(start, array.dtype, DTypeRegistry.PyFloat);
-            string startClass = start is DType d ? d.Meta.ToString() : Convert.ToString(start, CultureInfo.InvariantCulture);
+            // The start's class: a descriptor's class, or the abstract Python-scalar class itself (already a class).
+            object startClass = start is DType d ? d.Meta : start;
             // The promotion found a (text) dtype; np.subtract(stop, start, dtype=type(promoted)) has no loop for it.
-            throw new TypeError(
-                $"ufunc 'subtract' did not contain a loop with signature matching types ({array.dtype.Meta}, {startClass}) -> {promoted.Meta}");
+            throw new UFuncNoLoopError("subtract", 2, array.dtype.Meta, startClass, promoted.Meta);
         }
 
         /// <summary>
@@ -1868,7 +1868,7 @@ namespace NumSharp
         /// <returns>The constant boxed as <paramref name="tc"/>'s exact CLR type; an array of several elements or a value
         ///     that is not a number returns through the house conversion (<see cref="NumSharp.Utilities.Converts.ChangeType(object, NPTypeCode)"/>)
         ///     or as is (an array), for the broadcast-assignment route.</returns>
-        /// <exception cref="OverflowException">A signed integer array and a constant whose int() does not fit it:
+        /// <exception cref="OverflowError">A signed integer array and a constant whose int() does not fit it:
         ///     <c>np.pad(int8, 1, constant_values=1000)</c> raises "Python integer 1000 out of bounds for int8", as in NumPy
         ///     (an unsigned array casts instead: <c>np.pad(uint8, 1, constant_values=1000)</c> pads with 232); a float
         ///     infinity into a signed integer; a Python int of <c>tolist()</c> out of ANY integer array's range

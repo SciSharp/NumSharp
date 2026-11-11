@@ -221,7 +221,7 @@ namespace NumSharp
                     {
                         _base.SetAtIndex(value, flat);
                     }
-                    catch (Exception e) when (e is OverflowException || e is ValueError || e is TypeError)
+                    catch (Exception e) when (e is OverflowError || e is OverflowException || e is ValueError || e is TypeError)
                     {
                         throw new ValueError("Error setting single item of array.", e);
                     }
@@ -237,7 +237,7 @@ namespace NumSharp
                     // nan+nanj, False — or int(None)'s TypeError, which the catch below rewords like every pack error).
                     ReductionInitial.PackStore(value, tc, new Span<byte>(slot, ReductionInitial.SlotBytes));
                 }
-                catch (Exception e) when (e is OverflowException || e is ValueError || e is TypeError)
+                catch (Exception e) when (e is OverflowError || e is OverflowException || e is ValueError || e is TypeError)
                 {
                     // iter_ass_subscript replaces PyArray_Pack's error with this one text for an integer index.
                     throw new ValueError("Error setting single item of array.", e);

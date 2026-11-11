@@ -291,7 +291,7 @@ namespace NumSharp.Backends
         ///     <c>StringDType</c>.</exception>
         /// <exception cref="ValueError">A text that is not a number of a numeric class's kind (quoting it), a NaN into an
         ///     integer class, or a non-text value into a <c>coerce=False</c> <c>StringDType</c>.</exception>
-        /// <exception cref="OverflowException">A value that does not fit an integer class.</exception>
+        /// <exception cref="OverflowError">A value that does not fit an integer class.</exception>
         /// <exception cref="TypeError">None into an integer or decimal class, a value NumPy cannot convert, or a discovered
         ///     width past the string class's maximum.</exception>
         /// <exception cref="NotSupportedException">None without a dtype (NumPy's object array), or a value with no text
@@ -569,7 +569,7 @@ namespace NumSharp.Backends
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>.</exception>
         /// <exception cref="ValueError">A text that does not parse as a numeric dtype's number.</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer dtype's range.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer dtype's range.</exception>
         /// <exception cref="NotSupportedException">None without a dtype (NumPy's object array).</exception>
         /// <remarks>Only the array coercion splits: a fill or a store into a <c>'c'</c> array packs the whole text, cut to
         ///     its one byte, as NumPy's setitem does, so it keeps calling <see cref="FromAnyScalar"/>.</remarks>

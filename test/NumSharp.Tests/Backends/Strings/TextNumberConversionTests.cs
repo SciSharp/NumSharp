@@ -88,7 +88,7 @@ namespace NumSharp.Tests.Backends.Strings
             NDArray.AsStringArray(np.array(new[] { 'a', 'Z' }).astype("U")).Should().Equal("97", "90");
             np.array(new[] { "65", "7" }).astype(np.@char).ToArray<char>().Should().Equal('A', (char)7);
             Action charOverflow = () => np.array(new[] { "65536" }).astype(np.@char);
-            charOverflow.Should().Throw<OverflowException>().WithMessage("Python integer 65536 out of bounds for uint16");
+            charOverflow.Should().Throw<OverflowError>().WithMessage("Python integer 65536 out of bounds for uint16");
             NDArray.AsStringArray(np.array(new[] { 1.5m, -0.25m }).astype("U")).Should().Equal("1.5", "-0.25");
             np.array(new[] { "1.5", " 2 " }).astype(np.@decimal).ToArray<decimal>().Should().Equal(1.5m, 2m);
         }
@@ -388,23 +388,23 @@ namespace NumSharp.Tests.Backends.Strings
         {
             const string CLong = "Python int too large to convert to C long";
             Action i64Plus = () => U("9223372036854775808").astype(np.int64);
-            i64Plus.Should().Throw<OverflowException>().WithMessage(CLong);
+            i64Plus.Should().Throw<OverflowError>().WithMessage(CLong);
             Action i64Minus = () => U("-9223372036854775809").astype(np.int64);
-            i64Minus.Should().Throw<OverflowException>().WithMessage(CLong);
+            i64Minus.Should().Throw<OverflowError>().WithMessage(CLong);
             using (var min = U("-9223372036854775808").astype(np.int64))
                 min.GetInt64(0).Should().Be(long.MinValue);
             Action u64Minus = () => U("-9223372036854775809").astype(np.uint64);
-            u64Minus.Should().Throw<OverflowException>().WithMessage(CLong);
+            u64Minus.Should().Throw<OverflowError>().WithMessage(CLong);
             Action u64Min = () => U("-9223372036854775808").astype(np.uint64);
-            u64Min.Should().Throw<OverflowException>().WithMessage("Python integer -9223372036854775808 out of bounds for uint64");
+            u64Min.Should().Throw<OverflowError>().WithMessage("Python integer -9223372036854775808 out of bounds for uint64");
             using (var z = U("-0").astype(np.uint64))
                 z.GetUInt64(0).Should().Be(0UL);
             using (var z = U("-0").astype(np.uint32))
                 z.GetUInt32(0).Should().Be(0U);
             Action u32Minus = () => U("-1").astype(np.uint32);
-            u32Minus.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint32");
+            u32Minus.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint32");
             Action i8 = () => U("9223372036854775808").astype(np.int8);
-            i8.Should().Throw<OverflowException>().WithMessage(CLong);
+            i8.Should().Throw<OverflowError>().WithMessage(CLong);
         }
 
         /// <summary>
@@ -484,17 +484,17 @@ namespace NumSharp.Tests.Backends.Strings
             // NumSharp pins the Linux / macOS (LP64) C long: the Windows texts differ ("int too big to convert", and int32
             // reports the C long first) — probed against both.
             Action i8 = () => U("99999999999999999999").astype(np.int64);
-            i8.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            i8.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
             Action u8 = () => U("18446744073709551616").astype(np.uint64);
-            u8.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            u8.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
             Action u8Negative = () => U("-1").astype(np.uint64);
-            u8Negative.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint64");
+            u8Negative.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint64");
             Action i4 = () => U("3000000000").astype(np.int32);
-            i4.Should().Throw<OverflowException>().WithMessage("Python integer 3000000000 out of bounds for int32");
+            i4.Should().Throw<OverflowError>().WithMessage("Python integer 3000000000 out of bounds for int32");
             Action u4 = () => U("5000000000").astype(np.uint32);
-            u4.Should().Throw<OverflowException>().WithMessage("Python integer 5000000000 out of bounds for uint32");
+            u4.Should().Throw<OverflowError>().WithMessage("Python integer 5000000000 out of bounds for uint32");
             Action i1 = () => U("300").astype(np.int8);
-            i1.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            i1.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
         }
 
         /// <summary>CPython's 4300-digit limit applies to <c>int()</c> (its ValueError text), not to <c>float()</c>.</summary>
@@ -524,7 +524,7 @@ namespace NumSharp.Tests.Backends.Strings
             hello.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: 'hello'");
             var b = np.zeros(new Shape(2), np.int64);
             Action big = () => b[0] = "99999999999999999999";
-            big.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            big.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
             // np.full / np.full_like copy a str scalar through np.asarray: the array cast, quoting the NumPy scalar.
             Action full = () => np.full(new Shape(2), "x", np.int64);
             full.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: np.str_('x')");
@@ -863,7 +863,7 @@ namespace NumSharp.Tests.Backends.Strings
             ((double)NDArray.Scalar(Encoding.ASCII.GetBytes("1.5"))).Should().Be(1.5);
             ((ulong)np.array("18446744073709551615")).Should().Be(ulong.MaxValue);
             Action tooBig = () => _ = (ulong)np.array("18446744073709551616");
-            tooBig.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            tooBig.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
         }
 
         /// <summary>

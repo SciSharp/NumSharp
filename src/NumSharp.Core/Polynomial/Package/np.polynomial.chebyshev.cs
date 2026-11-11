@@ -40,7 +40,7 @@ namespace NumSharp
         /// <exception cref="IndexError"><paramref name="c"/> is empty: <c>index -2 is out of bounds for axis 0 with size 0</c>.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="tensor"/> is false and the shapes do not broadcast
         ///     (NumPy's ValueError text).</exception>
-        /// <exception cref="System.OverflowException">A Python int of the recurrence does not fit an integer x dtype
+        /// <exception cref="OverflowError">A Python int of the recurrence does not fit an integer x dtype
         ///     (NumPy's OverflowError).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebval.html</remarks>
         public NDArray chebval(object x, object c, bool tensor = true) => NDPolyEval.Val(PolyBasis.Chebyshev, x, c, tensor);
@@ -185,7 +185,7 @@ namespace NumSharp
         /// <exception cref="ValueError">An array scale with several elements or none (NumPy's truth-value errors), or
         ///     entries of different shapes (<c>setting an array element with a sequence…</c>).</exception>
         /// <exception cref="TypeError">NumPy's boolean negative / subtract.</exception>
-        /// <exception cref="OverflowException">A Python int out of a NumPy integer dtype's range, or CPython's int/float overflow.</exception>
+        /// <exception cref="OverflowError">A Python int out of a NumPy integer dtype's range, or CPython's int/float overflow.</exception>
         /// <exception cref="System.NotSupportedException">An entry NumPy would store in an object array: a Python int beyond
         ///     uint64, null, a string.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebline.html</remarks>
@@ -239,7 +239,7 @@ namespace NumSharp
         /// <returns>The trimmed copy (<c>c[:1]*0</c> when nothing exceeds the tolerance).</returns>
         /// <exception cref="ValueError"><c>tol must be non-negative</c>, an empty or non-1-d series, or no common type.</exception>
         /// <exception cref="TypeError">A complex or null tolerance.</exception>
-        /// <exception cref="OverflowException">A Python int tolerance too large to convert.</exception>
+        /// <exception cref="OverflowError">A Python int tolerance too large to convert.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebtrim.html</remarks>
         [NDScoped]
         public NDArray chebtrim(object c, object tol) => NDPolySeries.TrimCoef(c, PolyUtilsModule.Tolerance(tol));
@@ -343,7 +343,7 @@ namespace NumSharp
         /// <exception cref="System.NotSupportedException">A null series, or one holding None, a non-numeric object or a Python int past
         ///     uint64 (NumPy's object array, a dtype NumSharp does not have) — raised where NumPy starts computing with
         ///     it, after every series check. A str series is NumPy's ValueError (no common type).</exception>
-        /// <exception cref="System.DivideByZeroException">The divisor is zero (all its coefficients, after trimming) —
+        /// <exception cref="ZeroDivisionError">The divisor is zero (all its coefficients, after trimming) —
         ///     NumPy's bare <c>ZeroDivisionError</c>, empty message.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebdiv.html</remarks>
         [NDScoped]
@@ -375,7 +375,7 @@ namespace NumSharp
         /// <returns>The power series.</returns>
         /// <exception cref="ValueError">The series' errors; <c>cannot convert float NaN to integer</c>;
         ///     <c>Power must be a non-negative integer.</c> (a fractional or negative power); <c>Power is too large</c>.</exception>
-        /// <exception cref="System.OverflowException"><c>cannot convert float infinity to integer</c>; a power beyond
+        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>; a power beyond
         ///     int64 with no limit (NumPy would run until memory is exhausted).</exception>
         /// <exception cref="System.NotSupportedException">An object series (see <see cref="chebmul"/>), raised after the power checks.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebpow.html</remarks>
@@ -397,7 +397,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A power int() refuses: a complex, null (None), a list or tuple (<c>int() argument must
         ///     be a string, a bytes-like object or a real number, not '…'</c>), an ndarray of one or more dims (<c>only
         ///     0-dimensional arrays can be converted to Python scalars</c>).</exception>
-        /// <exception cref="System.OverflowException"><c>cannot convert float infinity to integer</c>; a power beyond int64
+        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>; a power beyond int64
         ///     with no limit (NumPy would run until memory is exhausted).</exception>
         /// <exception cref="System.NotSupportedException">An object series (see <see cref="chebmul"/>), raised after the
         ///     power checks.</exception>
@@ -420,7 +420,7 @@ namespace NumSharp
         ///     no element or several (NumPy's truth-value texts).</exception>
         /// <exception cref="TypeError">A power int() refuses, or a limit that does not compare with an int: a complex, str,
         ///     list or tuple (<c>'&gt;' not supported between instances of 'int' and '…'</c>).</exception>
-        /// <exception cref="System.OverflowException"><c>cannot convert float infinity to integer</c>; a power the limit's
+        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>; a power the limit's
         ///     comparison dtype cannot hold (<c>int too large to convert to float</c> for a float limit ndarray or np.float16,
         ///     <c>int too big to convert</c> for a bool one); a power beyond int64 with no limit.</exception>
         /// <exception cref="System.NotSupportedException">An object series, raised after the power checks.</exception>
@@ -501,7 +501,7 @@ namespace NumSharp
         /// <param name="deg">The degree (≥ 0).</param>
         /// <returns>A view of shape <c>x.shape + (deg + 1,)</c> over a new array, the degree axis last (OWNDATA false).</returns>
         /// <exception cref="ValueError"><c>deg must be non-negative</c>; a ragged list x; <c>array is too big; …</c>.</exception>
-        /// <exception cref="System.OutOfMemoryException">The matrix cannot be allocated (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">The matrix cannot be allocated (NumPy's MemoryError).</exception>
         /// <exception cref="System.NotSupportedException">A null or str x, or a list NumPy makes a str / object array of.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebvander.html</remarks>
         [NDScoped]
@@ -537,8 +537,8 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>Expected 2 dimensions of degrees, got {len}</c>; points of different shapes;
         ///     <c>deg must be non-negative</c>; <c>array is too big; …</c>.</exception>
         /// <exception cref="IncorrectShapeException">No points (NumPy's reshape text).</exception>
-        /// <exception cref="System.OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated.</exception>
-        /// <exception cref="System.OverflowException">Scalar points with a Python int past the float range (NumPy's
+        /// <exception cref="MemoryError">A matrix NumPy allocates on the way cannot be allocated.</exception>
+        /// <exception cref="OverflowError">Scalar points with a Python int past the float range (NumPy's
         ///     <c>int too large to convert to float</c> at its per-element <c>+ 0.0</c>).</exception>
         /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str array, or into an object array it
         ///     computes with as Python objects or fails on. Scalar points that are all numbers but stack into an object array
@@ -560,8 +560,8 @@ namespace NumSharp
         /// <exception cref="TypeError">A deg without a length, or a non-integer degree.</exception>
         /// <exception cref="ValueError"><c>Expected 3 dimensions of degrees, got {len}</c>, and the 2-D form's other errors.</exception>
         /// <exception cref="IncorrectShapeException">No points (NumPy's reshape text).</exception>
-        /// <exception cref="System.OutOfMemoryException">A matrix NumPy allocates on the way cannot be allocated.</exception>
-        /// <exception cref="System.OverflowException">Scalar points with a Python int past the float range (NumPy's
+        /// <exception cref="MemoryError">A matrix NumPy allocates on the way cannot be allocated.</exception>
+        /// <exception cref="OverflowError">Scalar points with a Python int past the float range (NumPy's
         ///     <c>int too large to convert to float</c> at its per-element <c>+ 0.0</c>).</exception>
         /// <exception cref="System.NotSupportedException">Points NumPy stacks into a str array, or into an object array it
         ///     computes with as Python objects or fails on. Scalar points that are all numbers but stack into an object array
@@ -588,7 +588,7 @@ namespace NumSharp
         ///     arithmetic does not raise — NumPy's result is an object matrix, a dtype NumSharp does not have; or one where NumPy's
         ///     object arithmetic reaches None or a str (CPython's TypeError there). A two-term object series of numbers computes:
         ///     NumPy's linear root of the items is a numeric 1x1 array. A str series is NumPy's ValueError (no common type).</exception>
-        /// <exception cref="System.OverflowException">An object series whose arithmetic meets a Python int too large for a
+        /// <exception cref="OverflowError">An object series whose arithmetic meets a Python int too large for a
         ///     float — CPython's <c>integer division result too large for a float</c> when it is divided by a Python int,
         ///     <c>int too large to convert to float</c> when it meets anything else — whichever NumPy's statements raise first.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebcompanion.html</remarks>
@@ -621,7 +621,7 @@ namespace NumSharp
         ///     uint64 among the terms) of one term — NumPy returns <c>np.array([], dtype=object)</c> — or one where NumPy's
         ///     object arithmetic reaches None or a str (CPython's TypeError there). A two-term object series of numbers
         ///     computes: NumPy's linear root of the items is a numeric array.</exception>
-        /// <exception cref="System.OverflowException">An object series whose arithmetic meets a Python int too large for a
+        /// <exception cref="OverflowError">An object series whose arithmetic meets a Python int too large for a
         ///     float — CPython's <c>integer division result too large for a float</c> when it is divided by a Python int,
         ///     <c>int too large to convert to float</c> when it meets anything else — whichever NumPy's statements raise first.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebroots.html</remarks>
@@ -646,7 +646,7 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="x"/> is a Python list or tuple (an <c>object[]</c>, a C# list, a
         ///     <c>ValueTuple</c>), null or a string: Python's <c>unsupported operand type(s) for +: 'float' and 'list'</c>
         ///     (<c>'tuple'</c>, <c>'NoneType'</c>, <c>'str'</c>). Or a string array: <c>np.add</c>'s no-loop error.</exception>
-        /// <exception cref="System.OverflowException">A Python int too large for a float: CPython's <c>int too large to
+        /// <exception cref="OverflowError">A Python int too large for a float: CPython's <c>int too large to
         ///     convert to float</c> from <c>1.0 + x</c>. Or a decimal x outside [-1, 1]: decimal (no NumPy dtype) has no NaN,
         ///     so the house decimal square root of a negative number raises.</exception>
         /// <exception cref="System.DivideByZeroException">A decimal x of ±1 (<c>1.0/0</c>: decimal has no infinity).</exception>
@@ -682,12 +682,12 @@ namespace NumSharp
         /// <exception cref="TypeError">int()'s <c>int() argument must be a string, a bytes-like object or a real number,
         ///     not '…'</c> (null, a <see cref="System.Numerics.Complex"/>, a list or tuple) or <c>only 0-dimensional arrays can
         ///     be converted to Python scalars</c> (an array of one or more dims).</exception>
-        /// <exception cref="System.OverflowException">int() of an infinity (<c>cannot convert float infinity to integer</c>),
+        /// <exception cref="OverflowError">int() of an infinity (<c>cannot convert float infinity to integer</c>),
         ///     or a count past the float range (<c>int too large to convert to float</c>, from <c>0.5*np.pi / npts</c>).</exception>
         /// <exception cref="System.NotSupportedException">A count in <c>[2**63 + 2, 2**63 + 1024]</c>, where NumPy's np.arange
         ///     length rounds to <c>2**63</c> and returns an EMPTY object array (a dtype NumSharp does not have). The counts
         ///     <c>[2**63 - 512, 2**63 + 1]</c> return an empty float64 array, as NumPy's do.</exception>
-        /// <exception cref="System.OutOfMemoryException">A count below the byte limit that the machine cannot hold (NumPy's
+        /// <exception cref="MemoryError">A count below the byte limit that the machine cannot hold (NumPy's
         ///     MemoryError).</exception>
         /// <remarks>
         ///     <para>sin is the C runtime's on both sides (Math.Sin, NumPy's float64 loop on win-amd64), so the speed gain is
@@ -710,7 +710,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>npts must be integer</c>, <c>npts must be &gt;= 2</c>, int()'s ValueErrors, or a
         ///     count too large to allocate (<c>array is too big; …</c>, <c>Maximum allowed size exceeded</c>).</exception>
         /// <exception cref="TypeError">int()'s TypeErrors (see <see cref="chebpts1"/>).</exception>
-        /// <exception cref="System.OverflowException">int() of an infinity.</exception>
+        /// <exception cref="OverflowError">int() of an infinity.</exception>
         /// <exception cref="IndexError">A count in <c>[2**63 - 512, 2**63 + 1024]</c>: np.arange returns an empty ramp there
         ///     and NumPy's linspace fails on <c>y[-1, ...] = stop</c> (<c>index -1 is out of bounds for axis 0 with size 0</c>).</exception>
         /// <exception cref="System.OutOfMemoryException">A count below the byte limit that the machine cannot hold.</exception>
@@ -798,7 +798,7 @@ namespace NumSharp
         /// <exception cref="System.NotSupportedException">A result NumPy turns into an OBJECT array (null, or a list holding null
         ///     or a Python int past uint64): NumPy then computes the product with Python objects, a dtype NumSharp does not
         ///     have.</exception>
-        /// <exception cref="System.OutOfMemoryException">A degree whose matrix the machine cannot hold (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">A degree whose matrix the machine cannot hold (NumPy's MemoryError).</exception>
         /// <remarks>
         ///     <para><b>Ownership.</b> The points handed to <paramref name="func"/> and every array it creates are intermediates
         ///     of this call and are reclaimed when it returns (<see cref="NDScopedAttribute"/>): to keep one, call
@@ -856,7 +856,7 @@ namespace NumSharp
         /// <exception cref="System.NotSupportedException">No LAPACK backend (<c>np.linalg.lstsq</c> needs
         ///     <c>NumSharp.Interop.OpenBLAS</c>); an argument NumPy computes with as Python objects; an rcond array with one or
         ///     more dimensions (NumPy broadcasts lstsq over it).</exception>
-        /// <exception cref="System.OutOfMemoryException">A design matrix the machine cannot hold (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">A design matrix the machine cannot hold (NumPy's MemoryError).</exception>
         /// <remarks>
         ///     <para>NumPy warns (<c>RankWarning: The fit may be poorly conditioned</c>) when the rank falls short of the number
         ///     of fitted terms and <paramref name="full"/> is false; NumSharp emits no warnings — read <c>rank</c> with

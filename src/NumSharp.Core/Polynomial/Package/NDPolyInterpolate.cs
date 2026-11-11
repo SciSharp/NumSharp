@@ -85,7 +85,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">np.dot's alignment errors, where NumSharp's product raises them as ArgumentException.</exception>
         /// <exception cref="NotSupportedException">A func result NumPy computes with as Python objects, or a deg past the
         ///     integer dtypes (see the file header).</exception>
-        /// <exception cref="OutOfMemoryException">A degree whose matrix the machine cannot hold (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">A degree whose matrix the machine cannot hold (NumPy's MemoryError).</exception>
         /// <remarks>Every exception <paramref name="func"/> throws propagates unchanged.</remarks>
         public static NDArray ChebInterpolate(Func<NDArray, object[], object> func, object deg, object args)
         {

@@ -131,7 +131,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(object value)
@@ -320,7 +320,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static char ToChar(object value)
@@ -437,7 +437,7 @@ namespace NumSharp.Utilities
         /// <returns>The char value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside char (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside char (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(string value)
@@ -456,7 +456,7 @@ namespace NumSharp.Utilities
         /// <returns>The char value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside char (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside char (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(string value, IFormatProvider provider) => ToChar(value);
@@ -532,7 +532,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(object value)
@@ -699,7 +699,7 @@ namespace NumSharp.Utilities
         /// <returns>The int8 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside int8 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside int8 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(string value)
@@ -719,7 +719,7 @@ namespace NumSharp.Utilities
         /// <returns>The int8 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside int8 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside int8 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(string value, IFormatProvider provider) => ToSByte(value);
@@ -747,7 +747,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(object value)
@@ -908,7 +908,7 @@ namespace NumSharp.Utilities
         /// <returns>The uint8 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside uint8 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside uint8 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(string value)
@@ -927,7 +927,7 @@ namespace NumSharp.Utilities
         /// <returns>The uint8 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside uint8 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside uint8 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(string value, IFormatProvider provider) => ToByte(value);
@@ -954,7 +954,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(object value)
@@ -1113,7 +1113,7 @@ namespace NumSharp.Utilities
         /// <returns>The int16 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside int16 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside int16 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(string value)
@@ -1132,7 +1132,7 @@ namespace NumSharp.Utilities
         /// <returns>The int16 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside int16 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside int16 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(string value, IFormatProvider provider) => ToInt16(value);
@@ -1160,7 +1160,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(object value)
@@ -1325,7 +1325,7 @@ namespace NumSharp.Utilities
         /// <returns>The uint16 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside uint16 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside uint16 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(string value)
@@ -1345,7 +1345,7 @@ namespace NumSharp.Utilities
         /// <returns>The uint16 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside uint16 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside uint16 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(string value, IFormatProvider provider) => ToUInt16(value);
@@ -1373,7 +1373,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(object value)
@@ -1544,7 +1544,7 @@ namespace NumSharp.Utilities
         /// <returns>The int32 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside int32 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside int32 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(string value)
@@ -1563,7 +1563,7 @@ namespace NumSharp.Utilities
         /// <returns>The int32 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside int32 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside int32 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(string value, IFormatProvider provider) => ToInt32(value);
@@ -1591,7 +1591,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(object value)
@@ -1767,7 +1767,7 @@ namespace NumSharp.Utilities
         /// <returns>The uint32 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside uint32 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside uint32 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(string value)
@@ -1787,7 +1787,7 @@ namespace NumSharp.Utilities
         /// <returns>The uint32 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside uint32 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside uint32 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(string value, IFormatProvider provider) => ToUInt32(value);
@@ -1815,7 +1815,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(object value)
@@ -1979,7 +1979,7 @@ namespace NumSharp.Utilities
         /// <returns>The int64 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside int64 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside int64 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(string value)
@@ -1998,7 +1998,7 @@ namespace NumSharp.Utilities
         /// <returns>The int64 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside int64 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside int64 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(string value, IFormatProvider provider) => ToInt64(value);
@@ -2026,7 +2026,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(object value)
@@ -2224,7 +2224,7 @@ namespace NumSharp.Utilities
         /// <returns>The uint64 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside uint64 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside uint64 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(string value)
@@ -2244,7 +2244,7 @@ namespace NumSharp.Utilities
         /// <returns>The uint64 value.</returns>
         /// <exception cref="ValueError">The text is not a literal of the target's kind (CPython's text, quoting the str:
         ///     <c>invalid literal for int() with base 10: '1.5'</c>, <c>could not convert string to float: 'x'</c>).</exception>
-        /// <exception cref="OverflowException">The integer is outside uint64 (NumPy's <c>Python integer 300 out of bounds for
+        /// <exception cref="OverflowError">The integer is outside uint64 (NumPy's <c>Python integer 300 out of bounds for
         ///     uint8</c>, or <c>Python int too large to convert to C long</c>).</exception>
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(string value, IFormatProvider provider) => ToUInt64(value);
@@ -2272,7 +2272,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(object value)
@@ -2475,7 +2475,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(object value)
@@ -2674,7 +2674,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(object value)
@@ -2874,7 +2874,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static Half ToHalf(object value)
@@ -3084,7 +3084,7 @@ namespace NumSharp.Utilities
         /// <param name="value">The value; null gives the default.</param>
         /// <returns>The converted value.</returns>
         /// <exception cref="ValueError">A str that is not a literal of the target's kind.</exception>
-        /// <exception cref="OverflowException">A str holding an integer outside an integer target.</exception>
+        /// <exception cref="OverflowError">A str holding an integer outside an integer target.</exception>
         /// <exception cref="InvalidCastException">A value that is neither a dtype value, a str nor <see cref="IConvertible"/>.</exception>
 [MethodImpl(OptimizeAndInline)]
         public static System.Numerics.Complex ToComplex(object value)

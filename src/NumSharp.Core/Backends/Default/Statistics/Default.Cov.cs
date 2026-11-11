@@ -76,9 +76,10 @@ namespace NumSharp.Backends
         ///     <c>StringDType</c> request with weights.</exception>
         /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/> (the in-place centring's cast
         ///     refusal).</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero.</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>, or decimal
-        ///     arithmetic out of range.</exception>
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="OverflowException">Decimal arithmetic out of range (.NET's own, decimal has no NumPy
+        ///     dtype).</exception>
         /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
         /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <exception cref="InvalidOperationException">Not reached (see <see cref="CovOfText"/>).</exception>
@@ -300,7 +301,7 @@ namespace NumSharp.Backends
         ///     <c>(0, 0)</c> covariance NumPy returns when there are no variables.</returns>
         /// <exception cref="ValueError">A text element that does not parse into a numeric <paramref name="dtype"/>
         ///     (<c>could not convert string to float: np.str_('ab')</c>; <paramref name="m"/>'s before <paramref name="y"/>'s).</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer <paramref name="dtype"/>.</exception>
         /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
         /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <exception cref="ValueError">The variables of <paramref name="m"/> and <paramref name="y"/> do not have the same

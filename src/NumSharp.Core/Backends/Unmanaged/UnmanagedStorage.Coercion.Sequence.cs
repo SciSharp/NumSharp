@@ -215,7 +215,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">A ragged sequence (NumPy's inhomogeneous-shape text), an array item that cannot be
         ///     assigned into its slot, or a value <c>setitem</c> refuses (a text that is not a number of the class's kind, a
         ///     NaN into an integer class).</exception>
-        /// <exception cref="OverflowException">A Python int outside an integer class (<c>Python integer 300 out of bounds
+        /// <exception cref="OverflowError">A Python int outside an integer class (<c>Python integer 300 out of bounds
         ///     for int8</c>).</exception>
         /// <exception cref="TypeError">A value the class cannot convert: None into an integer class (<c>int()</c>'s text), a
         ///     complex number into a real class.</exception>
@@ -819,7 +819,7 @@ namespace NumSharp.Backends
         ///     holds every one of them by construction.</param>
         /// <exception cref="ValueError">An array leaf whose dims differ from its slot (only possible after an empty
         ///     sibling ended the dims above the leaf's own), or a value <paramref name="store"/>'s setitem refuses.</exception>
-        /// <exception cref="OverflowException">A Python int outside <paramref name="store"/>'s integer range.</exception>
+        /// <exception cref="OverflowError">A Python int outside <paramref name="store"/>'s integer range.</exception>
         /// <exception cref="TypeError">A value <paramref name="store"/>'s setitem cannot convert.</exception>
         /// <exception cref="NotSupportedException">A value of no NumPy type under <paramref name="store"/>.</exception>
         private static void Fill(Node node, int depth, byte* p, long[] dims, long[] strides, NPTypeCode t, NDArray r, DType store = null)
