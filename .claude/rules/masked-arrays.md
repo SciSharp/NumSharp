@@ -90,6 +90,35 @@ the text classes included. The masked reductions' statistics (`ma.mean` / `ma.va
 - `ma.around` is `_MaskedUnaryOperation(np.around)`: the masked slots keep the operand's ORIGINAL data (`ma.round`
   rounds them). `ma.choose` reads each choice FILLED with its own fill value (visible through a plain out);
   `MaskedArray.choose` is `ndarray.choose`: the stored index values over the raw choices, a copy of the index's mask.
+- The 48 ufunc wrappers (`add` … `true_divide`; not `angle` / `around`) take np.add's C# keywords `(…, out, where,
+  dtype)`: they reach the ufunc, then the wrapper's own statements run over what it returned — with an out, the out's
+  DATA. The call returns a NEW masked array over that data (`result.view(...)`; the out itself only for a 0-d result),
+  with the wrapper's mask and the operand's fill / hardness. A MASKED out first goes through the ufunc's
+  `__array_wrap__` (`WrapIntoMaskedOut`): its mask is REPLACED (hard or not) — nomask for a binary ufunc, an all-False
+  ARRAY for a unary one (reduce over one input never shrinks) — and a ufunc numpy.ma registered with a domain writes its
+  `ufunc_fills` value where the domain fails (sqrt / tan / arcsin / arccos / arctanh 0.0, the logs / arccosh 1.0, the
+  division family 1) and masks those slots. The division family's add-back is then `MaskedArray.__iadd__` on the out,
+  which adds nothing where its wrap mask is set (a plain out gets the dividend back). NumPy's returned mask of a domained
+  call with a masked out is itself a masked array (`tolist()` shows None); NumSharp returns the plain values
+  (`[Misaligned]`). `where` without an out leaves the unselected slots unspecified, as NumPy (test with an out).
+- `sort(a, axis, kind, order, endwith, fill_value, stable)` / `argsort(a, axis, kind, order, endwith, fill_value,
+  stable)` and the methods are NumPy's order; the no-axis argsort (`axis=<no value>`) keeps `endwith` / `fill_value`
+  first so a positional null still binds the axis form. ma.sort and both methods refuse `stable=True` (`` `stable`
+  parameter is not supported for masked arrays. ``); the MODULE ma.argsort drops it (NumPy passes `stable=None`).
+- `clip(a, a_min, a_max, out, min, max, fill_value, bool? hardmask, dtype)` is `_convert2ma`: np.clip over the masked
+  operand viewed as masked, so the result ORs EVERY operand's mask (a masked bound masks; one input — no bounds, or
+  both dropped by `_clip`'s Python-int rule — keeps `getmaskarray(a)` unshrunk), takes the first masked input's fill /
+  hardness, and a masked out has its mask replaced (a view of it is returned). `hardmask` is `bool?` so an explicit
+  false softens. `MaskedArray.clip(min, max, out, dtype)` is ndarray.clip: it returns the out itself.
+- `median(a, NDAxis axis, out, overwrite_input, keepdims)` (+ int / int[]): `_ureduce` merges several axes into one
+  (`repeated axis`), `overwrite_input` sorts a masked operand IN PLACE (fill inf; a non-contiguous flattened operand
+  sorts a copy), and the out follows `_median`'s writes: an array mask (`outmask.flat`), nomask after an even-count 1-D
+  median (the halving ufunc's wrap), untouched through keepdims' view of a mask-less out; a PLAIN out for an inexact
+  operand on the axis path is NumPy's `return arrays must be of ArrayType` TypeError (`.data` is a memoryview).
+  `amax` / `amin(a, NDAxis axis, out, keepdims, initial, where)` are np.amax / np.amin: a masked operand runs `max` /
+  `min` and refuses initial / where (`MaskedArray.max() got an unexpected keyword argument 'initial'`); `fill_value` is
+  gone. Also NumPy's: `row_stack(object[] tup, dtype, casting)` (= vstack), `ndenumerate(a, compressed)` (`masked` at
+  the masked slots when false), `arange(…, dtype, device, fill_value, hardmask)`, `left_shift` / `right_shift(a, n)`.
 - Open: a 0-d result NumPy returns as a plain scalar stays a 0-d masked array. `NDArray.view()` of a DISPOSED array
   returns a live view over the freed buffer (`InitializeArc` ignores `TryAddRef`'s failure).
 - Gate: `Ma/NDMaskedArrayInheritanceTests.cs` (probed member by member against NumPy).

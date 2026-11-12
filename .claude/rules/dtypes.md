@@ -392,8 +392,19 @@ prefix (`GetCastingImpl`, `DTypePromotion.CommonDType`). PascalCase members (`Na
      first read (both orders, np first and registry first, are tested). The `static np()` tables are built as
      `Dictionary<(DType, DType), DType>` and the `Type`/`NPTypeCode`-keyed maps derived from them.
   3. `isdtype` has only the NumPy-exact `DType` overloads (NumPy rejects `issubdtype`'s vocabulary: `kind argument is a
-     string, but 'floating' is not a known kind name.`, ValueError); the `NDArray` convenience overloads route through
-     `arr.dtype`.
+     string, but 'floating' is not a known kind name.`, ValueError). An array is asked through `arr.dtype`: NumPy refuses
+     one (`dtype argument must be a NumPy dtype, but it is a <class 'numpy.ndarray'>.`, issubdtype's `Cannot construct a
+     dtype from an array`), and the NDArray convenience overloads went in API-parity batch 9, so it does not compile.
+  4. `np.can_cast` refuses a Python number with NumPy 2's NEP 50 TypeError (`can_cast() does not support Python ints,
+     floats, and complex because the result used to depend on the value.` + the NEP 50 line), as
+     `array_can_cast_safely` does: the eleven typed value overloads went (batch 9), so a bare C# number binds
+     `can_cast(NDArray, …)` through the implicit conversion, which refuses a `WasPythonLiteral` / `WasPythonBool` 0-d
+     array after the `to` / `casting` checks; the `object` form ports the whole `from_` dispatch (array, NumPy scalar —
+     a boxed `Half` / `char` —, Python number, dtype specifier, else `did not understand one of the types; 'None' not
+     accepted`). `np.array(1)`, `NDArray.Scalar(1)` and a `decimal` (no NumPy analog, unmarked) keep the dtype rule;
+     `np.can_cast(0, NPTypeCode.Byte)` is CS0121 (the literal 0 also converts to the enum). The generic
+     `finfo<T>()` / `iinfo<T>()` / `can_cast<TFrom, TTo>()` went too (OD7, batch 9): write `np.finfo(typeof(T))` or the
+     np dtype.
   4. Tests: `test/NumSharp.Tests/Utilities/DTypeAssertions.cs` adds `Should(this DType)` → `DTypeAssertions`
      (`Be(DType)` (a `Type`/`NPTypeCode`/string converts in), `Be<T>()`, `NotBe`, `BeOneOf`) in the `NumSharp.Tests`
      namespace, so enclosing-namespace lookup binds every `x.dtype.Should()` ahead of AwesomeAssertions'

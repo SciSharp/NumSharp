@@ -153,9 +153,9 @@ namespace NumSharp.Tests.DTypes
             np.can_cast(NPTypeCode.Decimal, NPTypeCode.Double, "same_kind").Should().BeTrue();
             np.can_cast(NPTypeCode.Double, NPTypeCode.Decimal, "safe").Should().BeTrue();
             np.can_cast(typeof(int), typeof(long)).Should().BeTrue();
-            np.can_cast<int, double>("safe").Should().BeTrue();
-            np.can_cast<int, float>("safe").Should().BeFalse("NumPy: int32 -> float32 loses precision, only same_kind");
-            np.can_cast<int, float>("same_kind").Should().BeTrue();
+            np.can_cast(np.int32, np.float64, "safe").Should().BeTrue();
+            np.can_cast(np.int32, np.float32, "safe").Should().BeFalse("NumPy: int32 -> float32 loses precision, only same_kind");
+            np.can_cast(np.int32, np.float32, "same_kind").Should().BeTrue();
             np.can_cast("i4", "i8").Should().BeTrue("a dtype string binds the grammar, not the char-array conversion");
             np.can_cast("i8", DType.Int32).Should().BeFalse();
             np.can_cast(np.zeros(new Shape(2), typeof(int)), DType.Int64).Should().BeTrue();

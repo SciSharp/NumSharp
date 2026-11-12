@@ -90,10 +90,6 @@ namespace NumSharp.Tests.APIs
             => np.finfo(typeof(Half)).bits.Should().Be(16);
 
         [TestMethod]
-        public void FInfo_Half_From_Generic()
-            => np.finfo<Half>().bits.Should().Be(16);
-
-        [TestMethod]
         public void FInfo_Half_From_Array()
         {
             var arr = np.array(new Half[] { (Half)1.0, (Half)2.0 });
@@ -188,10 +184,6 @@ namespace NumSharp.Tests.APIs
         [TestMethod]
         public void FInfo_Complex_From_Type()
             => np.finfo(typeof(Complex)).bits.Should().Be(64);
-
-        [TestMethod]
-        public void FInfo_Complex_From_Generic()
-            => np.finfo<Complex>().bits.Should().Be(64);
 
         [TestMethod]
         public void FInfo_Complex_From_Array()

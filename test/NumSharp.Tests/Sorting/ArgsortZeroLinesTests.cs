@@ -108,7 +108,7 @@ namespace NumSharp.Tests.Sorting
             {
                 using var data = np.zeros(new Shape(0, 3), NPTypeCode.Boolean);
                 using var mask = np.zeros(new Shape(0, 3), NPTypeCode.Boolean);
-                var sorted = np.ma.sort(np.ma.masked_array(data, mask), -1, true);
+                var sorted = np.ma.sort(np.ma.masked_array(data, mask), -1, endwith: true);
                 CollectionAssert.AreEqual(new long[] { 0, 3 }, sorted.shape);
                 Assert.AreEqual(NPTypeCode.Boolean, sorted.typecode);
                 ChurnNativeHeap();

@@ -14,7 +14,7 @@ Creation/np.dtype.cs	0	3	# stays (D): np.dtype is the dtype layer's own parser (
 DTypes/np.dtypes.cs	2	0	# stays (D): the np.dtypes module names the S and U classes
 Indexing/np.ndenumerate.cs	0	1	# stays (C): ndenumerate<T>'s C# element-type check
 Indexing/np.take.FancyAxis.cs	0	1	# stays (index kind): a contiguous 1-D int64 index takes the tiled gather
-Logic/np.can_cast.cs	1	80	# stays (D): a dtype routine - np.can_cast's rules for a Python scalar's value
+Logic/np.can_cast.cs	1	1	# stays (D): a dtype routine - from_'s dispatch (a string array's descriptor, a NumPy scalar's dtype; Python numbers refused under NEP 50)
 Logic/np.common_type.cs	1	6	# stays (D): a dtype routine
 Logic/np.find_common_type.cs	2	5	# stays (D): a dtype routine (NumPy 1.26.4's search)
 Logic/np.isreal_iscomplex.cs	0	2	# stays (D): isrealobj / iscomplexobj test the dtype itself

@@ -2053,6 +2053,35 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 ## 7. State log
 
+- **2026-11-12**: API-parity batch 9 on `journey5` (branch `api-parity/batch-09`; the owner approved all 15 picks, each
+  offered as a call table). Shape is a C# collection type (`[CollectionBuilder]` + a pattern `GetEnumerator`): a
+  collection expression is NumPy's list shape on every `Shape` / `Shape?` parameter again (`np.zeros([2, 3])`,
+  `np.zeros([])`, `np.tile(a, [2, 2])`, `size: [2, 3]`; batch 8's removal of the int[] overloads had broken them), and
+  `foreach` walks a shape's dimensions; arrays and spans still win over Shape in C#'s overload rules (probed at C# 12 /
+  net8.0 and C# 14 / net10.0). The reshape METHODS of NDArray / `NDArray<T>` / NDMatrix / NDCharArray keep NumPy's
+  `(shape, order, copy)` and the loose ints (`params long[]` + span twin); the `(Shape)`, `(ref Shape)` and `(int[])`
+  forms went (`a.reshape([3, 2])` no longer CS0121), and `NDArray<T>` gained order / copy. np.isdtype / np.issubdtype
+  lost their NDArray forms (NumPy refuses an array); np.can_cast refuses a Python number with NEP 50's TypeError (the
+  eleven typed value overloads went; the NDArray form reads the C# literal mark, the object form ports
+  `array_can_cast_safely`'s `from_` dispatch); OD7 removed `np.finfo<T>` / `np.iinfo<T>` / `np.can_cast<TFrom, TTo>`;
+  np.insert's object forms name `values`. numpy.ma: the 48 ufunc wrappers take `(…, out, where, dtype)` with NumPy's
+  statements (a masked out's `__array_wrap__`: mask replaced, the registered domain's fill, the division family's
+  `__iadd__` add-back), `sort` / `argsort` and the methods `kind` / `order` / `stable` in NumPy's order (stable refused
+  by ma.sort and the methods, dropped by ma.argsort), `clip` is `_convert2ma`'s np.clip over the masked operand (every
+  operand's mask — a masked bound's was lost —, `out`, `min` / `max`, `fill_value`, `bool? hardmask`, `dtype`;
+  `MaskedArray.clip(min, max, out, dtype)`), `median(a, NDAxis axis, out, overwrite_input, keepdims)` (`_ureduce`'s
+  merge, the in-place sort, `_median`'s out writes), `amax` / `amin` = np.amax / np.amin (`fill_value` gone, initial /
+  where refused on a masked operand), `row_stack` dtype / casting, `ndenumerate(a, compressed)`, `arange`'s dtype /
+  device / fill_value / hardmask, the shifts' `n`. Callers: 3 `reshape(ref …)`, 19 generic finfo / iinfo / can_cast, 16
+  value-based can_cast assertions (rewritten to NumPy's TypeError), 7 NDArray isdtype / issubdtype, 1 positional ma.sort
+  endwith, the oracle replay's positional median keepdims and sort / argsort endwith. Gates: the C# 12 probe (62 lines,
+  0 unexpected after), `APIs/NumPyKeywordParity.Batch9.Test.cs` (20 tests from NumPy output) and the migrated can_cast /
+  finfo / iinfo / isdtype suites; `[Misaligned]`: the masked mask NumPy returns for a domained call into a masked out
+  (NumSharp returns the plain values) and a C# decimal's can_cast (no NumPy analog: the dtype rule). The R1 ratchet's
+  np.can_cast row tightened 80 → 1 numeric dtype tests (the value table went). Gap map 937 → 995 with NumPy's signature,
+  373 → 315 to change (API_DIFF_GAP.md's refresh). Found on the way: four batch-8 docs named TypeError for the joins'
+  cast refusal, which raises InvalidCastException (the house mapping); the oracle's ma_reduce tier caught a fully masked
+  median's keepdims returning the 0-d singleton where NumPy gives a (1, …) masked array (fixed before landing).
 - **2026-11-12**: API-parity batch 8 on `journey5` (branch `api-parity/batch-08`; the owner approved 14 of the 15
   picks, each offered as a call table; "6 File parameter names (OD3)" was not taken and OD3 stays open). np.zeros /
   ones / empty `(Shape shape, DType dtype = null, char order = 'C', string device = null)` and np.full `(shape,

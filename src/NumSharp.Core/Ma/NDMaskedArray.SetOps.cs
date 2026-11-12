@@ -388,7 +388,7 @@ namespace NumSharp
         ///     does not apply.
         /// </summary>
         /// <param name="a">The masked operand.</param>
-        /// <returns>The same permutation <see cref="argsort(object,bool,object)"/> returns, or null.</returns>
+        /// <returns>The same permutation <see cref="argsort(object,bool,object,string,object,bool?)"/> returns, or null.</returns>
         /// <remarks>
         ///     NumPy keys every masked slot of an integer dtype by the dtype MAXIMUM (<c>minimum_fill_value</c>), so a
         ///     stable sort puts the masked slots after every smaller value, in input order. Unless an unmasked value equals
@@ -428,7 +428,7 @@ namespace NumSharp
         /// <exception cref="ValueError">An unmasked <c>StringDType</c> operand of two or more elements holding a None-like
         ///     NA: the sort's NumPy's <c>Cannot compare null that is not a nan-like value</c>.</exception>
         /// <remarks>
-        ///     In place, not through <see cref="sort(object,int?,bool,object)"/>: that one sorts a COPY, which NumPy's
+        ///     In place, not through <see cref="sort(object,int?,string,object,bool,object,bool?)"/>: that one sorts a COPY, which NumPy's
         ///     <c>np.array(a, copy=True, subok=True)</c> finalizes (converting a stored text fill to the dtype), while
         ///     <c>ar.sort()</c> keeps the stored fill as it is. The masked setter keeps NumPy's hard-mask rule: on a HARD
         ///     mask the old and the sorted masks are OR-ed and masked slots keep their old data.

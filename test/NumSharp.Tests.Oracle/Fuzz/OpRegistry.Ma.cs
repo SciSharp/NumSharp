@@ -123,7 +123,7 @@ namespace NumSharp.Tests.Fuzz
                 case "all": return np.ma.all(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
                 case "any": return np.ma.any(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
                 case "anom": return np.ma.anom(ops[0], ParseAxis(p), ParseMaDtype(p));
-                case "median": return np.ma.median(ops[0], ParseAxis(p), ParseKeepdims(p));
+                case "median": return np.ma.median(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
                 case "average": return np.ma.average(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "count": return np.ma.count(ops[0], ParseAxis(p), ParseKeepdims(p));
                 case "count_masked": return np.ma.count_masked(ops[0], ParseAxis(p));
@@ -230,9 +230,9 @@ namespace NumSharp.Tests.Fuzz
 
                 // ---- sort / set operations -> masked (argsort -> array) --------------------------
                 case "sort": return np.ma.sort(ops[0], p.TryGetValue("axis", out var sa) ? sa.GetInt32() : -1,
-                                               p.TryGetValue("endwith", out var ew) ? ew.GetBoolean() : true);
+                                               endwith: p.TryGetValue("endwith", out var ew) ? ew.GetBoolean() : true);
                 case "argsort": return np.ma.argsort(ops[0], p.TryGetValue("axis", out var aa) ? aa.GetInt32() : -1,
-                                                     p.TryGetValue("endwith", out var aew) ? aew.GetBoolean() : true);
+                                                     endwith: p.TryGetValue("endwith", out var aew) ? aew.GetBoolean() : true);
                 // The arraysetops (ma_sortsetops.jsonl, ma_setops.jsonl): `plain` / `hard` params say which operands NumPy
                 // received as a plain ndarray or hardened (SetOpOperand), the rest are NumPy's keyword arguments.
                 case "unique": return np.ma.unique(SetOpOperand(p, ops, 0));
