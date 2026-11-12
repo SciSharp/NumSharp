@@ -9,6 +9,11 @@ three capabilities every bridge builds on - and maps the bridges themselves. Rea
 bridge page becomes a variation on a theme you already know: only the far side of the boundary
 changes.
 
+![NumSharp at the center of its integrations: NumPy, PyTorch, pandas, SciPy, scikit-learn, Matplotlib, Pillow, OpenCV, PyArrow and polars through NumSharp.Interop.pythonnet; ONNX Runtime, ML.NET, System.Numerics.Tensors, System.Drawing and Numpy.NET in .NET; OpenBLAS; .npy and .npz files](../../images/integrations.svg)
+
+Each library's color names the package that brings it; [the bridges](#the-bridges) below map the
+bridges to their pages.
+
 **On this page:** [The contract](#the-contract) · [The bridges](#the-bridges) ·
 [Claims](#claims-ledger)
 

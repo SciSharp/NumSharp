@@ -45,10 +45,13 @@ and merges like everything else, but no NuGet package is created and no release 
    refuses the whole schema, a decimal past 28-29 digits rounds or overflows, and the decimal's trailing zeros are dropped.
 
 Keep it out of release notes (`docs/releases/RELEASE_<version>.md`; when that file is missing, GitHub generates the
-notes from merged PR titles, so PR titles stay free of it too), the website, the root README, and the shipped XML docs
-and README of every released package: a released package's IntelliSense must not point at a bridge nobody can install.
+notes from merged PR titles, so PR titles stay free of it too), the website, the root README (its integrations picture
+included), and the shipped XML docs and README of every released package: a released package's IntelliSense must not
+point at a bridge nobody can install.
 To release it: delete its `IsPackable` property, write its page and add its `toc.yml` entry and its `interop/index.md`
-row and "See also" link (the two packages released for 0.80.0 got theirs back from git history). CI needs no
+row and "See also" link (the two packages released for 0.80.0 got theirs back from git history), and give it an octagon
+in the integrations picture that the README and `interop/index.md` show (`ITEMS` and `SIDES` in
+`tools/gen_integrations_diagram.py`; run the script and commit `docs/website-src/images/integrations.svg`). CI needs no
 edit, but the package is a NEW id on nuget.org: check before the tag that the Trusted Publishing policy may push new
 packages (`ci-release.md`).
 
