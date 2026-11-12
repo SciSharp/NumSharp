@@ -876,7 +876,7 @@ On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray
 | Function | Returns | Works for |
 |----------|---------|-----------|
 | `np.iinfo(dtype)` | `iinfo` with `bits`, `min`, `max`, `kind` | integer dtypes + Boolean + Char |
-| `np.finfo(dtype)` | `finfo` with `bits`, `eps`, `min`, `max`, `precision`, `resolution`, `maxexp`, `minexp`, `smallest_normal`, `smallest_subnormal` | `Half`, `Single`, `Double`, `Decimal`, `Complex` |
+| `np.finfo(dtype)` | `finfo` with `bits`, `eps`, `epsneg`, `min`, `max`, `precision`, `resolution`, `maxexp`, `minexp`, `nmant`, `iexp` / `nexp`, `machep`, `negep`, `smallest_normal`, `smallest_subnormal` (NumPy's values; `2**minexp == smallest_normal`) | `Half`, `Single`, `Double`, `Decimal`, `Complex` |
 
 ### Exceptions
 

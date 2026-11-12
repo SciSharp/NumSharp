@@ -1762,7 +1762,10 @@ namespace NumSharp.Tests
         ///     own stacking instead: <c>(3, 2)</c>, <c>(3, 2)</c>, <c>(3, 2, 1)</c>, <c>(1, 3)</c> - silently, with the same
         ///     values in another shape and order. <c>np.vstack(M)</c> of a 2-D array happens to agree. np.concatenate and
         ///     np.stack take <c>NDArray[]</c> without <c>params</c>, so the same NumPy idiom (<c>np.concatenate(M)</c>, the
-        ///     row-flatten; <c>np.stack(M)</c>) does not compile there (q168).
+        ///     row-flatten; <c>np.stack(M)</c>) does not compile there (q168). Since API-parity batch 7 so does
+        ///     np.linalg.multi_dot's (NumPy: a <c>(2, 2, 2)</c> stack is the chain of its two matrices, <c>[[6, 7], [26,
+        ///     31]]</c>): its <c>params</c> form, which wrapped the stack into a one-element list ("Expecting at least two
+        ///     arrays."), was NumPy's refused <c>multi_dot(A, B, C)</c> spelling and went.
         /// </summary>
         [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB61")]
         public void ParityQb_QB61_SingleArrayToTheStackers_IsASequenceOfRows()
@@ -1784,12 +1787,6 @@ namespace NumSharp.Tests
             // numpy.ma's stackers (params object[]) inherit it: NumPy 2.4.2's np.ma.hstack(masked (3, 2)).shape is (6,)
             var masked = np.ma.masked_array(m, np.zeros(new Shape(3, 2), np.@bool));
             np.ma.hstack(masked).shape.Should().Equal(6L);
-
-            // So does np.linalg.multi_dot (NumPy: multi_dot(arrays), a sequence): a (2, 2, 2) stack is the chain of its two
-            // matrices in NumPy 2.4.2, [[6, 7], [26, 31]], where NumSharp raises "Expecting at least two arrays."
-            using var stack = np.arange(8.0).reshape(2, 2, 2);
-            using var chain = np.linalg.multi_dot(stack);
-            chain.GetDouble(1, 1).Should().Be(31.0);
         }
 
         // ------------------------------------------------------------------

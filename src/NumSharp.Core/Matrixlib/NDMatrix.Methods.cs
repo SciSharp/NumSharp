@@ -292,8 +292,11 @@ namespace NumSharp
         /// <param name="newShape">The requested dimensions; one may be -1 (inferred).</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c> or <c>'A'</c>: the index order the elements are read and
         ///     placed in.</param>
+        /// <param name="copy">NumPy's <c>copy</c> keyword (API-parity batch 7): null copies only when needed, true always
+        ///     copies, false raises <c>Unable to avoid creating a copy while reshaping.</c> when no view can express the
+        ///     reshape — <see cref="NDArray.reshape(Shape, char, bool?)"/>'s modes, the result wrapped as a matrix.</param>
         [NDScoped]
-        public new NDMatrix reshape(Shape newShape, char order) => From(base.reshape(newShape, order), this);
+        public new NDMatrix reshape(Shape newShape, char order = 'C', bool? copy = null) => From(base.reshape(newShape, order, copy), this);
 
         /// <inheritdoc cref="reshape(Shape)"/>
         /// <param name="shape">The requested dimensions; one may be -1.</param>

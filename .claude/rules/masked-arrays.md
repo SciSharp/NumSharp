@@ -44,6 +44,15 @@ the text classes included. The masked reductions' statistics (`ma.mean` / `ma.va
   floats `astype(object)` makes of them (`1.732421875`, not `1.732`).
 - The indexer parses a lone slice string once for the data and the mask (`GetView` rewrites its slice ARRAY, so the mask
   indexes a copy of it).
+- NumPy's keywords: `zeros` / `ones` / `empty(shape, dtype, order, device, fill_value, hardmask)` and `identity(n, dtype,
+  fill_value, hardmask)` are `_convert2ma` (the ndarray function, then `result.fill_value = ...` through the converting
+  setter — numpy.ma's TypeErrors — and `_hardmask`; the order check precedes the device check); `zeros_like` /
+  `ones_like` / `empty_like(a, dtype, order, shape, device)` follow `__array_finalize__` for a masked prototype: the mask
+  is copied in the RESULT's layout (C / F / K), reshaped (C order) for a same-size `shape` and dropped for another size,
+  with the fill and hardness carried; `copy(a, order)` and `MaskedArray.copy(order)` copy data and mask in that order.
+  `apply_over_axes(func, a, NDAxis axes)` (+ the kept int / int[] forms, all named `axes`), `angle(a, deg)`, and
+  `argmax` / `argmin(a, axis, fill_value, out, keepdims)` (the methods too: `filled(fill).argmax(axis, out=, keepdims=)`;
+  the common call keeps its 0-d route) are NumPy's signatures.
 - Open: a 0-d result NumPy returns as a plain scalar stays a 0-d masked array. `NDArray.view()` of a DISPOSED array
   returns a live view over the freed buffer (`InitializeArc` ignores `TryAddRef`'s failure).
 - Gate: `Ma/NDMaskedArrayInheritanceTests.cs` (probed member by member against NumPy).

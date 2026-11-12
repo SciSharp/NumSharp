@@ -37,6 +37,12 @@ namespace NumSharp
             ///     vector, with the added axis removed again afterwards — so the chain's endpoints
             ///     behave like <c>np.dot</c>'s.
             ///     </para>
+            ///     <para>
+            ///     NumPy's one signature, <c>multi_dot(arrays, *, out=None)</c>: the arrays are ONE sequence argument
+            ///     (<c>np.linalg.multi_dot(new[] { A, B, C })</c>). NumPy refuses them as separate arguments
+            ///     (<c>multi_dot(A, B, C)</c>: TypeError "multi_dot() takes 1 positional argument but 3 were given"), and
+            ///     since API-parity batch 7 NumSharp has no <c>params</c> form that accepted that spelling.
+            ///     </para>
             /// </remarks>
             /// <returns>The chain's product: <paramref name="out"/> itself for a two-array chain given one, else a fresh
             ///     array or a reshaped view of <paramref name="out"/>.</returns>
@@ -52,10 +58,6 @@ namespace NumSharp
                 TensorEngine engine = arrays is { Length: > 0 } && arrays[0] is { } first ? first.TensorEngine : TensorEngine.Default;
                 return engine.Linalg.MultiDot(arrays, @out);
             }
-
-            /// <inheritdoc cref="multi_dot(NDArray[], NDArray)"/>
-            /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-            public static NDArray multi_dot(params NDArray[] arrays) => multi_dot(arrays, null);
         }
     }
 }

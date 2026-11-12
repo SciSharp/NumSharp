@@ -300,11 +300,11 @@ public class AuditV2_ManipulationApis
     /// T1.26 — np.finfo(float32).minexp = -125; NumPy 2.x = -126.
     ///
     /// NumPy 2.4.2: np.finfo(np.float32).minexp == -126
-    /// Invariant: smallest_normal == 2^minexp → 2^-126 = 1.175494351e-38 ✓
-    /// NumSharp's stored value -125 violates this invariant.
+    /// Invariant: smallest_normal == 2^minexp → 2^-126 = 1.1754943508222875e-38 ✓
+    /// NumSharp's stored value was -125, which violated this invariant; NumPy's -126 since API-parity batch 7.
     /// File: src/NumSharp.Core/APIs/np.finfo.cs:129
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.26")]
+    [TestMethod]
     public void T1_26_Finfo_Float32_Minexp_Is_Minus126()
     {
         var info = np.finfo(NPTypeCode.Single);
@@ -320,7 +320,7 @@ public class AuditV2_ManipulationApis
     /// Invariant: 2^-1022 = 2.2250738585072014e-308 = smallest_normal.
     /// File: src/NumSharp.Core/APIs/np.finfo.cs:145
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.26")]
+    [TestMethod]
     public void T1_26_Finfo_Float64_Minexp_Is_Minus1022()
     {
         var info = np.finfo(NPTypeCode.Double);

@@ -349,6 +349,13 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   dropped (`reshape(-1,0)` → `(0)`), later ones read `newaxis` (`reshape(0,-1)` → `(0,newaxis)`), and a one-element shape
   closes with `,)` (`reshape(0)` → `(0,)`). The type is `IncorrectShapeException`; the multiple-unknown case is
   `ValueError` ("can only specify one unknown dimension").
+- `np.reshape(a, Shape shape, char order = 'C', bool? copy = null)` is NumPy's one signature: `Shape`'s conversions take
+  an int, a tuple, `int[]` and `long[]`, and the call is NumPy's `_wrapfunc` (`a.reshape(shape, order, copy)`, the
+  `[NewSubtype]` method, so a matrix or chararray operand keeps its class). `NDArray.ReshapeCore` is
+  `_reshape_with_copy_arg` with its three modes: `copy=true` (`NPY_COPY_ALWAYS`) skips the same-dims shortcut and copies
+  in `order` before the relabel; `copy=false` (`NEVER`) runs the view routes and raises `Unable to avoid creating a copy
+  while reshaping.` where the IF_NEEDED mode would copy; the size check comes before either. The method form
+  `reshape(Shape, char order, bool? copy = null)` (ndarray, matrix, chararray) carries the same keyword.
 - `np.expand_dims(a, int)` validates the axis against the output ndim (`a.ndim + 1`) and reports it as given, a 0-d input
   included. The guard lives at the `np.*` boundary, not in `Shape.ExpandDimension`, whose internal callers (keepdims
   reductions, fancy-index shaping, `asmatrix`) are not bound by NumPy's axis contract.
@@ -381,6 +388,33 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   transpose, copy and `broadcast_to` run to about 200,000 dimensions (measured to 300,000), so no path may size a
   `stackalloc` by `ndim`, and no walk may recurse per axis: printing does not (`io-printing.md`, parity QA-50). One limit
   remains: such an array cannot cross to NumPy (the pythonnet bridge refuses 65). Gate: `View/Shape.HighRank.Tests.cs`.
+
+## `np.astype` / `np.fromiter` / `np.fromfunction` / `np.lib.stride_tricks`
+
+- `np.astype(x, dtype, copy = true, device = null)` is NumPy 2.1's function: the input check (`None` is NumPy's
+  TypeError), the device check, then `x.astype(dtype, copy=copy)` (`order='K'`, `casting='unsafe'`). The cast runs in
+  `NDArray.AsTypeComputation`, whose `[NewSubtype("x")]` makes a matrix operand's result a matrix (`subok=True`); NumSharp.Build
+  reads the declaration on the computation the public function calls, never on the public function itself.
+- `np.fromiter(IEnumerable iter, DType dtype, long count = -1)` is `PyArray_FromIter`: the iterator first (null and a 0-d
+  array are NumPy's TypeErrors), the unsized-text check (`'U'` / `'S'` without a length), one item at a time (count -1
+  reads all, any other negative count nothing, a non-negative one never pulls item count + 1), each item packed as it is
+  read, then `iterator too short`. Plain items convert through `np.array(object[], dtype)` (NumPy's setitem per element:
+  the range OverflowErrors, `int()` / `float()` texts, None as NaN); a C# `char` is a one-character str (a string
+  iterates its characters), except into the char dtype. A SEQUENCE item (a C# array or list, a tuple, an array of rank
+  >= 1) is answered by the target dtype as NumPy's setitem answers: integers `int() ... not 'list'`, floats and decimal
+  `setting an array element with a sequence.`, text the same without the period, complex `must be real number, not
+  list` / `only 0-dimensional arrays can be converted to Python scalars`, bool its truth value, StringDType its `str()`;
+  the items before it convert first.
+- `np.fromfunction(Func<NDArray[], NDArray> function, Shape shape, DType dtype = null)`: one call with the
+  `np.indices(shape, dtype ?? float64)` grids as an array (`ix => ix[0] + ix[1]` is NumPy's `lambda i, j: i + j` at any
+  rank); the result is the function's, as is (a grid returned verbatim is kept; the other grids are released). NumPy's
+  `**kwargs` are captured values. [Misaligned]: an int shape converts to `(n,)` (NumPy's TypeError) and a number the
+  function returns arrives as a 0-d array.
+- `np.lib.stride_tricks.sliding_window_view(x, Shape window_shape, NDAxis? axis = null, bool writeable = false)` (+ the
+  kept int / int[] axis forms) is NumPy's statements over a `Shape` of `x`'s own buffer window (its offset and buffer
+  size): the window checks, `normalize_axis_tuple(..., allow_duplicate: true)`, `x.strides + x.strides[axes]`, the
+  trimmed shape; read-only unless `writeable: true` (and never more writeable than `x`). A plain array (`subok=False`).
+  NumPy's `as_strided` is not ported: it reads whatever memory the strides reach.
 
 ## `np.copyto`
 

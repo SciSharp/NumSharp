@@ -215,12 +215,12 @@ namespace NumSharp.Tests.Indexing
             Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, mode: "bogus"), generic);
             Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, mode: "Wrap"), misspelled);
             Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, mode: ""), empty);
-            Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, modes: new[] { "raise" }),
+            Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, mode: new[] { "raise" }),
                 "list of clipmodes has wrong length (1 instead of 2)");
-            Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, modes: new[] { "raise", "bogus" }), generic);
+            Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, mode: new[] { "raise", "bogus" }), generic);
             // The modes are converted before the coordinates are counted (arr_ravel_multi_index's order).
             Refuses(() => np.ravel_multi_index(new[] { np.array(new[] { 0 }) }, new[] { 2, 2 }, mode: "bogus"), generic);
-            np.ravel_multi_index(mi, new[] { 2, 2 }, modes: null).ToArray<long>().Should().Equal(1L);
+            np.ravel_multi_index(mi, new[] { 2, 2 }, mode: (string[])null).ToArray<long>().Should().Equal(1L);
         }
     }
 }

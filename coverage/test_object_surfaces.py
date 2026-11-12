@@ -74,7 +74,10 @@ class ObjectSurfaceTests(unittest.TestCase):
             self.assertEqual("property", self.by_id[row_id]["kind"], row_id)
         self.assertEqual("property", self.by_id["numpy.dtype.type"]["kind"])
         self.assertEqual("available", self.by_id["numpy.finfo.eps"]["status"])
-        self.assertEqual("missing", self.by_id["numpy.finfo.nmant"]["status"])
+        # An instance-only field NumSharp still lacks is reported missing, not dropped: iinfo.key (set in iinfo's
+        # __init__). finfo.nmant was this example until API-parity batch 7 added it.
+        self.assertEqual("property", self.by_id["numpy.iinfo.key"]["kind"])
+        self.assertEqual("missing", self.by_id["numpy.iinfo.key"]["status"])
 
     def test_modern_rng_exact_owner_mapping_and_genuine_gaps(self):
         expected = {

@@ -563,7 +563,7 @@ namespace NumSharp.Tests.Fuzz
                 case "vecmat": return np.vecmat(ops[0], ops[1]);
                 case "tensordot":
                     return p.ContainsKey("axesA")
-                        ? np.tensordot(ops[0], ops[1], ParseIntArray(p["axesA"]), ParseIntArray(p["axesB"]))
+                        ? np.tensordot(ops[0], ops[1], (ParseIntArray(p["axesA"]), ParseIntArray(p["axesB"])))
                         : np.tensordot(ops[0], ops[1], p["axes"].GetInt32());
                 case "multi_dot": return np.linalg.multi_dot(ops);
                 case "matrix_power": return np.linalg.matrix_power(ops[0], p["n"].GetInt32());

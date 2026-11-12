@@ -68,9 +68,47 @@ namespace NumSharp
         public int maxexp { get; }
 
         /// <summary>
-        /// The most negative power of the base (2) consistent with there being no leading 0s in the mantissa.
+        /// The most negative power of the base (2) consistent with there being no leading 0s in the mantissa — NumPy's
+        /// <c>minexp</c>, so <c>2**minexp == smallest_normal</c>: -14 (float16), -126 (float32), -1022 (float64 and
+        /// complex128). NumSharp reported -125 / -1021 (C's <c>FLT_MIN_EXP</c> convention) before API-parity batch 7.
         /// </summary>
         public int minexp { get; }
+
+        /// <summary>
+        /// NumPy's <c>nmant</c>: the number of bits in the stored mantissa (the fraction, without the implicit leading 1) —
+        /// 10 (float16), 23 (float32), 52 (float64 and complex128). <c>eps == 2**-nmant</c> for the IEEE formats.
+        /// </summary>
+        /// <remarks>NumSharp-only for <c>decimal</c>: 96, the bits of its integer coefficient.</remarks>
+        public int nmant { get; }
+
+        /// <summary>
+        /// NumPy's <c>iexp</c>: the number of bits in the exponent field — 5 (float16), 8 (float32), 11 (float64 and
+        /// complex128). The same value as <see cref="nexp"/> (NumPy keeps both names).
+        /// </summary>
+        /// <remarks>NumSharp-only for <c>decimal</c>: 8, the byte that holds its scale.</remarks>
+        public int iexp { get; }
+
+        /// <summary>
+        /// NumPy's <c>nexp</c>: the number of bits in the exponent including its sign and bias — the same value as
+        /// <see cref="iexp"/> for every format NumPy has (5 / 8 / 11).
+        /// </summary>
+        /// <remarks>NumSharp-only for <c>decimal</c>: 8, as <see cref="iexp"/>.</remarks>
+        public int nexp { get; }
+
+        /// <summary>
+        /// NumPy's <c>machep</c>: the exponent that yields <see cref="eps"/>, <c>eps == 2**machep</c> — -10 (float16),
+        /// -23 (float32), -52 (float64 and complex128).
+        /// </summary>
+        /// <remarks>NumSharp-only for <c>decimal</c>: -28, a power of TEN (<c>eps == 10**-28</c>): decimal is a base-10
+        ///     format, which its <see cref="eps"/> and <see cref="minexp"/> already follow.</remarks>
+        public int machep { get; }
+
+        /// <summary>
+        /// NumPy's <c>negep</c>: the exponent that yields <see cref="epsneg"/>, <c>epsneg == 2**negep</c> — -11 (float16),
+        /// -24 (float32), -53 (float64 and complex128).
+        /// </summary>
+        /// <remarks>NumSharp-only for <c>decimal</c>: -28, a power of ten like <see cref="machep"/>.</remarks>
+        public int negep { get; }
 
         /// <summary>
         /// The dtype of this floating point type — NumPy's <c>finfo.dtype</c> (a <see cref="DType"/> descriptor,
@@ -85,7 +123,11 @@ namespace NumSharp
         /// Create finfo for the specified dtype.
         /// </summary>
         /// <param name="dtype">A floating point dtype (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/> — all convert implicitly).</param>
-        /// <exception cref="ArgumentException">Thrown if <paramref name="dtype"/> is not a floating point type.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="dtype"/> is not a floating point (or complex) type — NumPy's text,
+        ///     which names the dtype's SCALAR CLASS: <c>data type &lt;class 'numpy.int32'&gt; not inexact</c>,
+        ///     <c>&lt;class 'numpy.str_'&gt;</c> for text. A <see cref="ValueError"/> is an <see cref="ArgumentException"/>, so
+        ///     code that catches the latter still catches it.</exception>
         public finfo(DType dtype)
         {
             if (dtype is null)
@@ -93,11 +135,15 @@ namespace NumSharp
 
             // Text is not inexact: NumPy names the scalar type (data type <class 'numpy.str_'> not inexact).
             if (dtype.Meta is StringDTypeMeta text)
-                throw new ArgumentException($"data type <class 'numpy.{text.ScalarName}'> not inexact", nameof(dtype));
+                throw new ValueError($"data type <class 'numpy.{text.ScalarName}'> not inexact");
 
             NPTypeCode typeCode = dtype.GetTypeCode();
+            // NumPy: `newdtype = obj2sctype(dtype); if not issubclass(newdtype, inexact): raise ValueError(f"data type
+            // {newdtype!r} not inexact")` — the repr of the dtype's scalar CLASS (<class 'numpy.int32'>, <class 'numpy.bool'>),
+            // which NDScalarType.Of renders. Before API-parity batch 7 this was an ArgumentException naming the dtype
+            // ('int32') with .NET's "(Parameter 'dtype')" suffix.
             if (!IsFloatType(typeCode))
-                throw new ArgumentException($"data type '{typeCode.AsNumpyDtypeName()}' not inexact", nameof(dtype));
+                throw new ValueError($"data type {NDScalarType.Of(dtype.Meta)} not inexact");
 
             // NumPy parity: np.finfo(np.complex128).dtype == np.float64.
             // The finfo represents the precision of the underlying real component, so
@@ -126,6 +172,10 @@ namespace NumSharp
                     resolution = 1e-3;                // 10^-precision
                     maxexp = 16;                      // bias+1 = 2^15*(2-eps) = MaxValue
                     minexp = -14;                     // 2^-14 = smallest normal
+                    nmant = 10;                       // NumPy's _MACHAR_PARAMS for half: 10 fraction bits
+                    iexp = nexp = 5;                  // 5 exponent bits
+                    machep = -10;                     // eps = 2^-10
+                    negep = -11;                      // epsneg = 2^-11
                     break;
 
                 case NPTypeCode.Single:
@@ -137,13 +187,21 @@ namespace NumSharp
                     epsneg = 1.0f - MathF.BitDecrement(1.0f);
                     max = float.MaxValue;
                     min = -float.MaxValue;
-                    smallest_normal = 1.175494351e-38;  // 2^-126
+                    // 2^-126 EXACTLY (1.1754943508222875e-38), NumPy's np.float32(1.1754944e-38) widened. The value used to be
+                    // the 10-digit decimal 1.175494351e-38, which is not 2^-126 (smallest_normal != 2**minexp by 1.8e-48).
+                    smallest_normal = 1.1754943508222875e-38;
                     smallest_subnormal = float.Epsilon;  // ~1.4e-45
                     tiny = smallest_normal;
                     precision = 6;
                     resolution = 1e-6;
                     maxexp = 128;   // 2^127 * (2-eps) = MaxValue
-                    minexp = -125;  // 2^-126 = smallest normal
+                    // NumPy's minexp is the exponent OF the smallest normal (2^-126), not C's FLT_MIN_EXP (-125, one
+                    // higher because C counts the mantissa as 0.1xxx): NumPy 2.4.2 np.finfo(np.float32).minexp == -126.
+                    minexp = -126;
+                    nmant = 23;     // 23 fraction bits
+                    iexp = nexp = 8;
+                    machep = -23;   // eps = 2^-23
+                    negep = -24;    // epsneg = 2^-24
                     break;
 
                 case NPTypeCode.Double:
@@ -159,7 +217,12 @@ namespace NumSharp
                     precision = 15;
                     resolution = 1e-15;
                     maxexp = 1024;   // 2^1023 * (2-eps) = MaxValue
-                    minexp = -1021;  // 2^-1022 = smallest normal
+                    // As for float32: NumPy's minexp is the smallest normal's exponent (2^-1022), not DBL_MIN_EXP (-1021).
+                    minexp = -1022;
+                    nmant = 52;      // 52 fraction bits
+                    iexp = nexp = 11;
+                    machep = -52;    // eps = 2^-52
+                    negep = -53;     // epsneg = 2^-53
                     break;
 
                 case NPTypeCode.Decimal:
@@ -177,6 +240,12 @@ namespace NumSharp
                     resolution = 1e-28;
                     maxexp = 96;   // Approximate - decimal has different representation
                     minexp = -28;  // Approximate
+                    // NumPy has no decimal: these follow decimal's own base-10 layout, as eps / minexp above already do —
+                    // a 96-bit integer coefficient, a scale byte (0..28), and eps = epsneg = 10^-28.
+                    nmant = 96;
+                    iexp = nexp = 8;
+                    machep = -28;
+                    negep = -28;
                     break;
 
                 default:
@@ -218,10 +287,14 @@ namespace NumSharp
         /// <summary>
         /// Machine limits for floating point types.
         /// </summary>
-        /// <param name="typeCode">A floating point type code.</param>
         /// <returns>An finfo object describing the floating point type limits.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="ValueError">Not a floating point or complex dtype: NumPy's <c>data type &lt;class
+        ///     'numpy.int32'&gt; not inexact</c>.</exception>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.finfo.html
+        /// <para>An ARRAY is not a dtype: NumPy's <c>np.finfo(arr)</c> raises <c>data type &lt;class 'numpy.object_'&gt; not
+        /// inexact</c>; NumSharp has no array overload since API-parity batch 7, so pass <c>arr.dtype</c>.</para>
         /// </remarks>
         /// <example>
         /// <code>
@@ -233,8 +306,8 @@ namespace NumSharp
         /// </example>
         /// <param name="dtype">
         ///     The floating point dtype — one descriptor parameter, like NumPy's: a C# <see cref="Type"/> (<c>typeof(double)</c>),
-        ///     an <see cref="NPTypeCode"/>, a NumPy dtype string or a <see cref="DType"/> (<c>np.float64</c>, <c>arr.dtype</c>) all
-        ///     convert implicitly.
+        ///     an <see cref="NPTypeCode"/> or a <see cref="DType"/> (<c>np.float64</c>, <c>arr.dtype</c>) convert implicitly; a
+        ///     string binds <see cref="finfo(string)"/>, which reads it as NumPy does.
         /// </param>
         public static finfo finfo(DType dtype)
         {
@@ -293,43 +366,50 @@ namespace NumSharp
         public static finfo finfo<T>() where T : struct => new finfo(typeof(T));
 
         /// <summary>
-        /// Machine limits for floating point types.
+        ///     Machine limits of the floating-point dtype a STRING names — NumPy's <c>np.finfo("float64")</c>, read as NumPy
+        ///     reads it: <c>numeric.dtype(dtype)</c>, and when that raises TypeError (the string names no dtype) the dtype of
+        ///     the value's TYPE, <c>str</c> — so <c>np.finfo("foo")</c> and <c>np.finfo("")</c> are NumPy's <c>data type
+        ///     &lt;class 'numpy.str_'&gt; not inexact</c>.
         /// </summary>
-        /// <param name="arr">An NDArray with floating point dtype.</param>
-        /// <returns>An finfo object describing the array's floating point type limits.</returns>
-        /// <exception cref="ArgumentNullException">Thrown if arr is null.</exception>
-        /// <example>
-        /// <code>
-        /// var a = np.array(new double[] {1.0, 2.0, 3.0});
-        /// var info = np.finfo(a);
-        /// Console.WriteLine(info.bits);  // 64
-        /// </code>
-        /// </example>
-        public static finfo finfo(NDArray arr)
-        {
-            if (arr is null)
-                throw new ArgumentNullException(nameof(arr));
-            // The descriptor, so a string array reports its text class rather than failing on the storage lane.
-            return new finfo(arr.dtype);
-        }
-
-        /// <summary>
-        /// Machine limits for floating point types.
-        /// </summary>
-        /// <param name="dtypeName">A dtype string (e.g., "float32", "float64", "double").</param>
+        /// <param name="dtype">A dtype string (<c>"float32"</c>, <c>"f2"</c>, <c>"double"</c>); null is NumPy's None, which
+        ///     NumPy 2.4.2 still reads as float64 (with a DeprecationWarning since 1.25; NumSharp has no warnings).</param>
         /// <returns>An finfo object describing the floating point type limits.</returns>
-        /// <exception cref="ArgumentException">Thrown if dtypeName is not a valid floating point dtype.</exception>
+        /// <exception cref="ValueError">The string names a non-inexact dtype (<c>"int32"</c>: <c>data type &lt;class
+        ///     'numpy.int32'&gt; not inexact</c>) or no dtype at all (<c>&lt;class 'numpy.str_'&gt;</c>) — NumPy's
+        ///     texts.</exception>
+        /// <exception cref="NotSupportedException">The string names a NumPy dtype NumSharp does not model (<c>"O"</c>,
+        ///     <c>"V"</c>): <see cref="dtype(string)"/>'s refusal.</exception>
         /// <example>
         /// <code>
         /// var info = np.finfo("float64");
         /// Console.WriteLine(info.bits);  // 64
         /// </code>
         /// </example>
-        public static finfo finfo(string dtypeName)
+        /// <remarks>An ARRAY is not a dtype: NumPy's <c>np.finfo(arr)</c> reads its type (an object dtype) and raises
+        ///     <c>data type &lt;class 'numpy.object_'&gt; not inexact</c>; NumSharp has no array overload since API-parity
+        ///     batch 7, so pass <c>arr.dtype</c>. Before that batch this parameter was named <c>dtypeName</c>, and a null or
+        ///     empty string raised NumSharp's own ArgumentException.</remarks>
+        public static finfo finfo(string dtype)
         {
-            if (string.IsNullOrEmpty(dtypeName))
-                throw new ArgumentException("dtype name cannot be null or empty", nameof(dtypeName));
-            return new finfo(dtype(dtypeName).typecode);
+            // NumPy: `try: dtype = numeric.dtype(dtype) except TypeError: dtype = numeric.dtype(type(dtype))`, after
+            // `dtype is None` only warns. A string naming no dtype falls back to str's dtype, which the constructor refuses
+            // with NumPy's text; only a TypeError takes the fallback (an unmodelled NumPy dtype's NotSupportedException
+            // propagates). `np.dtype` — not the parameter, which shadows the method's simple name here.
+            DType resolved;
+            if (dtype is null)
+                resolved = float64;
+            else
+            {
+                try
+                {
+                    resolved = np.dtype(dtype);
+                }
+                catch (TypeError)
+                {
+                    resolved = str_;
+                }
+            }
+            return new finfo(resolved);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 namespace NumSharp.Tests.APIs;
 
@@ -139,9 +140,12 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public void IInfo_NullArray_Throws()
+    public void IInfo_HasNoArrayOverload_AsNumPyRefusesAnArray()
     {
-        new Action(() => np.iinfo((NDArray)null!)).Should().Throw<Exception>();
+        // NumPy 2.4.2: np.iinfo(np.arange(3)) is "Invalid integer data type 'O'." (an array is not a dtype); API-parity
+        // batch 7 removed the NDArray form, so a C# array argument does not compile: pass arr.dtype.
+        typeof(np).GetMethods().Where(m => m.Name == "iinfo")
+            .Any(m => m.GetParameters().Any(p => p.ParameterType == typeof(NDArray))).Should().BeFalse();
     }
 
     [TestMethod]
@@ -203,27 +207,28 @@ public class NpIInfoBattleTests
     #region NDArray Overload Tests
 
     [TestMethod]
-    public void IInfo_NDArray_Int32()
+    public void IInfo_ArrayDtype_Int32()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
-        var info = np.iinfo(arr);
+        var info = np.iinfo(arr.dtype);
         info.bits.Should().Be(32);
         info.dtype.Should().Be(NPTypeCode.Int32);
     }
 
     [TestMethod]
-    public void IInfo_NDArray_Byte()
+    public void IInfo_ArrayDtype_Byte()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
-        var info = np.iinfo(arr);
+        var info = np.iinfo(arr.dtype);
         info.bits.Should().Be(8);
     }
 
     [TestMethod]
-    public void IInfo_NDArray_Float_Throws()
+    public void IInfo_ArrayDtype_Float_Throws()
     {
+        // NumPy 2.4.2: np.iinfo(np.float32) names the KIND character.
         var arr = np.array(new float[] { 1.0f, 2.0f });
-        new Action(() => np.iinfo(arr)).Should().Throw<Exception>();
+        new Action(() => np.iinfo(arr.dtype)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'f'.");
     }
 
     #endregion

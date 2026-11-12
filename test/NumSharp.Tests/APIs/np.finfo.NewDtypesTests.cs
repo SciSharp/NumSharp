@@ -97,7 +97,7 @@ namespace NumSharp.Tests.APIs
         public void FInfo_Half_From_Array()
         {
             var arr = np.array(new Half[] { (Half)1.0, (Half)2.0 });
-            np.finfo(arr).bits.Should().Be(16);
+            np.finfo(arr.dtype).bits.Should().Be(16);
         }
 
         [TestMethod]
@@ -164,7 +164,7 @@ namespace NumSharp.Tests.APIs
 
         [TestMethod]
         public void FInfo_Complex_MinExp()
-            => np.finfo(NPTypeCode.Complex).minexp.Should().Be(-1021);
+            => np.finfo(NPTypeCode.Complex).minexp.Should().Be(-1022);   // NumPy 2.4.2: complex128's real part's
 
         [TestMethod]
         public void FInfo_Complex_SmallestNormal_MatchesFloat64()
@@ -197,7 +197,7 @@ namespace NumSharp.Tests.APIs
         public void FInfo_Complex_From_Array()
         {
             var arr = np.array(new Complex[] { new Complex(1, 2) });
-            np.finfo(arr).bits.Should().Be(64);
+            np.finfo(arr.dtype).bits.Should().Be(64);
         }
 
         [TestMethod]
