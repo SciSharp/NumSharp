@@ -126,7 +126,10 @@ parser).
   byte-identical to NumPy's `einsum(..., optimize=True)`. NumPy's default `einsum` (`optimize=False`) is its own C
   `sum_of_products` loop and not BLAS-identical even inside NumPy, so a float comparison with a plain NumPy einsum call is
   a ≤ 3-ULP comparison. There is no `TryEinsum` seam: N operands fold left to right in `TensorEngine.Einsum`, each step
-  through `PairwiseContract`.
+  through `PairwiseContract`. Kept by decision (the owner, 2026-11-12, "Keep the BLAS route", the OptunaSharp brief's
+  item 3): a bit-exact default would port `c_einsum` and give up BLAS there (NumPy's own default takes 29.7 ms for
+  `'ij,jk->ik'` over 500 x 500, 2.0 ms with `optimize=True`); `LinearAlgebra/EinsumContractionOrder.Test.cs` is the
+  `[Misaligned]` record (NSGA-III's `"ni,pi,p,pm->npm"`: within 2 ULP, 19 of 60 elements bit-identical on this host).
 - Values: integer and boolean contractions are byte-exact everywhere; product-shaped cases (matmul, batched matmul,
   matvec, `ij,kj->ik`, tensor contractions, inner/outer/kron) equal `np.matmul`/`np.multiply` bit for bit. A pure float
   summation outside a product (`ij->i`, a diagonal then a sum, the accumulation across three or more float operands) can
