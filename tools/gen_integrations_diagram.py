@@ -11,8 +11,8 @@ must be able to install everything the picture shows. The color of an octagon na
 
     Python  NumSharp.Interop.pythonnet (NumPy, PyTorch, pandas, SciPy, scikit-learn, Matplotlib, Pillow, OpenCV, PyArrow,
             polars; the Python libraries cross through numpy arrays or the buffer protocol)
-    .NET    NumSharp.Interop.OnnxRuntime / .MLNet / .System.Numerics.Tensors, NumSharp.Bitmap (System.Drawing), and
-            NumSharp.Interop.pythonnet for Numpy.NET
+    .NET    NumSharp.Interop.OnnxRuntime / .MLNet / .System.Numerics.Tensors / .TorchSharp, NumSharp.Bitmap
+            (System.Drawing), and NumSharp.Interop.pythonnet for Numpy.NET
     Native  NumSharp.Interop.OpenBLAS
     Files   NumSharp itself (.npy / .npz, byte-identical to np.save)
 
@@ -106,6 +106,7 @@ ITEMS = [
     Item("ort", "ONNX Runtime", "OrtValue · Run()", "net"),
     Item("mlnet", "ML.NET", "IDataView", "net"),
     Item("tensors", "System.Numerics.Tensors", "Tensor<T> · TensorSpan<T>", "net"),
+    Item("torchsharp", "TorchSharp", "zero-copy torch.Tensor", "net"),
     Item("drawing", "System.Drawing", "Bitmap ⇄ NDArray", "net"),
     Item("numpynet", "Numpy.NET", "PyObject handoff", "net"),
     Item("openblas", "OpenBLAS", "BLAS · LAPACK", "native"),
@@ -117,7 +118,7 @@ BY_KEY = {item.key: item for item in ITEMS}
 # clockwise, Python fills the bottom-left, the left column and the top-left; native, .NET and files follow on the right.
 SIDES = {
     "top": ["pillow", "opencv", "openblas"],
-    "right": ["ort", "mlnet", "tensors", "drawing", "numpynet"],
+    "right": ["ort", "mlnet", "tensors", "torchsharp", "drawing", "numpynet"],
     "bottom": ["polars", "arrow", "npy"],
     "left": ["numpy", "torch", "pandas", "scipy", "sklearn", "mpl"],
 }

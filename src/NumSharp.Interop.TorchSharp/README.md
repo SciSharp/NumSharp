@@ -9,7 +9,14 @@ Interop between NumSharp's `NDArray` and **TorchSharp** tensors (.NET bindings f
 It is a **conversion library**: no `TensorEngine` seam, no `[ModuleInitializer]`, no native asset of its own. It binds
 TorchSharp's own `LibTorchSharp` library. Referencing the package changes nothing until you call a verb.
 
-The package is **unreleased**: it builds and is tested in CI, but no NuGet package is published yet.
+## Install
+
+```bash
+dotnet add package NumSharp.Interop.TorchSharp
+dotnet add package TorchSharp-cpu        # libtorch for the CPU (or one TorchSharp-cuda-* package)
+```
+
+The documentation page is [TorchSharp](https://scisharp.github.io/NumSharp/docs/interop/torchsharp.html) on the NumSharp site.
 
 ```csharp
 using NumSharp;

@@ -87,6 +87,8 @@
     href: interop/mlnet.md
   - name: System.Numerics.Tensors
     href: interop/system-numerics-tensors.md
+  - name: TorchSharp
+    href: interop/torchsharp.md
   - name: System.Drawing
     href: extensions/bitmap.md
 - name: NumPy API Coverage & Support
