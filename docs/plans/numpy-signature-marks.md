@@ -46,7 +46,7 @@ lists what failed, with the compiler's reason.
 
 | group | names with a NumPy counterpart | M ● | M ◦ only | X | O | T ● | T ◇ | B ● | B ◐ | L ● | L ◐ | L ◦ | Q | no mark | not compared | NumSharp-only names | of them O | of them T | NumPy names NumSharp lacks |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `np` | 382 | 10 | 126 | 16 | 98 | 5 | 2 | 2 | 0 | 1 | 0 | 0 | 0 | 171 | 0 | 17 | 8 | 8 | 30 |
+| `np` | 382 | 10 | 126 | 16 | 96 | 5 | 2 | 2 | 0 | 1 | 0 | 0 | 0 | 173 | 0 | 17 | 8 | 8 | 30 |
 | `ndarray` | 57 | 4 | 1 | 4 | 13 | 1 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 38 | 0 | 83 | 45 | 15 | 3 |
 | `np.char` | 53 | 0 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 42 | 0 | 1 | 0 | 0 | 0 |
 | `np.dtypes` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
@@ -89,7 +89,7 @@ lists what failed, with the compiler's reason.
 | `np.random.PCG64DXSM` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 |
 | `np.random.Philox` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 |
 | `np.random.SFC64` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 10 | 0 | 0 | 0 |
-| **total** | 1310 | 61 | 220 | 51 | 272 | 9 | 7 | 17 | 0 | 2 | 15 | 0 | 4 | 780 | 0 | 239 | 61 | 26 | 76 |
+| **total** | 1310 | 61 | 220 | 51 | 270 | 9 | 7 | 17 | 0 | 2 | 15 | 0 | 4 | 782 | 0 | 239 | 61 | 26 | 76 |
 
 *no mark*: no M (● or ◦), X, O, T, B, L or Q: the name matches NumPy in every respect the table checks.
 
@@ -251,7 +251,7 @@ lists what failed, with the compiler's reason.
 | `full` | ◦ |  |  |  |  |  |  | `full(shape, fill_value, dtype=None, order='C', *, device=None, like=None)` | excluded: `like` |  |  |  |
 | `full_like` | ◦ |  |  |  |  |  |  | `full_like(a, fill_value, dtype=None, order='K', subok=True, shape=None, *, device=None)` | excluded: `subok` |  |  |  |
 | `gcd` | ◦ |  |  |  |  |  |  | `gcd(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
-| `geomspace` |  |  | 2 |  |  |  |  | `geomspace(start, stop, num=50, endpoint=True, dtype=None, axis=0)` |  |  |  |  |
+| `geomspace` |  |  |  |  |  |  |  | `geomspace(start, stop, num=50, endpoint=True, dtype=None, axis=0)` |  |  |  |  |
 | `get_printoptions` |  |  |  |  |  |  |  | `get_printoptions()` |  |  |  |  |
 | `getbufsize` |  |  |  |  |  |  |  | `getbufsize()` |  |  |  |  |
 | `gradient` |  |  | 4 |  |  |  |  | `gradient(f, *varargs, axis=None, edge_order=1)` |  |  |  |  |
@@ -399,7 +399,7 @@ lists what failed, with the compiler's reason.
 | `reciprocal` | ◦ |  |  |  |  |  |  | `reciprocal(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `remainder` | ◦ |  | 2 |  |  |  |  | `remainder(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `repeat` |  |  | 2 |  |  |  |  | `repeat(a, repeats, axis=None)` |  |  |  |  |
-| `require` |  |  | 2 |  |  |  |  | `require(a, dtype=None, requirements=None, *, like=None)` |  |  |  |  |
+| `require` |  |  |  |  |  |  |  | `require(a, dtype=None, requirements=None, *, like=None)` |  |  |  |  |
 | `reshape` |  |  |  |  |  |  |  | `reshape(a, /, shape, order='C', *, copy=None)` |  |  |  |  |
 | `resize` |  |  |  |  |  |  |  | `resize(a, new_shape)` |  |  |  |  |
 | `result_type` |  |  | 8 | ● |  |  |  | `result_type(*arrays_and_dtypes)` |  |  | `NPTypeCode[] types`, `NPTypeCode type1`, `NPTypeCode type2`, `Type type1`, `Type type2` |  |

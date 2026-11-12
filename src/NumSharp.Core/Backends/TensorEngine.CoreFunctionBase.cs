@@ -6,7 +6,7 @@
 // its own override by calling the member on itself. np.arange, which NumPy fills through the dtype's ArrFuncs fill and
 // no ufunc, is the array object's (UnmanagedStorage.Ctors.cs), not an engine member (Appendix D). np.linspace takes NumPy's
 // array_like ends (the NDArray member: its dtype from result_type, the new sample axis placed by `axis`), reached through the
-// start operand's engine; np.logspace and np.geomspace take scalar ends.
+// start operand's engine, and so does np.geomspace (API-parity batch 10); np.logspace takes scalar ends.
 
 using System;
 using System.Numerics;
@@ -136,80 +136,54 @@ namespace NumSharp
         public abstract NDArray Logspace(double start, double stop, long num = 50, bool endpoint = true, double @base = 10.0, DType dtype = null, int axis = 0);
 
         /// <summary>
-        ///     NumPy's <c>np.geomspace(start, stop, num=50, endpoint=True, dtype=None, axis=0)</c> over real scalar ends: a
-        ///     geometric progression from <paramref name="start"/> to <paramref name="stop"/>, computed as NumPy computes
-        ///     it - both ends divided by <c>sign(start)</c>, <c>logspace(log10(start), log10(stop))</c>, the ends written
-        ///     back, the whole multiplied by the sign - so the ends are the arguments bit for bit and ends of opposite
-        ///     signs give NaN between them (the log of a negative value).
+        ///     NumPy's <c>np.geomspace(start, stop, num=50, endpoint=True, dtype=None, axis=0)</c>: numbers spaced evenly on a
+        ///     log scale, each end pair its own geometric progression - computed as NumPy computes it: both ends divided by
+        ///     <c>sign(start)</c>, <c>logspace(log10(start), log10(stop))</c>, the ends written back exactly, the whole
+        ///     multiplied by the sign, the sample axis moved to <paramref name="axis"/> - so ends of opposite signs give NaN
+        ///     between them (the log of a negative value) and complex ends a logarithmic spiral.
         /// </summary>
-        /// <param name="start">The first sample; not zero.</param>
-        /// <param name="stop">The last sample when <paramref name="endpoint"/> is true; not zero.</param>
+        /// <param name="start">The first sample(s): a 0-d array (a C# number converts to one, read as NumPy reads a Python
+        ///     number) or any array that broadcasts with <paramref name="stop"/>; no element may be zero.</param>
+        /// <param name="stop">The last sample(s) when <paramref name="endpoint"/> is true; no element may be zero.</param>
         /// <param name="num">The number of samples.</param>
         /// <param name="endpoint">Whether <paramref name="stop"/> is the last sample.</param>
-        /// <param name="dtype">The result dtype, or null for float64. A complex dtype computes in the complex128 domain,
-        ///     as the <see cref="Geomspace(Complex, Complex, long, bool, DType, int)"/> overload does (its interior differs
-        ///     from the real path's); a text dtype is refused, as NumPy refuses it (below); any other dtype casts the
-        ///     float64 result (an integer dtype truncates toward zero).</param>
-        /// <param name="axis">The destination of NumPy's trailing moveaxis: the same values for the 1-D result, but only 0
-        ///     and -1 are in range, and -1 returns NumPy's moveaxis view.</param>
-        /// <returns>A new 1-D array of <paramref name="num"/> samples. With <paramref name="axis"/> -1 it is NumPy's
-        ///     <c>moveaxis</c> view, which does not own its buffer, unless the final cast to <paramref name="dtype"/> copies
-        ///     it; otherwise it owns its buffer.</returns>
-        /// <exception cref="ValueError">A zero end (<c>Geometric sequence cannot include zero</c>, NumPy's first check),
-        ///     then (after the text dtypes) a negative <paramref name="num"/> (<c>Number of samples, -1, must be
-        ///     non-negative.</c>).</exception>
+        /// <param name="dtype">The result dtype, or null for the computation dtype <c>dt = result_type(start, stop,
+        ///     float(num), zeros((), dtype))</c> (float64 for real ends unless they are a narrower float array AND the
+        ///     dtype asks for it, complex128 for complex ends or a complex dtype); the samples are computed in <c>dt</c>
+        ///     and cast at the end (an integer dtype truncates toward zero); a text dtype is refused, as NumPy refuses
+        ///     it (below).</param>
+        /// <param name="axis">The axis of the result that holds the samples (NumPy's trailing <c>moveaxis(result, 0,
+        ///     axis)</c>): in range for the result's rank, one more than the broadcast ends'.</param>
+        /// <returns>A new array of shape <c>(num, *broadcast(start, stop).shape)</c> with the sample axis moved to
+        ///     <paramref name="axis"/>; a moved axis is NumPy's <c>moveaxis</c> view, which does not own its buffer unless
+        ///     the final cast to <paramref name="dtype"/> copies it.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="start"/> or <paramref name="stop"/> is null.</exception>
+        /// <exception cref="ValueError">A zero element in either end (<c>Geometric sequence cannot include zero</c>, NumPy's
+        ///     first check), then (after the text dtypes) a negative <paramref name="num"/> (<c>Number of samples, -1, must
+        ///     be non-negative.</c>).</exception>
         /// <exception cref="DTypePromotionError">A <c>StringDType</c> <paramref name="dtype"/>: NumPy's
         ///     <c>result_type(start, stop, float(num), zeros((), dtype))</c> finds no common DType (its text lists the four
         ///     DType classes), right after the zero check.</exception>
         /// <exception cref="TypeError">An <c>S</c> or <c>U</c> <paramref name="dtype"/>: the ends promote to text and NumPy's
         ///     <c>sign(start)</c> has no string loop (<c>ufunc 'sign' did not contain a loop with signature matching types
         ///     &lt;class 'numpy.dtypes.StrDType'&gt; -&gt; None</c>), right after the zero check.</exception>
-        /// <exception cref="AxisError">An <paramref name="axis"/> other than 0 or -1, checked after
-        ///     <paramref name="num"/>.</exception>
+        /// <exception cref="IncorrectShapeException">Ends that do not broadcast (the division by the start's sign).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> out of range for the result (<c>destination: axis 1 is out of
+        ///     bounds for array of dimension 1</c>), checked after <paramref name="num"/>.</exception>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no storage lane (a datetime descriptor):
         ///     the final cast refuses it.</exception>
         /// <remarks>
-        ///     <c>np.geomspace</c> calls this member of the default engine. DefaultEngine's real path is NumPy's float64
-        ///     result byte for byte (the sign is exactly 1 or -1, and the interior is <see cref="System.Math.Pow(double, double)"/>
-        ///     and <see cref="System.Math.Log10(double)"/>, the routines NumPy calls on win-amd64); a NaN start makes every
-        ///     sample NaN, as NumPy's <c>result *= out_sign</c> does.
+        ///     <para><c>np.geomspace</c> calls this member of the start operand's engine. DefaultEngine follows NumPy's
+        ///     statements over arrays (sign, true_divide, log10, linspace, power, the end writes, multiply, moveaxis), so an
+        ///     override must keep that arithmetic in <c>dt</c>: float32 ends with a float32 dtype round in float32, as
+        ///     NumPy's do. Two 0-d ends that compute in float64 are NumPy's float64 result byte for byte (the sign is exactly
+        ///     1 or -1, and the interior is <see cref="System.Math.Pow(double, double)"/> and
+        ///     <see cref="System.Math.Log10(double)"/>, the routines NumPy calls on win-amd64); complex ends are within the
+        ///     complex-unary envelope of NumPy's values (about 3 ULP), not its bits. A NaN start makes every sample of its
+        ///     progression NaN, as NumPy's <c>result *= out_sign</c> does.</para>
+        ///     <para>API-parity batch 10: this one member replaces the scalar <c>Geomspace(double, ...)</c> and
+        ///     <c>Geomspace(Complex, ...)</c> members; a C# number or <see cref="Complex"/> converts to a 0-d array.</para>
         /// </remarks>
-        public abstract NDArray Geomspace(double start, double stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0);
-
-        /// <summary>
-        ///     NumPy's <c>np.geomspace</c> over complex scalar ends: a logarithmic spiral in the complex plane from
-        ///     <paramref name="start"/> to <paramref name="stop"/>, the shortest of the spirals through the two points, as
-        ///     NumPy computes it (both ends divided by <c>start / |start|</c>, a complex log-space interior, the ends written
-        ///     back, the whole multiplied by that sign).
-        /// </summary>
-        /// <param name="start">The first sample; not <c>0+0j</c> (a purely imaginary value is allowed).</param>
-        /// <param name="stop">The last sample when <paramref name="endpoint"/> is true; not <c>0+0j</c>.</param>
-        /// <param name="num">The number of samples.</param>
-        /// <param name="endpoint">Whether <paramref name="stop"/> is the last sample.</param>
-        /// <param name="dtype">The result dtype, or null for complex128; a real dtype drops the imaginary parts in the
-        ///     final cast, as NumPy's <c>astype</c> does; a text dtype is refused, as NumPy refuses it (below).</param>
-        /// <param name="axis">Only 0 and -1 are in range (NumPy's trailing moveaxis of the 1-D result); -1 returns NumPy's
-        ///     moveaxis view.</param>
-        /// <returns>A new 1-D array of <paramref name="num"/> samples. With <paramref name="axis"/> -1 it is NumPy's
-        ///     <c>moveaxis</c> view, which does not own its buffer, unless the final cast to <paramref name="dtype"/> copies
-        ///     it; otherwise it owns its buffer.</returns>
-        /// <exception cref="ValueError">A zero end (<c>Geometric sequence cannot include zero</c>), then (after the text
-        ///     dtypes) a negative <paramref name="num"/>.</exception>
-        /// <exception cref="DTypePromotionError">A <c>StringDType</c> <paramref name="dtype"/>: no common DType with the
-        ///     complex128 ends (NumPy's text, which lists <c>Complex128DType</c> twice), right after the zero
-        ///     check.</exception>
-        /// <exception cref="TypeError">An <c>S</c> or <c>U</c> <paramref name="dtype"/>: NumPy's <c>sign(start)</c> of the
-        ///     ends cast to text has no string loop, right after the zero check.</exception>
-        /// <exception cref="AxisError">An <paramref name="axis"/> other than 0 or -1, checked after
-        ///     <paramref name="num"/>.</exception>
-        /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no storage lane (a datetime descriptor):
-        ///     the final cast refuses it.</exception>
-        /// <remarks>
-        ///     DefaultEngine composes NumSharp's complex power (the <c>npy_cpow</c> port) and complex log10: its values are
-        ///     within the complex-unary envelope of NumPy's (about 3 ULP) but not NumPy's bits, and the ends are
-        ///     <c>(start / sign) * sign</c>, which complex division and multiplication need not round back to
-        ///     <paramref name="start"/>.
-        /// </remarks>
-        public abstract NDArray Geomspace(Complex start, Complex stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0);
+        public abstract NDArray Geomspace(NDArray start, NDArray stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0);
     }
 }

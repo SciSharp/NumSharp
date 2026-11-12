@@ -2053,6 +2053,21 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 ## 7. State log
 
+- **2026-11-13**: API-parity batch 10 on `journey5` (branch `api-parity/batch-10`; the owner approved 2 of 15 picks).
+  The owner turned down five picks that collapsed the dtype functions (np.finfo / np.iinfo, np.can_cast,
+  np.issubdtype, np.isdtype, np.dtype) into one `object` parameter each: "object are not good idea, user will never
+  know what he can send". From now on a one-signature fix keeps TYPED parameters (DType, NDArray, Shape, NDAxis-style
+  carriers with implicit conversions). np.result_type's `params object[]`, ma.default_fill_value's object form and
+  ma.fromfunction were not taken; np.strings add / multiply, the random choice / dirichlet / multinomial / size-less
+  samplers and numpy.matrix's one signatures were deferred. Fixed: np.require is one signature whose `requirements` is
+  an `IEnumerable` (what NumPy iterates: a string by character, any sequence by name; the page's `object` became the
+  typed parameter under the owner's rule), with NumPy's `KeyError` (the upper-cased name) for an unknown name and
+  `AttributeError` for a non-string item, in one ordered pass, and Python's truthiness for "no requirement";
+  np.geomspace takes NumPy's array_like start / stop through one `TensorEngine.Geomspace(NDArray, NDArray, ...)` member
+  (NumPy's statements over arrays: per-pair progressions, any in-range axis, `dt = result_type(start, stop, float(num),
+  zeros((), dtype))` with a C# number end read as a Python number, so float32 ends with a float32 dtype compute in
+  float32 as NumPy's do; two 0-d ends computing in float64 / complex128 keep the fused scalar cores). Callers: every
+  require and geomspace call compiles unchanged; 2 require tests moved from ValueError to NumPy's KeyError.
 - **2026-11-12**: API-parity batch 9 on `journey5` (branch `api-parity/batch-09`; the owner approved all 15 picks, each
   offered as a call table). Shape is a C# collection type (`[CollectionBuilder]` + a pattern `GetEnumerator`): a
   collection expression is NumPy's list shape on every `Shape` / `Shape?` parameter again (`np.zeros([2, 3])`,

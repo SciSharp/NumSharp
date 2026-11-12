@@ -119,9 +119,11 @@ namespace NumSharp.Tests.Creation
             ReferenceEquals(np.require(x, requirements: new[] { "E" }).Storage, x.Storage).Should().BeTrue();
         }
 
+        /// <summary>An unknown name is NumPy's <c>KeyError</c> with the upper-cased name quoted (<c>POSSIBLE_FLAGS[x.upper()]</c>;
+        ///     a ValueError before API-parity batch 10).</summary>
         [TestMethod]
         public void UnknownRequirement_Raises() =>
-            ((Action)(() => np.require(np.arange(6), requirements: new[] { "Z" }))).Should().Throw<ValueError>();
+            ((Action)(() => np.require(np.arange(6), requirements: new[] { "Z" }))).Should().Throw<KeyError>().Which.Message.Should().Be("'Z'");
 
         // ─── single-string requirements: NumPy iterates by character ────────
 
@@ -137,11 +139,12 @@ namespace NumSharp.Tests.Creation
             ((Action)(() => np.require(np.arange(6).reshape(2, 3), (Type)null, "CF")))
                 .Should().Throw<ValueError>().WithMessage("Cannot specify both*");
 
+        /// <summary>"F_CONTIGUOUS" as a single string is iterated by character; its '_' is no flag, NumPy's
+        ///     <c>KeyError: '_'</c>.</summary>
         [TestMethod]
         public void SingleString_MultiCharAlias_RaisesOnUnderscore() =>
-            // "F_CONTIGUOUS" as a single string is iterated by char; '_' is not a flag (NumPy: KeyError).
             ((Action)(() => np.require(np.arange(6).reshape(2, 3), (Type)null, "F_CONTIGUOUS")))
-                .Should().Throw<ValueError>();
+                .Should().Throw<KeyError>().Which.Message.Should().Be("'_'");
 
         // ─── dtype convenience overloads ────────────────────────────────────
 
