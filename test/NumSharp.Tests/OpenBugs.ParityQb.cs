@@ -1336,30 +1336,32 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QB-49 — np.ma.make_mask / np.ma.mask_or: NumPy's positional `copy` lands on C#'s `shrink`
+        // QB-49 — np.ma.make_mask / np.ma.mask_or: NumPy's positional `copy` (FIXED in API-parity batch 8)
         // ------------------------------------------------------------------
 
         /// <summary>
-        ///     NumPy 2.4.2's <c>make_mask(m, copy=False, shrink=True, dtype=np.bool)</c> and <c>mask_or(m1, m2, copy=False,
-        ///     shrink=True)</c> take <c>copy</c> positionally before <c>shrink</c>, so <c>np.ma.make_mask(np.array([0, 0]),
-        ///     False)</c> and <c>np.ma.mask_or(m, m, False)</c> still SHRINK an all-False mask to <c>nomask</c> (a 0-d False).
-        ///     NumSharp's <c>make_mask(object m, bool shrink = true)</c> / <c>mask_or(object m1, object m2, bool shrink =
-        ///     true)</c> have no <c>copy</c>, so the ported positional False binds <c>shrink</c> and the result is the full
-        ///     <c>[False, False]</c> array. numpy-signature-diff.md lists both slots; the silent consequence is the finding
-        ///     (the sibling slot mismatches of numpy.ma — <c>max(axis, out)</c>, <c>ma.array(data, dtype)</c>,
-        ///     <c>masked_array(data, mask, dtype)</c> — fail loudly instead).
+        ///     Regression pin for QB-49: NumPy 2.4.2's <c>make_mask(m, copy=False, shrink=True, dtype=np.bool)</c> and
+        ///     <c>mask_or(m1, m2, copy=False, shrink=True)</c> take <c>copy</c> positionally before <c>shrink</c>, so
+        ///     <c>np.ma.make_mask(np.array([0, 0]), False)</c> and <c>np.ma.mask_or(m, m, False)</c> still SHRINK an all-False
+        ///     mask to <c>nomask</c> (a 0-d False). NumSharp's signatures had no <c>copy</c> until API-parity batch 8, so the
+        ///     ported positional False bound <c>shrink</c> and gave the full <c>[False, False]</c> array; they now have
+        ///     NumPy's order.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB49")]
+        /// <remarks>The results are the shared <see cref="MaskedArrayModule.nomask"/> sentinel, so they are not
+        ///     disposed.</remarks>
+        [TestMethod]
         public void ParityQb_QB49_MakeMaskAndMaskOr_PositionalCopyIsNotShrink()
         {
             using var zeros = np.array(new long[] { 0, 0 });
             using var falses = np.array(new bool[] { false, false });
 
             // NumPy 2.4.2: np.ma.make_mask(np.array([0, 0]), False) and np.ma.mask_or(m, m, False) are nomask (0-d False)
-            using (var made = np.ma.make_mask(zeros, false))
-                made.ndim.Should().Be(0);
-            using (var either = np.ma.mask_or(falses, falses, false))
-                either.ndim.Should().Be(0);
+            var made = np.ma.make_mask(zeros, false);
+            made.ndim.Should().Be(0);
+            ReferenceEquals(made, np.ma.nomask).Should().BeTrue();
+            var either = np.ma.mask_or(falses, falses, false);
+            either.ndim.Should().Be(0);
+            ReferenceEquals(either, np.ma.nomask).Should().BeTrue();
         }
 
         // ------------------------------------------------------------------

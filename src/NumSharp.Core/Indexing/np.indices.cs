@@ -7,83 +7,27 @@ namespace NumSharp
         // ─────────────────────────────────────────────────────────────────────────────
         //  np.indices — dense form
         //
-        //  Three dimension spellings are offered so the API is friendly to the whole
-        //  house shape vocabulary, exactly as np.zeros/np.ones/np.empty do: an int[]
-        //  (back-compat + the shortest literal), a long[] (THE house shape type —
-        //  NDArray.shape, Shape.Dimensions and every computed size are long, so a
-        //  caller must not down-cast their own array's shape to reach np.indices),
-        //  and a Shape (accepts an NDArray's Shape directly, and lets a C# value tuple
-        //  read like Python: np.indices((2, 3))). All three funnel into the long[]
-        //  core so a grid dimension is never silently truncated to 32 bits.
+        //  NumPy's one signature, indices(dimensions, dtype=int, sparse=False), over one
+        //  Shape: an int[] (the shortest literal), a long[] (NDArray.shape, the house shape
+        //  type, so a caller never down-casts its own shape), a tuple (np.indices((2, 3)))
+        //  and a Shape all convert to it, and only the dimension sizes are read. The int[]
+        //  and long[] overloads went with API-parity batch 8 (2026-11-12). sparse=True keeps
+        //  its own name, np.indices_sparse below: its result is a tuple of arrays.
         // ─────────────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        ///     Return an array representing the indices of a grid — dense form
-        ///     (<c>int[]</c> spelling). For the sparse form, see <see cref="indices_sparse(int[], DType)"/>.
+        ///     Return an array representing the indices of a grid — NumPy's dense <c>np.indices(dimensions, dtype=int)</c>.
+        ///     For the sparse form (NumPy's <c>sparse=True</c>), see <see cref="indices_sparse(Shape, DType)"/>.
         /// </summary>
-        /// <param name="dimensions">Shape of the grid, as a 32-bit array. Widened to the
-        ///     long-native core; prefer the <see cref="indices(long[], DType)"/> overload
-        ///     when you already hold a <see cref="long"/> shape (e.g. <c>arr.shape</c>).</param>
-        /// <param name="dtype">Element type of the result — any dtype spelling
-        ///     (<see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/>)
-        ///     converts implicitly. Default (null) is <see cref="long"/> / <see cref="int64"/>
-        ///     (NumPy's <c>intp</c>).</param>
-        /// <returns>Single dense array of shape <c>(len(dimensions), *dimensions)</c>; the
-        ///     d-th sub-array holds the d-th coordinate of each output position.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="dimensions"/> is null.</exception>
-        /// <exception cref="ValueError">A dimension is negative (<c>negative dimensions are not allowed</c>), or the grid's
-        ///     byte count overflows (<c>array is too big; ...</c>): NumPy's allocation of the result, which comes before any
-        ///     arange.</exception>
-        /// <exception cref="TypeError">An arange of <paramref name="dtype"/> refuses, even for an empty grid: a text dtype
-        ///     (<c>arange() not supported for inputs with DType ...</c>), or bool with a dimension longer than two
-        ///     (<c>arange() is only supported for booleans when the result has at most length 2.</c>).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.indices.html</remarks>
-        public static NDArray indices(int[] dimensions, DType dtype = null)
-        {
-            if (dimensions == null) throw new ArgumentNullException(nameof(dimensions));
-            // Widen to the long-native core — int[] does not convert to long[] by array
-            // covariance, so this overload exists only to carry the 32-bit spelling in.
-            return indices(WidenDimensions(dimensions), dtype);
-        }
-
-        /// <summary>
-        ///     Return an array representing the indices of a grid — dense form, taking the
-        ///     house <see cref="long"/> shape type. This is the overload to prefer: an
-        ///     <see cref="NDArray"/>'s own <c>shape</c> is <c>long[]</c>, so it binds here
-        ///     with no down-cast (the reason this overload exists — the former <c>int[]</c>-only
-        ///     surface forced callers to truncate a long shape to reach <c>np.indices</c>).
-        /// </summary>
-        /// <param name="dimensions">Shape of the grid. An empty array yields NumPy's
-        ///     <c>(0,)</c> result. Elements are not mutated.</param>
-        /// <param name="dtype">Element type of the result — any dtype spelling converts
-        ///     implicitly. Default (null) is <see cref="long"/> / <see cref="int64"/>.</param>
-        /// <returns>Single dense array of shape <c>(len(dimensions), *dimensions)</c>.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="dimensions"/> is null.</exception>
-        /// <exception cref="ValueError">A dimension is negative (<c>negative dimensions are not allowed</c>), or the grid's
-        ///     byte count overflows (<c>array is too big; ...</c>): NumPy's allocation of the result, which comes before any
-        ///     arange.</exception>
-        /// <exception cref="TypeError">An arange of <paramref name="dtype"/> refuses, even for an empty grid: a text dtype
-        ///     (<c>arange() not supported for inputs with DType ...</c>), or bool with a dimension longer than two
-        ///     (<c>arange() is only supported for booleans when the result has at most length 2.</c>).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.indices.html</remarks>
-        [NDScoped]
-        public static NDArray indices(long[] dimensions, DType dtype = null)
-        {
-            if (dimensions == null) throw new ArgumentNullException(nameof(dimensions));
-            return NDArray.indices(dimensions, dtype);
-        }
-
-        /// <summary>
-        ///     Return an array representing the indices of a grid — dense form, taking a
-        ///     <see cref="Shape"/>. Accepts an <see cref="NDArray.Shape"/> directly and lets a
-        ///     C# value tuple read like Python (<c>np.indices((2, 3))</c>, via <see cref="Shape"/>'s
-        ///     implicit tuple conversions). Only the dimension SIZES are used — any strides/offset
-        ///     the shape carries are ignored, since <c>indices</c> describes a grid of these sizes.
-        /// </summary>
-        /// <param name="dimensions">Grid shape. A 0-dimensional shape yields NumPy's <c>(0,)</c> result.</param>
-        /// <param name="dtype">Element type of the result — any dtype spelling converts
-        ///     implicitly. Default (null) is <see cref="long"/> / <see cref="int64"/>.</param>
-        /// <returns>Single dense array of shape <c>(ndim, *dimensions)</c>.</returns>
+        /// <param name="dimensions">The shape of the grid: a tuple (<c>(2, 3)</c>), an <c>int[]</c> / <c>long[]</c> (an
+        ///     array's <c>shape</c>) or a <see cref="Shape"/>, all converting implicitly. Only the dimension SIZES are read —
+        ///     any strides / offset a <see cref="Shape"/> carries are ignored, since <c>indices</c> describes a grid of these
+        ///     sizes. A 0-dimensional shape yields NumPy's <c>(0,)</c> result.</param>
+        /// <param name="dtype">Element type of the result — any dtype spelling (<see cref="Type"/>, <see cref="NPTypeCode"/>,
+        ///     dtype string or <see cref="DType"/>) converts implicitly. Default (null) is <see cref="long"/> /
+        ///     <see cref="int64"/> (NumPy's <c>int</c>, the platform's intp).</param>
+        /// <returns>Single dense array of shape <c>(len(dimensions), *dimensions)</c>; the d-th sub-array holds the d-th
+        ///     coordinate of each output position.</returns>
         /// <exception cref="ValueError">A dimension is negative (<c>negative dimensions are not allowed</c>), or the grid's
         ///     byte count overflows (<c>array is too big; ...</c>): NumPy's allocation of the result, which comes before any
         ///     arange.</exception>
@@ -93,24 +37,24 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.indices.html
         ///     <para>
-        ///     Because a scalar converts implicitly to a 1-D <see cref="Shape"/>, <c>np.indices(5)</c>
-        ///     is accepted here as the 1-D grid <c>(1, 5)</c> — a NumSharp convenience; NumPy's
-        ///     <c>np.indices(5)</c> raises (an int is not a sequence). C# has no 1-element tuple,
-        ///     so spell a 1-D grid as <c>np.indices([5])</c> or <c>np.indices(new long[]{5})</c>.
+        ///     Because a scalar converts implicitly to a 1-D <see cref="Shape"/>, <c>np.indices(5)</c> is accepted as the 1-D
+        ///     grid <c>(1, 5)</c> — a NumSharp convenience (a <see cref="Shape"/> cannot tell <c>5</c> from <c>(5,)</c>);
+        ///     NumPy's <c>np.indices(5)</c> raises (<c>TypeError: 'int' object is not iterable</c>). C# has no 1-element
+        ///     tuple, so a 1-D grid is <c>np.indices(new long[] { 5 })</c> or <c>np.indices(5)</c>.
         ///     </para>
         /// </remarks>
+        [NDScoped]
         public static NDArray indices(Shape dimensions, DType dtype = null)
-        {
-            // A Shape's Dimensions is the live long[] of sizes (null for a default(Shape)).
-            return indices(dimensions.dimensions ?? Array.Empty<long>(), dtype);
-        }
+            // A Shape's dimensions are the live long[] of sizes (null for a default(Shape)); the array-object home reads them
+            // without writing.
+            => NDArray.indices(dimensions.dimensions ?? Array.Empty<long>(), dtype);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  np.indices — sparse form (NumPy's sparse=True)
         // ─────────────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        ///     Sparse counterpart to <see cref="indices(int[], DType)"/> — returns a tuple of
+        ///     Sparse counterpart to <see cref="indices(Shape, DType)"/> — returns a tuple of
         ///     broadcast-shaped arrays where each axis-d array has shape
         ///     <c>(1, …, 1, dimensions[d], 1, …, 1)</c>. Equivalent to NumPy's
         ///     <c>np.indices(dimensions, sparse=True)</c>. <c>int[]</c> spelling; widened to the
@@ -138,7 +82,7 @@ namespace NumSharp
         /// <summary>
         ///     Sparse grid indices taking the house <see cref="long"/> shape type — the overload to
         ///     prefer when you hold a <c>long[]</c> shape (e.g. <c>arr.shape</c>), so no down-cast is
-        ///     needed. See <see cref="indices(long[], DType)"/> for the dense twin.
+        ///     needed. See <see cref="indices(Shape, DType)"/> for the dense twin.
         /// </summary>
         /// <param name="dimensions">Shape of the grid. Empty → an empty tuple.</param>
         /// <param name="dtype">Element type of each array — any dtype spelling converts

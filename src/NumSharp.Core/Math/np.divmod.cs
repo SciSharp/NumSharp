@@ -28,7 +28,7 @@ namespace NumSharp
         ///     <para>One signature, NumPy's ufunc form (2026-11-11): the former overload that took the second operand as an
         ///     <c>object</c> read a boxed number as a STRONG array (parity QA-QB30); a C# literal converts to a 0-d array
         ///     marked as the Python scalar it stands for, so NEP 50's weak-scalar rule holds without it, and a value held in
-        ///     an <c>object</c> variable goes through <see cref="np.asanyarray(in object, DType, string)"/>.</para>
+        ///     an <c>object</c> variable goes through <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/>.</para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="TypeError">A complex operand with no <paramref name="dtype"/>: divmod has no complex loop,

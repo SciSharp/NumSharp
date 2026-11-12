@@ -150,14 +150,17 @@ namespace NumSharp.Tests.Indexing
 
         // ─────────────────────────────────────────────────────────── .NET-friendly idioms
 
+        /// <summary>
+        ///     NumPy's one <c>np.indices(dimensions, ...)</c> form (API-parity batch 8): an <c>int[]</c>, a <c>long[]</c> and a
+        ///     value tuple all convert to the single <see cref="Shape"/> parameter and agree. A C# 12 collection expression
+        ///     (<c>[2, 3]</c>) no longer compiles there — <see cref="Shape"/> is not a collection type; it bound the removed
+        ///     <c>int[]</c> / <c>long[]</c> overloads.
+        /// </summary>
         [TestMethod]
-        public void Indices_CollectionExpression_BindsIntAndLong()
+        public void Indices_IntLongAndTupleSpellings_ConvertToTheShapeForm()
         {
-            // A C# 12 collection expression of int literals binds int[] (no ambiguity with the
-            // long[] overload — an identity element conversion beats the implicit int->long one),
-            // while long literals bind long[]. Both must compile AND agree.
-            np.array_equal(np.indices([2, 3]), np.indices(new int[] { 2, 3 })).Should().BeTrue();
-            np.array_equal(np.indices([2L, 3L]), np.indices(new long[] { 2, 3 })).Should().BeTrue();
+            np.array_equal(np.indices((2, 3)), np.indices(new int[] { 2, 3 })).Should().BeTrue();
+            np.array_equal(np.indices((2L, 3L)), np.indices(new long[] { 2, 3 })).Should().BeTrue();
         }
 
         [TestMethod]
@@ -214,8 +217,8 @@ namespace NumSharp.Tests.Indexing
             string.Join(",", s.Shape.Dimensions).Should().Be("1,5");
             s.ToArray<long>().Should().Equal(0L, 1, 2, 3, 4);
 
-            // C# has no 1-element tuple, so a 1-D grid is spelled [5] or new long[]{5} (both agree).
-            np.array_equal(np.indices([5]), s).Should().BeTrue();
+            // C# has no 1-element tuple, so a 1-D grid is spelled new[] { 5 } or new long[]{5} (both agree).
+            np.array_equal(np.indices(new[] { 5 }), s).Should().BeTrue();
             np.array_equal(np.indices(new long[] { 5 }), s).Should().BeTrue();
         }
     }

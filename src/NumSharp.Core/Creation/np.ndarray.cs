@@ -10,7 +10,7 @@ namespace NumSharp
         /// <summary>
         ///     Constructs an array — NumPy's low-level <c>numpy.ndarray(shape, dtype=float, buffer=None, offset=0,
         ///     strides=None, order=None)</c>. Without a buffer it allocates an UNINITIALIZED array, like
-        ///     <see cref="empty(Shape, DType, string)"/>; with a buffer it lays the array over the buffer's BYTES without
+        ///     <see cref="empty(Shape, DType, char, string)"/>; with a buffer it lays the array over the buffer's BYTES without
         ///     copying them, so writes through the result change the buffer.
         /// </summary>
         /// <param name="shape">

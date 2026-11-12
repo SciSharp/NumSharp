@@ -23,7 +23,7 @@ namespace NumSharp.Tests.Ma
     public class np_ma_setops_numpy_port_tests
     {
         private static NDMaskedArray L(long[] data, int[] mask = null) =>
-            np.ma.array(np.array(data), mask is null ? null : np.array(mask.Select(m => m != 0).ToArray()));
+            np.ma.array(np.array(data), mask: mask is null ? null : np.array(mask.Select(m => m != 0).ToArray()));
 
         private static bool[] Mask(NDMaskedArray r) => np.ma.getmaskarray(r).ToArray<bool>();
 
@@ -77,7 +77,7 @@ namespace NumSharp.Tests.Ma
         {
             var mask = new bool[24];
             mask[20] = true;
-            var a = np.ma.array(np.arange(24L).reshape(2, 3, 4), np.array(mask).reshape(2, 3, 4));
+            var a = np.ma.array(np.arange(24L).reshape(2, 3, 4), mask: np.array(mask).reshape(2, 3, 4));
             var b = L(new long[] { 0, 10, 20, 30, 1, 3, 11, 22, 33 }, new[] { 0, 1, 0, 1, 0, 1, 0, 1, 0 });
             var r = np.ma.isin(a, b);
             r.shape.Should().Equal(2L, 3L, 4L);
@@ -109,7 +109,7 @@ namespace NumSharp.Tests.Ma
             all.inverse_indices.ToArray<long>().Should().Equal(0L, 0L, 0L);
 
             // The inverse keeps a 2-D input's shape.
-            var two = np.ma.unique(np.ma.array(np.array(new long[,] { { 3, 1 }, { 1, 9 } }), np.array(new[,] { { false, false }, { false, true } })),
+            var two = np.ma.unique(np.ma.array(np.array(new long[,] { { 3, 1 }, { 1, 9 } }), mask: np.array(new[,] { { false, false }, { false, true } })),
                                    return_inverse: true);
             two.values.data.ToArray<long>().Should().Equal(1L, 3L, 9L);
             Mask(two.values).Should().Equal(false, false, true);
@@ -138,7 +138,7 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void Unique_AMaskedKeyTiedWithAnEqualValue_SortsAmongThem()
         {
-            var r = np.ma.unique(np.ma.array(np.array(new[] { true, true, false }), np.array(new[] { true, false, false })));
+            var r = np.ma.unique(np.ma.array(np.array(new[] { true, true, false }), mask: np.array(new[] { true, false, false })));
             Bools(r).Should().Equal(false, true, true);
             Mask(r).Should().Equal(false, true, false);
         }
@@ -150,7 +150,7 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void Unique_NaNsBeforeAMaskedSlot_AreNotCollapsed()
         {
-            var r = np.ma.unique(np.ma.array(np.array(new[] { double.NaN, 1.0, double.NaN, 2.0 }), np.array(new[] { false, false, false, true })));
+            var r = np.ma.unique(np.ma.array(np.array(new[] { double.NaN, 1.0, double.NaN, 2.0 }), mask: np.array(new[] { false, false, false, true })));
             var d = r.data.ToArray<double>();
             d.Length.Should().Be(4);
             d[0].Should().Be(1.0);
@@ -160,7 +160,7 @@ namespace NumSharp.Tests.Ma
 
             // The masked last slot holds NaN DATA: still `masked`, still falsy, so the unmasked NaN is not collapsed into
             // it — NumPy keeps [1.0, nan, --].
-            var nanLast = np.ma.unique(np.ma.array(np.array(new[] { double.NaN, 1.0, double.NaN }), np.array(new[] { false, false, true })));
+            var nanLast = np.ma.unique(np.ma.array(np.array(new[] { double.NaN, 1.0, double.NaN }), mask: np.array(new[] { false, false, true })));
             nanLast.size.Should().Be(3);
             Mask(nanLast).Should().Equal(false, false, true);
             double.IsNaN(nanLast.data.GetDouble(1)).Should().BeTrue();

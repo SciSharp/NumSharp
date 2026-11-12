@@ -107,21 +107,21 @@ namespace NumSharp.Tests.Fuzz
                 case "minimum": return np.ma.minimum(ops[0], ops[1]);
 
                 // ---- reductions -> masked (count/argmin/argmax -> array) --------------------------
-                case "sum": return np.ma.sum(ops[0], ParseAxis(p), null, ParseKeepdims(p));
-                case "prod": return np.ma.prod(ops[0], ParseAxis(p), null, ParseKeepdims(p));
-                case "product": return np.ma.product(ops[0], ParseAxis(p), null, ParseKeepdims(p));
+                case "sum": return np.ma.sum(ops[0], ParseAxis(p), null, keepdims: ParseKeepdims(p));
+                case "prod": return np.ma.prod(ops[0], ParseAxis(p), null, keepdims: ParseKeepdims(p));
+                case "product": return np.ma.product(ops[0], ParseAxis(p), null, keepdims: ParseKeepdims(p));
                 // ma_meanvar.jsonl gives mean / var / std / anom a dtype= and var / std a mean= (ParseMaDtype, ParseMaMean);
                 // the older tiers carry neither, which reads as null.
-                case "mean": return np.ma.mean(ops[0], ParseAxis(p), ParseMaDtype(p), ParseKeepdims(p));
-                case "min": return np.ma.min(ops[0], ParseAxis(p), null, ParseKeepdims(p));
-                case "max": return np.ma.max(ops[0], ParseAxis(p), null, ParseKeepdims(p));
+                case "mean": return np.ma.mean(ops[0], ParseAxis(p), ParseMaDtype(p), keepdims: ParseKeepdims(p));
+                case "min": return np.ma.min(ops[0], ParseAxis(p), null, keepdims: ParseKeepdims(p));
+                case "max": return np.ma.max(ops[0], ParseAxis(p), null, keepdims: ParseKeepdims(p));
                 case "amin": return np.ma.amin(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "amax": return np.ma.amax(ops[0], ParseAxis(p), null, ParseKeepdims(p));
-                case "ptp": return np.ma.ptp(ops[0], ParseAxis(p), null, ParseKeepdims(p));
-                case "var": return np.ma.var(ops[0], ParseAxis(p), ParseMaDtype(p), ParseDdof(p), ParseKeepdims(p), ParseMaMean(p, ops));
-                case "std": return np.ma.std(ops[0], ParseAxis(p), ParseMaDtype(p), ParseDdof(p), ParseKeepdims(p), ParseMaMean(p, ops));
-                case "all": return np.ma.all(ops[0], ParseAxis(p), ParseKeepdims(p));
-                case "any": return np.ma.any(ops[0], ParseAxis(p), ParseKeepdims(p));
+                case "ptp": return np.ma.ptp(ops[0], ParseAxis(p), null, keepdims: ParseKeepdims(p));
+                case "var": return np.ma.var(ops[0], ParseAxis(p), ParseMaDtype(p), ddof: ParseDdof(p), keepdims: ParseKeepdims(p), mean: ParseMaMean(p, ops));
+                case "std": return np.ma.std(ops[0], ParseAxis(p), ParseMaDtype(p), ddof: ParseDdof(p), keepdims: ParseKeepdims(p), mean: ParseMaMean(p, ops));
+                case "all": return np.ma.all(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
+                case "any": return np.ma.any(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
                 case "anom": return np.ma.anom(ops[0], ParseAxis(p), ParseMaDtype(p));
                 case "median": return np.ma.median(ops[0], ParseAxis(p), ParseKeepdims(p));
                 case "average": return np.ma.average(ops[0], ParseAxis(p), null, ParseKeepdims(p));
@@ -191,9 +191,9 @@ namespace NumSharp.Tests.Fuzz
 
                 // ---- selection -> masked (put/putmask -> mutated operand) -------------------------
                 case "take": return np.ma.take(ops[0], ops[1]._data, ParseAxis(p),
-                                                p.TryGetValue("mode", out var tm) ? tm.GetString() : "raise");
+                                                mode: p.TryGetValue("mode", out var tm) ? tm.GetString() : "raise");
                 case "choose": return np.ma.choose(ops[0], ops.Skip(1).Cast<object>().ToArray(),
-                                                   p.TryGetValue("mode", out var cm) ? cm.GetString() : "raise");
+                                                   mode: p.TryGetValue("mode", out var cm) ? cm.GetString() : "raise");
                 case "compress": return np.ma.compress(ops[0], ops[1], ParseAxis(p));   // ops[0]=condition, ops[1]=a
                 case "clip": return np.ma.clip(ops[0], p["min"].GetDouble(), p["max"].GetDouble());
                 case "where": return np.ma.where(ops[0], ops[1], ops[2]);

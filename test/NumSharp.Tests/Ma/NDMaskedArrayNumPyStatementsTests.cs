@@ -28,7 +28,7 @@ namespace NumSharp.Tests.Ma
         public void ShapeViews_InheritTheFillValueAndTheHardMask()
         {
             // ma.ravel(x) / ma.reshape(x, (3, 1)) / ma.transpose(x): mask kept, fill 7, hard (the _arraymethod path).
-            foreach (var r in new[] { np.ma.ravel(Inheriting()), np.ma.reshape(Inheriting(), 3, 1), np.ma.transpose(Inheriting()) })
+            foreach (var r in new[] { np.ma.ravel(Inheriting()), np.ma.reshape(Inheriting(), (3, 1)), np.ma.transpose(Inheriting()) })
             {
                 Mask(r).Should().Equal(true, false, false);
                 Convert.ToInt64(r.fill_value).Should().Be(7L);

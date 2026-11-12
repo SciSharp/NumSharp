@@ -21,7 +21,7 @@ namespace NumSharp
         /// One signature, NumPy's ufunc form (2026-11-11): the former overload that took the shift count as an
         /// <c>object</c> read a boxed number as a STRONG array; a C# literal converts to a 0-d array marked as the
         /// Python scalar it stands for (NEP 50's weak scalar), and a value held in an <c>object</c> variable goes
-        /// through <see cref="np.asanyarray(in object, DType, string)"/>.
+        /// through <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/>.
         ///
         /// Bits are shifted to the left by appending x2 0s at the right of x1.
         /// Since the internal representation of numbers is in binary format,

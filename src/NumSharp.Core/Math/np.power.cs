@@ -19,7 +19,7 @@ namespace NumSharp
         ///     <para>One signature, NumPy's ufunc form (2026-11-11): the former overload that took the second operand as an
         ///     <c>object</c> read a boxed number as a STRONG array (parity QA-QB30); a C# literal converts to a 0-d array
         ///     marked as the Python scalar it stands for, so NEP 50's weak-scalar rule holds without it, and a value held in
-        ///     an <c>object</c> variable goes through <see cref="np.asanyarray(in object, DType, string)"/>.</para>
+        ///     an <c>object</c> variable goes through <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/>.</para>
         ///     <para>The former two-argument and <c>in</c> overloads called the same engine method with no out / where /
         ///     dtype, so <c>np.power(a, b)</c> computes exactly as before through this one.</para>
         /// </remarks>

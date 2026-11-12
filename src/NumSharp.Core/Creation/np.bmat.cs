@@ -117,7 +117,7 @@ namespace NumSharp
         ///     Port of NumPy 2.x <c>numpy.bmat</c>'s <c>isinstance(obj, (tuple, list))</c> branch. Mixed
         ///     forms work too — <c>([A, B], [C, D])</c> (a tuple of lists) — since a row may be a tuple, an
         ///     <c>NDArray[]</c>, or any <see cref="IEnumerable"/> of blocks; a non-<see cref="NDArray"/>
-        ///     entry is passed through <see cref="asanyarray(in object, DType, string)"/> exactly as NumPy runs
+        ///     entry is passed through <see cref="asanyarray(in object, DType, char?, string, bool?)"/> exactly as NumPy runs
         ///     <c>asarray</c> over the entries. Still pure concatenation (no matrix products).
         ///     <para>
         ///     <b>Error parity.</b> The errors reproduce <c>numpy.concatenate</c>'s contract as
@@ -301,7 +301,7 @@ namespace NumSharp
         /// <summary>
         ///     Converts a tuple entry to a block: an <see cref="NDArray"/> passes through, <c>null</c> stays
         ///     <c>null</c> (a 0-D array to <see cref="BmatConcat"/>, matching NumPy's <c>None</c>), and any
-        ///     other value goes through <see cref="asanyarray(in object, DType, string)"/> — as NumPy runs
+        ///     other value goes through <see cref="asanyarray(in object, DType, char?, string, bool?)"/> — as NumPy runs
         ///     <c>asarray</c> over the entries (a scalar so produced is 0-D and rejected identically).
         /// </summary>
         private static NDArray BmatElementToBlock(object e)

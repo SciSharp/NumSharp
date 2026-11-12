@@ -1870,8 +1870,6 @@ GAPS = {
             "np.kron with a 0-d, np.nanmedian along an axis — MaskedArray.filled's _data view) come back owning "
             "their data",
     "VF29": "np.median / np.nanmedian of a 0-d with keepdims=True are read-only; NumPy returns a writeable 0-d array",
-    "VS01": "np.zeros / ones / empty / full given a view's Shape of a dense F or permuted layout allocate that "
-            "layout; NumPy's np.zeros(x.shape) is always C-ordered",
     "VA02": "np.take_along_axis with F-ordered indices returns a C-ordered result; NumPy's follows the indices (F)",
     "VA04": "np.cov / np.corrcoef results do not own their data (OWNDATA false): both end with ndarray.squeeze, which "
             "in NumSharp returns a new view where NumPy returns the array itself (VF04)",
@@ -1934,11 +1932,9 @@ def _gap_of(tier, case):
             return "VF29"
         return None
     if tier == "shapes":
-        # Only where the view's dense layout is a real F / permuted one: a (1,1) or an empty transposed view's Shape is
-        # also C, so NumSharp keeps NumPy's answer there.
-        if (fn in ("zeros", "ones", "empty", "full") and p["form"] in ("view:transposed", "view:permuted")
-                and p["dims"] in ([2, 3], [2, 3, 4])):
-            return "VS01"
+        # The shapes tier keeps no gap since VS01 (np.zeros / ones / empty / full allocating a view Shape's F or permuted
+        # layout) was fixed by API-parity batch 8 on 2026-11-12: a new array is laid out from the dimensions and the
+        # order letter alone.
         return None
     if tier == "arrays":
         if fn == "take_along_axis" and lay in ("indices=f", "indices=t"):

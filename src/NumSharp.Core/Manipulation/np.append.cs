@@ -57,13 +57,13 @@ namespace NumSharp
 
         /// <summary>
         ///     Scalar / generic-value overload that wraps the value via
-        ///     <see cref="np.asanyarray(in object, DType, string)"/> before delegating. Matches NumPy's
+        ///     <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/> before delegating. Matches NumPy's
         ///     <c>np.append([1,2,3], 4)</c> idiom — the scalar is auto-coerced
         ///     to a 0-D ndarray (whose ravel is shape (1,)).
         /// </summary>
         /// <param name="arr">Input array.</param>
         /// <param name="values">Values to append: a scalar, a C# array or collection, or an <see cref="NDArray"/>
-        ///     whose static type is <see cref="object"/>. Converted with <see cref="np.asanyarray(in object, DType, string)"/>.</param>
+        ///     whose static type is <see cref="object"/>. Converted with <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/>.</param>
         /// <param name="axis">Axis along which to append; <c>null</c> (default) flattens both operands first.</param>
         /// <returns>A new array with <paramref name="values"/> appended to <paramref name="arr"/>.
         ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
@@ -71,7 +71,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="values"/> is null.</exception>
         /// <remarks>
         ///     Scoped by <c>[NDScoped]</c>: the conversion of a scalar or collection is released on return. An
-        ///     <see cref="NDArray"/> passed as <see cref="object"/> comes back from <see cref="np.asanyarray(in object, DType, string)"/>
+        ///     <see cref="NDArray"/> passed as <see cref="object"/> comes back from <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/>
         ///     unchanged; it was built before the scope opened, so the scope never disposes it. (The hand-written
         ///     version disposed that conversion unconditionally, which released the caller's own array.)
         /// </remarks>

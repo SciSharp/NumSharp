@@ -474,7 +474,7 @@ namespace NumSharp.Tests.Fuzz
                 // replay's and is released after the assignment (which copies what it needs), on a throw too.
                 using var d = np.array(new long[] { 5, 6 });
                 using var m = np.array(new[] { true, false });
-                var cast = np.ma.array(d, m).astype(a.dtype);
+                var cast = np.ma.array(d, mask: m).astype(a.dtype);
                 try
                 {
                     a[key] = cast;

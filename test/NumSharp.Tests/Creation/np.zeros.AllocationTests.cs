@@ -181,7 +181,7 @@ namespace NumSharp.Tests.Creation
             using var byLongArr = np.zeros(new long[] { 2, 3 });
             Assert.AreEqual(6L, byLongArr.size);
 
-            using var byGeneric = np.zeros<int>(new int[] { 4 });
+            using var byGeneric = np.zeros(new int[] { 4 }, np.int32);
             Assert.AreEqual(typeof(int), byGeneric.dtype);
             Assert.AreEqual(0, byGeneric.GetInt32(0));
 

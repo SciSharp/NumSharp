@@ -146,7 +146,7 @@ namespace NumSharp.Tests.Fuzz
             E(l, "NDMaskedArray.argsort", "last axis", f => f.MA.argsort());
             E(l, "NDMaskedArray.astype", "float32", f => f.MA.astype(np.float32));
             E(l, "NDMaskedArray.byteswap", "copy", f => f.MA.byteswap());
-            E(l, "NDMaskedArray.choose", "index array", f => f.MI.choose(new object[] { f.M, f.M }, "clip"));
+            E(l, "NDMaskedArray.choose", "index array", f => f.MI.choose(new object[] { f.M, f.M }, mode: "clip"));
             E(l, "NDMaskedArray.clip", "bounds", f => f.MA.clip(1.0, 10.0));
             E(l, "NDMaskedArray.compress", "condition", f => f.MV.compress(f.B));
             E(l, "NDMaskedArray.compressed", "1-D", f => f.MA.compressed());
@@ -178,7 +178,7 @@ namespace NumSharp.Tests.Fuzz
             });
             E(l, "NDMaskedArray.max", "axis", f => f.MA.max(0));
             E(l, "NDMaskedArray.mean", "flat", f => f.MA.mean());
-            E(l, "NDMaskedArray.min", "axis keepdims", f => f.MA.min(1, null, true));
+            E(l, "NDMaskedArray.min", "axis keepdims", f => f.MA.min(1, keepdims: true));
             E(l, "NDMaskedArray.nonzero", "masked", f => f.MA.nonzero());
             E(l, "NDMaskedArray.partition", "owned copy", f =>
             {
@@ -228,7 +228,7 @@ namespace NumSharp.Tests.Fuzz
             E(l, "NDMaskedArray.soften_mask", "owned copy", f => f.MA.copy().soften_mask());
             E(l, "NDMaskedArray.sort", "last axis", f => f.MA.sort());
             E(l, "NDMaskedArray.squeeze", "no-op", f => f.MA.squeeze());
-            E(l, "NDMaskedArray.std", "axis ddof", f => f.MA.std(0, null, 1));
+            E(l, "NDMaskedArray.std", "axis ddof", f => f.MA.std(0, null, ddof: 1));
             E(l, "NDMaskedArray.sum", "axis", f => f.MA.sum(1));
             E(l, "NDMaskedArray.swapaxes", "0,1", f => f.MA.swapaxes(0, 1));
             E(l, "NDMaskedArray.take", "flat indices", f => f.MA.take(f.Idx));

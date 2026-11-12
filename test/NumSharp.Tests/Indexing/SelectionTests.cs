@@ -315,7 +315,7 @@ public class SelectionTests
     {
         var a = np.array(new int[] { 10, 20, 30, 40, 50 });
         var idx = np.array(new int[] { 0, 2, 4 });
-        var outArr = np.zeros<int>(new int[] { 3 });
+        var outArr = np.zeros(new int[] { 3 }, np.int32);
         var r = np.take(a, idx, @out: outArr);
         ReferenceEquals(r, outArr).Should().BeTrue("out= must return the supplied buffer");
         outArr.ToArray<int>().Should().Equal(10, 30, 50);
@@ -329,7 +329,7 @@ public class SelectionTests
         // src=float64, out=int32 satisfies that direction (int32→float64 is safe),
         // so the writeback truncates values into int32.
         var a = np.array(new double[] { 10.7, 20.5, 30.0 });
-        var outInt = np.zeros<int>(new int[] { 2 });
+        var outInt = np.zeros(new int[] { 2 }, np.int32);
         np.take(a, np.array(new int[] { 0, 2 }), @out: outInt);
         outInt.ToArray<int>().Should().Equal(10, 30);
     }
@@ -338,7 +338,7 @@ public class SelectionTests
     public void Take_OutParam_ShapeMismatch_Throws()
     {
         var a = np.array(new int[] { 10, 20, 30 });
-        var outBad = np.zeros<int>(new int[] { 5 });
+        var outBad = np.zeros(new int[] { 5 }, np.int32);
         var act = () => np.take(a, np.array(new int[] { 0 }), @out: outBad);
         act.Should().Throw<ArgumentException>().WithMessage("*output array does not match*");
     }
@@ -348,7 +348,7 @@ public class SelectionTests
     {
         var a = np.array(new int[] { 10, 20, 30, 40, 50 });
         var idx = np.array(new int[,] { { 0, 2 }, { 4, 1 } });
-        var outArr = np.zeros<int>(new int[] { 2, 2 });
+        var outArr = np.zeros(new int[] { 2, 2 }, np.int32);
         np.take(a, idx, @out: outArr);
         outArr.GetInt32(0, 0).Should().Be(10);
         outArr.GetInt32(0, 1).Should().Be(30);

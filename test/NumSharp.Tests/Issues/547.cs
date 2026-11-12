@@ -86,10 +86,11 @@ namespace NumSharp.Tests.Issues
         }
 
         /// <summary>
-        ///     The comment's "still missing" list: 11 NumPy 2.4.2 names NumSharp lacks. Fails until all exist; the message
-        ///     lists the ones still missing.
+        ///     Regression pin for the comment's "still missing" list: the 11 NumPy 2.4.2 names it named all exist now (the
+        ///     last one, <c>np.astype</c>, arrived with API-parity batch 7 on 2026-11-12). A failure lists the ones missing
+        ///     again.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "https://github.com/SciSharp/NumSharp/issues/547")]
+        [TestMethod]
         public void StillMissing_NumPy2Names()
         {
             var missing = MissingNumPy2Names.Where(n => !NpHas(n)).ToArray();

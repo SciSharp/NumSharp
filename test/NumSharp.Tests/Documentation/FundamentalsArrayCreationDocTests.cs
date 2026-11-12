@@ -111,11 +111,11 @@ namespace NumSharp.Tests.Documentation
         [TestMethod]
         public void Intrinsic_Indices_AcceptsAllShapeSpellings()
         {
-            // The doc shows every .NET shape spelling reaching np.indices — a collection
-            // expression (int[]), a value tuple, a long[], and an array's own .shape (long[],
-            // no cast) — and they all agree on the (2, 3, 3) grid.
+            // The doc shows every .NET shape spelling reaching np.indices — an int[], a value
+            // tuple, a long[], and an array's own .shape (long[], no cast) — and they all agree
+            // on the (2, 3, 3) grid.
             var expected = new long[] { 2, 3, 3 };
-            np.indices([3, 3]).shape.Should().Equal(expected);                 // collection expression -> int[]
+            np.indices(new[] { 3, 3 }).shape.Should().Equal(expected);         // int[] -> Shape
             np.indices((3, 3)).shape.Should().Equal(expected);                 // value tuple -> Shape
             np.indices(new long[] { 3, 3 }).shape.Should().Equal(expected);    // long[] (house shape type)
             np.indices(np.zeros((3, 3)).shape).shape.Should().Equal(expected); // an array's own long[] shape

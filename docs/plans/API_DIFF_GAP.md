@@ -109,6 +109,26 @@ np.lib.stride_tricks, the binding probe imports System.Collections (a non-generi
 numpy.astype alias left `coverage/overrides.json`, and `coverage/oracle_map.json` maps the surface oracle's
 sliding_window_view key. The fixes are recorded in [`api-parameter-parity.md`](api-parameter-parity.md) §7.
 
+**Refresh 2026-11-12 (API-parity batch 8 on `journey5` at `1844f704`).** Regenerated on the batch's tree: 882 → 937
+NumPy names with NumPy's signature, 428 → 373 to change; M 163 → 111, Q 29 → 3, B 24 → 16, T 21 → 17, X 57 → 54, O 273
+→ 271, L 17 unchanged; np.ma 127 → 99 and np.ma.MaskedArray 29 → 7 to change; the coverage artifact's headline with
+NumPy's exact signature 356 → 361. Fixed: np.zeros / ones / empty / full have NumPy's one signature (`order`, `device`;
+the int[] / long[] and generic `<T>` forms gone, so OD7 is decided for the creation names: the dtype is an argument),
+and a view's Shape is laid out from its dimensions (gap VS01); np.indices and np.tile take one Shape; np.asanyarray
+NumPy's order / copy; numpy.ma: stack / vstack / hstack dtype / casting, reshape order (and the method's copy),
+squeeze / expand_dims tuple axes and `_convert2ma` keywords, the reductions' NDAxis axes and NumPy's out= branches,
+ma.array's and masked_array's NumPy orders with order / ndmin, out= for cumsum / cumprod / take / choose / compress /
+round / around / dot / trace (round's masked out through NumPy's ufunc wraps; around one `_MaskedUnaryOperation` form;
+MaskedArray.choose is ndarray.choose), make_mask / mask_or copy and dtype, make_mask_none dtype, ma.where(condition),
+several-array atleast_*d and MaskedArray.item(*args). Not taken: the file parameter names (OD3 stays open). Entries
+that stay on purpose: the MemoryView forms of np.asarray / asanyarray / ascontiguousarray / asfortranarray [O2],
+np.indices / np.ma.indices `sparse` [M] (np.indices_sparse is the C# form), ma.stack's `out` [M] (NumPy hands the same
+out to the data and mask joins), ma.vstack / hstack's params forms [O2] (the owner's batch-3 call), masked_array's
+required data [B], ma.where's two forms [O2 B] (C# cannot say "both or neither"), and the batch-1 `obj` renames. Found
+at test time: the removed int[] / long[] creation forms were what C# 12 collection expressions bound
+(`np.indices([2, 3])`), a Shape is not a collection type. The fixes are recorded in
+[`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
 ---
 
 ## Contents
@@ -837,7 +857,7 @@ void dtype; [`dtype-system.md`](dtype-system.md)).
 | **OD4** | `size=None` of the samplers | **DECIDED 2026-11-12 (API-parity batch 4): (b)** `Shape? size = null` everywhere: probed at C# 12 / net8.0 (scratchpad `probe_od4`), `normal()`, `normal(0, 1, null)`, `size: null`, `size: 5`, a positional `5`, `size: (2, 3)`, `size: new[] {2, 3}`, `int` / `int[]` variables, a `Shape`, `5L` and `new Shape(new long[0])` (NumPy's `size=()`, a 0-d result, distinct from None) all bind. Rejected: (a) the `Shape size = default` idiom. The samplers adopt it in the np.random batch. | AD9d (73 names), AD9e, AD1 for `np.random` |
 | **OD5** | NumSharp-only API (typed accessors, `GetData<T>`, `CopyTo`, `Get*/Set*`, interop overloads, `np.evaluate`, `np.multithreading`, ...) | keep as NumSharp extensions (outside the one-signature rule, which speaks of NumPy functions), rename to make the extension visible, or remove | Appendix C, AD5 kind 2, AD7 |
 | **OD6** | constructors (`new NDArray(...)`, `new NDArray<T>(...)`, `new DType(...)`, engine and `SeedSequence` constructors) | (a) must mirror NumPy's class call (`ndarray(shape, dtype, buffer, offset, strides, order)`, `dtype(dtype, align, copy, metadata)`); (b) the factories (`np.ndarray`, `np.dtype`, `np.random.PCG64`, ...) are the NumPy spelling and the constructors stay C# API | AD2 slots, AD3e, AD8, AD6 |
-| **OD7** | generic typed forms of NumPy names (`np.zeros<T>`, `ndarray.item<T>`, `np.nditer<T>`, `np.ndenumerate<T>`) | remove (the max/min family's precedent) or keep the iterator / accessor forms as NumSharp extensions | AD7, AD1 |
+| **OD7** | generic typed forms of NumPy names (`np.zeros<T>`, `ndarray.item<T>`, `np.nditer<T>`, `np.ndenumerate<T>`) | remove (the max/min family's precedent) or keep the iterator / accessor forms as NumSharp extensions. **DECIDED 2026-11-12 for the creation names (API-parity batch 8): removed** — `np.zeros<T>` / `ones<T>` / `empty<T>` / `full<T>` are gone, the dtype is an argument; the accessor and iterator forms stay open | AD7, AD1 |
 | **OD8** | the seed parameter (NumPy: None, an int, a sequence of ints, `SeedSequence`, `BitGenerator`) | one `object seed = null` with NumPy's conversion rules (the random-API oracle pins them), or a seed type with implicit conversions | AD9c, AD1 (`np.random`, the engines) |
 | **OD9** | exposing types and constants under NumPy's module paths (`np.exceptions`, `np.linalg.LinAlgError`, `np.ma.MaskedArray` / `MaskError`, `np.random.BitGenerator`, `np.flatiter`, `np.version`, `np.__version__`) | nested types / static members on the facades, or documentation only | §6, §7 |
 | **OD10** | which absent names to implement (§6 Implement / Decide rows: `ufunc` objects, FP error state, DLPack, `memmap`, `fromiter`, stride tricks) | per row | §6, §7 |

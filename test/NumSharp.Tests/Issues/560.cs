@@ -65,8 +65,9 @@ namespace NumSharp.Tests.Issues
             new Action(() => np.zeros(new Shape(2), np.dtype("complex64"))).Should().NotThrow();
         }
 
-        /// <summary>The spec names the comment lists as missing (shared with #547). Fails until all exist.</summary>
-        [TestMethod, OpenBugs(IssueUrl = "https://github.com/SciSharp/NumSharp/issues/560")]
+        /// <summary>Regression pin for the spec names the comment listed as missing (shared with #547): all exist since
+        /// API-parity batch 7 added <c>np.astype</c> (2026-11-12). A failure lists the ones missing again.</summary>
+        [TestMethod]
         public void StillMissing_SpecNames()
         {
             var missing = Issue547.MissingNumPy2Names.Where(n => !Issue547.NpHas(n)).ToArray();

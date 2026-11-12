@@ -2053,6 +2053,34 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 ## 7. State log
 
+- **2026-11-12**: API-parity batch 8 on `journey5` (branch `api-parity/batch-08`; the owner approved 14 of the 15
+  picks, each offered as a call table; "6 File parameter names (OD3)" was not taken and OD3 stays open). np.zeros /
+  ones / empty `(Shape shape, DType dtype = null, char order = 'C', string device = null)` and np.full `(shape,
+  fill_value, dtype, order, device)` are NumPy's one signature each: `np.CreationLayout` checks the order letter, the
+  device, the C-or-F switch and then the allocation in NumPy's order, and lays the array out from the dimensions alone
+  (gap VS01 closed; np.where's result allocates its KEEPORDER layout with `new NDArray(dtype, layout, false)`). The
+  generic `<T>` creation forms are gone (OD7 decided for the creation names). np.indices `(Shape dimensions, dtype)` and
+  np.tile `(A, Shape reps)` are one signature (np.tile's negative repetition is NumPy's ValueError); np.asanyarray
+  `(a, dtype, order, device, copy)` is `_array_fromobject_generic` with NumPy's copy modes and the copy text; the
+  buffer forms of the as*array family name their operand `a`. numpy.ma: stack / vstack / hstack `dtype` / `casting`
+  (`_fromnxfunction_seq`), reshape `(a, Shape new_shape, order)` and `MaskedArray.reshape(shape, order, copy)`,
+  squeeze / expand_dims NDAxis with `_convert2ma`'s keywords, indices' fill_value / hardmask; the reductions take NDAxis
+  axes (+ the kept int / int[] forms) and NumPy's out= per function (`ReduceIdentity`'s `OutMaskRule`, the plain-array
+  wrapper marked `IsPlainArrayWrapper` for `isinstance(out, MaskedArray)`); ma.array `(data, dtype, copy, order, mask,
+  fill_value, keep_mask, hard_mask, shrink, ndmin)` and masked_array `(data, mask, dtype, copy, ndmin, fill_value,
+  keep_mask, hard_mask, shrink, order)`; out= for cumsum / cumprod / take / choose / compress / round / around / dot /
+  trace and their methods (`SetMaskLikeNumPy` for `__setmask__`, `RoundInto` for the round family's ufunc wraps:
+  inf → 1.0 under the divide domain, decimals 0's all-False mask, no wrap for integer data, complex's AttributeError);
+  ma.around one `_MaskedUnaryOperation` form; MaskedArray.choose is ndarray.choose; make_mask / mask_or NumPy's copy
+  slot (the internal callers that store the result pass `copy: true`), make_mask_none's dtype; ma.where(condition) is
+  nonzero; atleast_1d / 2d / 3d `(params object[] arys)`; `MaskedArray.item(params long[] args)` is ndarray.item over
+  the data. Closed: VS01, QB-49 (both pins are regression tests), and the #547 / #560 missing-name pins (fixed by batch
+  7's np.astype). Pinned [Misaligned]: np.indices(3), np.tile's null reps, atleast_1d's lone object[]. Callers: 143
+  positional ma.array masks, 24 generic creation calls, 20 loose np.tile reps, 9 positional orders, the numpy.ma oracle
+  replay's positional keepdims / ddof / mode (min / max / ptp's would have bound fill_value silently). Oracle: the
+  shape_args tier regenerated without the VS01 carve (591 cases, no gaps). Gap map 882 → 937 with NumPy's signature,
+  428 → 373 to change (API_DIFF_GAP.md's refresh). Found at test time: C# 12 collection expressions no longer bind the
+  creation functions (`np.indices([2, 3])`): they bound the removed int[] / long[] forms.
 - **2026-11-12**: API-parity batch 7 on `journey5` (branch `api-parity/batch-07`; the owner approved all 15 picks, each
   offered as a call table: C# call | NumPy | today | after). np.reshape has ONE signature, `reshape(a, Shape shape, char
   order = 'C', bool? copy = null)`, NumPy's `_wrapfunc` onto the method, and `NDArray.ReshapeCore` is NumPy's
