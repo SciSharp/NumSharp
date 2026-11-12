@@ -621,8 +621,10 @@ def main():
     # Every namespace that holds a public type a probe value can name: value_for writes `default(T)` from the C#
     # parameter type's simple name, so a namespace missing here turns a binding verdict into CS0246 ("type not
     # found"), a probe artifact rather than a finding (UnmanagedStorage, the storage parameter of the NDMatrix and
-    # NDCharArray constructors, lives in NumSharp.Backends).
-    lines = ["#nullable disable", "using System;", "using System.Collections.Generic;", "using System.IO;",
+    # NDCharArray constructors, lives in NumSharp.Backends). System.Collections holds the NON-generic IEnumerable
+    # (np.fromiter's iter): without it `default(IEnumerable)` names the generic IEnumerable<T> and fails CS0305.
+    lines = ["#nullable disable", "using System;", "using System.Collections;", "using System.Collections.Generic;",
+             "using System.IO;",
              "using System.Numerics;", "using NumSharp;", "using NumSharp.Generic;", "using NumSharp.IO;",
              "using NumSharp.Backends;", "namespace Probe {", "public static class P {"]
     for cs_type, local in sorted(set(INSTANCES.values())):

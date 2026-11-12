@@ -340,6 +340,10 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   zero entries (is empty).` in every mode, and the errors are ValueError. Its `mode` is NumPy's mode object (a string for
   every axis, a sequence of strings, None: `ClipModes.ConvertClipmodeSequence(object, int)`), and a null coordinate array
   is NumPy's None (`TypeError: only int indices permitted`).
+- The keyword names are NumPy's: `unravel_index(indices, shape, order)` (the scalar `long` form too, which a named
+  `indices: 5L` binds, returning `long[]`), `ravel_multi_index(multi_index, dims, mode, order)` (the scalar `long[]` form
+  and the per-axis `string[] mode` form too; a bare `mode: null` is ambiguous between the two mode forms, so write
+  `(string[])null` or `(string)null`).
 - Gates: the layout-parity oracle's `unravel` / `ravelmi` families, the string oracle (no layout excuse) and
   `Indexing/IndexSearchLayout.Test.cs`.
 

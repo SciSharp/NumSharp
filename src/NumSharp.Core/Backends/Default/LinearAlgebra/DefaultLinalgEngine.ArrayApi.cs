@@ -75,7 +75,7 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>NumPy's one statement <c>return _core_tensordot(x1, x2, axes=axes)</c> with the pair of axis lists: the
-        ///     member <see cref="np.tensordot(NDArray, NDArray, int[], int[])"/> dispatches to,
+        ///     member <see cref="np.tensordot(NDArray, NDArray, ValueTuple{int[], int[]})"/> dispatches to,
         ///     <see cref="TensorEngine.Tensordot(NDArray, NDArray, int[], int[])"/> of <paramref name="x1"/>'s engine.</remarks>
         public override NDArray Tensordot(NDArray x1, NDArray x2, int[] axesA, int[] axesB)
             => x1.TensorEngine.Tensordot(x1, x2, axesA, axesB);

@@ -455,7 +455,7 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>np.linalg.tensordot(x1, x2, axes=(axesA, axesB))</c>, the Array-API spelling of
-        ///     <see cref="np.tensordot(NDArray, NDArray, int[], int[])"/>: <paramref name="axesA"/> of
+        ///     <see cref="np.tensordot(NDArray, NDArray, ValueTuple{int[], int[]})"/>: <paramref name="axesA"/> of
         ///     <paramref name="x1"/> contracted element by element with <paramref name="axesB"/> of <paramref name="x2"/>.
         /// </summary>
         /// <param name="x1">The first tensor.</param>

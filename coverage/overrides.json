@@ -1,10 +1,6 @@
 {
   "schema_version": 1,
   "aliases": {
-    "numpy.astype": {
-      "target": "NumSharp.NDArray.astype",
-      "notes": "The NumPy 2.x top-level helper is available as the NDArray instance method."
-    },
     "numpy.row_stack": {
       "target": "NumSharp.np.vstack",
       "notes": "NumPy documents row_stack as an alias of vstack."

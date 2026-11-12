@@ -90,6 +90,25 @@ the permutation pair. Entries that stay on purpose: np.nanargmax / nanargmin [O2
 (the S8 `long` of the no-axis call), np.geomspace [O2] (its real / complex pair: NumPy's array_like start / stop is a
 separate item). The fixes are recorded in [`api-parameter-parity.md`](api-parameter-parity.md) §7.
 
+**Refresh 2026-11-12 (API-parity batch 7 on `journey5` at `adb80352`).** Regenerated on the batch's tree: 860 → 882
+NumPy names with NumPy's signature, 446 → 428 to change; M 184 → 163, X 65 → 57, O 276 → 273, the absent names 83 →
+76 and the NumPy modules with no facade 15 → 14 (np.lib.stride_tricks has one), L 17, Q 29, B 24 and T 21 unchanged;
+the coverage artifact's headline with NumPy's exact signature 351 → 356. New: np.astype (NumPy 2.1's function form),
+np.fromiter (NumPy's `PyArray_FromIter` order and per-dtype item answers), np.fromfunction, np.little_endian and
+np.lib.stride_tricks.sliding_window_view (NumPy's statements over a Shape of x's own buffer window, read-only by
+default). Fixed: np.reshape and the ndarray / matrix / chararray reshape methods take NumPy's `order='C', copy=None`
+(copy=True copies, copy=False refuses a copy with NumPy's ValueError); finfo gains nmant / iexp / nexp / machep /
+negep and NumPy's minexp, tiny and smallest_normal (gaps SU12 / SU14); np.finfo / np.iinfo take one dtype argument and
+read a string as NumPy does, refusing an array with NumPy's texts (SU11 / SU16); np.tensordot's axes are one pair
+(np.linalg.tensordot also the (int, int) pair); np.linalg.multi_dot has one signature; np.unravel_index /
+ravel_multi_index use NumPy's keyword names; numpy.ma's apply_over_axes axes, angle's deg, the creation keywords
+(zeros / ones / empty / identity / the `*_like` family / copy) and argmax / argmin's out / keepdims. Still listed, for
+a later pick: np.finfo / np.iinfo [O4 T◇] (their NDScalarType, string and generic forms beside DType) and the
+ndarray / matrix / chararray reshape methods [O6] / [O4] (their int[] / long[] / span forms). Tooling: the module table names
+np.lib.stride_tricks, the binding probe imports System.Collections (a non-generic `IEnumerable` parameter), the stale
+numpy.astype alias left `coverage/overrides.json`, and `coverage/oracle_map.json` maps the surface oracle's
+sliding_window_view key. The fixes are recorded in [`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
 ---
 
 ## Contents

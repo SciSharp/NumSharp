@@ -45,7 +45,7 @@ namespace NumSharp.Tests.APIs
         public void IInfo_SByte_From_Array()
         {
             var arr = np.array(new sbyte[] { 1, 2, 3 });
-            np.iinfo(arr).bits.Should().Be(8);
+            np.iinfo(arr.dtype).bits.Should().Be(8);
         }
 
         [TestMethod]

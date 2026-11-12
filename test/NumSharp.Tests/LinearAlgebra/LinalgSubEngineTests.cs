@@ -154,7 +154,7 @@ namespace NumSharp.Tests.LinearAlgebra
                 np.linalg.matrix_norm(sq);
                 np.linalg.matrix_power(sq, 3);
                 Call(() => np.linalg.matrix_rank(sq));
-                np.linalg.multi_dot(sq, sq, sq);
+                np.linalg.multi_dot(new[] { sq, sq, sq });
                 np.linalg.norm(sq);
                 np.linalg.outer(v, w);
                 Call(() => np.linalg.pinv(sq));
@@ -164,7 +164,7 @@ namespace NumSharp.Tests.LinearAlgebra
                 Call(() => np.linalg.svd(m));
                 Call(() => np.linalg.svdvals(m));
                 np.linalg.tensordot(sq, sq);
-                np.linalg.tensordot(sq, sq, new[] {1}, new[] {0});
+                np.linalg.tensordot(sq, sq, axes: (new[] {1}, new[] {0}));
                 np.linalg.tensorinv(np.eye(4).reshape(4, 2, 2), 1);
                 np.linalg.tensorsolve(sq, b);
                 np.linalg.trace(sq);

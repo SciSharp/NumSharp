@@ -514,7 +514,7 @@ namespace NumSharp.Tests.Fuzz
             E(l, "np.datetime_data", "M8[ns]", f => Box(np.datetime_data(DType.From("M8[ns]"))));
             E(l, "np.find_common_type", "DType[]", f => np.find_common_type(new DType[] { np.float32, np.int64 }, new DType[0]));
             E(l, "np.finfo", "float64", f => np.finfo(np.float64));
-            E(l, "np.finfo", "array", f => np.finfo(f.M));
+            E(l, "np.finfo", "dtype string", f => np.finfo("float32"));
             E(l, "np.flat", "boxed FlatIterator over a view", f =>
             {
                 var it = np.flat(f.MT);
@@ -542,6 +542,9 @@ namespace NumSharp.Tests.Fuzz
                 np.format_float_scientific(f.Zero, unique: false, precision: 5),
             });
             E(l, "np.frompyfunc", "Call", f => np.frompyfunc((Func<double, double>)(x => x * 2), 1, 1).Call(f.V));
+            E(l, "np.fromiter", "IEnumerable", f => np.fromiter(new[] { 1.5, 2.5, 3.5 }, np.float64));
+            E(l, "np.fromfunction", "index grids", f => np.fromfunction(ix => ix[0] + ix[1], (2, 3)));
+            E(l, "np.lib.stride_tricks.sliding_window_view", "1-D window", f => np.lib.stride_tricks.sliding_window_view(f.V, 2));
             E(l, "np.get_printoptions", "read", f => np.get_printoptions());
             E(l, "np.getbufsize", "read", f => Box(np.getbufsize()));
             E(l, "np.histogram", "int bins", f => (NDArray[])np.histogram(f.V, 10));
@@ -562,7 +565,7 @@ namespace NumSharp.Tests.Fuzz
                 return new object[] { h, xe, ye };
             });
             E(l, "np.iinfo", "int32", f => np.iinfo(np.int32));
-            E(l, "np.iinfo", "array", f => np.iinfo(f.I));
+            E(l, "np.iinfo", "dtype string", f => np.iinfo("int16"));
             E(l, "np.isneginf", "nan/inf lanes", f => np.isneginf(f.NanV));
             E(l, "np.isposinf", "nan/inf lanes", f => np.isposinf(f.NanV));
             E(l, "np.issctype", "type", f => Box(np.issctype(typeof(double))));
@@ -665,7 +668,8 @@ namespace NumSharp.Tests.Fuzz
             E(l, "np.linalg.matrix_transpose", "view", f => np.linalg.matrix_transpose(f.Cube));
             E(l, "np.linalg.outer", "1-D", f => np.linalg.outer(f.V3, f.V3));
             E(l, "np.linalg.tensordot", "int axes", f => np.linalg.tensordot(f.M, f.MT, 1));
-            E(l, "np.linalg.tensordot", "axis lists", f => np.linalg.tensordot(f.Cube, f.Cube, new[] { 0, 1 }, new[] { 0, 1 }));
+            E(l, "np.linalg.tensordot", "axis lists", f => np.linalg.tensordot(f.Cube, f.Cube, axes: (new[] { 0, 1 }, new[] { 0, 1 })));
+            E(l, "np.linalg.tensordot", "axis pair", f => np.linalg.tensordot(f.M, f.MT, axes: (1, 0)));
             E(l, "np.linalg.trace", "last two axes", f => np.linalg.trace(f.Cube));
             E(l, "np.linalg.vecdot", "last axis", f => np.linalg.vecdot(f.M, f.M));
             E(l, "np.linalg.cholesky", "SPD", f => np.linalg.cholesky(f.Sq), backend: true);

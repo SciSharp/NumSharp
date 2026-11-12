@@ -30,6 +30,11 @@ namespace NumSharp
         ///     'A' - 'F' when the source is F-contiguous and NOT C-contiguous, else 'C';
         ///     'K' raises NumPy's <c>ValueError("order 'K' is not permitted for reshaping")</c>.
         /// </param>
+        /// <param name="copy">
+        ///     NumPy's <c>copy</c> keyword: <see langword="null"/> (the default) copies only when the reshape cannot be a
+        ///     view; <see langword="true"/> ALWAYS copies (even for the same shape) — a copy in <paramref name="order"/> that
+        ///     shares no memory with this array; <see langword="false"/> NEVER copies and raises when a view is impossible.
+        /// </param>
         /// <returns>
         ///     A VIEW whenever the reshape can be expressed over the existing strides
         ///     (contiguous-in-order relabel, or NumPy's <c>_attempt_nocopy_reshape</c> grouping —
@@ -37,11 +42,19 @@ namespace NumSharp
         ///     copy taken in <paramref name="order"/> (so the result reports owndata=False either
         ///     way, exactly like NumPy's reshape).
         /// </returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
+        /// <exception cref="ValueError"><c>order 'K' is not permitted for reshaping</c>; more than one -1; <c>Unable to
+        ///     avoid creating a copy while reshaping.</c> when <paramref name="copy"/> is <see langword="false"/> and no view
+        ///     can express the reshape (a transposed array to 1-D in C order).</exception>
+        /// <exception cref="IncorrectShapeException">The size does not match, with NumPy's text (<c>cannot reshape array of
+        ///     size 6 into shape (4,2)</c>; NumPy's ValueError), whatever <paramref name="copy"/> says.</exception>
+        /// <exception cref="ArgumentException">An order letter outside NumPy's vocabulary (OrderResolver's text).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html — the method form of
+        ///     <see cref="np.reshape(NDArray, Shape, char, bool?)"/> (NumPy's np.reshape calls this method). The
+        ///     <paramref name="copy"/> keyword arrived in API-parity batch 7, with np.reshape's.</remarks>
         [NewSubtype("this")]
-        public NDArray reshape(Shape newShape, char order)
+        public NDArray reshape(Shape newShape, char order = 'C', bool? copy = null)
         {
-            return ReshapeCore(newShape, order);
+            return ReshapeCore(newShape, order, copy);
         }
 
         /// <summary>
@@ -133,8 +146,19 @@ namespace NumSharp
         ///     internal copy — NumPy's reshape result reports owndata=False on the copy path too
         ///     (its base is the internal copy), e.g. reshape(order:'F') of a C source.</item>
         ///     </list>
+        ///     <paramref name="copy"/> selects NumPy's other two modes (API-parity batch 7): <see langword="true"/> is
+        ///     <c>NPY_COPY_ALWAYS</c> — the same-dims shortcut is skipped and the source is copied in
+        ///     <paramref name="order"/> before the relabel, so the result never shares memory with this array;
+        ///     <see langword="false"/> is <c>NPY_COPY_NEVER</c> — the routes above run unchanged, but where step 6
+        ///     would copy, NumPy's <c>ValueError("Unable to avoid creating a copy while reshaping.")</c> is raised instead.
         /// </summary>
-        private NDArray ReshapeCore(Shape requestedShape, char order)
+        /// <param name="requestedShape">The new dimensions (one may be -1).</param>
+        /// <param name="order">'C' / 'F' / 'A' ('K' refused), in either case.</param>
+        /// <param name="copy">NumPy's copy mode: null = IF_NEEDED, true = ALWAYS, false = NEVER.</param>
+        /// <returns>A view of this array, or a view over an internal copy.</returns>
+        /// <exception cref="ValueError">'K'; more than one -1; the NEVER mode's refusal.</exception>
+        /// <exception cref="IncorrectShapeException">The size does not match (NumPy's text).</exception>
+        private NDArray ReshapeCore(Shape requestedShape, char order, bool? copy = null)
         {
             var src = this.Shape;
 
@@ -160,8 +184,10 @@ namespace NumSharp
                 OrderResolver.Resolve(order, src); // throws the house order-vocabulary ArgumentException
 
             // ---- quick same-shape check (BEFORE -1 resolution) → a plain full view ----
+            // NumPy: `if (ndim == PyArray_NDIM(array) && copy != NPY_COPY_ALWAYS)` — copy=true must copy even an
+            // unchanged shape, so it skips the shortcut.
             var reqDims = requestedShape.dimensions ?? System.Array.Empty<long>();
-            if (reqDims.Length == src.NDim)
+            if (reqDims.Length == src.NDim && copy != true)
             {
                 bool same = true;
                 for (int i = 0; i < reqDims.Length && same; i++)
@@ -172,6 +198,17 @@ namespace NumSharp
 
             // ---- -1 resolution + size validation (NumPy's verbatim texts, already ported) ----
             var resolvedDims = src.Reshape(requestedShape, @unsafe: false).dimensions;
+
+            // ---- copy=true (NPY_COPY_ALWAYS): PyArray_NewCopy(array, order), then interpret that buffer ----
+            // The copy is taken in the resolved order (C / F after 'A'), so the relabel below is a dense view of it; the
+            // wrapper's counted reference is released once the view holds its own, as on the copy-if-needed path.
+            if (copy == true)
+            {
+                var always = NDIter.CopyAs(this.dtype, this, order, TensorEngine);
+                var copied = MakeReshapeView(always, resolvedDims, order);
+                always.Dispose();
+                return copied;
+            }
 
             // ---- contiguous in the requested order: relabel the same buffer window ----
             // size ≤ 1 and size 0 arrays are always contiguous in NumPy's flag model, so they
@@ -189,10 +226,14 @@ namespace NumSharp
                 return new NDArray(Storage.Alias(viewShape)) { TensorEngine = TensorEngine };
             }
 
+            // ---- copy=false (NPY_COPY_NEVER): no view expresses the reshape, and a copy is not allowed ----
+            if (copy == false)
+                throw new ValueError("Unable to avoid creating a copy while reshaping."); // NumPy verbatim
+
             // ---- copy in the requested order, then hand back a VIEW of that internal copy ----
-            var copy = NDIter.CopyAs(this.dtype, this, order, TensorEngine);
-            var reshaped = MakeReshapeView(copy, resolvedDims, order);
-            copy.Dispose(); // release the wrapper's counted ref — the returned view holds its own, so the buffer stays alive
+            var internalCopy = NDIter.CopyAs(this.dtype, this, order, TensorEngine);
+            var reshaped = MakeReshapeView(internalCopy, resolvedDims, order);
+            internalCopy.Dispose(); // release the wrapper's counted ref — the returned view holds its own, so the buffer stays alive
             return reshaped;
         }
 

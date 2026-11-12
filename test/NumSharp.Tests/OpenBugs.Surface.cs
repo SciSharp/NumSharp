@@ -199,9 +199,9 @@ namespace NumSharp.Tests
 
         /// <summary>
         ///     <c>np.finfo(np.int32)</c>: NumPy's text names the scalar class, <c>data type &lt;class 'numpy.int32'&gt; not
-        ///     inexact</c>; NumSharp's says <c>data type 'int32' not inexact</c> (gap SU11).
+        ///     inexact</c>; NumSharp's said <c>data type 'int32' not inexact</c> (gap SU11). Matches NumPy since API-parity batch 7 (a regression test now).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU11")]
+        [TestMethod]
         public void Surface_Finfo_NonInexactDtype_IsNumPysText()
         {
             Action act = () => np.finfo(np.int32);
@@ -211,9 +211,9 @@ namespace NumSharp.Tests
 
         /// <summary>
         ///     <c>np.finfo(float32).minexp</c> is -126 and <c>np.finfo(float64).minexp</c> -1022 in NumPy; NumSharp's are one
-        ///     higher (gap SU12).
+        ///     higher (gap SU12). Matches NumPy since API-parity batch 7 (a regression test now).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU12")]
+        [TestMethod]
         public void Surface_Finfo_Minexp_IsTheSmallestNormalExponent()
         {
             np.finfo(np.float32).minexp.Should().Be(-126);
@@ -234,9 +234,9 @@ namespace NumSharp.Tests
 
         /// <summary>
         ///     <c>np.finfo(float32).tiny</c> (and smallest_normal) is exactly 2**-126 = 1.1754943508222875e-38 in NumPy;
-        ///     NumSharp's is the double literal 1.17549435e-38 (gap SU14).
+        ///     NumSharp's was the double literal 1.17549435e-38 (gap SU14). Matches NumPy since API-parity batch 7 (a regression test now).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU14")]
+        [TestMethod]
         public void Surface_Finfo_Float32Tiny_IsExactlyTwoToTheMinus126()
         {
             np.finfo(np.float32).tiny.Should().Be(System.Math.Pow(2, -126));
@@ -257,9 +257,9 @@ namespace NumSharp.Tests
 
         /// <summary>
         ///     <c>np.iinfo(np.float64)</c>: NumPy's text names the kind character and ends with a period, <c>Invalid integer
-        ///     data type 'f'.</c>; NumSharp's names the dtype (gap SU16).
+        ///     data type 'f'.</c>; NumSharp's named the dtype (gap SU16). Matches NumPy since API-parity batch 7 (a regression test now).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU16")]
+        [TestMethod]
         public void Surface_Iinfo_Float_IsNumPysText()
         {
             Action act = () => np.iinfo(np.float64);

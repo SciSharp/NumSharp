@@ -314,8 +314,10 @@ namespace NumSharp.Tests.Fuzz
             return facet;
         }
 
-        /// <summary>The fromfunction callable menu — the C# twin of <c>gen_ma_surface_oracle.FROMFUNCTION_FUNCS</c>. No int
-        /// literals: a C# and a Python literal promote differently against a narrow grid.</summary>
+        /// <summary>The fromfunction callable menu — the C# twin of <c>gen_ma_surface_oracle.FROMFUNCTION_FUNCS</c> and of
+        /// <c>gen_surface_oracle.FROMFUNCTION_FUNCS</c> (np.fromfunction's batch-7 cases take the same names, so both
+        /// replays share this one). No int literals: a C# and a Python literal promote differently against a narrow
+        /// grid.</summary>
         /// <param name="name">The menu name.</param>
         /// <returns>The vectorized function of the per-axis index grids.</returns>
         /// <exception cref="NotSupportedException">An unknown name (a corpus/registry drift).</exception>

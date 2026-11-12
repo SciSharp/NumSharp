@@ -59,9 +59,9 @@ namespace NumSharp
             => a.TensorEngine.Tensordot(a, b, new[] {axes.AxisA}, new[] {axes.AxisB});
 
         /// <summary>
-        ///     Tensor contraction pairing <paramref name="axesA"/> of <paramref name="a"/> with
-        ///     <paramref name="axesB"/> of <paramref name="b"/>, element by element — NumPy's
-        ///     <c>axes=(list, list)</c> spelling.
+        ///     Tensor contraction pairing a list of axes of <paramref name="a"/> with a list of axes of <paramref name="b"/>,
+        ///     element by element — NumPy's <c>axes=([1, 0], [0, 1])</c> spelling, the pair as ONE argument:
+        ///     <c>np.tensordot(a, b, axes: (new[] { 1, 0 }, new[] { 0, 1 }))</c>.
         /// </summary>
         /// <exception cref="ValueError">
         ///     <c>"duplicate axes are not allowed in tensordot"</c> when either list repeats a raw
@@ -81,19 +81,22 @@ namespace NumSharp
         ///     null.</exception>
         /// <param name="a">The first tensor (not null).</param>
         /// <param name="b">The second tensor (not null).</param>
-        /// <param name="axesA">The axes of <paramref name="a"/> to contract, in pairing order.</param>
-        /// <param name="axesB">The axes of <paramref name="b"/> to contract, paired element by element with
-        ///     <paramref name="axesA"/>.</param>
+        /// <param name="axes">NumPy's pair of axis lists: <c>AxesA</c>, the axes of <paramref name="a"/> to contract in
+        ///     pairing order, and <c>AxesB</c>, the axes of <paramref name="b"/> paired with them element by element.</param>
         /// <returns>A new array of <paramref name="a"/>'s kept axes followed by <paramref name="b"/>'s.</returns>
         /// <remarks>
         ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
-        ///     ends with <c>np.concatenate</c>), which drops the class. The statements are
-        ///     <see cref="TensorEngine.Tensordot(NDArray, NDArray, int[], int[])"/>, on <paramref name="a"/>'s engine.
+        ///     ends with <c>np.concatenate</c>), which drops the class. NumPy's <c>axes_a, axes_b = axes</c>, then the
+        ///     statements of <see cref="TensorEngine.Tensordot(NDArray, NDArray, int[], int[])"/>, on <paramref name="a"/>'s
+        ///     engine.
+        ///     <para>NumPy has ONE axes argument; until API-parity batch 7 NumSharp split the pair into two parameters,
+        ///     <c>tensordot(a, b, int[] axesA, int[] axesB)</c>, the four-argument call NumPy refuses
+        ///     (<c>tensordot() takes from 2 to 3 positional arguments but 4 were given</c>).</para>
         /// </remarks>
-        public static NDArray tensordot(NDArray a, NDArray b, int[] axesA, int[] axesB)
+        public static NDArray tensordot(NDArray a, NDArray b, (int[] AxesA, int[] AxesB) axes)
         {
             // NumPy's body (the axis checks, the two transposes and reshapes, the final dot) is the engine's.
-            return a.TensorEngine.Tensordot(a, b, axesA, axesB);
+            return a.TensorEngine.Tensordot(a, b, axes.AxesA, axes.AxesB);
         }
     }
 }

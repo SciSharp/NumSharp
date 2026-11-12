@@ -1832,5 +1832,184 @@ namespace NumSharp
             np.copyto(@out, self);
             return @out;
         }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_FromIter</c> (<c>ctors.c</c>), the body of <see cref="np.fromiter"/>: the iterator, the
+        ///     unsized-dtype check, one item at a time until <paramref name="count"/>, each item packed as it is read (a plain
+        ///     item through <see cref="array(Array, DType, int, bool, char)"/>'s list conversion, NumPy's setitem; a sequence
+        ///     item by the target dtype's own answer), then the short-iterator check.
+        /// </summary>
+        /// <param name="iter">The sequence (see <see cref="np.fromiter"/>).</param>
+        /// <param name="dtype">The result dtype; null is float64.</param>
+        /// <param name="count">-1 reads all; a non-negative count at most that many; any other negative count nothing.</param>
+        /// <returns>A new, owning, C-contiguous 1-D array.</returns>
+        /// <exception cref="TypeError">A null or 0-d iterable; an item the dtype's conversion refuses with Python's
+        ///     TypeError.</exception>
+        /// <exception cref="ValueError">An unsized text dtype; a short iterator; an item that does not parse or a sequence
+        ///     item a float / text dtype refuses.</exception>
+        /// <exception cref="OverflowError">An integer the dtype cannot hold.</exception>
+        /// <exception cref="NotSupportedException">A dtype NumSharp has no storage for.</exception>
+        /// <remarks>An array-object home (the np-layer dtype plan's Appendix D): its dtype tests are NumPy's statements, not
+        ///     facade logic, so the facade file holds none (ratchet R1).</remarks>
+        internal static NDArray fromiter(IEnumerable iter, DType dtype, long count)
+        {
+            // dtype=None is PyArray_DescrConverter2's default descriptor: float64, never inferred from the items.
+            dtype ??= np.DefaultTypeDescr;
+
+            // NumPy's first step is PyObject_GetIter(obj): None is not iterable, and a 0-d ndarray's iterator refuses
+            // (NDArray.GetEnumerator raises NumPy's "iteration over a 0-d array" itself) — both before the dtype check.
+            if (iter is null)
+                throw new TypeError("'NoneType' object is not iterable");
+            IEnumerator enumerator = iter.GetEnumerator();
+            try
+            {
+                // PyDataType_ISUNSIZED: a text dtype without a length ('U', 'S') cannot hold an item. StringDType ('T')
+                // has a fixed cell and is fine.
+                if (dtype.Meta is StringDTypeMeta && dtype.itemsize == 0)
+                    throw new ValueError("Must specify length when using variable-size data-type.");
+
+                // NumPy's loop: `for (i = 0; i < count || count == -1; i++)` — count -1 reads to the end, any other
+                // negative count reads nothing, a non-negative one at most that many (the next item is never pulled).
+                long limit = count == -1 ? long.MaxValue : Math.Max(count, 0);
+                bool charTarget = dtype.Meta is not StringDTypeMeta && dtype.GetTypeCode() == NPTypeCode.Char;
+                var items = new List<object>(count > 0 && count <= 4096 ? (int)count : 16);
+                Exception refusal = null;
+                while (items.Count < limit && enumerator.MoveNext())
+                {
+                    object item = enumerator.Current;
+                    // Python has no char: a C# char (from a string or a char-dtype array) is a one-character str. NumSharp's
+                    // own char dtype keeps it as the character it is (NumPy has no char dtype to say otherwise).
+                    if (item is char c && !charTarget)
+                        item = c.ToString();
+                    if (IsFromIterSequence(item, out NDArray arrayItem))
+                    {
+                        if (!TryPackSequenceItem(dtype, item, arrayItem, out object packed, out refusal))
+                            break; // NumPy stops at the first item it cannot pack
+                        item = packed;
+                    }
+                    items.Add(item);
+                }
+
+                // Pack the items read: np.array's list conversion (NDArray.array) is NumPy's setitem per element, in
+                // order, so the first
+                // bad item raises its own error here — ahead of a refused sequence item after it and of a short iterator.
+                NDArray result = array(items.ToArray(), dtype, 0, true, 'C');
+                if (refusal != null)
+                {
+                    result.Dispose();
+                    throw refusal;
+                }
+                if (count > 0 && items.Count < count)
+                {
+                    result.Dispose();
+                    throw new ValueError(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                        $"iterator too short: Expected {count} but iterator had only {items.Count} items."));
+                }
+                return result;
+            }
+            finally
+            {
+                // An iterator method's finally blocks (and its resources) run when the caller stops early, as Python's
+                // generator close does when NumPy drops the iterator.
+                (enumerator as IDisposable)?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     Whether an <see cref="fromiter(IEnumerable, DType, long)"/> item is a Python SEQUENCE NumPy's per-item store cannot treat as one value: a
+        ///     C# array or list (a Python list), a tuple (a Python tuple) or an <see cref="NDArray"/> of rank 1 or more. Text
+        ///     (<see cref="string"/>, and <c>byte[]</c>, an <c>S</c> element's stand-in for Python bytes), None and a 0-d
+        ///     array are values.
+        /// </summary>
+        /// <param name="item">The item, after the char-to-str step.</param>
+        /// <param name="arrayItem">The item when it is an array of rank 1 or more, else null.</param>
+        /// <returns>True for a sequence item.</returns>
+        private static bool IsFromIterSequence(object item, out NDArray arrayItem)
+        {
+            arrayItem = null;
+            switch (item)
+            {
+                case null:
+                case string:
+                case byte[]:
+                    return false;
+                case NDArray nd:
+                    if (nd.ndim == 0)
+                        return false;
+                    arrayItem = nd;
+                    return true;
+                case ITuple:
+                case IList:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's per-item store of a SEQUENCE into <paramref name="dtype"/> — each dtype's setitem answer (probed on
+        ///     NumPy 2.4.2): bool stores the truth value (<c>bool(list)</c>; an array only when it has exactly one element),
+        ///     <c>StringDType</c> stores <c>str(item)</c>, every other dtype refuses in its own words.
+        /// </summary>
+        /// <param name="dtype">The target dtype.</param>
+        /// <param name="item">The sequence item.</param>
+        /// <param name="arrayItem">The item when it is an array of rank 1 or more, else null.</param>
+        /// <param name="packed">The value to store when the dtype accepts the item.</param>
+        /// <param name="refusal">NumPy's error when it refuses the item (raised by the caller after the earlier items
+        ///     convert).</param>
+        /// <returns>True when the item is stored as <paramref name="packed"/>.</returns>
+        private static bool TryPackSequenceItem(DType dtype, object item, NDArray arrayItem, out object packed, out Exception refusal)
+        {
+            packed = null;
+            refusal = null;
+            switch (dtype.kind)
+            {
+                case 'b':
+                    // BOOL_setitem: PyObject_IsTrue — a list / tuple is true when non-empty; an ndarray of more (or fewer)
+                    // than one element is the packer's sequence error, a one-element one its element's truth.
+                    if (arrayItem is null)
+                    {
+                        packed = item is ITuple tuple ? tuple.Length > 0 : ((IList)item).Count > 0;
+                        return true;
+                    }
+                    if (arrayItem.size == 1)
+                    {
+                        using var flat = arrayItem.flatten();
+                        using var truth = flat.astype(np.@bool);
+                        packed = truth.GetAtIndex<bool>(0);
+                        return true;
+                    }
+                    refusal = new ValueError("setting an array element with a sequence.");
+                    return false;
+                case 'T':
+                    // StringDType's setitem stores str(obj) of any object: a list as its repr ('[1]').
+                    packed = NDPyObject.Str(item);
+                    return true;
+                case 'i':
+                case 'u':
+                    // The integer setitem calls int(): Python's TypeError names the list / tuple; an ndarray of rank >= 1 is
+                    // the packer's sequence ValueError.
+                    refusal = arrayItem is null
+                        ? new TypeError($"int() argument must be a string, a bytes-like object or a real number, not '{NDPyObject.TypeName(item)}'")
+                        : new ValueError("setting an array element with a sequence.");
+                    return false;
+                case 'c':
+                    // The complex setitem: PyComplex_AsCComplex's "must be real number, not list"; an ndarray of rank >= 1
+                    // fails its scalar conversion.
+                    refusal = arrayItem is null
+                        ? new TypeError($"must be real number, not {NDPyObject.TypeName(item)}")
+                        : new TypeError("only 0-dimensional arrays can be converted to Python scalars");
+                    return false;
+                case 'U':
+                case 'S':
+                    // The fixed-width text setitem refuses a sequence without the float message's period.
+                    refusal = new ValueError("setting an array element with a sequence");
+                    return false;
+                default:
+                    // float16 / float32 / float64 (and decimal, kind 'f'): the float setitem's sequence check.
+                    refusal = new ValueError("setting an array element with a sequence.");
+                    return false;
+            }
+        }
     }
 }

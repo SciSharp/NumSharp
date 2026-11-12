@@ -80,12 +80,17 @@ numerics exist WITHOUT a backend depends on what a portable managed algorithm co
   and `([5,0],[0,1])` are index errors); mismatched extents and unequal list lengths → `ValueError("shape-mismatch for
   sum")`, and since the extent comparison short-circuits, a mismatch found earlier hides a later out-of-range axis
   (`([0,1],[0,5])` is the shape mismatch). A negative count contracts nothing (`axes=-1` ≡ `axes=0` ≡ the outer product).
+  NumPy's `axes` is ONE argument: `np.tensordot` / `np.linalg.tensordot` take an `int`, an `(int, int)` pair or a
+  `(int[] AxesA, int[] AxesB)` pair of lists (`axes: (new[] {1, 0}, new[] {0, 1})` is NumPy's `axes=([1, 0], [0, 1])`);
+  the engine members keep their two-list parameters.
 - `np.linalg.multi_dot` requires every non-endpoint operand to be 2-D: NumPy promotes a 1-D first/last operand (row /
   column) and then runs `_assert_2d` over all of them, so a 0-D, a 3-D+, or a 1-D operand in a middle position raises
   `LinAlgError("{ndim}-dimensional array given. Array must be two-dimensional")` (without it the Cormen cost model would
   read a phantom `dimensions[1]`). `out=` is threaded into the final dot, so it takes the TWO-dimensional product shape
   even for a vector endpoint (`multi_dot([v, B, C], out)` wants `(1,k)` and returns a raveled `(k,)` view). Exactly two
-  operands is a plain `np.dot` and skips the 2-D check.
+  operands is a plain `np.dot` and skips the 2-D check. Its one signature is NumPy's `multi_dot(NDArray[] arrays, NDArray
+  out = null)`: separate arrays (`multi_dot(A, B, C)`, NumPy's TypeError) and a single stacked ndarray (NumPy's sequence
+  of its first-axis slices, QB-61's q168 family) do not compile.
 - The `np.linalg` Array-API forms are not aliases: `linalg.trace`/`linalg.diagonal` reduce the LAST two axes where
   `np.trace`/`np.diagonal` take the first (a `(2,3,3)` stack gives `(2,)` against `(3,)`); `linalg.outer` demands 1-D
   where `np.outer` flattens anything; `linalg.cross` demands 3-vectors.

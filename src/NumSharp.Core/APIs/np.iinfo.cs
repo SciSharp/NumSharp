@@ -52,26 +52,36 @@ namespace NumSharp
         public char kind { get; }
 
         /// <summary>
-        /// Create iinfo for the specified dtype.
+        /// Create iinfo for the specified dtype — NumPy's <c>iinfo(int_type)</c> class call.
         /// </summary>
-        /// <param name="dtype">An integer dtype (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/> — all convert implicitly).</param>
-        /// <exception cref="ArgumentException">Thrown if <paramref name="dtype"/> is not an integer type.</exception>
-        public iinfo(DType dtype)
+        /// <param name="int_type">An integer dtype (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or
+        ///     <see cref="DType"/> — all convert implicitly). NumPy's keyword name.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="int_type"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="int_type"/> is not an integer type — NumPy's text, which names the
+        ///     dtype's KIND character: <c>Invalid integer data type 'f'.</c> for every float (decimal included, whose
+        ///     kind is <c>'f'</c>), <c>'c'</c> for complex, <c>'U'</c> / <c>'S'</c> for text. A <see cref="ValueError"/> is an
+        ///     <see cref="ArgumentException"/>, so code that catches the latter still catches it.</exception>
+        /// <remarks>bool and char stay accepted (NumSharp extensions, see <see cref="IsIntegerType"/>); NumPy refuses bool
+        ///     (<c>'b'</c>, pinned by AuditV2 T1.62).</remarks>
+        public iinfo(DType int_type)
         {
-            if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
+            if (int_type is null)
+                throw new ArgumentNullException(nameof(int_type));
 
             // Text is not an integer type: NumPy names the kind character (Invalid integer data type 'U'.).
-            if (dtype.Meta is StringDTypeMeta)
-                throw new ArgumentException($"Invalid integer data type '{dtype.kind}'.", nameof(dtype));
+            if (int_type.Meta is StringDTypeMeta)
+                throw new ValueError($"Invalid integer data type '{int_type.kind}'.");
 
-            NPTypeCode typeCode = dtype.GetTypeCode();
+            NPTypeCode typeCode = int_type.GetTypeCode();
+            // NumPy: `if self.kind not in 'iu': raise ValueError(f"Invalid integer data type {self.kind!r}.")` — the KIND
+            // character ('f' for float32, 'c' for complex128), not the dtype's name. Before API-parity batch 7 this was an
+            // ArgumentException naming the dtype ('float32') with .NET's "(Parameter 'dtype')" suffix.
             if (!IsIntegerType(typeCode))
-                throw new ArgumentException($"Invalid integer data type '{typeCode.AsNumpyDtypeName()}'", nameof(dtype));
+                throw new ValueError($"Invalid integer data type '{int_type.kind}'.");
 
             // The class, not the lane: np.iinfo(np.intc).dtype is the intc descriptor ('i') on Windows, although its limits
             // are int32's lane's (a lane-sharing class has no storage code of its own to rebuild it from).
-            this.dtype = dtype.Meta is LegacyBuiltinDTypeMeta builtin ? builtin.singleton : typeCode;
+            this.dtype = int_type.Meta is LegacyBuiltinDTypeMeta builtin ? builtin.singleton : typeCode;
             (bits, min, max, maxUnsigned, kind) = GetTypeInfo(typeCode);
         }
 
@@ -137,10 +147,12 @@ namespace NumSharp
         /// <summary>
         /// Machine limits for integer types.
         /// </summary>
-        /// <param name="typeCode">An integer type code.</param>
         /// <returns>An iinfo object describing the integer type limits.</returns>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.iinfo.html
+        /// <para>An ARRAY is not a dtype: NumPy's <c>np.iinfo(arr)</c> reads its type (<c>ndarray</c>, an object dtype) and
+        /// raises <c>Invalid integer data type 'O'.</c>; NumSharp has no array overload since API-parity batch 7, so pass
+        /// <c>arr.dtype</c>.</para>
         /// </remarks>
         /// <example>
         /// <code>
@@ -150,16 +162,19 @@ namespace NumSharp
         /// Console.WriteLine(info.max);   // 2147483647
         /// </code>
         /// </example>
-        /// <param name="dtype">
-        ///     The integer dtype — one descriptor parameter, like NumPy's: a C# <see cref="Type"/> (<c>typeof(int)</c>), an
-        ///     <see cref="NPTypeCode"/>, a NumPy dtype string or a <see cref="DType"/> (<c>np.int32</c>, <c>arr.dtype</c>) all
-        ///     convert implicitly.
+        /// <param name="int_type">
+        ///     The integer dtype — one descriptor parameter under NumPy's keyword name: a C# <see cref="Type"/>
+        ///     (<c>typeof(int)</c>), an <see cref="NPTypeCode"/> or a <see cref="DType"/> (<c>np.int32</c>, <c>arr.dtype</c>)
+        ///     convert implicitly; a string binds <see cref="iinfo(string)"/>, which reads it as NumPy does.
         /// </param>
-        public static iinfo iinfo(DType dtype)
+        /// <exception cref="ArgumentNullException"><paramref name="int_type"/> is null.</exception>
+        /// <exception cref="ValueError">Not an integer dtype: NumPy's <c>Invalid integer data type 'f'.</c> (the kind
+        ///     character).</exception>
+        public static iinfo iinfo(DType int_type)
         {
-            if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
-            return new iinfo(dtype);
+            if (int_type is null)
+                throw new ArgumentNullException(nameof(int_type));
+            return new iinfo(int_type);
         }
 
         /// <summary>
@@ -168,9 +183,9 @@ namespace NumSharp
         ///     the limits of the NumPy class NumPy reads it as (<c>np.iinfo(NDScalarType.PyInt)</c> is int64's on a 64-bit
         ///     host).
         /// </summary>
-        /// <param name="dtype">The scalar class.</param>
+        /// <param name="int_type">The scalar class (NumPy's keyword name).</param>
         /// <returns>The limits.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="int_type"/> is null.</exception>
         /// <exception cref="ValueError">
         ///     The class's kind is not <c>'i'</c> or <c>'u'</c> — NumPy's text, which names the kind of <c>np.dtype(cls)</c>:
         ///     <c>Invalid integer data type 'f'.</c>, <c>'b'</c> for bool, <c>'m'</c> for timedelta64, <c>'c'</c> for
@@ -178,16 +193,16 @@ namespace NumSharp
         ///     converts to no dtype with the dtype of its TYPE, and the type of a class is Python's <c>type</c>, an object
         ///     dtype.
         /// </exception>
-        public static iinfo iinfo(NDScalarType dtype)
+        public static iinfo iinfo(NDScalarType int_type)
         {
-            if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
-            if (dtype.IsAbstract)
+            if (int_type is null)
+                throw new ArgumentNullException(nameof(int_type));
+            if (int_type.IsAbstract)
                 throw new ValueError("Invalid integer data type 'O'.");
 
             // A Python built-in class is read as NumPy's dtype(cls).type (int -> int64); NumPy then checks the descriptor's
             // kind, so a dtype-less class (complex64, object_, void) is refused by its recorded kind without a descriptor.
-            var cls = dtype.NumPyClass;
+            var cls = int_type.NumPyClass;
             char kind = cls.NumPyKind;
             if (kind != 'i' && kind != 'u')
                 throw new ValueError($"Invalid integer data type '{kind}'.");
@@ -208,43 +223,48 @@ namespace NumSharp
         public static iinfo iinfo<T>() where T : struct => new iinfo(typeof(T));
 
         /// <summary>
-        /// Machine limits for integer types.
+        ///     Machine limits of the integer dtype a STRING names — NumPy's <c>np.iinfo("int32")</c>, read as NumPy reads it:
+        ///     <c>numeric.dtype(int_type)</c>, and when that raises TypeError (the string names no dtype) the dtype of the
+        ///     value's TYPE, <c>str</c> — so <c>np.iinfo("foo")</c> and <c>np.iinfo("")</c> are the str kind's
+        ///     <c>Invalid integer data type 'U'.</c>, exactly NumPy's answers.
         /// </summary>
-        /// <param name="arr">An NDArray with integer dtype.</param>
-        /// <returns>An iinfo object describing the array's integer type limits.</returns>
-        /// <exception cref="ArgumentNullException">Thrown if arr is null.</exception>
-        /// <example>
-        /// <code>
-        /// var a = np.array(new int[] {1, 2, 3});
-        /// var info = np.iinfo(a);
-        /// Console.WriteLine(info.bits);  // 32
-        /// </code>
-        /// </example>
-        public static iinfo iinfo(NDArray arr)
-        {
-            if (arr is null)
-                throw new ArgumentNullException(nameof(arr));
-            // The descriptor, so a string array reports its text kind rather than failing on the storage lane.
-            return new iinfo(arr.dtype);
-        }
-
-        /// <summary>
-        /// Machine limits for integer types.
-        /// </summary>
-        /// <param name="dtypeName">A dtype string (e.g., "int32", "uint8", "bool").</param>
+        /// <param name="int_type">A dtype string (<c>"int32"</c>, <c>"i8"</c>, <c>"uint8"</c>); null is NumPy's None, which
+        ///     <c>np.dtype</c> reads as the default float64 (so NumPy's <c>Invalid integer data type 'f'.</c>).</param>
         /// <returns>An iinfo object describing the integer type limits.</returns>
-        /// <exception cref="ArgumentException">Thrown if dtypeName is not a valid integer dtype.</exception>
+        /// <exception cref="ValueError">The string names a non-integer dtype (<c>"float32"</c>: <c>'f'</c>) or no dtype at
+        ///     all (<c>'U'</c>), or is null (<c>'f'</c>) — NumPy's texts.</exception>
+        /// <exception cref="NotSupportedException">The string names a NumPy dtype NumSharp does not model (<c>"O"</c>,
+        ///     <c>"V"</c>): <see cref="dtype(string)"/>'s refusal, where NumPy would answer <c>'O'</c> / <c>'V'</c>.</exception>
         /// <example>
         /// <code>
         /// var info = np.iinfo("int32");
         /// Console.WriteLine(info.bits);  // 32
         /// </code>
         /// </example>
-        public static iinfo iinfo(string dtypeName)
+        /// <remarks>Before API-parity batch 7 the parameter was named <c>dtypeName</c> (NumPy's keyword is
+        ///     <c>int_type</c>), a null or empty string raised NumSharp's own ArgumentException, and an unknown name
+        ///     surfaced <see cref="dtype(string)"/>'s TypeError.</remarks>
+        public static iinfo iinfo(string int_type)
         {
-            if (string.IsNullOrEmpty(dtypeName))
-                throw new ArgumentException("dtype name cannot be null or empty", nameof(dtypeName));
-            return new iinfo(dtype(dtypeName).typecode);
+            // NumPy: `try: self.dtype = numeric.dtype(int_type) except TypeError: self.dtype = numeric.dtype(type(int_type))`.
+            // np.dtype(None) is float64 in NumPy, so a null string is that; any other string that names no dtype falls back
+            // to str's dtype, whose kind 'U' the constructor's kind check refuses with NumPy's text. Only a TypeError takes
+            // the fallback: NumSharp's NotSupportedException for an unmodelled NumPy dtype ('O', 'V') propagates as is.
+            DType resolved;
+            if (int_type is null)
+                resolved = float64;
+            else
+            {
+                try
+                {
+                    resolved = dtype(int_type);
+                }
+                catch (TypeError)
+                {
+                    resolved = str_;
+                }
+            }
+            return new iinfo(resolved);
         }
     }
 }

@@ -441,7 +441,7 @@ namespace NumSharp.Tests.LinearAlgebra
         public void Tensordot_ExplicitAxisListsPairElementwise()
         {
             np.tensordot(np.arange(24.0).reshape(2, 3, 4), np.arange(24.0).reshape(4, 3, 2),
-                    new[] {1, 2}, new[] {1, 0})
+                    (new[] {1, 2}, new[] {1, 0}))
                 .Should().BeOfValues(880, 946, 2464, 2674).And.BeShaped(2, 2);
         }
 
@@ -456,7 +456,7 @@ namespace NumSharp.Tests.LinearAlgebra
         public void Tensordot_NegativeAxisIndicesNormalize()
         {
             np.tensordot(np.arange(24.0).reshape(2, 3, 4), np.arange(24.0).reshape(4, 3, 2),
-                    new[] {-1}, new[] {0})
+                    (new[] {-1}, new[] {0}))
                 .Should().BeShaped(2, 3, 3, 2);
         }
 
@@ -470,34 +470,34 @@ namespace NumSharp.Tests.LinearAlgebra
             // is IN range (both operands are 3-D), so it too is an extent mismatch, not an index error.
             new Action(() => np.tensordot(a, b)).Should().Throw<ValueError>().WithMessage("shape-mismatch for sum");
             new Action(() => np.tensordot(a, b, 3)).Should().Throw<ValueError>().WithMessage("shape-mismatch for sum");
-            new Action(() => np.tensordot(a, b, new[] {0}, new[] {0}))
+            new Action(() => np.tensordot(a, b, (new[] {0}, new[] {0})))
                 .Should().Throw<ValueError>().WithMessage("shape-mismatch for sum");
-            new Action(() => np.tensordot(a, b, new[] {0, 1}, new[] {0}))
+            new Action(() => np.tensordot(a, b, (new[] {0, 1}, new[] {0})))
                 .Should().Throw<ValueError>().WithMessage("shape-mismatch for sum");
 
             // A repeated RAW axis value is rejected first, ahead of any shape or range check.
-            new Action(() => np.tensordot(a, b, new[] {0, 0}, new[] {0, 1}))
+            new Action(() => np.tensordot(a, b, (new[] {0, 0}, new[] {0, 1})))
                 .Should().Throw<ValueError>().WithMessage("duplicate axes are not allowed in tensordot");
-            new Action(() => np.tensordot(a, b, new[] {1, 2}, new[] {0, 0}))
+            new Action(() => np.tensordot(a, b, (new[] {1, 2}, new[] {0, 0})))
                 .Should().Throw<ValueError>().WithMessage("duplicate axes are not allowed in tensordot");
 
             var m = np.ones(new Shape(3, 4));
             var n = np.ones(new Shape(4, 3));
 
             // Duplicate wins even when the repeated axis is also out of range.
-            new Action(() => np.tensordot(m, n, new[] {5, 5}, new[] {0, 1}))
+            new Action(() => np.tensordot(m, n, (new[] {5, 5}, new[] {0, 1})))
                 .Should().Throw<ValueError>().WithMessage("duplicate axes are not allowed in tensordot");
 
             // An out-of-range contraction axis is an IndexError — NumPy indexes the shape TUPLE with
             // the raw axis — whether the int count exceeds ndim or a listed axis is out of bounds.
             new Action(() => np.tensordot(m, n, 3)).Should().Throw<IndexError>().WithMessage("tuple index out of range");
-            new Action(() => np.tensordot(m, n, new[] {5, 0}, new[] {0, 1}))
+            new Action(() => np.tensordot(m, n, (new[] {5, 0}, new[] {0, 1})))
                 .Should().Throw<IndexError>().WithMessage("tuple index out of range");
-            new Action(() => np.tensordot(m, n, new[] {-3}, new[] {0}))
+            new Action(() => np.tensordot(m, n, (new[] {-3}, new[] {0})))
                 .Should().Throw<IndexError>().WithMessage("tuple index out of range");
 
             // …but a mismatched extent found earlier in the list hides a later out-of-range axis.
-            new Action(() => np.tensordot(m, n, new[] {0, 1}, new[] {0, 5}))
+            new Action(() => np.tensordot(m, n, (new[] {0, 1}, new[] {0, 5})))
                 .Should().Throw<ValueError>().WithMessage("shape-mismatch for sum");
         }
 

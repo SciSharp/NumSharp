@@ -2053,6 +2053,33 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 ## 7. State log
 
+- **2026-11-12**: API-parity batch 7 on `journey5` (branch `api-parity/batch-07`; the owner approved all 15 picks, each
+  offered as a call table: C# call | NumPy | today | after). np.reshape has ONE signature, `reshape(a, Shape shape, char
+  order = 'C', bool? copy = null)`, NumPy's `_wrapfunc` onto the method, and `NDArray.ReshapeCore` is NumPy's
+  `_reshape_with_copy_arg` (copy=True copies in the resolved order before the relabel; copy=False keeps every view
+  route and raises "Unable to avoid creating a copy while reshaping." where IF_NEEDED would copy; the size check first,
+  IncorrectShapeException with NumPy's text); the ndarray / matrix / chararray methods take `order = 'C'` too. New:
+  np.astype(x, dtype, copy, device) (NumPy's two checks, then `x.astype`; the cast runs in `NDArray.AsTypeComputation`,
+  whose `[NewSubtype("x")]` the weaver reads, so a matrix stays a matrix); np.fromiter(iter, dtype, count) as NumPy's
+  `PyArray_FromIter` (the iterator, the unsized-dtype check, one item at a time, each packed as read through NumPy's
+  setitem, a sequence item answered per dtype, then "iterator too short"), its statements in `NDArray.Multiarray.cs`
+  (ratchet R1); np.fromfunction(function, shape, dtype) (one call with np.indices' grids; [Misaligned]: an int shape,
+  a number result); np.little_endian; np.lib.stride_tricks.sliding_window_view (NumPy's statements, a Shape of x's own
+  buffer window, read-only unless writeable). finfo gains nmant / iexp / nexp / machep / negep and NumPy's minexp
+  (float32 -126, float64 -1022), float32's tiny / smallest_normal exactly 2^-126; np.finfo / np.iinfo take one dtype
+  argument (DType, NDScalarType, string; the array forms gone), read a string through `np.dtype` and on its TypeError as
+  str, and refuse with NumPy's ValueErrors (iinfo the kind character, finfo the scalar class). np.tensordot's axes are
+  one `(int[], int[])` pair, np.linalg.tensordot also the `(int, int)` pair; np.linalg.multi_dot one `NDArray[]`
+  signature; np.unravel_index `indices`, np.ravel_multi_index `multi_index` / `mode` (a bare `mode: null` is now
+  CS0121). numpy.ma: apply_over_axes `NDAxis axes` (+ the kept int / int[] forms), angle `deg`, zeros / ones / empty
+  NumPy's `_convert2ma` keywords (order, device, fill_value, hardmask; identity fill_value / hardmask), the `*_like`
+  family dtype / order / shape / device under `__array_finalize__` (the mask in the result's layout, reshaped for a
+  same-size shape, dropped otherwise), copy `order`, argmax / argmin `out` / `keepdims`. Closed: AuditV2 T1.26 and the
+  surface gaps SU11 / SU12 / SU14 / SU16. Oracle: the surface tier's gen_batch7 section (np.fromiter 216 cases, its
+  text-dtype results as their repr; np.fromfunction 213 over numpy.ma's callable menu; sliding_window_view 595), whose
+  replay found that the surface replay's `PyNumber` boxed every Python int as a double (fixed); the four finfo entries
+  left the dtype-spread ledger; the leak catalogue audits the three new functions. Gap map: NumPy's signature 860 →
+  882, to change 446 → 428.
 - **2026-11-12**: API-parity batch 6 on `journey5` (branch `api-parity/batch-06`; the owner approved 13 of 15 picks -
   not np.broadcast's params form nor the permutation pair - and decided, after a resolution proof, to KEEP the `int` and
   `int[]` overloads beside every NumPy-axis member: "can you also have the int and int[] overloads kept instead of

@@ -233,6 +233,19 @@ namespace NumSharp
         public static double Infinity => double.PositiveInfinity;
         public static double infinity => double.PositiveInfinity;
 
+        /// <summary>
+        ///     NumPy's <c>np.little_endian</c>: whether this machine stores multi-byte numbers least-significant byte first,
+        ///     which decides what a native byte order (<c>'='</c>) means for a dtype (<c>&lt;</c> here, <c>&gt;</c> on a
+        ///     big-endian host). Reads <see cref="BitConverter.IsLittleEndian"/>.
+        /// </summary>
+        /// <remarks>
+        ///     Every platform .NET runs NumSharp on today is little-endian (x64, Arm64, WebAssembly), so this is
+        ///     <see langword="true"/> in practice. It describes the PROCESS, not an array: an array's byte order is its dtype's
+        ///     (<see cref="DType.byteorder"/>), and a non-native one (<c>'&gt;f8'</c>) stays non-native whatever this says.
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.little_endian.html
+        /// </remarks>
+        public static bool little_endian => BitConverter.IsLittleEndian;
+
         #endregion
     }
 }
