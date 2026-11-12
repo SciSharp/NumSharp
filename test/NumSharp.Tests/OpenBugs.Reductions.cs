@@ -153,20 +153,19 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.median</c> and <c>np.nanmedian</c> must be <c>np.mean</c> of the middle element(s), as in
-        ///     NumPy, so a <c>-0.0</c> middle gives <c>+0.0</c> (<c>np.median([-0.0, 5.0, -0.0])</c> is
-        ///     <c>0.0</c>). NumSharp returns the middle element itself, or <c>(a + b) / 2</c> for an even count,
-        ///     which keeps the <c>-0.0</c>. Every cell of the probe's all-<c>-0.0</c> matrix differs: every float
-        ///     dtype, complex128, flat and per axis, with and without keepdims.
+        ///     Regression pin (fixed 2026-11-12 with QB43): <c>np.median</c> and <c>np.nanmedian</c> are <c>np.mean</c> of
+        ///     the middle element(s), as in NumPy, so a <c>-0.0</c> middle gives <c>+0.0</c>
+        ///     (<c>np.median([-0.0, 5.0, -0.0])</c> is <c>0.0</c>): every float dtype, complex128, flat and per axis.
         /// </summary>
         /// <remarks>
-        ///     Root cause: <c>DirectILKernelGenerator.Quantile.cs</c> <c>WriteCell</c> with <c>medianMean</c> writes
-        ///     <c>prev</c> for an odd count ("γ = 0 … already yields that sample, so it needs no special case") and
-        ///     <c>(prev + next) / 2</c> for an even count. NumPy's <c>median</c> calls <c>np.mean(part[indexer])</c>,
-        ///     which is <c>(+0.0 + prev [+ next]) / n</c>. The values are equal except for the sign of a zero.
-        ///     <c>np.percentile</c> and <c>np.quantile</c> use NumPy's <c>_lerp</c> and already match.
+        ///     NumPy's <c>median</c> calls <c>np.mean(part[indexer])</c>, whose add.reduce starts from the identity:
+        ///     <c>(+0.0 + prev [+ next]) / n</c> (complex128: <c>0+0j</c> plus the sum, then Smith's division by
+        ///     <c>n+0j</c>). <c>DirectILKernelGenerator.Quantile.cs</c> <c>WriteCell</c> (<c>medianMean</c>) and
+        ///     <c>DefaultEngine.ComplexMedianMean</c> compute exactly that; they used to write the middle element itself, or
+        ///     <c>(prev + next) / 2</c>, which kept the <c>-0.0</c>. <c>np.percentile</c> and <c>np.quantile</c> use NumPy's
+        ///     <c>_lerp</c> (no identity).
         /// </remarks>
-        [TestMethod, OpenBugs]
+        [TestMethod]
         public void Median_OfNegativeZeros_IsPositiveZero()
         {
             var fails = new List<string>();

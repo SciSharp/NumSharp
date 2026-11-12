@@ -517,15 +517,34 @@ namespace NumSharp.Backends
                 long k = raw[i];
                 cellIndex[i] = (int)(k < 0 ? k + n : k);
             }
+            // Two partition lists. kSorted is the needed neighbours alone: the kernel's tie-blind select places them for a
+            // row whose result bits cannot show the arrangement (QuickSelect.PartitionAtManyTieBlind). kExact is NumPy's
+            // own list for float data (the 0 and -1 it adds, the median's own positions): a row holding both zero signs,
+            // or NaNs of different bits, is partitioned there with NumPy's statements, whose swaps decide which zero of a
+            // ±0 tie a neighbour reads and which NaN a NaN slice answers (QB43). Integer data never shows it.
             int[] kSortedManaged = nanAware || n <= 1 ? Array.Empty<int>() : SortedDistinct(cellIndex);
+            int[] kExactManaged = Array.Empty<int>();
+            if (!nanAware && n > 1 && inexact)
+            {
+                var list = new int[raw.Length + 3];
+                int count;
+                unsafe
+                {
+                    fixed (long* rawPtr = raw)
+                    fixed (int* listPtr = list)
+                        count = QuantileIndexes.FloatPartitionKth(rawPtr, raw.Length, n, discrete, medianMean, listPtr);
+                }
+                Array.Resize(ref list, count);
+                kExactManaged = list;
+            }
 
             int srcSize = TypeSize(a.typecode);
             byte[] scratchBytes = ArrayPool<byte>.Shared.Rent(checked(srcSize * n));
             double[] qCopy = q;   // q is already a flat array we own; no need to copy
             // Per-row plan scratch for the NaN path (2 entries per q, reused across rows so the per-row plan allocates
-            // nothing).
+            // nothing); the partition list holds up to 3 more (NumPy's 0 and -1, or the median's own positions).
             int rowScratch = Math.Max(1, 2 * qCopy.Length);
-            int[] rowKManaged = nanAware ? ArrayPool<int>.Shared.Rent(rowScratch) : null;
+            int[] rowKManaged = nanAware ? ArrayPool<int>.Shared.Rent(rowScratch + 3) : null;
             long[] rowRawManaged = nanAware ? ArrayPool<long>.Shared.Rent(rowScratch) : null;
             double[] rowWeightManaged = nanAware ? ArrayPool<double>.Shared.Rent(rowScratch) : null;
 
@@ -535,6 +554,7 @@ namespace NumSharp.Backends
                 {
                     fixed (byte* scratchPtr = scratchBytes)
                     fixed (int* kPtr = kSortedManaged)
+                    fixed (int* kExactPtr = kExactManaged)
                     fixed (int* cellIndexPtr = cellIndex)
                     fixed (double* cellWeightPtr = weight)
                     fixed (double* qPtr = qCopy)
@@ -565,7 +585,8 @@ namespace NumSharp.Backends
                                 q: qPtr, nQs: qCopy.Length,
                                 dstBase: (System.Numerics.Complex*)resultRaw.Address,
                                 dstOuterStride: dstOuterStride,
-                                medianNaNCheck: medianMean && !ignoreNaN);
+                                medianNaNCheck: medianMean && !ignoreNaN,
+                                medianMean: medianMean);
                         }
                         else
                         {
@@ -591,7 +612,9 @@ namespace NumSharp.Backends
                                 rowKScratch: rowKPtr,
                                 rowRaw: rowRawPtr,
                                 rowWeight: rowWeightPtr,
-                                medianMean: medianMean);
+                                medianMean: medianMean,
+                                kExact: kExactPtr,
+                                nKExact: kExactManaged.Length);
                         }
                     }
                 }
@@ -1081,6 +1104,8 @@ namespace NumSharp.Backends
         /// <param name="medianNaNCheck">True for <c>np.median</c> (not the NaN-ignoring median): NumPy's
         ///     <c>_median_nancheck</c> - a row holding a NaN in either part gives the element NumPy's complex order puts last
         ///     (see <see cref="LastNaNInNumPyOrder"/>) instead of the mean of the middle values.</param>
+        /// <param name="medianMean">True for <c>np.median</c> / <c>np.nanmedian</c>: the result is NumPy's <c>np.mean</c> of
+        ///     the central value(s) (<see cref="ComplexMedianMean"/>), not the quantile lerp at 0.5.</param>
         /// <remarks>
         ///     NumPy's <c>_median</c> partitions with <c>kth</c> including -1 when the dtype supports NaN, so the largest element
         ///     of its complex order (<c>CDOUBLE_LT</c>: <c>[R + Rj, R + nanj, nan + Rj, nan + nanj]</c>, NaNs last) sits last, and
@@ -1091,7 +1116,7 @@ namespace NumSharp.Backends
         private static unsafe void ComputeComplexQuantile(
             System.Numerics.Complex* srcBase, long outer, int n,
             QuantileMethod method, double* q, int nQs,
-            System.Numerics.Complex* dstBase, long dstOuterStride, bool medianNaNCheck = false)
+            System.Numerics.Complex* dstBase, long dstOuterStride, bool medianNaNCheck = false, bool medianMean = false)
         {
             var scratch = new System.Numerics.Complex[n];
             for (long row = 0; row < outer; row++)
@@ -1114,10 +1139,36 @@ namespace NumSharp.Backends
                 for (int qi = 0; qi < nQs; qi++)
                 {
                     double qv = q[qi];
-                    System.Numerics.Complex result = ComplexQuantileAtMethod(scratch, n, qv, method);
+                    // np.median's `mean(part[indexer])`: the central element of an odd row, the central pair of an even one.
+                    System.Numerics.Complex result = medianMean && n > 0
+                        ? (n % 2 == 1 ? ComplexMedianMean(scratch[n / 2], default, 1)
+                                      : ComplexMedianMean(scratch[n / 2 - 1], scratch[n / 2], 2))
+                        : ComplexQuantileAtMethod(scratch, n, qv, method);
                     dstBase[qi * dstOuterStride + row] = result;
                 }
             }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.mean</c> of a complex128 median's central value(s), statement for statement: <c>add.reduce</c>
+        ///     starts its accumulator at the identity <c>0+0j</c> and adds the pairwise sum (<c>-0.0 + a [+ b]</c> per part),
+        ///     then <c>true_divide</c> by the count as the complex <c>count+0j</c> (Smith's branch: <c>rat = 0 / count</c>,
+        ///     <c>scl = 1 / (count + 0 * rat)</c>, <c>((s.re + s.im * rat) * scl, (s.im - s.re * rat) * scl)</c>).
+        /// </summary>
+        /// <param name="a">The first central value.</param>
+        /// <param name="b">The second central value (ignored when <paramref name="count"/> is 1).</param>
+        /// <param name="count">1 for an odd row, 2 for an even one.</param>
+        /// <returns>The mean as NumPy computes it: a zero part comes out +0.0 (the identity), and an infinite part turns
+        ///     the other into NaN through <c>inf * rat</c> (as NumPy's).</returns>
+        private static System.Numerics.Complex ComplexMedianMean(System.Numerics.Complex a, System.Numerics.Complex b, int count)
+        {
+            // The identity first: `0.0 + (pairwise sum)`; the pairwise sum's own -0.0 start is exact (-0.0 + x == x).
+            double sr = count == 2 ? 0.0 + (a.Real + b.Real) : 0.0 + a.Real;
+            double si = count == 2 ? 0.0 + (a.Imaginary + b.Imaginary) : 0.0 + a.Imaginary;
+            double divisorReal = count, divisorImag = 0.0;
+            double rat = divisorImag / divisorReal;
+            double scl = 1.0 / (divisorReal + divisorImag * rat);
+            return new System.Numerics.Complex((sr + si * rat) * scl, (si - sr * rat) * scl);
         }
 
         /// <summary>

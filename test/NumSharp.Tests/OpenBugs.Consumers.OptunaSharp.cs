@@ -19,7 +19,8 @@ namespace NumSharp.Tests
     public class OpenBugsOptunaSharpConsumerTests : TestClass
     {
         // ============================================================================
-        //  BUG: the linear quantile family returns +0.0 for [0.0, -0.0, -0.0, -1.0] at q = 0.5; NumPy returns -0.0.
+        //  FIXED 2026-11-12 (QB43): the linear quantile family returned +0.0 for [0.0, -0.0, -0.0, -1.0] at q = 0.5;
+        //  NumPy returns -0.0.
         //
         //  Found by OptunaSharp's PercentilePruner, whose cutoff is np.nanpercentile of the trials' reports: over 600
         //  seeded cases NumSharp's np.nanpercentile matched NumPy bit for bit, except on this tie of signed zeros. No
@@ -30,29 +31,27 @@ namespace NumSharp.Tests
         //  np.unique([0, -1, prev, next]), here [-1, 0, 1, 2], and several kth run the scalar introselect_ on every host
         //  (introselect_noarg hands only ONE kth to x86-simd-sort). Its dumb_select moves each window's FIRST strict
         //  minimum to the window's front, which leaves [-1.0, -0.0, -0.0, 0.0] (np.argpartition: [3, 1, 2, 0]), so the
-        //  'linear' lerp runs between two -0.0. NumSharp's Utilities/QuickSelect.cs insertion-sorts a window of at most 16
-        //  elements instead (IntroSelectBlock; the quantile kernels' PartitionAtMany(int) sorts a line that short whole):
-        //  a stable order, [-1.0, 0.0, -0.0, -0.0] (np.argpartition: [3, 0, 1, 2]), so the lerp runs between 0.0 and
-        //  -0.0, and b - (b - a) * (1 - t) = -0.0 - (-0.0) * 0.5 is +0.0. On this input NumSharp's 'lower' and
-        //  'midpoint' are +0.0 as well, 'higher' and 'nearest' already -0.0; NumPy's five methods all give -0.0.
-        //  np.median gives +0.0 on both sides: its middle pair is -0.0, -0.0 in NumPy too, but np.mean of it is +0.0.
+        //  'linear' lerp runs between two -0.0. NumSharp's Utilities/QuickSelect.cs insertion-sorted a window of at most
+        //  16 elements instead, and partitioned at the neighbours alone: a stable order, [-1.0, 0.0, -0.0, -0.0], so the
+        //  lerp ran between 0.0 and -0.0, and b - (b - a) * (1 - t) = -0.0 - (-0.0) * 0.5 is +0.0.
         //
-        //  The fix: QB43's - keep NumPy's dumb_select / last-maximum shortcuts for short windows as well (drop the
-        //  insertion-sort window, or make it reproduce dumb_select's swaps), so ties land where NumPy puts them.
+        //  The fix: several kth run a statement-for-statement port of introselect_ (QuickSelect.Introselect.cs), and the
+        //  quantile family partitions float data at NumPy's own kth list.
         // ============================================================================
 
         /// <summary>
-        ///     <c>np.percentile(x, 50)</c>, <c>np.nanpercentile(x, 50)</c>, <c>np.quantile(x, 0.5)</c> and
+        ///     Regression pin: <c>np.percentile(x, 50)</c>, <c>np.nanpercentile(x, 50)</c>, <c>np.quantile(x, 0.5)</c> and
         ///     <c>np.nanquantile(x, 0.5)</c> of <c>[0.0, -0.0, -0.0, -1.0]</c> are <c>-0.0</c> in NumPy 2.4.2 (its partition
-        ///     places the two <c>-0.0</c> at positions 1 and 2, the interpolated neighbours). NumSharp returns <c>+0.0</c> for
-        ///     all four, because its short-window insertion sort leaves <c>0.0</c> at position 1.
+        ///     places the two <c>-0.0</c> at positions 1 and 2, the interpolated neighbours). Guards the multi-kth
+        ///     introselect_ port and the quantile family's kth list; the short-window insertion sort they replaced left
+        ///     <c>0.0</c> at position 1 and returned <c>+0.0</c> for all four.
         /// </summary>
         /// <remarks>
         ///     The value is checked first, so a fix that changes the result rather than its sign cannot pass; then the sign
-        ///     bits of all four calls are collected, so a failure names every call still returning <c>+0.0</c>. Each call
-        ///     gets a fresh input array (the family does not write its input, but the test does not depend on that).
+        ///     bits of all four calls are collected, so a failure names every call returning <c>+0.0</c>. Each call gets a
+        ///     fresh input array (the family does not write its input, but the test does not depend on that).
         /// </remarks>
-        [TestMethod, OpenBugs(IssueUrl = "consumer-optunasharp-quantile-zero-sign")]
+        [TestMethod]
         public void LinearQuantiles_OfTiedSignedZeros_KeepNumPysNegativeZero()
         {
             var calls = new (string Call, Func<NDArray, NDArray> Run)[]
