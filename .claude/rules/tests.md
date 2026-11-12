@@ -166,6 +166,12 @@ mapped memory ends. Two tools make it fail:
   `[0.0, -0.0, -0.0, -1.0]` return `+0.0` where NumPy returns `-0.0`, QB43's root cause (the short-window insertion sort
   in `Utilities/QuickSelect.cs` instead of `introselect_`'s dumb_select) seen through the default 'linear' method.
   Disabling the value path's two window sorts turns it green (QB43's argpartition half also needs the index path's).
+  Also two costs of `np.sum(axis=-1)` from its TPE sampler (2026-11-12), same-process ratios whose batches alternate
+  (`BestOfAlternatingBatches`: timed one route after the other, a slow stretch of the hybrid CPU passed the first
+  version with the bug present): 2,400 rows of 10 cost 6.1-7.4 times the same values as 24 rows of 1,000 (NumPy
+  3.3-3.5; about 18 ns per row through `ForEach`'s per-row inner-loop calls against NumPy's 8), and `out=` costs
+  1.84-2.19 times the fresh call (NumPy 1.02-1.04) because `ReduceIntoOut` computes a fresh result and copies it; that
+  one is calibrated for Release only (a Debug build measured 1.05-1.90).
 - The LIFETIME OpenBugs (lost GC anchors) live in the Oracle project, because the bug exists only in optimized code and
   needs the lifetime child process (`oracle.md`): none is open; a new open gap gets a `Lifetime_LT<nn>_*` test beside the
   aggregate `Lifetime_KnownGaps` (and `LifetimeOracleTests.Scaled.cs`'s `LifetimeScaled_KnownGaps`).
