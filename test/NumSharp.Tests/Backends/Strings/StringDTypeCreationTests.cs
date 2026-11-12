@@ -229,7 +229,7 @@ namespace NumSharp.Tests.Backends.Strings
         [TestMethod]
         public void Ones_WithOrder()
         {
-            using var f = np.ones(new Shape(2, 2), 'F', T);
+            using var f = np.ones(new Shape(2, 2), T, 'F');
             f.Shape.IsFContiguous.Should().BeTrue();
             V(f).Should().Equal(new object[] { "1", "1", "1", "1" });
         }

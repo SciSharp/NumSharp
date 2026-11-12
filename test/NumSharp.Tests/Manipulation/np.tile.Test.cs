@@ -9,7 +9,7 @@ namespace NumSharp.Tests.Manipulation
     public class TileTests
     {
         // ----------------------------------------------------------------------
-        // Section 1 — params int[] overload, NumPy doc examples
+        // Section 1 — NumPy doc examples (reps as one Shape: an int, a tuple or an array)
         // ----------------------------------------------------------------------
 
         [TestMethod]
@@ -26,7 +26,7 @@ namespace NumSharp.Tests.Manipulation
         public void Tile_1D_Reps_2_2_PromotesAxis()
         {
             // NumPy: np.tile([0,1,2], (2,2)) → shape (2,6)
-            var got = np.tile(np.arange(3), 2, 2);
+            var got = np.tile(np.arange(3), (2, 2));
             got.shape.Should().Equal(new long[] { 2, 6 });
             int[] expected = { 0, 1, 2, 0, 1, 2 };
             for (int i = 0; i < 2; i++)
@@ -38,7 +38,7 @@ namespace NumSharp.Tests.Manipulation
         public void Tile_1D_Reps_2_1_2_Promotes3D()
         {
             // NumPy: np.tile([0,1,2], (2,1,2)) → shape (2,1,6)
-            var got = np.tile(np.arange(3), 2, 1, 2);
+            var got = np.tile(np.arange(3), (2, 1, 2));
             got.shape.Should().Equal(new long[] { 2, 1, 6 });
             int[] expected = { 0, 1, 2, 0, 1, 2 };
             for (int i = 0; i < 2; i++)
@@ -64,7 +64,7 @@ namespace NumSharp.Tests.Manipulation
         {
             // NumPy: np.tile([[1,2],[3,4]], (2,1)) → shape (4,2)
             var b = np.array(new[,] { { 1, 2 }, { 3, 4 } });
-            var got = np.tile(b, 2, 1);
+            var got = np.tile(b, (2, 1));
             got.shape.Should().Equal(new long[] { 4, 2 });
             int[,] expected = { { 1, 2 }, { 3, 4 }, { 1, 2 }, { 3, 4 } };
             for (int i = 0; i < 4; i++)
@@ -77,7 +77,7 @@ namespace NumSharp.Tests.Manipulation
         {
             // NumPy: np.tile([1,2,3,4], (4,1)) → shape (4,4) — vertical stack
             var c = np.array(new[] { 1, 2, 3, 4 });
-            var got = np.tile(c, 4, 1);
+            var got = np.tile(c, (4, 1));
             got.shape.Should().Equal(new long[] { 4, 4 });
             int[] row = { 1, 2, 3, 4 };
             for (int i = 0; i < 4; i++)
@@ -90,7 +90,7 @@ namespace NumSharp.Tests.Manipulation
         {
             // NumPy: np.tile([[1,2],[3,4]], (2,3)) → (4,6)
             var b = np.array(new[,] { { 1, 2 }, { 3, 4 } });
-            var got = np.tile(b, 2, 3);
+            var got = np.tile(b, (2, 3));
             got.shape.Should().Equal(new long[] { 4, 6 });
             int[,] expected =
             {
@@ -122,7 +122,7 @@ namespace NumSharp.Tests.Manipulation
         public void Tile_Scalar_Reps_2_3()
         {
             // NumPy: np.tile(5, (2,3)) → [[5,5,5],[5,5,5]]
-            var got = np.tile(np.array(5), 2, 3);
+            var got = np.tile(np.array(5), (2, 3));
             got.shape.Should().Equal(new long[] { 2, 3 });
             for (int i = 0; i < 2; i++)
                 for (int j = 0; j < 3; j++)
@@ -162,7 +162,7 @@ namespace NumSharp.Tests.Manipulation
         public void Tile_AllOnes_2D_ReturnsCopy()
         {
             var src = np.array(new[,] { { 1, 2 }, { 3, 4 } });
-            var got = np.tile(src, 1, 1);
+            var got = np.tile(src, (1, 1));
             got.shape.Should().Equal(new long[] { 2, 2 });
             got[0, 0] = 99;
             ((int)src[0, 0]).Should().Be(1);
@@ -173,7 +173,7 @@ namespace NumSharp.Tests.Manipulation
         {
             // NumPy 2.4.2: np.tile(arange(12).reshape(3,4).T, (1,1)) preserves F-contiguous output.
             var src = np.arange(12).reshape(3, 4).T;
-            var got = np.tile(src, 1, 1);
+            var got = np.tile(src, (1, 1));
 
             got.shape.Should().Equal(new long[] { 4, 3 });
             got.Shape.IsContiguous.Should().BeFalse();
@@ -188,7 +188,7 @@ namespace NumSharp.Tests.Manipulation
         {
             // NumPy 2.4.2: np.tile(f_arr, ()) is a keep-order copy.
             var src = np.arange(12).reshape(3, 4).T;
-            var got = np.tile(src);
+            var got = np.tile(src, Array.Empty<int>());
 
             got.shape.Should().Equal(new long[] { 4, 3 });
             got.Shape.IsContiguous.Should().BeFalse();
@@ -203,7 +203,7 @@ namespace NumSharp.Tests.Manipulation
         {
             // NumPy 2.4.2: np.tile(non_contiguous, (1,1)) materializes a C-contiguous copy.
             var src = np.arange(12).reshape(3, 4)[":, ::-1"];
-            var got = np.tile(src, 1, 1);
+            var got = np.tile(src, (1, 1));
 
             got.shape.Should().Equal(new long[] { 3, 4 });
             got.Shape.IsContiguous.Should().BeTrue();
@@ -222,7 +222,7 @@ namespace NumSharp.Tests.Manipulation
         {
             // NumPy: np.tile(arange(8).reshape(2,2,2), (2,1,3)) → shape (4,2,6)
             var a = np.arange(8).reshape((2, 2, 2));
-            var got = np.tile(a, 2, 1, 3);
+            var got = np.tile(a, (2, 1, 3));
             got.shape.Should().Equal(new long[] { 4, 2, 6 });
             // Spot-check values against NumPy output
             ((long)got[0, 0, 0]).Should().Be(0);
@@ -289,15 +289,23 @@ namespace NumSharp.Tests.Manipulation
             act.Should().Throw<ArgumentNullException>();
         }
 
-        [TestMethod]
-        public void Tile_NullReps_Throws()
+        /// <summary>
+        ///     A null <c>int[]</c> converts to <see cref="Shape"/>'s 0-d form, NumPy's empty tuple, so the tile is a copy of
+        ///     the input. NumPy has no null: <c>np.tile(a, None)</c> raises <c>TypeError: 'NoneType' object is not
+        ///     iterable</c>. Before API-parity batch 8 the <c>params int[] reps</c> overload raised ArgumentNullException.
+        /// </summary>
+        [TestMethod, Misaligned]
+        public void Tile_NullReps_IsTheEmptyTuple()
         {
-            Action act = () => np.tile(np.array(new[] { 1, 2, 3 }), (int[])null!);
-            act.Should().Throw<ArgumentNullException>();
+            using var src = np.array(new[] { 1, 2, 3 });
+            using var got = np.tile(src, (int[])null!);
+            got.shape.Should().Equal(3L);
+            got.ToArray<int>().Should().Equal(1, 2, 3);
+            np.shares_memory(got, src).Should().BeFalse();
         }
 
         // ----------------------------------------------------------------------
-        // Section 7 — Long overload
+        // Section 7 — long[] reps (converts to the one Shape signature)
         // ----------------------------------------------------------------------
 
         [TestMethod]
@@ -316,7 +324,7 @@ namespace NumSharp.Tests.Manipulation
         {
             // NumPy: np.tile(np.array([1,2,3]), ()) → array([1,2,3]), shape (3,)
             var src = np.array(new[] { 1, 2, 3 });
-            var got = np.tile(src);
+            var got = np.tile(src, Array.Empty<int>());
             got.shape.Should().Equal(3L);
             for (int i = 0; i < 3; i++) ((int)got[i]).Should().Be(i + 1);
             // Must be a copy (writable, independent of src).
@@ -329,7 +337,7 @@ namespace NumSharp.Tests.Manipulation
         {
             // NumPy: np.tile(2d_array, ()) → preserves 2D shape
             var src = np.array(new[,] { { 1, 2 }, { 3, 4 } });
-            var got = np.tile(src);
+            var got = np.tile(src, Array.Empty<int>());
             got.shape.Should().Equal(new long[] { 2, 2 });
         }
 
@@ -360,7 +368,7 @@ namespace NumSharp.Tests.Manipulation
         public void Tile_TransposedInput_Reps_2_2()
         {
             var a = np.arange(6).reshape((2, 3)).T;
-            var got = np.tile(a, 2, 2);
+            var got = np.tile(a, (2, 2));
             got.shape.Should().Equal(new long[] { 6, 4 });
             long[,] expected = {
                 { 0, 3, 0, 3 }, { 1, 4, 1, 4 }, { 2, 5, 2, 5 },
@@ -411,7 +419,7 @@ namespace NumSharp.Tests.Manipulation
         {
             // NumPy: np.tile([[1,2],[3,4]], (0,2)) → shape (0,4)
             var b = np.array(new[,] { { 1, 2 }, { 3, 4 } });
-            var got = np.tile(b, 0, 2);
+            var got = np.tile(b, (0, 2));
             got.shape.Should().Equal(new long[] { 0, 4 });
             got.size.Should().Be(0);
             got.dtype.Should().Be(typeof(int));
@@ -422,7 +430,7 @@ namespace NumSharp.Tests.Manipulation
         {
             // NumPy: np.tile([[1,2],[3,4]], (2,0)) → shape (4,0)
             var b = np.array(new[,] { { 1, 2 }, { 3, 4 } });
-            var got = np.tile(b, 2, 0);
+            var got = np.tile(b, (2, 0));
             got.shape.Should().Equal(new long[] { 4, 0 });
             got.size.Should().Be(0);
         }
@@ -470,7 +478,7 @@ namespace NumSharp.Tests.Manipulation
             // NumPy: np.tile(arange(24).reshape(2,3,2,2), (2,1,3,1)) → shape (4,3,6,2)
             // Axis 2 has dim 2 tiled 3x → 6. Pattern on axis 2: [a0,a1,a0,a1,a0,a1].
             var a = np.arange(24).reshape((2, 3, 2, 2));
-            var got = np.tile(a, 2, 1, 3, 1);
+            var got = np.tile(a, (2, 1, 3, 1));
             got.shape.Should().Equal(new long[] { 4, 3, 6, 2 });
             // got[0,0,:,:] = tile [[0,1],[2,3]] along axis 0 three times
             long[,] block00 = {
@@ -566,7 +574,7 @@ namespace NumSharp.Tests.Manipulation
         public void Tile_Scalar_Reps_2_1_3()
         {
             // NumPy: np.tile(np.array(7), (2,1,3)) → shape (2,1,3) filled with 7
-            var got = np.tile(np.array(7), 2, 1, 3);
+            var got = np.tile(np.array(7), (2, 1, 3));
             got.shape.Should().Equal(new long[] { 2, 1, 3 });
             for (int i = 0; i < 2; i++)
                 for (int j = 0; j < 3; j++)
@@ -581,7 +589,7 @@ namespace NumSharp.Tests.Manipulation
         public void Tile_1D_Reps_2_1_3_4()
         {
             // NumPy: np.tile([1,2,3], (2,1,3,4)) → shape (2,1,3,12)
-            var got = np.tile(np.array(new[] { 1, 2, 3 }), 2, 1, 3, 4);
+            var got = np.tile(np.array(new[] { 1, 2, 3 }), (2, 1, 3, 4));
             got.shape.Should().Equal(new long[] { 2, 1, 3, 12 });
             // got[0,0,0,:] = [1,2,3,1,2,3,1,2,3,1,2,3]
             int[] row = { 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3 };

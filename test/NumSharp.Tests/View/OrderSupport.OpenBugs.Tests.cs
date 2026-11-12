@@ -36,30 +36,37 @@ namespace NumSharp.Tests.View
             arr.Shape.IsFContiguous.Should().BeFalse();
         }
 
+        /// <summary>
+        ///     NumPy's <c>np.zeros(shape, order='F')</c>: an F-ordered <see cref="Shape"/> passes only its dimensions (as
+        ///     NumPy's shape tuple does), so the order letter decides the layout — C by default, F when asked. Before
+        ///     API-parity batch 8 np.zeros had no order parameter and kept the Shape's own F layout as a workaround.
+        /// </summary>
         [TestMethod]
         public void NpZeros_FShape_PreservesFContig()
         {
-            // Workaround: passing an F-contig Shape to np.zeros preserves the layout.
-            // (np.zeros has no order parameter; this documents the functional workaround.)
             var shape = new Shape(new long[] { 3, 4 }, 'F');
-            var arr = np.zeros(shape);
-            arr.Shape.IsFContiguous.Should().BeTrue();
+            np.zeros(shape).Shape.IsContiguous.Should().BeTrue("the dimensions alone are NumPy's shape");
+            np.zeros(shape, order: 'F').Shape.IsFContiguous.Should().BeTrue();
         }
 
+        /// <summary>NumPy's <c>np.ones(shape, order='F')</c>; an F-ordered Shape passes only its dimensions (see
+        ///     <see cref="NpZeros_FShape_PreservesFContig"/>).</summary>
         [TestMethod]
         public void NpOnes_FShape_PreservesFContig()
         {
             var shape = new Shape(new long[] { 3, 4 }, 'F');
-            var arr = np.ones(shape);
-            arr.Shape.IsFContiguous.Should().BeTrue();
+            np.ones(shape).Shape.IsContiguous.Should().BeTrue("the dimensions alone are NumPy's shape");
+            np.ones(shape, order: 'F').Shape.IsFContiguous.Should().BeTrue();
         }
 
+        /// <summary>NumPy's <c>np.full(shape, fill_value, order='F')</c>; an F-ordered Shape passes only its dimensions (see
+        ///     <see cref="NpZeros_FShape_PreservesFContig"/>).</summary>
         [TestMethod]
         public void NpFull_FShape_PreservesFContig()
         {
             var shape = new Shape(new long[] { 3, 4 }, 'F');
-            var arr = np.full(shape, 7);
-            arr.Shape.IsFContiguous.Should().BeTrue();
+            np.full(shape, 7).Shape.IsContiguous.Should().BeTrue("the dimensions alone are NumPy's shape");
+            np.full(shape, 7, order: 'F').Shape.IsFContiguous.Should().BeTrue();
         }
 
         [TestMethod]

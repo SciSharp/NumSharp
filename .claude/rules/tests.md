@@ -179,8 +179,8 @@ mapped memory ends. Two tools make it fail:
   aggregate `Lifetime_KnownGaps` (and `LifetimeOracleTests.Scaled.cs`'s `LifetimeScaled_KnownGaps`).
 - The GitHub-answer pins live in `Issues/<issue>.cs`, beside the passing tests that back the same posted answer (the
   2026-11-08 triage after 0.80.0: each `Issue<n>` class turns one answer into assertions). An answer's "still missing"
-  list is an `[OpenBugs(IssueUrl = …)]` pin: #547 and #560 (NumPy 2.x's `np.astype` still missing, `np.asscalar` still
-  present, complex64), #550 (`item(1)` of a 0-d array raises `IndexOutOfRangeException`, not `IndexError`), #592 (`np.genfromtxt`,
+  list is an `[OpenBugs(IssueUrl = …)]` pin: #547 and #560 (`np.asscalar` still present, complex64; their missing-name
+  lists are regression pins since `np.astype` arrived), #550 (`item(1)` of a 0-d array raises `IndexOutOfRangeException`, not `IndexError`), #592 (`np.genfromtxt`,
   `np.memmap`, `np.rec`).
 - Auditing the category: run `TestCategory=OpenBugs&TestCategory!=HighMemory` (`[LargeMemoryTest]` adds the OpenBugs
   category to memory-heavy NON-bug tests) in Release AND Debug on both TFMs; a test that passes in all four has its tag

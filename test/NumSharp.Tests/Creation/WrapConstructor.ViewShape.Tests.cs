@@ -390,9 +390,10 @@ namespace NumSharp.Tests.Creation
         }
 
         /// <summary>
-        ///     <c>np.ones</c> moved from the wrap constructor to the storage constructor so that it keeps a KEEPORDER layout:
-        ///     NumPy's <c>np.ones_like(f_array)</c> is F-contiguous, and <c>np.ones</c> of a dense permuted shape keeps the
-        ///     permutation (<see cref="Shape.ForFreshAllocation"/>).
+        ///     <c>np.ones</c> moved from the wrap constructor to the storage constructor so that the array object's ones keeps
+        ///     a KEEPORDER layout: NumPy's <c>np.ones_like(f_array)</c> is F-contiguous. The public <c>np.ones(p.Shape)</c> of
+        ///     a dense permuted shape is NumPy's <c>np.ones(p.shape)</c>: laid out from the dimensions, C-ordered (API-parity
+        ///     batch 8; it kept the permutation before, gap VS01).
         /// </summary>
         [TestMethod]
         public void Ones_KeepsKeepOrderLayouts()
@@ -405,7 +406,7 @@ namespace NumSharp.Tests.Creation
 
             using var p = np.transpose(np.zeros(new Shape(3, 2, 4)), new[] { 1, 0, 2 });
             using var ones = np.ones(p.Shape);
-            ones.Shape.strides.Should().Equal(p.Shape.strides, "a dense permutation is a fresh layout and is kept");
+            ones.Shape.strides.Should().Equal(new long[] { 12, 4, 1 }, "NumPy's np.ones(p.shape) is C-ordered (2, 3, 4)");
             ones.ToArray<double>().Should().OnlyContain(v => v == 1.0);
         }
     }

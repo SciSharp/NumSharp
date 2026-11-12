@@ -233,7 +233,7 @@ namespace NumSharp
         ///     number, bool, text, None) is packed by the dtype's setitem (<see cref="UnmanagedStorage.FromAnyScalar"/>: NEP 50's
         ///     range check, CPython's parsers, None's setitem), a NumPy scalar (an <see cref="NDArray"/>, a <see cref="Half"/>,
         ///     NumSharp's <see cref="decimal"/>) or an array is cast unsafely, a C# array or collection (a Python list)
-        ///     converted by <see cref="np.asanyarray(in object, DType, string)"/>.
+        ///     converted by <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/>.
         /// </summary>
         /// <param name="x">The argument (not <see cref="Missing.Value"/>); null is <c>None</c>.</param>
         /// <param name="descr">The requested descriptor.</param>

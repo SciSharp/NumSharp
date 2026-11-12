@@ -437,7 +437,7 @@ namespace NumSharp.Tests.Math
                 r1.Shape.IsFContiguous.Should().BeTrue();
             }
 
-            using var fout = np.empty(new Shape(2, 3), 'F', np.float64);
+            using var fout = np.empty(new Shape(2, 3), np.float64, 'F');
             var (q2, _) = np.divmod(f, two, (null, fout));
             using (q2)
                 q2.Shape.IsFContiguous.Should().BeTrue();

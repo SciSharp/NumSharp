@@ -64,7 +64,7 @@ namespace NumSharp
         ///     exactly as NumPy's Python int does. The former <c>(long index, object value)</c> overload made that very
         ///     call ambiguous (CS0121: the literal index preferred <c>long</c>, the literal value <c>NDArray</c>), so only
         ///     cast arguments ever reached it; a value held in an <c>object</c> variable goes through
-        ///     <see cref="np.asanyarray(in object, DType, string)"/>.</para>
+        ///     <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/>.</para>
         /// </remarks>
         [NDScoped]
         public static void put(NDArray a, NDArray ind, NDArray v, string mode = "raise")

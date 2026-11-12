@@ -1133,6 +1133,8 @@ namespace NumSharp
         /// <param name="operand">The matrix or chararray (a subclass operand, <see cref="NDSubclass.IsOperand(NDArray)"/>).</param>
         /// <param name="dtype">The requested dtype, or null to keep the operand's.</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
+        /// <param name="copy">NumPy's copy mode for the plain route (<see cref="asarray(NDArray, DType, char, bool?)"/>):
+        ///     null copies only when needed, true always copies (the copy is then created as the operand's class).</param>
         /// <returns><paramref name="operand"/> itself, or a new array of its class.</returns>
         /// <exception cref="ValueError">A chararray converted to a dtype that is not string data (<c>Can only create a
         ///     chararray from string data.</c>), or a matrix result with more than two axes longer than 1.</exception>
@@ -1141,14 +1143,14 @@ namespace NumSharp
         /// <remarks>The conversion runs on the operand's plain view (the plain route answers every dtype and layout question
         ///     exactly as for a plain array); the scope reclaims that view and the hidden plain result, which the subclass
         ///     object keeps alive through its own counted reference when it is created from it.</remarks>
-        private static NDArray AsAnyArrayOfSubclass(NDArray operand, DType dtype, char order)
+        private static NDArray AsAnyArrayOfSubclass(NDArray operand, DType dtype, char order, bool? copy = null)
         {
             NDScope scope = NDScope.Open();
             try
             {
                 NDArray plain = NDSubclass.Plain(operand);
                 // A conversion that needs nothing hands the plain view back: that is the caller's operand again.
-                NDArray result = NDSubclass.Unalias(asarray(plain, dtype, order, null), plain, operand);
+                NDArray result = NDSubclass.Unalias(asarray(plain, dtype, order, copy), plain, operand);
                 return scope.Returns(NDSubclass.NewSubtype(result, null, operand, keepRank: false, NewSubtypeZeroDim.Array));
             }
             finally
@@ -1158,9 +1160,64 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     NumPy's copy modes of <c>_array_fromobject_generic</c> with <c>subok</c>, the body of
+        ///     <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/> once the order letter and the device were
+        ///     checked: <c>copy=None</c> is <see cref="asanyarray(object, DType, char)"/>'s conversion, <c>copy=True</c> always
+        ///     returns a new array (<c>PyArray_NewCopy</c> of an array operand, created as its class), and <c>copy=False</c>
+        ///     returns the operand itself or raises NumPy's <c>npy_no_copy_err_msg</c>.
+        /// </summary>
+        /// <param name="a">The value: null is Python's None.</param>
+        /// <param name="dtype">The requested dtype, or null to discover it.</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c> (already a valid letter).</param>
+        /// <param name="copy">Null (if needed), true (always) or false (never).</param>
+        /// <returns><paramref name="a"/> itself when it is an array that satisfies the request and <paramref name="copy"/> is
+        ///     not true, else a new array (of a subclass operand's class).</returns>
+        /// <exception cref="ValueError"><paramref name="copy"/> is false and a copy is needed: always for a non-array
+        ///     <paramref name="a"/>, and for an array whose dtype or layout does not satisfy the request. Plus every refusal of
+        ///     <see cref="asanyarray(object, DType, char)"/>.</exception>
+        /// <exception cref="NotSupportedException">As <see cref="asanyarray(object, DType, char)"/>.</exception>
+        /// <exception cref="TypeError">As <see cref="asanyarray(object, DType, char)"/>.</exception>
+        /// <remarks>The refusal is NumPy's ValueError with its text verbatim (the <see cref="asarray(NDArray, DType, char, bool?)"/>
+        ///     route raises the same text as an ArgumentException naming the parameter, its own older convention). A
+        ///     conversion that allocated before the refusal releases its fresh result first.</remarks>
+        [SubclassAware]
+        internal static NDArray asanyarray(object a, DType dtype, char order, bool? copy)
+        {
+            // copy=None is NPY_COPY_IF_NEEDED: the conversion as it always was.
+            if (copy is null)
+                return asanyarray(a, dtype, order);
+
+            if (a is not NDArray operand)
+            {
+                // PyArray_FromAny_int: a scalar or a (nested) sequence always becomes a NEW array, so NPY_COPY_NEVER refuses
+                // it. NumPy refuses after discovering the shape and dtype; NumSharp's conversion discovers them together with
+                // the items, so the refusal comes first (a ragged list reports it instead of its shape). NPY_COPY_ALWAYS is the
+                // conversion itself.
+                if (copy == false)
+                    throw new ValueError(UnableToAvoidCopyText);
+                return asanyarray(a, dtype, order);
+            }
+
+            if (copy == true)
+                // NPY_COPY_ALWAYS on an array: PyArray_NewCopy in the requested order, cast when the dtype differs; a subclass
+                // operand's copy is created as its class (the subok fast path keeps the type).
+                return NDSubclass.IsOperand(operand)
+                    ? AsAnyArrayOfSubclass(operand, dtype, order, copy: true)
+                    : asarray(operand, dtype, order, true);
+
+            // NPY_COPY_NEVER on an array: the operand itself (or a view of it: an equivalent dtype relabels) when its dtype
+            // and layout satisfy the request; a conversion that had to allocate is refused, its fresh result released first.
+            NDArray result = asanyarray(a, dtype, order);
+            if (ReferenceEquals(result, operand) || np.may_share_memory(result, operand))
+                return result;
+            result.Dispose();
+            throw new ValueError(UnableToAvoidCopyText);
+        }
+
+        /// <summary>
         ///     NumPy's <c>_array_fromobject_generic</c> with <c>subok</c> for any C# value, the body of
-        ///     <see cref="np.asanyarray(in object, DType, char, string)"/> once the device and the class boundaries were
-        ///     checked: the order first (NumPy parses it with the arguments), then Python's <c>None</c>, an array
+        ///     <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/> (through the copy modes) once the device
+        ///     and the class boundaries were checked: the order first (NumPy parses it with the arguments), then Python's <c>None</c>, an array
         ///     (<see cref="np.asarray(NDArray, DType, char?, bool?, NDArray, string)"/>), text arrays and sequences (the text
         ///     array builder), Python lists - object arrays and grids, tuples and any other enumerable of objects - through
         ///     the coercion of a sequence (<see cref="UnmanagedStorage.FromSequence(object, DType)"/>: a C# int is a Python
@@ -1507,8 +1564,9 @@ namespace NumSharp
             // The K layout resolved above (dense, offset 0; C unless an operand moved the vote). The kernel fast paths
             // below run only for C-contiguous operands, whose vote is C by construction, so they always write a C
             // result linearly; every other layout is written by WhereImpl's iterator, which walks the result's own
-            // strides.
-            var result = np.empty(resultLayout, outType);
+            // strides. Allocated straight from the layout: np.empty lays a new array out from the dimensions and its
+            // order letter alone (NumPy's np.empty(shape)), which would drop the K layout's F / permuted strides.
+            var result = new NDArray(outType, resultLayout, false);
 
             // Handle empty arrays - nothing to iterate
             if (result.size == 0)

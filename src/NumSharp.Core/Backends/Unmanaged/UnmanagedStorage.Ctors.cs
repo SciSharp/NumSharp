@@ -233,7 +233,7 @@ namespace NumSharp.Backends
         // ---------------------------------------------------------------------------------------------
 
         /// <summary>
-        ///     The storage-lane core behind <see cref="NDArray.full"/> and so <see cref="np.full(Shape,object,DType,string)"/>:
+        ///     The storage-lane core behind <see cref="NDArray.full"/> and so <see cref="np.full(Shape, object, DType, char, string)"/>:
         ///     a new array of <paramref name="shape"/>'s dimensions in <paramref name="typeCode"/>'s lane, with the fill
         ///     value's element (<see cref="FullFillElement"/>) in every slot. For storage lanes only: the text classes take
         ///     their own fill routes, and a lane-sharing C-type class is the caller's to label afterwards.

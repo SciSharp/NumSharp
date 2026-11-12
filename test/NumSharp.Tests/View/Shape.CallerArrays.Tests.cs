@@ -108,8 +108,8 @@ namespace NumSharp.Tests.View
         }
 
         /// <summary>
-        ///     The <c>np.*</c> creation functions over a caller's <c>long[]</c> (and over a shape built from one), generic
-        ///     forms included. NumPy: every one keeps <c>(2, 3)</c>.
+        ///     The <c>np.*</c> creation functions over a caller's <c>long[]</c> (and over a shape built from one), dtype
+        ///     forms included (the generic <c>np.zeros&lt;T&gt;</c> forms were removed in API-parity batch 8). NumPy: every one keeps <c>(2, 3)</c>.
         /// </summary>
         [TestMethod]
         public void CreationFunctions_CopyTheCallersArray()
@@ -117,12 +117,12 @@ namespace NumSharp.Tests.View
             var routes = new List<(string name, Func<long[], NDArray> make)>
             {
                 ("np.zeros(long[])", d => np.zeros(d)),
-                ("np.zeros<double>(long[])", d => np.zeros<double>(d)),
+                ("np.zeros(long[], np.float64)", d => np.zeros(d, np.float64)),
                 ("np.empty(long[])", d => np.empty(d)),
-                ("np.empty<double>(long[])", d => np.empty<double>(d)),
+                ("np.empty(long[], np.float64)", d => np.empty(d, np.float64)),
                 ("np.ones(long[])", d => np.ones(d)),
                 ("np.full(long[], 7.0)", d => np.full(d, 7.0)),
-                ("np.full<double>(long[], 7.0)", d => np.full<double>(d, 7.0)),
+                ("np.full(long[], 7.0, np.float64)", d => np.full(d, 7.0, np.float64)),
                 ("np.zeros(new Shape(long[]))", d => np.zeros(new Shape(d))),
                 ("new NDArray(double[6], long[])", d => new NDArray(new double[6], d)),
                 ("new NDArray(double[6], new Shape(long[]), 'F')", d => new NDArray(new double[6], new Shape(d), 'F')),

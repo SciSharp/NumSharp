@@ -308,7 +308,7 @@ public class NonzeroIlRefactorTests
     {
         // All-zero mask. The count kernel must return 0 → early return
         // with `ndim` empty result arrays. No flat scan, no expand.
-        var a = np.zeros<bool>(new int[] { 4096 });
+        var a = np.zeros(new int[] { 4096 }, np.@bool);
         var r = np.nonzero(a);
         r.Length.Should().Be(1);
         r[0].size.Should().Be(0);

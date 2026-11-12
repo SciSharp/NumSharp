@@ -224,6 +224,10 @@ namespace NumSharp.Backends
             }
         }
 
+        /// <summary>The exact table of <see cref="PowerOfTen"/> for <c>n &lt; 9</c>: each entry a power of ten that is
+        /// exactly representable in double, as NumPy's <c>p10[]</c>.</summary>
+        private static readonly double[] s_powerOfTen = { 1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8 };
+
         /// <summary>
         /// NumPy's <c>power_of_ten</c> (<c>calculation.c</c>): an EXACT small table for <c>n &lt; 9</c> (each entry a
         /// power of ten that is exactly representable in double), else <c>1e9</c> multiplied by ten <c>(n-9)</c> more
@@ -232,10 +236,12 @@ namespace NumSharp.Backends
         /// <c>n ≥ 309</c> (10^309 already overflows double, and this both matches NumPy's eventual infinity AND
         /// avoids a multi-billion-iteration loop when the magnitude is <see cref="int.MaxValue"/>).
         /// </summary>
-        /// <param name="n">A NON-negative magnitude (<c>|decimals|</c>).</param>
+        /// <param name="n">A NON-negative magnitude (<c>|decimals|</c>); a negative one indexes outside the table.</param>
         /// <returns><c>10^n</c> as a double, or <c>+∞</c> once it overflows.</returns>
-        private static readonly double[] s_powerOfTen = { 1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8 };
-        private static double PowerOfTen(int n)
+        /// <exception cref="IndexOutOfRangeException"><paramref name="n"/> is negative.</exception>
+        /// <remarks>Internal since API-parity batch 8: numpy.ma's round family writes <c>10**|decimals|</c> where NumPy's
+        /// divide domain fires in a masked <c>out=</c> (<c>MaskedArrayModule.RoundInto</c>).</remarks>
+        internal static double PowerOfTen(int n)
         {
             if (n < 9)
                 return s_powerOfTen[n];

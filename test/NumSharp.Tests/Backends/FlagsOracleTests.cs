@@ -261,9 +261,9 @@ namespace NumSharp.Tests.Backends
                 case "make":
                     return rest switch
                     {
-                        "zeros_F" => np.zeros(new Shape(3, 4), 'F'),
-                        "ones_F" => np.ones(new Shape(3, 4), 'F'),
-                        "empty_F" => np.empty(new Shape(3, 4), 'F'),
+                        "zeros_F" => np.zeros(new Shape(3, 4), order: 'F'),
+                        "ones_F" => np.ones(new Shape(3, 4), order: 'F'),
+                        "empty_F" => np.empty(new Shape(3, 4), order: 'F'),
                         "eye_F" => np.eye(3, order: 'F'),
                         "eye_k1" => np.eye(3, k: 1),
                         "identity" => np.identity(3),

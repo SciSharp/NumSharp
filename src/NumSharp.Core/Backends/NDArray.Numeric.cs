@@ -27,7 +27,7 @@ namespace NumSharp
     {
         /// <summary>
         ///     NumPy's <c>np.full</c> (<c>numeric.py</c>: <c>a = empty(shape, dtype, order); multiarray.copyto(a, fill_value,
-        ///     casting='unsafe')</c>), the body of <see cref="np.full(Shape, object, DType, string)"/> once the device was
+        ///     casting='unsafe')</c>), the body of <see cref="np.full(Shape, object, DType, char, string)"/> once the device was
         ///     checked: a fill value with dimensions broadcasts into the result (<see cref="FullFromArrayFill"/>), a text
         ///     dtype (or, without one, a <c>str</c> / <c>bytes</c> fill value) takes its class's fill route, <c>None</c>
         ///     without a dtype is refused, and any other value is stored into every element of the dtype's storage lane
@@ -236,7 +236,7 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>np.ones</c> (<c>numeric.py</c>: <c>a = empty(shape, dtype, order); multiarray.copyto(a, 1,
-        ///     casting='unsafe')</c>), the body of <see cref="np.ones(Shape, DType, string)"/> once the device was checked: a
+        ///     casting='unsafe')</c>), the body of <see cref="np.ones(Shape, DType, char, string)"/> once the device was checked: a
         ///     text dtype gets the text <c>'1'</c> in every element (<see cref="OnesOfText"/>), any other dtype the Python int
         ///     1 as its class's <c>setitem</c> converts it, written into every element (<see cref="UnmanagedStorage.OnesCore"/>).
         /// </summary>
@@ -255,28 +255,6 @@ namespace NumSharp
             if (dtype is not null && (dtype.Meta.HasReferences || Backends.Strings.NDStringStorage.IsString(dtype)))
                 return OnesOfText(shape, dtype);
             return WithLaneSharingDescr(UnmanagedStorage.OnesCore(shape, dtype ?? DType.Double), dtype);
-        }
-
-        /// <summary>
-        ///     NumPy's <c>np.ones</c> with an <c>order</c>, the body of <see cref="np.ones(Shape, char, DType)"/>: the order
-        ///     resolved (<c>'A'</c> and <c>'K'</c> mean C without a source), the dimensions laid out in it, then the fill of
-        ///     <see cref="ones(Shape, DType)"/>.
-        /// </summary>
-        /// <param name="shape">The dimensions (only they are read: the layout comes from <paramref name="order"/>).</param>
-        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
-        /// <param name="dtype">The dtype, or null for float64.</param>
-        /// <returns>A fresh array of ones in the requested layout (the fill is order-independent, so only the flags
-        ///     differ).</returns>
-        /// <exception cref="ValueError">An order other than C, F, A or K; a negative dimension, or a byte count past the
-        ///     limit.</exception>
-        internal static NDArray ones(Shape shape, char order, DType dtype)
-        {
-            char physical = OrderResolver.Resolve(order);
-            var orderedShape = new Shape(shape.dimensions, physical, copy: false);
-            // The text routes as in Ones(Shape, DType): text has no lane fill.
-            if (dtype is not null && (dtype.Meta.HasReferences || Backends.Strings.NDStringStorage.IsString(dtype)))
-                return OnesOfText(orderedShape, dtype);
-            return WithLaneSharingDescr(UnmanagedStorage.OnesCore(orderedShape, dtype ?? DType.Double), dtype);
         }
 
         /// <summary>
@@ -589,7 +567,7 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>np.indices</c> (<c>numeric.py</c>) with <c>sparse=False</c>, the body of
-        ///     <see cref="np.indices(long[], DType)"/> once the dimensions were checked for null: a single dense array of
+        ///     <see cref="np.indices(Shape, DType)"/> once the dimensions were read: a single dense array of
         ///     shape <c>(len(dimensions), *dimensions)</c> whose d-th sub-array holds each position's d-th coordinate.
         /// </summary>
         /// <param name="dimensions">The grid's sizes. An empty array gives NumPy's <c>(0,)</c> result. Never mutated.</param>

@@ -78,6 +78,12 @@ paths:
   array cast to float32 keeps strides (16, 32, 4)); the same or an equivalent dtype copies under `'A'` as
   `PyArray_NewCopy(order='A')` (C, F for an F-only array). Parity QA-36; gate `Math/UfuncResultLayout.Test.cs`
   (`AsarrayOrderA_CastCopiesInKOrder`).
+- `np.asanyarray(a, dtype=None, order=None, *, device=None, copy=None)` is `_array_fromobject_generic` with
+  `subok=True` (`NDArray.asanyarray`, `[SubclassAware]`): the order letter (None is K) and the device are checked first;
+  `copy=true` always copies (a subclass stays one), `copy=false` refuses a non-array operand and any conversion that
+  allocates (a dtype or an order the operand lacks) with NumPy's `Unable to avoid copy while creating an
+  array as requested.` text (`may_share_memory` decides), `copy=null` copies only when needed. The `MemoryView` form
+  reads its `obj`; the buffer forms of `asarray` / `ascontiguousarray` / `asfortranarray` name their operand `a`.
 - `asarray_chkfinite(a, dtype=None, order='K')` is `asarray`, then `ValueError("array must not contain infs or NaNs")`
   when a float-family dtype (Half/Single/Double/Complex, NumPy's `typecodes['AllFloat']`; Decimal, integers and bool skip
   the check) holds an inf or NaN. The check is a fused single-pass NaN-poison SIMD reduction
@@ -141,6 +147,23 @@ the storage-lane fills `UnmanagedStorage.FullCore` / `FullFillElement` / `OnesCo
   check the order before the device.
 - Gates: the constructors' snapshot (`tools/facade-move/snapshot.cs`) and
   `Creation/np.{eye.NumPyOrder,like.OrderBeforeDevice,full.FillValues}.Test.cs`.
+
+## `np.zeros` / `np.ones` / `np.empty` / `np.full`: one signature each
+
+- NumPy's `zeros(shape, dtype=None, order='C', *, device=None)` (ones and empty alike) and `full(shape, fill_value,
+  dtype=None, order='C', *, device=None)`: ONE `Shape shape` parameter, which an int, a tuple, an `int[]` / `long[]` or a
+  Shape converts to; the dtype is an argument (no generic `<T>` forms). `np.zeros(s, 'F')` does not compile, where NumPy
+  reads that `'F'` as the dtype (complex64): write `order: 'F'`. A C# collection expression (`np.zeros([2, 3])`) does
+  not convert to a Shape.
+- `np.CreationLayout` (`Creation/np.empty.cs`) checks in NumPy's argument order: the order letter
+  (`PyArray_OrderConverter`: `order must be one of 'C', 'F', 'A', or 'K' (got 'X')`), the device (`Device not
+  understood. Only "cpu" is allowed, but received: gpu`), the C-or-F switch (`only 'C' or 'F' order is permitted`), then
+  the allocation (`negative dimensions are not allowed`).
+- Only the dimensions are read: a view's Shape (transposed, permuted, stepped) is laid out again in C (or F) order, as
+  NumPy's `np.zeros(x.shape)`. Core code that must keep a KEEPORDER / F layout allocates with `new NDArray(dtype,
+  layout, fillZeros)` (np.where's result does), never through these functions.
+- Gates: `APIs/NumPyKeywordParity.Batch8.Test.cs`, `View/OrderSupport.OpenBugs.Tests.cs` (`Np*_FShape_*`) and the
+  `shape_args` view-flags tier (zero excuses).
 
 ## `np.frombuffer`
 
@@ -362,8 +385,12 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
 - Matched, no need to re-prove: the values of `split`/`array_split`/`hsplit`/`vsplit` × {0, negative, empty},
   `repeat`/`tile`/`roll` × {0, negative, empty axis}, `squeeze`, `moveaxis`, `swapaxes`.
 - Text divergences (each typed and texted on both sides): `np.split(a, 0)` raises "number sections must be
-  larger than 0." where NumPy leaks `ZeroDivisionError: integer modulo by zero`; `repeat(-1)` and `tile(-1)` texts
-  differ in wording; `np.broadcast_to(a, (2^62, 6))` builds the view where NumPy refuses with `iterator is too large`.
+  larger than 0." where NumPy leaks `ZeroDivisionError: integer modulo by zero`; the `repeat(-1)` text differs in wording;
+  `np.broadcast_to(a, (2^62, 6))` builds the view where NumPy refuses with `iterator is too large`.
+- `np.tile(A, Shape reps)` is one signature: the repetitions are ONE argument (an int, a tuple, an array; the loose
+  `np.tile(a, 2, 2)` is NumPy's TypeError and does not compile; a null `int[]` is the empty tuple, a copy). A negative
+  repetition raises NumPy's `negative dimensions are not allowed` from the repeat allocation while the tile holds
+  elements, else the final reshape's `cannot reshape array of size 0 into shape (0,newaxis)`.
 - `np.broadcast_to` refuses a negative target dimension first, with NumPy's `ValueError: all elements of broadcast shape
   must be non-negative` (`Shape.ValidateBroadcastTo`, behind every overload; parity QA-13): a `Shape` accepts negatives
   (reshape's -1), and the stride-0 view built from one had a negative size. `np.broadcast_shapes` keeps NumPy's

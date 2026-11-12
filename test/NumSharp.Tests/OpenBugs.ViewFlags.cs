@@ -350,10 +350,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.zeros(t.Shape)</c> for the transposed <c>zeros((3, 2)).T</c>: NumPy's <c>np.zeros(t.shape)</c> is
-        ///     C-ordered (strides (24, 8)); NumSharp allocates the view's F layout (gap VS01).
+        ///     FIXED by API-parity batch 8 (2026-11-12): <c>np.zeros(t.Shape)</c> for the transposed <c>zeros((3, 2)).T</c> is
+        ///     C-ordered (strides (24, 8)), as NumPy's <c>np.zeros(t.shape)</c>: the creation functions lay a new array out
+        ///     from the dimensions and the order letter alone. Before the fix NumSharp allocated the view's F layout (gap
+        ///     VS01).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VS01")]
+        [TestMethod]
         public void ViewFlags_ZerosOfAViewShape_ShouldBeCOrdered()
         {
             using var t0 = np.zeros(new Shape(3, 2));

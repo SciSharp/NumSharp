@@ -28,7 +28,7 @@ namespace NumSharp
         ///     <see cref="IList"/> (<c>List&lt;T&gt;</c>) — a nested LIST whose
         ///     elements are classified recursively (mirrors a Python list).</item>
         ///     <item>rank ≥ 2 rectangular arrays (<c>int[,]</c>, …) — a leaf,
-        ///     converted via <see cref="asanyarray(in object, DType, string)"/>.</item>
+        ///     converted via <see cref="asanyarray(in object, DType, char?, string, bool?)"/>.</item>
         ///     <item>tuples (<see cref="ITuple"/>) — rejected with
         ///     <see cref="TypeError"/>, matching NumPy ("np.block does not allow
         ///     implicit conversion from tuple to ndarray").</item>

@@ -1634,16 +1634,19 @@ namespace NumSharp
         ///     reshape that lays the repetitions out in C order.
         /// </summary>
         /// <param name="A">The array to repeat (not null).</param>
-        /// <param name="reps">The repetitions along each axis (not null, every entry non-negative): fewer entries than
-        ///     <paramref name="A"/>'s rank repeat its trailing axes, more promote <paramref name="A"/> by leading axes.</param>
+        /// <param name="reps">The repetitions along each axis (not null): fewer entries than <paramref name="A"/>'s rank repeat
+        ///     its trailing axes, more promote <paramref name="A"/> by leading axes. A negative entry is refused where NumPy's
+        ///     statements refuse it (see the exceptions).</param>
         /// <returns>The tiled array, of rank <c>max(reps.Length, A.ndim)</c> and <paramref name="A"/>'s dtype, plain whatever
         ///     <paramref name="A"/>'s class: a fresh C-contiguous array for a real repetition; for all-ones repetitions a
         ///     keep-order copy that owns its data (an F-contiguous <paramref name="A"/> stays F-contiguous); for an empty
         ///     result a view - of <paramref name="A"/>'s own buffer when <paramref name="A"/> is empty, of a fresh
         ///     zero-filled buffer otherwise (owndata false either way, as NumPy's final reshape gives).</returns>
-        /// <exception cref="ArgumentException">An entry of the padded repetitions is negative (<c>reps[i] must be
-        ///     non-negative, got r.</c>, parameter <c>reps</c>). The index counts the PADDED list: a <paramref name="reps"/>
-        ///     shorter than <paramref name="A"/>'s rank reports an index past its own length.</exception>
+        /// <exception cref="ValueError">A negative repetition that NumPy's <c>repeat</c> reaches while the tile still holds
+        ///     elements: <c>negative dimensions are not allowed</c> (the allocation of a negative count).</exception>
+        /// <exception cref="IncorrectShapeException">A negative extent left in the output shape of an EMPTY tile (an empty
+        ///     <paramref name="A"/>, or a zero repetition met first): NumPy's closing reshape refuses it with its own text,
+        ///     <c>cannot reshape array of size 0 into shape (0,newaxis)</c>.</exception>
         /// <remarks>
         ///     Scoped by <c>[NDScoped]</c>: the interleaved reshape of <paramref name="A"/>, its broadcast view and the
         ///     materialized copy are released on return, and the final reshape (a view that holds its own reference on the
@@ -1669,10 +1672,6 @@ namespace NumSharp
             for (int i = 0; i < outDim - d; i++) tup[i] = 1;
             for (int i = 0; i < d; i++) tup[outDim - d + i] = reps[i];
 
-            for (int i = 0; i < outDim; i++)
-                if (tup[i] < 0)
-                    throw new ArgumentException(string.Create(CultureInfo.InvariantCulture, $"reps[{i}] must be non-negative, got {tup[i]}."), nameof(reps));
-
             // Compute output shape.
             var outShape = new long[outDim];
             long outSize = 1;
@@ -1693,6 +1692,42 @@ namespace NumSharp
             {
                 var c = aDim == outDim ? A.copy('K') : A.reshape(new Shape(aShape, copy: false)).copy('K');
                 return c;
+            }
+
+            // A negative repetition, as NumPy's loop meets it: `if n > 0: for dim_in, nrep in zip(c.shape, tup): if nrep !=
+            // 1: c = c.reshape(-1, n).repeat(nrep, 0)`. np.repeat's allocation refuses a negative count while c still holds
+            // elements; a zero count empties c, after which a negative one repeats nothing. What survives is a negative
+            // extent in shape_out, which NumPy's closing `c.reshape(shape_out)` of the EMPTY c refuses with reshape's own
+            // text (and an extent the zero dimension absorbed is no longer negative).
+            bool negative = false;
+            for (int i = 0; i < outDim; i++)
+                negative |= tup[i] < 0;
+            if (negative)
+            {
+                if (A.size > 0)
+                {
+                    for (int i = 0; i < outDim; i++)
+                    {
+                        if (tup[i] == 1)
+                            continue;
+                        if (tup[i] < 0)
+                            throw new ValueError("negative dimensions are not allowed");
+                        if (tup[i] == 0)
+                            break;
+                    }
+                }
+
+                for (int i = 0; i < outDim; i++)
+                {
+                    if (outShape[i] >= 0)
+                        continue;
+                    // NumPy's reshape of the empty tile: the size-0 array's reshape into shape_out raises its size-mismatch
+                    // (or "can only specify one unknown dimension") text. It always refuses here: c is empty because some
+                    // extent of shape_out is 0, so the known product is 0. The scope releases the throwaway array.
+                    var emptyTile = new NDArray(A.dtype, Shape.Vector(0), false);
+                    emptyTile.reshape(new Shape(outShape, copy: false));
+                    break;
+                }
             }
 
             // Empty result: any rep==0 or any aShape[i]==0 → a zero-element array of the correct shape and dtype.

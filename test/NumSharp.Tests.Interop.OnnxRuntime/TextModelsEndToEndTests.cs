@@ -277,7 +277,7 @@ namespace NumSharp.Tests.Interop.OnnxRuntime
             {
                 var outputs = session.Run(new Dictionary<string, NDArray> { ["X"] = a, ["R"] = repeats });
                 using NDArray y = outputs["Y"];
-                using NDArray expected = np.tile(a, 1, 2);
+                using NDArray expected = np.tile(a, (1, 2));
                 AssertSameText(y, expected, name);
             }
         }

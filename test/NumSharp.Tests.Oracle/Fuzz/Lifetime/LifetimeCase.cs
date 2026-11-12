@@ -213,7 +213,7 @@ namespace NumSharp.Tests.Fuzz.Lifetime
         public void ReleaseBytes() => _bytes = null;
 
         /// <summary>
-        ///     Builds the operand: a fresh array allocated from the pool (<see cref="np.empty(Shape, DType, string)"/>) holding
+        ///     Builds the operand: a fresh array allocated from the pool (<see cref="np.empty(Shape, DType, char, string)"/>) holding
         ///     the recipe's bytes, with the view applied.
         /// </summary>
         /// <returns>

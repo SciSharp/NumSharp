@@ -352,7 +352,7 @@ namespace NumSharp
         ///     </para>
         ///     <para>
         ///     Anything else: an <see cref="NDArray"/> is raveled and CAST (FORCECAST: unsafe); a C# array (an ndarray in the
-        ///     boundary map), a list, a tuple or a collection goes through <see cref="np.asanyarray(in object, DType, string)"/>
+        ///     boundary map), a list, a tuple or a collection goes through <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/>
         ///     with the dtype requested, whose coercion of a Python list stores every item by the setitem (<c>[1000]</c> into
         ///     int8 raises, as NumPy's <c>PyArray_AssignFromCache</c> does) and whose typed C# arrays are cast.
         ///     </para>

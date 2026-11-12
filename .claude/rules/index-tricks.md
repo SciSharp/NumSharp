@@ -92,6 +92,9 @@ in the `manip` tier. Sources `Creation/np.{r_,c_}.cs`, `Indexing/np.{ix_,s_}.cs`
   `"negative dimensions are not allowed"` where `ogrid[5:0, 0:3]` gives an empty axis. `MGridResult` converts to
   `NDArray`, deconstructs (`var (x, y) = np.mgrid["0:5", "0:3"];`) and indexes the per-axis grids. Gate:
   `Creation/np.mgrid.Test.cs`.
+- `np.indices(Shape dimensions, dtype)` is one dense signature (the sparse grid is `np.indices_sparse`); an int converts
+  to a one-dimension Shape, so `np.indices(3)` is the `(1, 3)` grid where NumPy raises `'int' object is not iterable`
+  (`[Misaligned]`). `np.ma.indices` adds `_convert2ma`'s `fill_value` / `hardmask` over a nomask result.
 - `np.indices(dimensions, dtype, sparse)` is `NDArray.indices` / `indices_sparse` (`Backends/NDArray.Numeric.cs`),
   NumPy's `res = empty((N,) + dimensions, dtype)` then one `arange(dim, dtype)` per axis assigned with broadcasting: the
   allocation's ValueError comes first (a negative dimension), an arange's TypeError next (a text dtype at any length,

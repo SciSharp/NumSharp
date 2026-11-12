@@ -321,7 +321,7 @@ namespace NumSharp.Tests.Fuzz
             using var positions = flat.reshape(a.Shape.dimensions);
             using var rem = positions % 3;
             using var mask = rem == 0;
-            var m = np.ma.array(a, mask);
+            var m = np.ma.array(a, mask: mask);
             try
             {
                 return AxisArgMaskedCall(fn, m, ax, a);
