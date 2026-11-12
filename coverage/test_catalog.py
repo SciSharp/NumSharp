@@ -362,6 +362,29 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(3, summary["api_scope"]["by_category"]["Test"]["total"])
         self.assertEqual(7, summary["catalog_rows"])
 
+    def test_refused_calls_and_inherited_repeats_are_listed_but_not_counted(self):
+        """A call NumPy refuses and a member a class NumSharp lacks inherits unchanged stay catalogued APIs, outside every
+        percentage: api_scope counts the rest and reports them under ``excluded``."""
+        def row(name, status="missing", **extra):
+            return dict(id=name, name=name, surface="test", category="Test", kind="method", origin="numpy",
+                        extended=True, disposition="candidate", in_default_scope=False, status=status,
+                        availability=status, object_surface=True, **extra)
+        rows = [row("counted", status="available"), row("gap"),
+                row("refused", applicability="not_applicable", python_protocol=True),
+                row("repeat", inherited_repeat="numpy.ndarray", python_protocol=True)]
+        summary = coverage.build_summary(rows)
+        scope = summary["api_scope"]
+        self.assertEqual((2, 1, 1, 50.0), (scope["total"], scope["available"], scope["missing"],
+                                           scope["coverage_percent"]))
+        self.assertEqual({"total": 2, "not_applicable": 1, "inherited_repeat": 1}, scope["excluded"])
+        self.assertEqual(2, scope["by_category"]["Test"]["total"])
+        self.assertEqual((0, 1, 1), (summary["python_protocols"]["total"], summary["python_protocols"]["not_applicable"],
+                                     summary["python_protocols"]["inherited_repeat"]))
+        self.assertEqual([True, True, True, True], [coverage.is_catalogued_api(item) for item in rows])
+        self.assertEqual([True, True, False, False], [coverage.is_api_row(item) for item in rows])
+        self.assertEqual([None, None, "not_applicable", "inherited_repeat"],
+                         [coverage.excluded_from_percentages(item) for item in rows])
+
     def test_csv_preserves_extended_scope_and_object_metadata(self):
         source = {**self.extended[0], "object_surface": True, "object_type": "numpy.ufunc",
                   "applicability": "conditional"}

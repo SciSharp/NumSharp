@@ -21,8 +21,8 @@ import numpy as np
 import generate_coverage as coverage
 from numpy_documentation import documentation_url
 from object_surfaces import (REFUSED_PROTOCOLS, REVIEWED_PROTOCOL_ADAPTERS, class_member_rows,
-                             enrich_object_classes, object_surface_rows, protocol_credit, ufunc_method_rejection,
-                             ufunc_protocol_methods)
+                             enrich_object_classes, object_surface_rows, protocol_credit, scalar_type_rows,
+                             ufunc_method_rejection, ufunc_protocol_methods)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -384,8 +384,15 @@ class ObjectSurfaceTests(unittest.TestCase):
 
     def test_reviewed_protocol_adapters_credit_only_what_numsharp_documents(self):
         """Every reviewed adapter credits its row; a ToString that ports repr() never credits __str__."""
+        # The adapters of a class-member owner (numpy.dtypes.StringDType, credited against DType) credit rows of
+        # class_member_rows, not of the object surfaces.
+        class_row = {"id": "numpy.dtypes.StringDType", "origin": "numpy", "kind": "class", "name": "StringDType",
+                     "category": "Dtype classes", "disposition": "candidate"}
+        by_id = {**self.by_id, **{row["id"]: row for row in class_member_rows(
+            np, [class_row], set(), self.inventory, root=ROOT, source_base_url="https://example.test/",
+            signature=signature, documentation_url=documentation_url, types_by_simple_name={})}}
         for (owner, name), (member, _fragment, _evidence) in REVIEWED_PROTOCOL_ADAPTERS.items():
-            row = self.by_id[f"numpy.{owner}.{name}"]
+            row = by_id[f"numpy.{owner}.{name}"]
             self.assertEqual(("available", "alias"), (row["status"], row["availability"]), row["id"])
             self.assertTrue(row["numsharp_target"].endswith("." + member), row["id"])
             self.assertIn("Reviewed protocol adapter", row["notes"], row["id"])
@@ -515,6 +522,83 @@ class ObjectSurfaceTests(unittest.TestCase):
                          (ndim["status"], ndim["availability"], ndim["numsharp_target"]))
         self.assertTrue(any("DType" in path for path in ndim["numsharp_source_paths"]))
         self.assertEqual("missing", stand_in["numpy.exceptions.AxisError.axis"]["status"])
+
+    def test_class_member_near_misses_are_reported_never_credited(self):
+        """A missing class member whose NumSharp type spells it with other letter case reports the twin; the row stays
+        missing (NumPy's ``e.axis`` does not compile against ``Axis``)."""
+        class_row = {"id": "numpy.exceptions.AxisError", "origin": "numpy", "kind": "class", "name": "AxisError",
+                     "category": "Exceptions & warnings", "disposition": "candidate"}
+        synthetic = {"objectTypes": {"NumSharp.Synthetic": {"methods": [], "fields": [], "operators": [], "properties": [
+            {"name": "Axis", "kind": "property", "signatures": ["int Axis { get; }"], "obsolete": False}]}}}
+        rows = {row["id"]: row for row in class_member_rows(
+            np, [class_row], set(), synthetic, root=ROOT, source_base_url="https://example.test/", signature=signature,
+            documentation_url=documentation_url, types_by_simple_name={"AxisError": "NumSharp.Synthetic"})}
+        axis = rows["numpy.exceptions.AxisError.axis"]
+        self.assertEqual(("missing", ["NumSharp.Synthetic.Axis"]), (axis["status"], axis["case_insensitive_matches"]))
+        self.assertIn("Case-insensitive near-miss (NOT counted", axis["notes"])
+        self.assertNotIn("case_insensitive_matches", rows["numpy.exceptions.AxisError.ndim"])
+
+    def test_string_dtype_members_are_dtype_members(self):
+        """np.dtypes.StringDType(...) returns a DType, so StringDType's own members are credited against NumSharp.DType
+        (CLASS_MEMBER_OWNERS); its orderings, which NumPy refuses, are not, though DType declares < and >."""
+        class_row = {"id": "numpy.dtypes.StringDType", "origin": "numpy", "kind": "class", "name": "StringDType",
+                     "category": "Dtype classes", "disposition": "candidate"}
+        rows = {row["id"]: row for row in class_member_rows(
+            np, [class_row], set(), self.inventory, root=ROOT, source_base_url="https://example.test/",
+            signature=signature, documentation_url=documentation_url, types_by_simple_name={})}
+        for name, target in (("na_object", "na_object"), ("coerce", "coerce"), ("__eq__", "op_Equality"),
+                             ("__ne__", "op_Inequality"), ("__hash__", "GetHashCode"), ("__repr__", "ToString"),
+                             ("__str__", "ToString")):
+            row = rows[f"numpy.dtypes.StringDType.{name}"]
+            self.assertEqual(("available", "NumSharp.DType." + target), (row["status"], row["numsharp_target"]), name)
+            self.assertTrue(row["numsharp_source_paths"], name)
+        for name in ("__lt__", "__le__", "__gt__", "__ge__"):
+            row = rows[f"numpy.dtypes.StringDType.{name}"]
+            self.assertEqual(("missing", "not_applicable"), (row["status"], row["applicability"]), name)
+        self.assertEqual("missing", rows["numpy.dtypes.StringDType.__reduce__"]["status"])
+
+    def test_classes_numsharp_lacks_mark_their_inherited_members_as_repeats(self):
+        """On memmap / recarray / record / MaskedRecords (no NumSharp type), a member inherited unchanged from a class
+        the catalog lists itself names that class in ``inherited_repeat``; what the class defines is its own API."""
+        expected = {
+            "numpy.memmap.sum": "numpy.ndarray", "numpy.memmap.flush": None, "numpy.memmap.__getitem__": None,
+            "numpy.recarray.reshape": "numpy.ndarray", "numpy.recarray.field": None, "numpy.recarray.__getitem__": None,
+            "numpy.record.item": "numpy.generic", "numpy.record.pprint": None,
+            "numpy.ma.mrecords.MaskedRecords.filled": "numpy.ma.MaskedArray",
+            "numpy.ma.mrecords.MaskedRecords.harden_mask": None,
+        }
+        for row_id, repeat_of in expected.items():
+            self.assertEqual(repeat_of, self.by_id[row_id].get("inherited_repeat"), row_id)
+        # A class NumSharp has a type for credits its inherited members by inheritance instead: none is a repeat.
+        for owner in ("numpy.ndarray", "numpy.matrix", "numpy.char.chararray", "numpy.ma.MaskedArray"):
+            self.assertFalse([row["id"] for row in self.rows
+                              if row.get("object_type") == owner and row.get("inherited_repeat")], owner)
+        self.assertIn("Inherited unchanged from numpy.ndarray", self.by_id["numpy.memmap.sum"]["notes"])
+
+    def test_scalar_type_members_are_credited_against_ndarray(self):
+        """A NumPy scalar is a read-only 0-d NDArray: a scalar-type member is credited against NDArray by name or by
+        ndarray's protocol spellings; a refused protocol and a member NDArray lacks stay missing; without an
+        inventory (the catalog-only callers) nothing is credited."""
+        common = dict(signature=signature, documentation_url=documentation_url)
+        rows = {row["id"]: row for row in scalar_type_rows(
+            np, set(), inventory=self.inventory, root=ROOT, source_base_url="https://example.test/", **common)}
+        item = rows["numpy.generic.item"]
+        self.assertEqual(("available", "exact", "NumSharp.NDArray.item"),
+                         (item["status"], item["availability"], item["numsharp_target"]))
+        self.assertTrue(item["numsharp_source_paths"])
+        add = rows["numpy.double.__add__"]
+        self.assertEqual(("available", "alias", "NumSharp.NDArray.op_Addition"),
+                         (add["status"], add["availability"], add["numsharp_target"]))
+        self.assertEqual("missing", rows["numpy.generic.__pow__"]["status"], "C# has no ** operator")
+        self.assertEqual("missing", rows["numpy.integer.is_integer"]["status"])
+        refused = rows["numpy.void.__delitem__"]
+        self.assertEqual(("missing", "not_applicable"), (refused["status"], refused["applicability"]))
+        self.assertTrue(all(row["disposition"] == "candidate" for row in rows.values()))
+        bare = scalar_type_rows(np, set(), **common)
+        self.assertEqual(set(rows), {row["id"] for row in bare})
+        self.assertTrue(all(row["status"] == "missing" for row in bare))
+        with self.assertRaisesRegex(ValueError, "NumSharp.NDArray"):
+            scalar_type_rows(np, set(), inventory={"objectTypes": {}}, root=ROOT, **common)
 
     def test_preexisting_flatiter_class_is_enriched_without_changing_scope(self):
         flatiter = {

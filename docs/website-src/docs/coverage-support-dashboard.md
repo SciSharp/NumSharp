@@ -85,6 +85,8 @@
 .ns-coverage-dashboard .is-unsupported,
 .ns-coverage-dashboard .is-missing { --status-color: var(--cov-bad); --status-soft: var(--cov-bad-soft); }
 .ns-coverage-dashboard .is-extension { --status-color: var(--cov-ext); --status-soft: var(--cov-ext-soft); }
+/* Listed but outside every percentage and gap count: a call NumPy refuses, or a member inherited unchanged. */
+.ns-coverage-dashboard .is-excluded { --status-color: var(--cov-quiet); --status-soft: var(--cov-muted); }
 .ns-coverage-dashboard .is-exact { --status-color: var(--cov-good); --status-soft: var(--cov-good-soft); }
 .ns-coverage-dashboard .is-alias { --status-color: var(--cov-alias); --status-soft: var(--cov-alias-soft); }
 .ns-coverage-dashboard .is-oracle { --status-color: var(--cov-oracle); --status-soft: var(--cov-oracle-soft); }
@@ -170,6 +172,7 @@
 .ns-coverage-dashboard .cov-status-segment[data-status="unsupported"],
 .ns-coverage-dashboard .cov-status-segment[data-status="missing"] { background: var(--cov-bad); }
 .ns-coverage-dashboard .cov-status-segment[data-status="extension"] { background: var(--cov-ext); }
+.ns-coverage-dashboard .cov-status-segment[data-status="excluded"] { background: var(--cov-quiet); }
 .ns-coverage-dashboard .cov-status-segment:hover,
 .ns-coverage-dashboard .cov-status-segment:focus-visible {
   box-shadow: inset 0 0 0 2px rgba(255,255,255,.52), 0 8px 20px rgba(20, 27, 34, .24);
@@ -210,6 +213,7 @@
 .ns-coverage-dashboard .cov-mini-segment.is-partial { background: var(--cov-partial); }
 .ns-coverage-dashboard .cov-mini-segment.is-gap { background: var(--cov-bad); }
 .ns-coverage-dashboard .cov-mini-segment.is-extension { background: var(--cov-ext); }
+.ns-coverage-dashboard .cov-mini-segment.is-excluded { background: var(--cov-quiet); opacity: .45; }
 .ns-coverage-dashboard .cov-small { color: var(--cov-quiet); font-size: .75rem; overflow-wrap: anywhere; }
 .ns-coverage-dashboard .cov-card-breakdown { display: grid; gap: .35rem; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: .58rem; }
 .ns-coverage-dashboard .cov-card-stat { background: var(--cov-muted); border: 1px solid color-mix(in srgb, var(--status-color), transparent 68%); border-radius: .42rem; color: var(--status-color); min-width: 0; padding: .38rem .42rem; }
@@ -402,7 +406,7 @@
     <section class="cov-metrics" id="cov-metrics" aria-label="Coverage summary"></section>
     <div class="cov-definition">
       <strong>Coverage math</strong>
-      <p><span id="cov-headline-reference"></span> Summaries, cards, and the explorer follow the selected scope. Availability is <code>available ÷ NumPy APIs in that scope</code>; supporting types, constants, modules, and NumSharp-only APIs do not enter this percentage. “Available” means an exact public member or a reviewed alias exists and is not marked partial/unsupported. The headline comparison also excludes extended APIs. API presence is not a blanket edge-case, dtype, layout, or signature parity claim. <span id="cov-oracle-explainer"><strong>Oracle-verified</strong> is that claim's evidence: committed NumPy 2.4.2 output (the differential-fuzz corpus plus the .npy, flags and layout oracles) that CI replays against NumSharp, bit-exact or a documented divergence, resolved to the API directly or through an identity or reviewed delegation alias.</span> <span id="cov-oracle-reference"></span> <span id="cov-signature-explainer"><strong>NumPy-identical signature</strong> is a separate check: one C# overload with exactly NumPy's parameters (names, positions, defaults) under NumPy's name, and NumPy-style calls of it compile. It comes from the API diff gap map (<code>tools/api-parameter-parity</code>), which compares every C# spelling (functions, members, constructors, extension methods, <code>NDArray&lt;T&gt;</code>) and compiles NumPy-style calls at C# 12 and C# 14. Marks of a differing call: M a NumPy parameter no overload offers, X a parameter NumPy does not have, O more than one overload, T a dtype taken as NPTypeCode / Type or picked by a generic type argument, B a NumPy-style call that does not compile, L <code>null</code> refused where NumPy's default is None, Q an integer sequence refused where NumPy allows one, N credited through another name.</span> <span id="cov-signature-reference"></span> <span id="cov-applicability-note"></span></p>
+      <p><span id="cov-headline-reference"></span> Summaries, cards, and the explorer follow the selected scope. Availability is <code>available ÷ NumPy APIs in that scope</code>; supporting types, constants, modules, and NumSharp-only APIs do not enter this percentage. “Available” means an exact public member or a reviewed alias exists and is not marked partial/unsupported. The headline comparison also excludes extended APIs. <span id="cov-excluded-explainer">Two kinds of NumPy API are listed but <strong>not counted</strong> in any percentage or gap count, because neither describes something NumSharp could implement: a call NumPy itself refuses (a unary ufunc's <code>reduce</code>, <code>del a[i]</code>, ordering comparisons of <code>ndarray.flags</code>), and a member that a class NumSharp has no type for (memmap, recarray, record, MaskedRecords) inherits unchanged from a class whose own rows already count it; that class shows its gap through its class row and its own members. A NumPy scalar is a read-only 0-d <code>NDArray</code> in NumSharp, so the scalar types' members are credited against <code>NDArray</code>.</span> API presence is not a blanket edge-case, dtype, layout, or signature parity claim. <span id="cov-oracle-explainer"><strong>Oracle-verified</strong> is that claim's evidence: committed NumPy 2.4.2 output (the differential-fuzz corpus plus the .npy, flags and layout oracles, and the string oracle's numpy.strings and numpy.char calls) that CI replays against NumSharp, bit-exact or a documented divergence, resolved to the API directly or through an identity or reviewed delegation alias; a corpus key the replay runs through a C# operator (<code>a + b</code>, <code>a == b</code>) also verifies that operator's ndarray protocol.</span> <span id="cov-oracle-reference"></span> <span id="cov-signature-explainer"><strong>NumPy-identical signature</strong> is a separate check: one C# overload with exactly NumPy's parameters (names, positions, defaults) under NumPy's name, and NumPy-style calls of it compile. It comes from the API diff gap map (<code>tools/api-parameter-parity</code>), which compares every C# spelling (functions, members, constructors, extension methods, <code>NDArray&lt;T&gt;</code>) and compiles NumPy-style calls at C# 12 and C# 14. Marks of a differing call: M a NumPy parameter no overload offers, X a parameter NumPy does not have, O more than one overload, T a dtype taken as NPTypeCode / Type or picked by a generic type argument, B a NumPy-style call that does not compile, L <code>null</code> refused where NumPy's default is None, Q an integer sequence refused where NumPy allows one, N credited through another name.</span> <span id="cov-signature-reference"></span> <span id="cov-applicability-note"></span></p>
     </div>
     <section class="cov-section" aria-labelledby="cov-status-heading">
       <div class="cov-section-head">
@@ -465,8 +469,11 @@
     .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
   const surfaceLabels = { np: "np.*", ndarray: "ndarray.*", random: "np.random.*", linalg: "np.linalg.*", fft: "np.fft.*", ufunc: "np.ufunc.*", ma: "np.ma.*", polynomial: "np.polynomial.*" };
   const scopeLabels = { numpy: "All NumPy APIs", default: "Headline comparison", extended: "Extended NumPy APIs", catalog: "Full NumPy catalog", extensions: "NumSharp-only APIs", all: "Everything" };
-  const statusLabels = { available: "Available", partial: "Partial", unsupported: "Unsupported", missing: "Missing", extension: "NumSharp-only", gaps: "Open gaps (missing + unsupported)" };
-  const statusOrder = { unsupported: 0, partial: 1, missing: 2, available: 3, extension: 4 };
+  // "excluded" is not a row status: it is countedStatus()'s name for a catalogued API that no percentage or gap count
+  // includes (excludedReason), shown and filtered like a status so its rows stay findable.
+  const statusLabels = { available: "Available", partial: "Partial", unsupported: "Unsupported", missing: "Missing", extension: "NumSharp-only", excluded: "Not counted", gaps: "Open gaps (missing + unsupported)" };
+  const statusOrder = { unsupported: 0, partial: 1, missing: 2, available: 3, extension: 4, excluded: 5 };
+  const excludedLabels = { not_applicable: "NumPy rejects every call", inherited_repeat: "inherited unchanged" };
   const mappingLabels = { exact: "Exact public name", alias: "Reviewed alias", missing: "No public mapping", extension: "NumSharp-only" };
   const dispositionLabels = { object: "Object members", type: "Type", constant: "Constant", module: "Module", extension: "NumSharp-only API", extended: "Extended catalog" };
   const oracleLabels = { verified: "Oracle-verified (any)", "verified-direct": "Direct oracle contracts", "verified-alias": "Verified via alias", uncredited: "Oracle-gated, not credited", unverified: "Available, no oracle contracts", none: "No oracle evidence" };
@@ -495,7 +502,10 @@
   // hasSignature: whether the artifact records signature parity (generator 1.15+ publishes
   // default_scope.signature_identical). Like hasOracle it defaults to true and initializeMetadata
   // clears it for an older artifact, whose rows carry no `signature` record at all.
-  const state = { rows: [], filtered: [], selectedId: null, visible: 120, tooltipInstances: [], activeTooltip: null, hasOracle: true, hasSignature: true };
+  // excludesRows: whether the artifact keeps NumPy-refused calls and inherited repeats out of its percentages
+  // (generator 1.17+ publishes api_scope.excluded). An older artifact counted them as gaps, and its published
+  // summary was computed that way, so initializeMetadata clears the flag and every row counts again.
+  const state = { rows: [], filtered: [], selectedId: null, visible: 120, tooltipInstances: [], activeTooltip: null, hasOracle: true, hasSignature: true, excludesRows: true };
 
   function surfaceLabel(surface) {
     if (surfaceLabels[surface]) return surfaceLabels[surface];
@@ -509,8 +519,30 @@
     return state.rows.filter((row) => rowInScope(row, byId("cov-scope").value));
   }
 
-  function isComparableApi(row) {
+  // Mirrors coverage/generate_coverage.py is_catalogued_api(): a NumPy API (headline row, or an extended row that is
+  // not a supporting class / constant / module). The "All NumPy APIs" scope lists these.
+  function isCataloguedApi(row) {
     return row.origin === "numpy" && (row.in_default_scope || (row.extended && !["class", "constant", "module"].includes(row.kind)));
+  }
+
+  // Mirrors generate_coverage.excluded_from_percentages(): why a catalogued API is left out of every percentage and
+  // gap count ("not_applicable": NumPy refuses every call; "inherited_repeat": a class NumSharp has no type for
+  // inherits it unchanged), or null. An artifact from before generator 1.17.0 counted every row (state.excludesRows).
+  function excludedReason(row) {
+    if (!state.excludesRows || !isCataloguedApi(row)) return null;
+    if (row.applicability === "not_applicable") return "not_applicable";
+    if (row.inherited_repeat) return "inherited_repeat";
+    return null;
+  }
+
+  // The status a row is counted under: its own, or "excluded" for a row excludedReason() keeps out of the counts.
+  function countedStatus(row) {
+    return excludedReason(row) ? "excluded" : row.status;
+  }
+
+  // Mirrors generate_coverage.is_api_row(): the rows the availability, oracle and signature percentages count.
+  function isComparableApi(row) {
+    return isCataloguedApi(row) && !excludedReason(row);
   }
 
   // Mirrors coverage/oracle_evidence.py classify(), the generator's single definition. The two must
@@ -532,6 +564,14 @@
 
   function isOracleVerified(row) {
     return parityClass(row).startsWith("verified");
+  }
+
+  // Why a row is outside every count, as one sentence (the result chip's title and the detail pane's fact).
+  function excludedTitle(row) {
+    const reason = excludedReason(row);
+    if (reason === "not_applicable") return "Not counted: NumPy itself rejects every call of this API.";
+    if (reason === "inherited_repeat") return `Not counted: inherited unchanged from ${idLabel(row.inherited_repeat)}, whose own row counts it; NumSharp has no type for ${idLabel(row.object_type || "")}.`;
+    return "";
   }
 
   // Mirrors coverage/signature_parity.py classify(): "identical", "differs", "not-compared", or "none"
@@ -566,8 +606,16 @@
   }
 
   function summarize(rows) {
-    const counts = { total: rows.length, numpy: rows.filter(isComparableApi).length, availableApis: 0, available: 0, partial: 0, unsupported: 0, missing: 0, extension: 0, exact: 0, alias: 0, oracle: 0, oracleApis: 0, oracleDirect: 0, oracleAlias: 0, oracleUnverified: 0, oracleUncredited: 0, signature: 0, signatureApis: 0, signatureDiffers: 0, signatureNotCompared: 0, signatureMissing: 0, signatureForeign: 0, signatureOverloaded: 0, signatureTypecode: 0, signatureBinding: 0, signatureNull: 0, signatureSequence: 0, signatureOtherName: 0 };
+    const counts = { total: rows.length, numpy: rows.filter(isComparableApi).length, availableApis: 0, available: 0, partial: 0, unsupported: 0, missing: 0, extension: 0, excluded: 0, excludedRefused: 0, excludedInherited: 0, exact: 0, alias: 0, oracle: 0, oracleApis: 0, oracleDirect: 0, oracleAlias: 0, oracleUnverified: 0, oracleUncredited: 0, signature: 0, signatureApis: 0, signatureDiffers: 0, signatureNotCompared: 0, signatureMissing: 0, signatureForeign: 0, signatureOverloaded: 0, signatureTypecode: 0, signatureBinding: 0, signatureNull: 0, signatureSequence: 0, signatureOtherName: 0 };
     rows.forEach((row) => {
+      // A row outside the percentages counts only as "excluded" (by reason): never as a gap, an available API, an
+      // oracle-verified or a signature-checked one, as generate_coverage's is_api_row leaves it out.
+      const excluded = excludedReason(row);
+      if (excluded) {
+        counts.excluded += 1;
+        counts[excluded === "not_applicable" ? "excludedRefused" : "excludedInherited"] += 1;
+        return;
+      }
       if (counts[row.status] !== undefined) counts[row.status] += 1;
       if (isComparableApi(row) && row.status === "available") counts.availableApis += 1;
       if (row.availability === "exact" || row.availability === "alias") counts[row.availability] += 1;
@@ -752,9 +800,10 @@
       ["available", counts.available],
       ["partial", counts.partial],
       ["gap", gaps],
-      ["extension", counts.extension]
+      ["extension", counts.extension],
+      ["excluded", counts.excluded]
     ];
-    const label = `${counts.available} available, ${counts.partial} partial, ${gaps} gaps, ${counts.extension} NumSharp-only`;
+    const label = `${counts.available} available, ${counts.partial} partial, ${gaps} gaps, ${counts.extension} NumSharp-only${counts.excluded ? `, ${counts.excluded} not counted` : ""}`;
     return `<div class="cov-mini-track" role="img" aria-label="${escapeHtml(label)}">${segments.filter(([, count]) => count > 0).map(([status, count]) => `<span class="cov-mini-segment is-${status}" style="width:${percent(count, counts.total)}%"></span>`).join("")}</div>`;
   }
 
@@ -764,7 +813,7 @@
       <div class="cov-card-stat is-available"><strong>${counts.available}</strong><span>available</span></div>
       <div class="cov-card-stat is-partial"><strong>${counts.partial}</strong><span>partial</span></div>
       <div class="cov-card-stat is-missing"><strong>${gaps}</strong><span>gaps</span></div>
-    </div><div class="cov-small cov-card-foot">${state.hasOracle ? `${counts.oracle} oracle-verified · ` : ""}${state.hasSignature ? `${counts.signature} identical signatures · ` : ""}${counts.exact} direct names · ${counts.alias} aliases · ${counts.total} total${counts.extension ? ` · ${counts.extension} NumSharp-only` : ""}</div>`;
+    </div><div class="cov-small cov-card-foot">${state.hasOracle ? `${counts.oracle} oracle-verified · ` : ""}${state.hasSignature ? `${counts.signature} identical signatures · ` : ""}${counts.exact} direct names · ${counts.alias} aliases · ${counts.total} total${counts.extension ? ` · ${counts.extension} NumSharp-only` : ""}${counts.excluded ? ` · ${counts.excluded} not counted` : ""}</div>`;
   }
 
   function compactCardBreakdown(counts) {
@@ -776,6 +825,7 @@
       ${counts.oracle ? `<span class="is-oracle">${counts.oracle} oracle-verified</span>` : ""}
       ${counts.signature ? `<span class="is-signature">${counts.signature} identical signatures</span>` : ""}
       ${counts.extension ? `<span class="is-extension">${counts.extension} NumSharp-only</span>` : ""}
+      ${counts.excluded ? `<span class="is-excluded">${counts.excluded} not counted</span>` : ""}
     </div>`;
   }
 
@@ -789,9 +839,22 @@
     // Generator 1.15+ publishes signature parity; set before the recount, which reads signatureClass.
     state.hasSignature = published.signature_identical !== undefined;
     const hasSignature = state.hasSignature;
+    // Generator 1.17+ keeps NumPy-refused calls and inherited repeats out of its percentages and publishes how many
+    // (api_scope.excluded); set before any summarize(), which reads excludedReason.
+    const expanded = data.summary.api_scope;
+    state.excludesRows = Boolean(expanded?.excluded);
     const stats = summarize(defaultRows());
     if (stats.total !== number(published.total) || stats.available !== number(published.available)) {
       throw new Error("Coverage summary does not match its row inventory.");
+    }
+    // The expanded scope is recounted too once the page applies its own exclusion rule: a drift between
+    // excludedReason and the generator's excluded_from_percentages would misreport every scope's percentage.
+    if (state.excludesRows) {
+      const all = summarize(state.rows.filter(isCataloguedApi));
+      if (all.numpy !== number(expanded.total) || all.availableApis !== number(expanded.available)
+          || all.excluded !== number(expanded.excluded.total)) {
+        throw new Error("Coverage expanded summary does not match its row inventory.");
+      }
     }
     if (hasOracle && stats.oracle !== number(published.oracle_verified)) {
       throw new Error("Coverage oracle summary does not match its row evidence.");
@@ -819,6 +882,7 @@
       ? `Headline NumPy-identical signatures: ${percent(stats.signature, stats.total).toFixed(1)}% (${stats.signature}/${stats.total} APIs; ${stats.signatureDiffers} differ: ${stats.signatureMissing} M, ${stats.signatureForeign} X, ${stats.signatureOverloaded} O, ${stats.signatureTypecode} T, ${stats.signatureBinding} B, ${stats.signatureNull} L, ${stats.signatureSequence} Q, ${stats.signatureOtherName} N).`
       : "";
     // The lede and the reading guide describe the oracle evidence; an artifact without it shows none.
+    byId("cov-excluded-explainer").hidden = !state.excludesRows;
     byId("cov-lede-oracle").hidden = !hasOracle;
     byId("cov-oracle-explainer").hidden = !hasOracle;
     byId("cov-lede-signature").hidden = !hasSignature;
@@ -833,7 +897,11 @@
     const categories = [...new Set(rows.map((row) => row.category))].sort((a, b) => a.localeCompare(b));
     const rejectedContracts = rows.filter((row) => row.applicability === "not_applicable").length;
     byId("cov-scope-note").textContent = `${scopeLabels[scope]}: ${stats.total.toLocaleString()} entries across ${surfaces.length} surfaces and ${categories.length} capability areas. This selection updates every summary and the explorer.`;
-    byId("cov-applicability-note").textContent = rejectedContracts ? `This scope includes ${rejectedContracts.toLocaleString()} declared contract${rejectedContracts === 1 ? "" : "s"} whose calls NumPy rejects (ufunc methods the ufunc's shape rules out, and Python protocol slots NumPy fills only to refuse); gaps describe public API presence, not a count of computable operations.` : "";
+    // Generator 1.17+: the refused calls and the inherited repeats are listed but not counted; an older artifact
+    // counted the refused calls as gaps, which the note then says.
+    byId("cov-applicability-note").textContent = state.excludesRows
+      ? (stats.excluded ? `This scope lists ${stats.excluded.toLocaleString()} entr${stats.excluded === 1 ? "y" : "ies"} that no percentage or gap count includes: ${stats.excludedRefused.toLocaleString()} call${stats.excludedRefused === 1 ? "" : "s"} NumPy itself rejects (ufunc methods the ufunc's shape rules out, Python protocol slots NumPy fills only to refuse) and ${stats.excludedInherited.toLocaleString()} member${stats.excludedInherited === 1 ? "" : "s"} inherited unchanged by a class NumSharp has no type for. The explorer shows them as Not counted.` : "")
+      : rejectedContracts ? `This scope includes ${rejectedContracts.toLocaleString()} declared contract${rejectedContracts === 1 ? "" : "s"} whose calls NumPy rejects (ufunc methods the ufunc's shape rules out, and Python protocol slots NumPy fills only to refuse); gaps describe public API presence, not a count of computable operations.` : "";
 
     byId("cov-metrics").innerHTML = [
       metricCard("Scoped API availability", coverageLabel(stats), stats.numpy ? `${stats.availableApis} of ${stats.numpy} comparable NumPy APIs` : "No comparable NumPy APIs in this scope"),
@@ -842,17 +910,17 @@
       // The card filters the explorer to the differing calls: the next signature to fix.
       ...(state.hasSignature ? [metricCard("NumPy-identical signatures", stats.numpy ? `${stats.signatureCoverage.toFixed(1)}%` : "-", stats.numpy ? `${stats.signatureApis} of ${stats.numpy} take NumPy's exact parameters · ${stats.signatureDiffers} differ` : `${stats.signature} identical signatures in this scope`, stats.signatureDiffers ? "signature" : "")] : []),
       metricCard("Exact names", stats.exact.toLocaleString(), `${stats.alias} reviewed aliases bridge C#/NumPy naming`, stats.exact ? "exact" : ""),
-      metricCard("Open gaps", (stats.missing + stats.unsupported).toLocaleString(), `${stats.partial} additional API${stats.partial === 1 ? " is" : "s are"} partial`, "gaps"),
+      metricCard("Open gaps", (stats.missing + stats.unsupported).toLocaleString(), `${stats.partial} additional API${stats.partial === 1 ? " is" : "s are"} partial${stats.excluded ? ` · ${stats.excluded.toLocaleString()} not counted` : ""}`, "gaps"),
       metricCard("Entries in scope", stats.total.toLocaleString(), `${surfaces.length} public surfaces · ${categories.length} capability areas`)
     ].join("");
 
-    const statuses = ["available", "partial", "unsupported", "missing", "extension"];
+    const statuses = ["available", "partial", "unsupported", "missing", "extension", "excluded"];
     byId("cov-status-track").innerHTML = statuses.filter((status) => stats[status] > 0).map((status) => {
       const width = percent(stats[status], stats.total);
       const text = width >= 8 ? `<span>${statusLabels[status]} · ${stats[status]}</span>` : `<span>${stats[status]}</span>`;
       return `<button class="cov-status-segment" type="button" data-status="${status}" data-tooltip-group="status:${status}" style="width:${width}%" aria-label="Filter ${statusLabels[status]}: ${stats[status]} APIs">${text}</button>`;
     }).join("");
-    byId("cov-legend").innerHTML = statuses.filter((status) => status !== "extension" || stats.extension).map((status) => statusBadge(status, `${statusLabels[status]} ${stats[status]}`)).join("");
+    byId("cov-legend").innerHTML = statuses.filter((status) => !["extension", "excluded"].includes(status) || stats[status]).map((status) => statusBadge(status, `${statusLabels[status]} ${stats[status]}`)).join("");
 
     const priority = ["np", "ndarray", "random", "linalg", "fft"];
     const surfaceOrder = surfaces.sort((a, b) => {
@@ -903,7 +971,7 @@
     const rows = scopedRows();
     populateSelect("cov-surface", [...new Set(rows.map((row) => row.surface))].sort(), surfaceLabel);
     populateSelect("cov-category", [...new Set(rows.map((row) => row.category))].sort());
-    const statuses = [...new Set(rows.map((row) => row.status))].sort((a, b) => statusOrder[a] - statusOrder[b]);
+    const statuses = [...new Set(rows.map(countedStatus))].sort((a, b) => statusOrder[a] - statusOrder[b]);
     statuses.unshift("gaps");
     populateSelect("cov-status", statuses, statusLabels);
     populateSelect("cov-kind", [...new Set(rows.map((row) => row.kind))].sort());
@@ -937,10 +1005,12 @@
     };
   }
 
+  // The API scopes list every catalogued API, the ones no percentage counts included (summarize counts those as
+  // "excluded"), so a refused call or an inherited repeat stays findable in the explorer.
   function rowInScope(row, scope) {
     if (scope === "default") return row.origin === "numpy" && row.in_default_scope;
-    if (scope === "numpy") return isComparableApi(row);
-    if (scope === "extended") return isComparableApi(row) && row.extended;
+    if (scope === "numpy") return isCataloguedApi(row);
+    if (scope === "extended") return isCataloguedApi(row) && row.extended;
     if (scope === "catalog") return row.origin === "numpy";
     if (scope === "extensions") return row.origin === "numsharp";
     return true;
@@ -953,8 +1023,10 @@
       if (!rowInScope(row, filters.scope)) return false;
       if (filters.surface !== "all" && row.surface !== filters.surface) return false;
       if (filters.category !== "all" && row.category !== filters.category) return false;
-      if (filters.status === "gaps" && row.status !== "missing" && row.status !== "unsupported") return false;
-      if (filters.status !== "all" && filters.status !== "gaps" && row.status !== filters.status) return false;
+      // Statuses filter by the counted status: a NumPy-refused call reads "Not counted", never a missing gap.
+      const status = countedStatus(row);
+      if (filters.status === "gaps" && status !== "missing" && status !== "unsupported") return false;
+      if (filters.status !== "all" && filters.status !== "gaps" && status !== filters.status) return false;
       if (filters.kind !== "all" && row.kind !== filters.kind) return false;
       if (filters.mapping !== "all" && row.availability !== filters.mapping) return false;
       if (filters.oracle === "verified" && !isOracleVerified(row)) return false;
@@ -968,8 +1040,8 @@
       return terms.every((term) => haystack.includes(term));
     });
     results.sort((a, b) => {
-      if (filters.sort === "gap") return (statusOrder[a.status] - statusOrder[b.status]) || apiLabel(a).localeCompare(apiLabel(b));
-      if (filters.sort === "coverage") return (statusOrder[b.status] - statusOrder[a.status]) || apiLabel(a).localeCompare(apiLabel(b));
+      if (filters.sort === "gap") return (statusOrder[countedStatus(a)] - statusOrder[countedStatus(b)]) || apiLabel(a).localeCompare(apiLabel(b));
+      if (filters.sort === "coverage") return (statusOrder[countedStatus(b)] - statusOrder[countedStatus(a)]) || apiLabel(a).localeCompare(apiLabel(b));
       if (filters.sort === "surface") return a.surface.localeCompare(b.surface) || apiLabel(a).localeCompare(apiLabel(b));
       return apiLabel(a).localeCompare(apiLabel(b));
     });
@@ -997,8 +1069,11 @@
         : `<span class="cov-result-name">${name}</span>`;
       const oracleBadge = isOracleVerified(row) ? `<span class="cov-result-oracle" title="${escapeHtml(oracleTitle(row))}">oracle</span>` : "";
       const signatureBadge = signatureClass(row) === "differs" ? `<span class="cov-result-signature" title="${escapeHtml(signatureTitle(row))}">${escapeHtml(signatureMarks(row) || "sig")}</span>` : "";
+      // A row outside the counts shows "Not counted" with its reason as the chip's title.
+      const status = countedStatus(row);
+      const statusTitle = status === "excluded" ? ` title="${escapeHtml(excludedTitle(row))}"` : "";
       return `<div class="cov-result" role="listitem" tabindex="0" data-row-id="${escapeHtml(row.id)}" aria-current="${row.id === state.selectedId}">
-      <div class="cov-result-main">${nameMarkup}<span class="cov-result-badges">${signatureBadge}${oracleBadge}<span class="cov-result-status is-${escapeHtml(row.status)}">${escapeHtml(statusLabels[row.status] || row.status)}</span></span></div>
+      <div class="cov-result-main">${nameMarkup}<span class="cov-result-badges">${signatureBadge}${oracleBadge}<span class="cov-result-status is-${escapeHtml(status)}"${statusTitle}>${escapeHtml(statusLabels[status] || status)}</span></span></div>
       <div class="cov-result-sub"><span>${escapeHtml(surfaceLabel(row.surface))}</span><span>·</span><span>${escapeHtml(row.category)}</span><span>·</span><span>${escapeHtml(row.kind)}</span></div>
     </div>`;
     }).join("") + (state.filtered.length > visible.length ? `<button class="cov-more" id="cov-more" type="button">Show ${Math.min(120, state.filtered.length - visible.length)} more</button>` : "");
@@ -1026,13 +1101,15 @@
       const fileName = path.split("/").pop();
       return `<a class="cov-source-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="${escapeHtml(path)}">${escapeHtml(fileName)}</a>`;
     }).join("");
+    const excluded = excludedReason(row);
     target.innerHTML = `
-      <div class="cov-detail-head"><h3>${detailHeading}</h3>${statusBadge(row.status)}</div>
+      <div class="cov-detail-head"><h3>${detailHeading}</h3>${statusBadge(row.status)}${excluded ? statusBadge("excluded") : ""}</div>
       <div class="cov-detail-grid">
         <div class="cov-detail-fact"><div class="cov-detail-label">Surface</div><div class="cov-detail-value">${escapeHtml(surfaceLabel(row.surface))}</div></div>
         <div class="cov-detail-fact"><div class="cov-detail-label">Category</div><div class="cov-detail-value">${escapeHtml(row.category)}</div></div>
         <div class="cov-detail-fact"><div class="cov-detail-label">Availability</div><div class="cov-detail-value">${escapeHtml(mapping)}</div></div>
-        <div class="cov-detail-fact"><div class="cov-detail-label">Inventory group</div><div class="cov-detail-value">${row.in_default_scope ? "Headline comparison" : isComparableApi(row) ? "Extended NumPy API" : row.origin === "numsharp" ? "NumSharp-only API" : "Supporting NumPy export"}${row.disposition ? ` · ${escapeHtml(dispositionLabels[row.disposition] || row.disposition)}` : ""}</div></div>
+        <div class="cov-detail-fact"><div class="cov-detail-label">Inventory group</div><div class="cov-detail-value">${row.in_default_scope ? "Headline comparison" : isCataloguedApi(row) ? "Extended NumPy API" : row.origin === "numsharp" ? "NumSharp-only API" : "Supporting NumPy export"}${row.disposition ? ` · ${escapeHtml(dispositionLabels[row.disposition] || row.disposition)}` : ""}</div></div>
+        ${excluded ? `<div class="cov-detail-fact"><div class="cov-detail-label">Percentages</div><div class="cov-detail-value">${escapeHtml(excludedTitle(row))}</div></div>` : ""}
         ${row.applicability ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy applicability</div><div class="cov-detail-value">${escapeHtml(row.applicability === "not_applicable" ? (row.python_protocol ? "NumPy rejects every call of this protocol" : "NumPy rejects this ufunc method") : row.applicability === "conditional" ? "Depends on operands and dtype" : row.applicability)}</div></div>` : ""}
         ${state.hasOracle ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy oracle</div><div class="cov-detail-value">${escapeHtml(oracleSummary(row))}</div></div>` : ""}
         ${state.hasSignature && row.origin === "numpy" ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy signature</div><div class="cov-detail-value">${escapeHtml(signatureSummary(row))}</div></div>` : ""}
@@ -1086,7 +1163,7 @@
       const linkedLabel = row.documentation_url
         ? `<a data-api-link href="${escapeHtml(row.documentation_url)}" target="_blank" rel="noopener" title="Open latest NumPy documentation">${label}</a>`
         : label;
-      return `<div class="ns-cov-tip-row">${linkedLabel}<span>${escapeHtml(statusLabels[row.status] || row.status)}</span></div>`;
+      return `<div class="ns-cov-tip-row">${linkedLabel}<span>${escapeHtml(statusLabels[countedStatus(row)] || row.status)}</span></div>`;
     }).join("")
       + (rows.length > 18 ? `<div class="ns-cov-tip-row"><span>+${rows.length - 18} more in explorer</span></div>` : "");
   }
@@ -1096,16 +1173,17 @@
     const type = element.dataset.tooltipGroup.slice(0, separator);
     const value = element.dataset.tooltipGroup.slice(separator + 1);
     let rows = scopedRows();
-    if (type === "status") rows = rows.filter((row) => row.status === value);
+    if (type === "status") rows = rows.filter((row) => countedStatus(row) === value);
     if (type === "surface") rows = rows.filter((row) => row.surface === value);
     if (type === "category") rows = rows.filter((row) => row.category === value);
-    const available = rows.filter((row) => row.status === "available");
-    const gaps = rows.filter((row) => row.status === "missing" || row.status === "unsupported");
-    const other = rows.filter((row) => row.status === "partial" || row.status === "extension");
+    // The tabs split by the counted status, so a NumPy-refused call or an inherited repeat is never listed as a gap.
+    const available = rows.filter((row) => countedStatus(row) === "available");
+    const gaps = rows.filter((row) => ["missing", "unsupported"].includes(countedStatus(row)));
+    const other = rows.filter((row) => ["partial", "extension", "excluded"].includes(countedStatus(row)));
     const counts = summarize(rows);
     const title = type === "status" ? statusLabels[value] : type === "surface" ? surfaceLabel(value) : value;
     const tabs = [["available", "Available", available], ["gaps", "Gaps", gaps]];
-    if (other.length) tabs.push(["other", "Partial / NumSharp-only", other]);
+    if (other.length) tabs.push(["other", "Partial / NumSharp-only / not counted", other]);
     const initialTab = tabs.find(([, , items]) => items.length)?.[0] || "available";
     return `<div class="ns-cov-tip"><div class="ns-cov-tip-head"><strong>${escapeHtml(title)}</strong><span>${counts.total} entries · ${counts.numpy ? `${counts.availableApis}/${counts.numpy} NumPy APIs available · ${coverageLabel(counts)}${state.hasOracle ? ` · ${counts.oracleApis} oracle-verified` : ""}${state.hasSignature ? ` · ${counts.signatureApis} identical signatures` : ""}` : "No comparable NumPy APIs"}</span></div>
       <div class="ns-cov-tip-tabs" role="tablist">${tabs.map(([key, label, items]) => `<button class="ns-cov-tip-tab" role="tab" aria-selected="${key === initialTab}" data-tip-tab="${key}">${label} (${items.length})</button>`).join("")}</div>

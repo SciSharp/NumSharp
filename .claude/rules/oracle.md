@@ -69,12 +69,15 @@ test/NumSharp.Tests.Oracle/Fuzz/      C# replay harness (no Python)
   backend can affect: identical outcomes are deduplicated, and the flips are byte-compared with NumPy on the pinned host.
   Outcome equality includes threw/result, dtype, shape and bytes; a backend change on a non-CBLAS dtype is a hard failure.
 - Per-API parity in the coverage artifact: `coverage/generate_coverage.py` joins every committed contract of the corpus,
-  plus the `.npy`/flags/layout oracles and the string oracle's `numpy.strings` calls, onto its API row
+  plus the `.npy`/flags/layout oracles and the string oracle's `numpy.strings` and `numpy.char` calls, onto its API row
   (`coverage/oracle_evidence.py` + the reviewed `coverage/oracle_map.json`): each row reads available AND
   oracle-verified (direct contracts, an identity alias (the same NumPy object mapped to the same NumSharp member) or a
   reviewed delegation alias). The join is strict: a new op key must resolve (bare keys go to `np.*` first, dotted keys
   by namespace, anything else needs a `fuzz.keys` entry), a new corpus file must be named by a replay suite, and stale
-  or redundant map entries fail; otherwise the coverage generator (docs CI) fails, naming the key. Gate
+  or redundant map entries fail; otherwise the coverage generator (docs CI) fails, naming the key. A key OpRegistry.cs
+  replays through a C# operator (`case "subtract": return ops[0] - ops[1];`) needs a `fuzz.keys` entry with
+  `operator_ids` (its ndarray protocol, `numpy.ndarray.__sub__`): `test_operator_entries_mirror_opregistry` fails until
+  it has one, and a new string-oracle op that calls numpy.char needs its `STRINGS_OPS` entry. Gate
   `coverage/test_oracle_evidence.py` (including a cross-check that every C#
   `EquivalentAliases`/`NdarrayAliases`/`MaAliases` entry has its reviewed alias).
 - Signature parity in the coverage artifact: availability credits a NumPy API by NAME, which says nothing about the call
