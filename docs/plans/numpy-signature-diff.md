@@ -27,13 +27,13 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 
 | module | C# names | C# overloads | with a NumPy counterpart | identical | more than one overload | closest overload differs | one overload, differs | missing | in another overload only | renamed | extra | slot | C# requires | default | varargs | only null defaults | only policy | not compared | NumSharp-only names | NumPy names absent |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `np` | 396 | 803 | 379 | 159 | 110 | 30 | 9 | 11 | 4 | 4 | 0 | 6 | 9 | 2 | 6 | 9 | 109 | 0 | 17 | 34 |
+| `np` | 396 | 796 | 379 | 163 | 105 | 30 | 9 | 11 | 4 | 4 | 0 | 6 | 9 | 2 | 6 | 10 | 109 | 0 | 17 | 34 |
 | `ndarray` | 140 | 253 | 57 | 38 | 13 | 9 | 6 | 4 | 1 | 2 | 2 | 2 | 3 | 0 | 0 | 0 | 0 | 0 | 83 | 3 |
 | `np.char` | 54 | 54 | 53 | 30 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 12 | 11 | 0 | 1 | 0 |
 | `np.dtypes` | 1 | 2 | 1 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `np.emath` | 9 | 9 | 9 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| `np.fft` | 18 | 24 | 18 | 10 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0 |
-| `np.linalg` | 31 | 35 | 31 | 26 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 1 |
+| `np.fft` | 18 | 18 | 18 | 14 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0 |
+| `np.linalg` | 31 | 33 | 31 | 27 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 1 |
 | `np.ma` | 215 | 227 | 211 | 71 | 10 | 133 | 127 | 106 | 0 | 28 | 0 | 20 | 5 | 0 | 3 | 1 | 3 | 0 | 4 | 6 |
 | `np.polynomial` | 7 | 7 | 7 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `np.polynomial.chebyshev` | 31 | 36 | 30 | 24 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 3 | 0 | 0 | 1 | 0 |
@@ -43,15 +43,15 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 | `np.polynomial.legendre` | 28 | 33 | 27 | 22 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 1 | 0 |
 | `np.polynomial.polynomial` | 25 | 30 | 24 | 19 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 1 | 0 |
 | `np.polynomial.polyutils` | 7 | 22 | 7 | 3 | 4 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| `np.random` | 64 | 236 | 61 | 6 | 55 | 14 | 0 | 0 | 0 | 0 | 0 | 0 | 14 | 0 | 0 | 1 | 0 | 0 | 3 | 1 |
+| `np.random` | 64 | 209 | 61 | 11 | 50 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 12 | 0 | 0 | 1 | 0 | 0 | 3 | 1 |
 | `np.random.Generator` | 46 | 85 | 45 | 9 | 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 |
 | `np.strings` | 46 | 53 | 46 | 15 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 12 | 17 | 0 | 0 | 0 |
 | `np.typing` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `ndarray (NDArray<T>)` | 5 | 22 | 2 | 0 | 2 | 2 | 0 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 3 |
-| `np.matrix` | 58 | 77 | 54 | 27 | 16 | 16 | 11 | 11 | 0 | 1 | 0 | 3 | 5 | 0 | 0 | 0 | 0 | 0 | 4 | 0 |
-| `np.char.chararray` | 65 | 79 | 61 | 43 | 5 | 4 | 2 | 2 | 0 | 1 | 0 | 1 | 2 | 0 | 0 | 11 | 0 | 0 | 4 | 0 |
+| `np.matrix` | 58 | 73 | 54 | 29 | 12 | 16 | 13 | 11 | 0 | 1 | 0 | 3 | 5 | 0 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `np.char.chararray` | 65 | 77 | 61 | 43 | 5 | 4 | 2 | 2 | 0 | 1 | 0 | 1 | 2 | 0 | 0 | 11 | 0 | 0 | 4 | 0 |
 | `np.ma.MaskedArray` | 62 | 65 | 60 | 29 | 2 | 30 | 29 | 29 | 0 | 1 | 0 | 19 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 17 |
-| `np.dtype` | 9 | 19 | 4 | 2 | 2 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `np.dtype` | 9 | 18 | 4 | 3 | 1 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 0 |
 | `np.nditer` | 12 | 12 | 9 | 8 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `np.broadcast` | 5 | 5 | 2 | 1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `np.flatiter` | 4 | 4 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 1 |
@@ -69,7 +69,7 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 | `np.random.PCG64DXSM` | 13 | 21 | 3 | 1 | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 10 | 0 |
 | `np.random.Philox` | 13 | 22 | 3 | 1 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 10 | 0 |
 | `np.random.SFC64` | 11 | 18 | 1 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 10 | 0 |
-| **total** | 1545 | 2467 | 1306 | 636 | 297 | 258 | 188 | 168 | 6 | 40 | 2 | 51 | 55 | 2 | 10 | 66 | 140 | 0 | 239 | 83 |
+| **total** | 1545 | 2418 | 1306 | 653 | 276 | 256 | 190 | 168 | 6 | 40 | 2 | 51 | 53 | 2 | 10 | 67 | 140 | 0 | 239 | 83 |
 
 *closest overload differs* counts names whose closest overload has a hard difference (missing, in another
 overload only, renamed, extra, slot, C# requires, default, varargs); each kind is counted again in its own
@@ -114,7 +114,7 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 | `zeros` | `zeros(shape, dtype=None, order='C', *, device=None, like=None)` | `NDArray zeros(Shape shape, DType dtype, string device = null)`<br>(+7 more overloads, below) | **in another overload only**: `order`<br>**C# requires**: `dtype`<br>**policy**: `like` |
 | `zeros_like` | `zeros_like(a, dtype=None, order='K', subok=True, shape=None, *, device=None)` | `NDArray zeros_like(NDArray a, DType dtype = null, char order = 'K', Shape? shape = null, string device = null)` | **slot**: `shape: NumPy #4, C# #3`<br>**policy**: `subok` |
 
-### Only null defaults (9)
+### Only null defaults (10)
 
 | name | NumPy | closest C# overload | null defaults |
 |---|---|---|---|
@@ -127,6 +127,7 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 | `polyfit` | `polyfit(x, y, deg, rcond=None, full=False, w=None, cov=False)` | `PolyfitResult polyfit(NDArray x, NDArray y, int deg, double? rcond = null, bool full = false, NDArray w = null, object cov = null)` | **null default**: `cov: False vs null` |
 | `rot90` | `rot90(m, k=1, axes=(0, 1))` | `NDArray rot90(NDArray m, int k = 1, int[] axes = null)` | **null default**: `axes: (0, 1) vs null` |
 | `select` | `select(condlist, choicelist, default=0)` | `NDArray select(NDArray[] condlist, object[] choicelist, object default = null)` | **null default**: `default: 0 vs null` |
+| `unwrap` | `unwrap(p, discont=None, axis=-1, *, period=6.283185307179586)` | `NDArray unwrap(NDArray p, double? discont = null, int axis = -1, NDArray period = null)` | **null default**: `period: 6.283185307179586 vs null` |
 
 ### Only policy-excluded parameters (109)
 
@@ -135,7 +136,7 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 - lacking `subok`: `broadcast_arrays`
 - lacking `subok, signature`: `matvec`, `vecdot`, `vecmat`
 
-### More than one overload (110; NumPy has one signature each)
+### More than one overload (105; NumPy has one signature each)
 
 - `all`: NumPy `all(a, axis=None, out=None, keepdims=<no value>, *, where=<no value>)`
 
@@ -160,12 +161,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   ```csharp
   NDArray apply_along_axis(Func<NDArray, NDArray> func1d, int axis, NDArray arr)
   NDArray apply_along_axis(Func<NDArray, object[], NDArray> func1d, int axis, NDArray arr, params object[] args)
-  ```
-- `apply_over_axes`: NumPy `apply_over_axes(func, a, axes)`
-
-  ```csharp
-  NDArray apply_over_axes(Func<NDArray, int, NDArray> func, NDArray a, int[] axes)
-  NDArray apply_over_axes(Func<NDArray, int, NDArray> func, NDArray a, int axes)
   ```
 - `arange`: NumPy `arange(start_or_stop, /, stop=None, step=1, *, dtype=None, device=None, like=None)`
 
@@ -306,18 +301,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray atleast_3d(NDArray arr)
   NDArray[] atleast_3d(params object[] arys)
   NDArray[] atleast_3d(params NDArray[] arys)
-  ```
-- `base_repr`: NumPy `base_repr(number, base=2, padding=0)`
-
-  ```csharp
-  string base_repr(long number, int base = 2, int padding = 0)
-  string base_repr(BigInteger number, int base = 2, int padding = 0)
-  ```
-- `binary_repr`: NumPy `binary_repr(num, width=None)`
-
-  ```csharp
-  string binary_repr(long num, int? width = null)
-  string binary_repr(BigInteger num, int? width = null)
   ```
 - `bmat`: NumPy `bmat(obj, ldict=None, gdict=None)`
 
@@ -556,10 +539,8 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 - `geomspace`: NumPy `geomspace(start, stop, num=50, endpoint=True, dtype=None, axis=0)`
 
   ```csharp
-  NDArray geomspace(double start, double stop, int num = 50, bool endpoint = true, DType dtype = null, int axis = 0)
-  NDArray geomspace(double start, double stop, long num, bool endpoint = true, DType dtype = null, int axis = 0)
-  NDArray geomspace(Complex start, Complex stop, int num = 50, bool endpoint = true, DType dtype = null, int axis = 0)
-  NDArray geomspace(Complex start, Complex stop, long num, bool endpoint = true, DType dtype = null, int axis = 0)
+  NDArray geomspace(double start, double stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0)
+  NDArray geomspace(Complex start, Complex stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0)
   ```
 - `gradient`: NumPy `gradient(f, *varargs, axis=None, edge_order=1)`
 
@@ -753,12 +734,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray loadtxt(TextReader reader, DType dtype = null, object comments = "#", string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null, bool unpack = false, int ndmin = 0, string encoding = null, int? max_rows = null, string quotechar = null)
   NDArray loadtxt(IEnumerable<string> lines, DType dtype = null, object comments = "#", string delimiter = null, object converters = null, int skiprows = 0, int[] usecols = null, bool unpack = false, int ndmin = 0, string encoding = null, int? max_rows = null, string quotechar = null)
   ```
-- `logspace`: NumPy `logspace(start, stop, num=50, endpoint=True, base=10.0, dtype=None, axis=0)`
-
-  ```csharp
-  NDArray logspace(double start, double stop, int num = 50, bool endpoint = true, double base = 10, DType dtype = null, int axis = 0)
-  NDArray logspace(double start, double stop, long num, bool endpoint = true, double base = 10, DType dtype = null, int axis = 0)
-  ```
 - `matrix`: NumPy `matrix(data, dtype=None, copy=True)`
 
   ```csharp
@@ -784,13 +759,13 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 
   ```csharp
   long nanargmax(NDArray a)
-  NDArray nanargmax(NDArray a, int? axis = null, NDArray out = null, bool keepdims = false)
+  NDArray nanargmax(NDArray a, NDAxis? axis = null, NDArray out = null, bool keepdims = false)
   ```
 - `nanargmin`: NumPy `nanargmin(a, axis=None, out=None, *, keepdims=<no value>)`
 
   ```csharp
   long nanargmin(NDArray a)
-  NDArray nanargmin(NDArray a, int? axis = null, NDArray out = null, bool keepdims = false)
+  NDArray nanargmin(NDArray a, NDAxis? axis = null, NDArray out = null, bool keepdims = false)
   ```
 - `ndarray`: NumPy `ndarray(shape, dtype=None, buffer=None, offset=0, strides=None, order=None)`
 
@@ -1014,12 +989,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray<long>[] unravel_index(NDArray indices, int[] shape, char order = 'C')
   long[] unravel_index(long index, int[] shape, char order = 'C')
   ```
-- `unwrap`: NumPy `unwrap(p, discont=None, axis=-1, *, period=6.283185307179586)`
-
-  ```csharp
-  NDArray unwrap(NDArray p, double? discont = null, int axis = -1, double period = 6.283185307179586)
-  NDArray unwrap(NDArray p, long period, double? discont = null, int axis = -1)
-  ```
 - `vectorize`: NumPy `vectorize(pyfunc=<no value>, otypes=None, doc=None, excluded=None, cache=False, signature=None)`
 
   ```csharp
@@ -1070,9 +1039,9 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray zeros(Shape shape, char order, DType dtype = null)
   ```
 
-### Identical to NumPy (159)
+### Identical to NumPy (163)
 
-`allclose`, `amax`, `amin`, `angle`, `argsort`, `argwhere`, `around`, `array_equal`, `array_equiv`, `array_repr`, `array_str`, `asarray_chkfinite`, `bartlett`, `bincount`, `blackman`, `block`, `broadcast_shapes`, `clip`, `column_stack`, `common_type`, `compress`, `convolve`, `copy`, `corrcoef`, `correlate`, `cov`, `cross`, `cumprod`, `cumsum`, `cumulative_prod`, `cumulative_sum`, `datetime_data`, `diag`, `diag_indices`, `diag_indices_from`, `diagflat`, `diagonal`, `diff`, `digitize`, `dot`, `dstack`, `ediff1d`, `expand_dims`, `extract`, `fill_diagonal`, `fix`, `flatnonzero`, `flip`, `fliplr`, `flipud`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `getbufsize`, `hamming`, `hanning`, `i0`, `imag`, `inner`, `isclose`, `iscomplex`, `iscomplexobj`, `isfortran`, `isin`, `isneginf`, `isposinf`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `ix_`, `kaiser`, `kron`, `mask_indices`, `matrix_transpose`, `max`, `may_share_memory`, `mean`, `median`, `min`, `min_scalar_type`, `mintypecode`, `moveaxis`, `nancumprod`, `nancumsum`, `nanmax`, `nanmean`, `nanmedian`, `nanmin`, `nanpercentile`, `nanprod`, `nanquantile`, `nanstd`, `nansum`, `nanvar`, `ndim`, `nonzero`, `outer`, `packbits`, `percentile`, `permute_dims`, `poly`, `polyadd`, `polyder`, `polydiv`, `polymul`, `polysub`, `prod`, `promote_types`, `ptp`, `put`, `put_along_axis`, `quantile`, `ravel`, `real`, `real_if_close`, `resize`, `roll`, `rollaxis`, `roots`, `round`, `setbufsize`, `setdiff1d`, `setxor1d`, `shape`, `shares_memory`, `sinc`, `size`, `sort`, `sort_complex`, `squeeze`, `stack`, `std`, `sum`, `swapaxes`, `take`, `take_along_axis`, `trace`, `transpose`, `trapezoid`, `tril`, `tril_indices`, `tril_indices_from`, `trim_zeros`, `triu`, `triu_indices`, `triu_indices_from`, `typename`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`, `unique_values`, `unpackbits`, `unstack`, `vander`, `var`, `vdot`
+`allclose`, `amax`, `amin`, `angle`, `apply_over_axes`, `argsort`, `argwhere`, `around`, `array_equal`, `array_equiv`, `array_repr`, `array_str`, `asarray_chkfinite`, `bartlett`, `base_repr`, `binary_repr`, `bincount`, `blackman`, `block`, `broadcast_shapes`, `clip`, `column_stack`, `common_type`, `compress`, `convolve`, `copy`, `corrcoef`, `correlate`, `cov`, `cross`, `cumprod`, `cumsum`, `cumulative_prod`, `cumulative_sum`, `datetime_data`, `diag`, `diag_indices`, `diag_indices_from`, `diagflat`, `diagonal`, `diff`, `digitize`, `dot`, `dstack`, `ediff1d`, `expand_dims`, `extract`, `fill_diagonal`, `fix`, `flatnonzero`, `flip`, `fliplr`, `flipud`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `getbufsize`, `hamming`, `hanning`, `i0`, `imag`, `inner`, `isclose`, `iscomplex`, `iscomplexobj`, `isfortran`, `isin`, `isneginf`, `isposinf`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `ix_`, `kaiser`, `kron`, `logspace`, `mask_indices`, `matrix_transpose`, `max`, `may_share_memory`, `mean`, `median`, `min`, `min_scalar_type`, `mintypecode`, `moveaxis`, `nancumprod`, `nancumsum`, `nanmax`, `nanmean`, `nanmedian`, `nanmin`, `nanpercentile`, `nanprod`, `nanquantile`, `nanstd`, `nansum`, `nanvar`, `ndim`, `nonzero`, `outer`, `packbits`, `percentile`, `permute_dims`, `poly`, `polyadd`, `polyder`, `polydiv`, `polymul`, `polysub`, `prod`, `promote_types`, `ptp`, `put`, `put_along_axis`, `quantile`, `ravel`, `real`, `real_if_close`, `resize`, `roll`, `rollaxis`, `roots`, `round`, `setbufsize`, `setdiff1d`, `setxor1d`, `shape`, `shares_memory`, `sinc`, `size`, `sort`, `sort_complex`, `squeeze`, `stack`, `std`, `sum`, `swapaxes`, `take`, `take_along_axis`, `trace`, `transpose`, `trapezoid`, `tril`, `tril_indices`, `tril_indices_from`, `trim_zeros`, `triu`, `triu_indices`, `triu_indices_from`, `typename`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`, `unique_values`, `unpackbits`, `unstack`, `vander`, `var`, `vdot`
 
 ### NumSharp-only names (17 NumPy-style, 0 PascalCase C# members)
 
@@ -1291,38 +1260,9 @@ PascalCase: `ToString`
 | `irfft2` | `irfft2(a, s=None, axes=(-2, -1), norm=None, out=None)` | `NDArray irfft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray out = null)` | **null default**: `axes: (-2, -1) vs null` |
 | `rfft2` | `rfft2(a, s=None, axes=(-2, -1), norm=None, out=None)` | `NDArray rfft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray out = null)` | **null default**: `axes: (-2, -1) vs null` |
 
-### More than one overload (4; NumPy has one signature each)
+### Identical to NumPy (14)
 
-- `fftfreq`: NumPy `fftfreq(n, d=1.0, device=None)`
-
-  ```csharp
-  NDArray fftfreq(int n, double d = 1, string device = null)
-  NDArray fftfreq(long n, double d = 1, string device = null)
-  NDArray fftfreq(double n, double d = 1, string device = null)
-  ```
-- `fftshift`: NumPy `fftshift(x, axes=None)`
-
-  ```csharp
-  NDArray fftshift(NDArray x, int[] axes = null)
-  NDArray fftshift(NDArray x, int axes)
-  ```
-- `ifftshift`: NumPy `ifftshift(x, axes=None)`
-
-  ```csharp
-  NDArray ifftshift(NDArray x, int[] axes = null)
-  NDArray ifftshift(NDArray x, int axes)
-  ```
-- `rfftfreq`: NumPy `rfftfreq(n, d=1.0, device=None)`
-
-  ```csharp
-  NDArray rfftfreq(int n, double d = 1, string device = null)
-  NDArray rfftfreq(long n, double d = 1, string device = null)
-  NDArray rfftfreq(double n, double d = 1, string device = null)
-  ```
-
-### Identical to NumPy (10)
-
-`fft`, `fftn`, `hfft`, `ifft`, `ifftn`, `ihfft`, `irfft`, `irfftn`, `rfft`, `rfftn`
+`fft`, `fftfreq`, `fftn`, `fftshift`, `hfft`, `ifft`, `ifftn`, `ifftshift`, `ihfft`, `irfft`, `irfftn`, `rfft`, `rfftfreq`, `rfftn`
 
 ## `np.linalg`
 
@@ -1331,9 +1271,9 @@ PascalCase: `ToString`
 | name | NumPy | closest C# overload | null defaults |
 |---|---|---|---|
 | `matrix_norm` | `matrix_norm(x, /, *, keepdims=False, ord='fro')` | `NDArray matrix_norm(NDArray x, bool keepdims = false, object ord = null)` | **null default**: `ord: 'fro' vs null` |
-| `vector_norm` | `vector_norm(x, /, *, axis=None, keepdims=False, ord=2)` | `NDArray vector_norm(NDArray x, int[] axis = null, bool keepdims = false, object ord = null)` | **null default**: `ord: 2 vs null` |
+| `vector_norm` | `vector_norm(x, /, *, axis=None, keepdims=False, ord=2)` | `NDArray vector_norm(NDArray x, NDAxis? axis = null, bool keepdims = false, object ord = null)` | **null default**: `ord: 2 vs null` |
 
-### More than one overload (4; NumPy has one signature each)
+### More than one overload (2; NumPy has one signature each)
 
 - `multi_dot`: NumPy `multi_dot(arrays, *, out=None)`
 
@@ -1341,28 +1281,16 @@ PascalCase: `ToString`
   NDArray multi_dot(NDArray[] arrays, NDArray out = null)
   NDArray multi_dot(params NDArray[] arrays)
   ```
-- `norm`: NumPy `norm(x, ord=None, axis=None, keepdims=False)`
-
-  ```csharp
-  NDArray norm(NDArray x, object ord = null, int? axis = null, bool keepdims = false)
-  NDArray norm(NDArray x, object ord, int[] axis, bool keepdims = false)
-  ```
 - `tensordot`: NumPy `tensordot(x1, x2, /, *, axes=2)`
 
   ```csharp
   NDArray tensordot(NDArray x1, NDArray x2, int axes = 2)
   NDArray tensordot(NDArray x1, NDArray x2, int[] axesA, int[] axesB)
   ```
-- `vector_norm`: NumPy `vector_norm(x, /, *, axis=None, keepdims=False, ord=2)`
 
-  ```csharp
-  NDArray vector_norm(NDArray x, int axis, bool keepdims = false, object ord = null)
-  NDArray vector_norm(NDArray x, int[] axis = null, bool keepdims = false, object ord = null)
-  ```
+### Identical to NumPy (27)
 
-### Identical to NumPy (26)
-
-`cholesky`, `cond`, `cross`, `det`, `diagonal`, `eig`, `eigh`, `eigvals`, `eigvalsh`, `inv`, `lstsq`, `matmul`, `matrix_power`, `matrix_rank`, `matrix_transpose`, `outer`, `pinv`, `qr`, `slogdet`, `solve`, `svd`, `svdvals`, `tensorinv`, `tensorsolve`, `trace`, `vecdot`
+`cholesky`, `cond`, `cross`, `det`, `diagonal`, `eig`, `eigh`, `eigvals`, `eigvalsh`, `inv`, `lstsq`, `matmul`, `matrix_power`, `matrix_rank`, `matrix_transpose`, `norm`, `outer`, `pinv`, `qr`, `slogdet`, `solve`, `svd`, `svdvals`, `tensorinv`, `tensorsolve`, `trace`, `vecdot`
 
 ### NumPy public names that `np.linalg` lacks (1)
 
@@ -1931,7 +1859,7 @@ PascalCase: `ToString`
 
 ## `np.random`
 
-### Signature differences (14)
+### Signature differences (12)
 
 | name | NumPy | closest C# overload | differences |
 |---|---|---|---|
@@ -1943,20 +1871,18 @@ PascalCase: `ToString`
 | `SeedSequence` | `SeedSequence(entropy=None, *, spawn_key=(), pool_size=4, n_children_spawned=0)` | `SeedSequence SeedSequence(object entropy, object spawn_key = null, long pool_size = 4, uint n_children_spawned = 0)`<br>(+7 more overloads, below) | **C# requires**: `entropy`<br>**null default**: `spawn_key: () vs null` |
 | `default_rng` | `default_rng(seed=None)` | `Generator default_rng(long seed)`<br>(+12 more overloads, below) | **C# requires**: `seed` |
 | `get_state` | `get_state(legacy=True)` | `object get_state(bool legacy)`<br>(+1 more overloads, below) | **C# requires**: `legacy` |
-| `random` | `random(size=None)` | `NDArray random(params long[] size)`<br>(+1 more overloads, below) | **C# requires**: `size` |
-| `random_sample` | `random_sample(size=None)` | `NDArray random_sample(params long[] size)`<br>(+1 more overloads, below) | **C# requires**: `size` |
 | `seed` | `seed(seed=None)` | `void seed(uint seed)`<br>(+7 more overloads, below) | **C# requires**: `seed` |
-| `standard_cauchy` | `standard_cauchy(size=None)` | `NDArray standard_cauchy(Shape size)`<br>(+1 more overloads, below) | **C# requires**: `size` |
-| `standard_exponential` | `standard_exponential(size=None)` | `NDArray standard_exponential(Shape size)`<br>(+1 more overloads, below) | **C# requires**: `size` |
-| `standard_normal` | `standard_normal(size=None)` | `NDArray standard_normal(Shape size)`<br>(+1 more overloads, below) | **C# requires**: `size` |
+| `standard_cauchy` | `standard_cauchy(size=None)` | `NDArray standard_cauchy(Shape? size)`<br>(+1 more overloads, below) | **C# requires**: `size` |
+| `standard_exponential` | `standard_exponential(size=None)` | `NDArray standard_exponential(Shape? size)`<br>(+1 more overloads, below) | **C# requires**: `size` |
+| `standard_normal` | `standard_normal(size=None)` | `NDArray standard_normal(Shape? size)`<br>(+1 more overloads, below) | **C# requires**: `size` |
 
 ### Only null defaults (1)
 
 | name | NumPy | closest C# overload | null defaults |
 |---|---|---|---|
-| `gamma` | `gamma(shape, scale=1.0, size=None)` | `NDArray gamma(NDArray shape, NDArray scale = null, Shape size = default)` | **null default**: `scale: 1.0 vs null` |
+| `gamma` | `gamma(shape, scale=1.0, size=None)` | `NDArray gamma(NDArray shape, NDArray scale = null, Shape? size = null)` | **null default**: `scale: 1.0 vs null` |
 
-### More than one overload (55; NumPy has one signature each)
+### More than one overload (50; NumPy has one signature each)
 
 - `MT19937`: NumPy `MT19937(seed=None)`
 
@@ -2047,29 +1973,29 @@ PascalCase: `ToString`
 
   ```csharp
   NDArray beta(double a, double b)
-  NDArray beta(double a, double b, Shape size)
-  NDArray beta(NDArray a, NDArray b, Shape size = default)
+  NDArray beta(double a, double b, Shape? size)
+  NDArray beta(NDArray a, NDArray b, Shape? size = null)
   ```
 - `binomial`: NumPy `binomial(n, p, size=None)`
 
   ```csharp
   NDArray binomial(long n, double p)
-  NDArray binomial(long n, double p, Shape size)
-  NDArray binomial(NDArray n, NDArray p, Shape size = default)
+  NDArray binomial(long n, double p, Shape? size)
+  NDArray binomial(NDArray n, NDArray p, Shape? size = null)
   ```
 - `chisquare`: NumPy `chisquare(df, size=None)`
 
   ```csharp
   NDArray chisquare(double df)
-  NDArray chisquare(double df, Shape size)
-  NDArray chisquare(NDArray df, Shape size = default)
+  NDArray chisquare(double df, Shape? size)
+  NDArray chisquare(NDArray df, Shape? size = null)
   ```
 - `choice`: NumPy `choice(a, size=None, replace=True, p=None)`
 
   ```csharp
-  NDArray choice(NDArray a, Shape size = default, bool replace = true, NDArray p = null)
-  NDArray choice(long a, Shape size = default, bool replace = true, NDArray p = null)
-  NDArray choice(int a, Shape size = default, bool replace = true, NDArray p = null)
+  NDArray choice(NDArray a, Shape? size = null, bool replace = true, NDArray p = null)
+  NDArray choice(long a, Shape? size = null, bool replace = true, NDArray p = null)
+  NDArray choice(int a, Shape? size = null, bool replace = true, NDArray p = null)
   ```
 - `default_rng`: NumPy `default_rng(seed=None)`
 
@@ -2093,37 +2019,34 @@ PascalCase: `ToString`
   ```csharp
   NDArray dirichlet(double[] alpha, Shape? size = null)
   NDArray dirichlet(NDArray alpha, Shape? size = null)
-  NDArray dirichlet(double[] alpha, int[] size) [ORPA -1]
-  NDArray dirichlet(double[] alpha, long[] size) [ORPA -1]
-  NDArray dirichlet(double[] alpha, long size) [ORPA -1]
   ```
 - `exponential`: NumPy `exponential(scale=1.0, size=None)`
 
   ```csharp
   NDArray exponential(double scale)
-  NDArray exponential(double scale = 1, Shape size = default)
-  NDArray exponential(NDArray scale, Shape size = default)
+  NDArray exponential(double scale = 1, Shape? size = null)
+  NDArray exponential(NDArray scale, Shape? size = null)
   ```
 - `f`: NumPy `f(dfnum, dfden, size=None)`
 
   ```csharp
   NDArray f(double dfnum, double dfden)
-  NDArray f(double dfnum, double dfden, Shape size)
-  NDArray f(NDArray dfnum, NDArray dfden, Shape size = default)
+  NDArray f(double dfnum, double dfden, Shape? size)
+  NDArray f(NDArray dfnum, NDArray dfden, Shape? size = null)
   ```
 - `gamma`: NumPy `gamma(shape, scale=1.0, size=None)`
 
   ```csharp
   NDArray gamma(double shape, double scale = 1)
-  NDArray gamma(double shape, double scale, Shape size)
-  NDArray gamma(NDArray shape, NDArray scale = null, Shape size = default)
+  NDArray gamma(double shape, double scale, Shape? size)
+  NDArray gamma(NDArray shape, NDArray scale = null, Shape? size = null)
   ```
 - `geometric`: NumPy `geometric(p, size=None)`
 
   ```csharp
   NDArray geometric(double p)
-  NDArray geometric(double p, Shape size)
-  NDArray geometric(NDArray p, Shape size = default)
+  NDArray geometric(double p, Shape? size)
+  NDArray geometric(NDArray p, Shape? size = null)
   ```
 - `get_state`: NumPy `get_state(legacy=True)`
 
@@ -2135,105 +2058,89 @@ PascalCase: `ToString`
 
   ```csharp
   NDArray gumbel(double loc, double scale)
-  NDArray gumbel(double loc = 0, double scale = 1, Shape size = default)
-  NDArray gumbel(NDArray loc, NDArray scale = null, Shape size = default)
+  NDArray gumbel(double loc = 0, double scale = 1, Shape? size = null)
+  NDArray gumbel(NDArray loc, NDArray scale = null, Shape? size = null)
   ```
 - `hypergeometric`: NumPy `hypergeometric(ngood, nbad, nsample, size=None)`
 
   ```csharp
   NDArray hypergeometric(long ngood, long nbad, long nsample, Shape? size = null)
-  NDArray hypergeometric(long ngood, long nbad, long nsample, Shape size)
-  NDArray hypergeometric(long ngood, long nbad, long nsample, int[] size) [ORPA -1]
-  NDArray hypergeometric(long ngood, long nbad, long nsample, long[] size) [ORPA -1]
-  NDArray hypergeometric(long ngood, long nbad, long nsample, long size) [ORPA -1]
   NDArray hypergeometric(long ngood, long nbad, long nsample)
-  NDArray hypergeometric(NDArray ngood, NDArray nbad, NDArray nsample, Shape size = default)
+  NDArray hypergeometric(NDArray ngood, NDArray nbad, NDArray nsample, Shape? size = null)
   ```
 - `laplace`: NumPy `laplace(loc=0.0, scale=1.0, size=None)`
 
   ```csharp
   NDArray laplace(double loc, double scale)
-  NDArray laplace(double loc = 0, double scale = 1, Shape size = default)
-  NDArray laplace(NDArray loc, NDArray scale = null, Shape size = default)
+  NDArray laplace(double loc = 0, double scale = 1, Shape? size = null)
+  NDArray laplace(NDArray loc, NDArray scale = null, Shape? size = null)
   ```
 - `logistic`: NumPy `logistic(loc=0.0, scale=1.0, size=None)`
 
   ```csharp
   NDArray logistic(double loc, double scale)
-  NDArray logistic(double loc = 0, double scale = 1, Shape size = default)
-  NDArray logistic(NDArray loc, NDArray scale = null, Shape size = default)
+  NDArray logistic(double loc = 0, double scale = 1, Shape? size = null)
+  NDArray logistic(NDArray loc, NDArray scale = null, Shape? size = null)
   ```
 - `lognormal`: NumPy `lognormal(mean=0.0, sigma=1.0, size=None)`
 
   ```csharp
   NDArray lognormal(double mean, double sigma)
-  NDArray lognormal(double mean = 0, double sigma = 1, Shape size = default)
-  NDArray lognormal(NDArray mean, NDArray sigma = null, Shape size = default)
+  NDArray lognormal(double mean = 0, double sigma = 1, Shape? size = null)
+  NDArray lognormal(NDArray mean, NDArray sigma = null, Shape? size = null)
   ```
 - `logseries`: NumPy `logseries(p, size=None)`
 
   ```csharp
   NDArray logseries(double p, Shape? size = null)
-  NDArray logseries(double p, int[] size) [ORPA -1]
-  NDArray logseries(double p, long[] size) [ORPA -1]
-  NDArray logseries(double p, Shape size)
-  NDArray logseries(double p, long size) [ORPA -1]
-  NDArray logseries(NDArray p, Shape size = default)
+  NDArray logseries(NDArray p, Shape? size = null)
   ```
 - `multinomial`: NumPy `multinomial(n, pvals, size=None)`
 
   ```csharp
   NDArray multinomial(long n, double[] pvals, Shape? size = null)
   NDArray multinomial(long n, NDArray pvals, Shape? size = null)
-  NDArray multinomial(long n, double[] pvals, int[] size) [ORPA -1]
-  NDArray multinomial(long n, double[] pvals, long size) [ORPA -1]
   ```
 - `multivariate_normal`: NumPy `multivariate_normal(mean, cov, size=None, check_valid='warn', tol=1e-08)`
 
   ```csharp
   NDArray multivariate_normal(double[] mean, double[,] cov, Shape? size = null, string check_valid = "warn", double tol = 1E-08)
   NDArray multivariate_normal(NDArray mean, NDArray cov, Shape? size = null, string check_valid = "warn", double tol = 1E-08)
-  NDArray multivariate_normal(double[] mean, double[,] cov, long size, string check_valid = "warn", double tol = 1E-08) [ORPA -1]
-  NDArray multivariate_normal(double[] mean, double[,] cov, int[] size) [ORPA -1]
-  NDArray multivariate_normal(double[] mean, double[,] cov, long[] size) [ORPA -1]
   ```
 - `negative_binomial`: NumPy `negative_binomial(n, p, size=None)`
 
   ```csharp
   NDArray negative_binomial(double n, double p)
-  NDArray negative_binomial(double n, double p, Shape size)
-  NDArray negative_binomial(NDArray n, NDArray p, Shape size = default)
+  NDArray negative_binomial(double n, double p, Shape? size)
+  NDArray negative_binomial(NDArray n, NDArray p, Shape? size = null)
   ```
 - `noncentral_chisquare`: NumPy `noncentral_chisquare(df, nonc, size=None)`
 
   ```csharp
   NDArray noncentral_chisquare(double df, double nonc)
-  NDArray noncentral_chisquare(double df, double nonc, Shape size)
-  NDArray noncentral_chisquare(NDArray df, NDArray nonc, Shape size = default)
+  NDArray noncentral_chisquare(double df, double nonc, Shape? size)
+  NDArray noncentral_chisquare(NDArray df, NDArray nonc, Shape? size = null)
   ```
 - `noncentral_f`: NumPy `noncentral_f(dfnum, dfden, nonc, size=None)`
 
   ```csharp
   NDArray noncentral_f(double dfnum, double dfden, double nonc)
-  NDArray noncentral_f(double dfnum, double dfden, double nonc, Shape size)
-  NDArray noncentral_f(NDArray dfnum, NDArray dfden, NDArray nonc, Shape size = default)
+  NDArray noncentral_f(double dfnum, double dfden, double nonc, Shape? size)
+  NDArray noncentral_f(NDArray dfnum, NDArray dfden, NDArray nonc, Shape? size = null)
   ```
 - `normal`: NumPy `normal(loc=0.0, scale=1.0, size=None)`
 
   ```csharp
   NDArray normal(double loc, double scale)
-  NDArray normal(double loc = 0, double scale = 1, Shape size = default)
-  NDArray normal(NDArray loc, NDArray scale = null, Shape size = default)
+  NDArray normal(double loc = 0, double scale = 1, Shape? size = null)
+  NDArray normal(NDArray loc, NDArray scale = null, Shape? size = null)
   ```
 - `pareto`: NumPy `pareto(a, size=None)`
 
   ```csharp
-  NDArray pareto(double a, Shape size)
-  NDArray pareto(double a, int[] size) [ORPA -1]
-  NDArray pareto(double a, long[] size) [ORPA -1]
-  NDArray pareto(double a, long size) [ORPA -1]
+  NDArray pareto(double a, Shape? size)
   NDArray pareto(double a)
-  NDArray pareto(NDArray a, Shape size = default)
+  NDArray pareto(NDArray a, Shape? size = null)
   ```
 - `permutation`: NumPy `permutation(x)`
 
@@ -2246,32 +2153,23 @@ PascalCase: `ToString`
 
   ```csharp
   NDArray poisson(double lam)
-  NDArray poisson(double lam = 1, Shape size = default)
-  NDArray poisson(NDArray lam, Shape size = default)
+  NDArray poisson(double lam = 1, Shape? size = null)
+  NDArray poisson(NDArray lam, Shape? size = null)
   ```
 - `power`: NumPy `power(a, size=None)`
 
   ```csharp
-  NDArray power(double a, Shape size)
-  NDArray power(double a, int[] size) [ORPA -1]
-  NDArray power(double a, long[] size) [ORPA -1]
-  NDArray power(double a, long size) [ORPA -1]
+  NDArray power(double a, Shape? size)
   NDArray power(double a)
-  NDArray power(NDArray a, Shape size = default)
-  ```
-- `rand`: NumPy `rand(*args)`
-
-  ```csharp
-  NDArray rand(params long[] shape)
-  NDArray rand(Shape shape)
+  NDArray power(NDArray a, Shape? size = null)
   ```
 - `randint`: NumPy `randint(low, high=None, size=None, dtype=<class 'int'>)`
 
   ```csharp
-  NDArray randint(long low, long? high = null, Shape size = default, DType dtype = null)
-  NDArray randint(ulong low, ulong? high = null, Shape size = default, DType dtype = null)
-  NDArray randint(BigInteger low, BigInteger? high = null, Shape size = default, DType dtype = null)
-  NDArray randint(NDArray low, NDArray high = null, Shape size = default, DType dtype = null)
+  NDArray randint(long low, long? high = null, Shape? size = null, DType dtype = null)
+  NDArray randint(ulong low, ulong? high = null, Shape? size = null, DType dtype = null)
+  NDArray randint(BigInteger low, BigInteger? high = null, Shape? size = null, DType dtype = null)
+  NDArray randint(NDArray low, NDArray high = null, Shape? size = null, DType dtype = null)
   ```
 - `randn`: NumPy `randn(*args)`
 
@@ -2279,36 +2177,12 @@ PascalCase: `ToString`
   NDArray randn(params long[] shape)
   T randn<T>()
   ```
-- `random`: NumPy `random(size=None)`
-
-  ```csharp
-  NDArray random(params long[] size)
-  NDArray random(Shape size)
-  ```
-- `random_sample`: NumPy `random_sample(size=None)`
-
-  ```csharp
-  NDArray random_sample(params long[] size)
-  NDArray random_sample(Shape size)
-  ```
-- `ranf`: NumPy `ranf(*args, **kwargs)`
-
-  ```csharp
-  NDArray ranf(params long[] size)
-  NDArray ranf(Shape size)
-  ```
 - `rayleigh`: NumPy `rayleigh(scale=1.0, size=None)`
 
   ```csharp
   NDArray rayleigh(double scale)
-  NDArray rayleigh(double scale = 1, Shape size = default)
-  NDArray rayleigh(NDArray scale, Shape size = default)
-  ```
-- `sample`: NumPy `sample(*args, **kwargs)`
-
-  ```csharp
-  NDArray sample(params long[] size)
-  NDArray sample(Shape size)
+  NDArray rayleigh(double scale = 1, Shape? size = null)
+  NDArray rayleigh(NDArray scale, Shape? size = null)
   ```
 - `seed`: NumPy `seed(seed=None)`
 
@@ -2333,80 +2207,80 @@ PascalCase: `ToString`
 
   ```csharp
   NDArray standard_cauchy()
-  NDArray standard_cauchy(Shape size)
+  NDArray standard_cauchy(Shape? size)
   ```
 - `standard_exponential`: NumPy `standard_exponential(size=None)`
 
   ```csharp
   NDArray standard_exponential()
-  NDArray standard_exponential(Shape size)
+  NDArray standard_exponential(Shape? size)
   ```
 - `standard_gamma`: NumPy `standard_gamma(shape, size=None)`
 
   ```csharp
   NDArray standard_gamma(double shape)
-  NDArray standard_gamma(double shape, Shape size)
-  NDArray standard_gamma(NDArray shape, Shape size = default)
+  NDArray standard_gamma(double shape, Shape? size)
+  NDArray standard_gamma(NDArray shape, Shape? size = null)
   ```
 - `standard_normal`: NumPy `standard_normal(size=None)`
 
   ```csharp
   NDArray standard_normal()
-  NDArray standard_normal(Shape size)
+  NDArray standard_normal(Shape? size)
   ```
 - `standard_t`: NumPy `standard_t(df, size=None)`
 
   ```csharp
   NDArray standard_t(double df)
-  NDArray standard_t(double df, Shape size)
-  NDArray standard_t(NDArray df, Shape size = default)
+  NDArray standard_t(double df, Shape? size)
+  NDArray standard_t(NDArray df, Shape? size = null)
   ```
 - `triangular`: NumPy `triangular(left, mode, right, size=None)`
 
   ```csharp
   NDArray triangular(double left, double mode, double right)
-  NDArray triangular(double left, double mode, double right, Shape size)
-  NDArray triangular(NDArray left, NDArray mode, NDArray right, Shape size = default)
+  NDArray triangular(double left, double mode, double right, Shape? size)
+  NDArray triangular(NDArray left, NDArray mode, NDArray right, Shape? size = null)
   ```
 - `uniform`: NumPy `uniform(low=0.0, high=1.0, size=None)`
 
   ```csharp
   NDArray uniform(double low, double high)
-  NDArray uniform(double low = 0, double high = 1, Shape size = default)
-  NDArray uniform(NDArray low, NDArray high = null, Shape size = default)
+  NDArray uniform(double low = 0, double high = 1, Shape? size = null)
+  NDArray uniform(NDArray low, NDArray high = null, Shape? size = null)
   ```
 - `vonmises`: NumPy `vonmises(mu, kappa, size=None)`
 
   ```csharp
   NDArray vonmises(double mu, double kappa)
-  NDArray vonmises(double mu, double kappa, Shape size)
-  NDArray vonmises(NDArray mu, NDArray kappa, Shape size = default)
+  NDArray vonmises(double mu, double kappa, Shape? size)
+  NDArray vonmises(NDArray mu, NDArray kappa, Shape? size = null)
   ```
 - `wald`: NumPy `wald(mean, scale, size=None)`
 
   ```csharp
   NDArray wald(double mean, double scale)
-  NDArray wald(double mean, double scale, Shape size)
-  NDArray wald(NDArray mean, NDArray scale, Shape size = default)
+  NDArray wald(double mean, double scale, Shape? size)
+  NDArray wald(NDArray mean, NDArray scale, Shape? size = null)
   ```
 - `weibull`: NumPy `weibull(a, size=None)`
 
   ```csharp
   NDArray weibull(double a)
-  NDArray weibull(double a, Shape size)
-  NDArray weibull(NDArray a, Shape size = default)
+  NDArray weibull(double a, Shape? size)
+  NDArray weibull(NDArray a, Shape? size = null)
   ```
 - `zipf`: NumPy `zipf(a, size=None)`
 
   ```csharp
   NDArray zipf(double a)
-  NDArray zipf(double a, Shape size)
-  NDArray zipf(NDArray a, Shape size = default)
+  NDArray zipf(double a, Shape? size)
+  NDArray zipf(NDArray a, Shape? size = null)
   ```
 
-### Identical to NumPy (6)
+### Identical to NumPy (11)
 
-`Generator`, `bytes`, `get_bit_generator`, `random_integers`, `set_bit_generator`, `shuffle`
+`Generator`, `bytes`, `get_bit_generator`, `rand`, `random`, `random_integers`, `random_sample`, `ranf`, `sample`, `set_bit_generator`, `shuffle`
 
 ### NumSharp-only names (2 NumPy-style, 1 PascalCase C# members)
 
@@ -2761,8 +2635,8 @@ PascalCase: `Clone`, `GetAtIndex`
 
 | name | NumPy | closest C# overload | differences |
 |---|---|---|---|
-| `argmax` | `matrix.argmax(axis=None, out=None)` | `NDMatrix argmax(int axis, NDArray out = null)`<br>(+1 more overloads, below) | **C# requires**: `axis` |
-| `argmin` | `matrix.argmin(axis=None, out=None)` | `NDMatrix argmin(int axis, NDArray out = null)`<br>(+1 more overloads, below) | **C# requires**: `axis` |
+| `argmax` | `matrix.argmax(axis=None, out=None)` | `NDArray argmax(NDAxis? axis, NDArray out = null)` | **C# requires**: `axis` |
+| `argmin` | `matrix.argmin(axis=None, out=None)` | `NDArray argmin(NDAxis? axis, NDArray out = null)` | **C# requires**: `axis` |
 | `argsort` | `matrix.argsort(axis=-1, kind=None, order=None, *, stable=None)` | `NDMatrix argsort(int? axis = -1)` | **missing**: `kind`, `stable`<br>**policy**: `order` |
 | `astype` | `matrix.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)` | `NDMatrix astype(DType dtype, char order = 'K', string casting = "unsafe", bool copy = true)` | **slot**: `copy: NumPy #4, C# #3`<br>**policy**: `subok` |
 | `choose` | `matrix.choose(choices, out=None, mode='raise')` | `NDMatrix choose(NDArray[] choices, string mode = "raise")` | **missing**: `out`<br>**slot**: `mode: NumPy #2, C# #1` |
@@ -2778,37 +2652,13 @@ PascalCase: `Clone`, `GetAtIndex`
 | `view` | `matrix.view(dtype=<optional>, type=<optional>)` | `NDArray view(DType dtype, Type type)`<br>(+2 more overloads, below) | **C# requires**: `dtype`, `type` |
 | `(constructor)` | `matrix(data, dtype=None, copy=True)` | `NDMatrix (constructor)(UnmanagedStorage storage)` | **missing**: `dtype`, `copy`<br>**renamed**: `data -> storage` |
 
-### More than one overload (16; NumPy has one signature each)
+### More than one overload (12; NumPy has one signature each)
 
 - `__pow__`: NumPy `matrix.__pow__(other)`
 
   ```csharp
   NDMatrix __pow__(int n)
   NDMatrix __pow__(object other)
-  ```
-- `all`: NumPy `matrix.all(axis=None, out=None)`
-
-  ```csharp
-  NDMatrix all(int axis, NDArray out = null)
-  NDArray all(NDAxis? axis = null, NDArray out = null)
-  ```
-- `any`: NumPy `matrix.any(axis=None, out=None)`
-
-  ```csharp
-  NDMatrix any(int axis, NDArray out = null)
-  NDArray any(NDAxis? axis = null, NDArray out = null)
-  ```
-- `argmax`: NumPy `matrix.argmax(axis=None, out=None)`
-
-  ```csharp
-  NDMatrix argmax(int axis, NDArray out = null)
-  NDArray argmax(NDAxis? axis, NDArray out = null)
-  ```
-- `argmin`: NumPy `matrix.argmin(axis=None, out=None)`
-
-  ```csharp
-  NDMatrix argmin(int axis, NDArray out = null)
-  NDArray argmin(NDAxis? axis, NDArray out = null)
   ```
 - `max`: NumPy `matrix.max(axis=None, out=None)`
 
@@ -2880,9 +2730,9 @@ PascalCase: `Clone`, `GetAtIndex`
   NDArray view(DType dtype, Type type)
   ```
 
-### Identical to NumPy (27)
+### Identical to NumPy (29)
 
-`__getitem__`, `__imul__`, `__ipow__`, `__iter__`, `__mul__`, `__rmul__`, `__rpow__`, `__setitem__`, `argpartition`, `byteswap`, `conj`, `conjugate`, `copy`, `diagonal`, `flatten`, `getA`, `getA1`, `getH`, `getI`, `getT`, `getfield`, `ravel`, `repeat`, `squeeze`, `swapaxes`, `to_device`, `transpose`
+`__getitem__`, `__imul__`, `__ipow__`, `__iter__`, `__mul__`, `__rmul__`, `__rpow__`, `__setitem__`, `all`, `any`, `argpartition`, `byteswap`, `conj`, `conjugate`, `copy`, `diagonal`, `flatten`, `getA`, `getA1`, `getH`, `getI`, `getT`, `getfield`, `ravel`, `repeat`, `squeeze`, `swapaxes`, `to_device`, `transpose`
 
 ### NumSharp-only names (0 NumPy-style, 4 PascalCase C# members)
 
@@ -2921,15 +2771,13 @@ PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
 
   ```csharp
   long argmax()
-  NDArray argmax(int axis, bool keepdims = false)
-  NDArray argmax(int? axis = null, NDArray out = null, bool keepdims = false)
+  NDArray argmax(NDAxis? axis = null, NDArray out = null, bool keepdims = false)
   ```
 - `argmin`: NumPy `chararray.argmin(axis=None, out=None, *, keepdims=False)`
 
   ```csharp
   long argmin()
-  NDArray argmin(int axis, bool keepdims = false)
-  NDArray argmin(int? axis = null, NDArray out = null, bool keepdims = false)
+  NDArray argmin(NDAxis? axis = null, NDArray out = null, bool keepdims = false)
   ```
 - `partition`: NumPy `chararray.partition(sep)`
 
@@ -3039,14 +2887,8 @@ PascalCase: `ToString`
 |---|---|---|---|
 | `(constructor)` | `dtype(dtype, align=False, copy=False, *, metadata=..., **kwargs)` | `DType (constructor)(Type type)`<br>(+1 more overloads, below) | **missing**: `dtype`, `align`, `copy`, `metadata` |
 
-### More than one overload (2; NumPy has one signature each)
+### More than one overload (1; NumPy has one signature each)
 
-- `newbyteorder`: NumPy `dtype.newbyteorder(new_order='S', /)`
-
-  ```csharp
-  DType newbyteorder(string new_order = "S")
-  DType newbyteorder(char new_order)
-  ```
 - `(constructor)`: NumPy `dtype(dtype, align=False, copy=False, *, metadata=..., **kwargs)`
 
   ```csharp
@@ -3054,9 +2896,9 @@ PascalCase: `ToString`
   DType (constructor)(NPTypeCode typecode)
   ```
 
-### Identical to NumPy (2)
+### Identical to NumPy (3)
 
-`__getitem__`, `__len__`
+`__getitem__`, `__len__`, `newbyteorder`
 
 ### NumSharp-only names (0 NumPy-style, 5 PascalCase C# members)
 

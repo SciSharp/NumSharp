@@ -243,7 +243,7 @@ namespace NumSharp.Tests.Fuzz
                     int unwAxis = p.TryGetValue("axis", out var pua) ? pua.GetInt32() : -1;
                     bool unwPeriodIsInt = p.TryGetValue("period_is_int", out var pupi) && pupi.GetBoolean();
                     if (unwPeriodIsInt)
-                        return np.unwrap(ops[0], p["period"].GetInt64(), unwDiscont, unwAxis);
+                        return np.unwrap(ops[0], unwDiscont, unwAxis, period: p["period"].GetInt64());
                     if (p.TryGetValue("period", out var pup))
                         return np.unwrap(ops[0], unwDiscont, unwAxis, pup.GetDouble());
                     return np.unwrap(ops[0], unwDiscont, unwAxis);
@@ -1138,7 +1138,8 @@ namespace NumSharp.Tests.Fuzz
             {
                 // ---- portable: pure MT19937 bits + exactly-rounded arithmetic ----
                 case "uniform": return random.uniform(A(0), A(1), S());
-                case "rand": return random.rand(S());
+                // NumPy's rand(*dims) is random_sample(dims): the same stream; rand itself takes loose dimensions only.
+                case "rand": return random.random_sample(S());
                 case "random_sample": return random.random_sample(SL());
                 case "randint": return random.randint((long)A(0), (long)A(1), S());
                 case "permutation": return random.permutation((int)A(0));

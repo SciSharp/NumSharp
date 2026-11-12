@@ -1351,6 +1351,68 @@ def extension_overloads(types, clr):
     return found
 
 
+#: The parameter names that carry NumPy's axis argument (the kept-forward rule below matches them by name).
+AXIS_PARAMETER_NAMES = frozenset({"axis", "axes", "source", "destination"})
+#: The kept integer spellings of an axis parameter (the dump's short type names).
+KEPT_INTEGER_AXIS_TYPES = frozenset({"int", "int?", "int[]"})
+#: NumPy's axis type in the dump.
+NDAXIS_TYPES = frozenset({"NDAxis", "NDAxis?"})
+
+
+def is_kept_axis_forward(overload, siblings):
+    """Whether ``overload`` is one of the owner's kept integer axis forwards (API-parity batch 6, "keep the int and int[]
+    overloads ... for allllll overloads"): beside every member that takes NumPy's axis as NDAxis / NDAxis?, an ``int``
+    and an ``int[]`` overload (``int?`` for a one-integer axis) forward to it. NumPy's ONE signature is the NDAxis member;
+    the forwards are the C# spellings of the same signature, so they must not count as overloads (no O mark).
+
+    The rule is structural, never a list: the overload's axis-like parameters are ``int`` / ``int?`` / ``int[]``, and a
+    sibling of the same name and receiver has the same parameter names and types except NDAxis / NDAxis? in those
+    slots (defaults may differ: a kept forward has none on its axis and on the parameters before it). An integer
+    overload WITHOUT such a sibling still counts.
+
+    Args:
+        overload: One overload dictionary of the dump.
+        siblings: Every overload of the same name (``overload`` included).
+
+    Returns:
+        True for a kept forward.
+    """
+    params = overload["params"]
+    if not any(p["name"] in AXIS_PARAMETER_NAMES and p["type"] in KEPT_INTEGER_AXIS_TYPES for p in params):
+        return False
+    for sibling in siblings:
+        if sibling is overload or sibling.get("static") != overload.get("static"):
+            continue
+        others = sibling["params"]
+        if len(others) != len(params):
+            continue
+        same = True
+        for p, q in zip(params, others):
+            if p["name"] != q["name"]:
+                same = False
+            elif p["name"] in AXIS_PARAMETER_NAMES and p["type"] in KEPT_INTEGER_AXIS_TYPES:
+                same = q["type"] in NDAXIS_TYPES
+            else:
+                same = p["type"] == q["type"]
+            if not same:
+                break
+        if same:
+            return True
+    return False
+
+
+def drop_kept_axis_forwards(overloads):
+    """The overloads without the owner's kept integer axis forwards (see ``is_kept_axis_forward``).
+
+    Args:
+        overloads: Every overload dictionary of one name.
+
+    Returns:
+        A new list: the NumPy-signature overloads and every other overload, the kept forwards left out.
+    """
+    return [o for o in overloads if not is_kept_axis_forward(o, overloads)]
+
+
 def build_groups(dump, types):
     """Every group the comparison covers: each module facade, then (with the type dump) each object API.
 
@@ -1366,14 +1428,15 @@ def build_groups(dump, types):
     groups = []
     for key in sorted(dump, key=lambda k: (k != "np", k != "ndarray", k)):
         info = dump[key]
-        methods = {n: list(v) for n, v in info["methods"].items()}
+        # The owner's kept integer axis forwards are the NDAxis member's C# spellings, not overloads (batch 6).
+        methods = {n: drop_kept_axis_forwards(list(v)) for n, v in info["methods"].items()}
         members = set(methods) | set(info["properties"]) | set(info["fields"]) | set(info.get("types", []))
         clr = MODULE_TYPES.get(key)
         if types is not None and clr in types:
             if types[clr]["ctors"]:
                 methods[CONSTRUCTOR] = list(types[clr]["ctors"])
             for name, extra in extension_overloads(types, clr).items():
-                methods.setdefault(name, []).extend(extra)
+                methods[name] = drop_kept_axis_forwards(methods.get(name, []) + list(extra))
                 members.add(name)
         groups.append({"key": key, "target": resolve_module(key), "methods": methods, "members": members,
                        "own_only": False, "clr": clr or info["type"]})
@@ -1384,13 +1447,13 @@ def build_groups(dump, types):
         target = resolve_numpy_path(path)
         if info is None or target is None:
             continue
-        methods = {n: list(v) for n, v in info["methods"].items()}
+        methods = {n: drop_kept_axis_forwards(list(v)) for n, v in info["methods"].items()}
         if info["ctors"]:
             # A generic class's constructors take the class's type argument as their dtype (`new NDArray<double>(shape)`),
             # so they carry its generic parameters, which typecode_params reads as a dtype selector.
             methods[CONSTRUCTOR] = [dict(c, generic=list(info["genericParams"])) for c in info["ctors"]]
         for name, extra in extension_overloads(types, clr).items():
-            methods.setdefault(name, []).extend(extra)
+            methods[name] = drop_kept_axis_forwards(methods.get(name, []) + list(extra))
         members = set(methods) | set(info["properties"]) | set(info["fields"]) | set(info["types"])
         # Members a C# subclass inherits from a NumSharp base are there for the caller too (NDMatrix.reshape is
         # NDArray.reshape), so they count as present when NumPy's names are checked.

@@ -934,7 +934,7 @@ namespace NumSharp.Tests.RandomSampling
             D(rs.rand(5)).Should().Equal(0.3745401188473625, 0.9507143064099162, 0.7319939418114051, 0.5986584841970366, 0.15601864044243652);
             var single = np.random.RandomState(42);
             var bulk = np.random.RandomState(42);
-            double[] b = D(bulk.rand(new Shape(700)));
+            double[] b = D(bulk.rand(700));
             var s = new double[700];
             for (int k = 0; k < 700; k++) s[k] = Convert.ToDouble(single.rand().GetAtIndex(0));
             b.Should().Equal(s);

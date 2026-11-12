@@ -428,7 +428,7 @@ namespace NumSharp.Tests.DTypes
             np.dtype(">i4").newbyteorder(">").str.Should().Be(">i4");
             np.dtype(">M8[ns]").newbyteorder("S").str.Should().Be("<M8[ns]");
             np.dtype("i4").newbyteorder().str.Should().Be(">i4", "the default is 'S' (swap)");
-            np.dtype("i4").newbyteorder('>').Should().Be(np.dtype(">i4"));
+            np.dtype("i4").newbyteorder(">").Should().Be(np.dtype(">i4"));
             np.dtype("i4").newbyteorder("=").isbuiltin.Should().Be(0, "newbyteorder always returns a new descriptor");
         }
 

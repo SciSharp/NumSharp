@@ -35,7 +35,7 @@ namespace NumSharp
         ///     from <see cref="NumSharp.Generator.choice(NDArray, Shape?, bool, NDArray, int, bool)"/>'s).
         /// </remarks>
         [NDScoped]
-        public NDArray choice(NDArray a, Shape size = default, bool replace = true, NDArray p = null)
+        public NDArray choice(NDArray a, Shape? size = null, bool replace = true, NDArray p = null)
         {
             // NumPy: np.asarray(None) is 0-d and operator.index(None) raises, so None is the 0-d branch's ValueError
             // whatever the size.
@@ -43,8 +43,8 @@ namespace NumSharp
                 throw new ValueError("a must be 1-dimensional or an integer");
 
             // `shape == None` means `shape == ()`, with the sample unpacked at the end (NumPy's is_scalar).
-            bool isScalar = size.IsEmpty;
-            Shape shape = isScalar ? Shape.Scalar : size;
+            bool isScalar = size.GetValueOrDefault().IsEmpty;
+            Shape shape = isScalar ? Shape.Scalar : size.GetValueOrDefault();
             long count = isScalar ? 1 : shape.size; // np.prod(size); prod(()) == 1
 
             // ---- resolve the population (NumPy: a = np.asarray(a); legacy: 1-D or an integer only) ----
@@ -86,7 +86,7 @@ namespace NumSharp
                         var cdf = np.cumsum(np.array(pw));
                         double total = Convert.ToDouble(cdf.GetAtIndex(cdf.size - 1));
                         cdf = cdf / total;
-                        var uniformSamples = rand(shape);
+                        var uniformSamples = FillUniform(shape);
                         idx = np.searchsorted(cdf, uniformSamples, "right").astype(LegacyLong);
                     }
                     else if (popExceedsInt64)
@@ -145,7 +145,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html
         /// </remarks>
         [NDScoped]
-        public NDArray choice(long a, Shape size = default, bool replace = true, NDArray p = null)
+        public NDArray choice(long a, Shape? size = null, bool replace = true, NDArray p = null)
             => choice(NDArray.WritableScalar(a), size, replace, p);
 
         /// <summary>
@@ -161,7 +161,7 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html
         /// </remarks>
-        public NDArray choice(int a, Shape size = default, bool replace = true, NDArray p = null)
+        public NDArray choice(int a, Shape? size = null, bool replace = true, NDArray p = null)
             => choice((long)a, size, replace, p);
 
         /// <summary>
@@ -205,7 +205,7 @@ namespace NumSharp
             {
                 long need = size - nUniq;
                 // x = self.rand(size - n_uniq): the legacy next_double draws.
-                using NDArray x = rand(new Shape(need));
+                using NDArray x = FillUniform(new Shape(need));
                 double* xp = (double*)x.Address;
 
                 for (long k = 0; k < nUniq; k++) pw[found[k]] = 0.0;

@@ -77,11 +77,11 @@ namespace NumSharp
         ///     NumPy's <c>legacy_normal</c>: <c>loc + scale * legacy_gauss</c> (the cached polar method). Holds the bit
         ///     generator's lock for the draws.
         /// </remarks>
-        public NDArray normal(double loc = 0.0, double scale = 1.0, Shape size = default)
+        public NDArray normal(double loc = 0.0, double scale = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -93,7 +93,7 @@ namespace NumSharp
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;
@@ -129,9 +129,9 @@ namespace NumSharp
         ///     NumPy's <c>legacy_gauss</c> directly (not <c>0 + 1 * gauss</c>: <c>standard_normal</c> returns the draw itself,
         ///     so a <c>-0.0</c> normal keeps its sign). Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray standard_normal(Shape size)
+        public NDArray standard_normal(Shape? size)
         {
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -143,7 +143,7 @@ namespace NumSharp
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

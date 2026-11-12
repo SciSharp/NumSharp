@@ -190,6 +190,45 @@ class NumPySignature:
     text: str
 
 
+#: The parameter names that carry NumPy's axis argument (the kept-forward rule matches them by name).
+AXIS_PARAMETER_NAMES = frozenset({"axis", "axes", "source", "destination"})
+#: The kept integer spellings of an axis parameter (the inventory's friendly type names).
+KEPT_INTEGER_AXIS_TYPES = frozenset({"int", "int?", "int[]"})
+#: NumPy's axis type in the inventory (full names: NumSharp types are not C# aliases).
+NDAXIS_TYPES = frozenset({"NumSharp.NDAxis", "NumSharp.NDAxis?"})
+
+
+def drop_kept_axis_forwards(overloads: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """The overloads without the owner's kept integer axis forwards (API-parity batch 6: "keep the int and int[]
+    overloads ... for allllll overloads"). Beside every member that takes NumPy's axis as NDAxis / NDAxis?, an ``int`` and
+    an ``int[]`` overload (``int?`` for a one-integer axis) forward to it; they are C# spellings of the NDAxis member's
+    one NumPy signature, so they must not count as overloads (the O mark). The same structural rule as
+    tools/api-parameter-parity/signature_diff.py's ``is_kept_axis_forward``: integer-typed axis-like parameters, and a
+    sibling with the same parameter names and types except NDAxis / NDAxis? in those slots.
+
+    Args:
+        overloads: Every overload record of one member (inventory schema 7: ``parameters`` with ``name`` and ``type``).
+
+    Returns:
+        A new list without the kept forwards (an integer overload without such a sibling stays).
+    """
+    def is_forward(overload: Mapping[str, Any]) -> bool:
+        params = list(overload.get("parameters") or [])
+        if not any(p["name"] in AXIS_PARAMETER_NAMES and p["type"] in KEPT_INTEGER_AXIS_TYPES for p in params):
+            return False
+        for sibling in overloads:
+            others = list(sibling.get("parameters") or [])
+            if sibling is overload or len(others) != len(params):
+                continue
+            if all(p["name"] == q["name"] and (q["type"] in NDAXIS_TYPES if p["name"] in AXIS_PARAMETER_NAMES
+                                               and p["type"] in KEPT_INTEGER_AXIS_TYPES else p["type"] == q["type"])
+                   for p, q in zip(params, others)):
+                return True
+        return False
+
+    return [o for o in overloads if not is_forward(o)]
+
+
 def default_text(np: Any, value: Any) -> Any:
     """Convert an ``inspect`` default to the text a ``Param`` keeps.
 
@@ -827,7 +866,8 @@ def assess(np: Any, row: Mapping[str, Any], member: Mapping[str, Any] | None) ->
         return _not_compared(spelling, "the credited member is not in the inventory")
     if member_kind != "method":
         return _not_compared(spelling, f"credited to a {member_kind or 'non-method member'}")
-    overloads = member.get("overloads") or []
+    # The owner's kept integer axis forwards (API-parity batch 6) are the NDAxis member's C# spellings, not overloads.
+    overloads = drop_kept_axis_forwards(member.get("overloads") or [])
     if not overloads:
         return _not_compared(spelling, "the inventory carries no overload data for the credited member")
     signature = numpy_parameters(np, row["id"])

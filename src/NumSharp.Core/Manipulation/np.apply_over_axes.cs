@@ -42,15 +42,16 @@ namespace NumSharp
         /// </param>
         /// <param name="a">Input array.</param>
         /// <param name="axes">
-        ///     The axes to apply <paramref name="func"/> over, in order. Negative axes count from the
-        ///     end using <paramref name="a"/>'s ORIGINAL rank (matching NumPy — the normalization does
-        ///     not track the running result's rank, which the re-expansion keeps equal anyway).
+        ///     NumPy's <c>axes</c>: one axis or a tuple of axes, applied in order (an int is NumPy's <c>(axes,)</c>;
+        ///     <c>()</c> applies nothing and returns <paramref name="a"/> itself; a repeat applies <paramref name="func"/>
+        ///     again). Negative axes count from the end using <paramref name="a"/>'s ORIGINAL rank (matching NumPy — the
+        ///     normalization does not track the running result's rank, which the re-expansion keeps equal anyway).
         /// </param>
         /// <returns>
         ///     The array after applying <paramref name="func"/> over every axis; same rank as
         ///     <paramref name="a"/>, sizes along <paramref name="axes"/> reduced (typically to 1).
         /// </returns>
-        /// <exception cref="ArgumentNullException"><paramref name="func"/>, <paramref name="a"/>, or <paramref name="axes"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="func"/> or <paramref name="a"/> is null.</exception>
         /// <exception cref="ValueError">
         ///     <paramref name="func"/> returns an array whose rank is neither equal to nor exactly one
         ///     less than its input's, so the reduced axis cannot be re-inserted —
@@ -64,15 +65,15 @@ namespace NumSharp
         ///     only by a GC — run the call inside an <see cref="NDScope"/> (yielding the final result) when
         ///     deterministic release matters. The re-expanded views this method creates are its own and are
         ///     released as soon as they are superseded.</para>
+        ///     <para>One signature for NumPy's int-or-tuple <c>axes</c> since API-parity batch 6; the <c>int</c> and
+        ///     <c>int[]</c> overloads forward here.</para>
         /// </remarks>
-        public static NDArray apply_over_axes(Func<NDArray, int, NDArray> func, NDArray a, int[] axes)
+        public static NDArray apply_over_axes(Func<NDArray, int, NDArray> func, NDArray a, NDAxis axes)
         {
             if (func is null)
                 throw new ArgumentNullException(nameof(func));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            if (axes is null)
-                throw new ArgumentNullException(nameof(axes));
 
             // asarray(a) is a no-op for an ndarray (views preserved), so `val` starts as `a`.
             NDArray val = a;
@@ -85,7 +86,8 @@ namespace NumSharp
             // is returned and never released here (R1).
             bool valIsOurs = false;
 
-            foreach (int rawAxis in axes)
+            // NumPy: `if array(axes).ndim == 0: axes = (axes,)` - the int form is the one-element tuple.
+            foreach (int rawAxis in axes.ToArray())
             {
                 int axis = rawAxis < 0 ? N + rawAxis : rawAxis;
 
@@ -121,7 +123,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Advances <see cref="apply_over_axes(Func{NDArray, int, NDArray}, NDArray, int[])"/>'s running
+        ///     Advances <see cref="apply_over_axes(Func{NDArray, int, NDArray}, NDArray, NDAxis)"/>'s running
         ///     value to <paramref name="next"/>, releasing the superseded value only when it is one of the
         ///     method's OWN expand_dims views — never a callback result, never the caller's input.
         /// </summary>
@@ -142,20 +144,30 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Scalar-axis overload — NumPy accepts a single integer for <c>axes</c> (its
-        ///     <c>array(axes).ndim == 0</c> branch wraps it into a one-tuple). Forwards to the array
-        ///     overload with a single-element axis list.
+        ///     <see cref="apply_over_axes(Func{NDArray, int, NDArray}, NDArray, NDAxis)"/> with one <c>int</c> axis: the
+        ///     overload a C# integer binds (NumPy's <c>array(axes).ndim == 0</c> branch, the 1-tuple), forwarding to the NDAxis
+        ///     form, so every answer and error is that one's.
         /// </summary>
-        /// <param name="func">Called as <c>func(current, axis)</c>; see the array overload.</param>
+        /// <param name="func">Called as <c>func(current, axis)</c>; see the NDAxis form.</param>
         /// <param name="a">Input array.</param>
         /// <param name="axes">The single axis to apply <paramref name="func"/> over; negative counts from the end.</param>
-        /// <returns>See the array overload.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="func"/> or <paramref name="a"/> is null.</exception>
-        /// <exception cref="ValueError"><paramref name="func"/> returns an array of the wrong rank.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.apply_over_axes.html</remarks>
+        /// <returns>See the NDAxis form.</returns>
+        /// <inheritdoc cref="apply_over_axes(Func{NDArray, int, NDArray}, NDArray, NDAxis)"/>
         public static NDArray apply_over_axes(Func<NDArray, int, NDArray> func, NDArray a, int axes)
-        {
-            return apply_over_axes(func, a, new[] { axes });
-        }
+            => apply_over_axes(func, a, (NDAxis)axes);
+
+        /// <summary>
+        ///     <see cref="apply_over_axes(Func{NDArray, int, NDArray}, NDArray, NDAxis)"/> with the axes as an
+        ///     <c>int[]</c>: the overload an <c>int[]</c> (and a bare <c>null</c>) binds, forwarding to the NDAxis form as
+        ///     NumPy's tuple. NumPy's <c>axes</c> has no None, so a null array throws, as the NDAxis conversion does.
+        /// </summary>
+        /// <param name="func">Called as <c>func(current, axis)</c>; see the NDAxis form.</param>
+        /// <param name="a">Input array.</param>
+        /// <param name="axes">The axes, in order (not null; <c>new int[0]</c> applies nothing).</param>
+        /// <returns>See the NDAxis form.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="axes"/> is null.</exception>
+        /// <inheritdoc cref="apply_over_axes(Func{NDArray, int, NDArray}, NDArray, NDAxis)"/>
+        public static NDArray apply_over_axes(Func<NDArray, int, NDArray> func, NDArray a, int[] axes)
+            => apply_over_axes(func, a, (NDAxis)axes);
     }
 }

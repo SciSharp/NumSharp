@@ -165,5 +165,25 @@ namespace NumSharp.Tests
             Matrix(np.percentile(m, 50, 1), 1, 2, 2.0, 4.0);
             Matrix(np.quantile(m, 0.5, new[] { 1 }), 1, 2, 2.0, 4.0);
         }
+
+        /// <summary>
+        ///     np.unwrap with a period of several elements: NumPy broadcasts the period into its elementwise statements, so a
+        ///     float period array that broadcasts against <c>diff(p)</c> unwraps each lane by its own period, and one that does
+        ///     not is the broadcast ValueError. NumSharp's one-signature unwrap (API-parity batch 6, an <see cref="NDArray"/>
+        ///     period) reads one number only and raises <see cref="NotSupportedException"/> for more. Found by API-parity
+        ///     batch 6 (NumPy 2.4.2 probes: <c>np.unwrap(p2, period=np.array([[4.0], [6.0]]))</c>; an integer period array
+        ///     is NumPy's own "truth value ... ambiguous" error from <c>if boundary_ambiguous</c>).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "api-parity-batch-6")]
+        public void ApiParity_Unwrap_PeriodArray_BroadcastsAsNumPy()
+        {
+            var p2 = np.array(new double[,] { { 0, 1, 2, -1, 0 }, { 0, 1, 2, -1, 0 } });
+            var lanes = np.unwrap(p2, period: np.array(new double[,] { { 4.0 }, { 6.0 } }));
+            lanes.dtype.Should().Be(np.float64);
+            lanes.ToArray<double>().Should().Equal(0.0, 1.0, 2.0, 3.0, 4.0, 0.0, 1.0, 2.0, -1.0, 0.0);
+
+            Action mismatch = () => np.unwrap(np.array(new[] { 0.0, 1.0, 2.0, -1.0, 0.0 }), period: np.array(new[] { 4.0, 4.0 }));
+            mismatch.Should().Throw<ValueError>().WithMessage("operands could not be broadcast together with shapes (4,) (2,) ");
+        }
     }
 }

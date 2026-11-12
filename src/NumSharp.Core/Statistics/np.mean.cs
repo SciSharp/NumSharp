@@ -59,5 +59,26 @@ namespace NumSharp
             // The whole call is the engine's: TensorEngine.ReduceMean of a's engine takes every keyword.
             return a.TensorEngine.ReduceMean(a, axis, keepdims, dtype, @out, @where);
         }
+
+        /// <summary>
+        ///     <see cref="mean(NDArray, NDAxis?, DType, NDArray, bool, NDArray)"/> with the axis as one <c>int</c>: the
+        ///     overload a C# integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the
+        ///     NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="mean(NDArray, NDAxis?, DType, NDArray, bool, NDArray)"/>
+        public static NDArray mean(NDArray a, int axis, DType dtype = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
+            => mean(a, (NDAxis?)axis, dtype, @out, keepdims, @where);
+
+        /// <summary>
+        ///     <see cref="mean(NDArray, NDAxis?, DType, NDArray, bool, NDArray)"/> with the axes as an <c>int[]</c>:
+        ///     the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better
+        ///     than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's
+        ///     tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="mean(NDArray, NDAxis?, DType, NDArray, bool, NDArray)"/>
+        public static NDArray mean(NDArray a, int[] axis, DType dtype = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
+            => mean(a, (NDAxis?)axis, dtype, @out, keepdims, @where);
     }
 }

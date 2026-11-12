@@ -509,7 +509,7 @@ namespace NumSharp.Tests.APIs
             A.argmin(1).ToArray<long>().Should().OnlyContain(v => v == 0L);
 
             static string[] Forms(Type owner, string name, BindingFlags flags)
-                => owner.GetMethods(flags).Where(m => m.Name == name)
+                => owner.GetMethods(flags).Where(m => m.Name == name).WithoutKeptIntegerForms()
                     .Select(m => string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name))).OrderBy(s => s).ToArray();
             Forms(typeof(np), "argmax", BindingFlags.Public | BindingFlags.Static)
                 .Should().Equal("NDArray a", "NDArray a, Nullable`1 axis, NDArray out, Boolean keepdims");
@@ -567,7 +567,7 @@ namespace NumSharp.Tests.APIs
             Action zeroD = () => np.roll(np.array(5L), 1, new NDAxis());
             zeroD.Should().Throw<ValueError>().WithMessage("not enough values to unpack (expected 2, got 0)");
 
-            typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.Name == "roll")
+            typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.Name == "roll").WithoutKeptIntegerForms()
                 .Select(m => string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)))
                 .Should().Equal("NDArray a, NDArray shift, Nullable`1 axis");
         }
@@ -609,7 +609,7 @@ namespace NumSharp.Tests.APIs
             foreach (var name in names)
             {
                 var forms = typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static)
-                    .Where(m => m.Name == name && m.GetParameters().Any(p => p.Name == "axis")).ToArray();
+                    .Where(m => m.Name == name && m.GetParameters().Any(p => p.Name == "axis")).WithoutKeptIntegerForms();
                 forms.Should().HaveCount(1, $"np.{name} has one axis-taking form");
                 forms[0].GetParameters().Single(p => p.Name == "axis").ParameterType.Should().Be(typeof(NDAxis?), $"np.{name}");
             }
@@ -618,6 +618,7 @@ namespace NumSharp.Tests.APIs
             {
                 typeof(NDArray).GetMethods(BindingFlags.Public | BindingFlags.Instance)
                     .Where(m => m.Name == name && m.DeclaringType == typeof(NDArray) && m.GetParameters().Any(p => p.Name == "axis"))
+                    .WithoutKeptIntegerForms()
                     .Select(m => m.GetParameters().Single(p => p.Name == "axis").ParameterType)
                     .Should().Equal(new[] { typeof(NDAxis?) }, $"ndarray.{name}");
                 typeof(NDMatrix).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)

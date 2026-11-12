@@ -63,7 +63,7 @@ namespace NumSharp
         ///     <br/>mtrand's <c>cont(&amp;legacy_beta, …)</c> broadcast path, one <c>legacy_beta</c> call per output position
         ///     with that position's <c>(a, b)</c>: byte-identical to <c>RandomState(seed).beta(a_arr, b_arr, size)</c>.
         /// </remarks>
-        public NDArray beta(NDArray a, NDArray b, Shape size = default)
+        public NDArray beta(NDArray a, NDArray b, Shape? size = null)
         {
             using var pa = RandomParam.Float64(a);
             using var pb = RandomParam.Float64(b);
@@ -72,7 +72,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pa.Array, "a", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pb.Array, "b", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pa.Array, pb.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pa.Array, pb.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -117,14 +117,14 @@ namespace NumSharp
         ///     <br/><c>legacy_exponential</c> = <c>scale * -log(1 - U)</c> per position: exactly one uniform per value, so the
         ///     uniforms are bulk-filled and transformed in place. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray exponential(NDArray scale, Shape size = default)
+        public NDArray exponential(NDArray scale, Shape? size = null)
         {
             using var ps = RandomParam.Float64(scale, 1.0);
             if (ps.IsScalar)
                 return exponential(ps.Scalar(), size);
 
             RandomConstraints.CheckArray(ps.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, ps.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, ps.Array);
             unsafe
             {
                 FillUniforms(ret);
@@ -161,7 +161,7 @@ namespace NumSharp
         ///     <c>low</c> and the range. The uniforms are bulk-filled (one per value) and transformed in place.
         ///     Byte-identical to NumPy.
         /// </remarks>
-        public NDArray uniform(NDArray low, NDArray high = null, Shape size = default)
+        public NDArray uniform(NDArray low, NDArray high = null, Shape? size = null)
         {
             using var pLow = RandomParam.Float64(low, 0.0);
             using var pHigh = RandomParam.Float64(high, 1.0);
@@ -174,7 +174,7 @@ namespace NumSharp
             // CONS_NON_NEGATIVE on the range does not exist here).
             if (!RandomBroadcast.AllInRange(pRange.Array, -double.MaxValue, double.MaxValue))
                 throw new OverflowError("Range exceeds valid bounds");
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pLow.Array, pRange.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pLow.Array, pRange.Array);
             unsafe
             {
                 FillUniforms(ret);
@@ -208,7 +208,7 @@ namespace NumSharp
         ///     RandomState's cached Gaussian exactly as the per-value calls would) and are transformed in place.
         ///     Byte-identical to NumPy.
         /// </remarks>
-        public NDArray normal(NDArray loc, NDArray scale = null, Shape size = default)
+        public NDArray normal(NDArray loc, NDArray scale = null, Shape? size = null)
         {
             using var pLoc = RandomParam.Float64(loc, 0.0);
             using var pScale = RandomParam.Float64(scale, 1.0);
@@ -216,7 +216,7 @@ namespace NumSharp
                 return normal(pLoc.Scalar(), pScale.Scalar(), size);
 
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pLoc.Array, pScale.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pLoc.Array, pScale.Array);
             unsafe
             {
                 FillLegacyGauss(ret);
@@ -247,14 +247,14 @@ namespace NumSharp
         ///     <br/><c>legacy_standard_gamma</c> per position (Marsaglia-Tsang over the cached-Gaussian polar normals above
         ///     1, Johnk/Ahrens-Dieter below). Byte-identical to NumPy.
         /// </remarks>
-        public NDArray standard_gamma(NDArray shape, Shape size = default)
+        public NDArray standard_gamma(NDArray shape, Shape? size = null)
         {
             using var p = RandomParam.Float64(shape);
             if (p.IsScalar)
                 return standard_gamma(p.ScalarChecked("shape", ConstraintType.CONS_NON_NEGATIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "shape", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, p.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -301,7 +301,7 @@ namespace NumSharp
         ///     <br/><c>legacy_gamma</c> = <c>scale * legacy_standard_gamma(shape)</c> per position (a zero shape returns 0
         ///     without drawing). Byte-identical to NumPy.
         /// </remarks>
-        public NDArray gamma(NDArray shape, NDArray scale = null, Shape size = default)
+        public NDArray gamma(NDArray shape, NDArray scale = null, Shape? size = null)
         {
             using var pShape = RandomParam.Float64(shape);
             using var pScale = RandomParam.Float64(scale, 1.0);
@@ -310,7 +310,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pShape.Array, "shape", ConstraintType.CONS_NON_NEGATIVE);
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pShape.Array, pScale.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pShape.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -355,7 +355,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.f.html
         ///     <br/><c>legacy_f</c> per position, the numerator chi-square first. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray f(NDArray dfnum, NDArray dfden, Shape size = default)
+        public NDArray f(NDArray dfnum, NDArray dfden, Shape? size = null)
         {
             using var pNum = RandomParam.Float64(dfnum);
             using var pDen = RandomParam.Float64(dfden);
@@ -364,7 +364,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pNum.Array, "dfnum", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pDen.Array, "dfden", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pNum.Array, pDen.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pNum.Array, pDen.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -413,7 +413,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.noncentral_f.html
         ///     <br/><c>legacy_noncentral_f</c> per position. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray noncentral_f(NDArray dfnum, NDArray dfden, NDArray nonc, Shape size = default)
+        public NDArray noncentral_f(NDArray dfnum, NDArray dfden, NDArray nonc, Shape? size = null)
         {
             using var pNum = RandomParam.Float64(dfnum);
             using var pDen = RandomParam.Float64(dfden);
@@ -426,7 +426,7 @@ namespace NumSharp
             RandomConstraints.CheckArray(pNum.Array, "dfnum", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pDen.Array, "dfden", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pNonc.Array, "nonc", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pNum.Array, pDen.Array, pNonc.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pNum.Array, pDen.Array, pNonc.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -470,14 +470,14 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.chisquare.html
         ///     <br/><c>legacy_chisquare</c> = <c>2 * legacy_standard_gamma(df / 2)</c> per position. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray chisquare(NDArray df, Shape size = default)
+        public NDArray chisquare(NDArray df, Shape? size = null)
         {
             using var p = RandomParam.Float64(df);
             if (p.IsScalar)
                 return chisquare(p.ScalarChecked("df", ConstraintType.CONS_POSITIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "df", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, p.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -525,7 +525,7 @@ namespace NumSharp
         ///     <br/><c>legacy_noncentral_chisquare</c> per position. Unlike the Generator's sampler a NaN non-centrality
         ///     still draws (the NaN guard sits after the draws). Byte-identical to NumPy.
         /// </remarks>
-        public NDArray noncentral_chisquare(NDArray df, NDArray nonc, Shape size = default)
+        public NDArray noncentral_chisquare(NDArray df, NDArray nonc, Shape? size = null)
         {
             using var pDf = RandomParam.Float64(df);
             using var pNonc = RandomParam.Float64(nonc);
@@ -535,7 +535,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pDf.Array, "df", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pNonc.Array, "nonc", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pDf.Array, pNonc.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pDf.Array, pNonc.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -602,14 +602,14 @@ namespace NumSharp
         ///     <br/><c>legacy_standard_t</c> = <c>sqrt(df/2) * N / sqrt(G(df/2))</c> per position, the polar normal drawn
         ///     first. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray standard_t(NDArray df, Shape size = default)
+        public NDArray standard_t(NDArray df, Shape? size = null)
         {
             using var p = RandomParam.Float64(df);
             if (p.IsScalar)
                 return standard_t(p.ScalarChecked("df", ConstraintType.CONS_POSITIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "df", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, p.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -659,7 +659,7 @@ namespace NumSharp
         ///     included) never returns in NumPy (its rejection test compares NaN); like the scalar sampler this returns
         ///     <c>mu</c> wrapped to <c>[-pi, pi]</c> without drawing. Otherwise byte-identical to NumPy.
         /// </remarks>
-        public NDArray vonmises(NDArray mu, NDArray kappa, Shape size = default)
+        public NDArray vonmises(NDArray mu, NDArray kappa, Shape? size = null)
         {
             using var pMu = RandomParam.Float64(mu);
             using var pKappa = RandomParam.Float64(kappa);
@@ -667,7 +667,7 @@ namespace NumSharp
                 return vonmises(pMu.Scalar(), pKappa.ScalarChecked("kappa", ConstraintType.CONS_NON_NEGATIVE), size);
 
             RandomConstraints.CheckArray(pKappa.Array, "kappa", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pMu.Array, pKappa.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pMu.Array, pKappa.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -714,14 +714,14 @@ namespace NumSharp
         ///     <br/><c>legacy_pareto</c> = <c>exp(-log(1 - U) / a) - 1</c> per position over bulk-filled uniforms (the legacy
         ///     <c>exp(x) - 1</c>, not <c>expm1</c> — so, unlike the Generator's, byte-identical to NumPy).
         /// </remarks>
-        public NDArray pareto(NDArray a, Shape size = default)
+        public NDArray pareto(NDArray a, Shape? size = null)
         {
             using var p = RandomParam.Float64(a);
             if (p.IsScalar)
                 return pareto(p.ScalarChecked("a", ConstraintType.CONS_POSITIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "a", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, p.Array);
             unsafe
             {
                 FillUniforms(ret);
@@ -754,14 +754,14 @@ namespace NumSharp
         ///     back — a position never reads a slot an earlier position overwrote, because at most as many positions precede
         ///     it as draw-free positions exist. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray weibull(NDArray a, Shape size = default)
+        public NDArray weibull(NDArray a, Shape? size = null)
         {
             using var p = RandomParam.Float64(a);
             if (p.IsScalar)
                 return weibull(p.ScalarChecked("a", ConstraintType.CONS_NON_NEGATIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "a", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, p.Array);
             unsafe
             {
                 long n = ret.size;
@@ -814,14 +814,14 @@ namespace NumSharp
         ///     <br/><c>legacy_power</c> = <c>(1 - exp(-E))^(1/a)</c> with <c>E = -log(1 - U)</c> per position over bulk-filled
         ///     uniforms (the legacy <c>1 - exp</c>, not <c>-expm1</c> — byte-identical to NumPy).
         /// </remarks>
-        public NDArray power(NDArray a, Shape size = default)
+        public NDArray power(NDArray a, Shape? size = null)
         {
             using var p = RandomParam.Float64(a);
             if (p.IsScalar)
                 return power(p.ScalarChecked("a", ConstraintType.CONS_POSITIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "a", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, p.Array);
             unsafe
             {
                 FillUniforms(ret);
@@ -856,7 +856,7 @@ namespace NumSharp
         ///     <br/>mtrand calls the modern <c>random_laplace</c> on the bare bit generator per position (one uniform,
         ///     redrawn only on an exact 0). Byte-identical to NumPy.
         /// </remarks>
-        public NDArray laplace(NDArray loc, NDArray scale = null, Shape size = default)
+        public NDArray laplace(NDArray loc, NDArray scale = null, Shape? size = null)
         {
             using var pLoc = RandomParam.Float64(loc, 0.0);
             using var pScale = RandomParam.Float64(scale, 1.0);
@@ -864,7 +864,7 @@ namespace NumSharp
                 return laplace(pLoc.Scalar(), pScale.Scalar(), size);
 
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pLoc.Array, pScale.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pLoc.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -900,7 +900,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.gumbel.html
         ///     <br/>mtrand calls the modern <c>random_gumbel</c> on the bare bit generator per position. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray gumbel(NDArray loc, NDArray scale = null, Shape size = default)
+        public NDArray gumbel(NDArray loc, NDArray scale = null, Shape? size = null)
         {
             using var pLoc = RandomParam.Float64(loc, 0.0);
             using var pScale = RandomParam.Float64(scale, 1.0);
@@ -908,7 +908,7 @@ namespace NumSharp
                 return gumbel(pLoc.Scalar(), pScale.Scalar(), size);
 
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pLoc.Array, pScale.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pLoc.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -944,7 +944,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.logistic.html
         ///     <br/>mtrand calls the modern <c>random_logistic</c> on the bare bit generator per position. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray logistic(NDArray loc, NDArray scale = null, Shape size = default)
+        public NDArray logistic(NDArray loc, NDArray scale = null, Shape? size = null)
         {
             using var pLoc = RandomParam.Float64(loc, 0.0);
             using var pScale = RandomParam.Float64(scale, 1.0);
@@ -952,7 +952,7 @@ namespace NumSharp
                 return logistic(pLoc.Scalar(), pScale.Scalar(), size);
 
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pLoc.Array, pScale.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pLoc.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -990,7 +990,7 @@ namespace NumSharp
         ///     <br/><c>legacy_lognormal</c> = <c>exp(mean + sigma * legacy_gauss)</c> per position over the two-phase polar
         ///     fill (Gaussian cache consumed and left as the per-value calls would). Byte-identical to NumPy.
         /// </remarks>
-        public NDArray lognormal(NDArray mean, NDArray sigma = null, Shape size = default)
+        public NDArray lognormal(NDArray mean, NDArray sigma = null, Shape? size = null)
         {
             using var pMean = RandomParam.Float64(mean, 0.0);
             using var pSigma = RandomParam.Float64(sigma, 1.0);
@@ -998,7 +998,7 @@ namespace NumSharp
                 return lognormal(pMean.Scalar(), pSigma.Scalar(), size);
 
             RandomConstraints.CheckArray(pSigma.Array, "sigma", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pMean.Array, pSigma.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pMean.Array, pSigma.Array);
             unsafe
             {
                 FillLegacyGauss(ret);
@@ -1028,14 +1028,14 @@ namespace NumSharp
         ///     <br/><c>legacy_rayleigh</c> = <c>mode * sqrt(-2 * log1p(-U))</c> per position over bulk-filled uniforms (it
         ///     takes the bare bit generator, so the Gaussian cache is untouched). Byte-identical to NumPy.
         /// </remarks>
-        public NDArray rayleigh(NDArray scale, Shape size = default)
+        public NDArray rayleigh(NDArray scale, Shape? size = null)
         {
             using var p = RandomParam.Float64(scale, 1.0);
             if (p.IsScalar)
                 return rayleigh(p.Scalar(), size);
 
             RandomConstraints.CheckArray(p.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, p.Array);
             unsafe
             {
                 FillUniforms(ret);
@@ -1067,7 +1067,7 @@ namespace NumSharp
         ///     <br/><c>legacy_wald</c> per position (a cached-Gaussian polar normal and one acceptance uniform), with the
         ///     legacy cancellation-prone spelling the stream depends on. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray wald(NDArray mean, NDArray scale, Shape size = default)
+        public NDArray wald(NDArray mean, NDArray scale, Shape? size = null)
         {
             using var pMean = RandomParam.Float64(mean);
             using var pScale = RandomParam.Float64(scale);
@@ -1076,7 +1076,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pMean.Array, "mean", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pMean.Array, pScale.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pMean.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -1127,7 +1127,7 @@ namespace NumSharp
         ///     bulk-filled and each position applies <c>random_triangular</c>'s per-call statements to its own. A NaN limit
         ///     passes every comparison and samples NaN. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray triangular(NDArray left, NDArray mode, NDArray right, Shape size = default)
+        public NDArray triangular(NDArray left, NDArray mode, NDArray right, Shape? size = null)
         {
             using var pLeft = RandomParam.Float64(left);
             using var pMode = RandomParam.Float64(mode);
@@ -1145,7 +1145,7 @@ namespace NumSharp
                 throw new ValueError("mode > right");
             if (RandomBroadcast.AnyCompare(NDExpr.Equal, pLeft.Array, pRight.Array))
                 throw new ValueError("left == right");
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !size.IsEmpty, pLeft.Array, pMode.Array, pRight.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pLeft.Array, pMode.Array, pRight.Array);
             unsafe
             {
                 FillUniforms(ret);
@@ -1194,7 +1194,7 @@ namespace NumSharp
         ///     The legacy sampler has no <c>n == 0</c> / <c>p == 0</c> shortcut, so every position draws. Byte-identical to
         ///     NumPy's LP64 build (Windows NumPy's 32-bit long bounds <c>n</c> at <c>2^31 - 1</c>).
         /// </remarks>
-        public NDArray binomial(NDArray n, NDArray p, Shape size = default)
+        public NDArray binomial(NDArray n, NDArray p, Shape? size = null)
         {
             using var pp = RandomParam.Float64(p);
             using var pn = RandomParam.Int64(n);
@@ -1203,7 +1203,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pp.Array, "p", ConstraintType.CONS_BOUNDED_0_1);
             RandomConstraints.CheckArray(pn.Array, "n", ConstraintType.LEGACY_CONS_NON_NEGATIVE_INBOUNDS_LONG);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !size.IsEmpty, pp.Array, pn.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pp.Array, pn.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1245,7 +1245,7 @@ namespace NumSharp
         ///     position. Unlike the Generator there is no Poisson-mean bound; <c>p == 0</c> makes the mean infinite and the
         ///     count C's integer cast of it. Byte-identical to NumPy's LP64 build.
         /// </remarks>
-        public NDArray negative_binomial(NDArray n, NDArray p, Shape size = default)
+        public NDArray negative_binomial(NDArray n, NDArray p, Shape? size = null)
         {
             using var pn = RandomParam.Float64(n);
             using var pp = RandomParam.Float64(p);
@@ -1254,7 +1254,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pn.Array, "n", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pp.Array, "p", ConstraintType.CONS_BOUNDED_0_1);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !size.IsEmpty, pn.Array, pp.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pn.Array, pp.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1301,14 +1301,14 @@ namespace NumSharp
         ///     the product method below 10, PTRS above, 0 without a draw for <c>lam == 0</c>. Byte-identical to NumPy's LP64
         ///     build (Windows NumPy bounds <c>lam</c> by its 32-bit long).
         /// </remarks>
-        public NDArray poisson(NDArray lam, Shape size = default)
+        public NDArray poisson(NDArray lam, Shape? size = null)
         {
             using var p = RandomParam.Float64(lam, 1.0);
             if (p.IsScalar)
                 return poisson(p.Scalar(), size);
 
             RandomConstraints.CheckArray(p.Array, "lam", ConstraintType.LEGACY_CONS_POISSON);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !size.IsEmpty, p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, p.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1367,14 +1367,14 @@ namespace NumSharp
         ///     <br/><c>legacy_random_zipf</c> per position. For <c>a &gt;= 1025</c> (infinity included) NumPy's legacy loop
         ///     never returns; like the scalar sampler this returns 1 there without drawing. Otherwise byte-identical to NumPy.
         /// </remarks>
-        public NDArray zipf(NDArray a, Shape size = default)
+        public NDArray zipf(NDArray a, Shape? size = null)
         {
             using var p = RandomParam.Float64(a);
             if (p.IsScalar)
                 return zipf(p.ScalarChecked("a", ConstraintType.CONS_GT_1), size);
 
             RandomConstraints.CheckArray(p.Array, "a", ConstraintType.CONS_GT_1);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !size.IsEmpty, p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, p.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1431,14 +1431,14 @@ namespace NumSharp
         ///     <br/><c>legacy_random_geometric</c> per position: the CDF search for <c>p &gt;= 1/3</c>, else the legacy
         ///     inversion <c>ceil(log1p(-U) / log(1 - p))</c>; one uniform either way. Byte-identical to NumPy's LP64 build.
         /// </remarks>
-        public NDArray geometric(NDArray p, Shape size = default)
+        public NDArray geometric(NDArray p, Shape? size = null)
         {
             using var pp = RandomParam.Float64(p);
             if (pp.IsScalar)
                 return geometric(pp.ScalarChecked("p", ConstraintType.CONS_BOUNDED_GT_0_1), size);
 
             RandomConstraints.CheckArray(pp.Array, "p", ConstraintType.CONS_BOUNDED_GT_0_1);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !size.IsEmpty, pp.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pp.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1490,7 +1490,7 @@ namespace NumSharp
         ///     are no <c>10^9</c> caps. Byte-identical to NumPy's LP64 build (Windows NumPy bounds <c>ngood</c> by its 32-bit
         ///     long).
         /// </remarks>
-        public NDArray hypergeometric(NDArray ngood, NDArray nbad, NDArray nsample, Shape size = default)
+        public NDArray hypergeometric(NDArray ngood, NDArray nbad, NDArray nsample, Shape? size = null)
         {
             using var pg = RandomParam.Int64(ngood);
             using var pb = RandomParam.Int64(nbad);
@@ -1506,7 +1506,7 @@ namespace NumSharp
             RandomConstraints.CheckArray(pg.Array, "ngood", ConstraintType.LEGACY_CONS_NON_NEGATIVE_INBOUNDS_LONG);
             RandomConstraints.CheckArray(pb.Array, "nbad", ConstraintType.CONS_NON_NEGATIVE);
             RandomConstraints.CheckArray(ps.Array, "nsample", ConstraintType.CONS_GTE_1);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !size.IsEmpty, pg.Array, pb.Array, ps.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pg.Array, pb.Array, ps.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1575,14 +1575,14 @@ namespace NumSharp
         ///     <br/><c>legacy_logseries</c> per position (the legacy <c>log(1 - p)</c> / <c>1 - exp(r*U)</c> spellings, so —
         ///     unlike the Generator's — byte-identical to NumPy).
         /// </remarks>
-        public NDArray logseries(NDArray p, Shape size = default)
+        public NDArray logseries(NDArray p, Shape? size = null)
         {
             using var pp = RandomParam.Float64(p);
             if (pp.IsScalar)
                 return logseries(pp.ScalarChecked("p", ConstraintType.CONS_BOUNDED_LT_0_1), size);
 
             RandomConstraints.CheckArray(pp.Array, "p", ConstraintType.CONS_BOUNDED_LT_0_1);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !size.IsEmpty, pp.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !size.GetValueOrDefault().IsEmpty, pp.Array);
             unsafe
             {
                 long count = ret.size, i = 0;

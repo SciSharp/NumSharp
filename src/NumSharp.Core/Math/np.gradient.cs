@@ -181,6 +181,27 @@ namespace NumSharp
                             edge_order);
         }
 
+        /// <summary>
+        ///     <see cref="gradient(NDArray, object, NDAxis?, int)"/> with the axis as one <c>int</c>: the overload a C#
+        ///     integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the NDAxis form, so
+        ///     every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="gradient(NDArray, object, NDAxis?, int)"/>
+        public static GradientResult gradient(NDArray f, object spacing, int axis, int edge_order = 1)
+            => gradient(f, spacing, (NDAxis?)axis, edge_order);
+
+        /// <summary>
+        ///     <see cref="gradient(NDArray, object, NDAxis?, int)"/> with the axes as an <c>int[]</c>: the overload an
+        ///     <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better than to NDAxis),
+        ///     forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's tuple (<c>new
+        ///     int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="gradient(NDArray, object, NDAxis?, int)"/>
+        public static GradientResult gradient(NDArray f, object spacing, int[] axis, int edge_order = 1)
+            => gradient(f, spacing, (NDAxis?)axis, edge_order);
+
         /// <summary>Two per-axis spacings — see the main overload.</summary>
         /// <inheritdoc cref="gradient(NDArray, object, NDAxis?, int)" path="/exception"/>
         public static GradientResult gradient(NDArray f, object spacing0, object spacing1, NDAxis? axis = null, int edge_order = 1)
@@ -189,6 +210,27 @@ namespace NumSharp
             return f.TensorEngine.Gradient(f, new[] { spacing0, spacing1 }, axis?.ToArray(), edge_order);
         }
 
+        /// <summary>
+        ///     <see cref="gradient(NDArray, object, object, NDAxis?, int)"/> with the axis as one <c>int</c>: the
+        ///     overload a C# integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the
+        ///     NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="gradient(NDArray, object, object, NDAxis?, int)"/>
+        public static GradientResult gradient(NDArray f, object spacing0, object spacing1, int axis, int edge_order = 1)
+            => gradient(f, spacing0, spacing1, (NDAxis?)axis, edge_order);
+
+        /// <summary>
+        ///     <see cref="gradient(NDArray, object, object, NDAxis?, int)"/> with the axes as an <c>int[]</c>: the
+        ///     overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better than to
+        ///     NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's tuple
+        ///     (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="gradient(NDArray, object, object, NDAxis?, int)"/>
+        public static GradientResult gradient(NDArray f, object spacing0, object spacing1, int[] axis, int edge_order = 1)
+            => gradient(f, spacing0, spacing1, (NDAxis?)axis, edge_order);
+
         /// <summary>Three per-axis spacings — see the main overload.</summary>
         /// <inheritdoc cref="gradient(NDArray, object, NDAxis?, int)" path="/exception"/>
         public static GradientResult gradient(NDArray f, object spacing0, object spacing1, object spacing2, NDAxis? axis = null, int edge_order = 1)
@@ -196,6 +238,27 @@ namespace NumSharp
             if (f is null) throw new ArgumentNullException(nameof(f));
             return f.TensorEngine.Gradient(f, new[] { spacing0, spacing1, spacing2 }, axis?.ToArray(), edge_order);
         }
+
+        /// <summary>
+        ///     <see cref="gradient(NDArray, object, object, object, NDAxis?, int)"/> with the axis as one <c>int</c>:
+        ///     the overload a C# integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the
+        ///     NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="gradient(NDArray, object, object, object, NDAxis?, int)"/>
+        public static GradientResult gradient(NDArray f, object spacing0, object spacing1, object spacing2, int axis, int edge_order = 1)
+            => gradient(f, spacing0, spacing1, spacing2, (NDAxis?)axis, edge_order);
+
+        /// <summary>
+        ///     <see cref="gradient(NDArray, object, object, object, NDAxis?, int)"/> with the axes as an <c>int[]</c>:
+        ///     the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better
+        ///     than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's
+        ///     tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="gradient(NDArray, object, object, object, NDAxis?, int)"/>
+        public static GradientResult gradient(NDArray f, object spacing0, object spacing1, object spacing2, int[] axis, int edge_order = 1)
+            => gradient(f, spacing0, spacing1, spacing2, (NDAxis?)axis, edge_order);
 
         /// <summary>
         ///     N per-axis spacings passed explicitly (each a scalar or a 1-D coordinate array). Also the
@@ -207,5 +270,26 @@ namespace NumSharp
             if (f is null) throw new ArgumentNullException(nameof(f));
             return f.TensorEngine.Gradient(f, varargs ?? Array.Empty<object>(), axis?.ToArray(), edge_order);
         }
+
+        /// <summary>
+        ///     <see cref="gradient(NDArray, object[], NDAxis?, int)"/> with the axis as one <c>int</c>: the overload a
+        ///     C# integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the NDAxis form, so
+        ///     every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="gradient(NDArray, object[], NDAxis?, int)"/>
+        public static GradientResult gradient(NDArray f, object[] varargs, int axis, int edge_order = 1)
+            => gradient(f, varargs, (NDAxis?)axis, edge_order);
+
+        /// <summary>
+        ///     <see cref="gradient(NDArray, object[], NDAxis?, int)"/> with the axes as an <c>int[]</c>: the overload
+        ///     an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better than to NDAxis),
+        ///     forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's tuple (<c>new
+        ///     int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="gradient(NDArray, object[], NDAxis?, int)"/>
+        public static GradientResult gradient(NDArray f, object[] varargs, int[] axis, int edge_order = 1)
+            => gradient(f, varargs, (NDAxis?)axis, edge_order);
     }
 }

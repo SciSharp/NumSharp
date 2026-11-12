@@ -44,7 +44,7 @@ namespace NumSharp.Tests.Fuzz
             bool tuple = AxisArgIsTuple(p, "axis");
             int ax = !tuple && p.ContainsKey("axis") ? p["axis"].GetInt32() : 0;
             int[] axt = tuple ? ParseIntArray(p["axis"]) : null;
-            // NumPy's axis argument for the functions that take its axis type (API-parity batches 4 and 5): the tuple, or
+            // NumPy's axis argument for the functions that take its axis type (API-parity batches 4 to 6): the tuple, or
             // the integer.
             NDAxis axis = tuple ? new NDAxis(axt) : ax;
             NDArray a = ops.Length > 0 ? ops[0] : null;
@@ -78,8 +78,8 @@ namespace NumSharp.Tests.Fuzz
                 case "any": return tuple ? np.any(a, axt) : np.any(a, ax);
                 case "argmax": return np.argmax(a, axis);
                 case "argmin": return np.argmin(a, axis);
-                case "nanargmax": return np.nanargmax(a, ax);
-                case "nanargmin": return np.nanargmin(a, ax);
+                case "nanargmax": return np.nanargmax(a, axis);
+                case "nanargmin": return np.nanargmin(a, axis);
                 case "cumsum": return np.cumsum(a, ax);
                 case "cumprod": return np.cumprod(a, ax);
                 case "nancumsum": return np.nancumsum(a, ax);
@@ -167,9 +167,8 @@ namespace NumSharp.Tests.Fuzz
                         p.TryGetValue("axis", out var xx) ? xx.GetInt32() : (int?)null);
 
                 // ---- np.linalg / the gufunc vecdot ----
-                case "linalg.norm": return tuple ? np.linalg.norm(a, null, axt) : np.linalg.norm(a, null, ax);
-                case "linalg.vector_norm":
-                    return tuple ? np.linalg.vector_norm(a, axis: axt) : np.linalg.vector_norm(a, axis: ax);
+                case "linalg.norm": return np.linalg.norm(a, null, axis);
+                case "linalg.vector_norm": return np.linalg.vector_norm(a, axis: axis);
                 case "linalg.vecdot": return np.linalg.vecdot(ops[0], ops[1], ax);
                 case "linalg.cross": return np.linalg.cross(ops[0], ops[1], ax);
                 case "vecdot": return np.vecdot(ops[0], ops[1], axis: ax);
@@ -181,8 +180,8 @@ namespace NumSharp.Tests.Fuzz
                 case "fft.irfft": return np.fft.irfft(a, axis: ax);
                 case "fft.hfft": return np.fft.hfft(a, axis: ax);
                 case "fft.ihfft": return np.fft.ihfft(a, axis: ax);
-                case "fft.fftshift": return tuple ? np.fft.fftshift(a, axes: axt) : np.fft.fftshift(a, axes: ax);
-                case "fft.ifftshift": return tuple ? np.fft.ifftshift(a, axes: axt) : np.fft.ifftshift(a, axes: ax);
+                case "fft.fftshift": return np.fft.fftshift(a, axes: axis);
+                case "fft.ifftshift": return np.fft.ifftshift(a, axes: axis);
                 case "linalg.tensorsolve": return np.linalg.tensorsolve(a, ops[1], axt);
                 case "fft.fftn": return np.fft.fftn(a, axes: axt);
                 case "fft.ifftn": return np.fft.ifftn(a, axes: axt);

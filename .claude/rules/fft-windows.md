@@ -96,8 +96,13 @@ has no operand to choose another) and keep the cephes `BesselI0` port behind kai
   `Cannot cast ufunc 'fft' output from …` text); the N-D wrappers accept `out` for signature parity but
   do not thread it (NumPy passes `out=None`).
 - Helpers: `fftfreq`/`rfftfreq` are float64 generators with NumPy's check order (divide by zero first, then `device`,
-  then `fftfreq`'s negative length; a non-integer n → `ValueError("n should be an integer")`); `fftshift`/`ifftshift` are
-  dtype-preserving cyclic rolls by `±(dim//2)` (0-d → a no-op copy, `[Misaligned]`).
+  then `fftfreq`'s negative length) and ONE integer signature, `long n` (NumPy's runtime `ValueError("n should be an
+  integer")` for a float n is C#'s compile-time refusal: no overload takes one). `fftshift`/`ifftshift` take NumPy's
+  int-or-tuple `axes` (`NDAxis?`, with the kept `int` / `int[]` forwards) and run NumPy's statements: the shift read from
+  `x.shape[ax] // 2` per listed axis (`±`; Python's `IndexError "tuple index out of range"` for an axis past the rank,
+  before anything rolls), then ONE `np.roll(x, shift, axes)` (repeats accumulate; `()` is a copy; a 0-d input is roll's
+  `ValueError "not enough values to unpack (expected 2, got 0)"`, NumPy's own; a subclass operand gives a plain array:
+  NumPy's `asarray`).
 - `[Misaligned]` F1, dtype only: NumSharp has one complex type (complex128) and no complex64, so a float32/float16 input
   returns complex128/float64 where NumPy returns complex64/float32/float16. The VALUES are bit-identical, because
   NumSharp reproduces NumPy's per-loop precision: NumPy's fft ufuncs have a single (`Ff->F`/`ff->F`) and a double

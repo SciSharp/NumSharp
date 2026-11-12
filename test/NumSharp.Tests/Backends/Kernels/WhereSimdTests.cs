@@ -463,7 +463,7 @@ namespace NumSharp.Tests.Backends.Kernels
             var rng = np.random.RandomState(55);
             // 2D contiguous array should use SIMD
             var shape = new[] { 100, 100 };
-            var cond = rng.rand(shape) > 0.5;
+            var cond = rng.random_sample(shape) > 0.5;
             var x = np.ones(shape, NPTypeCode.Int32);
             var y = np.zeros(shape, NPTypeCode.Int32);
 
@@ -487,7 +487,7 @@ namespace NumSharp.Tests.Backends.Kernels
         {
             var rng = np.random.RandomState(56);
             var shape = new[] { 10, 20, 30 };
-            var cond = rng.rand(shape) > 0.5;
+            var cond = rng.random_sample(shape) > 0.5;
             var x = np.ones(shape, NPTypeCode.Single);
             var y = np.zeros(shape, NPTypeCode.Single);
 

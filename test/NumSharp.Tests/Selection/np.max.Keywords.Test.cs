@@ -1,3 +1,4 @@
+using NumSharp.Tests.APIs;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -759,7 +760,8 @@ namespace NumSharp.Tests
         private static void CheckSignature(List<string> mismatches, Type owner, string method, bool isStatic, string[] expected, int requiredCount)
         {
             var flags = BindingFlags.Public | (isStatic ? BindingFlags.Static : BindingFlags.Instance);
-            var overloads = owner.GetMethods(flags).Where(m => m.Name == method).ToArray();
+            // Without the kept int / int[] forwards of the NDAxis member (the owner's batch-6 decision).
+            var overloads = owner.GetMethods(flags).Where(m => m.Name == method).WithoutKeptIntegerForms();
             string label = $"{(isStatic ? "np" : "ndarray")}.{method}";
             var form = overloads.FirstOrDefault(m => m.GetParameters().Select(p => p.Name).SequenceEqual(expected));
             if (form == null)

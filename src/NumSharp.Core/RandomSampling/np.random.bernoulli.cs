@@ -26,9 +26,9 @@ namespace NumSharp
         ///     One uniform per value (<c>U &lt; p</c>), bulk-filled into the output and thresholded in place — the same stream
         ///     as drawing them one at a time. Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray bernoulli(double p, Shape size)
+        public NDArray bernoulli(double p, Shape? size)
         {
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 double draw;
                 lock (randomizer.@lock)
@@ -37,7 +37,7 @@ namespace NumSharp
                 return NDArray.WritableScalar(draw);
             }
 
-            var result = LegacyOutput(NPTypeCode.Double, size);
+            var result = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var addr = (double*)result.Address;

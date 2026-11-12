@@ -1,3 +1,4 @@
+using NumSharp.Tests.APIs;
 using System;
 using System.Linq;
 using System.Numerics;
@@ -113,7 +114,9 @@ namespace NumSharp.Tests.Math
             };
             foreach (var (name, ps) in np5)
             {
-                var ms = typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.Name == name).ToArray();
+                // Without the kept int / int[] forwards of the NDAxis member (the owner's batch-6 decision).
+                var ms = typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.Name == name)
+                    .WithoutKeptIntegerForms();
                 ms.Should().HaveCount(1, $"np.{name} keeps one overload");
                 ms[0].GetParameters().Select(p => p.Name).Should().Equal(ps, $"np.{name} takes NumPy's parameters in NumPy's order");
                 ms[0].GetParameters().Skip(1).Should().OnlyContain(p => p.HasDefaultValue, $"every np.{name} parameter after a is optional");
@@ -129,14 +132,15 @@ namespace NumSharp.Tests.Math
             };
             foreach (var (name, ps) in nd5)
             {
+                // Without the kept int / int[] forwards of the NDAxis member (the owner's batch-6 decision).
                 var ms = typeof(NDArray).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-                    .Where(m => m.Name == name).ToArray();
+                    .Where(m => m.Name == name).WithoutKeptIntegerForms();
                 ms.Should().HaveCount(1, $"ndarray.{name} keeps one overload");
                 ms[0].GetParameters().Select(p => p.Name).Should().Equal(ps, $"ndarray.{name} takes NumPy's parameters in NumPy's order");
             }
 
             // NumPy's defaults: ddof 0, keepdims false, everything else None.
-            var var = typeof(np).GetMethod("var")!.GetParameters();
+            var var = typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.Name == "var").WithoutKeptIntegerForms().Single().GetParameters();
             var.Single(p => p.Name == "ddof").DefaultValue.Should().Be(0);
             var.Single(p => p.Name == "keepdims").DefaultValue.Should().Be(false);
             var.Where(p => p.Name is "axis" or "dtype" or "out" or "where" or "mean" or "correction").Should().OnlyContain(p => p.DefaultValue == null);

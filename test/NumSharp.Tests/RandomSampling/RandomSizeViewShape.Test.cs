@@ -159,7 +159,6 @@ namespace NumSharp.Tests.RandomSampling
             G("Generator.choice(no replace)", (g, s) => g.choice(1000L, s, replace: false)),
             G("Generator.multinomial", (g, s) => g.multinomial(10, new[] { 0.2, 0.3, 0.5 }, s)),
             G("Generator.dirichlet", (g, s) => g.dirichlet(new[] { 1.0, 2.0 }, s)),
-            L("RandomState.rand", (rs, s) => rs.rand(s)),
             L("RandomState.random_sample", (rs, s) => rs.random_sample(s)),
             L("RandomState.randint", (rs, s) => rs.randint(0, 100, s)),
             L("RandomState.randint(uint16)", (rs, s) => rs.randint(0, 100, s, np.uint16)),

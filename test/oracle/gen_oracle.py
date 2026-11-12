@@ -11162,6 +11162,9 @@ def gen_axis_args():
         ("nanmin", lambda a, t: np.nanmin(a, axis=t)),
         ("argmax", lambda a, t: np.argmax(a, axis=t)),
         ("argmin", lambda a, t: np.argmin(a, axis=t)),
+        # API-parity batch 6: nanargmax / nanargmin take NumPy's axis type, a tuple refused in NumPy's order.
+        ("nanargmax", lambda a, t: np.nanargmax(a, axis=t)),
+        ("nanargmin", lambda a, t: np.nanargmin(a, axis=t)),
         ("roll", lambda a, t: np.roll(a, 1, axis=t)),
         ("all", lambda a, t: np.all(a, axis=t)),
         ("any", lambda a, t: np.any(a, axis=t)),

@@ -24,6 +24,10 @@ runtime refuses (``ndarray.std(correction=...)``), a docstring can name a keywor
   comes from a real call (``REAL_CALLS``) or stays inconclusive.
 - **Q and L, by NumPy.** Q says NumPy takes a sequence of integers there and L that NumPy takes None: each is called
   with a real operand and the tuple / None (``SEQUENCE_CALLS``, ``NULL_CALLS``, else a generic call on a 3-D operand).
+- **B with several ``*args`` values, by NumPy.** A runtime signature of ``(*args, **kwargs)`` only (a module-level
+  wrapper such as ``np.random.ranf``, which forwards to ``random_sample(size)``) promises loose values NumPy may refuse:
+  the call is made with the probe's two values (two ints); NumPy's own arity TypeError refutes the finding (the
+  NumPy-style call is not NumPy's either), anything else confirms it or leaves it unreached.
 
 The JSON lists every verdict; ``summary`` counts them per mark. signature_diff.py and parity_diff.py read the refuted
 findings (``refuted``) to leave them out of the marks and the change list.
@@ -467,6 +471,51 @@ def signature_default_is_none(group, name, param):
     return parameter.default is None
 
 
+#: The B finding of a NumPy-style call that passes several values to NumPy's ``*args`` (binding_probe.py's text).
+VARARGS_FINDING = "several `*args` values"
+#: NumPy's (CPython's) refusal of the arity itself: ``random_sample() takes at most 1 positional argument (2 given)``.
+VARARGS_ARITY_REFUSAL = re.compile(r"takes (?:at most |exactly |from \d+ to )?\d+ positional arguments? (?:\(\d+ given\)|but)")
+
+
+def check_varargs(rows):
+    """Validate the B findings that pass several values to NumPy's ``*args`` of a ``(*args, **kwargs)``-only signature.
+
+    Such a signature (a module-level wrapper: ``np.random.ranf(*args, **kwargs)`` forwards to ``random_sample(size)``)
+    promises loose values the function behind it may refuse. The probe's call passes two values; NumPy's call with two
+    ints decides: its arity TypeError refutes the finding (the NumPy-style call is not valid NumPy), a call that runs
+    confirms it, any other failure leaves it unreached. A signature with named parameters before ``*args`` is not
+    checked here (the probe's values follow real operands NumPy would need too).
+
+    Args:
+        rows: The CSV rows.
+
+    Returns:
+        ``{"confirmed", "refuted", "unreached"}`` verdict lists keyed by ``(module, name)``.
+    """
+    out = {"confirmed": [], "refuted": [], "unreached": []}
+    for row in rows:
+        if VARARGS_FINDING not in (row.get("probe_binding") or ""):
+            continue
+        key = (row["module"], row["name"])
+        signature = row.get("numpy_signature") or ""
+        if "(*args, **kwargs)" not in signature and not signature.endswith("(*args)"):
+            out["unreached"].append({"key": key, "detail": "named parameters before *args"})
+            continue
+        func = numpy_callable(row["module"], row["name"])
+        if func is None:
+            out["unreached"].append({"key": key})
+            continue
+        try:
+            func(2, 3)
+            out["confirmed"].append({"key": key})
+        except TypeError as error:
+            detail = f"TypeError: {str(error)[:150]}"
+            (out["refuted"] if VARARGS_ARITY_REFUSAL.search(str(error)) else out["unreached"]).append({"key": key, "detail": detail})
+        except Exception as error:  # noqa: BLE001  (an operand's refusal says nothing about the arity)
+            out["unreached"].append({"key": key, "detail": f"{type(error).__name__}: {str(error)[:150]}"})
+    return out
+
+
 def check_values(rows, mark, pattern, table, value):
     """Validate Q (NumPy takes a tuple there) or L (NumPy takes None there).
 
@@ -669,6 +718,7 @@ def main():
         result["numpy_keywords"] = check_numpy_keywords(rows)
         result["q_numpy"] = check_values(rows, "Q", r"`(\w+)` as a sequence", SEQUENCE_CALLS, (0, 1))
         result["l_numpy"] = check_values(rows, "L", r"(?:^|; )`(\w+)`:", NULL_CALLS, None)
+        result["b_numpy"] = check_varargs(rows)
     finally:
         os.chdir(here)
     faulthandler.cancel_dump_traceback_later()
@@ -678,7 +728,7 @@ def main():
         "X": sorted({(*x["key"], x["param"]) for x in kw["x_refuted"]}),
         "Q": sorted({tuple(x["key"]) for x in result["q_numpy"]["refuted"]}),
         "L": sorted({tuple(x["key"]) for x in result["l_numpy"]["refuted"]}),
-        "B": sorted({tuple(x["key"]) for x in result["artifacts"]}),
+        "B": sorted({tuple(x["key"]) for x in result["artifacts"]} | {tuple(x["key"]) for x in result["b_numpy"]["refuted"]}),
         # A NumPy name the gap map lists as absent although a C# member access of it compiles.
         "absent": sorted({tuple(x["key"]) for x in result["m_compiler"]["absent_refuted"]}),
     }
@@ -689,6 +739,7 @@ def main():
         "numpy_keywords": {k: len(v) for k, v in kw.items()},
         "q_numpy": {k: len(v) for k, v in result["q_numpy"].items()},
         "l_numpy": {k: len(v) for k, v in result["l_numpy"].items()},
+        "b_numpy": {k: len(v) for k, v in result["b_numpy"].items()},
         "refuted": {mark: len(items) for mark, items in refuted.items()},
     }
     with open(args.out, "w", encoding="utf-8", newline="\n") as handle:

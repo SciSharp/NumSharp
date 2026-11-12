@@ -110,6 +110,27 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     <see cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the axis as one <c>int</c>: the
+        ///     overload a C# integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the
+        ///     NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
+        public static NDArray max(NDArray a, int axis, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => max(a, (NDAxis?)axis, @out, keepdims, initial, @where);
+
+        /// <summary>
+        ///     <see cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the axes as an <c>int[]</c>:
+        ///     the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better
+        ///     than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's
+        ///     tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
+        public static NDArray max(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => max(a, (NDAxis?)axis, @out, keepdims, initial, @where);
+
+        /// <summary>
         ///     Return the maximum of an array or the maximum along an axis — NumPy's <c>np.amax</c>, an alias of
         ///     <see cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the same signature (NumPy's
         ///     <c>(a, axis=None, out=None, keepdims=&lt;no value&gt;, initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>).
@@ -144,6 +165,27 @@ namespace NumSharp
         public static NDArray amax(NDArray a, NDAxis? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
             => max(a, axis, @out, keepdims, initial, @where);
+
+        /// <summary>
+        ///     <see cref="amax(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the axis as one <c>int</c>:
+        ///     the overload a C# integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the
+        ///     NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="amax(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
+        public static NDArray amax(NDArray a, int axis, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => amax(a, (NDAxis?)axis, @out, keepdims, initial, @where);
+
+        /// <summary>
+        ///     <see cref="amax(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the axes as an <c>int[]</c>:
+        ///     the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better
+        ///     than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's
+        ///     tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="amax(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
+        public static NDArray amax(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => amax(a, (NDAxis?)axis, @out, keepdims, initial, @where);
 
         /// <summary>
         ///     Return the minimum of an array or the minimum along an axis — NumPy's <c>np.min(a, axis=None, out=None,
@@ -189,6 +231,27 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     <see cref="min(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the axis as one <c>int</c>: the
+        ///     overload a C# integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the
+        ///     NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="min(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
+        public static NDArray min(NDArray a, int axis, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => min(a, (NDAxis?)axis, @out, keepdims, initial, @where);
+
+        /// <summary>
+        ///     <see cref="min(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the axes as an <c>int[]</c>:
+        ///     the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better
+        ///     than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's
+        ///     tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="min(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
+        public static NDArray min(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => min(a, (NDAxis?)axis, @out, keepdims, initial, @where);
+
+        /// <summary>
         ///     Return the minimum of an array or the minimum along an axis — NumPy's <c>np.amin</c>, an alias of
         ///     <see cref="min(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the same signature (NumPy's
         ///     <c>(a, axis=None, out=None, keepdims=&lt;no value&gt;, initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>).
@@ -222,6 +285,27 @@ namespace NumSharp
         public static NDArray amin(NDArray a, NDAxis? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
             => min(a, axis, @out, keepdims, initial, @where);
+
+        /// <summary>
+        ///     <see cref="amin(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the axis as one <c>int</c>:
+        ///     the overload a C# integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the
+        ///     NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="amin(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
+        public static NDArray amin(NDArray a, int axis, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => amin(a, (NDAxis?)axis, @out, keepdims, initial, @where);
+
+        /// <summary>
+        ///     <see cref="amin(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the axes as an <c>int[]</c>:
+        ///     the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better
+        ///     than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's
+        ///     tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="amin(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
+        public static NDArray amin(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => amin(a, (NDAxis?)axis, @out, keepdims, initial, @where);
 
         /// <summary>
         ///     Return the maximum of an array or the maximum along an axis, ignoring NaNs — NumPy's <c>np.nanmax(a, axis=None,
@@ -300,6 +384,27 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     <see cref="nanmax(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the axis as one <c>int</c>:
+        ///     the overload a C# integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the
+        ///     NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="nanmax(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
+        public static NDArray nanmax(NDArray a, int axis, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => nanmax(a, (NDAxis?)axis, @out, keepdims, initial, @where);
+
+        /// <summary>
+        ///     <see cref="nanmax(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the axes as an <c>int[]</c>:
+        ///     the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better
+        ///     than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's
+        ///     tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="nanmax(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
+        public static NDArray nanmax(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => nanmax(a, (NDAxis?)axis, @out, keepdims, initial, @where);
+
+        /// <summary>
         ///     Return the minimum of an array or the minimum along an axis, ignoring NaNs — NumPy's <c>np.nanmin(a, axis=None,
         ///     out=None, keepdims=&lt;no value&gt;, initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>, i.e.
         ///     <c>np.fmin.reduce</c> for an ndarray, reproduced bit for bit; the keywords behave as in
@@ -367,6 +472,27 @@ namespace NumSharp
             // overrides it with NumPy's branch for anything that is not a base ndarray (a null a is refused above).
             return a.NanMin(axis, @out, keepdims, initial, @where);
         }
+
+        /// <summary>
+        ///     <see cref="nanmin(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the axis as one <c>int</c>:
+        ///     the overload a C# integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the
+        ///     NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="nanmin(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
+        public static NDArray nanmin(NDArray a, int axis, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => nanmin(a, (NDAxis?)axis, @out, keepdims, initial, @where);
+
+        /// <summary>
+        ///     <see cref="nanmin(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the axes as an <c>int[]</c>:
+        ///     the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better
+        ///     than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's
+        ///     tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="nanmin(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
+        public static NDArray nanmin(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => nanmin(a, (NDAxis?)axis, @out, keepdims, initial, @where);
 
     }
 }

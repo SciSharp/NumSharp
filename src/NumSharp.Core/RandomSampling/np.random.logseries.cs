@@ -7,86 +7,28 @@ namespace NumSharp
         ///     Draw samples from a logarithmic series distribution.
         /// </summary>
         /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
-        /// <param name="size">Output shape. If null, a single value is returned.</param>
-        /// <returns>Drawn samples from the parameterized logarithmic series distribution (int64).</returns>
-        /// <exception cref="ValueError">If p is not in range [0, 1) or is NaN (<c>p &lt; 0, p &gt;= 1 or p is NaN</c>), or a size
-        ///     dimension is negative.</exception>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.logseries.html
-        ///     <br/>
-        ///     The probability density for the Log Series distribution is:
-        ///     P(k) = -p^k / (k * ln(1-p))
-        ///     <br/>
-        ///     The log series distribution is frequently used to represent species
-        ///     richness and occurrence, first proposed by Fisher, Corbet, and Williams in 1943.
-        ///     <br/>
-        ///     Returns positive integers (k >= 1).
-        /// </remarks>
-        public NDArray logseries(double p, Shape? size = null)
-        {
-            if (size is null)
-                return logseries(p, default(Shape));
-            return logseries(p, size.Value);
-        }
-
-        /// <summary>
-        ///     Draw samples from a logarithmic series distribution.
-        /// </summary>
-        /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
-        /// <exception cref="ValueError"><paramref name="p"/> is outside <c>[0, 1)</c> or NaN, or a size dimension is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray logseries(double p, int[] size)
-            => logseries(p, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a logarithmic series distribution.
-        /// </summary>
-        /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
-        /// <exception cref="ValueError"><paramref name="p"/> is outside <c>[0, 1)</c> or NaN, or a size dimension is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray logseries(double p, long[] size)
-            => logseries(p, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a logarithmic series distribution.
-        /// </summary>
-        /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
-        /// <param name="size">Output shape; <c>default</c> (NumPy's <c>None</c>) draws a single value.</param>
+        /// <param name="size">Output shape; <c>null</c> (NumPy's <c>None</c>, the default) draws a single value.</param>
         /// <returns>Drawn samples from the parameterized logarithmic series distribution (int64).</returns>
         /// <exception cref="ValueError"><paramref name="p"/> is outside <c>[0, 1)</c> or NaN
         ///     (<c>p &lt; 0, p &gt;= 1 or p is NaN</c>), or <paramref name="size"/> has a negative dimension.</exception>
         /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.logseries.html: P(k) = -p^k / (k *
+        ///     ln(1-p)), positive integers (k >= 1) - the log series distribution Fisher, Corbet and Williams proposed in
+        ///     1943 for species richness and occurrence.
+        ///     <br/>
         ///     NumPy's <c>legacy_logseries</c> (Kemp's LK generator with the legacy <c>log(1 - p)</c> / <c>1 - exp(r*U)</c>
         ///     spellings) — byte-identical to <c>np.random.RandomState(seed).logseries</c>, including the rejection of a
         ///     count whose <c>floor</c> overflows. <c>p = 0</c> (and <c>-0.0</c>) returns 1 after one draw. int64 output
         ///     (NumPy returns C <c>long</c>). Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray logseries(double p, Shape size)
+        public NDArray logseries(double p, Shape? size = null)
         {
             RandomConstraints.Check(p, "p", ConstraintType.CONS_BOUNDED_LT_0_1);
 
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
             var setup = new LegacyLogseriesSetup(p);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -98,7 +40,7 @@ namespace NumSharp
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Int64, size);
+            var ret = LegacyOutput(NPTypeCode.Int64, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (long*)ret.Address;
@@ -117,22 +59,5 @@ namespace NumSharp
             return ret;
         }
 
-        /// <summary>
-        ///     Draw samples from a logarithmic series distribution.
-        /// </summary>
-        /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
-        /// <param name="size">Output shape as a single integer — NumPy's integer <c>size</c>: one npy_intp (int64) dimension.</param>
-        /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
-        /// <exception cref="ValueError"><paramref name="p"/> is outside <c>[0, 1)</c> or NaN, or <paramref name="size"/> is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray logseries(double p, long size)
-            => logseries(p, new Shape(new long[] { size }, copy: false));
     }
 }

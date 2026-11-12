@@ -24,9 +24,9 @@ namespace NumSharp
         ///     <c>2**31</c>, a different stream). For MT19937 a 64-bit draw is two 32-bit words, high word first. Holds the bit
         ///     generator's lock for the draws.
         /// </remarks>
-        public NDArray tomaxint(Shape size)
+        public NDArray tomaxint(Shape? size)
         {
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 long draw;
                 lock (randomizer.@lock)
@@ -36,7 +36,7 @@ namespace NumSharp
                 return NDArray.WritableScalar(draw);
             }
 
-            var ret = LegacyOutput(NPTypeCode.Int64, size);
+            var ret = LegacyOutput(NPTypeCode.Int64, size.GetValueOrDefault());
             unsafe
             {
                 // The raw 64-bit words are written in place, then halved: each value consumes exactly one next_uint64.

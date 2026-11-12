@@ -90,63 +90,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Draw samples from the Dirichlet distribution.
-        /// </summary>
-        /// <param name="alpha">Concentration parameters.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the Dirichlet distribution.</returns>
-        /// <exception cref="TypeError"><paramref name="alpha"/> is null.</exception>
-        /// <exception cref="ValueError">An element of <paramref name="alpha"/> is <c>&lt;= 0</c>, or a size dimension is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray dirichlet(double[] alpha, int[] size)
-            => dirichlet(alpha, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from the Dirichlet distribution.
-        /// </summary>
-        /// <param name="alpha">Concentration parameters.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the Dirichlet distribution.</returns>
-        /// <exception cref="TypeError"><paramref name="alpha"/> is null.</exception>
-        /// <exception cref="ValueError">An element of <paramref name="alpha"/> is <c>&lt;= 0</c>, or a size dimension is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray dirichlet(double[] alpha, long[] size)
-            => dirichlet(alpha, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from the Dirichlet distribution.
-        /// </summary>
-        /// <param name="alpha">Concentration parameters.</param>
-        /// <param name="size">Number of samples to draw — NumPy's integer <c>size</c>: one npy_intp (int64) dimension.</param>
-        /// <returns>Drawn samples from the Dirichlet distribution.</returns>
-        /// <exception cref="TypeError"><paramref name="alpha"/> is null.</exception>
-        /// <exception cref="ValueError">An element of <paramref name="alpha"/> is <c>&lt;= 0</c>, or <paramref name="size"/> is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray dirichlet(double[] alpha, long size)
-            => dirichlet(alpha, new Shape(new long[] { size }, copy: false));
-
-        /// <summary>
         ///     The shared body of the <c>dirichlet</c> overloads — NumPy's legacy loop over a contiguous float64 alpha.
         /// </summary>
         /// <param name="alpha">The k concentration parameters (read-only here).</param>

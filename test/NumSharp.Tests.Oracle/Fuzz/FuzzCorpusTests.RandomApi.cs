@@ -112,11 +112,19 @@ namespace NumSharp.Tests.Fuzz
         ///     which is why the LP64 floor leaves more room: how many cases need Linux's 64-bit-long answer depends a little
         ///     on the seeds.
         /// </summary>
+        /// <remarks>
+        ///     API-parity batch 6 was such a deliberate trim (9,422 / 14,122 / 444 / 222 after it): the corpus sweeps every
+        ///     public overload, and the batch deleted whole overloads — the <c>int[]</c> / <c>long[]</c> / <c>long</c> size
+        ///     shims of dirichlet, hypergeometric, logseries, multinomial, multivariate_normal, pareto and power, the
+        ///     params-array spellings of random_sample / random / ranf / sample and <c>rand(Shape)</c> — so the floors
+        ///     followed them down; every overload that remains kept its exact case count (the size-omitted sweep of the
+        ///     one <c>Shape? size = null</c> random_sample spelling added 8 portable cases).
+        /// </remarks>
         internal static readonly Dictionary<string, int> RandomApiMinCases = new(StringComparer.Ordinal)
         {
-            ["random_api.jsonl"] = 9_600,
-            ["random_api_host.jsonl"] = 15_500,
-            ["random_api_mvn.jsonl"] = 700,
+            ["random_api.jsonl"] = 9_300,
+            ["random_api_host.jsonl"] = 14_000,
+            ["random_api_mvn.jsonl"] = 430,
             ["random_api_lp64.jsonl"] = 120,
         };
 

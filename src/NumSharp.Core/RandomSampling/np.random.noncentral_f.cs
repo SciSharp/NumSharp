@@ -33,7 +33,7 @@ namespace NumSharp
         ///     NumPy's <c>legacy_noncentral_f</c>: <c>(ncchi2(dfnum, nonc) * dfden) / (chi2(dfden) * dfnum)</c> — byte-identical
         ///     to <c>np.random.RandomState(seed).noncentral_f</c>. Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray noncentral_f(double dfnum, double dfden, double nonc, Shape size)
+        public NDArray noncentral_f(double dfnum, double dfden, double nonc, Shape? size)
         {
             RandomConstraints.Check(dfnum, "dfnum", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(dfden, "dfden", ConstraintType.CONS_POSITIVE);
@@ -42,7 +42,7 @@ namespace NumSharp
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
             var setup = new LegacyNoncentralFSetup(dfnum, dfden, nonc);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -54,7 +54,7 @@ namespace NumSharp
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;
