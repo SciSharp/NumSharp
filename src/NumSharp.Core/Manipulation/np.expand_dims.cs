@@ -1,66 +1,47 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace NumSharp
 {
     public static partial class np
     {
         /// <summary>
-        ///     NumPy's <c>np.expand_dims(a, axis)</c>: a view of <paramref name="a"/> with a length-one axis inserted at
-        ///     position <paramref name="axis"/> of the result.
+        ///     NumPy's <c>np.expand_dims(a, axis)</c>: a view of <paramref name="a"/> with a new axis of length one at every
+        ///     position <paramref name="axis"/> names in the RESULT.
         /// </summary>
         /// <param name="a">The array.</param>
-        /// <param name="axis">The position of the new axis in the RESULT, which has rank <c>a.ndim + 1</c>; negative values
-        ///     count from the end of the result.</param>
-        /// <returns>A view of <paramref name="a"/> with the new axis.
-        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
-        ///     subclass), owning its data exactly when the plain result would.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is outside <c>[-(a.ndim + 1), a.ndim]</c>: "axis … is out of
-        ///     bounds for array of dimension {a.ndim + 1}", the axis as given.</exception>
-        public static NDArray expand_dims(NDArray a, int axis)
-            // NumPy's statements are the array object's.
-            => NDArray.expand_dims(a, axis);
-
-        /// <summary>
-        ///     Expand the shape of an array. Insert new axes that will appear at
-        ///     the <paramref name="axis"/> positions in the expanded output.
-        /// </summary>
-        /// <param name="a">The array.</param>
-        /// <param name="axis">The positions of the new axes in the RESULT, which has rank <c>a.ndim + axis.Length</c>;
-        ///     negative values count from the end of the result. An empty array inserts nothing.</param>
-        /// <returns>A view of <paramref name="a"/> with the new axes (a fresh view object, the empty tuple included —
-        ///     NumPy's <c>a.reshape(shape)</c>).
-        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
-        ///     subclass), owning its data exactly when the plain result would.</returns>
+        /// <param name="axis">NumPy's <c>axis</c> (required, no None): one position (<c>0</c>, <c>-1</c>) or a tuple of
+        ///     positions (<c>(0, 3)</c> or <c>new[] { 0, 3 }</c>), each in the result's rank <c>a.ndim + Count</c>;
+        ///     negative positions count from the end of the result. An empty tuple inserts nothing. A
+        ///     <c>List&lt;int&gt;</c> needs <c>.ToArray()</c>.</param>
+        /// <returns>A NEW view of <paramref name="a"/> with the new axes (an empty tuple included, NumPy's
+        ///     <c>a.reshape(shape)</c>): it shares memory with <paramref name="a"/>. A <c>numpy.matrix</c> operand gives a
+        ///     plain array (NumPy converts it with <c>asarray</c> first); a <c>numpy.char.chararray</c> operand gives a
+        ///     chararray over the result (NumPy creates it as the subclass), owning its data exactly when the plain result
+        ///     would.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null, or <paramref name="axis"/> was converted
+        ///     from a null <c>int[]</c> (a non-nullable <see cref="NDAxis"/> has no None).</exception>
+        /// <exception cref="AxisError">A position is out of range for the result's rank: <c>axis 4 is out of bounds for
+        ///     array of dimension 4</c>, the position as given (every position is range-checked before the repeat
+        ///     check).</exception>
+        /// <exception cref="ValueError">Two positions are the same after normalization (<c>repeated axis</c>).</exception>
         /// <remarks>
-        ///     Matches NumPy 2.x: each axis in the tuple is normalized against
-        ///     the FINAL output ndim (<c>a.ndim + axis.Length</c>) by
-        ///     <c>normalize_axis_tuple</c>, every range check before the repeat check.
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.expand_dims.html. NumPy's statements are the array
+        ///     object's (<c>NDArray.expand_dims</c>): <c>out_ndim = len(axis) + a.ndim</c>,
+        ///     <c>axis = normalize_axis_tuple(axis, out_ndim)</c>, then the reshape.
+        ///     <para>One signature since API-parity batch 4 (2026-11-12): it replaces the <c>int</c>, <c>int[]</c> and
+        ///     <c>IEnumerable&lt;int&gt;</c> overloads (the last one let a null sequence return <paramref name="a"/> itself,
+        ///     where NumPy has no None for this argument).</para>
         /// </remarks>
-        /// <exception cref="AxisError">An axis is out of range for the result's rank.</exception>
-        /// <exception cref="ValueError">Two axes name the same position ("repeated axis").</exception>
-        public static NDArray expand_dims(NDArray a, int[] axis)
-            // NumPy's statements are the array object's.
-            => NDArray.expand_dims(a, axis);
-
-        /// <summary>
-        ///     Sequence overload — accepts any <see cref="IEnumerable{Int32}"/>,
-        ///     materializes to an array, and delegates to the tuple-axis path.
-        /// </summary>
-        /// <param name="a">The array.</param>
-        /// <param name="axis">The positions of the new axes in the result, or null for none.</param>
-        /// <returns>A view of <paramref name="a"/> with the new axes (<paramref name="a"/> itself for a null sequence).
-        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
-        ///     subclass), owning its data exactly when the plain result would.</returns>
-        /// <exception cref="AxisError">An axis is out of range for the result's rank.</exception>
-        /// <exception cref="ValueError">Two axes name the same position ("repeated axis").</exception>
-        public static NDArray expand_dims(NDArray a, IEnumerable<int> axis)
+        public static NDArray expand_dims(NDArray a, NDAxis axis)
         {
-            if (axis == null)
-                return a;
+            if (a is null)
+                throw new ArgumentNullException(nameof(a));
 
-            return expand_dims(a, axis as int[] ?? axis.ToArray());
+            // NumPy's statements are the array object's: one position takes the single-axis statement (the output rank is
+            // a.ndim + 1), a tuple the tuple statement (a.ndim + len(axis), every range before the repeat check).
+            return axis.IsTuple
+                ? NDArray.expand_dims(a, axis.ToArray())
+                : NDArray.expand_dims(a, axis[0]);
         }
     }
 }

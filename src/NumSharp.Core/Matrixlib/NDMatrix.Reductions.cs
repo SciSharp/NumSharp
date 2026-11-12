@@ -403,23 +403,34 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="TypeError"><paramref name="out"/> is not <c>null</c> (NumPy's
         ///     <c>Cannot construct a dtype from an array</c>).</exception>
-        public NDMatrix any(int axis, NDArray @out = null) => (NDMatrix)any((int?)axis, @out);
+        /// <remarks>The C#-typed form of <see cref="any(NDAxis?, NDArray)"/> for an <see cref="int"/> axis (C# prefers it
+        ///     there, an exact match): the answer is always a matrix, so the declared type says so.</remarks>
+        public NDMatrix any(int axis, NDArray @out = null) => (NDMatrix)any(new NDAxis(axis), @out);
 
-        /// <summary>NumPy's <c>matrix.any(axis=None, out=None)</c>; a bool scalar without an axis.</summary>
-        /// <param name="axis">The axis, or <c>null</c> to test every element.</param>
+        /// <summary>NumPy's <c>matrix.any(axis=None, out=None)</c>: <c>ndarray.any(self, axis, out,
+        ///     keepdims=True)._collapse(axis)</c> - a bool scalar without an axis, otherwise a bool matrix that keeps the
+        ///     reduced axes with length 1.</summary>
+        /// <param name="axis">The axis, a tuple of axes (<c>(0, 1)</c> gives the 1 x 1 matrix, <c>()</c> the truth values
+        ///     as a matrix), or <c>null</c> to test every element.</param>
         /// <param name="out">Must be <c>null</c> (see <see cref="any(int, NDArray)"/>).</param>
         /// <returns>A 0-d bool array when <paramref name="axis"/> is <c>null</c>; otherwise the bool matrix.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="TypeError"><paramref name="out"/> is not <c>null</c>.</exception>
+        /// <remarks>The target of <c>np.any</c>'s generated matrix dispatch (<c>[NumPyMethod]</c>), which hands it
+        ///     <c>np.any</c>'s own <see cref="NDAxis"/> by name and type: a tuple reaches it since API-parity batch 4
+        ///     (2026-11-12), where the <c>int?</c> axis it took gave a tuple call no matrix arm (a plain result).</remarks>
         [NDScoped]
         [NumPyMethod]
-        public NDArray any(int? axis = null, NDArray @out = null)
+        public NDArray any(NDAxis? axis = null, NDArray @out = null)
         {
             NDArray self = A;   // the plain computation (file header)
             if (@out is not null)
                 throw new TypeError("Cannot construct a dtype from an array");
             if (axis is null)
                 return np.any(self, axis: null, @out: null, keepdims: false);
+            // keepdims=True keeps every reduced axis with length 1 (a tuple's included), and _collapse(axis) keeps that
+            // matrix for any given axis: the class goes on the plain answer.
             return FromWrapped(np.any(self, axis: axis, @out: null, keepdims: true), this);
         }
 
@@ -431,23 +442,34 @@ namespace NumSharp
         /// <returns>The bool matrix.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="TypeError"><paramref name="out"/> is not <c>null</c>.</exception>
-        public NDMatrix all(int axis, NDArray @out = null) => (NDMatrix)all((int?)axis, @out);
+        /// <remarks>The C#-typed form of <see cref="all(NDAxis?, NDArray)"/> for an <see cref="int"/> axis (C# prefers it
+        ///     there, an exact match): the answer is always a matrix, so the declared type says so.</remarks>
+        public NDMatrix all(int axis, NDArray @out = null) => (NDMatrix)all(new NDAxis(axis), @out);
 
-        /// <summary>NumPy's <c>matrix.all(axis=None, out=None)</c>; a bool scalar without an axis.</summary>
-        /// <param name="axis">The axis, or <c>null</c> to test every element.</param>
+        /// <summary>NumPy's <c>matrix.all(axis=None, out=None)</c>: <c>ndarray.all(self, axis, out,
+        ///     keepdims=True)._collapse(axis)</c> - a bool scalar without an axis, otherwise a bool matrix that keeps the
+        ///     reduced axes with length 1.</summary>
+        /// <param name="axis">The axis, a tuple of axes (<c>(0, 1)</c> gives the 1 x 1 matrix, <c>()</c> the truth values
+        ///     as a matrix), or <c>null</c> to test every element.</param>
         /// <param name="out">Must be <c>null</c>.</param>
         /// <returns>A 0-d bool array when <paramref name="axis"/> is <c>null</c>; otherwise the bool matrix.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="TypeError"><paramref name="out"/> is not <c>null</c>.</exception>
+        /// <remarks>The target of <c>np.all</c>'s generated matrix dispatch (<c>[NumPyMethod]</c>), which hands it
+        ///     <c>np.all</c>'s own <see cref="NDAxis"/> by name and type: a tuple reaches it since API-parity batch 4
+        ///     (2026-11-12), where the <c>int?</c> axis it took gave a tuple call no matrix arm (a plain result).</remarks>
         [NDScoped]
         [NumPyMethod]
-        public NDArray all(int? axis = null, NDArray @out = null)
+        public NDArray all(NDAxis? axis = null, NDArray @out = null)
         {
             NDArray self = A;   // the plain computation (file header)
             if (@out is not null)
                 throw new TypeError("Cannot construct a dtype from an array");
             if (axis is null)
                 return np.all(self, axis: null, @out: null, keepdims: false);
+            // keepdims=True keeps every reduced axis with length 1 (a tuple's included), and _collapse(axis) keeps that
+            // matrix for any given axis: the class goes on the plain answer.
             return FromWrapped(np.all(self, axis: axis, @out: null, keepdims: true), this);
         }
 

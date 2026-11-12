@@ -1,6 +1,7 @@
 ---
 paths:
   - "src/NumSharp.Core/View/Shape.Axes.cs"
+  - "src/NumSharp.Core/View/NDAxis.cs"
   - "src/NumSharp.Core/Exceptions/AxisError.cs"
   - "src/NumSharp.Core/Exceptions/AxisOutOfRangeException.cs"
   - "src/NumSharp.Core/Backends/Default/Math/Reduction/ReductionArguments.cs"
@@ -22,6 +23,19 @@ type-strict, zero-excuse `axis_args.jsonl` oracle tier, the `evaluate.jsonl` tie
   never rewritten), every axis range-checked before the repeat check, a repeat NumPy's `ValueError "repeated axis"` /
   `"repeated axis in \`{argname}\` argument"` (never silently removed).
 - `AxisOutOfRangeException` is `[Obsolete]` and derives from `AxisError`: nothing in NumSharp raises it.
+- `NDAxis` (`View/NDAxis.cs`, the owner's OD1) is NumPy's axis argument as one type: a function whose NumPy default is
+  `axis=None` takes `NDAxis? axis = null`, one whose axis is required `NDAxis axis` (np.expand_dims, np.moveaxis). It
+  converts implicitly from `int` (lifted: an `int?` too, null = None), `int[]` (a null array is None for `NDAxis?` and an
+  ArgumentNullException for `NDAxis`), `(int, int)` and `(int, int, int)`, and has public constructors for the same
+  values. It only HOLDS the axes as given: each function normalizes them itself, because NumPy's functions read an axis
+  three ways - `normalize_axis_tuple` (`NDAxis.Normalize`; flip, expand_dims, moveaxis, the quantile family, average,
+  trim_zeros, size, gradient: every range, then "repeated axis"), the ufunc reduction (all / any / ptp / the sum behind
+  count_nonzero: every range, then "duplicate value in 'axis'", and the INTEGER axis 0 / -1 of a 0-d input) and
+  `PyArray_ConvertMultiAxis` (squeeze: each item's range and repeat in order, so `(0, 0, 5)` is the repeat). `IsTuple`
+  tells `1` from `(1,)` (Python's `1 != (1,)`); `default(NDAxis)` and `new NDAxis()` are the EMPTY tuple. Trap: the null
+  literal converts to `NDAxis` through the `int[]` operator, so `flag ? null : someAxis` is typed `NDAxis` and throws -
+  write `(NDAxis?)null`. NumSharp.Build reads an `NDAxis` axis for a `[ReducesThrough]` collapse through
+  `NDSubclass.AxisArgument`: the single axis, null for None AND for a tuple (the class answer the `int[]` overloads had).
 
 Rules every caller follows:
 - Never wrap then test. `while (axis < 0) axis += ndim` accepts `-ndim - 1` (wrapping twice, to the last axis) and
@@ -30,8 +44,8 @@ Rules every caller follows:
 - Check before every shortcut. `ReductionArguments.CheckReduceAxis` (PyUFunc_GenericReduction's integer branch: a 0-d
   input takes 0 / -1 and nothing else) runs first in prod / max / min / nanmax / nanmin, whose 0-d and one-element
   shortcuts would otherwise answer any axis; likewise cumsum / cumprod / argmax / argmin / compress.
-- 0-d inputs: the ufunc reductions, `count_nonzero` and `squeeze` accept axis 0 / -1 of a 0-d input (no axis selected)
-  and report every other axis against rank 0; the `PyArray_CheckAxis` functions (argmax / argmin / argsort / cumsum /
+- 0-d inputs: the ufunc reductions, `count_nonzero` and `squeeze` accept the INTEGER axis 0 / -1 of a 0-d input (no axis
+  selected; a tuple `(0,)` is an AxisError, `()` selects nothing) and report every other axis against rank 0; the `PyArray_CheckAxis` functions (argmax / argmin / argsort / cumsum /
   cumprod / take / compress / repeat / packbits / unpackbits) ravel a 0-d input first and report rank 1; `np.sort`,
   `np.rollaxis`, the tuple forms and `np.linalg.norm` / `vector_norm` (a tuple reduce) refuse every axis.
 - Python's IndexError where NumPy reads `a.shape[axis]` first: `np.split` / `np.array_split` (before the sections

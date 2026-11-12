@@ -165,23 +165,33 @@ namespace NumSharp.Tests.Manipulation
             act.Should().Throw<ArgumentException>().WithMessage("*out of bounds*");
         }
 
+        /// <summary>
+        ///     A <c>List&lt;int&gt;</c> of positions goes through <c>.ToArray()</c>: the <c>IEnumerable&lt;int&gt;</c> overload
+        ///     went with API-parity batch 4 (the one <see cref="NDAxis"/> signature), and an <c>int[]</c> is NumPy's tuple
+        ///     (NumPy 2.4.2: <c>np.expand_dims(np.arange(6).reshape(2, 3), (0, 2)).shape == (1, 2, 1, 3)</c>).
+        /// </summary>
         [TestMethod]
-        public void TupleAxis_IEnumerableOverload()
+        public void TupleAxis_ListGoesThroughToArray()
         {
             var a = np.arange(6).reshape(2, 3);
-            var r = np.expand_dims(a, new List<int> { 0, 2 });
+            var r = np.expand_dims(a, new List<int> { 0, 2 }.ToArray());
 
             r.shape.Should().Equal(1L, 2L, 1L, 3L);
         }
 
+        /// <summary>
+        ///     NumPy's expand_dims has no None axis (NumPy 2.4.2: <c>np.expand_dims(a, None)</c> is <c>TypeError: 'NoneType'
+        ///     object cannot be interpreted as an integer</c>). A null <c>int[]</c> converts to the non-nullable
+        ///     <see cref="NDAxis"/> parameter only by throwing (C#'s null-argument convention), where the removed <c>int[]</c>
+        ///     overload treated it as the empty tuple and returned the array unchanged (API-parity batch 4).
+        /// </summary>
         [TestMethod]
-        public void TupleAxis_NullAxis_ReturnsUnchanged()
+        public void TupleAxis_NullArray_IsRefused()
         {
-            // Defensive: null axis is a no-op (mirrors empty-tuple semantics).
             var a = np.arange(6).reshape(2, 3);
-            var r = np.expand_dims(a, (int[])null);
+            Action act = () => np.expand_dims(a, (int[])null);
 
-            r.shape.Should().Equal(2L, 3L);
+            act.Should().Throw<ArgumentNullException>();
         }
 
         [TestMethod]

@@ -52,6 +52,16 @@ entries stay on purpose, the owner's calls: `np.repeat` [O2] (the generic scalar
 their Q mark (a tuple axis), which OD1's decision (§8: the `NDAxis` struct) unblocks. The fixes are recorded in
 [`api-parameter-parity.md`](api-parameter-parity.md) §7.
 
+**Refresh 2026-11-12 (API-parity batch 4 on `journey5` at `36040d1e`).** Regenerated on the batch's tree: 791 → 809
+NumPy names with NumPy's signature, 515 → 497 to change; O 310 → 298, L 107 → 94, Q 73 → 61, X 67 → 65, B 25 → 24, M
+184, T 21 and the 83 absent names unchanged; the coverage artifact's headline with NumPy's exact signature 298 → 314.
+OD1's `NDAxis` is implemented and adopted by 19 names (flip, expand_dims, moveaxis, squeeze, all, any, count_nonzero,
+ptp, median, nanmedian, percentile, nanpercentile, quantile, nanquantile, average, average_returned, trim_zeros, size,
+gradient); OD4 is decided (`Shape? size = null`, §8). Entries that stay on purpose: `np.all` / `np.any` [O2] and
+`np.count_nonzero` [O2] (the C# `bool` / `long` of the no-axis call, decision S8), `np.gradient` [O4] (the spacing forms
+of NumPy's `*varargs`), `np.average` [M] (`returned=`, plan B10). The fixes are recorded in
+[`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
 ---
 
 ## Contents
@@ -593,7 +603,8 @@ values at NumPy's `*args` (`a.transpose(1, 0)`) and the call without a parameter
 - `density` (a `bool`): `np.histogram`, `np.histogram2d`, `np.histogramdd`;
 - `stop` (a `double` / `int`): `np.arange`, `np.ma.arange` (with AD8's single overload).
 
-**AD9b: `int?` against `int[]` (L ●, plan G4).** Two overloads take `null` equally well (CS0121): `np.average`,
+**AD9b: `int?` against `int[]` (L ●, plan G4; fixed 2026-11-12 by API-parity batch 4, the `NDAxis` signatures).** Two
+overloads take `null` equally well (CS0121): `np.average`,
 `np.flip`, `np.median`, `np.nanmedian`, `np.percentile`, `np.nanpercentile`, `np.quantile`, `np.nanquantile`,
 `np.ptp`; together with other None values: `np.trim_zeros(a, trim, axis: null)`, `np.linalg.norm(a, ord: null, axis:
 null)`. The fix is one axis parameter type that takes an int, a sequence and `null` (decision OD1), which also closes
@@ -773,10 +784,10 @@ void dtype; [`dtype-system.md`](dtype-system.md)).
 
 | id | question | options | affects |
 |---|---|---|---|
-| **OD1** | The axis parameter type (NumPy: `int`, a tuple of ints, or None) | **DECIDED 2026-11-11 (API-parity batch 3): (a)**, a `readonly struct NDAxis` taken as `NDAxis? axis = null`, with implicit conversions from `int`, `int[]`, `(int, int)` and `(int, int, int)`; probed at C# 12 / net8.0 (`np.sum(a)`, `(a, null)`, `axis: -1`, `(0, 1)`, `new[] {0, 1}`, an `int` and an `int?` variable all bind; a float axis is refused). Rejected: (b) `object axis`; (c) `int?` plus an `int[]` overload. | AD1 (all axis overloads), AD9b, AD10, plan G4, B1–B8 |
+| **OD1** | The axis parameter type (NumPy: `int`, a tuple of ints, or None) | **DECIDED 2026-11-11 (API-parity batch 3): (a)**, a `readonly struct NDAxis` taken as `NDAxis? axis = null`, with implicit conversions from `int`, `int[]`, `(int, int)` and `(int, int, int)`; probed at C# 12 / net8.0 (`np.sum(a)`, `(a, null)`, `axis: -1`, `(0, 1)`, `new[] {0, 1}`, an `int` and an `int?` variable all bind; a float axis is refused). Rejected: (b) `object axis`; (c) `int?` plus an `int[]` overload. **IMPLEMENTED 2026-11-12 (API-parity batch 4)**: `src/NumSharp.Core/View/NDAxis.cs`, with public constructors beside the conversions (the owner's call), an `int[]` → `NDAxis?` conversion that keeps a null array as None, and `default(NDAxis)` the empty tuple; adopted by flip, expand_dims, moveaxis, squeeze, all / any, count_nonzero, ptp, the median and quantile families, average, trim_zeros, size and gradient (the reductions `sum` … `var` and `roll` follow). | AD1 (all axis overloads), AD9b, AD10, plan G4, B1–B8 |
 | **OD2** | array_like / scalar parameters (NumPy takes lists, tuples, scalars, arrays) | (a) `NDArray` (C# arrays and scalars convert implicitly; Python-style nested lists do not); (b) `object` + NumPy's coercion (the polynomial package's `PolySequence` model: nested `object[]`, `ITuple`, typed collections, NEP 50 kinds); per parameter | AD1 (`np.array` 33, `np.asarray`, `np.arange`, `insert`, `pad`, ...), AD5 kind 2 |
 | **OD3** | file parameters (NumPy takes a path or a file-like object) | one `object file` parameter that dispatches on `string` / `Stream` / `TextReader` / `TextWriter` / `byte[]`; or keep typed overloads as a documented exception | `np.load`, `np.loadtxt`, `np.savetxt`, `np.save`, `np.savez`, `np.savez_compressed`, `np.fromfile`, `ndarray.tofile` |
-| **OD4** | `size=None` of the samplers | (a) keep `Shape size = default` (documented idiom; `null` refused); (b) `Shape? size = null` everywhere (every spelling binds) | AD9d (73 names), AD9e, AD1 for `np.random` |
+| **OD4** | `size=None` of the samplers | **DECIDED 2026-11-12 (API-parity batch 4): (b)** `Shape? size = null` everywhere: probed at C# 12 / net8.0 (scratchpad `probe_od4`), `normal()`, `normal(0, 1, null)`, `size: null`, `size: 5`, a positional `5`, `size: (2, 3)`, `size: new[] {2, 3}`, `int` / `int[]` variables, a `Shape`, `5L` and `new Shape(new long[0])` (NumPy's `size=()`, a 0-d result, distinct from None) all bind. Rejected: (a) the `Shape size = default` idiom. The samplers adopt it in the np.random batch. | AD9d (73 names), AD9e, AD1 for `np.random` |
 | **OD5** | NumSharp-only API (typed accessors, `GetData<T>`, `CopyTo`, `Get*/Set*`, interop overloads, `np.evaluate`, `np.multithreading`, ...) | keep as NumSharp extensions (outside the one-signature rule, which speaks of NumPy functions), rename to make the extension visible, or remove | Appendix C, AD5 kind 2, AD7 |
 | **OD6** | constructors (`new NDArray(...)`, `new NDArray<T>(...)`, `new DType(...)`, engine and `SeedSequence` constructors) | (a) must mirror NumPy's class call (`ndarray(shape, dtype, buffer, offset, strides, order)`, `dtype(dtype, align, copy, metadata)`); (b) the factories (`np.ndarray`, `np.dtype`, `np.random.PCG64`, ...) are the NumPy spelling and the constructors stay C# API | AD2 slots, AD3e, AD8, AD6 |
 | **OD7** | generic typed forms of NumPy names (`np.zeros<T>`, `ndarray.item<T>`, `np.nditer<T>`, `np.ndenumerate<T>`) | remove (the max/min family's precedent) or keep the iterator / accessor forms as NumSharp extensions | AD7, AD1 |

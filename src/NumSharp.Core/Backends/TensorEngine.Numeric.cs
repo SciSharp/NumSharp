@@ -86,18 +86,25 @@ namespace NumSharp
         public abstract long CountNonZero(NDArray a);
 
         /// <summary>
-        ///     NumPy's <c>np.count_nonzero(a, axis, keepdims=)</c>, the whole call: <c>a_bool.sum(axis=axis, dtype=intp,
-        ///     keepdims=keepdims)</c> over the truth values (text through <c>a != ''</c>), int64 zeros of the reduced shape for
-        ///     an array with no element.
+        ///     NumPy's <c>np.count_nonzero(a, axis=None, *, keepdims=False)</c>, the whole call: without an axis and without
+        ///     keepdims the flat count (<c>multiarray.count_nonzero(a)</c>) as NumPy's scalar, otherwise
+        ///     <c>a_bool.sum(axis=axis, dtype=intp, keepdims=keepdims)</c> over the truth values (text through
+        ///     <c>a != ''</c>), int64 zeros of the reduced shape for an array with no element.
         /// </summary>
         /// <param name="a">The array (any dtype, any layout).</param>
-        /// <param name="axis">The counted axis (negative counts from the end; a 0-d array accepts 0 and -1).</param>
-        /// <param name="keepdims">Whether the counted axis stays with length one.</param>
-        /// <returns>The int64 counts, laid out as NumPy's sum allocates them.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of range (the axis as given).</exception>
+        /// <param name="axis">NumPy's <c>axis</c>: null (None) counts every element; one axis (negative counts from the
+        ///     end; a 0-d array accepts 0 and -1, the sum's rule) or a tuple of axes (each range-checked, then a repeat
+        ///     refused; the empty tuple counts each element on its own).</param>
+        /// <param name="keepdims">Whether the counted axes stay with length one.</param>
+        /// <returns>The int64 counts, laid out as NumPy's sum allocates them; a read-only 0-d array (NumPy's scalar) when
+        ///     every axis is counted without <paramref name="keepdims"/> (and for any count of a 0-d array).</returns>
+        /// <exception cref="AxisError">An axis is out of range (the first one, as given).</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <remarks>The public <c>np.count_nonzero</c> only calls this, a subclass operand handed in as its plain view (the
-        ///     np-layer dtype plan, P1b).</remarks>
-        public abstract NDArray CountNonZero(NDArray a, int axis, bool keepdims = false);
+        ///     np-layer dtype plan, P1b). The axis is an <see cref="NDAxis"/> since API-parity batch 4 (2026-11-12): the
+        ///     member took one <see cref="int"/> axis, so a tuple and <c>axis=None</c> with keepdims had no route; an
+        ///     <see cref="int"/> argument converts.</remarks>
+        public abstract NDArray CountNonZero(NDArray a, NDAxis? axis, bool keepdims = false);
 
         /// <summary>
         ///     NumPy's <c>np.array_equal(a1, a2, equal_nan=False)</c>: whether two arrays have the same shape and equal

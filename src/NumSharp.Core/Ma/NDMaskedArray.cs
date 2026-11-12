@@ -7173,7 +7173,7 @@ namespace NumSharp
 
         /// <summary>Remove size-1 axes (mask squeezed alike). With <paramref name="axis"/> null EVERY size-1 axis
         /// is dropped; an explicit axis drops ONLY that one (and errors if it is not size 1, via
-        /// <see cref="np.squeeze(NDArray,int)"/>) — NumPy's <c>squeeze(axis=…)</c>.</summary>
+        /// <see cref="np.squeeze(NDArray,NDAxis?)"/>) — NumPy's <c>squeeze(axis=…)</c>.</summary>
         /// <param name="a">Operand.</param>
         /// <param name="axis">The single size-1 axis to drop, or null to drop all size-1 axes.</param>
         /// <returns>The squeezed masked array.</returns>
@@ -7589,7 +7589,7 @@ namespace NumSharp
         /// <summary>
         ///     Weighted average AND its sum-of-weights (NumPy's <c>average(..., returned=True)</c>, which returns
         ///     the pair). The C# analog of NumPy's tuple return — <c>var (avg, sws) = np.ma.average_returned(a)</c>
-        ///     — mirroring the base library's <see cref="np.average_returned(NDArray,int?,NDArray,bool)"/>. With no
+        ///     — mirroring the base library's <see cref="np.average_returned(NDArray,NDAxis?,NDArray,bool)"/>. With no
         ///     weights the sum-of-weights is the COUNT of unmasked elements (as float64), matching NumPy.
         /// </summary>
         /// <param name="a">Data.</param><param name="axis">Axis or null.</param>

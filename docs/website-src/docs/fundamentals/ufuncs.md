@@ -123,7 +123,7 @@ np.prod(x.astype(np.float64), axis: 0);
 np.max(x, axis: 0, keepdims: true); // shape (1, 3)
 ```
 
-> **One divergence from NumPy:** the reductions take a **single** `int?` axis (or none - all axes). NumPy's multi-axis tuple form (`axis=(0, 1)`) is not supported; pass no axis to reduce everything, or reduce one axis at a time.
+> **Axis tuples.** `np.all`, `np.any`, `np.count_nonzero`, `np.ptp`, `np.average`, the median and quantile families (and `np.flip`, `np.squeeze`, `np.expand_dims`, `np.moveaxis`, `np.trim_zeros`, `np.size`, `np.gradient`) take NumPy's axis as an `NDAxis`: one axis, a tuple - `np.all(x, (0, 1))`, `np.ptp(x, new[] { 0, 1 })` - or `null` for None. **One divergence from NumPy:** `np.sum`, `np.prod`, `np.mean`, `np.std`, `np.var`, `np.max` / `np.min` and the nan reductions still take a **single** `int?` axis (or none - all axes); pass no axis to reduce everything, or reduce one axis at a time.
 
 ### The reduce upcast rule
 

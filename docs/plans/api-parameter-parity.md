@@ -690,10 +690,11 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 - [x] G2 `ndarray.astype`: NumPy's order `(dtype, order, casting, copy)` - one overload on NDArray, NDMatrix,
   NDCharArray and NDMaskedArray (API-parity batch 3, 2026-11-11; `subok` stays excluded).
 - [x] G3 `ndarray.dot`: `out=` (API-parity batch 2, 2026-11-11; np.dot's out path).
-- [ ] G4 A bare `null` axis (NumPy's positional `None`) is ambiguous (CS0121) where an `int?` and an `int[]` overload
+- [x] G4 A bare `null` axis (NumPy's positional `None`) is ambiguous (CS0121) where an `int?` and an `int[]` overload
   share the position: `np.average`, `np.average_returned`, `np.flip`, `np.gradient`, `np.median`, `np.nanmedian`,
   `np.percentile`, `np.quantile`, `np.nanpercentile`, `np.nanquantile`, `np.ptp`, `np.trim_zeros` (found by A1, which
-  fixed `np.all` / `np.any`). Confirm each with a compile probe first: other parameters may already disambiguate.
+  fixed `np.all` / `np.any`). Done with API-parity batch 4 (2026-11-12): each takes one `NDAxis? axis = null` (OD1), and
+  the batch's compile probe binds `null`, an int and a tuple for every name at C# 12.
 
 ### Phase H: rarely used
 
@@ -2050,6 +2051,30 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    one, test the cases where the old one would answer differently.
 
 ## 7. State log
+
+- **2026-11-12**: API-parity batch 4 on `journey5` (branch `api-parity/batch-04`; the owner approved all 15 picks and
+  decided OD4): OD1's `NDAxis` (`View/NDAxis.cs`: implicit from `int` / `int[]` / `(int, int)` / `(int, int, int)`, public
+  constructors for the same values at the owner's request, a null `int[]` is None for `NDAxis?`, `default(NDAxis)` is
+  the empty tuple) and ONE axis signature for np.flip, np.expand_dims (`NDAxis axis`), np.moveaxis (`NDAxis source,
+  NDAxis destination`), np.squeeze / ndarray.squeeze (and matrix / chararray squeeze), np.all / np.any / ndarray.all /
+  .any (the typed `NDArray<bool>` forms went; `bool all(a)` stays, the S8 decision), np.count_nonzero (`long
+  count_nonzero(a)` stays), np.ptp, np.median / np.nanmedian, np.percentile / np.nanpercentile / np.quantile /
+  np.nanquantile (q as one NDArray: the engine's `QuantileQ` reads a converted C# number as the number it was, so a
+  differential of every old q spelling over the 13 methods is unchanged), np.average / np.average_returned,
+  np.trim_zeros, np.size and np.gradient (all five forms). G4 done (above). Each function reads the tuple as NumPy
+  does: `normalize_axis_tuple`, the ufunc reduction's prologue (`duplicate value in 'axis'`, the integer 0-d case) or
+  squeeze's `PyArray_ConvertMultiAxis` (range and repeat per item, in order). New computations: np.squeeze's tuple
+  branch (`SqueezeAxes`), np.count_nonzero over a tuple and `axis=None` with keepdims (one add.reduce in the intp loop:
+  `NumPyAddLoops.Int64` joins the reduction iterator), the matrix's `all` / `any` take a tuple. NumSharp.Build reads an
+  `NDAxis` axis for `[ReducesThrough]` through `NDSubclass.AxisArgument` (a tuple reads as no axis, the class answer the
+  `int[]` overloads gave). Behaviour changes: `np.all(m, 0)` of a numpy.matrix is matrix.all's 1 x N matrix (the typed
+  overload returned a plain array; NumPy's answer); `np.expand_dims(a, (int[])null)` throws where it returned the array
+  (NumPy has no None there). A differential of 343 calls (every function, dtype, q form and method, matrix and chararray
+  operands) changed only those matrix all / any answers. Pinned `[OpenBugs]`: a 0-d operand's tuple `(0,)` in np.all /
+  np.any (NumPy: AxisError), np.count_nonzero of a matrix with an axis (NumPy: matrix.sum's keepdims TypeError), the
+  quantile family's matrix shapes (NumPy keeps a 1 x 1 matrix for a full tuple, a column for median, a row for
+  percentile). Caller migration: 11 positional `keepdims` of the removed typed all / any forms (found by a compile trap:
+  they would have bound `out=` and raised NumPy's TypeError), 1 `List<int>` axis.
 
 - **2026-11-11**: API-parity batch 3 on `journey5` (branch `api-parity/batch-03`; the owner approved 8 of 15 picks
   and decided OD1): B5, B6, B7, D2, E2 and G2 done (above); one signature for the ten unary ufuncs (`abs`, `absolute`,

@@ -298,15 +298,18 @@ namespace NumSharp
         /// <summary>
         ///     The chararray without its length-1 axes (NumPy's <c>c.squeeze(axis)</c>).
         /// </summary>
-        /// <param name="axis">The axis to remove, or <c>null</c> for every axis of length 1.</param>
+        /// <param name="axis">The axis to remove, a tuple of axes (each of length 1), or <c>null</c> for every axis of
+        ///     length 1.</param>
         /// <returns>This chararray ITSELF when <paramref name="axis"/> is <c>null</c> and no axis has length 1 (as NumPy);
         ///     otherwise a chararray view.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="ValueError"><paramref name="axis"/> names an axis longer than 1, or this chararray holds data that
-        ///     is not string data and an axis is removed (NumPy wraps that plain view as an ndarray; the C# type here is a
-        ///     chararray).</exception>
+        /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        /// <exception cref="ValueError">An axis longer than 1 is named, a tuple names an axis twice (<c>duplicate value in
+        ///     'axis'</c>), or this chararray holds data that is not string data and an axis is removed (NumPy wraps that
+        ///     plain view as an ndarray; the C# type here is a chararray).</exception>
+        /// <remarks>The axis is an <see cref="NDAxis"/> since API-parity batch 4 (2026-11-12), as
+        ///     <see cref="NDArray.squeeze(NDAxis?)"/>'s; an <c>int?</c> argument converts.</remarks>
         [NDScoped]
-        public new NDCharArray squeeze(int? axis = null)
+        public new NDCharArray squeeze(NDAxis? axis = null)
         {
             if (axis is null)
             {

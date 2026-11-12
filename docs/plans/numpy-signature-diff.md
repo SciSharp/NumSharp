@@ -27,7 +27,7 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 
 | module | C# names | C# overloads | with a NumPy counterpart | identical | more than one overload | closest overload differs | one overload, differs | missing | in another overload only | renamed | extra | slot | C# requires | default | varargs | only null defaults | only policy | not compared | NumSharp-only names | NumPy names absent |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `np` | 396 | 851 | 379 | 147 | 123 | 31 | 8 | 11 | 4 | 4 | 0 | 6 | 10 | 2 | 6 | 9 | 109 | 0 | 17 | 34 |
+| `np` | 396 | 806 | 379 | 158 | 111 | 30 | 9 | 11 | 4 | 4 | 0 | 6 | 9 | 2 | 6 | 9 | 109 | 0 | 17 | 34 |
 | `ndarray` | 140 | 255 | 57 | 38 | 13 | 9 | 6 | 4 | 1 | 2 | 2 | 2 | 3 | 0 | 0 | 0 | 0 | 0 | 83 | 3 |
 | `np.char` | 54 | 54 | 53 | 30 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 12 | 11 | 0 | 1 | 0 |
 | `np.dtypes` | 1 | 2 | 1 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
@@ -69,7 +69,7 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 | `np.random.PCG64DXSM` | 13 | 21 | 3 | 1 | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 10 | 0 |
 | `np.random.Philox` | 13 | 22 | 3 | 1 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 10 | 0 |
 | `np.random.SFC64` | 11 | 18 | 1 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 10 | 0 |
-| **total** | 1545 | 2517 | 1306 | 624 | 310 | 259 | 187 | 168 | 6 | 40 | 2 | 51 | 56 | 2 | 10 | 66 | 140 | 0 | 239 | 83 |
+| **total** | 1545 | 2472 | 1306 | 635 | 298 | 258 | 188 | 168 | 6 | 40 | 2 | 51 | 55 | 2 | 10 | 66 | 140 | 0 | 239 | 83 |
 
 *closest overload differs* counts names whose closest overload has a hard difference (missing, in another
 overload only, renamed, extra, slot, C# requires, default, varargs); each kind is counted again in its own
@@ -79,7 +79,7 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 
 ## `np`
 
-### Signature differences (31)
+### Signature differences (30)
 
 | name | NumPy | closest C# overload | differences |
 |---|---|---|---|
@@ -87,11 +87,10 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 | `array` | `array(object, dtype=None, *, copy=True, order='K', subok=False, ndmin=0, ndmax=0, like=None)` | `NDArray array(Array array, DType dtype = null, int ndmin = 0, bool copy = true, char order = 'C')`<br>(+32 more overloads, below) | **missing**: `ndmax`<br>**renamed**: `object -> array`<br>**default**: `order: 'K' vs 'C'`<br>**policy**: `subok`, `like` |
 | `array2string` | `array2string(a, max_line_width=None, precision=None, suppress_small=None, separator=' ', prefix='', *, formatter=None, threshold=None, edgeitems=None, sign=None, floatmode=None, suffix='', legacy=None)` | `string array2string(NDArray a, int? max_line_width = null, int? precision = null, bool? suppress_small = null, string separator = " ", string prefix = "", int? threshold = null, int? edgeitems = null, char? sign = null, string floatmode = null, string suffix = "")` | **missing**: `formatter`, `legacy` |
 | `asanyarray` | `asanyarray(a, dtype=None, order=None, *, device=None, copy=None, like=None)` | `NDArray asanyarray(in object a, DType dtype, char order, string device = null)`<br>(+2 more overloads, below) | **missing**: `copy`<br>**C# requires**: `dtype`, `order`<br>**policy**: `like` |
-| `average` | `average(a, axis=None, weights=None, returned=False, *, keepdims=<no value>)` | `NDArray average(NDArray a, int? axis = null, NDArray weights = null, bool keepdims = false)`<br>(+1 more overloads, below) | **missing**: `returned` |
+| `average` | `average(a, axis=None, weights=None, returned=False, *, keepdims=<no value>)` | `NDArray average(NDArray a, NDAxis? axis = null, NDArray weights = null, bool keepdims = false)` | **missing**: `returned` |
 | `bmat` | `bmat(obj, ldict=None, gdict=None)` | `NDMatrix bmat(string obj, IDictionary<string, NDArray> ldict, IDictionary<string, NDArray> gdict = null)`<br>(+4 more overloads, below) | **C# requires**: `ldict` |
 | `broadcast_to` | `broadcast_to(array, shape, subok=False)` | `Shape broadcast_to(Shape from, Shape against)`<br>(+8 more overloads, below) | **renamed**: `array -> from`, `shape -> against`<br>**policy**: `subok` |
 | `can_cast` | `can_cast(from_, to, casting='safe')` | `bool can_cast(DType from, DType to, string casting = "safe")`<br>(+19 more overloads, below) | **renamed**: `from_ -> from` |
-| `count_nonzero` | `count_nonzero(a, axis=None, *, keepdims=False)` | `NDArray count_nonzero(NDArray a, int axis, bool keepdims = false)`<br>(+1 more overloads, below) | **C# requires**: `axis` |
 | `einsum` | `einsum(*operands, out=None, optimize=False, dtype=..., order=..., casting=..., **kwargs)` | `NDArray einsum(string subscripts, NDArray[] operands, NDArray out = null, DType dtype = null, char order = 'K', string casting = "safe", object optimize = null)`<br>(+2 more overloads, below) | **default**: `order: ... vs 'K'`, `casting: ... vs "safe"`<br>**varargs**: `*operands as string subscripts, NDArray[] operands (no params array)`<br>**null default**: `optimize: False vs null` |
 | `einsum_path` | `einsum_path(*operands, optimize='greedy', einsum_call=False)` | `ValueTuple<EinsumPath, string> einsum_path(string subscripts, NDArray[] operands, object optimize)`<br>(+2 more overloads, below) | **C# requires**: `optimize`<br>**varargs**: `*operands as string subscripts, NDArray[] operands (no params array)`<br>**policy**: `einsum_call` |
 | `empty` | `empty(shape, dtype=None, order='C', *, device=None, like=None)` | `NDArray empty(Shape shape, DType dtype, string device = null)`<br>(+7 more overloads, below) | **in another overload only**: `order`<br>**C# requires**: `dtype`<br>**policy**: `like` |
@@ -99,7 +98,7 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 | `frompyfunc` | `frompyfunc(func, /, nin, nout, *, identity=None, **kwargs)` | `Vectorized frompyfunc(Delegate func, int nin, int nout)` | **missing**: `identity` |
 | `full` | `full(shape, fill_value, dtype=None, order='C', *, device=None, like=None)` | `NDArray full(Shape shape, object fill_value, DType dtype = null, string device = null)`<br>(+4 more overloads, below) | **missing**: `order`<br>**policy**: `like` |
 | `full_like` | `full_like(a, fill_value, dtype=None, order='K', subok=True, shape=None, *, device=None)` | `NDArray full_like(NDArray a, object fill_value, DType dtype = null, char order = 'K', Shape? shape = null, string device = null)` | **slot**: `shape: NumPy #5, C# #4`<br>**policy**: `subok` |
-| `gradient` | `gradient(f, *varargs, axis=None, edge_order=1)` | `np.GradientResult gradient(NDArray f, object spacing = null, int? axis = null, int edge_order = 1)`<br>(+4 more overloads, below) | **varargs**: `*varargs as object spacing (no params array)` |
+| `gradient` | `gradient(f, *varargs, axis=None, edge_order=1)` | `np.GradientResult gradient(NDArray f, object spacing = null, NDAxis? axis = null, int edge_order = 1)`<br>(+3 more overloads, below) | **varargs**: `*varargs as object spacing (no params array)` |
 | `iinfo` | `iinfo(int_type)` | `iinfo iinfo(DType dtype)`<br>(+4 more overloads, below) | **renamed**: `int_type -> dtype` |
 | `indices` | `indices(dimensions, dtype=<class 'int'>, sparse=False)` | `NDArray indices(int[] dimensions, DType dtype = null)`<br>(+2 more overloads, below) | **missing**: `sparse` |
 | `meshgrid` | `meshgrid(*xi, copy=True, sparse=False, indexing='xy')` | `np.MeshgridResult meshgrid(NDArray x1, NDArray x2, string indexing = "xy", bool sparse = false, bool copy = true)`<br>(+2 more overloads, below) | **varargs**: `*xi as NDArray x1, NDArray x2 (no params array)` |
@@ -136,27 +135,19 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 - lacking `subok`: `broadcast_arrays`
 - lacking `subok, signature`: `matvec`, `vecdot`, `vecmat`
 
-### More than one overload (123; NumPy has one signature each)
+### More than one overload (111; NumPy has one signature each)
 
 - `all`: NumPy `all(a, axis=None, out=None, keepdims=<no value>, *, where=<no value>)`
 
   ```csharp
   bool all(NDArray a)
-  NDArray<bool> all(NDArray nd, int axis, bool keepdims = false)
-  NDArray<bool> all(NDArray nd, int[] axis, bool keepdims = false) [ORPA -1]
-  NDArray<bool> all(NDArray nd, bool keepdims)
-  NDArray all(NDArray a, int? axis = null, NDArray out = null, bool keepdims = false, NDArray where = null)
-  NDArray all(NDArray a, int[] axis, NDArray out, bool keepdims = false, NDArray where = null) [ORPA -1]
+  NDArray all(NDArray a, NDAxis? axis = null, NDArray out = null, bool keepdims = false, NDArray where = null)
   ```
 - `any`: NumPy `any(a, axis=None, out=None, keepdims=<no value>, *, where=<no value>)`
 
   ```csharp
   bool any(NDArray a)
-  NDArray<bool> any(NDArray nd, int axis, bool keepdims = false)
-  NDArray<bool> any(NDArray nd, int[] axis, bool keepdims = false) [ORPA -1]
-  NDArray<bool> any(NDArray nd, bool keepdims)
-  NDArray any(NDArray a, int? axis = null, NDArray out = null, bool keepdims = false, NDArray where = null)
-  NDArray any(NDArray a, int[] axis, NDArray out, bool keepdims = false, NDArray where = null) [ORPA -1]
+  NDArray any(NDArray a, NDAxis? axis = null, NDArray out = null, bool keepdims = false, NDArray where = null)
   ```
 - `append`: NumPy `append(arr, values, axis=None)`
 
@@ -318,12 +309,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray[] atleast_3d(params object[] arys)
   NDArray[] atleast_3d(params NDArray[] arys)
   ```
-- `average`: NumPy `average(a, axis=None, weights=None, returned=False, *, keepdims=<no value>)`
-
-  ```csharp
-  NDArray average(NDArray a, int? axis = null, NDArray weights = null, bool keepdims = false)
-  NDArray average(NDArray a, int[] axis, NDArray weights = null, bool keepdims = false)
-  ```
 - `base_repr`: NumPy `base_repr(number, base=2, padding=0)`
 
   ```csharp
@@ -439,7 +424,7 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 
   ```csharp
   long count_nonzero(NDArray a)
-  NDArray count_nonzero(NDArray a, int axis, bool keepdims = false)
+  NDArray count_nonzero(NDArray a, NDAxis? axis = null, bool keepdims = false)
   ```
 - `delete`: NumPy `delete(arr, obj, axis=None)`
 
@@ -500,13 +485,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray<bool> equal(NDArray x1, object x2)
   NDArray<bool> equal(object x1, NDArray x2)
   ```
-- `expand_dims`: NumPy `expand_dims(a, axis)`
-
-  ```csharp
-  NDArray expand_dims(NDArray a, int axis)
-  NDArray expand_dims(NDArray a, int[] axis)
-  NDArray expand_dims(NDArray a, IEnumerable<int> axis)
-  ```
 - `finfo`: NumPy `finfo(dtype)`
 
   ```csharp
@@ -515,12 +493,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   finfo finfo<T>()
   finfo finfo(NDArray arr)
   finfo finfo(string dtypeName)
-  ```
-- `flip`: NumPy `flip(m, axis=None)`
-
-  ```csharp
-  NDArray flip(NDArray m, int? axis = null)
-  NDArray flip(NDArray m, int[] axis)
   ```
 - `float_power`: NumPy `float_power(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)`
 
@@ -594,11 +566,10 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 - `gradient`: NumPy `gradient(f, *varargs, axis=None, edge_order=1)`
 
   ```csharp
-  np.GradientResult gradient(NDArray f, object spacing = null, int? axis = null, int edge_order = 1)
-  np.GradientResult gradient(NDArray f, object spacing, int[] axis, int edge_order = 1)
-  np.GradientResult gradient(NDArray f, object spacing0, object spacing1, int[] axis = null, int edge_order = 1)
-  np.GradientResult gradient(NDArray f, object spacing0, object spacing1, object spacing2, int[] axis = null, int edge_order = 1)
-  np.GradientResult gradient(NDArray f, object[] varargs, int[] axis = null, int edge_order = 1)
+  np.GradientResult gradient(NDArray f, object spacing = null, NDAxis? axis = null, int edge_order = 1)
+  np.GradientResult gradient(NDArray f, object spacing0, object spacing1, NDAxis? axis = null, int edge_order = 1)
+  np.GradientResult gradient(NDArray f, object spacing0, object spacing1, object spacing2, NDAxis? axis = null, int edge_order = 1)
+  np.GradientResult gradient(NDArray f, object[] varargs, NDAxis? axis = null, int edge_order = 1)
   ```
 - `greater`: NumPy `greater(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)`
 
@@ -798,12 +769,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDMatrix matrix(Array data, DType dtype = null, bool copy = true)
   NDMatrix matrix(object data, DType dtype = null, bool copy = true)
   ```
-- `median`: NumPy `median(a, axis=None, out=None, overwrite_input=False, keepdims=False)`
-
-  ```csharp
-  NDArray median(NDArray a, int? axis = null, NDArray out = null, bool overwrite_input = false, bool keepdims = false)
-  NDArray median(NDArray a, int[] axis, NDArray out = null, bool overwrite_input = false, bool keepdims = false)
-  ```
 - `meshgrid`: NumPy `meshgrid(*xi, copy=True, sparse=False, indexing='xy')`
 
   ```csharp
@@ -817,14 +782,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray mod(NDArray x1, NDArray x2, NDArray out = null, NDArray where = null, DType dtype = null)
   NDArray mod(NDArray x1, float x2)
   ```
-- `moveaxis`: NumPy `moveaxis(a, source, destination)`
-
-  ```csharp
-  NDArray moveaxis(NDArray a, int source, int destination)
-  NDArray moveaxis(NDArray a, int[] source, int destination)
-  NDArray moveaxis(NDArray a, int source, int[] destination)
-  NDArray moveaxis(NDArray a, int[] source, int[] destination)
-  ```
 - `nanargmax`: NumPy `nanargmax(a, axis=None, out=None, *, keepdims=<no value>)`
 
   ```csharp
@@ -836,34 +793,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   ```csharp
   long nanargmin(NDArray a)
   NDArray nanargmin(NDArray a, int? axis = null, NDArray out = null, bool keepdims = false)
-  ```
-- `nanmedian`: NumPy `nanmedian(a, axis=None, out=None, overwrite_input=False, keepdims=<no value>)`
-
-  ```csharp
-  NDArray nanmedian(NDArray a, int? axis = null, NDArray out = null, bool overwrite_input = false, bool keepdims = false)
-  NDArray nanmedian(NDArray a, int[] axis, NDArray out = null, bool overwrite_input = false, bool keepdims = false)
-  ```
-- `nanpercentile`: NumPy `nanpercentile(a, q, axis=None, out=None, overwrite_input=False, method='linear', keepdims=<no value>, *, weights=None)`
-
-  ```csharp
-  NDArray nanpercentile(NDArray a, double q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray nanpercentile(NDArray a, double[] q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray nanpercentile(NDArray a, double q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray nanpercentile(NDArray a, double[] q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray nanpercentile(NDArray a, NDArray q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray nanpercentile(NDArray a, NDArray q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  ```
-- `nanquantile`: NumPy `nanquantile(a, q, axis=None, out=None, overwrite_input=False, method='linear', keepdims=<no value>, *, weights=None)`
-
-  ```csharp
-  NDArray nanquantile(NDArray a, double q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray nanquantile(NDArray a, double[] q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray nanquantile(NDArray a, double q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray nanquantile(NDArray a, double[] q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray nanquantile(NDArray a, NDArray q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray nanquantile(NDArray a, NDArray q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray nanquantile(NDArray a, long q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray nanquantile(NDArray a, long q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
   ```
 - `ndarray`: NumPy `ndarray(shape, dtype=None, buffer=None, offset=0, strides=None, order=None)`
 
@@ -936,16 +865,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray partition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
   NDArray partition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
   ```
-- `percentile`: NumPy `percentile(a, q, axis=None, out=None, overwrite_input=False, method='linear', keepdims=False, *, weights=None)`
-
-  ```csharp
-  NDArray percentile(NDArray a, double q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray percentile(NDArray a, double[] q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray percentile(NDArray a, double q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray percentile(NDArray a, double[] q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray percentile(NDArray a, NDArray q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray percentile(NDArray a, NDArray q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  ```
 - `piecewise`: NumPy `piecewise(x, condlist, funclist, *args, **kw)`
 
   ```csharp
@@ -971,29 +890,11 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray polyval(NDArray p, NDArray x)
   poly1d polyval(poly1d p, poly1d x)
   ```
-- `ptp`: NumPy `ptp(a, axis=None, out=None, keepdims=<no value>)`
-
-  ```csharp
-  NDArray ptp(NDArray a, int? axis = null, NDArray out = null, bool keepdims = false)
-  NDArray ptp(NDArray a, int[] axis, NDArray out = null, bool keepdims = false)
-  ```
 - `putmask`: NumPy `putmask(a, /, mask, values)`
 
   ```csharp
   void putmask(NDArray a, NDArray mask, NDArray values)
   void putmask(NDArray a, NDArray mask, Array values)
-  ```
-- `quantile`: NumPy `quantile(a, q, axis=None, out=None, overwrite_input=False, method='linear', keepdims=False, *, weights=None)`
-
-  ```csharp
-  NDArray quantile(NDArray a, double q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray quantile(NDArray a, double[] q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray quantile(NDArray a, double q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray quantile(NDArray a, double[] q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray quantile(NDArray a, NDArray q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray quantile(NDArray a, NDArray q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray quantile(NDArray a, long q, int? axis = null, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
-  NDArray quantile(NDArray a, long q, int[] axis, NDArray out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
   ```
 - `ravel_multi_index`: NumPy `ravel_multi_index(multi_index, dims, mode='raise', order='C')`
 
@@ -1115,12 +1016,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray tile(NDArray A, params int[] reps)
   NDArray tile(NDArray A, long[] reps)
   ```
-- `trim_zeros`: NumPy `trim_zeros(filt, trim='fb', axis=None)`
-
-  ```csharp
-  NDArray trim_zeros(NDArray filt, string trim = "fb", int? axis = null)
-  NDArray trim_zeros(NDArray filt, string trim, int[] axis)
-  ```
 - `unravel_index`: NumPy `unravel_index(indices, shape, order='C')`
 
   ```csharp
@@ -1183,9 +1078,9 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray zeros(Shape shape, char order, DType dtype = null)
   ```
 
-### Identical to NumPy (147)
+### Identical to NumPy (158)
 
-`allclose`, `amax`, `amin`, `angle`, `argsort`, `argwhere`, `around`, `array_equal`, `array_equiv`, `array_repr`, `array_str`, `asarray_chkfinite`, `bartlett`, `bincount`, `blackman`, `block`, `broadcast_shapes`, `clip`, `column_stack`, `common_type`, `compress`, `convolve`, `copy`, `corrcoef`, `correlate`, `cov`, `cross`, `cumprod`, `cumsum`, `cumulative_prod`, `cumulative_sum`, `datetime_data`, `diag`, `diag_indices`, `diag_indices_from`, `diagflat`, `diagonal`, `diff`, `digitize`, `dot`, `dstack`, `ediff1d`, `extract`, `fill_diagonal`, `fix`, `flatnonzero`, `fliplr`, `flipud`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `getbufsize`, `hamming`, `hanning`, `i0`, `imag`, `inner`, `isclose`, `iscomplex`, `iscomplexobj`, `isfortran`, `isin`, `isneginf`, `isposinf`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `ix_`, `kaiser`, `kron`, `mask_indices`, `matrix_transpose`, `max`, `may_share_memory`, `mean`, `min`, `min_scalar_type`, `mintypecode`, `nancumprod`, `nancumsum`, `nanmax`, `nanmean`, `nanmin`, `nanprod`, `nanstd`, `nansum`, `nanvar`, `ndim`, `nonzero`, `outer`, `packbits`, `permute_dims`, `poly`, `polyadd`, `polyder`, `polydiv`, `polymul`, `polysub`, `prod`, `promote_types`, `put`, `put_along_axis`, `ravel`, `real`, `real_if_close`, `resize`, `rollaxis`, `roots`, `round`, `setbufsize`, `setdiff1d`, `setxor1d`, `shape`, `shares_memory`, `sinc`, `size`, `sort`, `sort_complex`, `squeeze`, `stack`, `std`, `sum`, `swapaxes`, `take`, `take_along_axis`, `trace`, `transpose`, `trapezoid`, `tril`, `tril_indices`, `tril_indices_from`, `triu`, `triu_indices`, `triu_indices_from`, `typename`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`, `unique_values`, `unpackbits`, `unstack`, `vander`, `var`, `vdot`
+`allclose`, `amax`, `amin`, `angle`, `argsort`, `argwhere`, `around`, `array_equal`, `array_equiv`, `array_repr`, `array_str`, `asarray_chkfinite`, `bartlett`, `bincount`, `blackman`, `block`, `broadcast_shapes`, `clip`, `column_stack`, `common_type`, `compress`, `convolve`, `copy`, `corrcoef`, `correlate`, `cov`, `cross`, `cumprod`, `cumsum`, `cumulative_prod`, `cumulative_sum`, `datetime_data`, `diag`, `diag_indices`, `diag_indices_from`, `diagflat`, `diagonal`, `diff`, `digitize`, `dot`, `dstack`, `ediff1d`, `expand_dims`, `extract`, `fill_diagonal`, `fix`, `flatnonzero`, `flip`, `fliplr`, `flipud`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `getbufsize`, `hamming`, `hanning`, `i0`, `imag`, `inner`, `isclose`, `iscomplex`, `iscomplexobj`, `isfortran`, `isin`, `isneginf`, `isposinf`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `ix_`, `kaiser`, `kron`, `mask_indices`, `matrix_transpose`, `max`, `may_share_memory`, `mean`, `median`, `min`, `min_scalar_type`, `mintypecode`, `moveaxis`, `nancumprod`, `nancumsum`, `nanmax`, `nanmean`, `nanmedian`, `nanmin`, `nanpercentile`, `nanprod`, `nanquantile`, `nanstd`, `nansum`, `nanvar`, `ndim`, `nonzero`, `outer`, `packbits`, `percentile`, `permute_dims`, `poly`, `polyadd`, `polyder`, `polydiv`, `polymul`, `polysub`, `prod`, `promote_types`, `ptp`, `put`, `put_along_axis`, `quantile`, `ravel`, `real`, `real_if_close`, `resize`, `rollaxis`, `roots`, `round`, `setbufsize`, `setdiff1d`, `setxor1d`, `shape`, `shares_memory`, `sinc`, `size`, `sort`, `sort_complex`, `squeeze`, `stack`, `std`, `sum`, `swapaxes`, `take`, `take_along_axis`, `trace`, `transpose`, `trapezoid`, `tril`, `tril_indices`, `tril_indices_from`, `trim_zeros`, `triu`, `triu_indices`, `triu_indices_from`, `typename`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`, `unique_values`, `unpackbits`, `unstack`, `vander`, `var`, `vdot`
 
 ### NumSharp-only names (17 NumPy-style, 0 PascalCase C# members)
 
@@ -2905,13 +2800,13 @@ PascalCase: `Clone`, `GetAtIndex`
 
   ```csharp
   NDMatrix all(int axis, NDArray out = null)
-  NDArray all(int? axis = null, NDArray out = null)
+  NDArray all(NDAxis? axis = null, NDArray out = null)
   ```
 - `any`: NumPy `matrix.any(axis=None, out=None)`
 
   ```csharp
   NDMatrix any(int axis, NDArray out = null)
-  NDArray any(int? axis = null, NDArray out = null)
+  NDArray any(NDAxis? axis = null, NDArray out = null)
   ```
 - `argmax`: NumPy `matrix.argmax(axis=None, out=None)`
 

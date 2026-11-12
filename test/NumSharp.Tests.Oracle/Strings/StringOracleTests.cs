@@ -1359,7 +1359,7 @@ namespace NumSharp.Tests.Strings
         /// <summary>
         ///     The one identity divergence: <c>np.squeeze</c> of an array with no length-1 axis. NumPy's <c>PyArray_Squeeze</c>
         ///     returns the operand itself; NumSharp returns a fresh view object by design (documented on
-        ///     <see cref="np.squeeze(NDArray)"/>: disposing the result must never dispose the input) — the array-object
+        ///     <see cref="np.squeeze(NDArray, NDAxis?)"/>: disposing the result must never dispose the input) — the array-object
         ///     oracle's same gap for plain arrays.
         /// </summary>
         /// <param name="c">The case.</param>

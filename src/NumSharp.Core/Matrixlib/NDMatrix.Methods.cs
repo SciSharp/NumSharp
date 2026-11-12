@@ -102,14 +102,17 @@ namespace NumSharp
         ///     NumPy's <c>matrix.squeeze(axis=None)</c>. A matrix cannot lose an axis, so a squeezed row stays a row
         ///     and a squeezed COLUMN becomes a row <c>(1, N)</c>.
         /// </summary>
-        /// <param name="axis">The axis to remove, or <c>null</c> for every axis of length 1.</param>
+        /// <param name="axis">The axis to remove, a tuple of axes (each of length 1; checked in order, NumPy's
+        ///     <c>PyArray_ConvertMultiAxis</c>), or <c>null</c> for every axis of length 1.</param>
         /// <returns>This matrix ITSELF when it has no axis of length 1 and <paramref name="axis"/> is
         ///     <c>null</c> (as NumPy); otherwise a view.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="ValueError"><paramref name="axis"/> names an axis longer than 1 (<c>cannot select an
-        ///     axis to squeeze out which has size not equal to one</c>).</exception>
+        /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        /// <exception cref="ValueError">An axis longer than 1 is named (<c>cannot select an axis to squeeze out which
+        ///     has size not equal to one</c>), or a tuple names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
+        /// <remarks>The axis is an <see cref="NDAxis"/> since API-parity batch 4 (2026-11-12), as
+        ///     <see cref="NDArray.squeeze(NDAxis?)"/>'s; an <c>int?</c> argument converts.</remarks>
         [NDScoped]
-        public new NDMatrix squeeze(int? axis = null)
+        public new NDMatrix squeeze(NDAxis? axis = null)
         {
             long[] dims = Storage.Shape.dimensions;
             if (axis is null)
@@ -121,13 +124,15 @@ namespace NumSharp
                 if (!unit)
                     return this;
             }
-            else
+            else if (!axis.Value.IsTuple)
             {
                 // PyArray_SqueezeSelected: the axis is normalized first (AxisError), then it must have length 1.
-                int selected = Backends.DefaultEngine.NormalizeAxis(axis.Value, dims.Length);
+                int selected = Backends.DefaultEngine.NormalizeAxis(axis.Value[0], dims.Length);
                 if (dims[selected] != 1)
                     throw new ValueError("cannot select an axis to squeeze out which has size not equal to one");
             }
+            // A tuple: the plain squeeze below checks it in NumPy's order (each item's range and repeat, then the lengths)
+            // before anything is built.
 
             return From(base.squeeze(axis), this);
         }

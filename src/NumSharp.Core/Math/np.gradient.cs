@@ -22,13 +22,14 @@ namespace NumSharp
     //     spacing=2, axis=3 (a single spacing with an integer axis). For two
     //     scalar spacings write doubles `gradient(f, 2.0, 3.0)` or an explicit
     //     `gradient(f, new object[]{2, 3})`.
-    //   * A tuple `axis` with NO spacing needs the explicit-array form:
-    //     `gradient(f, Array.Empty<object>(), axis: new[]{0, 1})` (a scalar axis
-    //     `gradient(f, axis: 0)` works directly).
+    //   * `gradient(f, 2.0, null)` binds axis=None (NumPy reads that None as a
+    //     second spacing and raises TypeError).
+    // The axis is an NDAxis on every form (API-parity batch 4): an int, a tuple
+    // `(0, 1)` or an int[], so `gradient(f, axis: (0, 1))` needs no spacing array.
     public static partial class np
     {
         /// <summary>
-        ///     The result of <see cref="gradient(NDArray, object, int?, int)"/>: NumPy returns a
+        ///     The result of <see cref="gradient(NDArray, object, NDAxis?, int)"/>: NumPy returns a
         ///     single ndarray when the gradient is taken along ONE axis and a tuple of ndarrays
         ///     (one per axis) otherwise. C# cannot pick a return type from a runtime count, so this
         ///     value stands in for both — it converts implicitly to <see cref="NDArray"/> (valid only
@@ -125,11 +126,11 @@ namespace NumSharp
         ///     strong (a float64 0-d step computes a float32 <paramref name="f"/> in float64, rounded once).
         /// </param>
         /// <param name="axis">
-        ///     The axis along which to take the gradient; <c>null</c> (default) computes it for every
-        ///     axis (returning a tuple). Negative axes count from the end.
+        ///     NumPy's <c>axis</c> (keyword-only there): <c>null</c> (None, the default) computes the gradient for every axis
+        ///     (returning a tuple); one axis, or a tuple (<c>(0, 1)</c>, <c>new[] { 0, 1 }</c>) for those axes - a
+        ///     one-element tuple gives NumPy's single array, the empty tuple no component. Negative axes count from the end.
         /// </param>
         /// <param name="edge_order">Boundary difference order, 1 (default) or 2.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.gradient.html</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="f"/> is <c>null</c>.</exception>
         /// <exception cref="AxisError">An <paramref name="axis"/> is outside <c>[-f.ndim, f.ndim-1]</c>.</exception>
         /// <exception cref="ValueError">
@@ -165,57 +166,46 @@ namespace NumSharp
         ///     A <c>BigInteger</c> step past the float range (CPython's "int too large to convert to float").
         /// </exception>
         /// <exception cref="OverflowException">A decimal result past decimal's range.</exception>
-        public static GradientResult gradient(NDArray f, object spacing = null, int? axis = null, int edge_order = 1)
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.gradient.html. One signature for a single
+        ///     spacing since API-parity batch 4 (2026-11-12): it replaces the <c>int?</c>-axis and <c>int[]</c>-axis forms,
+        ///     so a tuple axis needs no spacing array and <c>np.gradient(f, 2.0, null)</c> is no longer ambiguous (CS0121).
+        ///     The axis travels as an array (an int as NumPy's one-element tuple, which <c>normalize_axis_tuple</c> makes of
+        ///     it).</remarks>
+        public static GradientResult gradient(NDArray f, object spacing = null, NDAxis? axis = null, int edge_order = 1)
         {
             if (f is null) throw new ArgumentNullException(nameof(f));
+            // A null spacing is no spacing (NumPy's np.gradient(f, axis=...)), not a spacing VALUE.
             return f.TensorEngine.Gradient(f,
                             spacing is null ? Array.Empty<object>() : new[] { spacing },
-                            axis.HasValue ? new[] { axis.Value } : null,
+                            axis?.ToArray(),
                             edge_order);
         }
 
-        /// <summary>
-        ///     Single spacing with a tuple <paramref name="axis"/> — see the main overload. A null
-        ///     <paramref name="spacing"/> means no spacing (NumPy's <c>np.gradient(f, axis=(…))</c>), as in the main
-        ///     overload; it used to be passed on as a spacing VALUE and refused.
-        /// </summary>
-        /// <param name="f">The sampled values.</param>
-        /// <param name="spacing">One spacing for every axis (a scalar or a coordinate array), or null for unit spacing.</param>
-        /// <param name="axis">The axes to differentiate along (negative values count from the end).</param>
-        /// <param name="edge_order">The boundary order, 1 or 2.</param>
-        /// <returns>One gradient per axis (a single array when the tuple has one axis).</returns>
-        /// <inheritdoc cref="gradient(NDArray, object, int?, int)" path="/exception"/>
-        public static GradientResult gradient(NDArray f, object spacing, int[] axis, int edge_order = 1)
-        {
-            if (f is null) throw new ArgumentNullException(nameof(f));
-            return f.TensorEngine.Gradient(f, spacing is null ? Array.Empty<object>() : new[] { spacing }, axis, edge_order);
-        }
-
         /// <summary>Two per-axis spacings — see the main overload.</summary>
-        /// <inheritdoc cref="gradient(NDArray, object, int?, int)" path="/exception"/>
-        public static GradientResult gradient(NDArray f, object spacing0, object spacing1, int[] axis = null, int edge_order = 1)
+        /// <inheritdoc cref="gradient(NDArray, object, NDAxis?, int)" path="/exception"/>
+        public static GradientResult gradient(NDArray f, object spacing0, object spacing1, NDAxis? axis = null, int edge_order = 1)
         {
             if (f is null) throw new ArgumentNullException(nameof(f));
-            return f.TensorEngine.Gradient(f, new[] { spacing0, spacing1 }, axis, edge_order);
+            return f.TensorEngine.Gradient(f, new[] { spacing0, spacing1 }, axis?.ToArray(), edge_order);
         }
 
         /// <summary>Three per-axis spacings — see the main overload.</summary>
-        /// <inheritdoc cref="gradient(NDArray, object, int?, int)" path="/exception"/>
-        public static GradientResult gradient(NDArray f, object spacing0, object spacing1, object spacing2, int[] axis = null, int edge_order = 1)
+        /// <inheritdoc cref="gradient(NDArray, object, NDAxis?, int)" path="/exception"/>
+        public static GradientResult gradient(NDArray f, object spacing0, object spacing1, object spacing2, NDAxis? axis = null, int edge_order = 1)
         {
             if (f is null) throw new ArgumentNullException(nameof(f));
-            return f.TensorEngine.Gradient(f, new[] { spacing0, spacing1, spacing2 }, axis, edge_order);
+            return f.TensorEngine.Gradient(f, new[] { spacing0, spacing1, spacing2 }, axis?.ToArray(), edge_order);
         }
 
         /// <summary>
         ///     N per-axis spacings passed explicitly (each a scalar or a 1-D coordinate array). Also the
         ///     form for a tuple <paramref name="axis"/> with no spacing: pass an empty array.
         /// </summary>
-        /// <inheritdoc cref="gradient(NDArray, object, int?, int)" path="/exception"/>
-        public static GradientResult gradient(NDArray f, object[] varargs, int[] axis = null, int edge_order = 1)
+        /// <inheritdoc cref="gradient(NDArray, object, NDAxis?, int)" path="/exception"/>
+        public static GradientResult gradient(NDArray f, object[] varargs, NDAxis? axis = null, int edge_order = 1)
         {
             if (f is null) throw new ArgumentNullException(nameof(f));
-            return f.TensorEngine.Gradient(f, varargs ?? Array.Empty<object>(), axis, edge_order);
+            return f.TensorEngine.Gradient(f, varargs ?? Array.Empty<object>(), axis?.ToArray(), edge_order);
         }
     }
 }

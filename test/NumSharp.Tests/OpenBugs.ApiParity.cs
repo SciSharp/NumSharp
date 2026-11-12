@@ -3,7 +3,7 @@ using System;
 namespace NumSharp.Tests
 {
     /// <summary>
-    ///     Bugs the API-parity batches found on the way (docs/plans/API_PARITY_DIFF.md, 2026-11-11; batches 2 and 3): each is pinned here as
+    ///     Bugs the API-parity batches found on the way (docs/plans/API_PARITY_DIFF.md, 2026-11-11 / 12; batches 2, 3 and 4): each is pinned here as
     ///     NumPy 2.4.2's behaviour and left for its own fix, per the owner's rule that a bug found while fixing something
     ///     else gets a reproduction and is deferred.
     /// </summary>
@@ -99,6 +99,73 @@ namespace NumSharp.Tests
             meanWhere.Should().Throw<TypeError>().WithMessage("matrix.sum() got an unexpected keyword argument 'where'");
             Action varWhere = () => np.nanvar(m, where: w);
             varWhere.Should().Throw<TypeError>().WithMessage("matrix.sum() got an unexpected keyword argument 'where'");
+        }
+
+        /// <summary>
+        ///     np.all / np.any of a 0-d operand with a TUPLE axis: NumPy's ufunc reduction keeps the 0-d special case (axis 0
+        ///     or -1 accepted) for an INTEGER axis only, so <c>np.all(np.array(5.), (0,))</c> is <c>AxisError: axis 0 is out
+        ///     of bounds for array of dimension 0</c> (also <c>(-1,)</c> and <c>(0, 0)</c>). NumSharp's tuple route
+        ///     (<c>DefaultEngine.ReduceLogicalMultiAxis</c>) lets a one-element <c>(0,)</c> / <c>(-1,)</c> through and answers
+        ///     the scalar. Found by API-parity batch 4, whose <see cref="NDAxis"/> tells the two spellings apart; the route
+        ///     predates the batch (the <c>int[]</c> overloads reached it).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "api-parity-batch-4")]
+        public void ApiParity_AllAny_ZeroDOperand_TupleAxis_IsAxisError()
+        {
+            var s = np.array(5.0);
+            Action all = () => np.all(s, new[] { 0 });
+            all.Should().Throw<AxisError>().WithMessage("axis 0 is out of bounds for array of dimension 0*");
+            Action any = () => np.any(s, new[] { -1 });
+            any.Should().Throw<AxisError>().WithMessage("axis -1 is out of bounds for array of dimension 0*");
+        }
+
+        /// <summary>
+        ///     np.count_nonzero of a <c>numpy.matrix</c> with an axis (or keepdims): NumPy's body is
+        ///     <c>a.astype(bool).sum(axis=axis, dtype=np.intp, keepdims=keepdims)</c>, and the matrix's <c>sum</c> has no
+        ///     keepdims keyword, so every such call is <c>TypeError: matrix.sum() got an unexpected keyword argument
+        ///     'keepdims'</c> (NumPy 2.4.2: axis 0, <c>(0, 1)</c>, and None with keepdims). NumSharp counts on the plain
+        ///     view and returns the plain counts: TensorEngine.CountNonZero declares no class rule. Found by API-parity batch
+        ///     4's matrix evidence; it predates the batch (the int-axis overload answered the same).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "api-parity-batch-4")]
+        public void ApiParity_CountNonzero_MatrixOperand_IsMatrixSumsKeywordError()
+        {
+            var m = np.matrix(np.array(new long[,] { { 0, 0, 0 }, { 0, 7, 0 } }));
+            const string text = "matrix.sum() got an unexpected keyword argument 'keepdims'";
+            Action axis = () => np.count_nonzero(m, 0);
+            axis.Should().Throw<TypeError>().WithMessage(text);
+            Action tuple = () => np.count_nonzero(m, (0, 1));
+            tuple.Should().Throw<TypeError>().WithMessage(text);
+            Action kept = () => np.count_nonzero(m, null, true);
+            kept.Should().Throw<TypeError>().WithMessage(text);
+            np.count_nonzero(m).Should().Be(1L, "without an axis NumPy's multiarray.count_nonzero answers");
+        }
+
+        /// <summary>
+        ///     The quantile family's answer for a <c>numpy.matrix</c> operand where NumPy's own Python body keeps the matrix
+        ///     2-d: <c>np.median(m, (1,))</c> is the 2 x 1 column (as axis 1), <c>np.median(m, (0, 1))</c> and
+        ///     <c>np.percentile(m, 50, (0, 1))</c> the 1 x 1 matrix <c>[[3.0]]</c>, and <c>np.percentile(m, 50, 1)</c> /
+        ///     <c>np.quantile(m, 0.5, (1,))</c> the 1 x 2 ROW (its <c>_quantile</c> moves the axis first and takes rows of the
+        ///     matrix). NumSharp's <c>[ReducesThrough]</c> rule reads no axis from a tuple (the scalar for a full tuple, a row
+        ///     otherwise) and puts a 1-d result along axis 1 back as a column, for percentile too. Found by API-parity batch 4
+        ///     (batch4_matrix_evidence.py); the answers predate the batch (the <c>int[]</c> overloads gave them).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "api-parity-batch-4")]
+        public void ApiParity_QuantileFamily_MatrixOperand_KeepsNumPysMatrixShape()
+        {
+            var m = np.matrix(np.array(new double[,] { { 1, 5, 2 }, { 4, 0, 6 } }));
+            void Matrix(NDArray r, long rows, long cols, params double[] values)
+            {
+                (r is NDMatrix).Should().BeTrue();
+                r.shape.Should().Equal(rows, cols);
+                r.ToArray<double>().Should().Equal(values);
+            }
+
+            Matrix(np.median(m, new[] { 1 }), 2, 1, 2.0, 4.0);
+            Matrix(np.median(m, (0, 1)), 1, 1, 3.0);
+            Matrix(np.percentile(m, 50, (0, 1)), 1, 1, 3.0);
+            Matrix(np.percentile(m, 50, 1), 1, 2, 2.0, 4.0);
+            Matrix(np.quantile(m, 0.5, new[] { 1 }), 1, 2, 2.0, 4.0);
         }
     }
 }
