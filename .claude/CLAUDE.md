@@ -216,7 +216,8 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
   `nd[mask] = v`), fancy indexing (`nd[indices]`). A raw `int[]`/`long[]` as the ONLY index is fancy (`nd[new int[]{0,2}]` selects rows 0 and 2); `nd[0,2]`
   is a coordinate, and coordinate access by array is `nd.GetData(int[]/long[])` → `selection-indexing.md`.
 - Interop packages (OpenBLAS, ONNX Runtime, ML.NET, System.Numerics.Tensors, TorchSharp, pythonnet) → `openblas.md`,
-  `interop-packages.md`. ParquetNet and TorchSharp are UNRELEASED: no package, no docs, no mention in release notes.
+  `interop-packages.md`. ParquetNet is UNRELEASED: no package, no docs, no mention in release notes (TorchSharp ships
+  from 0.81.0).
 
 ## Build and test
 
@@ -346,7 +347,7 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 | Rule | Holds |
 |------|-------|
 | `openblas.md` | the `IBlasBackend` seam; `NumSharp.Interop.OpenBLAS`: why it exists, the bundled binary and discovery order, the macOS loader, the build-time override, what decides the result bits, API, gates, examples |
-| `interop-packages.md` | the unreleased-package policy; ONNX Runtime, ML.NET, System.Numerics.Tensors (sources, verbs, dtypes, lifetime, gates); the pythonnet examples |
+| `interop-packages.md` | the unreleased-package policy; ONNX Runtime, ML.NET, System.Numerics.Tensors, TorchSharp (sources, verbs, dtypes, lifetime, gates; TorchSharp's state-matrix oracle and coverage recipe); the pythonnet examples |
 | `kernels.md` | the two IL generators' contracts, shared infrastructure, coverage, kernel rules, float16 techniques, NaN operand order, the 2-D block kernel and its stationary-out mode, broadcast pattern stages, reversed runs |
 | `memory-views.md` | `Shape` (fields, flags, sharing), Slice / broadcasting / operator internals, views and aliases, allocation from a view's Shape, the buffer pool |
 | `creation-manipulation.md` | `np.arange`, `np.ndarray`, the `as*` family, object-list coercion, full / ones / eye, `np.frombuffer`, linspace / logspace / geomspace, set routines, flips / transposes, stacking, resize / tolist, allocation and reshape guards, `np.copyto` |

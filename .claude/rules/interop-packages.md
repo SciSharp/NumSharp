@@ -14,16 +14,17 @@ paths:
 
 ## Unreleased packages
 
-`NumSharp.Interop.ParquetNet` (Parquet columns decoded straight into `NDArray` buffers) and `NumSharp.Interop.TorchSharp`
-(NDArray ↔ TorchSharp tensors, below) are unreleased: they build, test and merge like everything else, but no NuGet
-package is created and no release or public documentation mentions them. `NumSharp.Interop.OnnxRuntime` and
-`NumSharp.Interop.MLNet` were unreleased the same way from 2026-10-02 and ship from 0.80.0 (the owner's decision of
-2026-11-02). Unreleased is exactly three things:
+`NumSharp.Interop.ParquetNet` (Parquet columns decoded straight into `NDArray` buffers) is unreleased: it builds, tests
+and merges like everything else, but no NuGet package is created and no release or public documentation mentions it.
+`NumSharp.Interop.OnnxRuntime` and `NumSharp.Interop.MLNet` were unreleased the same way from 2026-10-02 and ship from
+0.80.0 (the owner's decision of 2026-11-02); `NumSharp.Interop.TorchSharp` (NDArray ↔ TorchSharp tensors, below) was
+unreleased from 2026-11-12 and ships from 0.81.0 (the owner's decision of the same day, asked with its docs page).
+Unreleased is exactly three things:
 1. No package. The csproj sets `<IsPackable>false</IsPackable>`, which makes `dotnet pack` a silent no-op (exit 0, no
    `.nupkg`, not even a compile). CI still names it in the signing check and in `build-nuget`'s Build and Pack steps,
    and `create-release` lists exactly the `.nupkg` files that were packed (ids read from each nuspec), so packing,
    signing, publishing and the release text all follow that one property.
-2. No docs. ParquetNet and TorchSharp have no page (each `PackageProjectUrl` points at the page to write when it ships).
+2. No docs. ParquetNet has no page (its `PackageProjectUrl` points at the page to write when it ships).
    DocFX publishes every `.md` under `docs/website-src`, toc entry or not, so a hidden package's page needs a
    `docfx.json` exclude.
 3. Gated. The `interop-test` job builds and tests it on both TFMs; apart from `build-nuget`'s Build step on a release
@@ -284,7 +285,7 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   before any layout check, naming the class and `ToStringTensor()`); `ApiSurfaceTests` approves the text verbs.
 - Docs: `docs/website-src/docs/interop/system-numerics-tensors.md`.
 
-### `NumSharp.Interop.TorchSharp` (unreleased)
+### `NumSharp.Interop.TorchSharp` (released from 0.81.0)
 
 - `NDArrayTorchInterop` verbs and `TorchCodecMode { Auto, View, Copy }` (the owner's codec modes; NumPy/PyTorch's
   `copy=None/False/True`). Sources (`src/NumSharp.Interop.TorchSharp/`): `NDArrayTorchInterop.{cs,Export.cs,Import.cs}`
@@ -309,7 +310,11 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   downcasts uint64; torch's complex64 / bfloat16 widen exactly in NumSharp (float pairs → `.real` / `.imag`; bf16 bits
   zero-extended into a uint32 view of the result and `left_shift` 16), View throws; a `requires_grad` tensor is a
   READ-ONLY view (no TorchSharp / LibTorchSharp API bumps autograd's version counter; `t.detach().AsNDArray()` is the
-  writeable route); floor TorchSharp 0.100.0, tested with 0.107.0, no upper bound; unreleased until the owner decides.
+  writeable route); floor TorchSharp 0.100.0, tested with 0.107.0, no upper bound; released from 0.81.0 with its docs
+  page (decided 2026-11-12; a NEW nuget.org id, so the Trusted Publishing policy must allow new packages before the tag).
+- Docs: `docs/website-src/docs/interop/torchsharp.md` (on the site's Interoperability toc, an index row and an octagon in
+  the integrations picture since 0.81.0). Its layout tables are the state matrix's answers (the fixture below), and each
+  of its code blocks is a `DocExampleTests` test (`Page_*`, plus the README's two): edit a block and its test together.
 - Torch facts the package is built around (measured on 0.107.0 unless noted): `conj()` is lazy (the memory holds the
   unconjugated values; `.imag` of it carries the neg bit), so a view refuses `is_conj()` / `is_neg()`; `THSTensor_data` of
   a META tensor is null with NO recorded error (decide by `device_type`), of a sparse one null with an error; an empty

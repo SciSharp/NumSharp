@@ -9,7 +9,7 @@ three capabilities every bridge builds on - and maps the bridges themselves. Rea
 bridge page becomes a variation on a theme you already know: only the far side of the boundary
 changes.
 
-![NumSharp at the center of its integrations: NumPy, PyTorch, pandas, SciPy, scikit-learn, Matplotlib, Pillow, OpenCV, PyArrow and polars through NumSharp.Interop.pythonnet; ONNX Runtime, ML.NET, System.Numerics.Tensors, System.Drawing and Numpy.NET in .NET; OpenBLAS; .npy and .npz files](../../images/integrations.svg)
+![NumSharp at the center of its integrations: NumPy, PyTorch, pandas, SciPy, scikit-learn, Matplotlib, Pillow, OpenCV, PyArrow and polars through NumSharp.Interop.pythonnet; ONNX Runtime, ML.NET, System.Numerics.Tensors, TorchSharp, System.Drawing and Numpy.NET in .NET; OpenBLAS; .npy and .npz files](../../images/integrations.svg)
 
 Each library's color names the package that brings it; [the bridges](#the-bridges) below map the
 bridges to their pages.
@@ -172,6 +172,7 @@ own gates.
 | **ONNX Runtime inference** - `NDArray` ⇄ `OrtValue` / `DenseTensor<T>`, `session.Run(NDArray)` / `RunInto` / `RunAsync`, fixed-width text ⇄ string tensors, softmax / argmax / top-k on the outputs | `NumSharp.Interop.OnnxRuntime` | ✅ `OnnxCodecMode.Auto` feeds a C-contiguous input in place (else a copy the handle owns), outputs as owning copies or owning views; text always copies; no Python, no GIL | [ONNX Runtime](onnxruntime.md) |
 | **ML.NET pipelines** - `NDArray` ⇄ `IDataView` / `VBuffer<T>`, `transformer.Transform(nd.AsDataView(...)).ToNDArray("Score")`, softmax / argmax / top-k on the outputs | `NumSharp.Interop.MLNet` | ✅ `AsDataView` reads the buffer lazily through its strides (any layout); `vbuffer.AsNDArray<T>()` views a dense `VBuffer`; `ToVBuffer` and output columns are copies; text columns are not mapped; no Python | [ML.NET](mlnet.md) |
 | **System.Numerics.Tensors** - `NDArray` ⇄ `Tensor<T>` / `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` | `NumSharp.Interop.System.Numerics.Tensors` | ✅ `AsTensorSpan` shares **any** non-negative-stride layout (strided/transposed/broadcast); `AsNDArray` views a tensor's buffer; supported dtypes cross as their CLR element type; text crosses as a `Tensor<string>` copy (`ToStringTensor` / `ToNDArray`); no Python or native code | [System.Numerics.Tensors](system-numerics-tensors.md) |
+| **TorchSharp tensors** - `NDArray` ⇄ libtorch's `torch.Tensor` in .NET, `nd.AsTensor()` / `tensor.AsNDArray()` with `TorchCodecMode` Auto / View / Copy | `NumSharp.Interop.TorchSharp` | ✅ `AsTensor` shares any non-negative-stride writeable layout, a broadcast of writeable memory as torch's `expand`; `AsNDArray` views a CPU tensor's storage with torch's strides (read-only when it requires grad); reversed, read-only and misaligned arrays, other devices, conjugated, complex64 and bfloat16 tensors copy under Auto; no Python | [TorchSharp](torchsharp.md) |
 | **`.npy` / `.npz` files** - `np.save` / `np.load`, byte-for-byte identical to NumPy's own writer | `NumSharp` (core) | - files, not memory | [NumPy compliance](../compliance.md#npy-and-npz-interoperability) |
 
 Start with the page whose *consumer* matches yours: numpy code → the pythonnet page; a library
@@ -221,6 +222,8 @@ above applies to it; it has [its own page](openblas.md).
   transformer's output column back into an `NDArray`
 - [System.Numerics.Tensors](system-numerics-tensors.md) - view an `NDArray` as a `TensorSpan<T>` over the
   same buffer (any non-negative-stride layout), read a `Tensor<T>` back into an `NDArray`
+- [TorchSharp](torchsharp.md) - hand an `NDArray` to a TorchSharp model as a `torch.Tensor` over the same
+  buffer, read tensors back into `NDArray`s, with no Python
 - [Buffering & Memory](../buffering.md) - how NumSharp's own storage, slices and reference
   counting work underneath all of this
 

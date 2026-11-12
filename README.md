@@ -86,7 +86,7 @@ integration, and the [Interoperability](https://scisharp.github.io/NumSharp/docs
 pages document every bridge: what crosses as a view, what crosses as a copy, and who frees the memory.
 
 <p align="center">
-  <a href="https://scisharp.github.io/NumSharp/docs/interop/index.html"><img alt="NumSharp at the center of its integrations: NumPy, PyTorch, pandas, SciPy, scikit-learn, Matplotlib, Pillow, OpenCV, PyArrow and polars through NumSharp.Interop.pythonnet; ONNX Runtime, ML.NET, System.Numerics.Tensors, System.Drawing and Numpy.NET in .NET; OpenBLAS; .npy and .npz files" src="docs/website-src/images/integrations.svg"></a>
+  <a href="https://scisharp.github.io/NumSharp/docs/interop/index.html"><img alt="NumSharp at the center of its integrations: NumPy, PyTorch, pandas, SciPy, scikit-learn, Matplotlib, Pillow, OpenCV, PyArrow and polars through NumSharp.Interop.pythonnet; ONNX Runtime, ML.NET, System.Numerics.Tensors, TorchSharp, System.Drawing and Numpy.NET in .NET; OpenBLAS; .npy and .npz files" src="docs/website-src/images/integrations.svg"></a>
 </p>
 
 ## Features Support and Implementation Map

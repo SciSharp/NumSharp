@@ -6,7 +6,9 @@ without copying it. The bridge follows PyTorch's own supported interchange path:
 direction and [`Tensor.numpy`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.numpy.html)
 in the other. There is no TorchSharp dependency and no compile-time PyTorch dependency - `torch` is
 adapted dynamically from the CPython environment. Torch is a built-in front door to the existing
-`NDArrayPythonInterop` memory bridge, not a separate pointer/lifetime implementation.
+`NDArrayPythonInterop` memory bridge, not a separate pointer/lifetime implementation. To run libtorch
+from .NET with no Python at all, use [TorchSharp](torchsharp.md) instead: `NumSharp.Interop.TorchSharp`
+shares NumSharp memory with TorchSharp tensors the same way.
 
 **On this page:** [Setup](#setup) · [The four operations](#the-four-operations) ·
 [NumSharp → PyTorch](#numsharp--pytorch) · [PyTorch → NumSharp](#pytorch--numsharp) ·

@@ -201,10 +201,10 @@ jobs:
     # delay-) signature. It inspects the PACKED artifact because that is what users install; a
     # compile gate cannot see "builds fine, ships with no identity". Publishes nothing.
     #
-    # The loop also names the UNRELEASED packages (ParquetNet and TorchSharp: <IsPackable>false</IsPackable> in their
-    # csproj, "Unreleased packages" in .claude/rules/interop-packages.md). Their `dotnet pack` is a silent no-op that
-    # writes no .nupkg, so today they add nothing to verify; the day one is released by deleting that property, it is
-    # packed and verified here with no edit to this step, as OnnxRuntime and MLNet are since 0.80.0.
+    # The loop also names the UNRELEASED package (ParquetNet: <IsPackable>false</IsPackable> in its csproj, "Unreleased
+    # packages" in .claude/rules/interop-packages.md). Its `dotnet pack` is a silent no-op that writes no .nupkg, so
+    # today it adds nothing to verify; the day it is released by deleting that property, it is packed and verified
+    # here with no edit to this step, as OnnxRuntime and MLNet are since 0.80.0 and TorchSharp since 0.81.0.
     #
     # Why it is cheap here: the Build steps above already built NumSharp.Core (compiled, woven and
     # re-signed), NumSharp.Bitmap, NumSharp.Interop.OpenBLAS and NumSharp.Build in Release with the
@@ -277,8 +277,8 @@ jobs:
   # of the gate: this is the ONLY place CI compiles the pythonnet, OnnxRuntime, MLNet,
   # System.Numerics.Tensors, ParquetNet and TorchSharp packages, whose sources reach into NumSharp.Core
   # internals through keyed friend grants and would otherwise break unnoticed. That holds for the
-  # UNRELEASED ones too (ParquetNet and TorchSharp — "Unreleased packages" in .claude/rules/interop-packages.md):
-  # they are merged code that nothing packs, so this job is all that keeps them building and passing until they ship.
+  # UNRELEASED one too (ParquetNet — "Unreleased packages" in .claude/rules/interop-packages.md):
+  # it is merged code that nothing packs, so this job is all that keeps it building and passing until it ships.
   #
   # Why one job:
   #   - Slots. The SciSharp org is on the GitHub Free plan: 5 concurrent macOS jobs ORG-WIDE. This
@@ -1002,11 +1002,12 @@ jobs:
           -p:SourceRevisionId=${{ github.sha }} \
           -p:ContinuousIntegrationBuild=true
 
-        # The UNRELEASED packages (ParquetNet, TorchSharp) are built here and named in the Pack step below like
-        # every other package, but their csproj sets <IsPackable>false</IsPackable>, which makes their `dotnet pack`
-        # a silent no-op: no .nupkg, so nothing is uploaded, published or listed in the release notes.
+        # The UNRELEASED package (ParquetNet) is built here and named in the Pack step below like every other
+        # package, but its csproj sets <IsPackable>false</IsPackable>, which makes its `dotnet pack` a silent
+        # no-op: no .nupkg, so nothing is uploaded, published or listed in the release notes.
         # Releasing it is that property deleted ("Unreleased packages" in .claude/rules/interop-packages.md); this
-        # step and the Pack step then need no edit, as for OnnxRuntime and MLNet, released from 0.80.0.
+        # step and the Pack step then need no edit, as for OnnxRuntime and MLNet (released from 0.80.0) and
+        # TorchSharp (released from 0.81.0).
         # The build stays so that switch keeps working: the Pack step runs --no-build and needs this
         # Rebuild's output the moment the package is released.
         #
@@ -1051,8 +1052,8 @@ jobs:
           -p:ContinuousIntegrationBuild=true
 
         # TorchSharp interop: managed-only (depends on the managed TorchSharp package, whose LibTorchSharp
-        # it binds; the consumer brings libtorch), so a plain Rebuild is the whole build. Unreleased: see the
-        # note above.
+        # it binds; the consumer brings libtorch), so a plain Rebuild is the whole build. Released from
+        # 0.81.0: the Pack step packs it like every other package.
         dotnet build src/NumSharp.Interop.TorchSharp/NumSharp.Interop.TorchSharp.csproj \
           --configuration Release \
           -t:Rebuild \
