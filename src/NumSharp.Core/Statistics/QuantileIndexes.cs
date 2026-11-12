@@ -654,6 +654,67 @@ namespace NumSharp.Statistics
                 CheckKth(firstPastEnd, n);
         }
 
+        /// <summary>
+        ///     The positions NumPy's quantile family partitions a line of FLOAT data at, sorted ascending without repeats:
+        ///     <list type="bullet">
+        ///         <item><c>np.median</c> (<c>_median</c>): <c>[n//2 - 1, n//2]</c> for an even length, <c>[(n-1)//2]</c> for
+        ///             an odd one, then <c>-1</c> (the NaN check);</item>
+        ///         <item>a take (the selection methods, and 'linear' with an integer q): the indexes, then <c>-1</c>;</item>
+        ///         <item>an interpolation: <c>np.unique(np.concatenate(([0, -1], previous, next)))</c>.</item>
+        ///     </list>
+        ///     <c>-1</c> is the last position. The partition's swaps depend on this list, so it decides which zero of a ±0
+        ///     tie each neighbour reads and which NaN a NaN slice answers (the one left at <c>arr[-1]</c>).
+        /// </summary>
+        /// <param name="raw">The plan's indexes, two per quantile (previous / next, or the take index twice); negative
+        ///     values count from the end.</param>
+        /// <param name="count">How many values <paramref name="raw"/> holds.</param>
+        /// <param name="n">The line's length, at least 2.</param>
+        /// <param name="discrete">True for a take (no 0 is added).</param>
+        /// <param name="medianMean">True for np.median / np.nanmedian (the list is the median's own, from
+        ///     <paramref name="n"/> alone).</param>
+        /// <param name="kth">Receives the list: room for <paramref name="count"/> + 3 values.</param>
+        /// <returns>The number of positions written.</returns>
+        /// <remarks>
+        ///     Only float data needs NumPy's exact list. Over integer data equal values are identical and no NaN exists,
+        ///     so the arrangement is invisible and the callers partition at the needed neighbours alone: NumPy's extra
+        ///     0 and -1 cost an integer line a whole quickselect pass (an integer type has no last-maximum shortcut).
+        ///     NumPy's list may repeat a position (an explicit <c>n - 1</c> beside the <c>-1</c>); a repeated kth leaves
+        ///     the arrangement as it is, so dropping repeats changes nothing.
+        /// </remarks>
+        internal static unsafe int FloatPartitionKth(long* raw, int count, long n, bool discrete, bool medianMean, int* kth)
+        {
+            int c = 0;
+            if (medianMean)
+            {
+                if (n % 2 == 0)
+                {
+                    kth[c++] = (int)(n / 2 - 1);
+                    kth[c++] = (int)(n / 2);
+                }
+                else
+                    kth[c++] = (int)((n - 1) / 2);
+            }
+            else
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    long k = raw[i];
+                    kth[c++] = (int)(k < 0 ? k + n : k);
+                }
+                if (!discrete)
+                    kth[c++] = 0;
+            }
+            kth[c++] = (int)(n - 1);
+
+            // Sorted (a q array can hold thousands of quantiles: an O(c log c) sort), repeats dropped.
+            new Span<int>(kth, c).Sort();
+            int u = 0;
+            for (int i = 0; i < c; i++)
+                if (u == 0 || kth[u - 1] != kth[i])
+                    kth[u++] = kth[i];
+            return u;
+        }
+
         /// <summary>One kth of <c>partition_prep_kth_array</c>: a negative kth gains n; the result must lie in [0, n).</summary>
         /// <param name="kth">The kth as given.</param>
         /// <param name="n">The partitioned axis's length.</param>

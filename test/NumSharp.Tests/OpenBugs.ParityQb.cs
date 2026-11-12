@@ -486,7 +486,10 @@ namespace NumSharp.Tests
         ///     (an overflowing sum) is <c>inf+nanj</c>. NumSharp's complex route returns the middle element, or
         ///     <c>0.5·a + 0.5·b</c>, which never overflows. Same root cause as
         ///     <c>OpenBugsReductionTests.Median_OfNegativeZeros_IsPositiveZero</c> (the median is not np.mean of its middle),
-        ///     whose remarks say the values differ only in a zero's sign; these are value differences.
+        ///     whose remarks say the values differ only in a zero's sign; these are value differences. The complex half and
+        ///     the zero sign are fixed (2026-11-12, with QB-43: <c>DefaultEngine.ComplexMedianMean</c> is np.mean's
+        ///     statements); the float16 half is open: np.median narrows once from float32, while np.nanmedian along a short
+        ///     axis (numpy.ma) rounds the sum to float16 first, so the kernel needs the route (QB-17).
         /// </summary>
         [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB16")]
         public void ParityQb_QB16_MedianMiddleMean_IsNpMean()
@@ -1162,24 +1165,22 @@ namespace NumSharp.Tests
 
         // ------------------------------------------------------------------
         // QB-43 — a partition at SEVERAL kth is NumPy's scalar introselect_: its choice among equal values is defined
+        // (FIXED 2026-11-12: a regression pin now)
         // ------------------------------------------------------------------
 
         /// <summary>
-        ///     NumPy 2.4.2 dispatches a partition to x86-simd-sort only for ONE kth (<c>introselect_noarg</c>:
-        ///     <c>nkth == 1 &amp;&amp; quickselect_dispatch(...)</c>); several kth — every np.median / np.quantile call
-        ///     (<c>kth + [-1]</c>, <c>[0, -1, prev, next]</c>) and an explicit kth list — run the scalar <c>introselect_</c> on
-        ///     every host, whose swaps decide which of several EQUAL values lands at a kth: <c>np.partition([0., -0., -2.],
-        ///     [1, 2])</c> is <c>[-2., -0., 0.]</c> (dumb_select swaps the minimum to the front),
-        ///     <c>np.argpartition([0., -0., -2.], [1, 2])</c> is <c>[2, 1, 0]</c>, and
-        ///     <c>np.quantile([0., -0., 3., 0., 3., -2.], 0.6, method='lower')</c> is <c>-0.0</c>. NumSharp's
-        ///     <c>Utilities/QuickSelect.cs</c> insertion-sorts a window of up to 16 elements before its dumb_select / maximum
-        ///     shortcuts (a stable order, not dumb_select's swaps) and partitions longer lines its own way, so the tied
-        ///     element differs: <c>[-2., 0., -0.]</c>, <c>[2, 0, 1]</c>, <c>0.0</c>. Visible as the SIGN of a zero result of
-        ///     np.partition / the discontinuous quantile methods / np.median, and as argpartition's tied indices (in
-        ///     <c>q104</c> 57 of 300 random lines of 3–64 elements; the kth VALUES always compare equal). quantile.md's "keep
-        ///     NumPy's choice among ties" claim for the shortcuts does not survive the window sort.
+        ///     Regression pin (QB-43, fixed 2026-11-12): NumPy 2.4.2 dispatches a partition to x86-simd-sort only for ONE kth
+        ///     (<c>introselect_noarg</c>: <c>nkth == 1 &amp;&amp; quickselect_dispatch(...)</c>); several kth — every
+        ///     np.median / np.quantile call (<c>kth + [-1]</c>, <c>[0, -1, prev, next]</c>) and an explicit kth list — run the
+        ///     scalar <c>introselect_</c> on every host, whose swaps decide which of several EQUAL values lands at a kth:
+        ///     <c>np.partition([0., -0., -2.], [1, 2])</c> is <c>[-2., -0., 0.]</c> (dumb_select swaps the minimum to the
+        ///     front), <c>np.argpartition([0., -0., -2.], [1, 2])</c> is <c>[2, 1, 0]</c>, and
+        ///     <c>np.quantile([0., -0., 3., 0., 3., -2.], 0.6, method='lower')</c> is <c>-0.0</c>. Guards the port of
+        ///     <c>introselect_</c> in <c>Utilities/QuickSelect.Introselect.cs</c> and the quantile family's NumPy kth list:
+        ///     the window insertion sort it replaced (a stable order, not dumb_select's swaps) gave <c>[-2., 0., -0.]</c>,
+        ///     <c>[2, 0, 1]</c> and <c>0.0</c>.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB43")]
+        [TestMethod]
         public void ParityQb_QB43_MultiKthPartition_KeepsIntroselectsChoiceAmongTies()
         {
             using var zeros = np.array(new double[] { 0.0, -0.0, -2.0 });

@@ -101,8 +101,20 @@ sort_complex}.Test.cs` and the `sort`/`nanreduce` tiers. Sources:
     specify order when the array has no fields.`) → axis → writeable (`partition array is read-only`) → kth
     (`kth(=N) out of bounds (M)` with the post-wrap value; bounds are skipped for size-0 arrays; the kth list is sorted so
     partitions compose, and multi-kth segments confine each introselect).
-  - Floats move NaNs to the tail with their ORIGINAL bit patterns (unlike np.sort's canonicalizing radix); Complex uses
-    NumPy's CDOUBLE_LT comparator, whose NaN order is positional ((1,NaN) before (NaN,1)) and is not compacted.
+  - SEVERAL kth run NumPy's `introselect_` statement for statement (`Utilities/QuickSelect.Introselect.cs`, QB43), as
+    NumPy does on every host: the 50-deep pivot stack, dumb_select, the inexact last-maximum pass, median-of-3 /
+    median-of-medians-5, the Hoare scan with `low = ll`, the two-element finish; no insertion or heap sort. One generic
+    body serves the value and index paths (`ValueColumn` / `IndexColumn`) under NumPy's `Tag::less` (`RawLess`;
+    `NaNLess`, DOUBLE_LT / FLOAT_LT / HALF_LT, for a float line holding NaN, partitioned in place with the NaNs taking
+    part in the swaps; `CDoubleLess` for complex). Long windows keep the block partition, whose stops and pairing are
+    Hoare's, with Hoare's own loop finishing the crossing. So equal values (±0, the argpartition index of a tie, which
+    NaN ends a line) land where NumPy puts them; gate `Sorting/np.partition.IntroselectTies.Test.cs`.
+  - A SINGLE kth keeps the select it always ran (`QuickSelect.SingleKth.cs`): NumPy hands it to x86-simd-sort for the
+    32- and 64-bit types, which sorts a short line whole (`np.partition([3, 4, 2, 1], 3)` is `[1, 2, 3, 4]`) and is not
+    reproducible beyond that. Floats move NaNs to the tail with their ORIGINAL bit patterns (unlike np.sort's
+    canonicalizing radix), and complex uses the CDOUBLE_LT comparator select, whose NaN order is positional ((1,NaN)
+    before (NaN,1)) and is not compacted. NumPy runs `introselect_` for one kth too on bool / int8 / uint8 / complex128
+    (every host) and on the 16-bit types without AVX-512; those single-kth arrangements are still the old select's.
   - An empty `int[]` kth is NumPy's `np.array([], intp)`: a valid no-op copy (Python's bare `[]` is float64 → TypeError;
     a typed array carries no such ambiguity). The result is a fresh C-contiguous copy (NumPy's `copy(order='K')` keeps F
     order for an F input; the values are identical).
@@ -117,9 +129,10 @@ sort_complex}.Test.cs` and the `sort`/`nanreduce` tiers. Sources:
   the index-tracking QuickSelect overloads (`PartitionAtMany(T*, long*, …)`: values and their original indices swap in
   lockstep, the `RadixSort.ArgSortU32/U64` pattern). A 0-d input ravels to `(1,)` FIRST (NumPy's arg-side
   `PyArray_CheckAxis`: axis/kth errors then report dimension/size 1, the result is `[0]`), while `np.partition(0-d)`
-  raises AxisError. Float NaN indices go to the tail in encounter order (argsort's policy). The tier pins the DERIVED kth
-  values (`take(partition(a, ks), ks)` / the take_along_axis gather at ks): the arrangement between kth anchors is
-  implementation-specific on both sides, so the two-sided ≤/≥ invariant is unit-test-pinned instead.
+  raises AxisError. With one kth, float NaN indices go to the tail in encounter order (argsort's policy); with several,
+  where NumPy's swaps put them. The tier pins the DERIVED kth values (`take(partition(a, ks), ks)` / the take_along_axis
+  gather at ks): a single kth's arrangement between anchors is host-specific in NumPy (x86-simd-sort), so the two-sided
+  ≤/≥ invariant is unit-test-pinned there; several kth are pinned byte for byte by the QB43 tie gate.
 - The edge selection (`Utilities/QuickSelect.EdgeSelect.cs`, called first by the contiguous-line kernels of both
   functions): a single kth with m ≤ 64 positions on its side (the top-k idiom `argpartition(x, -k)`, or a kth near 0) of
   a contiguous line of at least max(256, 32·m, m²) elements, for the ten dtypes with `Vector<T>` lanes. One read keeps

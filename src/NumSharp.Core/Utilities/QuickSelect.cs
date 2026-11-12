@@ -17,6 +17,14 @@ namespace NumSharp.Utilities
     ///     in its final sorted position; adjacent ranges are mutually ordered. Net cost is
     ///     roughly O(n + k·n) average — far better than O(n log n) for small k.
     ///
+    ///     <b>Three selects, by what NumPy runs.</b> Several kth are NumPy's <c>introselect_</c> on every host, and
+    ///     <c>PartitionAtMany</c> / <c>PartitionAtManyNaN</c> / <c>PartitionAtManyComplex</c> run its statement-for-statement
+    ///     port (<c>QuickSelect.Introselect.cs</c>), so equal values land where NumPy puts them (QB43). A single kth is
+    ///     x86-simd-sort's in NumPy; <c>SelectSingleKth</c> keeps the select NumSharp always ran for it
+    ///     (<c>QuickSelect.SingleKth.cs</c>), after the edge selection (<c>QuickSelect.EdgeSelect.cs</c>).
+    ///     <c>PartitionAtManyTieBlind</c> is that select over a kth list, for the quantile kernels' rows whose result bits
+    ///     cannot show the arrangement.
+    ///
     ///     <b>64-bit line lengths.</b> <c>n</c>, every element position (lo/hi/left/right/mid/pivot),
     ///     the kth targets and the pivot stack are <see cref="long"/>, so a single line may exceed
     ///     <see cref="int.MaxValue"/> (the caller supplies unmanaged scratch, which is not bound by the
@@ -42,30 +50,27 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        ///     Pointer-+-length variant suitable for IL-emitted callers that prefer to avoid
-        ///     managed-array allocation per row. <paramref name="sortedKs"/> must already be
-        ///     sorted ascending and within <c>[0, n-1]</c>.
+        ///     np.partition's value select of one NaN-free line around several positions: NumPy's <c>introselect_</c>
+        ///     (<see cref="Introselect{T, TLess, TCol}"/>) once per kth, in the given order, sharing one pivot stack, so the
+        ///     line ends in NumPy's arrangement, equal values (the zero signs of a ±0 tie) included.
         /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="buf">The line, partitioned in place.</param>
+        /// <param name="n">The line's length.</param>
+        /// <param name="sortedKs">The positions, sorted ascending (repeats allowed: a repeat is a no-op, as in NumPy);
+        ///     a position outside <c>[0, n)</c> is skipped.</param>
+        /// <param name="nKs">How many positions.</param>
         /// <remarks>
-        ///     Port of NumPy's <c>introselect_</c> multi-select driver (<c>selection.cpp</c>):
-        ///     a <b>pivot stack</b> (<see cref="StorePivot"/>) records every placed pivot ≥ the
-        ///     current kth, so a subsequent (usually adjacent) kth — the <c>prev,next</c> pairs
-        ///     that <c>np.percentile</c>/<c>np.median</c> partition around — narrows from
-        ///     <b>both</b> ends instead of re-selecting the min of a half-array each time. The
-        ///     inner partition is a branchless <b>block-Hoare</b> pass
-        ///     (<see cref="PartitionBlock{T}"/>): the outer regions are scanned into fixed
-        ///     offset blocks with no data-dependent branch, so random-data partitions no longer
-        ///     pay ~50% branch-mispredict — the dominant cost of a scalar Hoare loop at scale.
-        ///     Together these are ~3–4.4× the previous scalar/narrow-lo path on 10M rows
-        ///     (single median, even median, and multi-quantile alike), and back the whole
-        ///     <c>median</c>/<c>percentile</c>/<c>quantile</c>/<c>nan*</c> family plus
-        ///     <c>np.partition</c>'s value path.
+        ///     FOOTGUN: the comparison is the type's raw <c>&lt;</c>, NumPy's <c>Tag::less</c> only when the line holds no
+        ///     NaN; a float line that may hold one goes to <see cref="PartitionAtManyNaN{T}(T*, long, long*, int)"/>, which
+        ///     partitions it in place as NumPy does. Long windows run the branchless block partition, whose swaps are
+        ///     Hoare's (<see cref="BlockScan{T, TLess, TCol}"/>): 10M-element selects keep their speed.
+        ///     <para>[SkipLocalsInit]: the pivot stack is written before it is read, and many-short-rows reductions would
+        ///     otherwise zero it per row; [AggressiveOptimization]: tier-1 from the first call, so the per-row select inlines
+        ///     into the hot axis-reduce loop.</para>
         /// </remarks>
-        [SkipLocalsInit]   // the pivot stack is written before read (StorePivot); skipping the
-                           // per-call zero-init of the stackalloc matters for many-tiny-rows axis
-                           // reductions, where each short row would otherwise pay to zero the stack.
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]   // tier-1 from the first call so the
-                           // per-row InsertionSort/IntroSelectBlock inline — the hot axis-reduce loop.
+        [SkipLocalsInit]
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static unsafe void PartitionAtMany<T>(T* buf, long n, long* sortedKs, int nKs)
             where T : unmanaged, IComparable<T>
         {
@@ -76,43 +81,123 @@ namespace NumSharp.Utilities
             {
                 long k = sortedKs[i];
                 if (k < 0 || k >= n) continue;
-                IntroSelectBlock(buf, n, k, pivots, ref npiv);
+                Introselect<T, RawLess<T>, ValueColumn<T>>(buf, default, n, k, pivots, &npiv);
             }
         }
 
         /// <summary>
-        ///     &lt;=int.MaxValue compatibility overload for the quantile IL kernels (their line length
-        ///     and kth positions never exceed int range): widens <paramref name="sortedKs"/> onto the
-        ///     stack and forwards to the 64-bit core. A line of at most <see cref="InsertionSortThreshold"/>
-        ///     elements is insertion-sorted whole instead, which places every kth at once.
+        ///     np.partition's value select of a float line that may hold NaN, around several positions: NumPy's
+        ///     <c>introselect_</c> under its NaN-aware comparison (<see cref="NaNLess{T}"/>: every NaN after every number),
+        ///     in place, so the NaNs take part in the swaps exactly as in NumPy and end the line, each with its own bits.
+        /// </summary>
+        /// <typeparam name="T"><see cref="double"/>, <see cref="float"/> or <see cref="Half"/>.</typeparam>
+        /// <param name="buf">The line, partitioned in place.</param>
+        /// <param name="n">The line's length.</param>
+        /// <param name="sortedKs">The positions, sorted ascending (repeats allowed); a position outside <c>[0, n)</c> is
+        ///     skipped.</param>
+        /// <param name="nKs">How many positions.</param>
+        /// <remarks>Slower per comparison than the raw order, so a caller takes it only for a line it found a NaN in.
+        ///     [SkipLocalsInit]: the pivot stack is written before it is read.</remarks>
+        [SkipLocalsInit]
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public static unsafe void PartitionAtManyNaN<T>(T* buf, long n, long* sortedKs, int nKs)
+            where T : unmanaged
+        {
+            if (nKs == 0 || n <= 1) return;
+            long* pivots = stackalloc long[PivotStackMax];
+            int npiv = 0;
+            for (int i = 0; i < nKs; i++)
+            {
+                long k = sortedKs[i];
+                if (k < 0 || k >= n) continue;
+                Introselect<T, NaNLess<T>, ValueColumn<T>>(buf, default, n, k, pivots, &npiv);
+            }
+        }
+
+        /// <summary>
+        ///     The quantile kernels' entry (their line lengths and positions fit an int): NumPy's <c>introselect_</c> over a
+        ///     NaN-free line, once per position, exactly as <see cref="PartitionAtMany{T}(T*, long, long*, int)"/>.
         /// </summary>
         /// <typeparam name="T">The element type (NaN-free: the kernels strip or skip NaN lines first).</typeparam>
-        /// <param name="buf">The line (scratch: its arrangement is not part of any result).</param>
+        /// <param name="buf">The line (the kernel's scratch copy: the values it reads are the placed positions).</param>
         /// <param name="n">The line's length.</param>
-        /// <param name="sortedKs">The positions to place, ascending.</param>
+        /// <param name="sortedKs">The positions to place, ascending (NumPy's kth list for the call: see the quantile
+        ///     engine, which adds NumPy's <c>0</c> / <c>-1</c> for float data).</param>
         /// <param name="nKs">How many.</param>
         /// <remarks>
-        ///     The whole-line sort is the first-kth work of the 64-bit core anyway (a window of up to
-        ///     <see cref="InsertionSortThreshold"/> elements is insertion-sorted there), without the widened copy, the
-        ///     pivot stack and one select call per kth: the quantile family's many-short-rows reductions (np.quantile over
-        ///     axis 1 of a (100000, 5) array) pay those per row. The callers read only the placed positions, so the
-        ///     sorted arrangement changes no result.
+        ///     A short line used to be insertion-sorted whole here (a stable order, not NumPy's swaps), so the zero a ±0
+        ///     tie left at a neighbour was not NumPy's: np.percentile([0., -0., -0., -1.], 50) read +0.0 where NumPy reads
+        ///     -0.0 (QB43). Every line now runs NumPy's statements; for short lines they are mostly dumb_select passes.
+        ///     [SkipLocalsInit]: the pivot stack is written before it is read; [AggressiveOptimization]: tier-1 from the
+        ///     first call, so the select inlines into the per-row path.
         /// </remarks>
-        [SkipLocalsInit]   // the widened kth copy is written before it is read
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]   // tier-1 from the first call, so the whole-line
-                           // InsertionSort inlines into the per-row path (a tier-0 entry kept it a call and ran slower).
+        [SkipLocalsInit]
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static unsafe void PartitionAtMany<T>(T* buf, int n, int* sortedKs, int nKs)
             where T : unmanaged, IComparable<T>
         {
             if (nKs == 0 || n <= 1) return;
-            if (n <= InsertionSortThreshold)
+            long* pivots = stackalloc long[PivotStackMax];
+            int npiv = 0;
+            for (int i = 0; i < nKs; i++)
             {
-                InsertionSort(buf, 0, n - 1);
-                return;
+                long k = sortedKs[i];
+                if (k < 0 || k >= n) continue;
+                Introselect<T, RawLess<T>, ValueColumn<T>>(buf, default, n, k, pivots, &npiv);
             }
-            long* ks = stackalloc long[nKs];
-            for (int i = 0; i < nKs; i++) ks[i] = sortedKs[i];
-            PartitionAtMany(buf, (long)n, ks, nKs);
+        }
+
+        /// <summary>
+        ///     The quantile kernels' NaN-aware entry: NumPy's <c>introselect_</c> under its NaN-aware comparison over a line
+        ///     that holds NaN, so the NaN NumPy's partition leaves at the line's end (<c>arr[-1]</c>, the value a NaN slice
+        ///     answers) is found by the same swaps.
+        /// </summary>
+        /// <typeparam name="T"><see cref="double"/>, <see cref="float"/> or <see cref="Half"/>.</typeparam>
+        /// <param name="buf">The line (the kernel's scratch copy).</param>
+        /// <param name="n">The line's length.</param>
+        /// <param name="sortedKs">The positions to place, ascending.</param>
+        /// <param name="nKs">How many.</param>
+        /// <remarks>[SkipLocalsInit]: the pivot stack is written before it is read.</remarks>
+        [SkipLocalsInit]
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public static unsafe void PartitionAtManyNaN<T>(T* buf, int n, int* sortedKs, int nKs)
+            where T : unmanaged
+        {
+            if (nKs == 0 || n <= 1) return;
+            long* pivots = stackalloc long[PivotStackMax];
+            int npiv = 0;
+            for (int i = 0; i < nKs; i++)
+            {
+                long k = sortedKs[i];
+                if (k < 0 || k >= n) continue;
+                Introselect<T, NaNLess<T>, ValueColumn<T>>(buf, default, n, k, pivots, &npiv);
+            }
+        }
+
+        /// <summary>
+        ///     np.partition's complex128 select: NumPy's <c>introselect_</c> under <c>CDOUBLE_LT</c>
+        ///     (<see cref="CDoubleLess"/>), in place, NaN parts included (complex128 is inexact: a kth at the line's end
+        ///     takes the last-maximum pass).
+        /// </summary>
+        /// <param name="buf">The line, partitioned in place.</param>
+        /// <param name="n">The line's length.</param>
+        /// <param name="sortedKs">The positions, sorted ascending (repeats allowed); a position outside <c>[0, n)</c> is
+        ///     skipped.</param>
+        /// <param name="nKs">How many positions.</param>
+        /// <remarks>[SkipLocalsInit]: the pivot stack is written before it is read.</remarks>
+        [SkipLocalsInit]
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public static unsafe void PartitionAtManyComplex(Complex* buf, long n, long* sortedKs, int nKs)
+        {
+            if (nKs == 0 || n <= 1) return;
+            long* pivots = stackalloc long[PivotStackMax];
+            int npiv = 0;
+            for (int i = 0; i < nKs; i++)
+            {
+                long k = sortedKs[i];
+                if (k < 0 || k >= n) continue;
+                Introselect<Complex, CDoubleLess, ValueColumn<Complex>>(buf, default, n, k, pivots, &npiv);
+            }
         }
 
         /// <summary>
@@ -146,34 +231,93 @@ namespace NumSharp.Utilities
         ///     indices — through the identical swaps. After the call <c>idx[k]</c> indexes the k-th
         ///     smallest source element.
         /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="buf">The line's values (scratch: moved with the indices).</param>
+        /// <param name="idx">The original-index column beside <paramref name="buf"/> (the answer).</param>
+        /// <param name="n">The line's length.</param>
+        /// <param name="sortedKs">The positions, sorted ascending (repeats allowed); a position outside <c>[0, n)</c> is
+        ///     skipped.</param>
+        /// <param name="nKs">How many positions.</param>
         /// <remarks>
-        ///     The argument-tracking twin of <see cref="PartitionAtMany{T}(T*, long, long*, int)"/> —
-        ///     NumPy's single <c>introselect_&lt;Tag, arg&gt;</c> template with <c>arg = true</c>
-        ///     (<c>selection.cpp</c>), threading the <c>tosort</c> index column through the identical
-        ///     swaps and sharing the identical <b>pivot stack</b> (<see cref="StorePivot"/>). It
-        ///     therefore inherits the value path's <b>branchless block-Hoare</b> partition
-        ///     (<see cref="PartitionBlock{T}(T*, long*, long, long)"/>) — no ~50% branch-mispredict on
-        ///     random data — and its both-ends pivot narrowing across adjacent kths, the two levers
-        ///     that took the value path to 2.5–5× the old scalar Hoare. Because every comparison is on
-        ///     <paramref name="buf"/> alone, the index column is a passive passenger: the control flow,
-        ///     and hence each placed kth's final position, is bit-identical to the value path — only
-        ///     the parallel <paramref name="idx"/> permutation rides along. Any NaNs are stripped by
-        ///     the argpartition line kernel (into an encounter-order tail) before this runs, so the
-        ///     raw <see cref="LtPtr{T}"/> ordering is total here.
+        ///     NumPy's single <c>introselect_&lt;Tag, arg&gt;</c> template with <c>arg = true</c>: the same statements and the
+        ///     same pivot stack as the value select, the index column moving with every swap
+        ///     (<see cref="IndexColumn{T}"/>), so a tie reports NumPy's index. Every comparison reads
+        ///     <paramref name="buf"/> alone: the indices never steer the select. FOOTGUN: the comparison is the raw
+        ///     <c>&lt;</c>; a float line that may hold NaN goes to
+        ///     <see cref="PartitionAtManyNaN{T}(T*, long*, long, long*, int)"/>. [SkipLocalsInit]: the pivot stack is
+        ///     written before it is read.
         /// </remarks>
-        [SkipLocalsInit]   // pivot stack is written before read (StorePivot); skip the per-call zero
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]   // tier-1 from the first call
+        [SkipLocalsInit]
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static unsafe void PartitionAtMany<T>(T* buf, long* idx, long n, long* sortedKs, int nKs)
             where T : unmanaged, IComparable<T>
         {
             if (nKs == 0 || n <= 1) return;
             long* pivots = stackalloc long[PivotStackMax];
             int npiv = 0;
+            var col = new IndexColumn<T>(idx);
             for (int i = 0; i < nKs; i++)
             {
                 long k = sortedKs[i];
                 if (k < 0 || k >= n) continue;
-                IntroSelectBlock(buf, idx, n, k, pivots, ref npiv);
+                Introselect<T, RawLess<T>, IndexColumn<T>>(buf, col, n, k, pivots, &npiv);
+            }
+        }
+
+        /// <summary>
+        ///     np.argpartition's select of a float line that may hold NaN: NumPy's <c>introselect_</c> under its NaN-aware
+        ///     comparison (<see cref="NaNLess{T}"/>), in place, the index column moving with every swap, so the NaN indices
+        ///     end the line in NumPy's order (not the encounter order of a compaction).
+        /// </summary>
+        /// <typeparam name="T"><see cref="double"/>, <see cref="float"/> or <see cref="Half"/>.</typeparam>
+        /// <param name="buf">The line's values (scratch).</param>
+        /// <param name="idx">The original-index column (the answer).</param>
+        /// <param name="n">The line's length.</param>
+        /// <param name="sortedKs">The positions, sorted ascending (repeats allowed); a position outside <c>[0, n)</c> is
+        ///     skipped.</param>
+        /// <param name="nKs">How many positions.</param>
+        /// <remarks>[SkipLocalsInit]: the pivot stack is written before it is read.</remarks>
+        [SkipLocalsInit]
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public static unsafe void PartitionAtManyNaN<T>(T* buf, long* idx, long n, long* sortedKs, int nKs)
+            where T : unmanaged
+        {
+            if (nKs == 0 || n <= 1) return;
+            long* pivots = stackalloc long[PivotStackMax];
+            int npiv = 0;
+            var col = new IndexColumn<T>(idx);
+            for (int i = 0; i < nKs; i++)
+            {
+                long k = sortedKs[i];
+                if (k < 0 || k >= n) continue;
+                Introselect<T, NaNLess<T>, IndexColumn<T>>(buf, col, n, k, pivots, &npiv);
+            }
+        }
+
+        /// <summary>
+        ///     np.argpartition's complex128 select: NumPy's <c>introselect_</c> under <c>CDOUBLE_LT</c>, the index column
+        ///     moving with every swap.
+        /// </summary>
+        /// <param name="buf">The line's values (scratch).</param>
+        /// <param name="idx">The original-index column (the answer).</param>
+        /// <param name="n">The line's length.</param>
+        /// <param name="sortedKs">The positions, sorted ascending (repeats allowed); a position outside <c>[0, n)</c> is
+        ///     skipped.</param>
+        /// <param name="nKs">How many positions.</param>
+        /// <remarks>[SkipLocalsInit]: the pivot stack is written before it is read.</remarks>
+        [SkipLocalsInit]
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public static unsafe void PartitionAtManyComplex(Complex* buf, long* idx, long n, long* sortedKs, int nKs)
+        {
+            if (nKs == 0 || n <= 1) return;
+            long* pivots = stackalloc long[PivotStackMax];
+            int npiv = 0;
+            var col = new IndexColumn<Complex>(idx);
+            for (int i = 0; i < nKs; i++)
+            {
+                long k = sortedKs[i];
+                if (k < 0 || k >= n) continue;
+                Introselect<Complex, CDoubleLess, IndexColumn<Complex>>(buf, col, n, k, pivots, &npiv);
             }
         }
 
@@ -221,53 +365,44 @@ namespace NumSharp.Utilities
 
         private const int InsertionSortThreshold = 16;
 
-        // ── pivot-stack block-select internals (np.introselect_ + branchless block partition) ──
-        //
-        // BlockSize is the offset-block width: each pass scans this many elements from each
-        // outer edge into a byte[] of misplaced-element offsets, then swaps the paired offsets.
-        // Kept ≤ 256 so an offset fits a byte. PivotStackMax mirrors NumPy's NPY_MAX_PIVOT_STACK.
+        // ── introselect_ constants (QuickSelect.Introselect.cs holds the select itself) ──
+
+        /// <summary>The block partition's scan width per side (see <see cref="BlockScan{T, TLess, TCol}"/>); at most 256,
+        ///     so an offset fits a byte.</summary>
         private const int BlockSize = 128;
-        private const int PivotStackMax = 64;
 
         /// <summary>
-        ///     Records a placed pivot for reuse by later kths (NumPy <c>store_pivot</c>). Only
-        ///     pivots at or above the current kth are useful as upper bounds, so smaller ones are
-        ///     never pushed; the stack therefore stays descending and its top is the tightest
-        ///     upper bound for the next (larger) kth.
+        ///     NumPy's <c>NPY_MAX_PIVOT_STACK</c>: the depth of a line's pivot stack. FOOTGUN: the depth is part of the
+        ///     arrangement, not a tuning knob: once the stack is full NumPy drops further pivots (and lets only the kth
+        ///     overwrite the top), so a deeper stack narrows later kths' windows differently and moves ties.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void StorePivot(long pivot, long kth, long* pivots, ref int npiv)
-        {
-            if (pivot == kth && npiv == PivotStackMax) pivots[npiv - 1] = pivot;
-            else if (pivot >= kth && npiv < PivotStackMax) { pivots[npiv] = pivot; npiv++; }
-        }
+        private const int PivotStackMax = 50;
 
         // ── NumPy introselect_'s two linear shortcuts (selection.cpp) ──────────────────────
         //
         // Once the pivot stack has narrowed [low, high], NumPy's introselect_ tries two O(n) placements before its
-        // quickselect:
+        // quickselect (QuickSelect.Introselect.cs runs them in NumPy's order):
         //   * kth - low < 3 → dumb_select_: kth - low + 1 passes, pass i moving the window's FIRST minimum (a strict less
         //     never replaces an equal candidate) to position low + i, then store_pivot(kth);
-        //   * a float32 / float64 line (IsInexact) with kth == n - 1 → one pass moving the window's LAST maximum ("not
-        //     less" replaces an equal candidate) to kth; nothing is stored.
-        // The quantile family partitions at both ends constantly (q = 0 and 1, the neighbours of a virtual index near 0,
-        // every index clipped to -1), where a quickselect pays several partitioning passes with swaps for one order
-        // statistic (np.quantile(a, [0, 1], method='midpoint') over 100,000 doubles: 394 µs before, 83 µs now, NumPy
-        // 282 µs). Where these passes run, they keep NumPy's choice among equal values: the sign of the zero a ±0 tie
-        // leaves at kth, and the index np.argpartition reports for a tie (the quickselect and the short-window
-        // insertion sort below arrange ties their own way, as before). The callers compact NaNs out first, so a plain
-        // less is NumPy's NaN-aware Tag::less here.
+        //   * an inexact line (float32 / float64 / complex128, IsInexact) with kth == n - 1 → one pass moving the window's
+        //     LAST maximum ("not less" replaces an equal candidate) to kth; nothing is stored.
+        // The quantile family partitions at both ends constantly (NumPy's own 0 and -1, q = 0 and 1, the neighbours of a
+        // virtual index near 0, every index clipped to -1), where a quickselect pays several partitioning passes with
+        // swaps for one order statistic (np.quantile(a, [0, 1], method='midpoint') over 100,000 doubles: 394 µs as a
+        // quickselect, 83 µs as these passes, NumPy 282 µs). Over a NaN-free line of a type with vector lanes the passes
+        // search with vectors (the minimum, then its first position; the maximum, then its last position), which finds
+        // NumPy's element: equality there is the type's ==.
 
         /// <summary>Whether NumPy's introselect_ treats the element type as inexact (its kth == n - 1 maximum pass):
-        ///     float32 and float64. NumPy's test is <c>!std::is_integral&lt;type&gt;</c>, and its float16 element type
-        ///     <c>npy_half</c> is a <c>uint16_t</c>, so a float16 line takes the quickselect there; so it does here, which
-        ///     keeps NumPy's argpartition index for a float16 tie at the line's end. JIT-folded to a constant per
-        ///     instantiation.</summary>
+        ///     float32, float64 and complex128. NumPy's test is <c>!std::is_integral&lt;type&gt;</c>: its complex types are
+        ///     structs (inexact), while its float16 element type <c>npy_half</c> is a <c>uint16_t</c>, so a float16 line
+        ///     takes the quickselect there; so it does here, which keeps NumPy's argpartition index for a float16 tie at the
+        ///     line's end. JIT-folded to a constant per instantiation.</summary>
         /// <typeparam name="T">The element type.</typeparam>
-        /// <returns>True for <see cref="float"/> and <see cref="double"/>.</returns>
+        /// <returns>True for <see cref="float"/>, <see cref="double"/> and <see cref="Complex"/>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsInexact<T>()
-            => typeof(T) == typeof(double) || typeof(T) == typeof(float);
+            => typeof(T) == typeof(double) || typeof(T) == typeof(float) || typeof(T) == typeof(Complex);
 
         /// <summary>Whether <see cref="Vector{T}"/> has lanes of the element type, so the extreme-value passes run vector
         ///     minimum / maximum and equality scans (<see cref="Vector{T}"/> throws for char, Half, decimal and bool, which
@@ -280,68 +415,6 @@ namespace NumSharp.Utilities
                || typeof(T) == typeof(ulong) || typeof(T) == typeof(int) || typeof(T) == typeof(uint)
                || typeof(T) == typeof(short) || typeof(T) == typeof(ushort) || typeof(T) == typeof(sbyte)
                || typeof(T) == typeof(byte);
-
-        /// <summary>
-        ///     NumPy's <c>dumb_select_</c> over the window <c>[low, high]</c>: for every position from <paramref name="low"/>
-        ///     to <paramref name="kth"/>, the first minimum of the rest of the window is swapped into it, so the window's
-        ///     <c>kth - low + 1</c> smallest values end in ascending order at its front. O(n·(kth − low + 1)), which is why
-        ///     NumPy (and this) takes it only for <c>kth - low &lt; 3</c>.
-        /// </summary>
-        /// <typeparam name="T">The element type (NaN-free).</typeparam>
-        /// <param name="v">The line.</param>
-        /// <param name="low">The window's first position.</param>
-        /// <param name="high">The window's last position (at least <paramref name="kth"/>).</param>
-        /// <param name="kth">The position to place, within 3 of <paramref name="low"/>.</param>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void DumbSelect<T>(T* v, long low, long high, long kth) where T : unmanaged, IComparable<T>
-        {
-            for (long i = low; i <= kth; i++)
-                Swap(v, i, FirstMinIndex(v, i, high));
-        }
-
-        /// <summary>
-        ///     The index of the first minimum of <c>v[from..to]</c>, the element NumPy's <c>dumb_select_</c> scan settles on
-        ///     (it replaces its candidate only on a strict less, so among equal values, every zero included, the first
-        ///     wins).
-        /// </summary>
-        /// <typeparam name="T">The element type (NaN-free).</typeparam>
-        /// <param name="v">The line.</param>
-        /// <param name="from">The first position scanned.</param>
-        /// <param name="to">The last position scanned (at least <paramref name="from"/>).</param>
-        /// <returns>The position of the first element no other element is below.</returns>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe long FirstMinIndex<T>(T* v, long from, long to) where T : unmanaged, IComparable<T>
-        {
-            long count = to - from + 1;
-            if (HasVectorLanes<T>() && Vector.IsHardwareAccelerated && count >= 2L * Vector<T>.Count)
-                return from + FirstMinIndexVector(v + from, count);
-            // NumPy's loop (comparing against v[minIdx] equals comparing against its copy: nothing moves during the scan).
-            long minIdx = from;
-            for (long k = from + 1; k <= to; k++)
-                if (LtPtr(v + k, v + minIdx)) minIdx = k;
-            return minIdx;
-        }
-
-        /// <summary>
-        ///     The index of the last maximum of <c>v[from..to]</c>, the element NumPy's float <c>kth == n - 1</c> pass settles
-        ///     on (it replaces its candidate whenever the element is not less, so among equal values the last wins).
-        /// </summary>
-        /// <typeparam name="T">The element type (NaN-free).</typeparam>
-        /// <param name="v">The line.</param>
-        /// <param name="from">The first position scanned.</param>
-        /// <param name="to">The last position scanned (at least <paramref name="from"/>).</param>
-        /// <returns>The position of the last element no other element is above.</returns>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe long LastMaxIndex<T>(T* v, long from, long to) where T : unmanaged, IComparable<T>
-        {
-            long count = to - from + 1;
-            if (HasVectorLanes<T>() && Vector.IsHardwareAccelerated && count >= 2L * Vector<T>.Count)
-                return from + LastMaxIndexVector(v + from, count);
-            long maxIdx = from;
-            for (long k = from + 1; k <= to; k++)
-                if (!LtPtr(v + k, v + maxIdx)) maxIdx = k;
-            return maxIdx;
-        }
 
         /// <summary>
         ///     The lane-wise minimum as the hardware computes it (<c>vminpd</c> / <c>vpminsd</c> ...): on .NET 9 and later
@@ -386,7 +459,7 @@ namespace NumSharp.Utilities
         /// <param name="count">The window's length, at least two vectors.</param>
         /// <returns>The offset of the first minimum from <paramref name="p"/>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe long FirstMinIndexVector<T>(T* p, long count) where T : unmanaged, IComparable<T>
+        private static unsafe long FirstMinIndexVector<T>(T* p, long count) where T : unmanaged
         {
             int w = Vector<T>.Count;
             // Four accumulators break the dependency chain of one: four minimums in flight per step.
@@ -446,7 +519,7 @@ namespace NumSharp.Utilities
         /// <param name="count">The window's length, at least two vectors.</param>
         /// <returns>The offset of the last maximum from <paramref name="p"/>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe long LastMaxIndexVector<T>(T* p, long count) where T : unmanaged, IComparable<T>
+        private static unsafe long LastMaxIndexVector<T>(T* p, long count) where T : unmanaged
         {
             int w = Vector<T>.Count;
             var a0 = Unsafe.ReadUnaligned<Vector<T>>(p);
@@ -492,193 +565,6 @@ namespace NumSharp.Utilities
                     return j;
             // The maximum is an element of the window: when no later position holds it, the first one does.
             return 0;
-        }
-
-        /// <summary>
-        ///     Single-kth introselect threading the shared pivot stack (NumPy <c>introselect_</c>).
-        ///     Pops the stack to narrow <c>[low, high]</c> before selecting, takes NumPy's two linear
-        ///     shortcuts (<see cref="DumbSelect{T}"/> for a kth within 3 of low, <see cref="LastMaxIndex{T}"/>
-        ///     for a float kth at the line's end), then median-of-3 + branchless block partition down
-        ///     to the insertion-sort / heap-sort thresholds, pushing every placed pivot back so the
-        ///     next kth reuses this work.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void IntroSelectBlock<T>(T* v, long n, long kth, long* pivots, ref int npiv)
-            where T : unmanaged, IComparable<T>
-        {
-            long low = 0, high = n - 1;
-            // Narrow from already-placed pivots: pop everything ≤ kth (raising low), stop at the
-            // first pivot > kth (lowering high). An exact hit means kth is already in place.
-            while (npiv > 0)
-            {
-                long top = pivots[npiv - 1];
-                if (top > kth) { high = top - 1; break; }
-                if (top == kth) return;
-                low = top + 1;
-                npiv--;
-            }
-
-            // A window the loop below would insertion-sort on its first step is sorted before NumPy's shortcuts, which
-            // NumPy takes for every window: on a few elements one insertion sort beat up to three minimum passes
-            // (100,000 rows of 5, np.quantile(m, 0.5, axis=1): 7.8 ms against 8.7 ms). The values placed are the same
-            // order statistics; only the arrangement of a short window differs.
-            if (high - low + 1 <= InsertionSortThreshold)
-            {
-                InsertionSort(v, low, high);
-                StorePivot(kth, kth, pivots, ref npiv);
-                return;
-            }
-
-            // NumPy's linear shortcuts, in NumPy's order (see the block above DumbSelect).
-            if (kth - low < 3)
-            {
-                DumbSelect(v, low, high, kth);
-                StorePivot(kth, kth, pivots, ref npiv);
-                return;
-            }
-            if (IsInexact<T>() && kth == n - 1)
-            {
-                // No pivot above kth can exist here, so the window ends at the line's end, which NumPy scans to.
-                Swap(v, kth, LastMaxIndex(v, low, n - 1));
-                return;
-            }
-
-            int depthLimit = 2 * Log2(n);
-            while (low < high)
-            {
-                long len = high - low + 1;
-                if (len <= InsertionSortThreshold)
-                {
-                    InsertionSort(v, low, high);
-                    StorePivot(kth, kth, pivots, ref npiv);
-                    return;
-                }
-                if (depthLimit == 0)
-                {
-                    // Median-of-3 degraded (adversarial input) — heap-sort the window for the
-                    // O(n log n) worst-case guarantee, matching NumPy's med-of-median-5 fallback.
-                    HeapSort(v, low, high);
-                    StorePivot(kth, kth, pivots, ref npiv);
-                    return;
-                }
-                depthLimit--;
-
-                long p = PartitionBlock(v, low, high);
-                if (p != kth) StorePivot(p, kth, pivots, ref npiv);
-                // Both may fire when p == kth: the window collapses and the loop exits.
-                if (p >= kth) high = p - 1;
-                if (p <= kth) low = p + 1;
-            }
-            StorePivot(kth, kth, pivots, ref npiv);
-        }
-
-        /// <summary>
-        ///     Median-of-3 pivot setup (NumPy <c>median3_swap_</c>): moves the median of
-        ///     <c>{low, mid, high}</c> to <paramref name="low"/> (the pivot) and the smallest of
-        ///     the three to <c>low+1</c>. This leaves <c>v[low+1] ≤ pivot</c> and
-        ///     <c>v[high] ≥ pivot</c> as sentinels, letting the partition scan run unguarded.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void Median3Swap<T>(T* v, long low, long mid, long high)
-            where T : unmanaged, IComparable<T>
-        {
-            if (LtV(v[high], v[mid])) Swap(v, high, mid);
-            if (LtV(v[high], v[low])) Swap(v, high, low);
-            if (LtV(v[low], v[mid])) Swap(v, low, mid);
-            Swap(v, mid, low + 1);
-        }
-
-        /// <summary>
-        ///     Scalar unguarded Hoare crossing used to finish the small middle a block partition
-        ///     leaves (or a whole small window). The caller guarantees a sentinel ≤ pivot at
-        ///     <paramref name="ll"/> and a sentinel ≥ pivot at <paramref name="hh"/>, so neither
-        ///     do/while can run off the region — no bounds test in the hot loop.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe long ScalarPartitionFinish<T>(T* v, T* pivot, long ll, long hh)
-            where T : unmanaged, IComparable<T>
-        {
-            for (;;)
-            {
-                do { ll++; } while (LtPtr(v + ll, pivot));
-                do { hh--; } while (LtPtr(pivot, v + hh));
-                if (hh < ll) break;
-                Swap(v, ll, hh);
-            }
-            return hh;
-        }
-
-        /// <summary>
-        ///     Branchless block-Hoare partition of <c>[low, high]</c> around the median-of-3
-        ///     pivot, returning the pivot's final index (BlockQuicksort / pdqsort scheme). The
-        ///     bulk of each side is scanned into fixed <see cref="BlockSize"/> offset blocks with
-        ///     a data-independent write (<c>numX += cmp ? 0 : 1</c>), then paired offsets are
-        ///     swapped — eliminating the ~50% branch-mispredict of a scalar Hoare inner loop on
-        ///     random data. The sub-block-size middle is finished by
-        ///     <see cref="ScalarPartitionFinish{T}"/>. Callers must supply a window larger than
-        ///     <see cref="InsertionSortThreshold"/> so the sentinels at <c>low+1</c>/<c>high</c>
-        ///     exist. Any NaNs are stripped by the quantile kernel before this runs, so the raw
-        ///     <see cref="LtV{T}"/> ordering is total here.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe long PartitionBlock<T>(T* v, long low, long high)
-            where T : unmanaged, IComparable<T>
-        {
-            long mid = low + ((high - low) >> 1);
-            Median3Swap(v, low, mid, high);
-
-            byte* offL = stackalloc byte[BlockSize];
-            byte* offR = stackalloc byte[BlockSize];
-            // The pivot lives at v[low] for the whole partition; comparing against its address
-            // (rather than a by-value copy) is what keeps the block scan in registers.
-            T* pivot = v + low;
-            // v[low+1] ≤ pivot and v[high] ≥ pivot are the sentinels, so the unknown span is
-            // (low+1, high): scan up from ll and down from hh.
-            long ll = low + 2, hh = high - 1;
-            int numL = 0, numR = 0, startL = 0, startR = 0;
-            long baseL = ll, baseR = hh;
-
-            while (hh - ll + 1 > 2 * BlockSize)
-            {
-                if (numL == 0)
-                {
-                    startL = 0; baseL = ll;
-                    for (int i = 0; i < BlockSize; i++) { offL[numL] = (byte)i; numL += LtPtr(v + ll + i, pivot) ? 0 : 1; }
-                }
-                if (numR == 0)
-                {
-                    startR = 0; baseR = hh;
-                    for (int i = 0; i < BlockSize; i++) { offR[numR] = (byte)i; numR += LtPtr(pivot, v + hh - i) ? 0 : 1; }
-                }
-                int num = Math.Min(numL, numR);
-                for (int i = 0; i < num; i++) Swap(v, baseL + offL[startL + i], baseR - offR[startR + i]);
-                numL -= num; numR -= num; startL += num; startR += num;
-                if (numL == 0) ll += BlockSize;
-                if (numR == 0) hh -= BlockSize;
-            }
-
-            // Drain the one partially-consumed block (at most one is non-empty here) against a
-            // scalar scan of the opposite side, keeping the confirmed regions as sentinels.
-            while (numL > 0)
-            {
-                while (LtPtr(pivot, v + hh)) hh--;
-                long li = baseL + offL[startL + numL - 1];
-                if (li >= hh) break;
-                Swap(v, li, hh);
-                hh--; numL--;
-            }
-            while (numR > 0)
-            {
-                while (LtPtr(v + ll, pivot)) ll++;
-                long ri = baseR - offR[startR + numR - 1];
-                if (ri <= ll) break;
-                Swap(v, ri, ll);
-                ll++; numR--;
-            }
-
-            long p = ScalarPartitionFinish(v, pivot, ll - 1, hh + 1);
-            Swap(v, low, p);   // move pivot from low into its final crossing position
-            return p;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -876,182 +762,10 @@ namespace NumSharp.Utilities
             buf[lo + i - 1] = d;
         }
 
-        // ── index-tracking internals (values + parallel idx column swap together) ──
+        // ── index-tracking scalar internals (values + parallel idx column swap together) ──
         //
-        // The argument-tracking mirror of the value-only pivot-stack block select above: identical
-        // structure, with the parallel idx column carried through every Swap. All comparisons read
-        // buf alone (LtV/LtPtr), so idx never steers control flow — it is a passive passenger that
-        // records the permutation the value partition performs. StorePivot/LtV/LtPtr/Log2 and the
-        // BlockSize/PivotStackMax constants are shared with the value path.
-
-        /// <summary>
-        ///     Index-tracking single-kth introselect threading the shared pivot stack (the
-        ///     <c>arg = true</c> instantiation of NumPy <c>introselect_</c>). Mirrors the value-only
-        ///     <see cref="IntroSelectBlock{T}(T*, long, long, long*, ref int)"/> exactly, moving
-        ///     <paramref name="idx"/> through every swap — NumPy's linear shortcuts included, so a tie at
-        ///     kth reports NumPy's index (the first minimum, or the last maximum of a float line's end).
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void IntroSelectBlock<T>(T* v, long* idx, long n, long kth, long* pivots, ref int npiv)
-            where T : unmanaged, IComparable<T>
-        {
-            long low = 0, high = n - 1;
-            // Narrow from already-placed pivots: pop everything ≤ kth (raising low), stop at the
-            // first pivot > kth (lowering high). An exact hit means kth is already in place.
-            while (npiv > 0)
-            {
-                long top = pivots[npiv - 1];
-                if (top > kth) { high = top - 1; break; }
-                if (top == kth) return;
-                low = top + 1;
-                npiv--;
-            }
-
-            // A short window is insertion-sorted first, as the value path does (see there).
-            if (high - low + 1 <= InsertionSortThreshold)
-            {
-                InsertionSort(v, idx, low, high);
-                StorePivot(kth, kth, pivots, ref npiv);
-                return;
-            }
-
-            // NumPy's linear shortcuts (see DumbSelect / LastMaxIndex): the values decide, the index column follows.
-            if (kth - low < 3)
-            {
-                for (long i = low; i <= kth; i++)
-                    Swap(v, idx, i, FirstMinIndex(v, i, high));
-                StorePivot(kth, kth, pivots, ref npiv);
-                return;
-            }
-            if (IsInexact<T>() && kth == n - 1)
-            {
-                Swap(v, idx, kth, LastMaxIndex(v, low, n - 1));
-                return;
-            }
-
-            int depthLimit = 2 * Log2(n);
-            while (low < high)
-            {
-                long len = high - low + 1;
-                if (len <= InsertionSortThreshold)
-                {
-                    InsertionSort(v, idx, low, high);
-                    StorePivot(kth, kth, pivots, ref npiv);
-                    return;
-                }
-                if (depthLimit == 0)
-                {
-                    HeapSort(v, idx, low, high);
-                    StorePivot(kth, kth, pivots, ref npiv);
-                    return;
-                }
-                depthLimit--;
-
-                long p = PartitionBlock(v, idx, low, high);
-                if (p != kth) StorePivot(p, kth, pivots, ref npiv);
-                if (p >= kth) high = p - 1;
-                if (p <= kth) low = p + 1;
-            }
-            StorePivot(kth, kth, pivots, ref npiv);
-        }
-
-        /// <summary>
-        ///     Index-tracking median-of-3 setup (mirror of
-        ///     <see cref="Median3Swap{T}(T*, long, long, long)"/>): moves the median of
-        ///     <c>{low, mid, high}</c> to <paramref name="low"/> and the smallest to <c>low+1</c>,
-        ///     carrying <paramref name="idx"/> through each swap.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void Median3Swap<T>(T* v, long* idx, long low, long mid, long high)
-            where T : unmanaged, IComparable<T>
-        {
-            if (LtV(v[high], v[mid])) Swap(v, idx, high, mid);
-            if (LtV(v[high], v[low])) Swap(v, idx, high, low);
-            if (LtV(v[low], v[mid])) Swap(v, idx, low, mid);
-            Swap(v, idx, mid, low + 1);
-        }
-
-        /// <summary>
-        ///     Index-tracking scalar unguarded Hoare crossing (mirror of
-        ///     <see cref="ScalarPartitionFinish{T}(T*, T*, long, long)"/>). Compares against the pivot
-        ///     address (never a by-value copy) and carries <paramref name="idx"/> through each swap.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe long ScalarPartitionFinish<T>(T* v, long* idx, T* pivot, long ll, long hh)
-            where T : unmanaged, IComparable<T>
-        {
-            for (;;)
-            {
-                do { ll++; } while (LtPtr(v + ll, pivot));
-                do { hh--; } while (LtPtr(pivot, v + hh));
-                if (hh < ll) break;
-                Swap(v, idx, ll, hh);
-            }
-            return hh;
-        }
-
-        /// <summary>
-        ///     Index-tracking branchless block-Hoare partition (mirror of
-        ///     <see cref="PartitionBlock{T}(T*, long, long)"/>): identical offset-block scan and swaps,
-        ///     with <paramref name="idx"/> carried through every <see cref="Swap{T}(T*, long*, long, long)"/>.
-        ///     The pivot stays at <c>v[low]</c> for the whole partition (the scan begins at
-        ///     <c>low+2</c>, so <paramref name="idx"/> at <c>low</c> is untouched until the final
-        ///     placement swap), keeping the compares against its hoisted address in registers.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe long PartitionBlock<T>(T* v, long* idx, long low, long high)
-            where T : unmanaged, IComparable<T>
-        {
-            long mid = low + ((high - low) >> 1);
-            Median3Swap(v, idx, low, mid, high);
-
-            byte* offL = stackalloc byte[BlockSize];
-            byte* offR = stackalloc byte[BlockSize];
-            T* pivot = v + low;
-            long ll = low + 2, hh = high - 1;
-            int numL = 0, numR = 0, startL = 0, startR = 0;
-            long baseL = ll, baseR = hh;
-
-            while (hh - ll + 1 > 2 * BlockSize)
-            {
-                if (numL == 0)
-                {
-                    startL = 0; baseL = ll;
-                    for (int i = 0; i < BlockSize; i++) { offL[numL] = (byte)i; numL += LtPtr(v + ll + i, pivot) ? 0 : 1; }
-                }
-                if (numR == 0)
-                {
-                    startR = 0; baseR = hh;
-                    for (int i = 0; i < BlockSize; i++) { offR[numR] = (byte)i; numR += LtPtr(pivot, v + hh - i) ? 0 : 1; }
-                }
-                int num = Math.Min(numL, numR);
-                for (int i = 0; i < num; i++) Swap(v, idx, baseL + offL[startL + i], baseR - offR[startR + i]);
-                numL -= num; numR -= num; startL += num; startR += num;
-                if (numL == 0) ll += BlockSize;
-                if (numR == 0) hh -= BlockSize;
-            }
-
-            while (numL > 0)
-            {
-                while (LtPtr(pivot, v + hh)) hh--;
-                long li = baseL + offL[startL + numL - 1];
-                if (li >= hh) break;
-                Swap(v, idx, li, hh);
-                hh--; numL--;
-            }
-            while (numR > 0)
-            {
-                while (LtPtr(v + ll, pivot)) ll++;
-                long ri = baseR - offR[startR + numR - 1];
-                if (ri <= ll) break;
-                Swap(v, idx, ri, ll);
-                ll++; numR--;
-            }
-
-            long p = ScalarPartitionFinish(v, idx, pivot, ll - 1, hh + 1);
-            Swap(v, idx, low, p);   // move pivot from low into its final crossing position
-            return p;
-        }
+        // The single-k PartitionAt-style scalar select with an index column and its Comparison<T> twin. np.argpartition
+        // runs NumPy's introselect_ instead (QuickSelect.Introselect.cs, IndexColumn<T>).
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void IntroSelect<T>(T* buf, long* idx, long lo, long hi, long k, int depthLimit)
@@ -1342,8 +1056,16 @@ namespace NumSharp.Utilities
         ///     registers, so the emitted <c>numX += (*a &lt; *b) ? 0 : 1</c> is a single load +
         ///     compare + branchless increment — matching a hand-written typed loop.
         /// </summary>
+        /// <typeparam name="T">The element type: any of the 14 non-complex dtypes folds to one native compare; another
+        ///     type falls back to <see cref="System.Collections.Generic.Comparer{T}.Default"/> (slow, and an exception for a
+        ///     type with no ordering).</typeparam>
+        /// <param name="a">The first element.</param>
+        /// <param name="b">The second element.</param>
+        /// <returns>The type's raw <c>*a &lt; *b</c> (IEEE for the floats: false whenever either is NaN).</returns>
+        /// <exception cref="ArgumentException">Only for a type outside the dtype list that has no
+        ///     <see cref="IComparable{T}"/> / <see cref="IComparable"/> ordering (no NumSharp dtype reaches the fallback).</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static unsafe bool LtPtr<T>(T* a, T* b) where T : unmanaged, IComparable<T>
+        private static unsafe bool LtPtr<T>(T* a, T* b) where T : unmanaged
         {
             if (typeof(T) == typeof(byte))    return *(byte*)a    < *(byte*)b;
             if (typeof(T) == typeof(sbyte))   return *(sbyte*)a   < *(sbyte*)b;
@@ -1359,7 +1081,9 @@ namespace NumSharp.Utilities
             if (typeof(T) == typeof(Half))    return HalfOrderKey(*(ushort*)a) < HalfOrderKey(*(ushort*)b);
             if (typeof(T) == typeof(decimal)) return *(decimal*)a < *(decimal*)b;
             if (typeof(T) == typeof(bool))    return !*(bool*)a && *(bool*)b;
-            return (*a).CompareTo(*b) < 0;
+            // Reached by no dtype (complex takes CDoubleLess); kept so the constraint can stay `unmanaged` for the
+            // policy structs, which instantiate this for every element type.
+            return System.Collections.Generic.Comparer<T>.Default.Compare(*a, *b) < 0;
         }
     }
 }
