@@ -922,6 +922,25 @@ namespace NumSharp
         /// <returns><c>null</c>.</returns>
         internal static int? NoAxis() => null;
 
+        /// <summary>
+        ///     The <c>int?</c> a <c>[ReducesThrough]</c> collapse takes for a function's <see cref="NDAxis"/> axis (the woven
+        ///     code's conversion, <c>EmitAxis</c>): the single axis as given, null for None AND for a tuple.
+        /// </summary>
+        /// <param name="axis">The function's axis: None, an int, or a tuple.</param>
+        /// <returns>The single axis, or null.</returns>
+        /// <remarks>A tuple reads as no axis - the answer the <c>int[]</c>-axis overloads gave before the functions took
+        ///     <see cref="NDAxis"/> (API-parity batch 4), whose axis the woven code could not read: a matrix's collapse decides
+        ///     row or column only for a single axis, so every former call keeps its class answer.</remarks>
+        internal static int? AxisArgument(NDAxis? axis) => axis is { IsTuple: false } single ? single[0] : null;
+
+        /// <summary>
+        ///     <see cref="AxisArgument(NDAxis?)"/> for a function whose axis has no None (a non-nullable
+        ///     <see cref="NDAxis"/>).
+        /// </summary>
+        /// <param name="axis">The function's axis: an int or a tuple.</param>
+        /// <returns>The single axis, or null for a tuple.</returns>
+        internal static int? AxisArgument(NDAxis axis) => axis.IsTuple ? null : axis[0];
+
         #endregion
 
         #region The caller audit (a test hook)

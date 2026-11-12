@@ -80,6 +80,12 @@ internal static class SubclassWeaver
     private const string NDArrayFullName = "NumSharp.NDArray";
     private const string NDArrayArrayFullName = "NumSharp.NDArray[]";
 
+    /// <summary>NumPy's axis type (<c>NumSharp.NDAxis</c>): an int or a tuple, read by <see cref="EmitAxis"/>.</summary>
+    private const string NDAxisFullName = "NumSharp.NDAxis";
+
+    /// <summary>The <c>NDAxis? axis = null</c> parameter of a function whose NumPy default is <c>axis=None</c>.</summary>
+    private const string NullableNDAxisFullName = "System.Nullable`1<NumSharp.NDAxis>";
+
     /// <summary>The mechanism families a declaration resolves to.</summary>
     private enum Kind
     {
@@ -1706,11 +1712,20 @@ internal static class SubclassWeaver
         il.Append(il.Create(OpCodes.Stloc, result));
     }
 
-    /// <summary>Loads the function's <c>axis</c> as an <c>int?</c> (an <c>int</c> axis converted, none as null).</summary>
+    /// <summary>
+    ///     Loads the function's <c>axis</c> as an <c>int?</c> (an <c>int</c> axis converted, none as null; an
+    ///     <c>NDAxis</c> / <c>NDAxis?</c> axis through <c>NDSubclass.AxisArgument</c>, which gives its single axis and null
+    ///     for None and for a tuple).
+    /// </summary>
     /// <param name="ctx">The weave.</param>
     /// <param name="il">The IL.</param>
     /// <param name="m">The function.</param>
     /// <param name="map">The function's parameters to the subclass path's.</param>
+    /// <exception cref="WeaveException">NDSubclass lacks a conversion this method calls (NDW029: weaver and library out of
+    ///     sync).</exception>
+    /// <remarks>A tuple reads as no axis, the answer the <c>int[]</c>-axis overloads (which had no axis this method could
+    ///     read) gave before the functions took NumPy's axis type: the collapse of a matrix intermediate decides row or
+    ///     column only for a single axis.</remarks>
     private static void EmitAxis(Context ctx, ILProcessor il, MethodDefinition m, Dictionary<ParameterDefinition, ParameterDefinition> map)
     {
         var axis = m.Parameters.FirstOrDefault(p => p.Name == "axis");
@@ -1722,6 +1737,12 @@ internal static class SubclassWeaver
         }
         else if (axis is not null && axis.ParameterType.FullName == "System.Nullable`1<System.Int32>")
             il.Append(il.Create(OpCodes.Ldarg, map[axis]));
+        else if (axis is not null && axis.ParameterType.FullName is NDAxisFullName or NullableNDAxisFullName)
+        {
+            // NumPy's axis type (None, an int or a tuple): the runtime picks the single axis out of it.
+            il.Append(il.Create(OpCodes.Ldarg, map[axis]));
+            il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "AxisArgument", axis.ParameterType.FullName))));
+        }
         else
             il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "NoAxis"))));
     }

@@ -1933,7 +1933,7 @@ namespace NumSharp.Tests
             var a = np.array(new bool[,] { { true, false }, { false, true } });
 
             NDArray result = null;
-            new Action(() => result = np.any(a, 0, false))
+            new Action(() => result = np.any(a, 0, keepdims: false))
                 .Should().NotThrow(
                     "NumPy: np.any([[T,F],[F,T]], axis=0) = [True, True]. " +
                     "NumSharp throws InvalidCastException when trying to cast " +
@@ -1954,7 +1954,7 @@ namespace NumSharp.Tests
             var a = np.array(new bool[,] { { true, false }, { false, false } });
 
             NDArray result = null;
-            new Action(() => result = np.any(a, 1, false))
+            new Action(() => result = np.any(a, 1, keepdims: false))
                 .Should().NotThrow(
                     "NumPy: np.any([[T,F],[F,F]], axis=1) = [True, False].");
 

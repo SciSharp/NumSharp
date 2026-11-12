@@ -204,10 +204,12 @@ namespace NumSharp.Backends
         /// <param name="q">
         ///     The caller's q. A <see cref="double"/> or <see cref="float"/> is a Python float (the number form); a
         ///     <see cref="double"/> array a Python list of floats (the list form); an <see cref="NDArray"/> (null included,
-        ///     reported later in NumPy's order) an ndarray, or a C# literal's weak array; a C# integer a Python int (the weak
-        ///     0-d int64 array the facades' <see cref="long"/> overloads make; a <see cref="ulong"/> past
-        ///     <see cref="long.MaxValue"/> is NumPy's uint64 array of it); a <see cref="bool"/> a Python bool, which is
-        ///     not weak (<c>type(True)</c> is <c>bool</c>); anything else whatever <c>np.asanyarray</c> makes of it.
+        ///     reported later in NumPy's order) an ndarray - except the 0-d array a C# number literal converted to
+        ///     (<see cref="NDArray.WasPythonLiteral"/>), which is the Python number it was: a float literal the number form,
+        ///     an integer literal the weak int64 array below; a C# integer a Python int (the weak 0-d int64 array; a
+        ///     <see cref="ulong"/> past <see cref="long.MaxValue"/> is NumPy's uint64 array of it); a <see cref="bool"/> a
+        ///     Python bool, which is not weak (<c>type(True)</c> is <c>bool</c>); anything else whatever
+        ///     <c>np.asanyarray</c> makes of it.
         /// </param>
         /// <param name="argument">The form <paramref name="q"/> takes.</param>
         /// <returns>
@@ -215,8 +217,12 @@ namespace NumSharp.Backends
         ///     returned); null when <paramref name="q"/> needed no new array.
         /// </returns>
         /// <exception cref="Exception">Whatever <c>np.asanyarray</c> raises for an object it cannot convert.</exception>
-        /// <remarks>The facades pass exactly the first three forms (a C# integer arrives as the array its overload made),
-        ///     so their calls take the forms they took before the plan's phase PE.</remarks>
+        /// <remarks>Since API-parity batch 4 (2026-11-12) the facades take q as one <see cref="NDArray"/>, so a C# literal
+        ///     arrives as its converted 0-d array; reading it back as the number it was gives every former overload's call
+        ///     (<c>np.quantile(a, 0.5)</c>, a <see cref="double"/>; <c>np.quantile(a, 1)</c>, the <see cref="long"/>
+        ///     overload's weak int64) the form it took before. A user's own NDArray holding a converted literal
+        ///     (<c>NDArray q = 0.5;</c>) is that Python number too, as NumPy's <c>type(q) in (int, float)</c> reads a Python
+        ///     number.</remarks>
         internal NDArray QuantileQ(object q, out QuantileArgument argument)
         {
             switch (q)
@@ -225,6 +231,24 @@ namespace NumSharp.Backends
                     // NumPy's None: asanyarray(None) is an object array; the bodies report a null q after the complex check.
                     argument = new QuantileArgument((NDArray)null);
                     return null;
+                case NDArray literal when literal.WasPythonLiteral && literal.ndim == 0
+                                          && literal.typecode is NPTypeCode.Single or NPTypeCode.Double:
+                    // A C# float literal the facade converted to its NDArray q: NumPy's Python float, the number form a
+                    // double q always took (weak, and percentile's division by 100 of the number itself).
+                    argument = new QuantileArgument((double)literal);
+                    return null;
+                case NDArray literal when literal.WasPythonLiteral && literal.ndim == 0 && literal.typecode is NPTypeCode.SByte
+                                          or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Int32
+                                          or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64:
+                {
+                    // A C# integer literal: NumPy's Python int, np.asanyarray's weak 0-d int64 (uint64 past int64's range),
+                    // the array the facades' long overloads made - not the literal's own C# width (an int is int32 here).
+                    NDArray made = literal.typecode == NPTypeCode.UInt64 && (ulong)literal > long.MaxValue
+                        ? NDArray.PythonLiteral((ulong)literal)
+                        : NDArray.PythonLiteral((long)literal);
+                    argument = new QuantileArgument(made);
+                    return made;
+                }
                 case NDArray array:
                     argument = new QuantileArgument(array);
                     return null;

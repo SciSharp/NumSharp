@@ -265,6 +265,11 @@ the result's own strides, keepdims re-inserts the axis at its sorted place (`Exp
 result is relabelled once, `RelabelKeptAxes`), and the tuple-axis chain drops its kept
 axes with their strides. `np.count_nonzero(a, axis)` is NumPy's own `a.astype(bool, copy=False).sum(axis, dtype=intp)`;
 np.sum's bool count route (`TryCountBoolAxisSum`) returns an owning result (never np.evaluate's reshaped keepdims view).
+A tuple (`TensorEngine.CountNonZero(a, NDAxis?, keepdims)`) is ONE add.reduce over the axis set in the intp loop
+(`ReduceAddOverAxes(truth, axes, keepdims, Int64)`: np.sum's routes for one axis and every axis, the reduction iterator's
+`NumPyAddLoops.Int64` for any other set, so an F operand gives an F result); `axis=None` without keepdims is the flat
+count as NumPy's scalar, with keepdims a (1, ..., 1) array. A known gap: a 0-d operand's tuple `(0,)` is accepted by
+np.all / np.any's tuple route (NumPy: AxisError; `[OpenBugs] ApiParity_AllAny_ZeroDOperand_TupleAxis_IsAxisError`).
 A bool C/F operand of at least 16K elements reduced to rank >= 1 runs np.evaluate's Any / All axis stream
 (`TryStreamLogicalAxis`; long contiguous rows of 4096 or more stay on the engine's per-row scan). Floor: the "read every
 element" F-slab cells at 1M stream from L2 on both sides. Gate: `Logic/np.all_any.ResultLayout.Test.cs` (probed strides

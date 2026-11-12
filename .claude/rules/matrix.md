@@ -96,8 +96,13 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
     its frame with `[MethodImpl(NoInlining | NoOptimization)]` (guard `SubclassAuditFrameTests`; optimized code inlines
     and tail-jumps it away otherwise, `char-chararray.md`).
   - Limits (`[Misaligned]`, pinned in `Matrixlib/NDMatrixOperand.Tests.cs`): a function whose C# return type is a typed
-    array cannot return a matrix (`np.isclose`, gap MO01; the typed `np.all` / `np.any` overloads, `np.nonzero` and
-    `np.flatnonzero` are plain in NumPy too); numpy.ma has no `masked_matrix` (NumPy's `ma.array(m).sum(axis=0)`
+    array cannot return a matrix (`np.isclose`, gap MO01; `np.nonzero` and `np.flatnonzero` are plain in NumPy too;
+    np.all / np.any have one `NDArray` signature since API-parity batch 4, so `np.all(m, 0)` is matrix.all's 1 x N
+    matrix, a tuple axis the kept axes as a matrix); the quantile family's class rule reads no axis from a tuple (the
+    scalar for a full tuple, a row otherwise) and puts a 1-d result along axis 1 back as a column for percentile /
+    quantile too, where NumPy's bodies keep a 1 x 1 matrix / a column for median / a row for percentile (`[OpenBugs]
+    ApiParity_QuantileFamily_MatrixOperand_KeepsNumPysMatrixShape`); np.count_nonzero with an axis computes plain where
+    NumPy's matrix.sum refuses keepdims (`[OpenBugs] ApiParity_CountNonzero_MatrixOperand_IsMatrixSumsKeywordError`); numpy.ma has no `masked_matrix` (NumPy's `ma.array(m).sum(axis=0)`
     is 1 × N); the `numpy.polynomial` package computes plain; a result is always a matrix VIEW of the plain result (no
     `flags.owndata` parity for the functions NumPy allocates as the subclass). Where matrix semantics leak into NumPy's
     own Python code, NumSharp does not reproduce it: gaps MO02 to MO05, `np.linalg.vector_norm(m)` (an array of `|x|` in
@@ -191,7 +196,8 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
 ## Divergences and the library rules it relies on
 
 - Divergences: the static typing above; a C# literal keeps its C# type (`matrix(int8) * 2` is int32 where NumPy's Python
-  int gives int64); no tuple axes; the address in `ast` error texts is zero; complex128 scaling by a complex scalar is
+  int gives int64); the matrix methods take one axis (matrix.all / any / squeeze take NumPy's tuple too, an
+  `NDAxis`); the address in `ast` error texts is zero; complex128 scaling by a complex scalar is
   the ufunc product, which can differ from OpenBLAS `zaxpy` in the last bit.
 - `np.asmatrix` returns a new view, never its operand. `np.dot(1-D, 2-D)` and `np.matmul` with a 1-D operand return an
   owner (the inserted axis is dropped in place); `np.dot(N-D, 1-D)` reports a mismatch in `np.dot`'s words.

@@ -487,7 +487,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="result">The average computed on the plain view.</param>
         /// <param name="a">The caller's operand.</param>
-        /// <param name="axis">The caller's axis: <c>null</c>, an <c>int</c> (boxed) or an <c>int[]</c>.</param>
+        /// <param name="axis">The caller's axis, boxed: <c>null</c> for None, or its <see cref="NDAxis"/> (an int or a
+        ///     tuple: either keeps the reduced axes, so only None collapses to the scalar).</param>
         /// <returns>The scalar or the matrix view of a matrix operand's average, otherwise <paramref name="result"/>.</returns>
         /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
         internal static NDArray Average(NDArray result, NDArray a, object axis)
@@ -507,7 +508,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="result">The average and the sum of weights computed on the plain views.</param>
         /// <param name="a">The caller's operand.</param>
-        /// <param name="axis">The caller's axis: <c>null</c>, an <c>int</c> (boxed) or an <c>int[]</c>.</param>
+        /// <param name="axis">The caller's axis, boxed: <c>null</c> for None, or its <see cref="NDAxis"/> (an int or a
+        ///     tuple: either keeps the reduced axes, so only None collapses to the scalar).</param>
         /// <returns>The pair, the average shaped as <see cref="Average"/>.</returns>
         /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
         internal static (NDArray, NDArray) AverageReturned((NDArray, NDArray) result, NDArray a, object axis)

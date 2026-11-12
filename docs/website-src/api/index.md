@@ -18,6 +18,7 @@ The essential types for working with NumSharp.
 | @NumSharp.np | Static API class (like `import numpy as np` in Python) |
 | @NumSharp.Shape | Array dimensions and strides |
 | @NumSharp.Slice | Slice specification for array indexing |
+| @NumSharp.NDAxis | NumPy's `axis` argument: one axis or a tuple (`1`, `(0, 2)`, `new[] { 0, 2 }`; `null` is None) |
 | @NumSharp.Generic.NDArray`1 | Generic typed wrapper for unmanaged CLR element types; use `NDArray` for text |
 | @NumSharp.DType | Full dtype descriptor, including text width or StringDType parameters |
 | @NumSharp.NDCharArray | NumPy's fixed-width `chararray`, with stripping element access and comparisons |
