@@ -50,6 +50,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- NumPy 2.4.2's and PyTorch's answers for every array / tensor state the StateMatrix*Tests cross, written by
+         test/oracle/gen_torch_interop_states.py and committed (no Python at test time). -->
+    <None Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
     <ProjectReference Include="..\..\src\NumSharp.Interop.TorchSharp\NumSharp.Interop.TorchSharp.csproj" />
   </ItemGroup>

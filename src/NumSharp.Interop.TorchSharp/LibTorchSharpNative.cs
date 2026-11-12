@@ -117,8 +117,12 @@ namespace NumSharp.Interop.TorchSharp
             Args9 = 9,
         }
 
-        /// <summary>The detected form, or -1 before the first detection (racing detections compute the same answer).</summary>
-        private static int _abi = -1;
+        /// <summary>
+        ///     The detected form, or -1 before the first detection (racing detections compute the same answer). Internal so the
+        ///     suite can force <see cref="NewTensorAbi.Unknown"/> to exercise the refusal no shipped TorchSharp triggers; it puts
+        ///     -1 back afterwards, which re-detects.
+        /// </summary>
+        internal static int _abi = -1;
 
         /// <summary>1 once <see cref="EnsureLoaded"/> ran TorchSharp's native initialization.</summary>
         private static int _loaded;
@@ -161,20 +165,37 @@ namespace NumSharp.Interop.TorchSharp
                 {
                     if (method.Name != "THSTensor_new")
                         continue;
-                    ParameterInfo[] p = method.GetParameters();
-                    // The deleter parameter is TorchSharp's internal GCHandleDeleter delegate: checked as "a delegate", since its
-                    // name is TorchSharp's business; every other position must be exactly the type the native form takes.
-                    bool head = p.Length >= 6 && p[0].ParameterType == typeof(IntPtr) && typeof(Delegate).IsAssignableFrom(p[1].ParameterType)
-                                && p[2].ParameterType == typeof(IntPtr) && p[3].ParameterType == typeof(int) && p[4].ParameterType == typeof(sbyte);
-                    if (!head)
-                        continue;
-                    if (p.Length == 9 && p[5].ParameterType == typeof(sbyte) && p[6].ParameterType == typeof(int)
-                        && p[7].ParameterType == typeof(int) && p[8].ParameterType == typeof(bool))
-                        return NewTensorAbi.Args9;
-                    if (p.Length == 6 && p[5].ParameterType == typeof(bool))
-                        return NewTensorAbi.Args6;
+                    NewTensorAbi abi = Classify(Array.ConvertAll(method.GetParameters(), p => p.ParameterType));
+                    if (abi != NewTensorAbi.Unknown)
+                        return abi;
                 }
             }
+            return NewTensorAbi.Unknown;
+        }
+
+        /// <summary>
+        ///     The <c>THSTensor_new</c> form a managed declaration's parameter types describe: exactly the 9-argument form, exactly
+        ///     the 6-argument form, or neither. Separate from the lookup so the refusal of every near miss is testable.
+        /// </summary>
+        /// <remarks>
+        ///     The deleter parameter is TorchSharp's internal <c>GCHandleDeleter</c> delegate, checked as "a delegate" (its name
+        ///     is TorchSharp's business); every other position must be exactly the type the native form takes. A list with the
+        ///     right count but another type anywhere is Unknown, never the nearest form: the native call cannot detect a mismatch,
+        ///     it just reads its arguments from the wrong registers.
+        /// </remarks>
+        /// <param name="parameters">The declaration's parameter types, in order.</param>
+        /// <returns>The form, or <see cref="NewTensorAbi.Unknown"/>.</returns>
+        internal static NewTensorAbi Classify(Type[] parameters)
+        {
+            Type[] p = parameters;
+            bool head = p.Length >= 6 && p[0] == typeof(IntPtr) && typeof(Delegate).IsAssignableFrom(p[1])
+                        && p[2] == typeof(IntPtr) && p[3] == typeof(int) && p[4] == typeof(sbyte);
+            if (!head)
+                return NewTensorAbi.Unknown;
+            if (p.Length == 9 && p[5] == typeof(sbyte) && p[6] == typeof(int) && p[7] == typeof(int) && p[8] == typeof(bool))
+                return NewTensorAbi.Args9;
+            if (p.Length == 6 && p[5] == typeof(bool))
+                return NewTensorAbi.Args6;
             return NewTensorAbi.Unknown;
         }
 

@@ -137,9 +137,13 @@ namespace NumSharp.Interop.TorchSharp
                 case ScalarType.Float64: return NPTypeCode.Double;
                 case ScalarType.ComplexFloat64: return NPTypeCode.Complex;
                 default:
+                    // Not "NumSharp has no ...": libtorch's uint16 / uint32 / uint64 (c10 27-29) ARE NumSharp dtypes, but
+                    // TorchSharp's ScalarType does not name them, so the bridge never makes such a tensor (the owner's NEP 50
+                    // decision); bfloat16, complex64 and the quantized types have no NumSharp layout to write.
                     throw new ArgumentException(
-                        $"{nameof(AsTensor)}: NumSharp has no {Name(dtype)} to convert into. Cross the array as it is and convert on the " +
-                        $"torch side (for example nd.AsTensor().to(ScalarType.{Name(dtype)})).", nameof(dtype));
+                        $"{nameof(AsTensor)}: dtype {Name(dtype)} is not one the bridge converts into: it writes only the ten dtypes NumSharp " +
+                        "and TorchSharp share (Bool, Byte, Int8, Int16, Int32, Int64, Float16, Float32, Float64, ComplexFloat64). Cross the " +
+                        $"array as it is and convert on the torch side (nd.AsTensor().to(...)).", nameof(dtype));
             }
         }
 
@@ -321,7 +325,7 @@ namespace NumSharp.Interop.TorchSharp
         /// <returns>The tensor.</returns>
         /// <exception cref="NotSupportedException">The loaded TorchSharp's <c>THSTensor_new</c> is unknown.</exception>
         /// <exception cref="System.Runtime.InteropServices.ExternalException">libtorch refused the tensor.</exception>
-        private static unsafe Tensor FromBlob(void* data, long[] dims, ScalarType scalarType, ExportLease lease)
+        internal static unsafe Tensor FromBlob(void* data, long[] dims, ScalarType scalarType, ExportLease lease)
         {
             IntPtr handle;
             try

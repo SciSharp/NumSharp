@@ -121,7 +121,7 @@ namespace NumSharp.Tests.Interop.TorchSharp
         {
             using NDArray nd = np.ones(new Shape(3), np.float32);
             Action bf16 = () => nd.AsTensor(dtype: ScalarType.BFloat16);
-            bf16.Should().Throw<ArgumentException>().WithMessage("*no BFloat16*torch side*");
+            bf16.Should().Throw<ArgumentException>().WithMessage("*dtype BFloat16 is not one the bridge converts into*torch side*");
             Action c64 = () => nd.AsTensor(dtype: ScalarType.ComplexFloat32);
             c64.Should().Throw<ArgumentException>().WithMessage("*ComplexFloat32*");
             Action casting = () => nd.AsTensor(casting: "kind");

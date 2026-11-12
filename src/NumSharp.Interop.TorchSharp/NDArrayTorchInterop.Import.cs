@@ -141,7 +141,7 @@ namespace NumSharp.Interop.TorchSharp
         /// <returns>The view.</returns>
         /// <exception cref="System.Runtime.InteropServices.ExternalException">libtorch reported an error reading the data pointer.</exception>
         /// <exception cref="NotSupportedException">The tensor has no addressable storage.</exception>
-        private static unsafe NDArray AdoptHandle(IntPtr handle, NPTypeCode code, long[] dims, long[] strides, bool readOnly)
+        internal static unsafe NDArray AdoptHandle(IntPtr handle, NPTypeCode code, long[] dims, long[] strides, bool readOnly)
         {
             ImportLease lease = null;
             try
@@ -344,7 +344,7 @@ namespace NumSharp.Interop.TorchSharp
         /// <param name="strides">The element strides to read (adopted by the view's Shape).</param>
         /// <returns>The transient view; dispose it before the tensor can go away.</returns>
         /// <exception cref="NotSupportedException">The tensor has no addressable storage.</exception>
-        private static unsafe NDArray Transient(Tensor work, NPTypeCode code, long[] dims, long[] strides)
+        internal static unsafe NDArray Transient(Tensor work, NPTypeCode code, long[] dims, long[] strides)
         {
             IntPtr data = LibTorchSharpNative.THSTensor_data(work.Handle);
             if (data == IntPtr.Zero)

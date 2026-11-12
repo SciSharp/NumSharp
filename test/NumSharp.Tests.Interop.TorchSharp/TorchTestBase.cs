@@ -102,7 +102,10 @@ namespace NumSharp.Tests.Interop.TorchSharp
         /// <returns>The bytes.</returns>
         protected static byte[] BytesOf(Tensor t)
         {
-            using Tensor dense = t.contiguous().clone();   // clone: a contiguous tensor's contiguous() is itself
+            // contiguous() of a contiguous tensor is a second handle on the SAME storage (for an exported tensor: the NumSharp
+            // buffer), so it is disposed here rather than left to a scope or the finalizer; clone() makes the bytes torch's own.
+            using Tensor contiguous = t.contiguous();
+            using Tensor dense = contiguous.clone();
             return dense.numel() == 0 ? Array.Empty<byte>() : dense.bytes.ToArray();
         }
 
