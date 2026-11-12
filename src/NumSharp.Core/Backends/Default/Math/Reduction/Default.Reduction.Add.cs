@@ -9,15 +9,17 @@ namespace NumSharp.Backends
     {
         /// <summary>
         ///     <c>np.sum</c> / <c>ndarray.sum</c> / <c>np.add.reduce</c>: the add reduction of <paramref name="arr"/>
-        ///     over <paramref name="axis_"/> (every axis when null), computed the way NumPy's
+        ///     over <paramref name="axis"/> (every axis when null), computed the way NumPy's
         ///     <c>PyUFunc_ReduceWrapper</c> computes it — the result is first assigned the loop's IDENTITY (+0.0 for an
         ///     inexact loop, 0 / False otherwise) and only then does the add loop run over every element. A sum of only
         ///     negative zeros is therefore +0.0 (each part of a complex), including the one-element and length-1-axis
         ///     reductions that look like a plain copy.
         /// </summary>
         /// <param name="arr">The array to reduce; any dtype and any layout (contiguous, strided, reversed, F, broadcast, 0-d).</param>
-        /// <param name="axis_">The axis to reduce (negative counts from the last), or null to reduce every axis. A 0-d
-        /// array also accepts 0 and -1, which ufunc.reduce reads as "every axis" (NumPy's backward-compatibility rule).</param>
+        /// <param name="axis">The axis to reduce (negative counts from the last), a tuple of axes reduced together (the empty
+        /// tuple reduces none: every output is the identity plus its one element), or null to reduce every axis. A 0-d
+        /// array also accepts the INTEGERS 0 and -1, which ufunc.reduce reads as "every axis" (NumPy's
+        /// backward-compatibility rule); a tuple item gets no such allowance.</param>
         /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
         /// <param name="dtype">NumPy's <c>dtype=</c>: the LOOP dtype — every element is cast to it (unsafely, element by
         /// element) before it is added, and the sum is computed and returned in it. Null selects the NEP 50 accumulator
@@ -34,9 +36,13 @@ namespace NumSharp.Backends
         /// <param name="where">NumPy's <c>where=</c> mask of the elements to add, or null (a 0-d true mask is no mask).</param>
         /// <returns>The sum: a read-only 0-d scalar for a full reduction without keepdims, otherwise a fresh array (or
         /// <paramref name="out"/>).</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range for <paramref name="arr"/>'s rank.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of range for
+        /// <paramref name="arr"/>'s rank.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only, or has the wrong rank or a length that cannot hold
-        /// the result (the reduce prologue's texts); an <paramref name="initial"/> the loop cannot hold.</exception>
+        /// the result (the reduce prologue's texts); an <paramref name="initial"/> the loop cannot hold; a tuple names an
+        /// axis twice (<c>duplicate value in 'axis'</c>, after the out / where checks and every item's bounds); a
+        /// <c>StringDType</c> sum over two axes or more (<c>reduction operation 'add' is not reorderable, so at most one
+        /// axis may be specified</c>).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast
         /// against the input (NumPy's "remapped shapes" text).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
@@ -63,8 +69,47 @@ namespace NumSharp.Backends
         ///     where this route rounds into out once.
         ///     </para>
         /// </remarks>
-        public override NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+        public override NDArray ReduceAdd(NDArray arr, NDAxis? axis, bool keepdims = false, DType dtype = null, NDArray @out = null,
             object initial = null, NDArray @where = null)
+        {
+            // A tuple. NumPy builds the same reduction flags for a tuple of ONE axis as for that integer, and for a tuple of
+            // EVERY axis as for None, so those take the integer / None routes below (their exact schedules, their text
+            // routes). Any other tuple - a set of two axes or more short of every axis, the empty tuple of an input with
+            // dimensions, or a tuple NumPy refuses - is add.reduce's own statements through the reduction iterator over the
+            // whole set at once (AddMulNumPy from the identity), which raise in NumPy's order: the out / where converters,
+            // each item's bounds, then the repeat.
+            if (axis is { IsTuple: true } tuple)
+            {
+                if (ReductionArguments.TryIntegerForm(arr.ndim, tuple, out int? single))
+                    return ReduceAddAlong(arr, single, keepdims, dtype, @out, initial, @where);
+                return AddMulNumPy(arr, tuple, keepdims, dtype, @out, initial, IsTrueScalarMask(@where) ? null : @where,
+                    multiply: false);
+            }
+            return ReduceAddAlong(arr, ReductionArguments.IntegerAxis(axis), keepdims, dtype, @out, initial, @where);
+        }
+
+        /// <summary>
+        ///     The integer-axis and <c>None</c> routes of <see cref="ReduceAdd"/>: NumPy's add.reduce over
+        ///     <paramref name="axis_"/> (every axis when null), with the schedules and the shortcuts each route keeps (see
+        ///     <see cref="ReduceAdd"/> for the whole contract).
+        /// </summary>
+        /// <param name="arr">The array to reduce.</param>
+        /// <param name="axis_">The axis (negative counts from the last), or null for every axis; a 0-d input also accepts 0
+        ///     and -1 (ufunc.reduce's backward-compatibility rule).</param>
+        /// <param name="keepdims">When true the reduced axes stay with length 1.</param>
+        /// <param name="dtype">The loop dtype, or null for NumPy's resolution.</param>
+        /// <param name="out">NumPy's <c>out=</c>, or null.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>, or null.</param>
+        /// <param name="where">NumPy's <c>where=</c>, or null.</param>
+        /// <returns>The sum (see <see cref="ReduceAdd"/>).</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="ValueError">See <see cref="ReduceAdd"/>.</exception>
+        /// <exception cref="IncorrectShapeException">See <see cref="ReduceAdd"/>.</exception>
+        /// <exception cref="ArgumentException">See <see cref="ReduceAdd"/>.</exception>
+        /// <exception cref="OverflowError">See <see cref="ReduceAdd"/>.</exception>
+        /// <exception cref="TypeError">See <see cref="ReduceAdd"/>.</exception>
+        private NDArray ReduceAddAlong(NDArray arr, int? axis_, bool keepdims, DType dtype, NDArray @out, object initial,
+            NDArray @where)
         {
             // initial= / where=: PyUFunc_ReduceWrapper's statements through NumPy's reduction iterator (AddMulNumPy) — the
             // start value replaced, the masked runs. Python's where=True (a 0-d true mask) is no mask, and add has an

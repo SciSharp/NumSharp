@@ -152,19 +152,25 @@ namespace NumSharp
         ///     scalar without an axis, a column <c>(N, 1)</c> along the last axis, a row or the matrix itself otherwise.
         /// </summary>
         /// <param name="result">The plain reduction, unaliased (a matrix result, or <c>null</c>, comes back itself).</param>
-        /// <param name="axis">The caller's axis: it decides row or column for a 1-d plain result.</param>
+        /// <param name="axis">The caller's axis: <c>null</c> for None (the scalar), an int or a one-axis tuple (row or column
+        ///     for the 1-d plain result), or any other tuple (the kept-dims matrix: <c>(1, 1)</c> for <c>(0, 1)</c>, the
+        ///     whole matrix for <c>()</c>).</param>
         /// <returns>The 0-d result, a matrix view of it, or <paramref name="result"/>.</returns>
         /// <exception cref="ValueError">More than two axes longer than 1.</exception>
-        protected internal override NDArray _collapse(NDArray result, int? axis)
+        protected internal override NDArray _collapse(NDArray result, NDAxis? axis)
         {
             if (result is null || result is NDMatrix)
                 return result;
             Shape shape = result.Storage.Shape;
-            if (shape.NDim == 0)
-                return result;   // _collapse(None): self[0, 0], the scalar
+            // _collapse(None): self[0, 0], the scalar. A TUPLE keeps the keepdims=True result whatever it names, so its 0-d
+            // plain result (every axis reduced) is the 1 x 1 matrix the finalize rule below makes of it (probed 2.4.2:
+            // np.nansum(m, (0, 1)) is matrix([[13.]])).
+            if (shape.NDim == 0 && axis is not { IsTuple: true })
+                return result;
             // The reduced axis stays with extent 1 under keepdims=True; the plain reduction dropped it, so a 1-d result is put
-            // back as a column for the last axis and as a row for the first.
-            if (shape.NDim == 1 && axis is int along && (along == 1 || along == -1))
+            // back as a column for the last axis and as a row for the first (an int axis or a tuple of that one axis). The
+            // finalize rule rebuilds every other result: a 0-d one as (1, 1), a 1-d one as a row, a 2-d one as itself.
+            if (shape.NDim == 1 && axis is { Count: 1 } one && (one[0] == 1 || one[0] == -1))
                 return new NDMatrix(result.Storage.Alias(shape.AsMatrixColumn()));
             return FromWrapped(result);
         }

@@ -83,18 +83,19 @@ namespace NumSharp
         // ---- shared output helpers (random output is always a fresh C-contiguous owning array) ----
 
         /// <summary>
-        ///     True when <paramref name="size"/> is NumPy's <c>size=None</c> — the uninitialized
-        ///     <c>default(Shape)</c>, which asks for a single SCALAR draw.
+        ///     True when <paramref name="size"/> is NumPy's <c>size=None</c> — <c>null</c>, or the uninitialized
+        ///     <c>default(Shape)</c> the samplers took for None before API-parity batch 5 — which asks for a single SCALAR
+        ///     draw.
         /// </summary>
         /// <param name="size">The size argument as received.</param>
-        /// <returns>True only for the default (unset) shape.</returns>
+        /// <returns>True for null and for the default (unset) shape.</returns>
         /// <remarks>
         ///     <c>size=()</c> (<see cref="Shape.Scalar"/>) is deliberately NOT "no size": NumPy fills a 0-d
         ///     ARRAY for it (<c>np.empty(())</c>), which keeps a float32 dtype, while <c>size=None</c> returns a
         ///     Python scalar and widens a float32 draw to float64. Treating the two alike made
         ///     <c>random((), dtype=float32)</c> return float64. Both still consume exactly one draw.
         /// </remarks>
-        private static bool IsNoSize(Shape size) => size.IsEmpty;
+        private static bool IsNoSize(Shape? size) => size is not { } given || given.IsEmpty;
 
         /// <summary>Allocates <paramref name="shape"/> as float64 and fills it with <c>next_double</c> draws.</summary>
         /// <param name="shape">The output shape (may be 0-d or empty). Only its dimensions are used — NumPy's
@@ -132,14 +133,15 @@ namespace NumSharp
         /// <summary>
         ///     Return random floats in the half-open interval <c>[0.0, 1.0)</c>.
         /// </summary>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value; <c>()</c> returns a 0-d array.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single value;
+        ///     <c>()</c> returns a 0-d array.</param>
         /// <param name="dtype">Desired dtype — only native <c>float64</c> (default) and <c>float32</c> are supported.</param>
         /// <param name="out">Optional C- or F-contiguous output array to fill in memory order; returned when given.</param>
         /// <returns>The draws; a float64 0-d array for <c>size=None</c> (NumPy widens a float32 scalar draw to a Python float).</returns>
         /// <exception cref="TypeError"><paramref name="dtype"/> is not a native float32/float64, or <paramref name="out"/> has the wrong dtype.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is not contiguous/writeable, or its shape disagrees with <paramref name="size"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.random.html</remarks>
-        public NDArray random(Shape size = default, DType dtype = null, NDArray @out = null)
+        public NDArray random(Shape? size = null, DType dtype = null, NDArray @out = null)
         {
             dtype ??= DType.Double;
             NPTypeCode tc = ResolveFloatDtype(dtype, "random");
@@ -164,7 +166,7 @@ namespace NumSharp
                     return NDArray.WritableScalar(_bitGenerator.NextDouble());
                 }
 
-                return tc == NPTypeCode.Single ? FillFloats(size, _bitGenerator) : FillDoubles(size, _bitGenerator);
+                return tc == NPTypeCode.Single ? FillFloats(size.GetValueOrDefault(), _bitGenerator) : FillDoubles(size.GetValueOrDefault(), _bitGenerator);
             }
         }
 
@@ -207,7 +209,8 @@ namespace NumSharp
         ///     <c>check_output</c> in <c>_common.pyx</c>).
         /// </summary>
         /// <param name="out">The user-supplied output array.</param>
-        /// <param name="size">The size argument (<c>None</c> skips the shape check; <c>()</c> requires a 0-d out).</param>
+        /// <param name="size">The size argument (<c>null</c>, NumPy's <c>None</c>, skips the shape check; <c>()</c> requires a
+        ///     0-d out).</param>
         /// <param name="loopType">The dtype the fill writes.</param>
         /// <param name="requireCContiguous">
         ///     NumPy's <c>require_c_array</c>: false for the plain fills (<c>double_fill</c>/<c>float_fill</c> —
@@ -220,7 +223,7 @@ namespace NumSharp
         ///     The checks run in NumPy's order (contiguity/writability → dtype → shape) with its verbatim
         ///     messages, so a call that is wrong in several ways reports the same first error NumPy does.
         /// </remarks>
-        private static void ValidateOut(NDArray @out, Shape size, NPTypeCode loopType, bool requireCContiguous)
+        private static void ValidateOut(NDArray @out, Shape? size, NPTypeCode loopType, bool requireCContiguous)
         {
             bool layoutOk = @out.Shape.IsContiguous || (!requireCContiguous && @out.Shape.IsFContiguous);
             if (!(layoutOk && @out.Shape.IsWriteable))
@@ -230,7 +233,7 @@ namespace NumSharp
             }
             if (@out.GetTypeCode != loopType)
                 throw new TypeError($"Supplied output array has the wrong type. Expected {loopType.AsNumpyDtypeName()}, got {@out.GetTypeCode.AsNumpyDtypeName()}");
-            if (!IsNoSize(size) && !size.Equals(@out.Shape))
+            if (!IsNoSize(size) && !size.Value.Equals(@out.Shape))
                 throw new ValueError("size must match out.shape when used together");
         }
 

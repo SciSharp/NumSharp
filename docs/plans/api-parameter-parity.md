@@ -1523,7 +1523,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     reductions.
   - Not changed:
     - no tuple axis for sum / prod / mean / std / var / max / min / the nan reductions / squeeze / roll / size / cumsum
-      (the library-wide gap);
+      (the library-wide gap; closed for all but cumsum, which takes one axis in NumPy too, by API-parity batches 4 and 5,
+      2026-11-12);
     - np.average over a tuple axis reduces one axis at a time: a mean of means, and with weights a sum of sums, where
       NumPy runs ONE add.reduce over the axis set. Its last bits differ on order-sensitive data (pinned:
       `OpenBugsReductionTests.Average_TupleAxis_IsOneReductionOverTheAxisSet`); the fix is that same multi-axis
@@ -2051,6 +2052,30 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    one, test the cases where the old one would answer differently.
 
 ## 7. State log
+
+- **2026-11-12**: API-parity batch 5 on `journey5` (branch `api-parity/batch-05`; the owner approved 14 of 15 picks
+  and deferred the legacy np.random samplers' `size=None`, to be offered again with a clearer example): NumPy's TUPLE
+  axis for np.sum, np.prod, np.mean, np.var, np.std, np.max / np.amax, np.min / np.amin, np.nansum, np.nanprod,
+  np.nanmean, np.nanvar, np.nanstd, np.nanmax, np.nanmin, their ndarray methods and numpy.matrix's [NumPyMethod]
+  forms (NDAxis?; the 14 TensorEngine members too, NDArray.NanMax / NanMin and `_collapse` virtuals included). A tuple
+  of one axis or every axis takes the integer / None route (`ReductionArguments.TryIntegerForm`); any other set runs the
+  function's NumPy statements over the whole set through the reduction iterator (AddMulNumPy, MaxMinNumPy, the _mean /
+  _var ports, the nan keyword statements), so the bits are NumPy's call schedule, the layouts its iterator's, and the
+  errors come in NumPy's order (the converters, each item's range, the repeat; np.mean's count before its sum).
+  StringDType's add / maximum / minimum refuse two axes or more (not reorderable) and compute the empty tuple. np.roll
+  has ONE signature, `roll(a, NDArray shift, NDAxis? axis = null)`, ported statement for statement (broadcast(shift,
+  axis), `int(sh)` per element summed in arbitrary precision, Python's modulo, the slice-copy product; the int / long
+  shift overloads went, both convert). np.argmax / np.argmin and the ndarray methods keep one axis signature (`NDAxis?`;
+  the typed `(a, int axis, bool keepdims)` forms went, `long argmax(a)` stays, S8): a tuple of any length is NumPy's
+  `TypeError "'tuple' object cannot be interpreted as an integer"`, a C# literal as out= its `"output must be an
+  array"`. The Generator samplers (75 overloads of 38 names) take `Shape? size = null` (OD4). NumSharp.Build hands an
+  NDAxis axis to the `[ReducesThrough]` collapse (`NDSubclass.CollapseAxes`), so np.nansum(m, (0, 1)) of a matrix is
+  NumPy's 1 x 1 matrix (np.median / np.percentile's full tuple too). Caller migration: 7 positional `keepdims` of the
+  removed typed argmax / argmin forms (a compile trap; they would have bound out=). Two fixed `[OpenBugs]` pins became
+  regression pins (the 17 reductions' tuple probe, QB-60's `axis: null`); the quantile family's matrix pin keeps only
+  percentile / quantile's axis-1 row. Oracle: the reduce_kwargs tier generates the five reductions' tuple cells, the
+  axis_args tier tuple jobs for the 16 reductions, argmax / argmin's refusal and roll; the random-API surface and corpus
+  were regenerated for `Shape?`.
 
 - **2026-11-12**: API-parity batch 4 on `journey5` (branch `api-parity/batch-04`; the owner approved all 15 picks and
   decided OD4): OD1's `NDAxis` (`View/NDAxis.cs`: implicit from `int` / `int[]` / `(int, int)` / `(int, int, int)`, public

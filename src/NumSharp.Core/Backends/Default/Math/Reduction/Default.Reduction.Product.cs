@@ -8,11 +8,13 @@ namespace NumSharp.Backends
     {
         /// <summary>
         ///     NumPy's <c>np.prod</c> (<c>np.multiply.reduce</c>): the product of <paramref name="arr"/>'s elements over
-        ///     <paramref name="axis_"/>, or over every axis when it is null, in NEP 50's accumulator dtype.
+        ///     <paramref name="axis"/>, or over every axis when it is null, in NEP 50's accumulator dtype.
         /// </summary>
         /// <param name="arr">The array.</param>
-        /// <param name="axis_">The reduced axis (negative values count from the end), or null for every axis. A 0-d input
-        ///     accepts 0 and -1 (NumPy's backward-compatibility rule) and nothing else.</param>
+        /// <param name="axis">The reduced axis (negative values count from the end), a tuple of axes reduced together in one
+        ///     pass of NumPy's reduction iterator (the empty tuple reduces none: every output is 1 times its element), or null
+        ///     for every axis. A 0-d input accepts the INTEGERS 0 and -1 (NumPy's backward-compatibility rule) and nothing
+        ///     else; a tuple item gets no such allowance.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
         /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null for the accumulator of the input (for
         ///     <c>promote_types(out, arr)</c> when <paramref name="out"/> is given).</param>
@@ -27,13 +29,14 @@ namespace NumSharp.Backends
         ///     mask).</param>
         /// <returns><paramref name="out"/> itself when given; otherwise the product (a read-only 0-d scalar for a full
         ///     reduction).</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before any shortcut.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of range — checked before any
+        ///     shortcut.</exception>
         /// <exception cref="TypeError">Text, or a string <paramref name="dtype"/>: NumPy's refusal (its verbatim text; no
         ///     multiply loop reduces text into itself); a C# scalar as <paramref name="out"/>; a complex
         ///     <paramref name="initial"/> for a real loop.</exception>
         /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number, a
-        ///     read-only / misshapen <paramref name="out"/> (the reduce prologue's texts), or an <paramref name="initial"/>
-        ///     the loop cannot hold.</exception>
+        ///     read-only / misshapen <paramref name="out"/> (the reduce prologue's texts), an <paramref name="initial"/>
+        ///     the loop cannot hold, or a tuple that names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast
         ///     against the input.</exception>
@@ -45,8 +48,44 @@ namespace NumSharp.Backends
         ///     against the elementwise form (<c>simd_cmul</c>, a float16 rounding per product). The other loops keep the flat /
         ///     axis kernels.
         /// </remarks>
-        public override NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+        public override NDArray ReduceProduct(NDArray arr, NDAxis? axis, bool keepdims = false, DType dtype = null, NDArray @out = null,
             object initial = null, NDArray @where = null)
+        {
+            // A tuple: one axis or every axis is the integer / None route (NumPy's same flags); any other tuple is
+            // multiply.reduce's own statements over the whole set (AddMulNumPy from the identity 1), which raise in NumPy's
+            // order (see ReduceAdd).
+            if (axis is { IsTuple: true } tuple)
+            {
+                if (ReductionArguments.TryIntegerForm(arr.ndim, tuple, out int? single))
+                    return ReduceProductAlong(arr, single, keepdims, dtype, @out, initial, @where);
+                return AddMulNumPy(arr, tuple, keepdims, dtype, @out, initial, IsTrueScalarMask(@where) ? null : @where,
+                    multiply: true);
+            }
+            return ReduceProductAlong(arr, ReductionArguments.IntegerAxis(axis), keepdims, dtype, @out, initial, @where);
+        }
+
+        /// <summary>
+        ///     The integer-axis and <c>None</c> routes of <see cref="ReduceProduct"/>: NumPy's multiply.reduce over
+        ///     <paramref name="axis_"/> (every axis when null), with the kernels and the shortcuts each route keeps (see
+        ///     <see cref="ReduceProduct"/> for the whole contract).
+        /// </summary>
+        /// <param name="arr">The array.</param>
+        /// <param name="axis_">The reduced axis (negative values count from the end), or null for every axis; a 0-d input
+        ///     accepts 0 and -1.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="dtype">The loop dtype, or null.</param>
+        /// <param name="out">NumPy's <c>out=</c>, or null.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>, or null.</param>
+        /// <param name="where">NumPy's <c>where=</c>, or null.</param>
+        /// <returns>The product (see <see cref="ReduceProduct"/>).</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="TypeError">See <see cref="ReduceProduct"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="ReduceProduct"/>.</exception>
+        /// <exception cref="ArgumentException">See <see cref="ReduceProduct"/>.</exception>
+        /// <exception cref="IncorrectShapeException">See <see cref="ReduceProduct"/>.</exception>
+        /// <exception cref="OverflowError">See <see cref="ReduceProduct"/>.</exception>
+        private NDArray ReduceProductAlong(NDArray arr, int? axis_, bool keepdims, DType dtype, NDArray @out, object initial,
+            NDArray @where)
         {
             // initial= / where=: PyUFunc_ReduceWrapper's statements through NumPy's reduction iterator (AddMulNumPy). A 0-d
             // true mask is Python's where=True, no mask; multiply has an identity, so that call is the plain call below.

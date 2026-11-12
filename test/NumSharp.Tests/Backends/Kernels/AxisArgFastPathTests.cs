@@ -44,7 +44,7 @@ public class AxisArgFastPathTests
         DefaultEngine.DisableFastAxisArg = true;
         try
         {
-            legacy = isMax ? np.argmax(a, axis, keepdims) : np.argmin(a, axis, keepdims);
+            legacy = isMax ? np.argmax(a, axis, keepdims: keepdims) : np.argmin(a, axis, keepdims: keepdims);
         }
         finally
         {
@@ -52,7 +52,7 @@ public class AxisArgFastPathTests
         }
 
         long before = DefaultEngine.FastAxisArgRuns;
-        var fast = isMax ? np.argmax(a, axis, keepdims) : np.argmin(a, axis, keepdims);
+        var fast = isMax ? np.argmax(a, axis, keepdims: keepdims) : np.argmin(a, axis, keepdims: keepdims);
         Assert.AreEqual(before + 1, DefaultEngine.FastAxisArgRuns, $"{what}: the fast fold must run");
 
         Assert.AreEqual(NPTypeCode.Int64, fast.typecode, $"{what}: dtype");

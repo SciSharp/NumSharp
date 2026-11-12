@@ -12,7 +12,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="low">Lowest integer drawn (or, when <paramref name="high"/> is null, one above the highest with low = 0).</param>
         /// <param name="high">If provided, one above the largest integer drawn (or the largest when <paramref name="endpoint"/>).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value; <c>()</c> returns a 0-d array.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single value;
+        ///     <c>()</c> returns a 0-d array.</param>
         /// <param name="dtype">Desired native integer or bool dtype. Default is int64.</param>
         /// <param name="endpoint">If true, sample from the closed interval <c>[low, high]</c>.</param>
         /// <returns>The draws, of <paramref name="dtype"/>.</returns>
@@ -31,8 +32,8 @@ namespace NumSharp
         ///     the bounds are checked and draws nothing, exactly as NumPy's <c>_rand_*</c> does. Validation and
         ///     the per-width fills are shared with the legacy <c>randint</c> (<see cref="BoundedIntegers"/>).
         /// </remarks>
-        public NDArray integers(long low, long? high = null, Shape size = default, DType dtype = null, bool endpoint = false)
-            => BoundedIntegers.Draw(_bitGenerator, low, high.HasValue ? (Int128)high.Value : (Int128?)null, size,
+        public NDArray integers(long low, long? high = null, Shape? size = null, DType dtype = null, bool endpoint = false)
+            => BoundedIntegers.Draw(_bitGenerator, low, high.HasValue ? (Int128)high.Value : (Int128?)null, size.GetValueOrDefault(),
                                     dtype ?? DType.Int64, endpoint, useMasked: false, "integers", legacyByteOrder: false);
 
         /// <summary>
@@ -44,7 +45,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="low">Lowest integer drawn (or, when <paramref name="high"/> is null, one above the highest with low = 0).</param>
         /// <param name="high">If provided, one above the largest integer drawn (or the largest when <paramref name="endpoint"/>).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value; <c>()</c> returns a 0-d array.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single value;
+        ///     <c>()</c> returns a 0-d array.</param>
         /// <param name="dtype">Desired native integer or bool dtype. Default is int64.</param>
         /// <param name="endpoint">If true, sample from the closed interval <c>[low, high]</c>.</param>
         /// <returns>The draws, of <paramref name="dtype"/>.</returns>
@@ -54,8 +56,8 @@ namespace NumSharp
         ///     Both overloads share one arbitrary-precision (<see cref="Int128"/>) range check, so every value
         ///     expressible in either spelling is validated exactly as NumPy validates the Python int.
         /// </remarks>
-        public NDArray integers(ulong low, ulong? high = null, Shape size = default, DType dtype = null, bool endpoint = false)
-            => BoundedIntegers.Draw(_bitGenerator, low, high.HasValue ? (Int128)high.Value : (Int128?)null, size,
+        public NDArray integers(ulong low, ulong? high = null, Shape? size = null, DType dtype = null, bool endpoint = false)
+            => BoundedIntegers.Draw(_bitGenerator, low, high.HasValue ? (Int128)high.Value : (Int128?)null, size.GetValueOrDefault(),
                                     dtype ?? DType.Int64, endpoint, useMasked: false, "integers", legacyByteOrder: false);
 
         /// <summary>
@@ -65,7 +67,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="low">Lowest integer drawn (or, when <paramref name="high"/> is null, one above the highest with low = 0).</param>
         /// <param name="high">If provided, one above the largest integer drawn (or the largest when <paramref name="endpoint"/>).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value; <c>()</c> returns a 0-d array.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single value;
+        ///     <c>()</c> returns a 0-d array.</param>
         /// <param name="dtype">Desired native integer or bool dtype. Default is int64.</param>
         /// <param name="endpoint">If true, sample from the closed interval <c>[low, high]</c>.</param>
         /// <returns>The draws, of <paramref name="dtype"/>.</returns>
@@ -76,9 +79,9 @@ namespace NumSharp
         ///     Validated exactly as NumPy validates the Python int: a value past <c>±2**100</c> — beyond every dtype's range —
         ///     reaches the checks clamped, which report the same error the exact value would.
         /// </remarks>
-        public NDArray integers(BigInteger low, BigInteger? high = null, Shape size = default, DType dtype = null, bool endpoint = false)
+        public NDArray integers(BigInteger low, BigInteger? high = null, Shape? size = null, DType dtype = null, bool endpoint = false)
             => BoundedIntegers.Draw(_bitGenerator, BoundedIntegers.ClampToInt128(low),
-                                    high.HasValue ? BoundedIntegers.ClampToInt128(high.Value) : (Int128?)null, size,
+                                    high.HasValue ? BoundedIntegers.ClampToInt128(high.Value) : (Int128?)null, size.GetValueOrDefault(),
                                     dtype ?? DType.Int64, endpoint, useMasked: false, "integers", legacyByteOrder: false);
 
         /// <summary>
@@ -90,7 +93,8 @@ namespace NumSharp
         /// <param name="low">The low bound(s) — any integer, bool or float array (a float truncates toward zero, as Python's
         ///     <c>int()</c> and NumPy's forced cast do). Null is Python's <c>None</c> (a <see cref="TypeError"/>).</param>
         /// <param name="high">The high bound(s); null is NumPy's <c>high=None</c>: the bounds are <c>[0, low)</c>.</param>
-        /// <param name="size">Output shape; default is the bounds' broadcast shape (or one value when both are 0-d).</param>
+        /// <param name="size">Output shape; <c>null</c> (NumPy's <c>None</c>, the default) is the bounds' broadcast
+        ///     shape (or one value when both are 0-d).</param>
         /// <param name="dtype">Desired native integer or bool dtype. Default is int64.</param>
         /// <param name="endpoint">If true, sample from the closed interval <c>[low, high]</c>.</param>
         /// <returns>The draws, of <paramref name="dtype"/>.</returns>
@@ -109,8 +113,8 @@ namespace NumSharp
         ///     bounds in a non-C layout) — see <see cref="BoundedIntegers.DrawArray"/>. Byte-identical to
         ///     <c>default_rng(seed).integers(low_arr, high_arr, ...)</c>.
         /// </remarks>
-        public NDArray integers(NDArray low, NDArray high = null, Shape size = default, DType dtype = null, bool endpoint = false)
-            => BoundedIntegers.DrawArray(_bitGenerator, low, high, size, dtype ?? DType.Int64, endpoint, useMasked: false,
+        public NDArray integers(NDArray low, NDArray high = null, Shape? size = null, DType dtype = null, bool endpoint = false)
+            => BoundedIntegers.DrawArray(_bitGenerator, low, high, size.GetValueOrDefault(), dtype ?? DType.Int64, endpoint, useMasked: false,
                                          "integers", legacyByteOrder: false);
 
         /// <summary>

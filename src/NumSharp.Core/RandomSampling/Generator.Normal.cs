@@ -7,7 +7,8 @@ namespace NumSharp
         /// <summary>
         ///     Draw samples from a standard Normal distribution (mean 0, stdev 1).
         /// </summary>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value; <c>()</c> returns a 0-d array.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single value;
+        ///     <c>()</c> returns a 0-d array.</param>
         /// <param name="dtype">Desired dtype — native <c>float64</c> (default) or <c>float32</c>.</param>
         /// <param name="out">Optional C- or F-contiguous output array, filled in memory order and returned.</param>
         /// <returns>The draws; a float64 0-d array for <c>size=None</c> even when <paramref name="dtype"/> is float32.</returns>
@@ -17,7 +18,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.standard_normal.html
         ///     <br/>Uses NumPy's ziggurat sampler, so the stream matches <c>default_rng(seed).standard_normal(...)</c>.
         /// </remarks>
-        public NDArray standard_normal(Shape size = default, DType dtype = null, NDArray @out = null)
+        public NDArray standard_normal(Shape? size = null, DType dtype = null, NDArray @out = null)
         {
             dtype ??= DType.Double;
             NPTypeCode tc = ResolveFloatDtype(dtype, "standard_normal");
@@ -44,7 +45,7 @@ namespace NumSharp
 
                 // NumPy's np.empty(size, dtype), from `size`'s dimensions only (AsClean): the fill writes in memory order,
                 // so a view's Shape must not reach the allocation.
-                var ret = new NDArray(tc == NPTypeCode.Single ? typeof(float) : typeof(double), size.AsClean(), false);
+                var ret = new NDArray(tc == NPTypeCode.Single ? typeof(float) : typeof(double), size.GetValueOrDefault().AsClean(), false);
                 unsafe
                 {
                     if (tc == NPTypeCode.Single) FillStandardNormalF((float*)ret.Address, ret.size);
@@ -59,14 +60,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="loc">Mean of the distribution.</param>
         /// <param name="scale">Standard deviation (sign bit must be clear; NaN propagates).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (NumPy's <c>scale &lt; 0</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.normal.html
         ///     <br/><c>loc + scale * standard_normal()</c>, byte-identical to NumPy.
         /// </remarks>
-        public NDArray normal(double loc = 0.0, double scale = 1.0, Shape size = default)
+        public NDArray normal(double loc = 0.0, double scale = 1.0, Shape? size = null)
         {
             CheckNonNegative(scale, "scale");
 
@@ -77,7 +79,7 @@ namespace NumSharp
 
                 // loc + scale * z for each standard normal z — the same expression per element as NumPy's cont(), into
                 // np.empty(size) built from `size`'s dimensions only (AsClean): the fill writes in memory order.
-                var ret = new NDArray(typeof(double), size.AsClean(), false);
+                var ret = new NDArray(typeof(double), size.GetValueOrDefault().AsClean(), false);
                 unsafe
                 {
                     var p = (double*)ret.Address;

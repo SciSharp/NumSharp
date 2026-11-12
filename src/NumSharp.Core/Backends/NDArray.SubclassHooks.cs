@@ -89,10 +89,13 @@ namespace NumSharp
         ///     <c>_collapse</c>.
         /// </summary>
         /// <param name="result">The plain reduction (keepdims=False), unaliased.</param>
-        /// <param name="axis">The caller's axis: it decides row or column for a 1-d plain result.</param>
+        /// <param name="axis">The caller's axis: <c>null</c> for None, an int (it decides row or column for a 1-d plain
+        ///     result), or a tuple (NumPy keeps every axis it names with length 1, the empty tuple included).</param>
         /// <returns><c>null</c>: this class has no <c>_collapse</c> (the reduction keeps NumPy's other answer).</returns>
         /// <remarks>Returning non-null claims the reduction's result for the class: only a subclass that collapses like
-        ///     numpy.matrix should override it (from another assembly as <c>protected override</c>).</remarks>
-        protected internal virtual NDArray _collapse(NDArray result, int? axis) => null;
+        ///     numpy.matrix should override it (from another assembly as <c>protected override</c>). The axis became NumPy's
+        ///     axis type with API-parity batch 5 (a breaking change for such an override, which took <c>int?</c>), so a tuple
+        ///     reaches the class instead of reading as None.</remarks>
+        protected internal virtual NDArray _collapse(NDArray result, NDAxis? axis) => null;
     }
 }

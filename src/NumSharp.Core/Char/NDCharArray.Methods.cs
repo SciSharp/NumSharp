@@ -460,7 +460,7 @@ namespace NumSharp
         ///     a plain text array's np.nanmax names <c>fmax</c>. An element's scalar stand-in is a NumPy scalar, computed as a
         ///     base ndarray.
         /// </summary>
-        /// <param name="axis">The axis to reduce, or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce, a tuple of axes, or <c>null</c> for every axis.</param>
         /// <param name="out">NumPy's <c>out=</c>, or <c>null</c>.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
         /// <param name="initial">NumPy's <c>initial=</c>, or <c>null</c>.</param>
@@ -482,7 +482,7 @@ namespace NumSharp
         ///     call; the cost is nil, as the text case always ends in np.amax's TypeError.</para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
-        protected internal override NDArray NanMax(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal override NDArray NanMax(NDAxis? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => IsScalarStandIn
                 ? base.NanMax(axis, @out, keepdims, initial, @where)
                 : np.amax(this, axis, @out, keepdims, initial, @where);
@@ -491,7 +491,7 @@ namespace NumSharp
         ///     np.nanmin of a chararray: NumPy's branch for subclasses, which for text (no NaN mask) is
         ///     <c>np.amin(a, axis=axis, out=out, **kwargs)</c> of the chararray itself (see <see cref="NanMax"/>).
         /// </summary>
-        /// <param name="axis">The axis to reduce, or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce, a tuple of axes, or <c>null</c> for every axis.</param>
         /// <param name="out">NumPy's <c>out=</c>, or <c>null</c>.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
         /// <param name="initial">NumPy's <c>initial=</c>, or <c>null</c>.</param>
@@ -504,7 +504,7 @@ namespace NumSharp
         ///     stay on the stack for the caller audit (the same <see cref="MethodImplAttribute"/>, for the same tail
         ///     jump to <c>np.&lt;amin&gt;subclass</c>).</remarks>
         [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
-        protected internal override NDArray NanMin(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal override NDArray NanMin(NDAxis? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => IsScalarStandIn
                 ? base.NanMin(axis, @out, keepdims, initial, @where)
                 : np.amin(this, axis, @out, keepdims, initial, @where);

@@ -46,7 +46,9 @@ namespace NumSharp
         ///     overload: NumPy's whole signature, with NumPy's names, order and defaults.
         /// </summary>
         /// <param name="a">Input data. A NaN propagates (use <see cref="nanmax"/> to skip NaNs).</param>
-        /// <param name="axis">The axis to reduce (negative counts from the end); <c>null</c> reduces every axis.</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end); <c>null</c> reduces every axis. A
+        ///     tuple (<c>(0, 2)</c>) reduces every axis it names together, in one pass (NumPy's tuple axis; the empty
+        ///     tuple reduces none, and a tuple item gets no 0-d allowance).</param>
         /// <param name="out">The array the result is written into and returned. It must have the result's shape (the
         ///     keepdims shape with <paramref name="keepdims"/>); its dtype may differ — the loop runs in the promotion of
         ///     (<paramref name="out"/>, <paramref name="a"/>), and the result is cast into it unsafely (a float64 maximum lands
@@ -85,7 +87,8 @@ namespace NumSharp
         ///     <paramref name="a"/>; <paramref name="where"/> without <paramref name="initial"/> ("reduction operation
         ///     'maximum' does not have an identity, so to use a where mask one has to specify 'initial'"); an empty reduced
         ///     axis without <paramref name="initial"/> ("zero-size array to reduction operation maximum which has no
-        ///     identity"); an unconvertible <paramref name="initial"/> (a float NaN into an integer loop, a sequence).</exception>
+        ///     identity"); an unconvertible <paramref name="initial"/> (a float NaN into an integer loop, a sequence).
+        ///     Also a tuple that names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast
@@ -97,7 +100,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/generated/numpy.max.html. There is no <c>dtype=</c>: NumPy's np.max has
         ///     none. A flat result is a 0-d array; read it as a C# value with a cast (<c>(double)np.max(a)</c>).
         /// </remarks>
-        public static NDArray max(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
+        public static NDArray max(NDArray a, NDAxis? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
@@ -108,34 +111,37 @@ namespace NumSharp
 
         /// <summary>
         ///     Return the maximum of an array or the maximum along an axis — NumPy's <c>np.amax</c>, an alias of
-        ///     <see cref="max(NDArray, int?, NDArray, bool, object, NDArray)"/> with the same signature (NumPy's
+        ///     <see cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the same signature (NumPy's
         ///     <c>(a, axis=None, out=None, keepdims=&lt;no value&gt;, initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>).
         ///     This is the only overload.
         /// </summary>
         /// <param name="a">Input data. A NaN propagates.</param>
-        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis. A tuple
+        ///     (<c>(0, 2)</c>) reduces every axis it names together, in one pass (NumPy's tuple axis; the empty tuple
+        ///     reduces none, and a tuple item gets no 0-d allowance).</param>
         /// <param name="out">The array the result is written into and returned (any dtype; a narrowing one is lossy, see
-        ///     <see cref="max(NDArray, int?, NDArray, bool, object, NDArray)"/>). Footgun: the third positional parameter, so
+        ///     <see cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>). Footgun: the third positional parameter, so
         ///     <c>np.amax(a, 1, true)</c> raises; write <c>keepdims: true</c> by name.</param>
         /// <param name="keepdims">Keep the reduced axes as length-1 dimensions.</param>
         /// <param name="initial">The value every output starts from, or <c>null</c>; required with <paramref name="where"/>.</param>
         /// <param name="where">A bool mask of the elements to reduce, or <c>null</c>; requires <paramref name="initial"/>.</param>
         /// <returns><paramref name="out"/> itself when given; else a fresh array (0-d for a flat reduction without keepdims). A
         ///     <c>numpy.matrix</c> operand gets the matrix method's answer (see
-        ///     <see cref="max(NDArray, int?, NDArray, bool, object, NDArray)"/>).</returns>
+        ///     <see cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>).</returns>
         /// <exception cref="TypeError"><paramref name="out"/> is a C# scalar ("return arrays must be of ArrayType");
         ///     <paramref name="initial"/> is complex for a real loop or of an unconvertible type; a <c>numpy.matrix</c> operand
         ///     with <c>keepdims: true</c>, <paramref name="initial"/> or <paramref name="where"/> (<c>matrix.max() got an
         ///     unexpected keyword argument ...</c>).</exception>
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain <paramref name="out"/>, after the values
         ///     were stored (<c>'numpy.ndarray' object has no attribute '_collapse'</c>).</exception>
-        /// <exception cref="ValueError">See <see cref="max(NDArray, int?, NDArray, bool, object, NDArray)"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>. Also a
+        ///     tuple that names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
         /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
-        public static NDArray amax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
+        public static NDArray amax(NDArray a, NDAxis? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
             => max(a, axis, @out, keepdims, initial, @where);
 
@@ -143,13 +149,15 @@ namespace NumSharp
         ///     Return the minimum of an array or the minimum along an axis — NumPy's <c>np.min(a, axis=None, out=None,
         ///     keepdims=&lt;no value&gt;, initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>, i.e.
         ///     <c>np.minimum.reduce(a, axis, out=out, keepdims=keepdims, initial=initial, where=where)</c>. The keywords
-        ///     behave as in <see cref="max(NDArray, int?, NDArray, bool, object, NDArray)"/>, with the minimum. This is the
+        ///     behave as in <see cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>, with the minimum. This is the
         ///     only overload.
         /// </summary>
         /// <param name="a">Input data. A NaN propagates (use <see cref="nanmin"/> to skip NaNs).</param>
-        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis. A tuple
+        ///     (<c>(0, 2)</c>) reduces every axis it names together, in one pass (NumPy's tuple axis; the empty tuple
+        ///     reduces none, and a tuple item gets no 0-d allowance).</param>
         /// <param name="out">The array the result is written into and returned (any dtype; a narrowing one is lossy, see
-        ///     <see cref="max(NDArray, int?, NDArray, bool, object, NDArray)"/>). Footgun: the third positional parameter, so
+        ///     <see cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>). Footgun: the third positional parameter, so
         ///     <c>np.min(a, 1, true)</c> raises; write <c>keepdims: true</c> by name.</param>
         /// <param name="keepdims">Keep the reduced axes as length-1 dimensions.</param>
         /// <param name="initial">The value every output starts from, or <c>null</c>; required with <paramref name="where"/>.</param>
@@ -163,14 +171,15 @@ namespace NumSharp
         ///     unexpected keyword argument ...</c>, the first one passed in that order).</exception>
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain <paramref name="out"/>, after the values
         ///     were stored (<c>'numpy.ndarray' object has no attribute '_collapse'</c>).</exception>
-        /// <exception cref="ValueError">See <see cref="max(NDArray, int?, NDArray, bool, object, NDArray)"/> ('minimum' in the texts).</exception>
+        /// <exception cref="ValueError">See <see cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> ('minimum'
+        ///     in the texts). Also a tuple that names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
         /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.min.html</remarks>
-        public static NDArray min(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
+        public static NDArray min(NDArray a, NDAxis? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
@@ -181,12 +190,14 @@ namespace NumSharp
 
         /// <summary>
         ///     Return the minimum of an array or the minimum along an axis — NumPy's <c>np.amin</c>, an alias of
-        ///     <see cref="min(NDArray, int?, NDArray, bool, object, NDArray)"/> with the same signature (NumPy's
+        ///     <see cref="min(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with the same signature (NumPy's
         ///     <c>(a, axis=None, out=None, keepdims=&lt;no value&gt;, initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>).
         ///     This is the only overload.
         /// </summary>
         /// <param name="a">Input data. A NaN propagates.</param>
-        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis. A tuple
+        ///     (<c>(0, 2)</c>) reduces every axis it names together, in one pass (NumPy's tuple axis; the empty tuple
+        ///     reduces none, and a tuple item gets no 0-d allowance).</param>
         /// <param name="out">The array the result is written into and returned. Footgun: the third positional parameter, so
         ///     <c>np.amin(a, 1, true)</c> raises; write <c>keepdims: true</c> by name.</param>
         /// <param name="keepdims">Keep the reduced axes as length-1 dimensions.</param>
@@ -194,20 +205,21 @@ namespace NumSharp
         /// <param name="where">A bool mask of the elements to reduce, or <c>null</c>; requires <paramref name="initial"/>.</param>
         /// <returns><paramref name="out"/> itself when given; else a fresh array (0-d for a flat reduction without keepdims). A
         ///     <c>numpy.matrix</c> operand gets the matrix method's answer (see
-        ///     <see cref="min(NDArray, int?, NDArray, bool, object, NDArray)"/>).</returns>
+        ///     <see cref="min(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>).</returns>
         /// <exception cref="TypeError"><paramref name="out"/> is a C# scalar ("return arrays must be of ArrayType");
         ///     <paramref name="initial"/> is complex for a real loop or of an unconvertible type; a <c>numpy.matrix</c> operand
         ///     with <c>keepdims: true</c>, <paramref name="initial"/> or <paramref name="where"/> (<c>matrix.min() got an
         ///     unexpected keyword argument ...</c>).</exception>
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain <paramref name="out"/>, after the values
         ///     were stored (<c>'numpy.ndarray' object has no attribute '_collapse'</c>).</exception>
-        /// <exception cref="ValueError">See <see cref="min(NDArray, int?, NDArray, bool, object, NDArray)"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="min(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>. Also a
+        ///     tuple that names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
         /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
-        public static NDArray amin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
+        public static NDArray amin(NDArray a, NDAxis? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
             => min(a, axis, @out, keepdims, initial, @where);
 
@@ -217,11 +229,13 @@ namespace NumSharp
         ///     <c>np.fmax.reduce(a, axis, out=out, keepdims=keepdims, initial=initial, where=where)</c>, reproduced bit for bit:
         ///     which zero sign survives a <c>±0</c> tie and which NaN an all-NaN slice returns (payload intact, never a canonical
         ///     NaN) are the ones NumPy 2.4.2 returns for the same layout. The keywords behave as in
-        ///     <see cref="max(NDArray, int?, NDArray, bool, object, NDArray)"/>; the texts name 'fmax' (for every dtype, an
+        ///     <see cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>; the texts name 'fmax' (for every dtype, an
         ///     integer array included). This is the only overload.
         /// </summary>
         /// <param name="a">Array containing numbers whose maximum is desired.</param>
-        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis. A tuple
+        ///     (<c>(0, 2)</c>) reduces every axis it names together, in one pass (NumPy's tuple axis; the empty tuple
+        ///     reduces none, and a tuple item gets no 0-d allowance).</param>
         /// <param name="out">The array the result is written into and returned. Footgun: the third positional parameter, so
         ///     <c>np.nanmax(a, 1, true)</c> raises; write <c>keepdims: true</c> by name.</param>
         /// <param name="keepdims">Keep the reduced axes as length-1 dimensions (for a flat reduction: shape <c>(1,)*a.ndim</c>).</param>
@@ -240,9 +254,10 @@ namespace NumSharp
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain <paramref name="out"/>: the method stores
         ///     the maxima of the NaN-replaced copy into it (an all-NaN slice as <c>-inf</c>), then fails on
         ///     <c>out._collapse</c>.</exception>
-        /// <exception cref="ValueError">See <see cref="max(NDArray, int?, NDArray, bool, object, NDArray)"/> ('fmax' in the
+        /// <exception cref="ValueError">See <see cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> ('fmax' in the
         ///     texts); an empty reduction without <paramref name="initial"/> raises (<c>fmax</c> has no identity; 'maximum' for a
-        ///     <c>numpy.matrix</c> operand, whose route reduces with the method) — it does not return NaN.</exception>
+        ///     <c>numpy.matrix</c> operand, whose route reduces with the method) — it does not return NaN. Also a tuple
+        ///     that names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
@@ -258,7 +273,7 @@ namespace NumSharp
         ///     <item>float16 and complex128 run NumPy's sequential loops: NaN elements are skipped (complex: a NaN in either
         ///     part), a tie keeps the EARLIER element, an all-NaN slice returns its first NaN verbatim; complex compares
         ///     lexicographically (real part, then imaginary).</item>
-        ///     <item>Integer, bool and char arrays cannot hold a NaN, so this is <see cref="amax(NDArray, int?, NDArray, bool, object, NDArray)"/>;
+        ///     <item>Integer, bool and char arrays cannot hold a NaN, so this is <see cref="amax(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>;
         ///     decimal likewise (no NumPy analog).</item>
         ///     </list>
         ///     </para>
@@ -274,7 +289,7 @@ namespace NumSharp
         ///     <c>nan+0j</c>; a matrix out of a flat call keeps the <c>-inf</c> (only the returned scalar is NaN).
         ///     </para>
         /// </remarks>
-        public static NDArray nanmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
+        public static NDArray nanmax(NDArray a, NDAxis? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
@@ -288,10 +303,12 @@ namespace NumSharp
         ///     Return the minimum of an array or the minimum along an axis, ignoring NaNs — NumPy's <c>np.nanmin(a, axis=None,
         ///     out=None, keepdims=&lt;no value&gt;, initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>, i.e.
         ///     <c>np.fmin.reduce</c> for an ndarray, reproduced bit for bit; the keywords behave as in
-        ///     <see cref="nanmax(NDArray, int?, NDArray, bool, object, NDArray)"/>. This is the only overload.
+        ///     <see cref="nanmax(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>. This is the only overload.
         /// </summary>
         /// <param name="a">Array containing numbers whose minimum is desired.</param>
-        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis. A tuple
+        ///     (<c>(0, 2)</c>) reduces every axis it names together, in one pass (NumPy's tuple axis; the empty tuple
+        ///     reduces none, and a tuple item gets no 0-d allowance).</param>
         /// <param name="out">The array the result is written into and returned. Footgun: the third positional parameter, so
         ///     <c>np.nanmin(a, 1, true)</c> raises; write <c>keepdims: true</c> by name.</param>
         /// <param name="keepdims">Keep the reduced axes as length-1 dimensions (for a flat reduction: shape <c>(1,)*a.ndim</c>).</param>
@@ -299,7 +316,7 @@ namespace NumSharp
         /// <param name="where">A bool mask of the elements to reduce, or <c>null</c>.</param>
         /// <returns><paramref name="out"/> itself when given; else a fresh array of <paramref name="a"/>'s dtype (0-d for a flat
         ///     reduction without keepdims). An all-NaN slice without an initial value is NaN. A <c>numpy.matrix</c> operand gets
-        ///     NumPy's subclass route, as in <see cref="nanmax(NDArray, int?, NDArray, bool, object, NDArray)"/> with
+        ///     NumPy's subclass route, as in <see cref="nanmax(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> with
         ///     <c>+inf</c> and <c>np.amin</c>.</returns>
         /// <exception cref="TypeError"><paramref name="out"/> is a C# scalar ("return arrays must be of ArrayType");
         ///     <paramref name="initial"/> is complex for a real loop or of an unconvertible type; a <c>numpy.matrix</c> operand
@@ -308,9 +325,10 @@ namespace NumSharp
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain <paramref name="out"/>: the method stores
         ///     the minima of the NaN-replaced copy into it (an all-NaN slice as <c>+inf</c>), then fails on
         ///     <c>out._collapse</c>.</exception>
-        /// <exception cref="ValueError">See <see cref="max(NDArray, int?, NDArray, bool, object, NDArray)"/> ('fmin' in the
+        /// <exception cref="ValueError">See <see cref="max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/> ('fmin' in the
         ///     texts); an empty reduction without <paramref name="initial"/> raises (<c>fmin</c> has no identity; 'minimum' for
-        ///     a <c>numpy.matrix</c> operand).</exception>
+        ///     a <c>numpy.matrix</c> operand). Also a tuple that names an axis twice (<c>duplicate value in
+        ///     'axis'</c>).</exception>
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
@@ -326,7 +344,7 @@ namespace NumSharp
         ///     values, exactly as in NumPy.</item>
         ///     <item>float16 and complex128 run NumPy's sequential loops: NaN elements are skipped (complex: a NaN in either
         ///     part), a tie keeps the EARLIER element, an all-NaN slice returns its first NaN verbatim.</item>
-        ///     <item>Integer, bool and char arrays cannot hold a NaN, so this is <see cref="amin(NDArray, int?, NDArray, bool, object, NDArray)"/>;
+        ///     <item>Integer, bool and char arrays cannot hold a NaN, so this is <see cref="amin(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>;
         ///     decimal likewise (no NumPy analog).</item>
         ///     </list>
         ///     </para>
@@ -340,7 +358,7 @@ namespace NumSharp
         ///     slice is NumPy's positive quiet NaN (complex: <c>nan+0j</c>).
         ///     </para>
         /// </remarks>
-        public static NDArray nanmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
+        public static NDArray nanmin(NDArray a, NDAxis? axis = null, NDArray @out = null, bool keepdims = false, object initial = null,
             NDArray @where = null)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));

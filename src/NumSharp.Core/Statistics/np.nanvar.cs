@@ -11,7 +11,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">The array whose variance is desired; any dtype and layout.</param>
         /// <param name="axis">The axis along which the variance is computed (negative counts from the end); null (the
-        /// default) computes the variance of the flattened array.</param>
+        /// default) computes the variance of the flattened array. A tuple (<c>(0, 2)</c>) reduces every axis it names
+        ///     together, in one pass (NumPy's tuple axis; the empty tuple reduces none, and a tuple item gets no 0-d
+        ///     allowance).</param>
         /// <param name="ddof">Delta degrees of freedom: the divisor is <c>N - ddof</c>. Default 0.</param>
         /// <param name="dtype">The type used to compute the variance (both sums run in it). For a float or complex input it
         /// must be inexact; null uses the input's dtype (np.var's float64 for an integer or bool input).</param>
@@ -30,13 +32,14 @@ namespace NumSharp
         /// "If a is inexact, then dtype must be inexact"; or with a non-inexact <paramref name="out"/>: "If a is inexact, then
         /// out must be inexact".</exception>
         /// <exception cref="ValueError">A non-zero <paramref name="ddof"/> with <paramref name="correction"/>: "ddof and
-        /// correction can't be provided simultaneously.".</exception>
+        /// correction can't be provided simultaneously.". Also a tuple that names an axis twice (<c>duplicate value in
+        ///     'axis'</c>).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <paramref name="a"/>'s dimensions (a 0-d array
         /// included).</exception>
         /// <remarks>
         ///     <para>
         ///     An array that cannot hold NaN (integer, bool, char, decimal) has no NaN to ignore: the result is
-        ///     <see cref="var(NDArray, int?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/>'s, keywords included. For a float or complex array the
+        ///     <see cref="var(NDArray, NDAxis?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/>'s, keywords included. For a float or complex array the
         ///     arithmetic is NumPy's <c>_nanfunctions_impl.nanvar</c> (see <c>TensorEngine.NanVar</c>), which
         ///     differs from np.var in three observable ways: the deviations are rounded into the input's dtype before they
         ///     are squared (with <c>dtype=float64</c>, a float32 input squares float32 deviations), a complex square is the
@@ -53,7 +56,7 @@ namespace NumSharp
         ///     <c>where=</c>: NumPy calls the matrix method, which has no such keyword (<c>matrix.sum() got an unexpected
         ///     keyword argument 'where'</c>).</exception>
         [NDScoped]
-        public static NDArray nanvar(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0,
+        public static NDArray nanvar(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0,
             bool keepdims = false, NDArray @where = null, NDArray mean = null, int? correction = null)
             => a.TensorEngine.NanVar(a, axis, dtype, ddof, keepdims, @out, @where, mean, correction);
     }

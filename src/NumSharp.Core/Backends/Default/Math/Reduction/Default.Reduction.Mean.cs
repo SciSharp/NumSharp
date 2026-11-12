@@ -13,8 +13,10 @@ namespace NumSharp.Backends
         ///     <c>n+0j</c>), so an infinite or NaN part poisons the other one even for a single element.
         /// </summary>
         /// <param name="arr">The array to average; any dtype, any layout.</param>
-        /// <param name="axis_">The axis to reduce, or null for every axis. Unlike np.sum, a 0-d array takes no axis
-        /// (np.mean normalizes it against rank 0 and raises).</param>
+        /// <param name="axis">The axis to reduce, a tuple of axes reduced together (<c>_mean</c>'s statements over the set:
+        /// the product of the reduced extents as the count, ONE pass of the reduction iterator for the sum; the empty tuple
+        /// divides each element by 1), or null for every axis. Unlike np.sum, a 0-d array takes no axis (np.mean normalizes
+        /// it against rank 0 and raises).</param>
         /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
         /// <param name="dtype">The dtype the sum is computed in and the mean returned in; null selects float64 for bool /
         /// integers / char and the input's own dtype for float16 / float32 / float64 / complex128 / decimal.</param>
@@ -26,16 +28,48 @@ namespace NumSharp.Backends
         /// masked sum, the division.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise the mean: a read-only 0-d scalar for a full reduction
         /// without keepdims, a fresh array else.</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range (every axis is, for a 0-d input without a
-        /// mask).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of range (every axis is, for a
+        /// 0-d input without a mask).</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape (the reduce
-        /// prologue's texts).</exception>
+        /// prologue's texts); a tuple names an axis twice (<c>duplicate value in 'axis'</c>, raised by the sum, after its out
+        /// check); a <c>StringDType</c> mean over two axes or more (not reorderable).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input, or
         /// <paramref name="where"/> does not broadcast to its shape.</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="TypeError">Text NumPy's loop resolution refuses (a text out has no division loop).</exception>
-        public override NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+        public override NDArray ReduceMean(NDArray arr, NDAxis? axis, bool keepdims = false, DType dtype = null, NDArray @out = null,
             NDArray @where = null)
+        {
+            // A tuple: one axis or every axis is the integer / None route (_count_reduce_items and umr_sum read the same axes);
+            // any other tuple is _mean's statements over the set (MeanWhereNumPy: the count, the sum through the reduction
+            // iterator, the division), which raise in NumPy's order - each item's bounds from the count, the repeat from the
+            // sum after its out check.
+            if (axis is { IsTuple: true } tuple)
+            {
+                if (ReductionArguments.TryIntegerForm(arr.ndim, tuple, out int? single))
+                    return ReduceMeanAlong(arr, single, keepdims, dtype, @out, @where);
+                return MeanWhereNumPy(arr, tuple, keepdims, dtype, @out, IsPythonTrueMask(@where) ? null : @where);
+            }
+            return ReduceMeanAlong(arr, ReductionArguments.IntegerAxis(axis), keepdims, dtype, @out, @where);
+        }
+
+        /// <summary>
+        ///     The integer-axis and <c>None</c> routes of <see cref="ReduceMean"/> (see it for the whole contract): the masked
+        ///     statements, the out= route, the text routes and the fused mean routes over one axis or every axis.
+        /// </summary>
+        /// <param name="arr">The array to average.</param>
+        /// <param name="axis_">The axis, or null for every axis (a 0-d array takes no axis).</param>
+        /// <param name="keepdims">When true the reduced axes stay with length 1.</param>
+        /// <param name="dtype">The sum's loop and the result dtype, or null for <c>_mean</c>'s default.</param>
+        /// <param name="out">NumPy's <c>out=</c>, or null.</param>
+        /// <param name="where">NumPy's <c>where=</c>, or null.</param>
+        /// <returns>The mean (see <see cref="ReduceMean"/>).</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="ValueError">See <see cref="ReduceMean"/>.</exception>
+        /// <exception cref="IncorrectShapeException">See <see cref="ReduceMean"/>.</exception>
+        /// <exception cref="ArgumentException">See <see cref="ReduceMean"/>.</exception>
+        /// <exception cref="TypeError">See <see cref="ReduceMean"/>.</exception>
+        private NDArray ReduceMeanAlong(NDArray arr, int? axis_, bool keepdims, DType dtype, NDArray @out, NDArray @where)
         {
             // where=: _mean's masked statements. NumPy tests `where is True`, so only the C# true literal is no mask; an
             // explicit 0-d true array is a mask (the same values, ufunc.reduce's axis rule).

@@ -17,12 +17,14 @@ namespace NumSharp
     {
         /// <summary>
         ///     Return the maximum along an axis — NumPy's <c>ndarray.max(axis=None, out=None, *, keepdims=&lt;no value&gt;,
-        ///     initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>, i.e. <see cref="np.max(NDArray, int?, NDArray, bool, object, NDArray)"/>
+        ///     initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>, i.e. <see cref="np.max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
         ///     on this array. This is the only overload.
         /// </summary>
-        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis. A tuple
+        ///     (<c>(0, 2)</c>) reduces every axis it names together, in one pass (NumPy's tuple axis; the empty tuple
+        ///     reduces none, and a tuple item gets no 0-d allowance).</param>
         /// <param name="out">The array the result is written into and returned (any dtype; a narrowing one is lossy, as in
-        ///     NumPy — see <see cref="np.max(NDArray, int?, NDArray, bool, object, NDArray)"/>). Footgun: the second
+        ///     NumPy — see <see cref="np.max(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>). Footgun: the second
         ///     positional parameter, as in NumPy, so <c>a.max(1, true)</c> passes the bool as out and raises; write
         ///     <c>keepdims: true</c> by name.</param>
         /// <param name="keepdims">Keep the reduced axes as length-1 dimensions (keyword-only in NumPy).</param>
@@ -35,7 +37,8 @@ namespace NumSharp
         ///     for a real loop or of an unconvertible type.</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, <paramref name="where"/> without
         ///     <paramref name="initial"/>, an empty reduced axis without <paramref name="initial"/>, or an unconvertible
-        ///     <paramref name="initial"/>.</exception>
+        ///     <paramref name="initial"/>. Also a tuple that names an axis twice (<c>duplicate value in
+        ///     'axis'</c>).</exception>
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
@@ -45,17 +48,19 @@ namespace NumSharp
         ///     own <c>max</c>). https://numpy.org/doc/stable/reference/generated/numpy.ndarray.max.html
         /// </remarks>
         [PlainReceiver]
-        public NDArray max(int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+        public NDArray max(NDAxis? axis = null, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
         {
             return np.max(this, axis, @out, keepdims, initial, @where);
         }
 
         /// <summary>
         ///     Return the minimum along an axis — NumPy's <c>ndarray.min(axis=None, out=None, *, keepdims=&lt;no value&gt;,
-        ///     initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>, i.e. <see cref="np.min(NDArray, int?, NDArray, bool, object, NDArray)"/>
+        ///     initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>, i.e. <see cref="np.min(NDArray, NDAxis?, NDArray, bool, object, NDArray)"/>
         ///     on this array. This is the only overload.
         /// </summary>
-        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis. A tuple
+        ///     (<c>(0, 2)</c>) reduces every axis it names together, in one pass (NumPy's tuple axis; the empty tuple
+        ///     reduces none, and a tuple item gets no 0-d allowance).</param>
         /// <param name="out">The array the result is written into and returned. Footgun: the second positional parameter, as
         ///     in NumPy, so <c>a.min(1, true)</c> passes the bool as out and raises; write <c>keepdims: true</c> by name.</param>
         /// <param name="keepdims">Keep the reduced axes as length-1 dimensions (keyword-only in NumPy).</param>
@@ -68,7 +73,8 @@ namespace NumSharp
         ///     for a real loop or of an unconvertible type.</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, <paramref name="where"/> without
         ///     <paramref name="initial"/>, an empty reduced axis without <paramref name="initial"/>, or an unconvertible
-        ///     <paramref name="initial"/>.</exception>
+        ///     <paramref name="initial"/>. Also a tuple that names an axis twice (<c>duplicate value in
+        ///     'axis'</c>).</exception>
         /// <exception cref="System.ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
@@ -78,7 +84,7 @@ namespace NumSharp
         ///     own <c>min</c>). https://numpy.org/doc/stable/reference/generated/numpy.ndarray.min.html
         /// </remarks>
         [PlainReceiver]
-        public NDArray min(int? axis = null, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+        public NDArray min(NDAxis? axis = null, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
         {
             return np.min(this, axis, @out, keepdims, initial, @where);
         }

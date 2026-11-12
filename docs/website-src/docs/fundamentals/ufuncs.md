@@ -123,7 +123,7 @@ np.prod(x.astype(np.float64), axis: 0);
 np.max(x, axis: 0, keepdims: true); // shape (1, 3)
 ```
 
-> **Axis tuples.** `np.all`, `np.any`, `np.count_nonzero`, `np.ptp`, `np.average`, the median and quantile families (and `np.flip`, `np.squeeze`, `np.expand_dims`, `np.moveaxis`, `np.trim_zeros`, `np.size`, `np.gradient`) take NumPy's axis as an `NDAxis`: one axis, a tuple - `np.all(x, (0, 1))`, `np.ptp(x, new[] { 0, 1 })` - or `null` for None. **One divergence from NumPy:** `np.sum`, `np.prod`, `np.mean`, `np.std`, `np.var`, `np.max` / `np.min` and the nan reductions still take a **single** `int?` axis (or none - all axes); pass no axis to reduce everything, or reduce one axis at a time.
+> **Axis tuples.** Every reduction takes NumPy's axis as an `NDAxis`: one axis, a tuple - `np.sum(x, (0, 2))`, `np.max(x, new[] { 0, 1 })`, `x.mean((0, 2))` - or `null` for None. That covers `np.sum`, `np.prod`, `np.mean`, `np.std`, `np.var`, `np.max` / `np.min` (`amax` / `amin`), the nan reductions, `np.all`, `np.any`, `np.count_nonzero`, `np.ptp`, `np.average` and the median and quantile families (and `np.flip`, `np.squeeze`, `np.expand_dims`, `np.moveaxis`, `np.roll`, `np.trim_zeros`, `np.size`, `np.gradient`). A tuple is ONE reduction over the whole axis set, as in NumPy - not one axis after another, which rounds floats differently. `np.argmax` / `np.argmin` take a single axis, and a tuple is NumPy's `TypeError`.
 
 ### The reduce upcast rule
 

@@ -7,6 +7,8 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <inheritdoc />
+        /// <exception cref="TypeError"><paramref name="out"/> is a C# scalar converted to a 0-d array (<c>output must be an
+        ///     array</c>), raised first; the inherited out-dtype refusals.</exception>
         /// <remarks>
         ///     DefaultEngine computes the indices (<see cref="ArgMinIndices"/>) and then writes them into
         ///     <paramref name="out"/> (<see cref="WriteArgOut"/>). A numeric computation raises only what NumPy raises
@@ -16,6 +18,11 @@ namespace NumSharp.Backends
         /// </remarks>
         public override NDArray ReduceArgMin(NDArray arr, int? axis_, bool keepdims = false, NDArray @out = null)
         {
+            // ndarray.argmin's argument parser (PyArray_OutputConverter): an out that is not an array - a C# literal the
+            // implicit conversion turned into a 0-d array, as np.argmin(a, 0, true) passes true as out= - is refused before
+            // the axis' bounds and every other check (probed 2.4.2).
+            if (@out is not null && @out.WasScalarArgument)
+                throw new TypeError("output must be an array");
             // NumPy's _PyArray_ArgMinMaxCommon: the axis (a 0-d input ravels first), the empty length and the out, all
             // before its arg_func compares an element. Only a text comparison can raise, so only text needs them first.
             if (@out is not null && (Strings.NDStringUfuncs.IsVString(arr) || Strings.NDStringUfuncs.IsString(arr)))

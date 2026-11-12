@@ -11,7 +11,8 @@ namespace NumSharp.Backends
         ///     <see cref="NanVarStdNumPy"/>.
         /// </summary>
         /// <param name="a">The array to reduce, any layout.</param>
-        /// <param name="axis">The reduced axis (negative counts from the end), or null for a flat reduction.</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), a tuple of axes (NumPy's statements over the
+        ///     set: every sum one pass of the reduction iterator), or null for a flat reduction.</param>
         /// <param name="dtype">The loop of both sums (NumPy's <c>dtype=</c>), or null for the input's dtype.</param>
         /// <param name="ddof">Delta degrees of freedom.</param>
         /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
@@ -24,13 +25,15 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/> or
         ///     <paramref name="out"/>.</exception>
         /// <exception cref="ValueError">A non-zero <paramref name="ddof"/> with <paramref name="correction"/>.</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) outside the operand.</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (the count's np.sum); a nonzero ddof with
+        ///     correction=.</exception>
         /// <remarks>
         ///     A public entry point since the np-layer dtype plan's phase PE (E1), so it owns its scope: the count, the
         ///     NaN-zeroed copy, the deviations and the sums are reclaimed here even when no scoped facade called it.
         /// </remarks>
         [NDScoped] // every intermediate of nanvar is this call's own; the variance is yielded
-        public override NDArray NanVar(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false,
+        public override NDArray NanVar(NDArray a, NDAxis? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false,
             NDArray @out = null, NDArray @where = null, NDArray mean = null, int? correction = null)
             => NanVarStdNumPy(a, axis, keepdims, ddof, dtype, takeSqrt: false, @out, @where, mean, correction);
 
@@ -39,7 +42,8 @@ namespace NumSharp.Backends
         ///     <c>nanvar</c>, run by <see cref="NanVarStdNumPy"/>.
         /// </summary>
         /// <param name="a">The array to reduce, any layout.</param>
-        /// <param name="axis">The reduced axis (negative counts from the end), or null for a flat reduction.</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), a tuple of axes (NumPy's statements over the
+        ///     set: every sum one pass of the reduction iterator), or null for a flat reduction.</param>
         /// <param name="dtype">The loop of both sums (NumPy's <c>dtype=</c>), or null for the input's dtype.</param>
         /// <param name="ddof">Delta degrees of freedom.</param>
         /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
@@ -52,10 +56,12 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/> or
         ///     <paramref name="out"/>.</exception>
         /// <exception cref="ValueError">A non-zero <paramref name="ddof"/> with <paramref name="correction"/>.</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) outside the operand.</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (the count's np.sum); a nonzero ddof with
+        ///     correction=.</exception>
         /// <remarks>A public entry point since the np-layer dtype plan's phase PE (E1), so it owns its scope.</remarks>
         [NDScoped] // every intermediate of nanstd is this call's own; the deviation is yielded
-        public override NDArray NanStd(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false,
+        public override NDArray NanStd(NDArray a, NDAxis? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false,
             NDArray @out = null, NDArray @where = null, NDArray mean = null, int? correction = null)
             => NanVarStdNumPy(a, axis, keepdims, ddof, dtype, takeSqrt: true, @out, @where, mean, correction);
 
@@ -77,7 +83,9 @@ namespace NumSharp.Backends
         ///     <c>np.std</c>), and so does this method.
         /// </summary>
         /// <param name="a">The array to reduce, any layout.</param>
-        /// <param name="axis_">The reduced axis (negative counts from the end), or null for a flat reduction.</param>
+        /// <param name="axisArgument">The reduced axis (negative counts from the end), a tuple of axes, or null for a flat
+        ///     reduction. A tuple that is neither one axis nor every axis runs the statements as written
+        ///     (<see cref="NanVarStdKeywords"/>) over the set.</param>
         /// <param name="keepdims">Keep the reduced axes as length-1 dimensions.</param>
         /// <param name="ddof">Delta degrees of freedom: the divisor is the non-NaN count minus <paramref name="ddof"/>.</param>
         /// <param name="dtype">The loop of both sums (NumPy's <c>dtype=</c>), or null for the input's dtype. Must be inexact
@@ -93,9 +101,10 @@ namespace NumSharp.Backends
         /// <paramref name="dtype"/>; 0-d (NumPy's scalar) for a flat reduction without keepdims.</returns>
         /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/>: "If a is inexact, then
         /// dtype must be inexact" (raised before the axis is checked, as in NumPy).</exception>
-        /// <exception cref="AxisError"><paramref name="axis_"/> outside the operand (a 0-d operand included).</exception>
+        /// <exception cref="AxisError"><paramref name="axisArgument"/> (or an item of a tuple) outside the operand (a 0-d
+        ///     operand included).</exception>
         /// <exception cref="ValueError">A non-zero <paramref name="ddof"/> with <paramref name="correction"/> ("ddof and
-        ///     correction can't be provided simultaneously.").</exception>
+        ///     correction can't be provided simultaneously."); a tuple that names an axis twice (the count's np.sum).</exception>
         /// <remarks>
         ///     <para>
         ///     How NumPy's statements decide the bits, all reproduced:
@@ -126,7 +135,7 @@ namespace NumSharp.Backends
         ///     statements instead — the same HALF loops, so the same bits.
         ///     </para>
         /// </remarks>
-        internal NDArray NanVarStdNumPy(NDArray a, int? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt,
+        internal NDArray NanVarStdNumPy(NDArray a, NDAxis? axisArgument, bool keepdims, int ddof, DType dtype, bool takeSqrt,
             NDArray @out = null, NDArray @where = null, NDArray mean = null, int? correction = null)
         {
             // Text is not inexact, so _replace_nan leaves it alone and nanvar / nanstd ARE np.var / np.std: the delegation
@@ -145,8 +154,8 @@ namespace NumSharp.Backends
             NPTypeCode inT = a.GetTypeCode;
             if (inT is not (NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex))
                 return takeSqrt
-                    ? engine.ReduceStd(a, axis_, keepdims, ddof, dtype, @out, @where, mean, correction)
-                    : engine.ReduceVar(a, axis_, keepdims, ddof, dtype, @out, @where, mean, correction);
+                    ? engine.ReduceStd(a, axisArgument, keepdims, ddof, dtype, @out, @where, mean, correction)
+                    : engine.ReduceVar(a, axisArgument, keepdims, ddof, dtype, @out, @where, mean, correction);
 
             // `if dtype is not None and not issubclass(dtype.type, np.inexact)` — checked before anything reads the axis,
             // so this TypeError wins over an AxisError. NumSharp's hierarchy counts Decimal as floating (inexact).
@@ -162,6 +171,18 @@ namespace NumSharp.Backends
                     throw new ValueError("ddof and correction can't be provided simultaneously.");
                 ddof = correction.Value;
             }
+            // A tuple: one axis or every axis is the integer / None route below (every sum reads the same axes); any other
+            // tuple runs NumPy's statements as written over the set (NanVarStdKeywords), which raise in NumPy's order (each
+            // item's bounds, then the repeat, from the count's np.sum).
+            int? axis_;
+            if (axisArgument is { IsTuple: true } tuple)
+            {
+                if (!ReductionArguments.TryIntegerForm(a.ndim, tuple, out axis_))
+                    return NanVarStdKeywords(a, tuple, keepdims, ddof, dtype, takeSqrt, @out, @where, mean);
+            }
+            else
+                axis_ = ReductionArguments.IntegerAxis(axisArgument);
+
             // out= / where= / mean= run NumPy's statements as written; the keyword-free call keeps the fused routes below.
             if (@out is not null || @where is not null || mean is not null)
                 return NanVarStdKeywords(a, axis_, keepdims, ddof, dtype, takeSqrt, @out, @where, mean);
@@ -303,7 +324,8 @@ namespace NumSharp.Backends
         ///     </code>
         /// </summary>
         /// <param name="a">The inexact array, any layout.</param>
-        /// <param name="axis_">The reduced axis, or null for every axis (np.sum's axis rules: the count reads it first).</param>
+        /// <param name="axis_">The reduced axis, a tuple of axes, or null for every axis (np.sum's axis rules: the count reads
+        ///     it first).</param>
         /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
         /// <param name="ddof">The delta degrees of freedom (a correction already folded in).</param>
         /// <param name="dtype">The loop of the sums, or null.</param>
@@ -313,10 +335,11 @@ namespace NumSharp.Backends
         /// <param name="mean">The mean to subtract (keepdims-shaped), or null to compute it.</param>
         /// <returns>The variance or deviation; <paramref name="out"/> itself when given; a 0-d scalar for a flat reduction
         ///     without <paramref name="keepdims"/> and <paramref name="out"/>.</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> outside the operand.</exception>
+        /// <exception cref="AxisError"><paramref name="axis_"/> (or an item of a tuple) outside the operand.</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (the count's np.sum).</exception>
         /// <remarks>The eager statements (no fused stream): NumPy's own order of operations, so every keyword combination
         ///     gives its bits. The caller's scope reclaims the mask, the copy and the counts.</remarks>
-        private NDArray NanVarStdKeywords(NDArray a, int? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt,
+        private NDArray NanVarStdKeywords(NDArray a, NDAxis? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt,
             NDArray @out, NDArray @where, NDArray mean)
         {
             var engine = a.TensorEngine;

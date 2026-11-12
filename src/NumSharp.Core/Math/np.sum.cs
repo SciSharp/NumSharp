@@ -24,7 +24,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Elements to sum (any dtype; <c>StringDType</c> concatenates, fixed-width text is refused).</param>
         /// <param name="axis">The axis to sum over (negative counts from the end); <c>null</c> sums every element. A 0-d
-        ///     array accepts 0 and -1 as every axis (ufunc.reduce's rule).</param>
+        ///     array accepts 0 and -1 as every axis (ufunc.reduce's rule). A tuple (<c>(0, 2)</c>) reduces every axis
+        ///     it names together, in one pass (NumPy's tuple axis; the empty tuple reduces none, and a tuple item gets
+        ///     no 0-d allowance).</param>
         /// <param name="dtype">The accumulator and result dtype (a C# <see cref="System.Type"/>, an <see cref="NPTypeCode"/> or
         ///     a NumPy dtype string converts implicitly): every element is cast to it before it is added. <c>null</c> is
         ///     NumPy's default, NEP 50's accumulator — int64 for bool and the signed integers narrower than 64 bits, uint64
@@ -55,7 +57,7 @@ namespace NumSharp
         ///     <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c>).</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>; a mask with more axes than
         ///     <paramref name="a"/>; an unconvertible <paramref name="initial"/> (a float NaN into an integer loop, a
-        ///     sequence).</exception>
+        ///     sequence). Also a tuple that names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast
@@ -71,7 +73,7 @@ namespace NumSharp
         ///     <paramref name="where"/> the call runs NumPy's reduction iterator itself; without them the engine's own
         ///     schedules, which give the same bits.
         /// </remarks>
-        public static NDArray sum(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
+        public static NDArray sum(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
             object initial = null, NDArray @where = null)
         {
             if (a is null)

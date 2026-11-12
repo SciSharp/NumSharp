@@ -17,7 +17,8 @@ namespace NumSharp
         ///     DIMENSIONS, so a size taken from a view (with its strides/offset) cannot make the allocation too small.
         /// </summary>
         /// <param name="typeCode">The output dtype.</param>
-        /// <param name="size">The requested shape.</param>
+        /// <param name="typeCode">The draws' dtype.</param>
+        /// <param name="size">The requested shape (not None: the caller answered None first).</param>
         /// <returns>A fresh, uninitialized C-contiguous array.</returns>
         /// <exception cref="ValueError">A dimension is negative.</exception>
         /// <remarks>
@@ -25,14 +26,17 @@ namespace NumSharp
         ///     re-lays out anything else, a dense F view included: the samplers fill in memory order, so the output must be
         ///     C-ordered for the draws to land where NumPy puts them.
         /// </remarks>
-        private static NDArray DistOutput(NPTypeCode typeCode, Shape size) => new NDArray(typeCode, size.AsClean(), false);
+        private static NDArray DistOutput(NPTypeCode typeCode, Shape? size)
+            // Only reached past IsNoSize: size holds the requested shape.
+            => new NDArray(typeCode, size.GetValueOrDefault().AsClean(), false);
 
         /// <summary>
         ///     Draw samples from a Beta distribution.
         /// </summary>
         /// <param name="a">Alpha, positive (<c>&gt; 0</c>; NaN is accepted and samples NaN, as in NumPy).</param>
         /// <param name="b">Beta, positive (<c>&gt; 0</c>; NaN accepted).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws, in <c>[0, 1]</c>.</returns>
         /// <exception cref="ValueError"><paramref name="a"/> (<c>a &lt;= 0</c>, checked first) or <paramref name="b"/> is not positive.</exception>
         /// <remarks>
@@ -42,7 +46,7 @@ namespace NumSharp
         ///     <c>3e-103</c>); otherwise the ratio of two standard gammas. Byte-identical to
         ///     <c>default_rng(seed).beta</c>.
         /// </remarks>
-        public NDArray beta(double a, double b, Shape size = default)
+        public NDArray beta(double a, double b, Shape? size = null)
         {
             RandomConstraints.Check(a, "a", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(b, "b", ConstraintType.CONS_POSITIVE);
@@ -80,7 +84,8 @@ namespace NumSharp
         ///     Draw samples from a chi-square distribution.
         /// </summary>
         /// <param name="df">Degrees of freedom, positive (<c>&gt; 0</c>; NaN accepted and samples NaN).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="df"/> is not positive (<c>df &lt;= 0</c>).</exception>
         /// <remarks>
@@ -88,7 +93,7 @@ namespace NumSharp
         ///     <br/>NumPy's <c>random_chisquare</c>: <c>2 * random_standard_gamma(df / 2)</c>. Byte-identical to
         ///     <c>default_rng(seed).chisquare</c>.
         /// </remarks>
-        public NDArray chisquare(double df, Shape size = default)
+        public NDArray chisquare(double df, Shape? size = null)
         {
             RandomConstraints.Check(df, "df", ConstraintType.CONS_POSITIVE);
             var half = new GammaSetup(df / 2.0);
@@ -126,7 +131,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="dfnum">Degrees of freedom in the numerator, positive (NaN accepted).</param>
         /// <param name="dfden">Degrees of freedom in the denominator, positive (NaN accepted).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="dfnum"/> (checked first) or <paramref name="dfden"/> is not positive.</exception>
         /// <remarks>
@@ -134,7 +140,7 @@ namespace NumSharp
         ///     <br/>NumPy's <c>random_f</c>: <c>(chisquare(dfnum) * dfden) / (chisquare(dfden) * dfnum)</c>, the numerator
         ///     drawn first. Byte-identical to <c>default_rng(seed).f</c>.
         /// </remarks>
-        public NDArray f(double dfnum, double dfden, Shape size = default)
+        public NDArray f(double dfnum, double dfden, Shape? size = null)
         {
             RandomConstraints.Check(dfnum, "dfnum", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(dfden, "dfden", ConstraintType.CONS_POSITIVE);
@@ -174,7 +180,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="df">Degrees of freedom, positive (NaN accepted).</param>
         /// <param name="nonc">Non-centrality, non-negative (<c>-0.0</c> rejected; NaN accepted and returns NaN without drawing).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="df"/> is not positive (checked first) or <paramref name="nonc"/> is negative.</exception>
         /// <remarks>
@@ -183,7 +190,7 @@ namespace NumSharp
         ///     non-centrality BEFORE drawing (so it advances nothing). Byte-identical to
         ///     <c>default_rng(seed).noncentral_chisquare</c>.
         /// </remarks>
-        public NDArray noncentral_chisquare(double df, double nonc, Shape size = default)
+        public NDArray noncentral_chisquare(double df, double nonc, Shape? size = null)
         {
             RandomConstraints.Check(df, "df", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(nonc, "nonc", ConstraintType.CONS_NON_NEGATIVE);
@@ -223,7 +230,8 @@ namespace NumSharp
         /// <param name="dfnum">Numerator degrees of freedom, positive (NaN accepted).</param>
         /// <param name="dfden">Denominator degrees of freedom, positive (NaN accepted).</param>
         /// <param name="nonc">Non-centrality, non-negative (<c>-0.0</c> rejected; NaN accepted).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError">In NumPy's order: <paramref name="dfnum"/> or <paramref name="dfden"/> is not positive, or <paramref name="nonc"/> is negative.</exception>
         /// <remarks>
@@ -231,7 +239,7 @@ namespace NumSharp
         ///     <br/>NumPy's <c>random_noncentral_f</c>: <c>(ncchi2(dfnum, nonc) * dfden) / (chi2(dfden) * dfnum)</c>.
         ///     Byte-identical to <c>default_rng(seed).noncentral_f</c>.
         /// </remarks>
-        public NDArray noncentral_f(double dfnum, double dfden, double nonc, Shape size = default)
+        public NDArray noncentral_f(double dfnum, double dfden, double nonc, Shape? size = null)
         {
             RandomConstraints.Check(dfnum, "dfnum", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(dfden, "dfden", ConstraintType.CONS_POSITIVE);
@@ -270,7 +278,8 @@ namespace NumSharp
         /// <summary>
         ///     Draw samples from a standard Cauchy distribution with mode = 0.
         /// </summary>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.standard_cauchy.html
@@ -278,7 +287,7 @@ namespace NumSharp
         ///     the Generator's normal fill of consecutive pairs, divided (the same division, the same bits).
         ///     Byte-identical to <c>default_rng(seed).standard_cauchy</c>.
         /// </remarks>
-        public NDArray standard_cauchy(Shape size = default)
+        public NDArray standard_cauchy(Shape? size = null)
         {
             if (IsNoSize(size))
             {
@@ -315,7 +324,8 @@ namespace NumSharp
         ///     Draw samples from a standard Student's t distribution with <paramref name="df"/> degrees of freedom.
         /// </summary>
         /// <param name="df">Degrees of freedom, positive (NaN accepted).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="df"/> is not positive (<c>df &lt;= 0</c>).</exception>
         /// <remarks>
@@ -323,7 +333,7 @@ namespace NumSharp
         ///     <br/>NumPy's <c>random_standard_t</c>: <c>sqrt(df/2) * N / sqrt(G(df/2))</c>, the normal drawn first.
         ///     Byte-identical to <c>default_rng(seed).standard_t</c>.
         /// </remarks>
-        public NDArray standard_t(double df, Shape size = default)
+        public NDArray standard_t(double df, Shape? size = null)
         {
             RandomConstraints.Check(df, "df", ConstraintType.CONS_POSITIVE);
             var half = new GammaSetup(df / 2);
@@ -362,7 +372,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="mu">Mode ("center") of the distribution.</param>
         /// <param name="kappa">Concentration, non-negative (<c>-0.0</c> rejected; NaN accepted and returns NaN without drawing).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws, in <c>[-pi, pi]</c>.</returns>
         /// <exception cref="ValueError"><paramref name="kappa"/> is negative (<c>kappa &lt; 0</c>).</exception>
         /// <remarks>
@@ -371,7 +382,7 @@ namespace NumSharp
         ///     wrapped-Cauchy rejection up to <c>1e6</c>, the wrapped normal above (so <c>kappa = inf</c> returns
         ///     <paramref name="mu"/>). Byte-identical to <c>default_rng(seed).vonmises</c>.
         /// </remarks>
-        public NDArray vonmises(double mu, double kappa, Shape size = default)
+        public NDArray vonmises(double mu, double kappa, Shape? size = null)
         {
             RandomConstraints.Check(kappa, "kappa", ConstraintType.CONS_NON_NEGATIVE);
             var setup = new VonmisesSetup(mu, kappa);
@@ -408,7 +419,8 @@ namespace NumSharp
         ///     Draw samples from a Pareto II (AKA Lomax) distribution with specified shape.
         /// </summary>
         /// <param name="a">Shape of the distribution, positive (NaN accepted).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="a"/> is not positive (<c>a &lt;= 0</c>).</exception>
         /// <remarks>
@@ -419,7 +431,7 @@ namespace NumSharp
         ///     reproduces (see <see cref="Expm1"/>). Measured over 20000 draws: 30% of <c>pareto(3)</c> values differ (1% by
         ///     2 ulp), 8% of <c>pareto(0.5)</c>.
         /// </remarks>
-        public NDArray pareto(double a, Shape size = default)
+        public NDArray pareto(double a, Shape? size = null)
         {
             RandomConstraints.Check(a, "a", ConstraintType.CONS_POSITIVE);
 
@@ -446,7 +458,8 @@ namespace NumSharp
         ///     Draw samples from a Weibull distribution.
         /// </summary>
         /// <param name="a">Shape parameter, non-negative (<c>-0.0</c> rejected; NaN accepted). 0 returns 0 without drawing.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="a"/> is negative (<c>a &lt; 0</c>).</exception>
         /// <remarks>
@@ -454,7 +467,7 @@ namespace NumSharp
         ///     <br/>NumPy's <c>random_weibull</c>: 0 (no draw) for <c>a == 0</c>, else <c>E^(1/a)</c> over a ziggurat
         ///     exponential. Byte-identical to <c>default_rng(seed).weibull</c>.
         /// </remarks>
-        public NDArray weibull(double a, Shape size = default)
+        public NDArray weibull(double a, Shape? size = null)
         {
             RandomConstraints.Check(a, "a", ConstraintType.CONS_NON_NEGATIVE);
 
@@ -464,7 +477,7 @@ namespace NumSharp
                     return NDArray.WritableScalar(a == 0.0 ? 0.0 : Math.Pow(NextStandardExponential(), 1.0 / a));
 
                 if (a == 0.0)
-                    return np.zeros(size.AsClean(), NPTypeCode.Double); // random_weibull(0) draws nothing; dims only (NumPy's np.empty(size))
+                    return np.zeros(size.GetValueOrDefault().AsClean(), NPTypeCode.Double); // random_weibull(0) draws nothing; dims only (NumPy's np.empty(size))
 
                 var ret = DistOutput(NPTypeCode.Double, size);
                 unsafe
@@ -484,7 +497,8 @@ namespace NumSharp
         ///     Draws samples in [0, 1] from a power distribution with positive exponent a - 1.
         /// </summary>
         /// <param name="a">Parameter of the distribution, positive (NaN accepted).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="a"/> is not positive (<c>a &lt;= 0</c>).</exception>
         /// <remarks>
@@ -495,7 +509,7 @@ namespace NumSharp
         ///     relative difference: measured over 20000 draws, <c>power(2.5)</c> stays within 1 ulp (8% of values differ)
         ///     while <c>power(0.3)</c> reaches 9 ulp (20% of values).
         /// </remarks>
-        public NDArray power(double a, Shape size = default)
+        public NDArray power(double a, Shape? size = null)
         {
             RandomConstraints.Check(a, "a", ConstraintType.CONS_POSITIVE);
 
@@ -523,14 +537,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="loc">The position of the distribution peak. Default 0.</param>
         /// <param name="scale">The exponential decay, non-negative (<c>-0.0</c> rejected; NaN accepted). Default 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="scale"/> is negative (<c>scale &lt; 0</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.laplace.html
         ///     <br/>NumPy's <c>random_laplace</c> (shared with RandomState), one uniform per value.
         /// </remarks>
-        public NDArray laplace(double loc = 0.0, double scale = 1.0, Shape size = default)
+        public NDArray laplace(double loc = 0.0, double scale = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
@@ -567,14 +582,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="loc">The location of the mode. Default 0.</param>
         /// <param name="scale">The scale parameter, non-negative (<c>-0.0</c> rejected; NaN accepted). Default 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="scale"/> is negative (<c>scale &lt; 0</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.gumbel.html
         ///     <br/>NumPy's <c>random_gumbel</c> (shared with RandomState), one uniform per value.
         /// </remarks>
-        public NDArray gumbel(double loc = 0.0, double scale = 1.0, Shape size = default)
+        public NDArray gumbel(double loc = 0.0, double scale = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
@@ -611,14 +627,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="loc">The mean. Default 0.</param>
         /// <param name="scale">The scale, non-negative (<c>-0.0</c> rejected; NaN accepted). Default 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="scale"/> is negative (<c>scale &lt; 0</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.logistic.html
         ///     <br/>NumPy's <c>random_logistic</c> (shared with RandomState), one uniform per value.
         /// </remarks>
-        public NDArray logistic(double loc = 0.0, double scale = 1.0, Shape size = default)
+        public NDArray logistic(double loc = 0.0, double scale = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
@@ -655,7 +672,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="mean">Mean of the underlying normal distribution. Default 0.</param>
         /// <param name="sigma">Standard deviation of the underlying normal, non-negative (<c>-0.0</c> rejected; NaN accepted). Default 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="sigma"/> is negative (<c>sigma &lt; 0</c>).</exception>
         /// <remarks>
@@ -663,7 +681,7 @@ namespace NumSharp
         ///     <br/>NumPy's <c>random_lognormal</c>: <c>exp(mean + sigma * N)</c> over a ziggurat normal — a fill is the
         ///     normal fill, then the transform in place. Byte-identical to <c>default_rng(seed).lognormal</c>.
         /// </remarks>
-        public NDArray lognormal(double mean = 0.0, double sigma = 1.0, Shape size = default)
+        public NDArray lognormal(double mean = 0.0, double sigma = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(sigma, "sigma", ConstraintType.CONS_NON_NEGATIVE);
 
@@ -689,7 +707,8 @@ namespace NumSharp
         ///     Draw samples from a Rayleigh distribution.
         /// </summary>
         /// <param name="scale">Scale, also equals the mode; non-negative (<c>-0.0</c> rejected; NaN accepted). Default 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="scale"/> is negative (<c>scale &lt; 0</c>).</exception>
         /// <remarks>
@@ -697,7 +716,7 @@ namespace NumSharp
         ///     <br/>NumPy's modern <c>random_rayleigh</c>: <c>mode * sqrt(2 * E)</c> over a ziggurat exponential (the legacy
         ///     sampler uses <c>-log1p(-U)</c> instead). Byte-identical to <c>default_rng(seed).rayleigh</c>.
         /// </remarks>
-        public NDArray rayleigh(double scale = 1.0, Shape size = default)
+        public NDArray rayleigh(double scale = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
@@ -724,7 +743,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="mean">Distribution mean, positive (NaN accepted).</param>
         /// <param name="scale">Scale parameter, positive (NaN accepted).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="mean"/> (checked first) or <paramref name="scale"/> is not positive.</exception>
         /// <remarks>
@@ -732,7 +752,7 @@ namespace NumSharp
         ///     <br/>NumPy's modern <c>random_wald</c> (the cancellation-free form), one ziggurat normal and one uniform per
         ///     value. Byte-identical to <c>default_rng(seed).wald</c>.
         /// </remarks>
-        public NDArray wald(double mean, double scale, Shape size = default)
+        public NDArray wald(double mean, double scale, Shape? size = null)
         {
             RandomConstraints.Check(mean, "mean", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_POSITIVE);
@@ -771,7 +791,8 @@ namespace NumSharp
         /// <param name="left">Lower limit.</param>
         /// <param name="mode">The peak; <c>left &lt;= mode &lt;= right</c>.</param>
         /// <param name="right">Upper limit, greater than <paramref name="left"/>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError">In NumPy's order: <c>left &gt; mode</c>, <c>mode &gt; right</c>, <c>left == right</c>.</exception>
         /// <remarks>
@@ -779,7 +800,7 @@ namespace NumSharp
         ///     <br/>NumPy's <c>random_triangular</c> (shared with RandomState), one uniform per value. A NaN limit passes
         ///     the checks (every comparison is false) and samples NaN, as in NumPy.
         /// </remarks>
-        public NDArray triangular(double left, double mode, double right, Shape size = default)
+        public NDArray triangular(double left, double mode, double right, Shape? size = null)
         {
             if (left > mode)
                 throw new ValueError("left > mode");

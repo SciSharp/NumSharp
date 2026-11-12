@@ -442,77 +442,149 @@ namespace NumSharp
         // ---------------------------- np.roll ----------------------------
 
         /// <summary>
-        ///     NumPy's <c>np.roll</c> (<c>numeric.py</c>) after the facade's class rules: with no axis the raveled array is
-        ///     rolled and reshaped back; along an axis, NumPy's <c>empty_like</c> plus the two slice copies (the body shifted
-        ///     forward, the tail wrapped to the front).
+        ///     NumPy's <c>np.roll</c> (<c>numeric.py</c>) after the facade's class rules, statement for statement: with no axis
+        ///     the raveled array is rolled along axis 0 and reshaped back; otherwise
+        ///     <code>
+        ///     axis = normalize_axis_tuple(axis, a.ndim, allow_duplicate=True)
+        ///     broadcasted = broadcast(shift, axis)              # ndim > 1: ValueError
+        ///     shifts = {ax: 0 for ax in range(a.ndim)}
+        ///     for sh, ax in broadcasted: shifts[ax] += int(sh)
+        ///     rolls[ax] = ((:-offset, offset:), (-offset:, :offset)) for each offset = shifts[ax] % (a.shape[ax] or 1) != 0
+        ///     result = empty_like(a); for indices in product(*rolls): result[res_index] = a[arr_index]
+        ///     </code>
         /// </summary>
         /// <param name="a">The array (not null).</param>
-        /// <param name="shift">The places to shift; any value, reduced Python-style modulo the axis length (a negative shift
-        ///     rolls backwards; the type's extremes do not overflow).</param>
-        /// <param name="axis">The axis, or null to roll the flattened array.</param>
+        /// <param name="shift">The places to shift: a scalar (0-d) or a 1-D array, broadcast against the axes; every element is
+        ///     read as Python's <c>int()</c> reads NumPy's scalar of it (an integer exactly, a float truncated toward zero, a
+        ///     bool as 0 / 1, a complex by its real part, text parsed as a Python int literal), and the shifts of one axis are
+        ///     SUMMED in arbitrary precision before Python's modulo by the axis length, so no value overflows.</param>
+        /// <param name="axis">The axis or the axes (repeats allowed: their shifts add up), or null to roll the flattened
+        ///     array.</param>
         /// <returns>A new array of <paramref name="a"/>'s shape and dtype: <paramref name="a"/>'s memory order (empty_like's
-        ///     <c>'K'</c>) along an axis, also for a zero shift (a <c>copy('K')</c>); C order with no axis (the reshape of the
-        ///     raveled roll).</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>'s rank (the axis as
-        ///     given).</exception>
-        /// <remarks>Scoped by <c>[NDScoped]</c>: the ravel, the inner roll, and the slice views of the two copies are released;
-        ///     the result is yielded. It sees plain arrays only: the woven public function hands it the plain view of a
-        ///     subclass operand and answers for the class itself (NDSubclass).</remarks>
-        [NDScoped /* the ravel and the inner roll of the flat case, and the four slice views of the copies, are released; the result is yielded */]
+        ///     <c>'K'</c>) along axes, also when every offset is 0 (a <c>copy('K')</c>); C order with no axis (the reshape of
+        ///     the raveled roll).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="shift"/> is null.</exception>
+        /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>'s rank (the axis as given).</exception>
+        /// <exception cref="IncorrectShapeException">The shift does not broadcast against the axes (np.broadcast's <c>shape
+        ///     mismatch: objects cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1
+        ///     with shape (2,).</c>).</exception>
+        /// <exception cref="ValueError">The broadcast has two dimensions or more (<c>'shift' and 'axis' should be scalars or
+        ///     1D sequences</c>); a NaN shift (<c>cannot convert float NaN to integer</c>); a text shift that is no int
+        ///     literal; a 0-d <paramref name="a"/> with the empty tuple (Python's <c>not enough values to unpack (expected 2,
+        ///     got 0)</c>: <c>zip(*())</c> of the one empty product).</exception>
+        /// <exception cref="OverflowError">An infinite shift (<c>cannot convert float infinity to integer</c>).</exception>
+        /// <exception cref="TypeError">A shift element <c>int()</c> refuses (a StringDType NA None).</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>: the ravel and the inner roll of the flat case, and every slice view of the
+        ///     copies, are released; the result is yielded. It sees plain arrays only: the woven public function hands it the
+        ///     plain view of a subclass operand and answers for the class itself (NDSubclass). NumPy's ComplexWarning for a
+        ///     complex shift is not raised (NumSharp has no warnings).</remarks>
+        [NDScoped /* the ravel and the inner roll of the flat case, and the slice views of the copies, are released; the result is yielded */]
         [NewSubtype("a")]
-        internal static NDArray roll(NDArray a, long shift, int? axis)
+        internal static NDArray roll(NDArray a, NDArray shift, NDAxis? axis)
         {
-            if (axis == null)
+            if (shift is null)
+                throw new ArgumentNullException(nameof(shift));
+            // `if axis is None: return roll(a.ravel(), shift, 0).reshape(a.shape)`.
+            if (axis is null)
                 return roll(a.ravel(), shift, 0).reshape(new Shape(a.Shape.dimensions, copy: false));
 
-            // normalize_axis_tuple(axis, a.ndim, allow_duplicate=True): NumPy's AxisError, the axis as given.
-            int ax = Shape.check_and_adjust_axis(a.ndim, axis.Value);
+            // `axis = normalize_axis_tuple(axis, a.ndim, allow_duplicate=True)`: NumPy's AxisError, the axis as given; an
+            // integer is a tuple of one.
+            int nd = a.ndim;
+            int[] axes = axis.Value.Normalize(nd, allowDuplicate: true);
 
-            long n = a.Shape.dimensions[ax];
+            // `broadcasted = broadcast(shift, axis)`: the shift's shape against the axes' (k,), np.broadcast's mismatch text;
+            // then the dimension check.
+            Shape spread = Shape.MultiIterShape(new[] { shift.Shape, new Shape(new long[] { axes.Length }, copy: false) });
+            if (spread.NDim > 1)
+                throw new ValueError("'shift' and 'axis' should be scalars or 1D sequences");
 
-            // Python-style modulo: always non-negative when n > 0.
-            // If n == 0 (empty axis), offset stays 0 — nothing to roll.
-            long offset = n == 0 ? 0 : ((shift % n) + n) % n;
-
-            // NumPy still runs empty_like + the slice copies for a zero shift, so the result keeps a's memory order
-            // (order='K': a transposed / broadcast input stays transposed / F), which copy('K') reproduces.
-            if (offset == 0)
-                return a.copy('K');
-
-            // np.empty_like(a)'s statements: an uninitialised array of a's dtype in a's K layout (every element is written
-            // by the two copies below).
-            var result = new NDArray(a.dtype, Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone()), false);
-
-            // Build Slice arrays for each dimension.
-            // For the rolled axis we split into body + tail:
-            //   result[..., offset:, ...] = a[..., :-offset, ...]   (body shifts)
-            //   result[..., :offset, ...] = a[..., -offset:, ...]   (tail wraps)
-            // All other axes use Slice.All (":").
-
-            var srcBody = new Slice[a.ndim];
-            var dstBody = new Slice[a.ndim];
-            var srcTail = new Slice[a.ndim];
-            var dstTail = new Slice[a.ndim];
-
-            for (int i = 0; i < a.ndim; i++)
+            // `for sh, ax in broadcasted: shifts[ax] += int(sh)` - in C order over the 1-D broadcast; a shift of one element
+            // (0-d, or length 1) repeats, an axis tuple of one names the same axis every time. The sums are Python ints.
+            var sums = new BigInteger[nd];
+            long count = spread.size;
+            bool shiftRepeats = shift.size == 1;
+            bool unicode = shift.typecode == NPTypeCode.String && !shift.Storage.IsVString && shift.dtype.kind == 'U';
+            for (long i = 0; i < count; i++)
             {
-                if (i == ax)
-                {
-                    srcBody[i] = new Slice(null, -offset);   // :-offset
-                    dstBody[i] = new Slice(offset, null);    // offset:
-                    srcTail[i] = new Slice(-offset, null);   // -offset:
-                    dstTail[i] = new Slice(null, offset);    // :offset
-                }
-                else
-                {
-                    srcBody[i] = dstBody[i] = srcTail[i] = dstTail[i] = Slice.All;
-                }
+                int ax = axes.Length == 1 ? axes[0] : axes[i];
+                sums[ax] += PythonIntOfShift(shift.GetAtIndex(shiftRepeats ? 0 : i), unicode);
             }
 
-            result[dstBody] = a[srcBody];
-            result[dstTail] = a[srcTail];
+            // Python's `offset %= a.shape[ax] or 1`: never negative, and 0 for an empty axis ("nothing matters").
+            var offsets = new long[nd];
+            bool any = false;
+            for (int d = 0; d < nd; d++)
+            {
+                long n = a.Shape.dimensions[d] == 0 ? 1 : a.Shape.dimensions[d];
+                BigInteger r = BigInteger.Remainder(sums[d], n);
+                offsets[d] = (long)(r.Sign < 0 ? r + n : r);
+                any |= offsets[d] != 0;
+            }
+
+            // `zip(*indices)` of the ONE empty product a 0-d input gives: Python cannot unpack it into two names.
+            if (nd == 0)
+                throw new ValueError("not enough values to unpack (expected 2, got 0)");
+
+            // NumPy still runs empty_like + the slice copies when every offset is 0, so the result keeps a's memory order
+            // (order='K': a transposed / broadcast input stays transposed / F), which copy('K') reproduces.
+            if (!any)
+                return a.copy('K');
+
+            // np.empty_like(a)'s statements: an uninitialised array of a's dtype in a's K layout (every element is written by
+            // the copies below: the 2^m slice pairs of the m rolled axes cover the result exactly once).
+            var result = new NDArray(a.dtype, Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone()), false);
+
+            // `for indices in itertools.product(*rolls)`: an odometer over the rolled axes, each either its body
+            // (result[offset:] = a[:-offset]) or its tail (result[:offset] = a[-offset:]); an axis without an offset is ':'
+            // on both sides. The product's order (the first axis slowest) is NumPy's.
+            var rolled = new int[nd];
+            int m = 0;
+            for (int d = 0; d < nd; d++)
+                if (offsets[d] != 0)
+                    rolled[m++] = d;
+            var src = new Slice[nd];
+            var dst = new Slice[nd];
+            for (long pick = 0; pick < 1L << m; pick++)
+            {
+                for (int d = 0; d < nd; d++)
+                    src[d] = dst[d] = Slice.All;
+                for (int j = 0; j < m; j++)
+                {
+                    int d = rolled[j];
+                    long offset = offsets[d];
+                    bool tail = ((pick >> (m - 1 - j)) & 1) != 0;
+                    src[d] = tail ? new Slice(-offset, null) : new Slice(null, -offset);
+                    dst[d] = tail ? new Slice(null, offset) : new Slice(offset, null);
+                }
+                result[dst] = a[src];
+            }
 
             return result;
+        }
+
+        /// <summary>
+        ///     Python's <c>int(sh)</c> of one element of the broadcast shift, as <c>np.broadcast</c>'s iteration hands it to
+        ///     np.roll: NumPy's scalar of the element (an <c>np.str_</c> for a <c>U</c> array, a Python str for StringDType).
+        /// </summary>
+        /// <param name="element">The element, boxed by <see cref="NDArray.GetAtIndex(long)"/>.</param>
+        /// <param name="unicode">The shift is a <c>U</c> array: an invalid literal is quoted as <c>np.str_('…')</c>.</param>
+        /// <returns>The integer.</returns>
+        /// <exception cref="ValueError">A NaN, or text that is no int literal.</exception>
+        /// <exception cref="OverflowError">An infinity.</exception>
+        /// <exception cref="TypeError">A value <c>int()</c> refuses (None).</exception>
+        private static BigInteger PythonIntOfShift(object element, bool unicode)
+        {
+            switch (element)
+            {
+                case Complex c:
+                    // NumPy's complex scalar __int__: a ComplexWarning, then int() of the real part.
+                    return PythonInt.From(c.Real);
+                case string s when unicode:
+                    return PythonInt.Parse(s, 10, numpyStr: true);
+                default:
+                    return PythonInt.From(element);
+            }
         }
 
         /// <summary>

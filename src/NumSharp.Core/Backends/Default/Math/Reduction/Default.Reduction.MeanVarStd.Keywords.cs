@@ -69,14 +69,16 @@ namespace NumSharp.Backends
         ///     keepdims).
         /// </summary>
         /// <param name="arr">The reduced array.</param>
-        /// <param name="axis">The axis, or null for every axis.</param>
+        /// <param name="axis">The axis, a tuple of axes, or null for every axis.</param>
         /// <param name="keepdims">Whether the counts keep the reduced axes with length 1.</param>
         /// <param name="where">The mask (not null).</param>
         /// <returns>A fresh int64 array of the counts.</returns>
         /// <exception cref="IncorrectShapeException">The mask does not broadcast to the array's shape (np.broadcast_to's
         ///     text).</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds (ufunc.reduce's rule).</exception>
-        private NDArray CountReduceItems(NDArray arr, int? axis, bool keepdims, NDArray where)
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of bounds (ufunc.reduce's
+        ///     rule).</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
+        private NDArray CountReduceItems(NDArray arr, NDAxis? axis, bool keepdims, NDArray where)
         {
             using var stretched = NDArray.broadcast_to(where, arr.Shape);
             // umr_sum(..., nt.intp, None, keepdims): a non-bool mask is summed by value, as NumPy's is.
@@ -84,30 +86,42 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     <c>np.mean</c> with a <c>where=</c> mask: <c>_methods._mean</c>'s statements (see the file header).
+        ///     <c>np.mean</c> with a <c>where=</c> mask, or over an axis SET: <c>_methods._mean</c>'s statements (see the file
+        ///     header) - the count, the sum through NumPy's reduction iterator, the division.
         /// </summary>
         /// <param name="arr">The array to average.</param>
-        /// <param name="axis">The axis, or null for every axis.</param>
+        /// <param name="axis">The axis, a tuple of axes reduced together, or null for every axis.</param>
         /// <param name="keepdims">Keep the reduced axes with length 1.</param>
         /// <param name="dtype">The sum's loop (<c>dtype=</c>), or null for <c>_mean</c>'s default.</param>
         /// <param name="out">The out, or null.</param>
-        /// <param name="where">The mask (not null; a <c>where=True</c> literal never reaches here).</param>
+        /// <param name="where">The mask, or null for none (<c>_count_reduce_items</c>' fast path: the product of the reduced
+        ///     extents, one count for every output; a <c>where=True</c> literal arrives as null).</param>
         /// <returns><paramref name="out"/> itself, or the fresh mean (NumPy's read-only scalar for a reduction over every axis
         ///     without keepdims).</returns>
         /// <exception cref="IncorrectShapeException">The mask does not broadcast to the array (raised first), or the out does
         ///     not broadcast.</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of bounds: from the count, before
+        ///     the sum looks at its out.</exception>
         /// <exception cref="ArgumentException">The mask is not bool (raised by the sum, after the count).</exception>
-        /// <exception cref="ValueError">A read-only or misshapen out; a <c>StringDType</c> input (its add has no identity, so
-        ///     the masked sum needs an initial value).</exception>
-        /// <exception cref="TypeError">NumPy's refusal for a fixed-width text input.</exception>
+        /// <exception cref="ValueError">A read-only or misshapen out; a <c>StringDType</c> input under a mask (its add has no
+        ///     identity, so the masked sum needs an initial value) or over two axes or more (not reorderable); a tuple that
+        ///     names an axis twice (raised by the sum, after its out check).</exception>
+        /// <exception cref="TypeError">NumPy's refusal for a fixed-width text input; a <c>StringDType</c> sum over no axis
+        ///     meets the division's refusal (no <c>divide</c> loop for text).</exception>
         /// <exception cref="DivideByZeroException">A decimal input (NumSharp's dtype, no NaN) with an output whose mask
         ///     selects nothing.</exception>
         [NDScoped]
-        private NDArray MeanWhereNumPy(NDArray arr, int? axis, bool keepdims, DType dtype, NDArray @out, NDArray @where)
+        private NDArray MeanWhereNumPy(NDArray arr, NDAxis? axis, bool keepdims, DType dtype, NDArray @out, NDArray @where)
         {
-            // rcount = _count_reduce_items(arr, axis, keepdims=keepdims, where=where): broadcast_to's errors, then the axis.
-            var rcount = CountReduceItems(arr, axis, keepdims, @where);
+            // rcount = _count_reduce_items(arr, axis, keepdims=keepdims, where=where): without a mask the product of the
+            // reduced extents, each axis normalized against the operand (its AxisError; no repeat check - the sum raises it);
+            // with one, broadcast_to's errors, then the axis.
+            NDArray rcount = null;
+            long items = 0;
+            if (@where is null)
+                items = ReduceItemCount(arr, axis);
+            else
+                rcount = CountReduceItems(arr, axis, keepdims, @where);
 
             // `if dtype is None`: float64 for an integer / bool (NumSharp's char) input, float32 for float16 with a float16
             // result (is_float16_result); every other input sums in its own loop.
@@ -122,8 +136,11 @@ namespace NumSharp.Backends
             if (@out is not null)
             {
                 // isinstance(ret, ndarray): true_divide(out, rcount, out=out, casting='unsafe') — the division runs on the
-                // sum as out's dtype holds it, one count per output.
-                DivideByCountLikeNumPy(@out, rcount);
+                // sum as out's dtype holds it, one count per output (or the one count of every output without a mask).
+                if (rcount is null)
+                    DivideByCountLikeNumPy(@out, items);
+                else
+                    DivideByCountLikeNumPy(@out, rcount);
                 return @out;
             }
 
@@ -132,11 +149,14 @@ namespace NumSharp.Backends
                 // The scalar branch: ret.dtype.type(ret / rcount), or arr.dtype.type(ret / rcount) for a float16 result;
                 // rcount is one np.intp here (every axis reduced without keepdims). A decimal output with no selected
                 // element divides 0 by 0 in decimal, which raises (decimal has no NaN).
-                return FinishMeanLikeNumPy(ret, rcount.GetAtIndex<long>(0), ret.GetTypeCode, float16Result);
+                return FinishMeanLikeNumPy(ret, rcount is null ? items : rcount.GetAtIndex<long>(0), ret.GetTypeCode, float16Result);
             }
 
             // true_divide(ret, rcount, out=ret, casting='unsafe'), then arr.dtype.type(ret) for a float16 result.
-            DivideByCountLikeNumPy(ret, rcount);
+            if (rcount is null)
+                DivideByCountLikeNumPy(ret, items);
+            else
+                DivideByCountLikeNumPy(ret, rcount);
             return float16Result ? ret.astype(np.float16, copy: true) : ret;
         }
 
@@ -145,7 +165,8 @@ namespace NumSharp.Backends
         ///     (see the file header).
         /// </summary>
         /// <param name="arr">The operand.</param>
-        /// <param name="axis">The axis, or null for every axis.</param>
+        /// <param name="axis">The axis, a tuple of axes reduced together (every sum one pass of NumPy's reduction iterator over
+        ///     the set), or null for every axis.</param>
         /// <param name="keepdims">Keep the reduced axes with length 1.</param>
         /// <param name="ddof">The delta degrees of freedom (after the <c>correction=</c> rule).</param>
         /// <param name="dtype">The loop of both sums (<c>dtype=</c>), or null: float64 for an integer / bool input, else the
@@ -158,15 +179,17 @@ namespace NumSharp.Backends
         ///     dimensions).</returns>
         /// <exception cref="IncorrectShapeException">The mask does not broadcast to the array, or the mean does not broadcast
         ///     against it (the subtraction's text), or the out does not broadcast.</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of bounds.</exception>
         /// <exception cref="TypeError">std into an integer or bool result with dimensions (NumPy's sqrt output-cast
         ///     error).</exception>
         /// <exception cref="ArgumentException">The mask is not bool.</exception>
         /// <exception cref="TypeError">A boolean subtraction (a bool input in a bool loop, or a bool mean of a bool input), or
         ///     NumPy's text refusals.</exception>
-        /// <exception cref="ValueError">A read-only or misshapen out.</exception>
+        /// <exception cref="ValueError">A read-only or misshapen out; a tuple that names an axis twice (raised by the mean's
+        ///     sum, before the out is looked at); a <c>StringDType</c> operand over two axes or more (not
+        ///     reorderable).</exception>
         [NDScoped]
-        private NDArray VarStdKeywordsNumPy(NDArray arr, int? axis, bool keepdims, int ddof, DType dtype, NDArray @out,
+        private NDArray VarStdKeywordsNumPy(NDArray arr, NDAxis? axis, bool keepdims, int ddof, DType dtype, NDArray @out,
             NDArray @where, NDArray mean, bool takeSqrt)
         {
             // rcount = _count_reduce_items(arr, axis, keepdims=keepdims, where=where): without a mask the axis is normalized

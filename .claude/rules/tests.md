@@ -151,9 +151,9 @@ mapped memory ends. Two tools make it fail:
   texts, moveaxis' length mismatch as NumPy's ValueError), `OpenBugs.NaNOperandOrder.cs`, `OpenBugs.Surface.cs`,
   `OpenBugs.MaSurface.cs`, `OpenBugs.Relayout.cs` (regression pins only: RL01–RL07 are fixed), `OpenBugs.ViewFlags.cs`,
   `OpenBugs.Consumers.cs` (found by upgrading consumers to 0.80.0, deferred: `np.array(string[])` discovers its dtype per
-  value, about 10x a sized `<U` request, a same-process wall-clock ratio; 17 reductions take no tuple of axes, a
-  reflection probe; SharpCV's: `copy()` of a reversed view gathers element by element, `a[::-1]` 5.8x NumPy's and
-  `a[:, ::-1]` / `a[..., ::-1]` a target beyond NumPy, same-process ratios against a contiguous copy). Their third finding, NDW003 on a `double[]` / `int[]` / `string[]` return, is
+  value, about 10x a sized `<U` request, a same-process wall-clock ratio; SharpCV's: `copy()` of a reversed view gathers element by element, `a[::-1]` 5.8x NumPy's and
+  `a[:, ::-1]` / `a[..., ::-1]` a target beyond NumPy, same-process ratios against a contiguous copy; its tuple-axis
+  reflection probe `Reductions_TakeATupleOfAxes` is a regression pin since API-parity batch 5). Their third finding, NDW003 on a `double[]` / `int[]` / `string[]` return, is
   `GateAnalyzerTests.ManagedArrayReturns_AreNotGated` in `NumSharp.Tests.Build.Analyzer`.
   `OpenBugs.Consumers.KokoroSharp.cs` holds KokoroSharp's round (desktops and two Android phones, 2026-11-09), deferred:
   `np`'s class constructor takes about 120 ms in a fresh load context (a 30 ms limit on the fastest of three collectible

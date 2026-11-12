@@ -217,8 +217,8 @@ namespace NumSharp.Tests.Strings
                 case "any": return flat ? np.any(a) : np.any(a, axis, keepdims: keepdims);
                 case "all": return flat ? np.all(a) : np.all(a, axis, keepdims: keepdims);
                 case "count_nonzero": return flat ? np.count_nonzero(a) : np.count_nonzero(a, axis.Value, keepdims);
-                case "argmax": return flat ? np.argmax(a) : np.argmax(a, axis.Value, keepdims);
-                case "argmin": return flat ? np.argmin(a) : np.argmin(a, axis.Value, keepdims);
+                case "argmax": return flat ? np.argmax(a) : np.argmax(a, axis.Value, keepdims: keepdims);
+                case "argmin": return flat ? np.argmin(a) : np.argmin(a, axis.Value, keepdims: keepdims);
                 case "nanargmax": return np.nanargmax(a, axis, keepdims: keepdims);
                 case "nanargmin": return np.nanargmin(a, axis, keepdims: keepdims);
             }

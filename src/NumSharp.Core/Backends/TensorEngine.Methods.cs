@@ -15,7 +15,7 @@ namespace NumSharp
     public abstract partial class TensorEngine
     {
         /// <summary>
-        ///     NumPy's <c>np.sum</c> (<c>np.add.reduce</c>), the whole call: the add reduction over <paramref name="axis_"/>
+        ///     NumPy's <c>np.sum</c> (<c>np.add.reduce</c>), the whole call: the add reduction over <paramref name="axis"/>
         ///     (every axis when null), started from the add identity or <paramref name="initial"/>, over the elements
         ///     <paramref name="where"/> selects, stored into <paramref name="out"/> when given. <c>np.sum</c> and
         ///     <c>ndarray.sum</c> are this member, a subclass operand handed in as its plain view (the declaration below
@@ -23,7 +23,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr">The array (any dtype, any layout; <c>StringDType</c> concatenates, fixed-width text is
         ///     refused).</param>
-        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis. A 0-d input accepts
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis. A 0-d input accepts
         ///     0 and -1 as every axis (ufunc.reduce's backward-compatibility rule).</param>
         /// <param name="keepdims">Whether the reduced axes stay in the result with length 1.</param>
         /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null: NEP 50's accumulator of the input without
@@ -47,7 +47,7 @@ namespace NumSharp
         ///     <paramref name="arr"/> (the reduce prologue's texts), or an <paramref name="initial"/> the loop cannot hold (a
         ///     NaN into an integer loop, a sequence).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not broadcast
         ///     against <paramref name="arr"/>.</exception>
         /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
@@ -57,7 +57,7 @@ namespace NumSharp
         ///     parameters. <see cref="Sum"/> stays for callers of the shipped member; <c>np.sum</c> calls this one.
         /// </remarks>
         [WrapReduction("sum")]
-        public abstract NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+        public abstract NDArray ReduceAdd(NDArray arr, NDAxis? axis, bool keepdims = false, DType dtype = null, NDArray @out = null,
             object initial = null, NDArray @where = null);
         /// <summary>
         ///     NumPy's <c>np.cumsum</c> (<c>np.add.accumulate</c>), the whole call: the running sums along
@@ -114,7 +114,7 @@ namespace NumSharp
         ///     reduced elements, stored into <paramref name="out"/> when given.
         /// </summary>
         /// <param name="arr">The array to average (any dtype, any layout).</param>
-        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis. Unlike a ufunc
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis. Unlike a ufunc
         ///     reduction, a 0-d array takes no axis.</param>
         /// <param name="keepdims">Whether the reduced axes stay in the result with length 1.</param>
         /// <param name="dtype">The loop of the sum (<c>dtype=</c>), or null: float64 for a bool or integer input, float32 for
@@ -129,7 +129,7 @@ namespace NumSharp
         ///     float loop, NumPy's unsafe cast of it in an integer one). Null, or a 0-d true mask, is no mask.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, NumPy's read-only scalar for a full
         ///     reduction.</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range (every axis is, for a 0-d input without a
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range (every axis is, for a 0-d input without a
         ///     mask; with one, ufunc.reduce's rule reads axis 0 / -1 of a 0-d input as every axis).</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape (NumPy's
         ///     reduce prologue texts), or text a numeric loop must parse does not parse.</exception>
@@ -145,7 +145,7 @@ namespace NumSharp
         ///     stays for callers of the shipped member; <c>np.mean</c> calls this one.
         /// </remarks>
         [WrapReduction("mean")]
-        public abstract NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+        public abstract NDArray ReduceMean(NDArray arr, NDAxis? axis, bool keepdims = false, DType dtype = null, NDArray @out = null,
             NDArray @where = null);
 
         /// <summary>
@@ -403,12 +403,12 @@ namespace NumSharp
         public abstract NDArray Any(NDArray a, int[] axis, NDArray @out, bool keepdims = false, NDArray where = null);
 
         /// <summary>
-        ///     NumPy's <c>np.max</c> / <c>np.amax</c> (<c>np.maximum.reduce</c>) over <paramref name="axis_"/>, or over every
+        ///     NumPy's <c>np.max</c> / <c>np.amax</c> (<c>np.maximum.reduce</c>) over <paramref name="axis"/>, or over every
         ///     axis when it is null, with <c>ufunc.reduce</c>'s <c>dtype=</c> and NumPy's <c>out=</c>, <c>initial=</c> and
         ///     <c>where=</c>: the whole call of <c>np.max</c> and <c>ndarray.max</c>.
         /// </summary>
         /// <param name="arr">The array (any dtype; <c>StringDType</c> computes, fixed-width text is refused).</param>
-        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis. A 0-d array accepts
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis. A 0-d array accepts
         ///     0 and -1 and nothing else.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
         /// <param name="dtype">The loop dtype (<c>dtype=</c>, NumPy's <c>np.maximum.reduce</c> keyword), or null for the
@@ -422,7 +422,7 @@ namespace NumSharp
         ///     elements reduce; it needs <paramref name="initial"/>. Null, or a 0-d true mask, is no mask.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, a read-only 0-d one (NumPy's scalar)
         ///     for a full reduction without keepdims.</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <exception cref="ArgumentException">An empty reduction without <paramref name="initial"/> (<c>zero-size array to
         ///     reduction operation maximum which has no identity</c>, NumPy's ValueError); a non-bool mask (NumPy's TypeError
         ///     text).</exception>
@@ -441,16 +441,16 @@ namespace NumSharp
         ///     (the np-layer dtype plan, phase PE, E5: D2): the keyword path was the static
         ///     <c>DefaultEngine.MaxMinNumPy</c>, which the public functions called past the engine.</remarks>
         [WrapReduction("max")]
-        public abstract NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null,
+        public abstract NDArray ReduceAMax(NDArray arr, NDAxis? axis, bool keepdims = false, DType dtype = null,
             NDArray @out = null, object initial = null, NDArray @where = null);
 
         /// <summary>
-        ///     NumPy's <c>np.min</c> / <c>np.amin</c> (<c>np.minimum.reduce</c>) over <paramref name="axis_"/>, or over every
+        ///     NumPy's <c>np.min</c> / <c>np.amin</c> (<c>np.minimum.reduce</c>) over <paramref name="axis"/>, or over every
         ///     axis when it is null, with <c>ufunc.reduce</c>'s <c>dtype=</c> and NumPy's <c>out=</c>, <c>initial=</c> and
         ///     <c>where=</c>: the whole call of <c>np.min</c> and <c>ndarray.min</c>.
         /// </summary>
         /// <param name="arr">The array (any dtype; <c>StringDType</c> computes, fixed-width text is refused).</param>
-        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis. A 0-d array accepts
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis. A 0-d array accepts
         ///     0 and -1 and nothing else.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
         /// <param name="dtype">The loop dtype (<c>dtype=</c>, NumPy's <c>np.minimum.reduce</c> keyword), or null for the
@@ -464,7 +464,7 @@ namespace NumSharp
         ///     elements reduce; it needs <paramref name="initial"/>. Null, or a 0-d true mask, is no mask.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, a read-only 0-d one (NumPy's scalar)
         ///     for a full reduction without keepdims.</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <exception cref="ArgumentException">An empty reduction without <paramref name="initial"/> (<c>zero-size array to
         ///     reduction operation minimum which has no identity</c>, NumPy's ValueError); a non-bool mask (NumPy's TypeError
         ///     text).</exception>
@@ -483,7 +483,7 @@ namespace NumSharp
         ///     (the np-layer dtype plan, phase PE, E5: D2): the keyword path was the static
         ///     <c>DefaultEngine.MaxMinNumPy</c>, which the public functions called past the engine.</remarks>
         [WrapReduction("min")]
-        public abstract NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null,
+        public abstract NDArray ReduceAMin(NDArray arr, NDAxis? axis, bool keepdims = false, DType dtype = null,
             NDArray @out = null, object initial = null, NDArray @where = null);
         /// <summary>
         ///     NumPy's <c>np.argmax(a, axis=None, out=None, *, keepdims=False)</c> (<c>PyArray_ArgMaxWithKeepdims</c>), the
@@ -557,11 +557,11 @@ namespace NumSharp
         [NewSubtype("arr")]
         public abstract NDArray ReduceArgMin(NDArray arr, int? axis_, bool keepdims = false, NDArray @out = null);
         /// <summary>
-        ///     NumPy's <c>np.prod</c> (<c>np.multiply.reduce</c>), the whole call: the product over <paramref name="axis_"/>
+        ///     NumPy's <c>np.prod</c> (<c>np.multiply.reduce</c>), the whole call: the product over <paramref name="axis"/>
         ///     (every axis when null), stored into <paramref name="out"/> when given.
         /// </summary>
         /// <param name="arr">The array (any dtype, any layout).</param>
-        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis. A 0-d input accepts
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis. A 0-d input accepts
         ///     0 and -1 (ufunc.reduce's backward-compatibility rule).</param>
         /// <param name="keepdims">Whether the reduced axes stay in the result with length 1.</param>
         /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null: NEP 50's accumulator of the input without
@@ -576,7 +576,7 @@ namespace NumSharp
         ///     no mask.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, NumPy's read-only scalar for a full
         ///     reduction.</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape (NumPy's
         ///     reduce prologue texts), text a numeric loop must parse does not parse, or an <paramref name="initial"/> the
         ///     loop cannot hold.</exception>
@@ -595,7 +595,7 @@ namespace NumSharp
         ///     from the call without them (that call's flat float loop multiplies in SIMD lane order, the open NL3).
         /// </remarks>
         [WrapReduction("prod")]
-        public abstract NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+        public abstract NDArray ReduceProduct(NDArray arr, NDAxis? axis, bool keepdims = false, DType dtype = null, NDArray @out = null,
             object initial = null, NDArray @where = null);
 
         /// <summary>
@@ -603,7 +603,7 @@ namespace NumSharp
         ///     into <paramref name="out"/> when given.
         /// </summary>
         /// <param name="arr">The operand (any dtype, any layout).</param>
-        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis.</param>
         /// <param name="keepdims">Whether the reduced axes stay in the result with length 1.</param>
         /// <param name="ddof">Delta degrees of freedom (null is 0): the divisor is <c>max(n - ddof, 0)</c>.</param>
         /// <param name="dtype">The loop of both sums (an integer or bool input defaults to float64, every other input to its
@@ -616,7 +616,7 @@ namespace NumSharp
         ///     (see <see cref="ReduceVar"/>), or null.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, a read-only 0-d scalar when the result
         ///     has no dimensions.</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand (a 0-d operand included, without a
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand (a 0-d operand included, without a
         ///     mask).</exception>
         /// <exception cref="TypeError">A bool input with <c>dtype=bool</c> or a bool <paramref name="mean"/> against a bool
         ///     input (NumPy's boolean-subtract refusal), or text NumPy's loop resolution refuses.</exception>
@@ -635,7 +635,7 @@ namespace NumSharp
         /// </remarks>
         [WrapReduction("std")]
         [WrapArgument("ddof", typeof(DefaultEngine), nameof(DefaultEngine.DdofWithCorrection))]
-        public abstract NDArray ReduceStd(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null, NDArray @out = null,
+        public abstract NDArray ReduceStd(NDArray arr, NDAxis? axis, bool keepdims = false, int? ddof = null, DType dtype = null, NDArray @out = null,
             NDArray @where = null, NDArray mean = null, int? correction = null);
 
         /// <summary>
@@ -643,7 +643,7 @@ namespace NumSharp
         ///     divided by <c>max(n - ddof, 0)</c>, stored into <paramref name="out"/> when given.
         /// </summary>
         /// <param name="arr">The operand (any dtype, any layout).</param>
-        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis.</param>
         /// <param name="keepdims">Whether the reduced axes stay in the result with length 1.</param>
         /// <param name="ddof">Delta degrees of freedom (null is 0).</param>
         /// <param name="dtype">The loop of both sums (an integer or bool input defaults to float64, every other input to its
@@ -663,7 +663,7 @@ namespace NumSharp
         ///     it replaces <paramref name="ddof"/> when that is null or 0, or null for none.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, a read-only 0-d scalar when the result
         ///     has no dimensions.</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand (a 0-d operand included, without a
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand (a 0-d operand included, without a
         ///     mask).</exception>
         /// <exception cref="TypeError">A bool input with <c>dtype=bool</c> or a bool <paramref name="mean"/> against a bool
         ///     input (NumPy's boolean-subtract refusal), a text out for a float or complex input, or text NumPy's loop
@@ -682,7 +682,7 @@ namespace NumSharp
         /// </remarks>
         [WrapReduction("var")]
         [WrapArgument("ddof", typeof(DefaultEngine), nameof(DefaultEngine.DdofWithCorrection))]
-        public abstract NDArray ReduceVar(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null, NDArray @out = null,
+        public abstract NDArray ReduceVar(NDArray arr, NDAxis? axis, bool keepdims = false, int? ddof = null, DType dtype = null, NDArray @out = null,
             NDArray @where = null, NDArray mean = null, int? correction = null);
 
         [WrapFunc("argmax", WhenGiven = "keepdims")]

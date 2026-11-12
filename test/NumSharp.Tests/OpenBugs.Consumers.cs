@@ -97,26 +97,26 @@ namespace NumSharp.Tests
         }
 
         // ============================================================================
-        //  BUG: 17 reductions take one axis only; NumPy takes a tuple of axes.
+        //  REGRESSION PIN (fixed by API-parity batches 4 and 5, 2026-11-12): every reduction takes a tuple of axes.
         //
         //  np.sum(a, axis=(1, 2)) reduces both axes at once in NumPy, and so do np.prod, np.mean, np.std, np.var,
-        //  np.max / np.min / np.amax / np.amin, the nan-reductions and np.count_nonzero. NumSharp's forms take int? (or
-        //  int) only; a consumer reshapes first (Bigtree.Algorithm's first Baum-Welch port did). Ten reductions already
-        //  have the multi-axis form, as an int[] overload beside the int? one: np.all, np.any, np.average, np.median,
-        //  np.nanmedian, np.percentile, np.nanpercentile, np.quantile, np.nanquantile and np.ptp.
+        //  np.max / np.min / np.amax / np.amin, the nan-reductions and np.count_nonzero. Found upgrading Bigtree.Algorithm
+        //  (its first Baum-Welch port reshaped first); every one now takes NumPy's axis type, NDAxis? (an int, a tuple, or
+        //  null for None), as np.all, np.any, np.average, np.median, np.nanmedian, np.percentile, np.nanpercentile,
+        //  np.quantile, np.nanquantile and np.ptp do since batch 4.
         // ============================================================================
 
         /// <summary>
-        ///     Every NumPy reduction that takes a tuple of axes has a multi-axis form in NumSharp: an overload whose
-        ///     <c>axis</c> parameter is neither <see cref="int"/> nor <see cref="Nullable{Int32}"/> (the ten that have
-        ///     one use <c>int[] axis</c>).
+        ///     Guards that every NumPy reduction taking a tuple of axes keeps a multi-axis form in NumSharp: an overload
+        ///     whose <c>axis</c> parameter is neither <see cref="int"/> nor <see cref="Nullable{Int32}"/>
+        ///     (<see cref="NDAxis"/>? since API-parity batches 4 and 5).
         /// </summary>
         /// <remarks>
-        ///     Reflection over <see cref="np"/>'s public static methods, so the test compiles today and turns green when
-        ///     the forms are added, whatever type they take. NumPy 2.4.2 documents <c>axis : None or int or tuple of
-        ///     ints</c> for each name below.
+        ///     Reflection over <see cref="np"/>'s public static methods, whatever type the forms take. NumPy 2.4.2 documents
+        ///     <c>axis : None or int or tuple of ints</c> for each name below. The values the forms compute are
+        ///     <c>NumPyKeywordParityBatch5Tests</c>' and <c>NumPyKeywordParityBatch4Tests</c>'.
         /// </remarks>
-        [TestMethod, OpenBugs(IssueUrl = "consumer-bigtree-tuple-axis")]
+        [TestMethod]
         public void Reductions_TakeATupleOfAxes()
         {
             string[] reductions =
@@ -127,7 +127,7 @@ namespace NumSharp.Tests
             // The control first: the probe finds the multi-axis forms that exist, so the failure below names missing
             // forms, never a probe that cannot see any.
             new[] { "all", "any", "average", "median", "percentile", "quantile", "ptp" }
-                .Where(name => !HasMultiAxisForm(name)).Should().BeEmpty("these already take int[] axis");
+                .Where(name => !HasMultiAxisForm(name)).Should().BeEmpty("these take NumPy's axis type since batch 4");
 
             string[] withoutTuple = reductions.Where(name => !HasMultiAxisForm(name)).ToArray();
             withoutTuple.Should().BeEmpty(

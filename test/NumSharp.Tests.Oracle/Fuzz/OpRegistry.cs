@@ -1330,8 +1330,8 @@ namespace NumSharp.Tests.Fuzz
                 // axis=None (keepdims=False only — the flat long form has no keepdims): wraps the
                 // scalar back to the 0-d int64 NumPy returns. G13: this is the path whose Decimal
                 // IL compare was silently wrong and whose Char case threw — now oracle-gated.
-                case "argmax": return axis.HasValue ? np.argmax(a, axis.Value, keepdims) : NDArray.Scalar(np.argmax(a));
-                case "argmin": return axis.HasValue ? np.argmin(a, axis.Value, keepdims) : NDArray.Scalar(np.argmin(a));
+                case "argmax": return axis.HasValue ? np.argmax(a, axis.Value, keepdims: keepdims) : NDArray.Scalar(np.argmax(a));
+                case "argmin": return axis.HasValue ? np.argmin(a, axis.Value, keepdims: keepdims) : NDArray.Scalar(np.argmin(a));
                 case "all": return np.all(a, axis, null, keepdims);
                 case "any": return np.any(a, axis, null, keepdims);
                 case "nansum": return np.nansum(a, axis, keepdims: keepdims);

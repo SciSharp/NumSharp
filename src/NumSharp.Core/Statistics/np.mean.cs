@@ -24,7 +24,8 @@ namespace NumSharp
         /// <param name="a">Array containing numbers whose mean is desired.</param>
         /// <param name="axis">The axis to average over (negative counts from the end); <c>null</c> averages every element.
         ///     Unlike np.sum, a 0-d array takes no axis (np.mean normalizes it first), unless <paramref name="where"/> is a
-        ///     mask.</param>
+        ///     mask. A tuple (<c>(0, 2)</c>) reduces every axis it names together, in one pass (NumPy's tuple axis; the
+        ///     empty tuple reduces none, and a tuple item gets no 0-d allowance).</param>
         /// <param name="dtype">The dtype the sum is computed in and the mean returned in. <c>null</c> is NumPy's default:
         ///     float64 for bool and integer input, float32 for float16 (with a float16 result), the input's own dtype
         ///     otherwise.</param>
@@ -40,7 +41,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, or a text out's missing
-        ///     division.</exception>
+        ///     division. Also a tuple that names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not
         ///     broadcast.</exception>
@@ -49,7 +50,7 @@ namespace NumSharp
         ///     (<c>matrix.mean() got an unexpected keyword argument 'keepdims'</c>).</exception>
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain (non-matrix) <paramref name="out"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
-        public static NDArray mean(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
+        public static NDArray mean(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
             NDArray @where = null)
         {
             if (a is null)
