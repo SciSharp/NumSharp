@@ -22,10 +22,11 @@ namespace NumSharp.Tests
     //   NL2  FIXED (the plan's D24, 2026-11-06): np.median of complex data holding a NaN returned the mean of the middle
     //        values, not NumPy's NaN element (_median_nancheck); its tests moved to np_median_BattleTests
     //        (Median_Complex_WithANaN_*), and the oracle's complex-median excuse is gone.
-    //   NL3  MISALIGNED (the plan's D24, 2026-11-06: "Keep SIMD lanes"): the float32 / float64 np.prod multiplies in
-    //        SIMD lane order, not NumPy's sequential order (an ULP apart; an overflow before a zero is NaN in NumPy, 0
-    //        here), flat, along an axis and through out=; initial= or where= run NumPy's loop. The lanes are 3.7-16x
-    //        NumPy; its cases moved to np_prod_lane_order_tests as [Misaligned] tests.
+    //   NL3  FIXED 2026-11-12 (the owner reversed the plan's D24 "Keep SIMD lanes" of 2026-11-06): the float32 / float64
+    //        np.prod multiplied in SIMD lane order, not NumPy's sequential order (an ULP apart; an overflow before a zero
+    //        was 0 where NumPy gives NaN), flat, along an axis and through out=. Every route is NumPy's sequential loop now
+    //        (Default.Reduction.Product.Sequential.cs, AddMulNumPy); its cases are regression tests in
+    //        np_prod_sequential_order_tests (Math/np.prod.SequentialOrder.Test.cs), no longer [Misaligned].
     //   NL4  FIXED (the plan's D24, 2026-11-06): 1-D np.polyval with complex coefficients and an infinite real x gave
     //        NaN+NaNj where NumPy keeps the coefficient's imaginary part (its first product is in x's dtype); its tests
     //        moved to PolynomialTests.Polyval_FirstProduct_IsInXsDtype.

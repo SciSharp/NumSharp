@@ -981,12 +981,13 @@ namespace NumSharp.Tests.Fuzz
                 // P1/P2 truthful branch above instead — a divergence that is LESS truthful than
                 // NumPy would otherwise hide in here.
                 // A signed-zero flip of sum / mean is NOT order (IsIdentitySumSignedZeroFlip) and stays red.
-                // prod's share is a decision, not a gap: its float32 / float64 SIMD lane order is the owner's documented
-                // divergence (np-layer NL3, D24 2026-11-06: "Keep SIMD lanes"; Math/np.prod.LaneOrder.Test.cs pins it).
+                // prod is NOT excused: since 2026-11-12 (the owner's D25, reversing NL3 / D24 "Keep SIMD lanes") every
+                // float32 / float64 / float16 / complex128 product is NumPy's sequential multiply.reduce, bit for bit, so
+                // any prod value divergence is a real bug (Math/np.prod.SequentialOrder.Test.cs pins the order).
                 if (kind == DivergenceKind.Value && truth == null
                     && (tc == NPTypeCode.Half || tc == NPTypeCode.Single
                         || tc == NPTypeCode.Double || tc == NPTypeCode.Complex)
-                    && (c.Op == "sum" || c.Op == "prod")
+                    && c.Op == "sum"
                     && !IsIdentitySumSignedZeroFlip(c.Op, expected, actual, tc, diffs))
                     return "reduction summation/two-pass precision (algorithm order)";
             }

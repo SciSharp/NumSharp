@@ -582,6 +582,32 @@ namespace NumSharp.Backends
         internal static NumPyReduceIterator.Loop<decimal> Decimal() => new(&DecimalReduce, &DecimalBinary);
 
         /// <summary>
+        ///     FLOAT / DOUBLE_multiply's reduce form for a caller outside the iterator (the exact float product kernels,
+        ///     <c>Default.Reduction.Product.Sequential.cs</c>): <c>acc *= x</c> along one run, the first NaN kept.
+        /// </summary>
+        /// <typeparam name="T"><see cref="float"/> or <see cref="double"/>.</typeparam>
+        /// <param name="acc">The running value (the identity 1 for a fresh product).</param>
+        /// <param name="x">The run's first element.</param>
+        /// <param name="xs">The run's stride in elements.</param>
+        /// <param name="n">The run's element count.</param>
+        /// <returns>The running value after the run.</returns>
+        internal static T ReduceRun<T>(T acc, T* x, long xs, long n) where T : unmanaged, IFloatingPointIeee754<T>
+            => FloatReduce(acc, x, xs, n);
+
+        /// <summary>
+        ///     FLOAT / DOUBLE_multiply's elementwise form for a caller outside the iterator: <c>o[i] = o[i] * x[i]</c>, the
+        ///     second operand's NaN kept when both are NaN.
+        /// </summary>
+        /// <typeparam name="T"><see cref="float"/> or <see cref="double"/>.</typeparam>
+        /// <param name="o">The out run.</param>
+        /// <param name="os">The out stride in elements.</param>
+        /// <param name="x">The input run.</param>
+        /// <param name="xs">The input stride in elements.</param>
+        /// <param name="n">The element count.</param>
+        internal static void BinaryRun<T>(T* o, long os, T* x, long xs, long n) where T : unmanaged, IFloatingPointIeee754<T>
+            => FloatBinary(o, os, x, xs, n);
+
+        /// <summary>
         ///     The reduce form of FLOAT / DOUBLE_multiply (PW = 0: <c>acc = *out; for: acc *= in2; *out = acc</c>), in the
         ///     run's order. Once the running value is a NaN it stays that NaN: NumPy's compiled loop keeps the running value's
         ///     NaN when both operands are NaN (probed 2.4.2), so the first NaN of the sequence, quieted, is the answer.
@@ -593,7 +619,10 @@ namespace NumSharp.Backends
         /// <param name="n">The run's element count.</param>
         /// <returns>The out's new value.</returns>
         /// <remarks>The NaN test is explicit because RyuJIT may swap a commutative multiply's operands, which would let a
-        ///     later NaN's payload replace the running one.</remarks>
+        ///     later NaN's payload replace the running one. [AggressiveOptimization]: the loop is reached through a function
+        ///     pointer (the iterator's Loop), whose call site the tiered JIT did not promote: at tier-0 its generic multiply
+        ///     and NaN test stay calls, 5-8x the optimized loop (np.prod of an F-ordered 1000 x 1000 along axis 0: 5.7 ms).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static T FloatReduce<T>(T acc, T* x, long xs, long n) where T : unmanaged, IFloatingPointIeee754<T>
         {
             for (long i = 0; i < n; i++)
@@ -617,7 +646,9 @@ namespace NumSharp.Backends
         /// <param name="n">The element count.</param>
         /// <remarks>A contiguous call runs a vector loop whose <c>(a &amp; (b == b)) * b</c> leaves the instruction no NaN
         ///     choice; a broadcast input (stride 0) takes the scalar statement, the second operand's NaN in every
-        ///     position.</remarks>
+        ///     position. [AggressiveOptimization]: as <see cref="FloatReduce{T}"/>, a function-pointer target that stayed at
+        ///     tier-0 (a 1000 x 1000 axis-0 product: 2.1 ms against 0.27 ms optimized).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void FloatBinary<T>(T* o, long os, T* x, long xs, long n) where T : unmanaged, IFloatingPointIeee754<T>
         {
             long i = 0;
@@ -647,6 +678,9 @@ namespace NumSharp.Backends
         /// <param name="xs">The run's stride in elements.</param>
         /// <param name="n">The run's element count.</param>
         /// <returns>The out's new value (float16 bits).</returns>
+        /// <remarks>[AggressiveOptimization]: a function-pointer target of the iterator's Loop, which the tiered JIT left at tier-0
+        ///     (see <see cref="FloatReduce{T}"/>).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static ushort HalfReduce(ushort acc, ushort* x, long xs, long n)
         {
             float io1 = DirectILKernelGenerator.HalfToFloatScalarExact(acc);
@@ -673,6 +707,7 @@ namespace NumSharp.Backends
         ///     (<see cref="DirectILKernelGenerator.HalfArithRun"/>, which supports that one aliasing); a strided out keeps the
         ///     scalar statement.</remarks>
         [SkipLocalsInit]
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void HalfBinary(ushort* o, long os, ushort* x, long xs, long n)
         {
             if (os == 1 && n > 0)
@@ -702,6 +737,9 @@ namespace NumSharp.Backends
         /// <param name="xs">The run's stride in elements.</param>
         /// <param name="n">The run's element count.</param>
         /// <returns>The out's new value.</returns>
+        /// <remarks>[AggressiveOptimization]: a function-pointer target of the iterator's Loop, which the tiered JIT left at tier-0
+        ///     (see <see cref="FloatReduce{T}"/>).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static Complex ComplexReduce(Complex acc, Complex* x, long xs, long n)
         {
             for (long i = 0; i < n; i++)
@@ -716,6 +754,9 @@ namespace NumSharp.Backends
         /// <param name="x">The input run.</param>
         /// <param name="xs">The input stride in elements.</param>
         /// <param name="n">The element count.</param>
+        /// <remarks>[AggressiveOptimization]: a function-pointer target of the iterator's Loop, which the tiered JIT left at tier-0
+        ///     (see <see cref="FloatReduce{T}"/>).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void ComplexBinary(Complex* o, long os, Complex* x, long xs, long n)
         {
             for (long i = 0; i < n; i++)
@@ -729,6 +770,9 @@ namespace NumSharp.Backends
         /// <param name="n">The run's element count.</param>
         /// <returns>The out's new value.</returns>
         /// <exception cref="OverflowException">The product leaves decimal's range.</exception>
+        /// <remarks>[AggressiveOptimization]: a function-pointer target of the iterator's Loop, which the tiered JIT left at tier-0
+        ///     (see <see cref="FloatReduce{T}"/>).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static decimal DecimalReduce(decimal acc, decimal* x, long xs, long n)
         {
             for (long i = 0; i < n; i++)
@@ -743,6 +787,9 @@ namespace NumSharp.Backends
         /// <param name="xs">The input stride in elements.</param>
         /// <param name="n">The element count.</param>
         /// <exception cref="OverflowException">A product leaves decimal's range.</exception>
+        /// <remarks>[AggressiveOptimization]: a function-pointer target of the iterator's Loop, which the tiered JIT left at tier-0
+        ///     (see <see cref="FloatReduce{T}"/>).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void DecimalBinary(decimal* o, long os, decimal* x, long xs, long n)
         {
             for (long i = 0; i < n; i++)
