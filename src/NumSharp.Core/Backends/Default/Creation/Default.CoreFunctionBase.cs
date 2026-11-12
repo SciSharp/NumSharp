@@ -661,49 +661,219 @@ namespace NumSharp.Backends
         // ACCURATE to NumPy within the documented ≤3-ULP complex-unary envelope but
         // NOT byte-reproducible (like np.sinc's complex path) — allclose, not bit-exact.
         //
-        // SCOPE: scalar start/stop only (NumSharp's linspace family is scalar-only;
-        // array-like start/stop and the `axis` placement of a new sample axis are a
-        // separate, larger feature). `axis` is kept for signature parity and validated
-        // against the 1-D output, but is a no-op for scalar inputs.
+        // ARRAY ends (API-parity batch 10): any other pair - array ends, or 0-d ends whose dt is
+        // float16 / float32 / decimal - runs NumPy's statements over arrays (GeomspaceArrays):
+        // the ends cast to dt, sign, true_divide, log10, the NDArray linspace, power, the
+        // end writes, multiply, moveaxis. Two 0-d ends that compute in float64 / complex128
+        // (every C# number pair) keep the fused scalar cores below, value for value.
         // =====================================================================
 
         /// <inheritdoc />
-        public override NDArray Geomspace(double start, double stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0)
+        public override NDArray Geomspace(NDArray start, NDArray stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0)
         {
-            // NumPy order: the zero-check runs FIRST (before the num check inside logspace and before the trailing
-            // axis moveaxis), so a zero endpoint wins over a negative num which wins over a bad axis.
-            if (start == 0.0 || stop == 0.0)
+            // The facade refuses a null end before it picks an engine; this guards a direct engine call.
+            if (start is null)
+                throw new ArgumentNullException(nameof(start));
+            if (stop is null)
+                throw new ArgumentNullException(nameof(stop));
+
+            // start = asanyarray(start); stop = asanyarray(stop): a C# number end is a Python number, whose array NumPy
+            // builds in the number's default dtype; an array end keeps its own.
+            DType startDType = GeomspaceEndDType(start), stopDType = GeomspaceEndDType(stop);
+            bool scalarEnds = start.ndim == 0 && stop.ndim == 0;
+
+            // if _nx.any(start == 0) or _nx.any(stop == 0): raise - NumPy's FIRST check, so a zero end wins over a negative
+            // num, a text dtype and a bad axis. Two 0-d ends are read directly (no comparison arrays).
+            if (scalarEnds ? IsZeroScalar(start) || IsZeroScalar(stop) : AnyZero(start) || AnyZero(stop))
                 throw new ValueError("Geometric sequence cannot include zero");
             // A text dtype fails NumPy's next statements, before the count and the axis are read.
             if (dtype != null && dtype.GetTypeCode() == NPTypeCode.String)
-                RefuseGeomspaceTextDtype(NewScalar(start), num, dtype);
-            ValidateSampleCount(num);
-            ValidateSpacingAxis(axis);
+                RefuseGeomspaceTextDtype(start, startDType, stopDType, num, dtype);
 
-            // NumPy's dt = result_type(start, stop, float(num), zeros((), dtype)). For scalar-double inputs that is
-            // float64 UNLESS a complex dtype forces complex128 — the only way a real-input geomspace enters the
-            // complex domain. Every other dtype (float32/float16/int) still computes float64 then casts at the end.
-            if (dtype != null && dtype.GetTypeCode() == NPTypeCode.Complex)
-                return GeomspaceComplexCore(new Complex(start, 0.0), new Complex(stop, 0.0), num, endpoint, dtype, axis);
+            // dt = result_type(start, stop, float(num), _nx.zeros((), dtype)): the ends and the 0-d zeros strong, float(num)
+            // weak - so dt is inexact, and float64 for C# number ends unless a complex dtype makes it complex128.
+            DType dt = DTypePromotion.ResultType(startDType, stopDType, (double)num, dtype ?? DType.Double);
 
-            // NumPy's tail: `if axis != 0: result = moveaxis(result, 0, axis)`, then `result.astype(dtype, copy=False)`.
-            NDArray ret = SpacingAxisView(GeomspaceRealCore(start, stop, num, endpoint), axis);
-            return CastSpacingResult(ret, dtype);
+            if (scalarEnds && dt.GetTypeCode() == NPTypeCode.Double)
+            {
+                // The scalar real path: NumPy's float64 statements fused into one pass (GeomspaceRealCore), value for value.
+                ValidateSampleCount(num);
+                ValidateSpacingAxis(axis);
+                // NumPy's tail: `if axis != 0: result = moveaxis(result, 0, axis)`, then `result.astype(dtype, copy=False)`.
+                NDArray ret = SpacingAxisView(GeomspaceRealCore(ScalarAsDouble(start), ScalarAsDouble(stop), num, endpoint), axis);
+                return CastSpacingResult(ret, dtype);
+            }
+            if (scalarEnds && dt.GetTypeCode() == NPTypeCode.Complex)
+            {
+                // The scalar spiral (a complex end or a complex dtype): NumPy's complex128 statements, GeomspaceComplexCore.
+                ValidateSampleCount(num);
+                ValidateSpacingAxis(axis);
+                return GeomspaceComplexCore(ScalarAsComplex(start), ScalarAsComplex(stop), num, endpoint, dtype, axis);
+            }
+
+            return GeomspaceArrays(start, stop, num, endpoint, dt, dtype ?? dt, axis);
         }
 
-        /// <inheritdoc />
-        public override NDArray Geomspace(Complex start, Complex stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0)
+        /// <summary>
+        ///     The dtype of an end as NumPy's <c>asanyarray(end)</c> builds it: an array keeps its dtype; a C# number (the 0-d
+        ///     array NDArray's implicit conversion marks as a Python number) takes the Python number's default - bool,
+        ///     int64 (uint64 for an integer above the int64 range), float64, complex128 - as NumPy's Python number would,
+        ///     whatever its C# width.
+        /// </summary>
+        /// <param name="end">The end (not null).</param>
+        /// <returns>The dtype NumPy's array of the end has.</returns>
+        /// <remarks>Only the result dtype and the text of a promotion error read it: the values are cast from the end
+        ///     itself, and a C# number's value is the Python number's.</remarks>
+        private static DType GeomspaceEndDType(NDArray end)
         {
-            // NumPy checks each endpoint against 0+0j (a purely-imaginary value is NOT zero and is allowed).
-            if (start == Complex.Zero || stop == Complex.Zero)
-                throw new ValueError("Geometric sequence cannot include zero");
-            // A text dtype fails NumPy's next statements, before the count and the axis are read.
-            if (dtype != null && dtype.GetTypeCode() == NPTypeCode.String)
-                RefuseGeomspaceTextDtype(NewScalar(start), num, dtype);
-            ValidateSampleCount(num);
-            ValidateSpacingAxis(axis);
+            if (end.WasPythonBool)
+                return DType.Boolean;
+            if (!end.WasPythonLiteral)
+                return end.dtype;
+            switch (end.typecode)
+            {
+                case NPTypeCode.Complex:
+                    return DType.Complex;
+                case NPTypeCode.Half:
+                case NPTypeCode.Single:
+                case NPTypeCode.Double:
+                case NPTypeCode.Decimal:
+                    return DType.Double;
+                case NPTypeCode.UInt64:
+                    // np.asanyarray(2**64 - 1) is uint64: a Python int beyond int64 takes the unsigned type.
+                    return Converts.ToUInt64(end.GetAtIndex(0)) > long.MaxValue ? DType.UInt64 : DType.Int64;
+                default:
+                    return DType.Int64;
+            }
+        }
 
-            return GeomspaceComplexCore(start, stop, num, endpoint, dtype, axis);
+        /// <summary>NumPy's <c>end == 0</c> for a 0-d end, read directly: a complex end is zero only at <c>0+0j</c>, a NaN
+        ///     never is, <c>False</c> is (bool compares as 0), and a text end never is.</summary>
+        /// <param name="end">The 0-d end.</param>
+        /// <returns>True when the end equals zero.</returns>
+        private static bool IsZeroScalar(NDArray end)
+        {
+            switch (end.typecode)
+            {
+                case NPTypeCode.Complex:
+                    return (Complex)end.GetAtIndex(0) == Complex.Zero;
+                case NPTypeCode.String:
+                    return false;
+                default:
+                    return Converts.ToDouble(end.GetAtIndex(0)) == 0.0;
+            }
+        }
+
+        /// <summary>NumPy's <c>_nx.any(end == 0)</c> over an array end.</summary>
+        /// <param name="end">The end.</param>
+        /// <returns>True when any element equals zero.</returns>
+        private bool AnyZero(NDArray end)
+        {
+            // The comparison array is a temporary of this check alone.
+            using var zero = end == 0;
+            return Any(zero);
+        }
+
+        /// <summary>The float64 value of a real 0-d end (a C# number, or a 0-d array of any real dtype), as NumPy's
+        ///     <c>start.astype(float64)</c> reads it.</summary>
+        /// <param name="end">The 0-d end.</param>
+        /// <returns>The value.</returns>
+        private static double ScalarAsDouble(NDArray end) => Converts.ToDouble(end.GetAtIndex(0));
+
+        /// <summary>The complex128 value of a 0-d end, as NumPy's <c>start.astype(complex128)</c> reads it (a real end's
+        ///     imaginary part is zero).</summary>
+        /// <param name="end">The 0-d end.</param>
+        /// <returns>The value.</returns>
+        private static Complex ScalarAsComplex(NDArray end)
+            => end.typecode == NPTypeCode.Complex ? (Complex)end.GetAtIndex(0) : new Complex(ScalarAsDouble(end), 0.0);
+
+        /// <summary>
+        ///     NumPy's <c>np.geomspace</c> statements after <c>dt</c> is known, over array ends: <c>start.astype(dt,
+        ///     copy=True)</c> and <c>stop</c>'s, <c>out_sign = sign(start)</c>, <c>start /= out_sign</c>, <c>stop = stop /
+        ///     out_sign</c>, <c>logspace(log10(start), log10(stop), num, endpoint, base=10.0, dtype=dt)</c> (NumPy's
+        ///     <c>power(10.0, linspace(log_start, log_stop, num, endpoint))</c> then <c>astype(dt, copy=False)</c>), the ends
+        ///     written into the first and last samples, <c>result *= out_sign</c>, <c>moveaxis(result, 0, axis)</c> and
+        ///     <c>astype(dtype, copy=False)</c>.
+        /// </summary>
+        /// <param name="start">The first end (any shape that broadcasts with <paramref name="stop"/>).</param>
+        /// <param name="stop">The second end.</param>
+        /// <param name="num">The number of samples (validated by the linspace, as NumPy's logspace does).</param>
+        /// <param name="endpoint">Whether the last sample is <paramref name="stop"/>.</param>
+        /// <param name="dt">The computation dtype.</param>
+        /// <param name="dtype">The result dtype (<paramref name="dt"/> when none was requested).</param>
+        /// <param name="axis">The destination of the sample axis.</param>
+        /// <returns>The samples; a moved axis is a view of the computed buffer, as NumPy's moveaxis is.</returns>
+        /// <exception cref="ValueError">A negative <paramref name="num"/> (the linspace's check).</exception>
+        /// <exception cref="IncorrectShapeException">Ends that do not broadcast.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> out of range for the result's rank.</exception>
+        /// <remarks>Every intermediate is released before returning; on a failure the partial result goes with them.</remarks>
+        private NDArray GeomspaceArrays(NDArray start, NDArray stop, long num, bool endpoint, DType dt, DType dtype, int axis)
+        {
+            NDArray s = null, e = null, outSign = null, logStart = null, logStop = null, y = null, result = null;
+            try
+            {
+                // start = start.astype(dt, copy=True); stop = stop.astype(dt, copy=True): private copies, changed in place below.
+                s = start.astype(dt, copy: true);
+                e = stop.astype(dt, copy: true);
+
+                // out_sign = _nx.sign(start): +-1 for a real end (NaN for NaN), z / |z| for a complex one.
+                outSign = Sign(s);
+                // start /= out_sign (in place); stop = stop / out_sign (a new array: the ends broadcast here).
+                Divide(s, outSign, null, s, null);
+                NDArray rotatedStop = Divide(e, outSign, null, null, null);
+                e.Dispose();
+                e = rotatedStop;
+
+                // log_start = _nx.log10(start); log_stop = _nx.log10(stop).
+                logStart = Log10(s);
+                logStop = Log10(e);
+
+                // result = logspace(log_start, log_stop, num=num, endpoint=endpoint, base=10.0, dtype=dt):
+                //     y = linspace(start, stop, num=num, endpoint=endpoint, axis=0); power(base, y).astype(dt, copy=False).
+                y = Linspace(logStart, logStop, num, endpoint, null, 0, null);
+                // base=10.0 is a weak Python float: the power runs in y's dtype.
+                using (var ten = NDArray.PythonLiteral(10.0))
+                    result = Power(ten, y, null, null, null);
+                result = CastSpacingResult(result, dt);
+
+                // if num > 0: result[0] = start; if num > 1 and endpoint: result[-1] = stop - the ends themselves, never
+                // 10 ** log10(x) (which need not round back to x).
+                if (num > 0)
+                {
+                    result["0, ..."] = s;
+                    if (num > 1 && endpoint)
+                        result["-1, ..."] = e;
+                }
+
+                // result *= out_sign: undo the rotation (the sign broadcasts against every sample).
+                Multiply(result, outSign, null, result, null);
+
+                // if axis != 0: result = _nx.moveaxis(result, 0, axis) - NumPy's "destination: axis ..." AxisError, and a view.
+                if (axis != 0)
+                {
+                    NDArray moved = MoveAxis(result, new[] { 0 }, new[] { axis });
+                    // The view holds its own reference to the buffer: only the computed wrapper goes.
+                    if (!ReferenceEquals(moved, result))
+                        result.Dispose();
+                    result = moved;
+                }
+
+                // return result.astype(dtype, copy=False)
+                NDArray ret = CastSpacingResult(result, dtype);
+                result = null; // ownership left with ret (CastSpacingResult released a replaced array)
+                return ret;
+            }
+            finally
+            {
+                // The working copies and stages; `result` is non-null here only when a statement failed.
+                s?.Dispose();
+                e?.Dispose();
+                outSign?.Dispose();
+                logStart?.Dispose();
+                logStop?.Dispose();
+                y?.Dispose();
+                result?.Dispose();
+            }
         }
 
         /// <summary>
@@ -731,8 +901,9 @@ namespace NumSharp.Backends
         ///     common DType for <c>StringDType</c>; <c>S</c> and <c>U</c> promote to text, NumPy casts the ends to it
         ///     (<c>start.astype(dt, copy=True)</c>), and <c>out_sign = sign(start)</c> has no string loop.
         /// </summary>
-        /// <param name="start">The first end as a 0-d array of the ends' dtype (float64, or complex128 for complex ends);
-        ///     consumed (disposed) here.</param>
+        /// <param name="start">The first end (the caller's; only read).</param>
+        /// <param name="startDType">The dtype NumPy's <c>asanyarray(start)</c> has (<see cref="GeomspaceEndDType"/>).</param>
+        /// <param name="stopDType">The dtype NumPy's <c>asanyarray(stop)</c> has.</param>
         /// <param name="num">The sample count, which NumPy promotes as <c>float(num)</c>, a weak Python float.</param>
         /// <param name="dtype">The text dtype (the String storage lane).</param>
         /// <exception cref="DTypePromotionError">A <c>StringDType</c>: NumPy's text, which lists the four DType classes
@@ -742,16 +913,15 @@ namespace NumSharp.Backends
         ///     with signature matching types &lt;class 'numpy.dtypes.StrDType'&gt; -&gt; None</c>, a UFuncTypeError in
         ///     NumPy).</exception>
         /// <exception cref="InvalidOperationException">Never: np.sign computing text would be a library bug.</exception>
-        private void RefuseGeomspaceTextDtype(NDArray start, long num, DType dtype)
+        private void RefuseGeomspaceTextDtype(NDArray start, DType startDType, DType stopDType, long num, DType dtype)
         {
-            using (start)
+            // The ends' arrays are strong, float(num) is weak, the dtype's 0-d zeros strong: DTypePromotion.ResultType takes
+            // the same operands as NumPy's call, in its order (the DTypePromotionError text lists them).
+            DType dt = DTypePromotion.ResultType(startDType, stopDType, (double)num, dtype);
+            // start.astype(dt, copy=True), then out_sign = sign(start): the text copy is this check's own temporary.
+            using (NDArray text = start.astype(dt))
+            using (NDArray sign = Sign(text))
             {
-                // The ends' arrays (start, stop: one dtype) are strong, float(num) is weak, the dtype's 0-d zeros strong:
-                // DTypePromotion.ResultType takes the same operands as NumPy's call, in its order (the DTypePromotionError
-                // text lists them).
-                DType dt = DTypePromotion.ResultType(start.dtype, start.dtype, (double)num, dtype);
-                using NDArray text = start.astype(dt);
-                using NDArray sign = Sign(text);
             }
             throw new InvalidOperationException("np.sign computed the sign of text; NumPy has no string loop for it.");
         }

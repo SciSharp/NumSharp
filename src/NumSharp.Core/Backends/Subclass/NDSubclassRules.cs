@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 
 // =============================================================================
 // NDSubclassRules - the NumPy answers no shared mechanism expresses
@@ -44,8 +45,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="result">The array computed on the plain view (the operand itself, a view or a copy).</param>
         /// <param name="a">The caller's operand.</param>
-        /// <param name="requirements">The caller's requirements: a <c>string[]</c> of flag names, a <c>string</c> whose
-        ///     characters are the flags, or <c>null</c>.</param>
+        /// <param name="requirements">The caller's requirements as np.require received them (an <c>IEnumerable</c>): a
+        ///     <c>string</c> whose characters are the flags, a sequence of flag names, or <c>null</c>.</param>
         /// <returns>A plain array for ENSUREARRAY, otherwise the result as <paramref name="a"/>'s class.</returns>
         /// <exception cref="ValueError">A chararray result whose dtype is not string data.</exception>
         internal static NDArray Require(NDArray result, NDArray a, object requirements)
@@ -54,22 +55,29 @@ namespace NumSharp
                 : NDSubclass.NewSubtype(result, null, a, keepRank: false, NewSubtypeZeroDim.Array);
 
         /// <summary>Whether <c>np.require</c>'s requirements ask for a base-class array (<c>'E'</c> / <c>'ENSUREARRAY'</c>).</summary>
-        /// <param name="requirements">A <c>string[]</c> of names, a <c>string</c> of one-letter flags, or anything else (none).</param>
+        /// <param name="requirements">A <c>string</c> of one-letter flags, a sequence of names (or characters), or anything
+        ///     else (none).</param>
         /// <returns>True when ENSUREARRAY is requested.</returns>
-        /// <remarks>An unknown flag never reaches here: the computation rejects it with NumPy's KeyError first.</remarks>
+        /// <remarks>An unknown flag or a non-string item never reaches here: the computation rejects it with NumPy's KeyError
+        ///     / AttributeError first, so every item read here is a valid name. A lazy sequence is enumerated a second time
+        ///     here (the computation enumerated it once), which is safe for every collection and repeatable query.</remarks>
         private static bool EnsuresArray(object requirements)
         {
             switch (requirements)
             {
-                case string[] names:
-                    foreach (string name in names)
+                case string letters:
+                    // NumPy iterates a str: each character is a flag.
+                    return letters.IndexOf('E') >= 0 || letters.IndexOf('e') >= 0;
+                case IEnumerable names:
+                    foreach (object item in names)
+                    {
+                        // A sequence's items are names (a char is a one-letter name, as in an iterated string).
+                        string name = item is char c ? c.ToString() : item as string;
                         if (string.Equals(name, "E", StringComparison.OrdinalIgnoreCase) ||
                             string.Equals(name, "ENSUREARRAY", StringComparison.OrdinalIgnoreCase))
                             return true;
+                    }
                     return false;
-                case string letters:
-                    // The string overload iterates its characters, as NumPy iterates a str: each one is a flag.
-                    return letters.IndexOf('E') >= 0 || letters.IndexOf('e') >= 0;
                 default:
                     return false;
             }

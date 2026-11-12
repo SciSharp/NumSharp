@@ -149,6 +149,17 @@ np.issubdtype [O10]. Found on the way: four batch-8 docs named TypeError for the
 InvalidCastException (the house mapping). The fixes are recorded in [`api-parameter-parity.md`](api-parameter-parity.md)
 §7.
 
+**Refresh 2026-11-13 (API-parity batch 10 on `journey5` at `c2796bd9`).** Regenerated on the batch's tree: 995 → 997
+NumPy names with NumPy's signature, 315 → 313 to change; O 272 → 270, every other mark unchanged; the coverage
+artifact's headline 361 → 363. Fixed: np.require is one signature (`IEnumerable requirements`: a string by character,
+any sequence by name; NumPy's KeyError / AttributeError), np.geomspace takes NumPy's array_like ends (one
+`TensorEngine.Geomspace(NDArray, NDArray, ...)` member). The owner's rule from this round: a one-signature fix keeps
+TYPED parameters - collapsing np.finfo / np.iinfo / np.can_cast / np.issubdtype / np.isdtype / np.dtype into one
+`object` parameter was turned down ("object are not good idea, user will never know what he can send"), so those
+entries wait for a typed design (a carrier like NDAxis, or the typed overloads recorded as staying). Not taken:
+np.result_type's `params object[]`, ma.default_fill_value's object form, ma.fromfunction; deferred: np.strings add /
+multiply, the random choice / dirichlet / multinomial / size-less sampler twins, numpy.matrix's one signatures.
+
 ---
 
 ## Contents

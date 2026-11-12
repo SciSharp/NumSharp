@@ -27,7 +27,7 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 
 | module | C# names | C# overloads | with a NumPy counterpart | identical | more than one overload | closest overload differs | one overload, differs | missing | in another overload only | renamed | extra | slot | C# requires | default | varargs | only null defaults | only policy | not compared | NumSharp-only names | NumPy names absent |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `np` | 399 | 748 | 382 | 166 | 98 | 23 | 10 | 8 | 1 | 3 | 0 | 6 | 5 | 2 | 6 | 10 | 116 | 0 | 17 | 30 |
+| `np` | 399 | 746 | 382 | 168 | 96 | 23 | 10 | 8 | 1 | 3 | 0 | 6 | 5 | 2 | 6 | 10 | 116 | 0 | 17 | 30 |
 | `ndarray` | 140 | 250 | 57 | 38 | 13 | 8 | 6 | 3 | 1 | 2 | 2 | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 83 | 3 |
 | `np.char` | 54 | 54 | 53 | 30 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 12 | 11 | 0 | 1 | 0 |
 | `np.dtypes` | 1 | 2 | 1 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
@@ -70,7 +70,7 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 | `np.random.PCG64DXSM` | 13 | 21 | 3 | 1 | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 10 | 0 |
 | `np.random.Philox` | 13 | 22 | 3 | 1 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 10 | 0 |
 | `np.random.SFC64` | 11 | 18 | 1 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 10 | 0 |
-| **total** | 1549 | 2365 | 1310 | 720 | 272 | 123 | 71 | 34 | 3 | 33 | 2 | 20 | 45 | 2 | 7 | 68 | 200 | 0 | 239 | 76 |
+| **total** | 1549 | 2363 | 1310 | 722 | 270 | 123 | 71 | 34 | 3 | 33 | 2 | 20 | 45 | 2 | 7 | 68 | 200 | 0 | 239 | 76 |
 
 *closest overload differs* counts names whose closest overload has a hard difference (missing, in another
 overload only, renamed, extra, slot, C# requires, default, varargs); each kind is counted again in its own
@@ -130,7 +130,7 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 - lacking `subok`: `broadcast_arrays`
 - lacking `subok, signature`: `matvec`, `vecdot`, `vecmat`
 
-### More than one overload (98; NumPy has one signature each)
+### More than one overload (96; NumPy has one signature each)
 
 - `all`: NumPy `all(a, axis=None, out=None, keepdims=<no value>, *, where=<no value>)`
 
@@ -494,12 +494,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray fromstring(string string, DType dtype = null, long count = -1, string sep = null, NDArray like = null)
   NDArray fromstring(byte[] string, DType dtype = null, long count = -1, string sep = null, NDArray like = null)
   ```
-- `geomspace`: NumPy `geomspace(start, stop, num=50, endpoint=True, dtype=None, axis=0)`
-
-  ```csharp
-  NDArray geomspace(double start, double stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0)
-  NDArray geomspace(Complex start, Complex stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0)
-  ```
 - `gradient`: NumPy `gradient(f, *varargs, axis=None, edge_order=1)`
 
   ```csharp
@@ -822,12 +816,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray repeat(NDArray a, NDArray repeats, int? axis = null)
   NDArray repeat<T>(T a, NDArray repeats)
   ```
-- `require`: NumPy `require(a, dtype=None, requirements=None, *, like=None)`
-
-  ```csharp
-  NDArray require(NDArray a, DType dtype = null, string[] requirements = null, NDArray like = null)
-  NDArray require(NDArray a, DType dtype, string requirements)
-  ```
 - `result_type`: NumPy `result_type(*arrays_and_dtypes)`
 
   ```csharp
@@ -947,9 +935,9 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray where(NDArray condition, object x, object y)
   ```
 
-### Identical to NumPy (166)
+### Identical to NumPy (168)
 
-`allclose`, `amax`, `amin`, `angle`, `apply_over_axes`, `argsort`, `argwhere`, `around`, `array_equal`, `array_equiv`, `array_repr`, `array_str`, `asarray_chkfinite`, `astype`, `bartlett`, `base_repr`, `binary_repr`, `bincount`, `blackman`, `block`, `broadcast_shapes`, `clip`, `column_stack`, `common_type`, `compress`, `convolve`, `copy`, `corrcoef`, `correlate`, `cov`, `cross`, `cumprod`, `cumsum`, `cumulative_prod`, `cumulative_sum`, `datetime_data`, `diag`, `diag_indices`, `diag_indices_from`, `diagflat`, `diagonal`, `diff`, `digitize`, `dot`, `dstack`, `ediff1d`, `expand_dims`, `extract`, `fill_diagonal`, `fix`, `flatnonzero`, `flip`, `fliplr`, `flipud`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `getbufsize`, `hamming`, `hanning`, `i0`, `imag`, `inner`, `isclose`, `iscomplex`, `iscomplexobj`, `isfortran`, `isin`, `isneginf`, `isposinf`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `ix_`, `kaiser`, `kron`, `logspace`, `mask_indices`, `matrix_transpose`, `max`, `may_share_memory`, `mean`, `median`, `min`, `min_scalar_type`, `mintypecode`, `moveaxis`, `nancumprod`, `nancumsum`, `nanmax`, `nanmean`, `nanmedian`, `nanmin`, `nanpercentile`, `nanprod`, `nanquantile`, `nanstd`, `nansum`, `nanvar`, `ndim`, `nonzero`, `outer`, `packbits`, `percentile`, `permute_dims`, `poly`, `polyadd`, `polyder`, `polydiv`, `polymul`, `polysub`, `prod`, `promote_types`, `ptp`, `put`, `put_along_axis`, `quantile`, `ravel`, `real`, `real_if_close`, `reshape`, `resize`, `roll`, `rollaxis`, `roots`, `round`, `setbufsize`, `setdiff1d`, `setxor1d`, `shape`, `shares_memory`, `sinc`, `size`, `sort`, `sort_complex`, `squeeze`, `stack`, `std`, `sum`, `swapaxes`, `take`, `take_along_axis`, `tile`, `trace`, `transpose`, `trapezoid`, `tril`, `tril_indices`, `tril_indices_from`, `trim_zeros`, `triu`, `triu_indices`, `triu_indices_from`, `typename`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`, `unique_values`, `unpackbits`, `unstack`, `vander`, `var`, `vdot`
+`allclose`, `amax`, `amin`, `angle`, `apply_over_axes`, `argsort`, `argwhere`, `around`, `array_equal`, `array_equiv`, `array_repr`, `array_str`, `asarray_chkfinite`, `astype`, `bartlett`, `base_repr`, `binary_repr`, `bincount`, `blackman`, `block`, `broadcast_shapes`, `clip`, `column_stack`, `common_type`, `compress`, `convolve`, `copy`, `corrcoef`, `correlate`, `cov`, `cross`, `cumprod`, `cumsum`, `cumulative_prod`, `cumulative_sum`, `datetime_data`, `diag`, `diag_indices`, `diag_indices_from`, `diagflat`, `diagonal`, `diff`, `digitize`, `dot`, `dstack`, `ediff1d`, `expand_dims`, `extract`, `fill_diagonal`, `fix`, `flatnonzero`, `flip`, `fliplr`, `flipud`, `format_float_positional`, `format_float_scientific`, `geomspace`, `get_printoptions`, `getbufsize`, `hamming`, `hanning`, `i0`, `imag`, `inner`, `isclose`, `iscomplex`, `iscomplexobj`, `isfortran`, `isin`, `isneginf`, `isposinf`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `ix_`, `kaiser`, `kron`, `logspace`, `mask_indices`, `matrix_transpose`, `max`, `may_share_memory`, `mean`, `median`, `min`, `min_scalar_type`, `mintypecode`, `moveaxis`, `nancumprod`, `nancumsum`, `nanmax`, `nanmean`, `nanmedian`, `nanmin`, `nanpercentile`, `nanprod`, `nanquantile`, `nanstd`, `nansum`, `nanvar`, `ndim`, `nonzero`, `outer`, `packbits`, `percentile`, `permute_dims`, `poly`, `polyadd`, `polyder`, `polydiv`, `polymul`, `polysub`, `prod`, `promote_types`, `ptp`, `put`, `put_along_axis`, `quantile`, `ravel`, `real`, `real_if_close`, `require`, `reshape`, `resize`, `roll`, `rollaxis`, `roots`, `round`, `setbufsize`, `setdiff1d`, `setxor1d`, `shape`, `shares_memory`, `sinc`, `size`, `sort`, `sort_complex`, `squeeze`, `stack`, `std`, `sum`, `swapaxes`, `take`, `take_along_axis`, `tile`, `trace`, `transpose`, `trapezoid`, `tril`, `tril_indices`, `tril_indices_from`, `trim_zeros`, `triu`, `triu_indices`, `triu_indices_from`, `typename`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`, `unique_values`, `unpackbits`, `unstack`, `vander`, `var`, `vdot`
 
 ### NumSharp-only names (17 NumPy-style, 0 PascalCase C# members)
 

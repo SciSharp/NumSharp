@@ -90,11 +90,15 @@ paths:
   (`Backends/Kernels/FiniteScan.cs`: `acc += v - v` adds +0 for a finite value and an absorbing NaN otherwise; AVX2
   gather and a reversed-contiguous fast path for strided and negative-stride views). Its statements are
   `NDArray.asarray_chkfinite` (`Manipulation/NDArray.FunctionBase.cs`).
-- `require(a, dtype=None, requirements=None)` parses the C/F/A/W/O/E flags and their aliases (a single string iterates
-  by character like NumPy, so `"F_CONTIGUOUS"` as one string raises), resolves an order, and copies only when a remaining
-  ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED fails after `setflags(align=False)` or over a caller's buffer at
-  a misaligning byte offset; WRITEABLE for broadcast views; OWNDATA for views). Its statements are `NDArray.require`
-  (`Backends/NDArray.CoreAsArray.cs`).
+- `require(a, dtype=None, requirements=None)` is one signature, `requirements` an `IEnumerable` (what NumPy
+  iterates): a string by character (`"CW"` is C + W, so `"F_CONTIGUOUS"` as one string is `KeyError: '_'`), a
+  `string[]` / `List<string>` / any sequence by name. Python's truthiness picks the `asanyarray` branch (null, `""`, an
+  empty collection; a lazy sequence is truthy, like a generator). `{POSSIBLE_FLAGS[x.upper()] for x in requirements}`
+  is ONE pass: an unknown name is NumPy's `KeyError` with the upper-cased name quoted (`'BOGUS'`), a non-string item
+  `AttributeError: 'int' object has no attribute 'upper'`, each at its own position. Then an order, and one copy only
+  when a remaining ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED fails after `setflags(align=False)` or over a
+  caller's buffer at a misaligning byte offset; WRITEABLE for broadcast views; OWNDATA for views). Its statements are
+  `NDArray.require` (`Backends/NDArray.CoreAsArray.cs`); a C# tuple is not an `IEnumerable` (pass an array).
 - `asmatrix(data, dtype=None)` is `matrix(data, dtype, copy=False)` and returns an `NDMatrix` (`matrix.md`): a new view of
   an array, never the operand itself. 0-D → (1,1), 1-D → (1,N), 2-D unchanged; more than 2-D drops length-1 axes and must
   land on 2-D, else `ValueError("shape too large to be a matrix.")`. It also parses matrix literals (`"1 2; 3 4"`).
@@ -195,9 +199,10 @@ a copy) in `Backends/Unmanaged/UnmanagedStorage.Buffer.cs`.
 
 NumPy 2.4.2's `numpy/_core/function_base.py`: `Creation/np.{linspace,logspace,geomspace}.cs` are the facades,
 `TensorEngine.Linspace` / `Logspace` / `Geomspace` (`Backends/TensorEngine.CoreFunctionBase.cs`) the members,
-DefaultEngine's fills in `Backends/Default/Creation/Default.CoreFunctionBase.cs`. `linspace` takes NumPy's array_like
-ends; `logspace` / `geomspace` take scalar `start`, `stop` and `base` (`double`). Otherwise full parameter parity:
-`num=50`, `endpoint=true`, `base=10.0` (logspace only), `dtype=null`, `axis=0`.
+DefaultEngine's fills in `Backends/Default/Creation/Default.CoreFunctionBase.cs`. `linspace` and `geomspace` take
+NumPy's array_like ends (`NDArray`, a C# number converts); `logspace` takes scalar `start`, `stop` and `base`
+(`double`). Otherwise full parameter parity: `num=50`, `endpoint=true`, `base=10.0` (logspace only), `dtype=null`,
+`axis=0`.
 - `linspace` has two overloads that never collide (a compiled C# 12 / 13 binding probe): `NDArray linspace(NDArray start,
   NDArray stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0, string device = null)` for every
   call, and NumPy's whole signature `LinspaceResult linspace(object start, object stop, ..., bool retstep = false, ...)`,
@@ -222,7 +227,7 @@ ends; `logspace` / `geomspace` take scalar `start`, `stop` and `base` (`double`)
   takes gh-5437's `(i / div) * delta + start`; `y[-1] = stop` for two or more samples). Integer dtypes are FLOORED, a text
   dtype is formatted by `astype` (`dtype='U5'` → `['0.0', '0.25', ...]`), and the result is NumPy's float64 view
   (OWNDATA false) wherever NumPy's in-place ramp is one.
-- `axis` changes no value for scalar inputs (the output is always 1-D) but is validated like NumPy's trailing
+- `axis` changes no value for scalar ends (the output is always 1-D) but is validated like NumPy's trailing
   `moveaxis(y, 0, axis)`: only 0 and -1 are in range, else
   `AxisError("destination: axis {a} is out of bounds for array of dimension 1")`, reporting the original axis.
   geomspace's `axis=-1` returns NumPy's moveaxis view (OWNDATA false) unless the final dtype cast copies. `num < 0` →
@@ -232,14 +237,25 @@ ends; `logspace` / `geomspace` take scalar `start`, `stop` and `base` (`double`)
   real + 0j, not a complex-domain computation. Bit-exact at every dtype (`Math.Pow` is `npy_pow`, and the exponents are
   NumPy's linspace values: `LinspaceValue`, the branches above). A negative base with fractional exponents yields NaN.
   One fused pass (`LogspaceCore`), no intermediate `linspace` array.
-- `geomspace` is ported op for op: `out_sign = sign(start)`, rotate `start`/`stop` onto the positive real axis,
-  `logspace(log10(start), log10(stop), num, endpoint, base=10)`, overwrite the endpoints, `result *= out_sign`. The real
-  path is bit-exact (decreasing, all-negative and mixed-sign inputs included: `geomspace(-1, 1)` → `[-1, nan, nan, 1]`).
+- `geomspace` is ONE signature over `NDArray` ends, `TensorEngine.Geomspace(NDArray, NDArray, ...)` reached through the
+  start operand's engine, ported op for op: `start = asanyarray(start)` (a C# number end is a Python number: bool,
+  int64, float64, complex128 - `GeomspaceEndDType`), the zero check over every element, `dt = result_type(start, stop,
+  float(num), zeros((), dtype))`, `out_sign = sign(start)`, rotate `start`/`stop` onto the positive real axis,
+  `logspace(log10(start), log10(stop), num, endpoint, base=10, dtype=dt)` (the NDArray linspace, then `power(10.0, y)`),
+  overwrite the endpoints (`result[0] = start`, `result[-1] = stop`), `result *= out_sign`, `moveaxis(result, 0, axis)`,
+  `astype(dtype, copy=False)`. Array ends give one progression per broadcast pair (shape `(num, *broadcast)`, the
+  sample axis moved to any in-range `axis`, a moved axis an F-ordered view); float32 / float16 ends with that dtype
+  compute in it (NumPy's bits: `[2.8284270763397217, 3.999999761581421]`), while a C# number end stays float64 even
+  with `dtype=float32`. Two 0-d ends whose `dt` is float64 or complex128 (every C# number pair) keep the fused scalar
+  cores (`GeomspaceRealCore` / `GeomspaceComplexCore`). The real path is bit-exact (decreasing, all-negative and
+  mixed-sign inputs included: `geomspace(-1, 1)` → `[-1, nan, nan, 1]`; a NaN start makes its column NaN). A matrix or
+  masked operand computes on its plain data and gives a plain array (no subclass rule is declared; NumPy's matrix
+  answer is a matrix-product error from `result *= out_sign`).
   Zero endpoints raise `ValueError("Geometric sequence cannot include zero")` first (before `num`, before `axis`); a text
   dtype then fails NumPy's next statements, still before `num` and `axis` (`StringDType`: `result_type(start, stop,
   float(num), zeros((), dtype))`'s `DTypePromotionError`; `S` / `U`: the ends promote to text and `sign(start)` has no
   string loop, NumPy's UFuncTypeError text).
-- A `Complex` start/stop overload and a real input with `dtype=complex128` compute in the complex128 domain (the interior
+- Complex ends and real ends with `dtype=complex128` compute in the complex128 domain (the interior
   differs: `geomspace(1, 8, 4, dtype=complex)[1] == 1.9999999999999998`), through NumSharp's `npy_cpow` port and complex
   log10: accurate within the ≤ 3-ULP complex envelope but not byte-reproducible, so those cases are allclose unit tests
   and stay out of the byte corpus.
