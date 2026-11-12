@@ -336,12 +336,31 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   restores all three OSes' natives, ~1.2 GB per version). The `interop-test` job runs the floor leg (Windows, Linux) and
   the current leg (0.107.0 / 2.10.0, all three OSes) on both TFMs; the current leg is the binary-compatibility gate for
   the floor-compiled package, and runs the sparse / quantized / libtorch-uint16 tests the floor leg reports Inconclusive.
-  Suites: `AbiTests` (the detected form, the floor reference), `DtypeMapTests`, `ExportTests`, `ExportLayoutTests` (every
-  shared dtype × layout, broadcast `expand`, reversed / read-only / misaligned copies, views ending at the buffer's last
-  element), `ImportTests`, `LifetimeTests` (dispose / scope / finalizer / torch views / `set_` / booking),
-  `ConcurrencyTests`, `ApiSurfaceTests`, `DocExampleTests`; the leak gate (`LiveExports` / `LiveImports` back to the
-  baseline) after every test. Run it under `NUMSHARP_DEBUG_GUARD_PAGES=1` after touching the export layouts (green on
-  both legs).
+  Suites: `AbiTests` (the detected form, `Classify`'s refusal of every near-miss signature, the floor reference),
+  `DtypeMapTests`, `ExportTests`, `ExportLayoutTests` (every shared dtype × layout, broadcast `expand`, reversed /
+  read-only / misaligned copies, views ending at the buffer's last element), `ImportTests`, `LifetimeTests` (dispose /
+  scope / finalizer / torch views / `set_` / booking), `ConcurrencyTests`, `ApiSurfaceTests`, `DocExampleTests`,
+  `ExplicitDtypeTests` (every target × every source dtype under NumPy's casting), `FailurePathTests` (the cleanup paths
+  through internal seams: an unknown native ABI, libtorch refusing `from_blob`, a handle without storage, double lease
+  releases), `SpecialStateTests` (NumPy scalars, foreign memory, `NDArray<T>`, `NDMatrix`, `NDScope`, flags changed
+  around an export), and the STATE MATRIX: `StateMatrixExportTests` (45 array states × the ten shared dtypes × the three
+  modes: NumSharp's own flags C / F / OWNDATA / WRITEABLE / ALIGNED and strides must be NumPy's for the same recipe, and a
+  shared tensor's strides and `is_contiguous()` `torch.from_numpy`'s; write-through both ways), `StateMatrixImportTests`
+  (24 tensor states × their dtypes × the modes against `t.numpy()` / `t.numpy(force=True)`), `StateMatrixRoundTripTests`,
+  `ConvertedDtypeStateTests` (the five NEP 50 dtypes × 13 deciding layouts) and `StateCatalogSyncTests`; the leak gate
+  (`LiveExports` / `LiveImports` back to the baseline) after every test. The matrix's answers are
+  `Fixtures/torch_interop_states.json`, written by `test/oracle/gen_torch_interop_states.py` (NumPy 2.4.2 + PyTorch,
+  `~/.claude/python` has both; 386 array cases, 205 tensor cases), with the recipes mirrored by name in `StateCatalog.cs`.
+  Divergences from PyTorch asserted as such: read-only, broadcast-over-read-only, misaligned and off-16-byte complex128
+  arrays copy where `from_numpy` shares; a negative stride on a length-1 axis shares where `from_numpy` refuses; an
+  expanded tensor and a tensor that requires grad import READ-ONLY where `numpy()` gives a writeable view / refuses;
+  complex64 and bfloat16 widen. Run it under `NUMSHARP_DEBUG_GUARD_PAGES=1` after touching the export layouts (green on
+  both legs; guard-page mode ends every buffer at a page boundary, so a recipe that needs a misaligned address finds one at
+  run time). Coverage of the package (`coverage/bridge.runsettings` + `coverage/union_cobertura.py` in the suite, the
+  floor and current legs unioned): 94.3 % of lines, 95.5 % of branches on 2026-11-12; what stays uncovered needs fault
+  injection or hardware - allocation failures in the lease and copy cleanups, libtorch returning no tensor without an error,
+  a failed `detach`, a CPU tensor without a data pointer, a TorchSharp with no recognizable `THSTensor_new`, `cpu()` of a
+  GPU tensor, the deleter's last-resort catch.
 
 ## The pythonnet bridge carries text
 

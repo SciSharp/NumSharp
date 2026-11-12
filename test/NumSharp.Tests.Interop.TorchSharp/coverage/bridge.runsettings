@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Line and branch coverage of NumSharp.Interop.TorchSharp (the package only: NumSharp.Core and the tests are excluded) with
+  the Microsoft code coverage collector the MSTest SDK already brings - no package to add. Run each TorchSharp leg, then
+  union the two reports (the 6-argument native ABI runs only on the floor, the 9-argument one only on 0.107.0):
+
+    dotnet build test/NumSharp.Tests.Interop.TorchSharp -c Release
+    dotnet test test/NumSharp.Tests.Interop.TorchSharp -c Release -\-no-build -\-framework net10.0 -\-settings test/NumSharp.Tests.Interop.TorchSharp/coverage/bridge.runsettings -\-results-directory <dir>/floor
+    dotnet build test/NumSharp.Tests.Interop.TorchSharp -c Release -p:TorchSharpVersion=0.107.0 -p:LibTorchVersion=2.10.0
+    dotnet test ... (the same, with <dir>/current)
+    python -I test/NumSharp.Tests.Interop.TorchSharp/coverage/union_cobertura.py <dir>/floor/*/*.cobertura.xml <dir>/current/*/*.cobertura.xml
+
+  (The double dashes above are escaped as "-\-" only because XML comments cannot contain two dashes.)
+-->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="Code Coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <CodeCoverage>
+            <ModulePaths>
+              <Include>
+                <ModulePath>.*NumSharp\.Interop\.TorchSharp\.dll$</ModulePath>
+              </Include>
+            </ModulePaths>
+            <IncludeTestAssembly>false</IncludeTestAssembly>
+          </CodeCoverage>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

@@ -27,6 +27,34 @@ namespace NumSharp.Tests.Interop.TorchSharp
         }
 
         /// <summary>
+        ///     Only the two exact parameter lists are recognized: every near miss - the right count with one type off, one
+        ///     argument more or less, a plain pointer where the deleter delegate goes - is Unknown, and Unknown refuses exports
+        ///     rather than calling a native signature that cannot tell it was given the wrong arguments.
+        /// </summary>
+        [TestMethod]
+        public void Classify_AcceptsOnlyTheTwoExactForms()
+        {
+            Type ptr = typeof(IntPtr), del = typeof(Action<IntPtr>), i32 = typeof(int), i8 = typeof(sbyte), b = typeof(bool);
+            LibTorchSharpNative.Classify(new[] { ptr, del, ptr, i32, i8, i8, i32, i32, b }).Should().Be(LibTorchSharpNative.NewTensorAbi.Args9);
+            LibTorchSharpNative.Classify(new[] { ptr, del, ptr, i32, i8, b }).Should().Be(LibTorchSharpNative.NewTensorAbi.Args6);
+            Type[][] nearMisses =
+            {
+                new[] { ptr, del, ptr, typeof(long), i8, i8, i32, i32, b },   // 64-bit szlength
+                new[] { ptr, del, ptr, i32, typeof(byte), i8, i32, i32, b },  // unsigned scalar type
+                new[] { ptr, del, ptr, i32, i8, i8, i32, i32, typeof(int) },  // requires_grad as an int
+                new[] { ptr, del, ptr, i32, i8, i32, i32, i32, b },           // dtype widened
+                new[] { ptr, ptr, ptr, i32, i8, i8, i32, i32, b },            // the deleter as a raw pointer
+                new[] { ptr, del, ptr, i32, i8, i8, i32, i32, b, b },         // one more argument
+                new[] { ptr, del, ptr, i32, i8, i8, i32, i32 },               // one fewer
+                new[] { ptr, del, ptr, i32, i8, i8 },                         // six, but the sixth is not bool
+                new[] { ptr, del, ptr, i32, i8 },
+                Array.Empty<Type>(),
+            };
+            foreach (Type[] miss in nearMisses)
+                LibTorchSharpNative.Classify(miss).Should().Be(LibTorchSharpNative.NewTensorAbi.Unknown, string.Join(", ", Array.ConvertAll(miss, t => t.Name)));
+        }
+
+        /// <summary>
         ///     The package is compiled against the floor, TorchSharp 0.100.0, whatever TorchSharp this leg loads: a run against a
         ///     newer TorchSharp is then the gate that every member the package binds kept its signature.
         /// </summary>
