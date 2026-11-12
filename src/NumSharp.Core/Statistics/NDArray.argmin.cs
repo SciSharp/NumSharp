@@ -35,5 +35,16 @@
         {
             return np.argmin(this, axis, @out, keepdims);
         }
+
+        /// <summary>
+        ///     <see cref="argmin(NDAxis?, NDArray, bool)"/> with the axis as an <c>int?</c>: the overload a C# integer,
+        ///     an <c>int?</c>, a bare <c>null</c> and <c>default</c> bind (NumPy's axis here is ONE integer, so there
+        ///     is no <c>int[]</c> form, and <c>null</c> / <c>default</c> stay None), forwarding to the NDAxis form, so
+        ///     every answer and error is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis, or <c>null</c> for the flattened array.</param>
+        /// <inheritdoc cref="argmin(NDAxis?, NDArray, bool)"/>
+        public NDArray argmin(int? axis, NDArray @out = null, bool keepdims = false)
+            => argmin(NDAxis.FromNullable(axis), @out, keepdims);
     }
 }

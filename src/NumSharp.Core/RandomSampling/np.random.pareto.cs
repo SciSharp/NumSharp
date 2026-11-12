@@ -30,11 +30,11 @@ namespace NumSharp
         ///     One draw per value, so the uniforms come from the bit generator's bulk fill and are transformed in place;
         ///     byte-identical to <c>np.random.RandomState(seed).pareto</c>. Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray pareto(double a, Shape size)
+        public NDArray pareto(double a, Shape? size)
         {
             RandomConstraints.Check(a, "a", ConstraintType.CONS_POSITIVE);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -46,7 +46,7 @@ namespace NumSharp
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;
@@ -60,60 +60,6 @@ namespace NumSharp
 
             return ret;
         }
-
-        /// <summary>
-        ///     Draw samples from a Pareto II or Lomax distribution with specified shape.
-        /// </summary>
-        /// <param name="a">Shape of the distribution. Must be positive (&gt; 0).</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the parameterized Pareto distribution.</returns>
-        /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 0</c>, or a size dimension is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray pareto(double a, int[] size)
-            => pareto(a, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a Pareto II or Lomax distribution with specified shape.
-        /// </summary>
-        /// <param name="a">Shape of the distribution. Must be positive (&gt; 0).</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized Pareto distribution.</returns>
-        /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 0</c>, or a size dimension is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray pareto(double a, long[] size)
-            => pareto(a, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a Pareto II or Lomax distribution with specified shape.
-        /// </summary>
-        /// <param name="a">Shape of the distribution. Must be positive (&gt; 0).</param>
-        /// <param name="size">Output shape as a single integer — NumPy's integer <c>size</c>: one npy_intp (int64) dimension.</param>
-        /// <returns>Drawn samples from the parameterized Pareto distribution.</returns>
-        /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 0</c>, or <paramref name="size"/> is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray pareto(double a, long size)
-            => pareto(a, new Shape(new long[] { size }, copy: false));
 
         /// <summary>
         ///     Draw a single sample from a Pareto II or Lomax distribution.

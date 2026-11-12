@@ -22,25 +22,20 @@ namespace NumSharp
         /// <summary>
         ///     Returns the binary (base-2) string of an integer (np.binary_repr). WITHOUT <paramref name="width"/>
         ///     a negative number is rendered with a leading minus sign; WITH <paramref name="width"/> a negative
-        ///     number is rendered as its two's complement to that width. About 25× faster than
-        ///     <see cref="base_repr(long,int,int)"/> with base 2.
+        ///     number is rendered as its two's complement to that width. About 25x faster than
+        ///     <see cref="base_repr(BigInteger,int,int)"/> with base 2.
         /// </summary>
-        /// <param name="num">The integer to convert.</param>
-        /// <param name="width">Optional field width: the result is left-zero-padded (positive input) or sign-extended with 1s (negative, two's-complement) to at least this many characters. Must be at least the number of significant bits or a <see cref="ValueError"/> is raised.</param>
-        /// <returns>The binary representation, or the two's complement when <paramref name="num"/> is negative and <paramref name="width"/> is given.</returns>
-        /// <exception cref="ValueError"><paramref name="width"/> is smaller than the number of bits required to represent <paramref name="num"/>.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.binary_repr.html</remarks>
-        public static string binary_repr(long num, int? width = null) => binary_repr((BigInteger)num, width);
-
-        /// <summary>
-        ///     Arbitrary-precision overload of <see cref="binary_repr(long,int?)"/> — accepts <c>ulong</c>
-        ///     (via its implicit conversion) and integers beyond the 64-bit range, matching NumPy's
-        ///     unbounded-Python-int input.
-        /// </summary>
-        /// <param name="num">The integer to convert.</param>
-        /// <param name="width">Optional field width (see <see cref="binary_repr(long,int?)"/>).</param>
-        /// <returns>The binary representation, or the two's complement when <paramref name="num"/> is negative and <paramref name="width"/> is given.</returns>
-        /// <exception cref="ValueError"><paramref name="width"/> is smaller than the number of bits required to represent <paramref name="num"/>.</exception>
+        /// <param name="num">The integer to convert: NumPy's Python int, so any size - every C# integer type (<c>int</c>,
+        ///     <c>long</c>, <c>ulong</c>, ...) converts implicitly, and values past 64 bits are exact.</param>
+        /// <param name="width">Optional field width: the result is left-zero-padded (positive input) or sign-extended with 1s
+        ///     (negative, two's-complement) to at least this many characters. Must be at least the number of significant
+        ///     bits or a <see cref="ValueError"/> is raised.</param>
+        /// <returns>The binary representation, or the two's complement when <paramref name="num"/> is negative and
+        ///     <paramref name="width"/> is given.</returns>
+        /// <exception cref="ValueError"><paramref name="width"/> is smaller than the number of bits required to represent
+        ///     <paramref name="num"/>.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.binary_repr.html. One signature since API-parity
+        ///     batch 6: the <c>long</c> overload, which only cast to this one, is gone.</remarks>
         public static string binary_repr(BigInteger num, int? width = null)
         {
             if (num.IsZero)
@@ -79,25 +74,17 @@ namespace NumSharp
 
         /// <summary>
         ///     Returns the string of an integer in a given base 2–36 (np.base_repr). A negative number gets a
-        ///     leading minus sign (NOT two's complement — that is <see cref="binary_repr(long,int?)"/>'s job).
+        ///     leading minus sign (NOT two's complement — that is <see cref="binary_repr(BigInteger,int?)"/>'s job).
         /// </summary>
-        /// <param name="number">The integer to convert (its sign is honoured; only the magnitude is expanded).</param>
+        /// <param name="number">The integer to convert (its sign is honoured; only the magnitude is expanded): NumPy's Python
+        ///     int, so any size - every C# integer type converts implicitly.</param>
         /// <param name="base">The radix, 2–36 inclusive. Digits above 9 use uppercase A–Z.</param>
-        /// <param name="padding">Number of extra leading zeros to prepend (placed AFTER the sign, so <c>base_repr(-7,5,3)</c> is <c>"-00012"</c>). Non-positive means no padding.</param>
+        /// <param name="padding">Number of extra leading zeros to prepend (placed AFTER the sign, so <c>base_repr(-7,5,3)</c>
+        ///     is <c>"-00012"</c>). Non-positive means no padding.</param>
         /// <returns>The base-<paramref name="base"/> representation of <paramref name="number"/>.</returns>
         /// <exception cref="ValueError"><paramref name="base"/> is greater than 36 or less than 2.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.base_repr.html</remarks>
-        public static string base_repr(long number, int @base = 2, int padding = 0) => base_repr((BigInteger)number, @base, padding);
-
-        /// <summary>
-        ///     Arbitrary-precision overload of <see cref="base_repr(long,int,int)"/> — accepts <c>ulong</c>
-        ///     (via its implicit conversion) and integers beyond the 64-bit range.
-        /// </summary>
-        /// <param name="number">The integer to convert.</param>
-        /// <param name="base">The radix, 2–36 inclusive.</param>
-        /// <param name="padding">Number of extra leading zeros to prepend (see <see cref="base_repr(long,int,int)"/>).</param>
-        /// <returns>The base-<paramref name="base"/> representation of <paramref name="number"/>.</returns>
-        /// <exception cref="ValueError"><paramref name="base"/> is greater than 36 or less than 2.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.base_repr.html. One signature since API-parity
+        ///     batch 6: the <c>long</c> overload, which only cast to this one, is gone.</remarks>
         public static string base_repr(BigInteger number, int @base = 2, int padding = 0)
         {
             const string digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";

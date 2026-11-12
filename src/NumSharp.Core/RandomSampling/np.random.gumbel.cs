@@ -45,11 +45,11 @@ namespace NumSharp
         ///     only when <c>U == 1</c>. <c>scale == 0</c> STILL consumes a uniform per value (the former shortcut skipped
         ///     the draw and desynchronized every later value). Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray gumbel(double loc = 0.0, double scale = 1.0, Shape size = default)
+        public NDArray gumbel(double loc = 0.0, double scale = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -61,7 +61,7 @@ namespace NumSharp
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

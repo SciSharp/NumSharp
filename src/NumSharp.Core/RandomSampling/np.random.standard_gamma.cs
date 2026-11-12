@@ -30,14 +30,14 @@ namespace NumSharp
         ///     NumPy's <c>legacy_standard_gamma</c> (see <c>NumPyRandom.LegacyDistributions.cs</c>) — byte-identical to
         ///     <c>np.random.RandomState(seed).standard_gamma</c>. Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray standard_gamma(double shape, Shape size)
+        public NDArray standard_gamma(double shape, Shape? size)
         {
             RandomConstraints.Check(shape, "shape", ConstraintType.CONS_NON_NEGATIVE);
 
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
             var setup = new GammaSetup(shape);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -49,7 +49,7 @@ namespace NumSharp
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

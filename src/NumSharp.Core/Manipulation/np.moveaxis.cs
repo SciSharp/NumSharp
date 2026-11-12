@@ -41,5 +41,30 @@ namespace NumSharp
             // the engine as arrays, unnormalized: it reports each with NumPy's argument name.
             return a.TensorEngine.MoveAxis(a, source.ToArray(), destination.ToArray());
         }
+
+        /// <summary>
+        ///     <see cref="moveaxis(NDArray, NDAxis, NDAxis)"/> with the axis as one <c>int</c>: the overload a C#
+        ///     integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the NDAxis form, so
+        ///     every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="source">The axis to move (NumPy's <c>source</c>; a negative value counts from the end).</param>
+        /// <param name="destination">The axis' new position (NumPy's <c>destination</c>).</param>
+        /// <inheritdoc cref="moveaxis(NDArray, NDAxis, NDAxis)"/>
+        public static NDArray moveaxis(NDArray a, int source, int destination)
+            => moveaxis(a, (NDAxis)source, (NDAxis)destination);
+
+        /// <summary>
+        ///     <see cref="moveaxis(NDArray, NDAxis, NDAxis)"/> with the axes as an <c>int[]</c>: the overload an
+        ///     <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better than to NDAxis),
+        ///     forwarding to the NDAxis form as NumPy's tuples (<c>new int[0]</c> is <c>()</c>). NumPy's moveaxis has no
+        ///     None, so a null array throws, exactly as the NDAxis form's conversion does.
+        /// </summary>
+        /// <param name="source">The axes to move, as NumPy's tuple (NumPy's <c>source</c>; not null).</param>
+        /// <param name="destination">Their new positions, as NumPy's tuple (NumPy's <c>destination</c>; not null).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="destination"/> is null
+        ///     (moveaxis has no None).</exception>
+        /// <inheritdoc cref="moveaxis(NDArray, NDAxis, NDAxis)"/>
+        public static NDArray moveaxis(NDArray a, int[] source, int[] destination)
+            => moveaxis(a, (NDAxis)source, (NDAxis)destination);
     }
 }

@@ -190,6 +190,21 @@ namespace NumSharp
             return new NDAxis(axes);
         }
 
+        /// <summary>
+        ///     One integer axis or None, as an <c>NDAxis?</c>: what the kept <c>int?</c> forwards of the one-integer-axis
+        ///     functions (argmax / argmin / nanargmax / nanargmin) hand their NDAxis member. It is ONE call where the
+        ///     cast <c>(NDAxis?)axis</c> of an <c>int?</c> is the compiler's lifted conversion, a branch inside the argument
+        ///     list; NumSharp.Build's subclass weaver recognises a forward to the same function only when its operands
+        ///     pass straight on, and that branch hid it, so the forward got a dispatch of its own (np.argmax(matrix, 1)
+        ///     was then the 1 x 4 row, not NumPy's 4 x 1 column).
+        /// </summary>
+        /// <param name="axis">The axis, or null for None.</param>
+        /// <returns>The single axis, or null.</returns>
+        /// <remarks>Not an implicit conversion: an <c>int? -> NDAxis?</c> operator would make <c>NDAxis? x = 1</c> ambiguous
+        ///     (C#'s most-specific-operator rule finds neither it nor the lifted <c>int -> NDAxis</c> operator converting
+        ///     from <c>int</c> to <c>NDAxis?</c> exactly).</remarks>
+        internal static NDAxis? FromNullable(int? axis) => axis is { } single ? new NDAxis(single) : default(NDAxis?);
+
         /// <summary>A tuple of two axes from a C# tuple: <c>(0, 2)</c> is NumPy's <c>axis=(0, 2)</c>.</summary>
         /// <param name="axes">The two axes as given.</param>
         /// <returns>The tuple.</returns>

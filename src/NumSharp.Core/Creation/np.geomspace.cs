@@ -32,25 +32,11 @@ namespace NumSharp
         /// <returns>A 1-D array of <paramref name="num"/> samples, equally spaced on a log scale.</returns>
         /// <exception cref="ValueError">If <paramref name="start"/> or <paramref name="stop"/> is zero, or <paramref name="num"/> is negative (NumPy's ValueError).</exception>
         /// <exception cref="AxisError">If <paramref name="axis"/> is neither 0 nor -1.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.geomspace.html</remarks>
-        public static NDArray geomspace(double start, double stop, int num = 50, bool endpoint = true, DType dtype = null, int axis = 0)
-            => geomspace(start, stop, (long)num, endpoint, dtype, axis);
-
-        /// <summary>
-        ///     Return numbers spaced evenly on a log scale (<see cref="long"/>-count overload — see the <see cref="int"/>
-        ///     overload for the full contract).
-        /// </summary>
-        /// <param name="start">The starting value of the sequence. Must be non-zero.</param>
-        /// <param name="stop">The final value of the sequence (excluded when <paramref name="endpoint"/> is False). Must be non-zero.</param>
-        /// <param name="num">Number of samples to generate. Must be non-negative.</param>
-        /// <param name="endpoint">If True (default) <paramref name="stop"/> is the last sample; otherwise it is excluded.</param>
-        /// <param name="dtype">The dtype of the output (null → float64; complex switches the computation into the complex128 domain).</param>
-        /// <param name="axis">Validated against the 1-D output; only 0 and -1 are accepted (no-op for scalar inputs).</param>
-        /// <returns>A 1-D array of <paramref name="num"/> samples, equally spaced on a log scale.</returns>
-        /// <exception cref="ValueError">If <paramref name="start"/> or <paramref name="stop"/> is zero, or <paramref name="num"/> is negative (NumPy's ValueError).</exception>
-        /// <exception cref="AxisError">If <paramref name="axis"/> is neither 0 nor -1.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.geomspace.html</remarks>
-        public static NDArray geomspace(double start, double stop, long num, bool endpoint = true, DType dtype = null, int axis = 0)
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.geomspace.html
+        ///     <para>One count type since API-parity batch 6: an <c>int</c> converts to <c>long</c> (the <c>int</c> forms,
+        ///     which only widened, are gone).</para>
+        /// </remarks>
+        public static NDArray geomspace(double start, double stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0)
             => TensorEngine.Default.Geomspace(start, stop, num, endpoint, dtype, axis);
 
         /// <summary>
@@ -69,25 +55,11 @@ namespace NumSharp
         /// <remarks>
         ///     ACCURATE to NumPy within the documented ≤3-ULP complex-unary envelope but NOT byte-reproducible — the
         ///     complex log10/power route through host-specific complex routines. https://numpy.org/doc/stable/reference/generated/numpy.geomspace.html
+        /// 
+        ///     <para>One count type since API-parity batch 6: an <c>int</c> converts to <c>long</c> (the <c>int</c> forms,
+        ///     which only widened, are gone).</para>
         /// </remarks>
-        public static NDArray geomspace(Complex start, Complex stop, int num = 50, bool endpoint = true, DType dtype = null, int axis = 0)
-            => geomspace(start, stop, (long)num, endpoint, dtype, axis);
-
-        /// <summary>
-        ///     Return numbers spaced evenly on a log scale for COMPLEX endpoints (<see cref="long"/>-count overload —
-        ///     see the <see cref="int"/> overload for the full contract).
-        /// </summary>
-        /// <param name="start">The starting value of the sequence. Must be non-zero.</param>
-        /// <param name="stop">The final value of the sequence (excluded when <paramref name="endpoint"/> is False). Must be non-zero.</param>
-        /// <param name="num">Number of samples to generate. Must be non-negative.</param>
-        /// <param name="endpoint">If True (default) <paramref name="stop"/> is the last sample; otherwise it is excluded.</param>
-        /// <param name="dtype">The dtype of the output (null → complex128).</param>
-        /// <param name="axis">Validated to 0 or -1 (no-op for scalar inputs).</param>
-        /// <returns>A 1-D array of <paramref name="num"/> complex samples following the shortest logarithmic spiral.</returns>
-        /// <exception cref="ValueError">If <paramref name="start"/> or <paramref name="stop"/> is <c>0+0j</c>, or <paramref name="num"/> is negative (NumPy's ValueError).</exception>
-        /// <exception cref="AxisError">If <paramref name="axis"/> is neither 0 nor -1.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.geomspace.html</remarks>
-        public static NDArray geomspace(Complex start, Complex stop, long num, bool endpoint = true, DType dtype = null, int axis = 0)
+        public static NDArray geomspace(Complex start, Complex stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0)
             => TensorEngine.Default.Geomspace(start, stop, num, endpoint, dtype, axis);
     }
 }

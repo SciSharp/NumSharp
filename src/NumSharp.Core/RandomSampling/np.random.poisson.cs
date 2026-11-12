@@ -37,14 +37,14 @@ namespace NumSharp
         ///     <c>np.random.RandomState(seed).poisson</c>. int64 output with the int64 bound — NumPy's LP64 shape; its win-amd64
         ///     build returns int32 and stops at <c>lam = 2147020237.4999895</c>. Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray poisson(double lam = 1.0, Shape size = default)
+        public NDArray poisson(double lam = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(lam, "lam", ConstraintType.LEGACY_CONS_POISSON);
 
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
-            var setup = new PoissonSetup(lam, hoistRejectionLog: !IsScalarDraw(size));
+            var setup = new PoissonSetup(lam, hoistRejectionLog: !IsScalarDraw(size.GetValueOrDefault()));
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -56,7 +56,7 @@ namespace NumSharp
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Int64, size);
+            var ret = LegacyOutput(NPTypeCode.Int64, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (long*)ret.Address;

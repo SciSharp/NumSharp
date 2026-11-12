@@ -222,7 +222,7 @@ still refuses big-endian - a native-endian shared view is impossible - with the 
 
 ```text
 NotSupportedException: big-endian buffer format '>l' cannot be mapped onto a native-endian
-NumSharp buffer. Byte-swap first: arr.astype(arr.dtype.newbyteorder('<')).
+NumSharp buffer. Byte-swap first: arr.astype(arr.dtype.newbyteorder("<")).
 ```
 
 <sub>See here [`Import_ViewsEveryExporterVariety`][gate], [`Import_WidensComplex64OnCopy_TextViewsAsItsOwnDtype`][gate], [`Import_ViewRefusesBigEndian_CopyByteSwaps`][gate]</sub>

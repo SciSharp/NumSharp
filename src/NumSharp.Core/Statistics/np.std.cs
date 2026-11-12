@@ -66,5 +66,26 @@ namespace NumSharp
             // The whole call is the engine's: TensorEngine.ReduceStd of a's engine takes every keyword, correction= first.
             return a.TensorEngine.ReduceStd(a, axis, keepdims, ddof, dtype, @out, @where, mean, correction);
         }
+
+        /// <summary>
+        ///     <see cref="std(NDArray, NDAxis?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/> with the axis as
+        ///     one <c>int</c>: the overload a C# integer binds (its identity conversion beats NDAxis' implicit one),
+        ///     forwarding to the NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="std(NDArray, NDAxis?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/>
+        public static NDArray std(NDArray a, int axis, DType dtype = null, NDArray @out = null, int ddof = 0, bool keepdims = false, NDArray @where = null, NDArray mean = null, int? correction = null)
+            => std(a, (NDAxis?)axis, dtype, @out, ddof, keepdims, @where, mean, correction);
+
+        /// <summary>
+        ///     <see cref="std(NDArray, NDAxis?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/> with the axes as
+        ///     an <c>int[]</c>: the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to
+        ///     <c>int[]</c> better than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any
+        ///     other array NumPy's tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="std(NDArray, NDAxis?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/>
+        public static NDArray std(NDArray a, int[] axis, DType dtype = null, NDArray @out = null, int ddof = 0, bool keepdims = false, NDArray @where = null, NDArray mean = null, int? correction = null)
+            => std(a, (NDAxis?)axis, dtype, @out, ddof, keepdims, @where, mean, correction);
     }
 }

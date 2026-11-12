@@ -106,5 +106,26 @@ namespace NumSharp
             // in NumPy's order. The axes go as an array (null for None): _ureduce's one-element tuple of an int axis.
             return a.TensorEngine.Quantile(a, q, axis?.ToArray(), @out, overwrite_input, method, keepdims, weights);
         }
+
+        /// <summary>
+        ///     <see cref="quantile(NDArray, NDArray, NDAxis?, NDArray, bool, string, bool, NDArray)"/> with the axis as
+        ///     one <c>int</c>: the overload a C# integer binds (its identity conversion beats NDAxis' implicit one),
+        ///     forwarding to the NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="quantile(NDArray, NDArray, NDAxis?, NDArray, bool, string, bool, NDArray)"/>
+        public static NDArray quantile(NDArray a, NDArray q, int axis, NDArray @out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
+            => quantile(a, q, (NDAxis?)axis, @out, overwrite_input, method, keepdims, weights);
+
+        /// <summary>
+        ///     <see cref="quantile(NDArray, NDArray, NDAxis?, NDArray, bool, string, bool, NDArray)"/> with the axes as
+        ///     an <c>int[]</c>: the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to
+        ///     <c>int[]</c> better than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any
+        ///     other array NumPy's tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="quantile(NDArray, NDArray, NDAxis?, NDArray, bool, string, bool, NDArray)"/>
+        public static NDArray quantile(NDArray a, NDArray q, int[] axis, NDArray @out = null, bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
+            => quantile(a, q, (NDAxis?)axis, @out, overwrite_input, method, keepdims, weights);
     }
 }

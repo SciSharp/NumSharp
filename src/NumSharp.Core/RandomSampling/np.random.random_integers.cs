@@ -33,7 +33,7 @@ namespace NumSharp
         ///     LP64 NumPy draws. The <c>high + 1</c> is exact (arbitrary precision, as NumPy's Python int), so
         ///     <c>random_integers(0, 2**63 - 1)</c> reaches the int64 maximum rather than wrapping.
         /// </remarks>
-        public NDArray random_integers(long low, long? high = null, Shape size = default)
+        public NDArray random_integers(long low, long? high = null, Shape? size = null)
         {
             Int128 lo, hiInclusive;
             if (high == null)
@@ -50,7 +50,7 @@ namespace NumSharp
 
             // randint(low, int(high) + 1, size=size, dtype='l'): the shared masked core, with the randint name in
             // any dtype error (dtype='l' is always supported, so that message never fires here).
-            return BoundedIntegers.Draw(randomizer, lo, hiInclusive + 1, size, LegacyLong, endpoint: false,
+            return BoundedIntegers.Draw(randomizer, lo, hiInclusive + 1, size.GetValueOrDefault(), LegacyLong, endpoint: false,
                                         useMasked: true, "randint", legacyByteOrder: true);
         }
     }

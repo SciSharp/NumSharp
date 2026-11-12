@@ -1167,6 +1167,8 @@ namespace NumSharp
         ///     or the descriptor is of a non-legacy class (<c>StringDType</c>): NumPy's
         ///     <c>Cannot use DescrNewByteOrder for this new style DTypes.</c>, raised after the order itself is parsed.</exception>
         /// <exception cref="ValueError"><paramref name="new_order"/> is empty or starts with another character (NumPy's <c>byteorder not recognized (got 'X')</c>, quoting the whole string).</exception>
+        /// <remarks>NumPy's <c>new_order</c> is a str: one signature since API-parity batch 6 (the <c>char</c> overload, a
+        ///     NumSharp convenience Python has no counterpart for, is gone; write <c>"&gt;"</c>, not <c>'&gt;'</c>).</remarks>
         public DType newbyteorder(string new_order = "S")
         {
             if (new_order == null)
@@ -1174,21 +1176,6 @@ namespace NumSharp
             // byteorder_parser reads only str[0]; an empty string is "not recognized", quoting the whole argument with %R.
             if (new_order.Length == 0 || !TryParseByteOrderCode(new_order[0], out char newendian))
                 throw new ValueError($"byteorder not recognized (got {PyLiteral.Repr(new_order)})");
-            return NewByteorder(newendian);
-        }
-
-        /// <summary>
-        ///     <see cref="newbyteorder(string)"/> with the request as one C# character (a NumSharp convenience — Python has no
-        ///     character type); the same codes and the same results.
-        /// </summary>
-        /// <param name="new_order">The byte-order code (see <see cref="newbyteorder(string)"/>).</param>
-        /// <returns>A new descriptor with the requested byte order.</returns>
-        /// <exception cref="ValueError"><paramref name="new_order"/> is not a byte-order code (NumPy's text).</exception>
-        /// <exception cref="TypeError">A descriptor of a non-legacy class (<c>StringDType</c>).</exception>
-        public DType newbyteorder(char new_order)
-        {
-            if (!TryParseByteOrderCode(new_order, out char newendian))
-                throw new ValueError($"byteorder not recognized (got {PyLiteral.Repr(new_order.ToString())})");
             return NewByteorder(newendian);
         }
 

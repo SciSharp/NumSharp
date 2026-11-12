@@ -245,7 +245,7 @@ namespace NumSharp.Tests.Strings
                     if (!hasAxis && !hasOut && !hasKeep)
                         r = max ? c.argmax() : c.argmin();
                     else if (hasAxis && axis is not null && !hasOut)
-                        r = max ? c.argmax(I(axis), keepdims) : c.argmin(I(axis), keepdims);
+                        r = max ? c.argmax(I(axis), keepdims: keepdims) : c.argmin(I(axis), keepdims: keepdims);
                     else
                         r = max ? c.argmax(Axis(axis), (NDArray)@out, keepdims) : c.argmin(Axis(axis), (NDArray)@out, keepdims);
                     break;

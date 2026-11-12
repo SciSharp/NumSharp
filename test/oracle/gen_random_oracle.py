@@ -1349,15 +1349,20 @@ def fam_randn_generic(out, m, seeds):
 @family("NumPyRandom", "random_sample", "random", "ranf", "sample")
 def fam_random_sample(out, surface, name, seeds):
     """random_sample and its aliases. `ranf`/`sample` are NumPy module functions over the singleton's random_sample;
-    the instance counterpart is random_sample itself. The params-array spelling passes the dimensions as ONE size
-    tuple (none = size=None); the Shape spelling is size itself (default = None, () = a 0-d array)."""
+    the instance counterpart is random_sample itself. Each has NumPy's one spelling, `(Shape? size = null)`: size is
+    itself (a null = None, () = a 0-d array), and the omitted argument — the C# default path, NumPy's size=None — is
+    swept too (the gate's G3 check needs every optional parameter omitted somewhere). A params-array spelling, should
+    one come back, passes the dimensions as ONE size tuple (none = size=None)."""
     np_name = "random" if name == "random" else "random_sample"
     for m in overloads(surface, "NumPyRandom", name):
         pn, ct = m["params"][0]["name"], m["params"][0]["type"]
 
         def np_fn(r, py, pn=pn, ct=ct):
+            # An omitted size is absent from `py`: py.get gives None, NumPy's default.
             return getattr(r, np_name)(size_kw(ct, py.get(pn)))
         vs = dims_variants(pn, ct)
+        if m["params"][0].get("optional", False):
+            vs = vs + [("omit", {pn: OMIT})]
         legacy_sweep(out, PORTABLE, f"RandomState.{name}", m, seeds, vs[0][1], vs[1:], np_fn)
 
 

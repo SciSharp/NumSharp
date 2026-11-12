@@ -285,7 +285,8 @@ prefix (`GetCastingImpl`, `DTypePromotion.CommonDType`). PascalCase members (`Na
   Python's `str(KeyError)`), `metadata` and `np.dtype(dtype, align, copy, metadata)` (`copy` copies only a singleton;
   `metadata` always copies and merges without overwriting existing keys; equality, hash and printing ignore it).
 - `newbyteorder` is `PyArray_DescrNewByteorder` (a requested host order stays EXPLICIT: `np.dtype('>i4').newbyteorder()`
-  is `dtype('<i4')`; errors quote the whole string; `None` is TypeError); `isnative` is `PyArray_ISNBO`; `repr` takes the
+  is `dtype('<i4')`; errors quote the whole string; `None` is TypeError; NumPy's `new_order` is a str, so there is no
+  `char` overload: `newbyteorder(">")`); `isnative` is `PyArray_ISNBO`; `repr` takes the
   short form whenever the stored byte order is explicit; `ensure_canonical` returns a FRESH native copy, never the
   singleton (`np.result_type(np.dtype('>f8')).isbuiltin` is 0); `promote_types`' fast path is pointer identity.
 - Gate: `test/oracle/gen_dtype_oracle.py` → `test/NumSharp.Tests/DTypes/corpus/dtype_oracle.{llp64,lp64}.jsonl` (NumPy's

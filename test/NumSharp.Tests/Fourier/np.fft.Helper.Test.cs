@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 
 namespace NumSharp.Tests.Fourier
@@ -131,19 +132,21 @@ namespace NumSharp.Tests.Fourier
 
         // ---- fftfreq / rfftfreq error parity (type + ORDER, probed vs NumPy 2.4.2) ----
 
+        /// <summary>
+        ///     NumPy refuses a floating window length at run time (<c>fftfreq(2.5)</c> / <c>rfftfreq(3.5)</c>:
+        ///     <c>ValueError: n should be an integer</c>, before the spacing and device checks); since API-parity batch 6
+        ///     NumSharp refuses it at compile time instead - both functions have ONE signature, an integer <c>long n</c>, and
+        ///     no overload takes a floating n.
+        /// </summary>
         [TestMethod]
-        public void FftFreq_NonInteger_Raises()
+        public void FftFreq_NonInteger_DoesNotCompile()
         {
-            // isinstance(n, int) check is FIRST — fires before spacing/device.
-            Action act = () => { var _ = np.fft.fftfreq(2.5); };
-            act.Should().Throw<ValueError>().WithMessage("n should be an integer");
-        }
-
-        [TestMethod]
-        public void RfftFreq_NonInteger_Raises()
-        {
-            Action act = () => { var _ = np.fft.rfftfreq(3.5); };
-            act.Should().Throw<ValueError>().WithMessage("n should be an integer");
+            foreach (var name in new[] { "fftfreq", "rfftfreq" })
+            {
+                var overloads = typeof(FourierModule).GetMethods().Where(m => m.Name == name).ToArray();
+                overloads.Should().HaveCount(1, name);
+                overloads[0].GetParameters()[0].ParameterType.Should().Be(typeof(long), name);
+            }
         }
 
         [TestMethod]
@@ -223,13 +226,12 @@ namespace NumSharp.Tests.Fourier
         [TestMethod]
         public void FftFreq_Device_OrderVsOtherErrors()
         {
-            // zero-division precedes device; device precedes negative-dims; integer-check precedes all.
+            // zero-division precedes device; device precedes negative-dims. (NumPy's integer check, which precedes all,
+            // is C#'s compile-time refusal of a floating n: FftFreq_NonInteger_DoesNotCompile.)
             ((Action)(() => { var _ = np.fft.fftfreq(0, device: "gpu"); }))
                 .Should().Throw<ZeroDivisionError>();
             ((Action)(() => { var _ = np.fft.fftfreq(-5, device: "gpu"); }))
                 .Should().Throw<ValueError>().WithMessage("Device not understood*");
-            ((Action)(() => { var _ = np.fft.fftfreq(3.5, device: "gpu"); }))
-                .Should().Throw<ValueError>().WithMessage("n should be an integer");
         }
 
         // ---- fftshift / ifftshift (values) ----
@@ -421,20 +423,28 @@ namespace NumSharp.Tests.Fourier
             np.fft.fftshift(np.arange(10).astype(NPTypeCode.Single)).dtype.Should().Be(typeof(float));
         }
 
+        /// <summary>
+        ///     NumPy's fftshift / ifftshift of a 0-d array: axes=None is <c>tuple(range(0))</c> = <c>()</c> with an empty
+        ///     shift, and roll over no axis of a 0-d array ends in Python's <c>not enough values to unpack (expected 2, got
+        ///     0)</c> (NumPy 2.4.2). Since API-parity batch 6 fftshift is NumPy's statements over batch 5's np.roll, so this
+        ///     is NumPy's answer (it used to be a documented divergence that returned a copy).
+        /// </summary>
         [TestMethod]
-        [Misaligned]
-        public void FftShift_ZeroD_NoOp_Divergence()
+        public void FftShift_ZeroD_IsNumPysRollError()
         {
-            // NumPy's fftshift(0-d) with axes=None hits an internal roll-unpack error
-            // (ValueError "not enough values to unpack (expected 2, got 0)"). NumSharp treats a
-            // scalar shift as a no-op (returns a copy). An EXPLICIT axis on a 0-d still raises
-            // IndexError in both, matching NumPy.
-            var z = np.array(5.0);
-            var r = np.fft.fftshift(z);
-            r.ndim.Should().Be(0);
-            ((double)r).Should().Be(5.0);
-            ((Action)(() => np.fft.fftshift(z, 0))).Should().Throw<IndexError>()
-                .WithMessage("tuple index out of range");
+            const string unpack = "not enough values to unpack (expected 2, got 0)";
+            foreach (var x in new[] { np.array(3.0), np.array(7L) })
+            {
+                Action shift = () => np.fft.fftshift(x);
+                shift.Should().Throw<ValueError>().WithMessage(unpack);
+                Action inverse = () => np.fft.ifftshift(x);
+                inverse.Should().Throw<ValueError>().WithMessage(unpack);
+                Action empty = () => np.fft.fftshift(x, new NDAxis());
+                empty.Should().Throw<ValueError>().WithMessage(unpack);
+                // An explicit axis of a 0-d array reads x.shape[0] first: Python's tuple IndexError.
+                Action axis = () => np.fft.fftshift(x, 0);
+                axis.Should().Throw<IndexError>().WithMessage("tuple index out of range");
+            }
         }
     }
 }

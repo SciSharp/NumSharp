@@ -31,14 +31,14 @@ namespace NumSharp
         ///     legacy gamma <c>G(df/2)</c>. Byte-identical to <c>np.random.RandomState(seed).standard_t</c>; holds the bit
         ///     generator's lock for the draws.
         /// </remarks>
-        public NDArray standard_t(double df, Shape size)
+        public NDArray standard_t(double df, Shape? size)
         {
             RandomConstraints.Check(df, "df", ConstraintType.CONS_POSITIVE);
 
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
             var setup = new LegacyStandardTSetup(df);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -50,7 +50,7 @@ namespace NumSharp
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

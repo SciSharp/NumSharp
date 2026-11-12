@@ -33,7 +33,7 @@ namespace NumSharp
         ///     chi-square (the shared PTRS Poisson for large <c>nonc</c>). Byte-identical to
         ///     <c>np.random.RandomState(seed).noncentral_chisquare</c>; holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray noncentral_chisquare(double df, double nonc, Shape size)
+        public NDArray noncentral_chisquare(double df, double nonc, Shape? size)
         {
             RandomConstraints.Check(df, "df", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(nonc, "nonc", ConstraintType.CONS_NON_NEGATIVE);
@@ -41,7 +41,7 @@ namespace NumSharp
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
             var setup = new LegacyNoncentralChisquareSetup(df, nonc);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -53,7 +53,7 @@ namespace NumSharp
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

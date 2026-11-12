@@ -41,13 +41,13 @@ namespace NumSharp
         ///     transformed in place). <c>high &lt; low</c> is legal and samples <c>(high, low]</c>, as in NumPy. Holds the bit
         ///     generator's lock for the draws.
         /// </remarks>
-        public NDArray uniform(double low = 0.0, double high = 1.0, Shape size = default)
+        public NDArray uniform(double low = 0.0, double high = 1.0, Shape? size = null)
         {
             double range = high - low;
             if (!double.IsFinite(range))
                 throw new OverflowError("Range exceeds valid bounds");
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -59,7 +59,7 @@ namespace NumSharp
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

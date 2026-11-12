@@ -21,7 +21,8 @@ namespace NumSharp.Tests.APIs
         /// <param name="name">The function name.</param>
         /// <returns>Every public static method of that name on <see cref="np"/>.</returns>
         private static MethodInfo[] NpForms(string name)
-            => typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.Name == name).ToArray();
+            // Without the kept int / int[] / int? forwards of an NDAxis member (the owner's batch-6 decision).
+            => typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.Name == name).WithoutKeptIntegerForms();
 
         /// <summary>The overloads of <c>np.<paramref name="name"/></c> that take an <c>axis</c> parameter.</summary>
         /// <param name="name">The function name.</param>

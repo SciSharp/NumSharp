@@ -2053,6 +2053,34 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 ## 7. State log
 
+- **2026-11-12**: API-parity batch 6 on `journey5` (branch `api-parity/batch-06`; the owner approved 13 of 15 picks -
+  not np.broadcast's params form nor the permutation pair - and decided, after a resolution proof, to KEEP the `int` and
+  `int[]` overloads beside every NumPy-axis member: "can you also have the int and int[] overloads kept instead of
+  removed for allllll overloads? Can you prove that they will resolve correctly before taking that", then "Everywhere",
+  with "Unless they create ambiguous between error, in that case we either use priority attributes or only keep
+  NDAxis"). The proof (scratchpad probe_axis: 83 call spellings on mimics with the real NDAxis, C# 12 / net8.0 and C# 14 /
+  net10.0 identical; then `Build.Analyzer/AxisOverloadResolutionTests.cs`, 107 spellings against the real members at
+  C# 12) fixed the rules: `int axis` and `int[] axis` WITHOUT defaults beside `NDAxis? axis = null` (an int binds int; an
+  int[] and a bare null bind int[], a null array being None; everything else the NDAxis member), `int?` for a one-integer
+  axis (argmax / argmin / nanargmax / nanargmin), never `int?` beside an int[] (`f(a, null)` would be CS0121); the one
+  refused spelling is `f(a, default)` (CS0121, a compile error). 104 forwards were restored on 54 members of batches 4
+  and 5 (np, ndarray, chararray; moveaxis as (int, int) / (int[], int[]); gradient's four forms), and the solution builds
+  with no ambiguous call anywhere. Fixes: np.fft.fftshift / ifftshift take NDAxis? axes and run NumPy's statements (the
+  shift from `x.shape[ax] // 2`, Python's IndexError past the rank, ONE np.roll; a 0-d input is now roll's NumPy
+  ValueError, the old `[Misaligned]` copy gone); np.fft.fftfreq / rfftfreq one `long n` (a float n does not compile,
+  C#'s form of NumPy's ValueError); np.linalg.norm and vector_norm take NDAxis? (norm(x, null, null, false) no longer
+  ambiguous); np.apply_over_axes NDAxis axes; np.nanargmax / nanargmin NDAxis? with NumPy's tuple order (the NaN mask's
+  np.all over the tuple - AxisError, the repeat, All-NaN slice - then argmax's TypeError); chararray.argmax / argmin
+  batch 5's signature; np.base_repr / binary_repr one BigInteger signature; np.logspace / geomspace one `long num = 50`;
+  np.unwrap ONE signature in NumPy's order, `unwrap(p, discont, axis, NDArray period = null)` (the old long-period
+  overload made `np.unwrap(p, 4)` the period-4 unwrap, NumPy's is discont=4; a C# number is NumPy's weak Python scalar,
+  a NumPy scalar or 0-d array a strong period joining `result_type(diff(p), period)`); dtype.newbyteorder string only;
+  the legacy np.random samplers and BitGenerator.random_raw `Shape? size = null` (the 20 `int[]` / `long[]` / `long`
+  size shims, whose priority C# 12 ignores, gone); random_sample / random / ranf / sample one `Shape? size`, rand loose
+  dimensions only (`NumPyRandom.FillUniform`). Pinned `[OpenBugs]`: np.unwrap with a period of several elements (NumPy
+  broadcasts it; NumSharp raises NotSupportedException). Tooling: the gap map and coverage count a kept forward as its
+  NDAxis member's spelling; the validator refutes a B finding NumPy's own arity TypeError refuses. Gap map: NumPy's
+  signature 837 → 860, to change 469 → 446.
 - **2026-11-12**: API-parity batch 5 on `journey5` (branch `api-parity/batch-05`; the owner approved 14 of 15 picks
   and deferred the legacy np.random samplers' `size=None`, to be offered again with a clearer example): NumPy's TUPLE
   axis for np.sum, np.prod, np.mean, np.var, np.std, np.max / np.amax, np.min / np.amin, np.nansum, np.nanprod,

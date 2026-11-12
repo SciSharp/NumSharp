@@ -20,13 +20,14 @@ namespace NumSharp.Tests.RandomSampling
         private static Generator Gen() => new Generator(new PCG64(1));
 
         /// <summary>
-        ///     <c>rand(default(Shape))</c> is NumPy's <c>rand()</c> — one draw, returned 0-d — where it used to throw
-        ///     <see cref="ArgumentNullException"/> allocating from a shape without dimensions.
+        ///     <c>random_sample(default(Shape))</c> is NumPy's <c>random_sample()</c> — one draw, returned 0-d — where
+        ///     <c>rand(default(Shape))</c> used to throw <see cref="ArgumentNullException"/> allocating from a shape without
+        ///     dimensions. (rand takes loose dimensions only since API-parity batch 6; the Shape spelling is random_sample's.)
         /// </summary>
         [TestMethod]
         public void Rand_DefaultShape_IsOneDraw()
         {
-            using var r = np.random.RandomState(42).rand(default(Shape));
+            using var r = np.random.RandomState(42).random_sample(default(Shape));
             r.ndim.Should().Be(0);
             r.GetDouble().Should().Be(0.3745401188473625); // np.random.RandomState(42).rand()
         }

@@ -30,8 +30,8 @@ namespace NumSharp
         ///     range that fits 32 bits takes the same buffered 32-bit masked sampler at either integer width, so the
         ///     values equal the win-amd64 int32 results NumPy's Windows build returns for the same seed.
         /// </remarks>
-        public NDArray randint(long low, long? high = null, Shape size = default, DType dtype = null)
-            => BoundedIntegers.Draw(randomizer, low, high.HasValue ? (Int128)high.Value : (Int128?)null, size,
+        public NDArray randint(long low, long? high = null, Shape? size = null, DType dtype = null)
+            => BoundedIntegers.Draw(randomizer, low, high.HasValue ? (Int128)high.Value : (Int128?)null, size.GetValueOrDefault(),
                                     dtype ?? LegacyLong, endpoint: false, useMasked: true, "randint", legacyByteOrder: true);
 
         /// <summary>
@@ -46,8 +46,8 @@ namespace NumSharp
         /// <returns>Random integers from the appropriate distribution, or a single such random int if size not provided.</returns>
         /// <exception cref="TypeError"><paramref name="dtype"/> is not an integer/bool dtype.</exception>
         /// <exception cref="ValueError">The bounds fall outside the dtype or the interval is empty.</exception>
-        public NDArray randint(ulong low, ulong? high = null, Shape size = default, DType dtype = null)
-            => BoundedIntegers.Draw(randomizer, low, high.HasValue ? (Int128)high.Value : (Int128?)null, size,
+        public NDArray randint(ulong low, ulong? high = null, Shape? size = null, DType dtype = null)
+            => BoundedIntegers.Draw(randomizer, low, high.HasValue ? (Int128)high.Value : (Int128?)null, size.GetValueOrDefault(),
                                     dtype ?? LegacyLong, endpoint: false, useMasked: true, "randint", legacyByteOrder: true);
 
         /// <summary>
@@ -65,9 +65,9 @@ namespace NumSharp
         ///     Validated exactly as NumPy validates the Python int: a value past <c>±2**100</c> — beyond every dtype's range —
         ///     reaches the checks clamped, which report the same error the exact value would.
         /// </remarks>
-        public NDArray randint(BigInteger low, BigInteger? high = null, Shape size = default, DType dtype = null)
+        public NDArray randint(BigInteger low, BigInteger? high = null, Shape? size = null, DType dtype = null)
             => BoundedIntegers.Draw(randomizer, BoundedIntegers.ClampToInt128(low),
-                                    high.HasValue ? BoundedIntegers.ClampToInt128(high.Value) : (Int128?)null, size,
+                                    high.HasValue ? BoundedIntegers.ClampToInt128(high.Value) : (Int128?)null, size.GetValueOrDefault(),
                                     dtype ?? LegacyLong, endpoint: false, useMasked: true, "randint", legacyByteOrder: true);
 
         /// <summary>
@@ -94,8 +94,8 @@ namespace NumSharp
         ///     for NumPy's check order and its two broadcast quirks). Byte-identical to
         ///     <c>np.random.RandomState(seed).randint(low_arr, high_arr, ...)</c> — the LP64 width, as for every legacy integer.
         /// </remarks>
-        public NDArray randint(NDArray low, NDArray high = null, Shape size = default, DType dtype = null)
-            => BoundedIntegers.DrawArray(randomizer, low, high, size, dtype ?? LegacyLong, endpoint: false, useMasked: true,
+        public NDArray randint(NDArray low, NDArray high = null, Shape? size = null, DType dtype = null)
+            => BoundedIntegers.DrawArray(randomizer, low, high, size.GetValueOrDefault(), dtype ?? LegacyLong, endpoint: false, useMasked: true,
                                          "randint", legacyByteOrder: true);
     }
 }

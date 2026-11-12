@@ -6,6 +6,8 @@ paths:
   - "src/NumSharp.Core/Exceptions/AxisOutOfRangeException.cs"
   - "src/NumSharp.Core/Backends/Default/Math/Reduction/ReductionArguments.cs"
   - "test/NumSharp.Tests/Manipulation/AxisArgumentParity.Test.cs"
+  - "test/NumSharp.Tests/APIs/KeptAxisOverloads.cs"
+  - "test/NumSharp.Tests.Build.Analyzer/AxisOverloadResolutionTests.cs"
 ---
 
 # Axis arguments
@@ -35,12 +37,35 @@ type-strict, zero-excuse `axis_args.jsonl` oracle tier, the `evaluate.jsonl` tie
   (np.mean / var / std: each item's range from the count, the repeat only from the sum after its out check, so
   `np.mean(a, (0, 0), out=read_only)` is the read-only error and `np.var`'s the repeat) and `PyArray_ConvertMultiAxis`
   (squeeze: each item's range and repeat in order, so `(0, 0, 5)` is the repeat); np.argmax / argmin take ONE integer
-  (a tuple of any length is `TypeError "'tuple' object cannot be interpreted as an integer"`, before the out). `IsTuple`
+  (a tuple of any length is `TypeError "'tuple' object cannot be interpreted as an integer"`, before the out), and so do
+  np.nanargmax / nanargmin, whose NumPy statements reduce the NaN mask over the tuple first (`np.all(mask, axis)`: its
+  AxisError, "duplicate value in 'axis'" and "All-NaN slice encountered" come before the TypeError; an integer or empty
+  input has no mask) and chararray.argmax / argmin (the TypeError before the finalize error). `IsTuple`
   tells `1` from `(1,)` (Python's `1 != (1,)`); `default(NDAxis)` and `new NDAxis()` are the EMPTY tuple. Trap: the null
   literal converts to `NDAxis` through the `int[]` operator, so `flag ? null : someAxis` is typed `NDAxis` and throws -
   write `(NDAxis?)null`. NumSharp.Build hands an `NDAxis` axis to a `[ReducesThrough]` collapse as it is
   (`NDSubclass.CollapseAxes`, the weaver's `EmitAxisValue`), so `matrix._collapse` keeps a tuple's kept-dims matrix (the
   1 x 1 matrix for `(0, 1)`, the whole matrix for `()`); an `int` / `int?` axis keeps `Collapse`.
+- The KEPT INTEGER OVERLOADS (the owner's API-parity batch-6 decision, "keep the int and int[] overloads ... for
+  allllll overloads", after a resolution proof): every public np / ndarray / chararray / np.fft / np.linalg member that
+  takes NumPy's axis as `NDAxis?` / `NDAxis` has an `int axis` and an `int[] axis` overload beside it, WITHOUT defaults
+  (a parameter before the axis loses its default too: norm's `ord`, trim_zeros' `trim`, gradient's spacing), each a
+  documented one-line forward that casts to the NDAxis member (every answer, error, layout and subclass result is that
+  member's; the woven matrix arm is reached through it). A one-integer axis (argmax / argmin / nanargmax / nanargmin,
+  ndarray and chararray methods included) keeps `int? axis` instead (no int[]: NumPy refuses a tuple). moveaxis keeps
+  `(int, int)` and `(int[], int[])`. The engine (`TensorEngine` members) and numpy.matrix (its static-type `int`
+  overloads) are outside the decision. The binding rules this gives, proven at C# 12 (net8.0) and C# 14 (net10.0) on
+  mimics (scratchpad probe_axis) and pinned against the real members at C# 12 by
+  `Build.Analyzer/AxisOverloadResolutionTests.cs`: an int-typed argument (a literal, an int / short / byte / char
+  variable) binds `int`; an `int[]` and a bare `null` bind `int[]` (null converts to `int[]` better than to `NDAxis?`; a
+  null array is None); every other spelling (tuples, NDAxis values, an `int?` variable, an omitted axis) binds the NDAxis
+  member. Why the kept integer is `int`, never `int?`, beside an `int[]`: with `int?`, `f(a, null)` is CS0121 ambiguous.
+  Why a one-integer axis keeps `int?`: with a plain `int`, `f(a, default)` would silently be axis 0. The one spelling the
+  three overloads refuse is `f(a, default)` (CS0121, `int` vs `int[]`) - a compile error, never a silent answer. A
+  NumPy-signature test or tool counts overloads WITHOUT the kept forwards: `KeptAxisOverloads.WithoutKeptIntegerForms`
+  (tests), `drop_kept_axis_forwards` (tools/api-parameter-parity/signature_diff.py, coverage/signature_parity.py) - a
+  structural rule (integer-typed axis parameters AND an NDAxis sibling with otherwise the same parameter names and types),
+  never a list, so a stray integer overload without its NDAxis member still counts.
 - The reductions route a tuple by `ReductionArguments.TryIntegerForm`: a set of ONE axis takes the integer route and a
   set of EVERY axis the None route (NumPy builds the same flags, so the exact schedules and the text routes are reused);
   every other tuple (two axes or more short of every axis, the empty tuple of an input with dimensions, or a tuple NumPy

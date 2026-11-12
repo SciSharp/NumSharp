@@ -73,6 +73,23 @@ call, decision S8), the Generator samplers' scalar and array forms [O2] (a separ
 samplers' `size=None` was deferred by the owner (re-offered with a clearer example). The fixes are recorded in
 [`api-parameter-parity.md`](api-parameter-parity.md) §7.
 
+**Refresh 2026-11-12 (API-parity batch 6 on `journey5` at `24b3c761`).** Regenerated on the batch's tree: 837 → 860
+NumPy names with NumPy's signature, 469 → 446 to change; O 297 → 276, L 56 → 17, Q 30 → 29, M 184, X 65, B 24, T 21 and
+the 83 absent names unchanged; the coverage artifact's headline with NumPy's exact signature 336 → 351. The owner kept
+the `int` and `int[]` overloads beside every NumPy-axis member (`int?` for a one-integer axis), after a proof that they
+resolve as designed at C# 12 and 14: the gap map counts such a forward as its NDAxis member's spelling, never as an
+overload (`signature_diff.drop_kept_axis_forwards`, the same structural rule in `coverage/signature_parity.py`), and
+the validator now asks NumPy about a B finding that passes several values to a `(*args, **kwargs)`-only signature
+(np.random.ranf / sample forward to `random_sample(size)`: NumPy's own arity TypeError refutes it). Fixed: np.fft.fftshift
+/ ifftshift, np.linalg.norm / vector_norm and np.apply_over_axes take NumPy's int-or-tuple axis; np.fft.fftfreq /
+rfftfreq one integer n; np.base_repr / binary_repr one Python-int (BigInteger) signature; np.logspace / geomspace one
+count type; np.unwrap one signature in NumPy's order (`NDArray period`); dtype.newbyteorder NumPy's str; the legacy
+np.random samplers and BitGenerator.random_raw `Shape? size = null` (their `int[]` / `long[]` / `long` size shims gone);
+random_sample / random / ranf / sample one size, rand loose dimensions only. Not taken: np.broadcast's params form and
+the permutation pair. Entries that stay on purpose: np.nanargmax / nanargmin [O2] and chararray.argmax / argmin [O2]
+(the S8 `long` of the no-axis call), np.geomspace [O2] (its real / complex pair: NumPy's array_like start / stop is a
+separate item). The fixes are recorded in [`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
 ---
 
 ## Contents

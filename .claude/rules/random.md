@@ -46,11 +46,16 @@ The random-API oracle binds overloads by reflection, so call shapes are pinned a
 3. A bare `null` seed binds (`[OverloadResolutionPriority(1)]` on the overload that takes it, polyfilled for net8.0 in
    `Assembly/OverloadResolutionPriorityAttribute.cs` and honored across assemblies), and a typed null seed ARRAY is
    NumPy's `None` too: fresh entropy.
-4. NumPy's `size=None`: the Generator samplers take `Shape? size = null` (OD4), so `size: null` is None and
-   `size: Shape.Scalar` (`()`) a 0-d array request; `default(Shape)` reads as None too (`Generator.IsNoSize`). The legacy
-   np.random samplers take `Shape size = default`: there `size: default` is None and binds the `Shape` overload; the
-   `int[]`/`long[]`/`long` size shims carry priority -1 (otherwise `multivariate_normal(mean, cov, size: default)` would
-   bind the `long` shim: size 0, an empty result).
+4. NumPy's `size=None`: every sampler takes `Shape? size = null` (OD4) - the Generator's since API-parity batch 5, the
+   legacy np.random samplers' and `BitGenerator.random_raw`'s since batch 6 - so `size: null` is None (one draw) and
+   `size: Shape.Scalar` (`()`) a 0-d array request; `default(Shape)` reads as None too (`Generator.IsNoSize`; the legacy
+   bodies hand `size.GetValueOrDefault()` to their `Shape` helpers). An int, an `int[]` / `long[]`, a `long` and a tuple
+   literal convert to `Shape?` through Shape's implicit conversions, so the `int[]` / `long[]` / `long` size shims (which
+   carried priority -1, a priority C# 12 ignores: they made `pareto(3.0, null)` CS0121 for a net8.0 consumer) are gone.
+   NumPy's `random_sample(size=None)` and its aliases `random`, `ranf`, `sample` take ONE size (`random_sample((2, 3))`;
+   `random_sample(2, 3)` is NumPy's TypeError and does not compile), and only `rand(d0, ..., dn)` / `randn` take loose
+   dimensions (NumPy's `rand((2, 3))` is a TypeError: no `Shape` overload). `NumPyRandom.FillUniform(Shape)` is the
+   shared [0, 1) fill (rand, random_sample, np.random.choice's uniform draws).
 5. `integers` and `randint` take NumPy's ARRAY bounds (`BoundedIntegers.Broadcast.cs`, the `_rand_<dtype>` broadcast path:
    `can_cast`-skipped bound checks in NumPy's order and words, buffered words carried across positions, the
    size-smaller-than-broadcast and non-C-layout-float-bounds quirks) and `BigInteger` (Python-int) bounds:

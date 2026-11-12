@@ -127,5 +127,33 @@ namespace NumSharp.Backends
             UnmanagedStorage.Copyto(replaced, NewScalar(fill), NPY_CASTING.NPY_SAME_KIND_CASTING, mask);
             return replaced;
         }
+
+        /// <summary>
+        ///     NumPy's nanargmax / nanargmin over a TUPLE axis, which never computes: <c>a, mask = _replace_nan(a, ...)</c> (a
+        ///     mask only for an inexact array: half, single, double, complex - the nan family's set), <c>mask = np.all(mask,
+        ///     axis=axis)</c> when the mask has elements - which reads the tuple as a reduction does (AxisError, <c>duplicate
+        ///     value in 'axis'</c>) - and <c>All-NaN slice encountered</c> when a reduced slice is all NaN; only then
+        ///     np.argmax / np.argmin's axis converter refuses the tuple. Returns that last refusal for the caller to throw; the
+        ///     earlier ones are thrown here, in NumPy's order.
+        /// </summary>
+        /// <param name="a">The input.</param>
+        /// <param name="tuple">The tuple axis.</param>
+        /// <returns>NumPy's TypeError <c>'tuple' object cannot be interpreted as an integer</c>.</returns>
+        /// <exception cref="AxisError">An item of the tuple is out of bounds (from the mask's all-reduction).</exception>
+        /// <exception cref="ValueError">A repeated axis (the mask's all-reduction), or a reduced slice of NaNs only.</exception>
+        /// <remarks>Engine members only (an engine file calls no np.*); the NaN mask and its reductions are this call's own and
+        ///     released by their <c>using</c> declarations (the method returns an exception, not an array).</remarks>
+        internal static TypeError NanArgTupleRefusal(NDArray a, NDAxis tuple)
+        {
+            if (a.typecode is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex && a.size > 0)
+            {
+                using var mask = a.TensorEngine.IsNan(a);
+                using var allNan = mask.TensorEngine.All(mask, tuple.ToArray(), null);
+                using var anyAll = allNan.TensorEngine.Any(allNan, (int?)null, null);
+                if (anyAll.GetBoolean())
+                    throw new ValueError("All-NaN slice encountered");
+            }
+            return new TypeError("'tuple' object cannot be interpreted as an integer");
+        }
     }
 }
