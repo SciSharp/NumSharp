@@ -1284,13 +1284,13 @@ REDUCE_KWARGS_FNS = {
     # name: (NumPy callable, whether it takes initial=, whether NumSharp's overload takes a tuple axis)
     "all": (np.all, False, True),
     "any": (np.any, False, True),
-    # np-layer dtype plan, P10 item 1 (api-parameter-parity B1-B4): one NumPy signature each, over a single axis (a
-    # tuple axis is not in NumSharp's overloads, so those cells are not generated for these five).
-    "sum": (np.sum, True, False),
-    "prod": (np.prod, True, False),
-    "mean": (np.mean, False, False),
-    "var": (np.var, False, False),
-    "std": (np.std, False, False),
+    # np-layer dtype plan, P10 item 1 (api-parameter-parity B1-B4): one NumPy signature each; API-parity batch 5
+    # (2026-11-12) gave the five NumPy's tuple axis (NDAxis?), so their tuple cells are generated too.
+    "sum": (np.sum, True, True),
+    "prod": (np.prod, True, True),
+    "mean": (np.mean, False, True),
+    "var": (np.var, False, True),
+    "std": (np.std, False, True),
 }
 REDUCE_KWARGS_DTYPES = ["bool", "int8", "uint8", "int32", "int64", "float16", "float32", "float64", "complex128"]
 
@@ -10827,8 +10827,9 @@ def gen_linalg_empty():
 # numpy.ma's functions have their own axis code in both libraries, so they are separate fn keys. A numpy.ma result is
 # compared through its data (the operands carry no mask, so no slot is masked). The valueclass "axis_args" holds the types
 # STRICT (NumPy's AxisError / ValueError / IndexError must come back as the house type of the same name), zero excuses.
-# Excluded: NumSharp has no tuple axis for sum / prod / mean / std / var / max / min / the nan reductions / squeeze / roll /
-# size / cumsum (a library-wide gap), so those take the integer forms only.
+# The tuple forms: every function NumPy gives a tuple axis takes one in NumSharp too (NumPy's axis type, NDAxis?, since
+# API-parity batches 4 and 5), and np.argmax / np.argmin are called with tuples for NumPy's TypeError. Excluded: squeeze /
+# size / cumsum (squeeze's and size's tuples are the integer jobs' twins elsewhere; cumsum takes one axis in NumPy).
 
 AX_OPERANDS = {
     0: lambda: np.array(1.5),
@@ -11142,6 +11143,26 @@ def gen_axis_args():
 
     # ---- tuple axes ---------------------------------------------------------------------------------------------------
     tuple_jobs = [
+        # API-parity batch 5: the reductions' tuple axis, argmax / argmin's refusal of one, np.roll over several axes.
+        ("sum", lambda a, t: np.sum(a, axis=t)),
+        ("prod", lambda a, t: np.prod(a, axis=t)),
+        ("mean", lambda a, t: np.mean(a, axis=t)),
+        ("std", lambda a, t: np.std(a, axis=t)),
+        ("var", lambda a, t: np.var(a, axis=t)),
+        ("max", lambda a, t: np.max(a, axis=t)),
+        ("min", lambda a, t: np.min(a, axis=t)),
+        ("amax", lambda a, t: np.amax(a, axis=t)),
+        ("amin", lambda a, t: np.amin(a, axis=t)),
+        ("nansum", lambda a, t: np.nansum(a, axis=t)),
+        ("nanprod", lambda a, t: np.nanprod(a, axis=t)),
+        ("nanmean", lambda a, t: np.nanmean(a, axis=t)),
+        ("nanstd", lambda a, t: np.nanstd(a, axis=t)),
+        ("nanvar", lambda a, t: np.nanvar(a, axis=t)),
+        ("nanmax", lambda a, t: np.nanmax(a, axis=t)),
+        ("nanmin", lambda a, t: np.nanmin(a, axis=t)),
+        ("argmax", lambda a, t: np.argmax(a, axis=t)),
+        ("argmin", lambda a, t: np.argmin(a, axis=t)),
+        ("roll", lambda a, t: np.roll(a, 1, axis=t)),
         ("all", lambda a, t: np.all(a, axis=t)),
         ("any", lambda a, t: np.any(a, axis=t)),
         ("average", lambda a, t: np.average(a, axis=t)),

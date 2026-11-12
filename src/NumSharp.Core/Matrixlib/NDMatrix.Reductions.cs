@@ -152,13 +152,15 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape
         ///     (NumPy's reduction texts).</exception>
-        public NDMatrix sum(int axis, DType dtype = null, NDMatrix @out = null) => (NDMatrix)sum((int?)axis, dtype, @out);
+        public NDMatrix sum(int axis, DType dtype = null, NDMatrix @out = null) => (NDMatrix)sum(new NDAxis(axis), dtype, @out);
 
         /// <summary>
         ///     NumPy's <c>matrix.sum(axis=None, dtype=None, out=None)</c>. Without an axis the result is the sum of
         ///     all elements as a scalar.
         /// </summary>
-        /// <param name="axis">The axis, or <c>null</c> to sum every element.</param>
+        /// <param name="axis">The axis, or <c>null</c> to sum every element. A tuple reduces the axes it names together
+        ///     and keeps them with length 1, as every axis but None does (the <c>(1, 1)</c> matrix for <c>(0, 1)</c>,
+        ///     the whole matrix for <c>()</c>).</param>
         /// <param name="dtype">The dtype the sum is computed in, or <c>null</c> for NumPy's default.</param>
         /// <param name="out">A matrix of the kept shape (<c>(1, 1)</c> without an axis), or <c>null</c>.</param>
         /// <returns>A 0-d array (the scalar) when <paramref name="axis"/> is <c>null</c>; otherwise the matrix of
@@ -170,7 +172,7 @@ namespace NumSharp
         ///     '_collapse'</c>).</exception>
         [NDScoped]
         [NumPyMethod]
-        public NDArray sum(int? axis = null, DType dtype = null, NDArray @out = null)
+        public NDArray sum(NDAxis? axis = null, DType dtype = null, NDArray @out = null)
         {
             NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
@@ -198,10 +200,12 @@ namespace NumSharp
         /// <returns>The products; <paramref name="out"/> itself when it is given.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape.</exception>
-        public NDMatrix prod(int axis, DType dtype = null, NDMatrix @out = null) => (NDMatrix)prod((int?)axis, dtype, @out);
+        public NDMatrix prod(int axis, DType dtype = null, NDMatrix @out = null) => (NDMatrix)prod(new NDAxis(axis), dtype, @out);
 
         /// <summary>NumPy's <c>matrix.prod(axis=None, dtype=None, out=None)</c>; a scalar without an axis.</summary>
-        /// <param name="axis">The axis, or <c>null</c> to multiply every element.</param>
+        /// <param name="axis">The axis, or <c>null</c> to multiply every element. A tuple reduces the axes it names
+        ///     together and keeps them with length 1, as every axis but None does (the <c>(1, 1)</c> matrix for <c>(0,
+        ///     1)</c>, the whole matrix for <c>()</c>).</param>
         /// <param name="dtype">The dtype the product is computed in, or <c>null</c> for NumPy's default.</param>
         /// <param name="out">A matrix of the kept shape, or <c>null</c>.</param>
         /// <returns>A 0-d array when <paramref name="axis"/> is <c>null</c>; otherwise the matrix.</returns>
@@ -212,7 +216,7 @@ namespace NumSharp
         ///     '_collapse'</c>).</exception>
         [NDScoped]
         [NumPyMethod]
-        public NDArray prod(int? axis = null, DType dtype = null, NDArray @out = null)
+        public NDArray prod(NDAxis? axis = null, DType dtype = null, NDArray @out = null)
         {
             NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
@@ -241,10 +245,12 @@ namespace NumSharp
         /// <returns>The means; <paramref name="out"/> itself when it is given.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape.</exception>
-        public NDMatrix mean(int axis, DType dtype = null, NDMatrix @out = null) => (NDMatrix)mean((int?)axis, dtype, @out);
+        public NDMatrix mean(int axis, DType dtype = null, NDMatrix @out = null) => (NDMatrix)mean(new NDAxis(axis), dtype, @out);
 
         /// <summary>NumPy's <c>matrix.mean(axis=None, dtype=None, out=None)</c>; a scalar without an axis.</summary>
-        /// <param name="axis">The axis, or <c>null</c> for the mean of every element.</param>
+        /// <param name="axis">The axis, or <c>null</c> for the mean of every element. A tuple reduces the axes it names
+        ///     together and keeps them with length 1, as every axis but None does (the <c>(1, 1)</c> matrix for <c>(0,
+        ///     1)</c>, the whole matrix for <c>()</c>).</param>
         /// <param name="dtype">The dtype the mean is computed in, or <c>null</c> for NumPy's default.</param>
         /// <param name="out">A matrix of the kept shape, or <c>null</c>. NumPy stores the SUM into it and then
         ///     divides it in place, both with an unsafe cast, so an integer <paramref name="out"/> holds
@@ -257,7 +263,7 @@ namespace NumSharp
         ///     '_collapse'</c>).</exception>
         [NDScoped]
         [NumPyMethod]
-        public NDArray mean(int? axis = null, DType dtype = null, NDArray @out = null)
+        public NDArray mean(NDAxis? axis = null, DType dtype = null, NDArray @out = null)
         {
             NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
@@ -296,10 +302,12 @@ namespace NumSharp
         /// <returns>The variances; <paramref name="out"/> itself when it is given.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape.</exception>
-        public NDMatrix var(int axis, DType dtype = null, NDMatrix @out = null, int ddof = 0) => (NDMatrix)var((int?)axis, dtype, @out, ddof);
+        public NDMatrix var(int axis, DType dtype = null, NDMatrix @out = null, int ddof = 0) => (NDMatrix)var(new NDAxis(axis), dtype, @out, ddof);
 
         /// <summary>NumPy's <c>matrix.var(axis=None, dtype=None, out=None, ddof=0)</c>; a scalar without an axis.</summary>
-        /// <param name="axis">The axis, or <c>null</c> for the variance of every element.</param>
+        /// <param name="axis">The axis, or <c>null</c> for the variance of every element. A tuple reduces the axes it
+        ///     names together and keeps them with length 1, as every axis but None does (the <c>(1, 1)</c> matrix for
+        ///     <c>(0, 1)</c>, the whole matrix for <c>()</c>).</param>
         /// <param name="dtype">The dtype of the computation, or <c>null</c> for NumPy's default.</param>
         /// <param name="out">A matrix of the kept shape, or <c>null</c>.</param>
         /// <param name="ddof">Delta degrees of freedom.</param>
@@ -318,7 +326,7 @@ namespace NumSharp
         ///     '_collapse'</c>).</exception>
         [NDScoped]
         [NumPyMethod]
-        public NDArray var(int? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0)
+        public NDArray var(NDAxis? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0)
         {
             NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
@@ -348,10 +356,12 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="out"/> or <paramref name="dtype"/> is an integer or
         ///     bool dtype: NumPy's <c>Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int64') with
         ///     casting rule 'same_kind'</c>.</exception>
-        public NDMatrix std(int axis, DType dtype = null, NDMatrix @out = null, int ddof = 0) => (NDMatrix)std((int?)axis, dtype, @out, ddof);
+        public NDMatrix std(int axis, DType dtype = null, NDMatrix @out = null, int ddof = 0) => (NDMatrix)std(new NDAxis(axis), dtype, @out, ddof);
 
         /// <summary>NumPy's <c>matrix.std(axis=None, dtype=None, out=None, ddof=0)</c>; a scalar without an axis.</summary>
-        /// <param name="axis">The axis, or <c>null</c> for the standard deviation of every element.</param>
+        /// <param name="axis">The axis, or <c>null</c> for the standard deviation of every element. A tuple reduces the
+        ///     axes it names together and keeps them with length 1, as every axis but None does (the <c>(1, 1)</c>
+        ///     matrix for <c>(0, 1)</c>, the whole matrix for <c>()</c>).</param>
         /// <param name="dtype">The dtype of the computation, or <c>null</c> for NumPy's default.</param>
         /// <param name="out">A float or complex matrix of the kept shape, or <c>null</c>.</param>
         /// <param name="ddof">Delta degrees of freedom.</param>
@@ -372,7 +382,7 @@ namespace NumSharp
         ///     '_collapse'</c>).</exception>
         [NDScoped]
         [NumPyMethod]
-        public NDArray std(int? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0)
+        public NDArray std(NDAxis? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0)
         {
             NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
@@ -485,11 +495,13 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError">The reduced axis is empty (<c>zero-size array to reduction operation
         ///     maximum which has no identity</c>), or <paramref name="out"/> is read-only or misshapen.</exception>
-        public NDMatrix max(int axis, NDMatrix @out = null) => (NDMatrix)max((int?)axis, @out);
+        public NDMatrix max(int axis, NDMatrix @out = null) => (NDMatrix)max(new NDAxis(axis), @out);
 
         /// <summary>NumPy's <c>matrix.max(axis=None, out=None)</c>; the largest element as a scalar without an
         ///     axis.</summary>
-        /// <param name="axis">The axis, or <c>null</c> for the maximum of every element.</param>
+        /// <param name="axis">The axis, or <c>null</c> for the maximum of every element. A tuple reduces the axes it
+        ///     names together and keeps them with length 1, as every axis but None does (the <c>(1, 1)</c> matrix for
+        ///     <c>(0, 1)</c>, the whole matrix for <c>()</c>).</param>
         /// <param name="out">A matrix of the kept shape, or <c>null</c>.</param>
         /// <returns>A 0-d array when <paramref name="axis"/> is <c>null</c>; otherwise the matrix.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
@@ -499,7 +511,7 @@ namespace NumSharp
         ///     '_collapse'</c>).</exception>
         [NDScoped]
         [NumPyMethod]
-        public NDArray max(int? axis = null, NDArray @out = null)
+        public NDArray max(NDAxis? axis = null, NDArray @out = null)
         {
             NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
@@ -523,11 +535,13 @@ namespace NumSharp
         /// <returns>The minima; <paramref name="out"/> itself when it is given.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError">An empty reduction, or <paramref name="out"/> is read-only or misshapen.</exception>
-        public NDMatrix min(int axis, NDMatrix @out = null) => (NDMatrix)min((int?)axis, @out);
+        public NDMatrix min(int axis, NDMatrix @out = null) => (NDMatrix)min(new NDAxis(axis), @out);
 
         /// <summary>NumPy's <c>matrix.min(axis=None, out=None)</c>; the smallest element as a scalar without an
         ///     axis.</summary>
-        /// <param name="axis">The axis, or <c>null</c> for the minimum of every element.</param>
+        /// <param name="axis">The axis, or <c>null</c> for the minimum of every element. A tuple reduces the axes it
+        ///     names together and keeps them with length 1, as every axis but None does (the <c>(1, 1)</c> matrix for
+        ///     <c>(0, 1)</c>, the whole matrix for <c>()</c>).</param>
         /// <param name="out">A matrix of the kept shape, or <c>null</c>.</param>
         /// <returns>A 0-d array when <paramref name="axis"/> is <c>null</c>; otherwise the matrix.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
@@ -537,7 +551,7 @@ namespace NumSharp
         ///     '_collapse'</c>).</exception>
         [NDScoped]
         [NumPyMethod]
-        public NDArray min(int? axis = null, NDArray @out = null)
+        public NDArray min(NDAxis? axis = null, NDArray @out = null)
         {
             NDArray self = A, outView = NDSubclass.PlainView(@out);   // the plain computation (file header)
             if (@out is null)
@@ -580,7 +594,7 @@ namespace NumSharp
         ///     makes np.nanmax look like a library caller (the chararray override's failure on PR #633's CI). The guard
         ///     test <c>SubclassAuditFrameTests</c> holds every override to it.</remarks>
         [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
-        protected internal override NDArray NanMax(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal override NDArray NanMax(NDAxis? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => Storage.Shape.NDim == 0
                 ? base.NanMax(axis, @out, keepdims, initial, @where)
                 : NanExtreme(axis, @out, keepdims, initial, @where, isMax: true);
@@ -601,7 +615,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <remarks>The frame stays on the stack for the caller audit, as for <see cref="NanMax"/>.</remarks>
         [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
-        protected internal override NDArray NanMin(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal override NDArray NanMin(NDAxis? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => Storage.Shape.NDim == 0
                 ? base.NanMin(axis, @out, keepdims, initial, @where)
                 : NanExtreme(axis, @out, keepdims, initial, @where, isMax: false);
@@ -620,13 +634,15 @@ namespace NumSharp
         ///         res = _copyto(res, np.nan, mask)
         ///     return res
         ///     </code>
-        ///     np.amax of the matrix copy IS this class's <see cref="max(int?, NDArray)"/> (the method NumPy's
+        ///     np.amax of the matrix copy IS this class's <see cref="max(NDAxis?, NDArray)"/> (the method NumPy's
         ///     <c>_wrapreduction</c> finds), so its keyword TypeErrors, its out= rules and its 'maximum' texts are the
         ///     answer's. Footgun: those bits are not fmax's - a <c>±0</c> tie follows maximum, an all-NaN slice is NumPy's
         ///     positive quiet NaN whatever NaN it held, and the copy and two mask reductions are paid on every call (NumPy's
         ///     slow route, which a plain array never takes).
         /// </summary>
-        /// <param name="axis">The axis, or <c>null</c> for the scalar of every element.</param>
+        /// <param name="axis">The axis, or <c>null</c> for the scalar of every element. A tuple reduces the axes it
+        ///     names together and keeps them with length 1, as every axis but None does (the <c>(1, 1)</c> matrix for
+        ///     <c>(0, 1)</c>, the whole matrix for <c>()</c>).</param>
         /// <param name="out">The caller's out, or <c>null</c>.</param>
         /// <param name="keepdims">The caller's keepdims; <c>true</c> is the method's TypeError.</param>
         /// <param name="initial">The caller's initial value; any value is the method's TypeError.</param>
@@ -647,7 +663,7 @@ namespace NumSharp
         ///     reduction), or a read-only or misshapen out.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         [NDScoped]
-        private NDArray NanExtreme(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where, bool isMax)
+        private NDArray NanExtreme(NDAxis? axis, NDArray @out, bool keepdims, object initial, NDArray @where, bool isMax)
         {
             // res = np.amax(a, ..., **kwargs) hands the caller's keywords to matrix.max, which takes none of them: the first
             // one passed, in amax's order (keepdims, initial, where), is its TypeError. Raising it before the copy is NumPy's
@@ -743,10 +759,10 @@ namespace NumSharp
         ///     does not exist on it.</exception>
         [NumPyMethod]
         [NDScoped]
-        public NDArray argmax(int? axis, NDArray @out = null) => axis is int along ? ArgReduce(along, @out, max: true) : FlatArgReduce(@out, max: true);
+        public NDArray argmax(NDAxis? axis, NDArray @out = null) => ArgReduceDispatch(axis, @out, max: true);
 
         /// <summary>NumPy's <c>matrix.argmin(axis=None, out=None)</c> as <c>np.argmin</c>'s generated dispatch calls it; see
-        ///     <see cref="argmax(int?, NDArray)"/>.</summary>
+        ///     <see cref="argmax(NDAxis?, NDArray)"/>.</summary>
         /// <param name="axis">The axis (0 or 1), or <c>null</c> for the flat index (no default, see argmax).</param>
         /// <param name="out">Must be <c>null</c> in practice.</param>
         /// <returns>The 0-d flat index without an axis; otherwise the int64 index matrix.</returns>
@@ -755,7 +771,28 @@ namespace NumSharp
         /// <exception cref="AttributeError"><paramref name="out"/> is a plain array NumPy's reduction accepted.</exception>
         [NumPyMethod]
         [NDScoped]
-        public NDArray argmin(int? axis, NDArray @out = null) => axis is int along ? ArgReduce(along, @out, max: false) : FlatArgReduce(@out, max: false);
+        public NDArray argmin(NDAxis? axis, NDArray @out = null) => ArgReduceDispatch(axis, @out, max: false);
+
+        /// <summary>
+        ///     The routes of the axis forms of <see cref="argmax(NDAxis?, NDArray)"/> / <see cref="argmin(NDAxis?, NDArray)"/>:
+        ///     <c>ndarray.argmax(self, axis, out)</c> converts its axis to ONE integer first, so a tuple is its TypeError
+        ///     (before the out is looked at); an integer is the aligned index matrix, None the flat index.
+        /// </summary>
+        /// <param name="axis">The axis (0 or 1), a tuple (refused), or <c>null</c> for the flat index.</param>
+        /// <param name="out">The caller's out, or <c>null</c>.</param>
+        /// <param name="max">Maximum instead of minimum.</param>
+        /// <returns>The 0-d flat index without an axis; otherwise the int64 index matrix.</returns>
+        /// <exception cref="TypeError"><paramref name="axis"/> is a tuple: <c>'tuple' object cannot be interpreted as an
+        ///     integer</c> (probed 2.4.2 for a matrix, the empty tuple and a one-axis tuple included).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="ValueError">An unsupported axis, an empty reduction, or a misshapen out.</exception>
+        /// <exception cref="AttributeError"><paramref name="out"/> is a plain array NumPy's reduction accepted.</exception>
+        private NDArray ArgReduceDispatch(NDAxis? axis, NDArray @out, bool max)
+        {
+            if (axis is { IsTuple: true })
+                throw new TypeError("'tuple' object cannot be interpreted as an integer");
+            return axis is { } along ? ArgReduce(along[0], @out, max) : FlatArgReduce(@out, max);
+        }
 
         /// <summary>
         ///     <c>ndarray.argmax(self, None, out)._align(None)</c>: the flat index of the first extreme element as a 0-d array;

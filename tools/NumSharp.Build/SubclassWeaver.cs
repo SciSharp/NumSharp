@@ -1665,11 +1665,18 @@ internal static class SubclassWeaver
                 EmitCall(ctx, il, module, result, "AsArray", rt, () => { });
                 break;
             case Kind.ReducesThrough:
-                EmitCall(ctx, il, module, result, "Collapse", rt, () =>
+                // A function that takes NumPy's axis type hands the axis itself to the collapse (CollapseAxes): matrix._collapse
+                // keeps the keepdims=True result for a TUPLE, which the int? of every other function cannot say (a tuple read as
+                // None gave np.nansum(m, (0, 1)) the scalar where NumPy gives the 1 x 1 matrix).
+                bool axisValue = HasNDAxisAxis(m);
+                EmitCall(ctx, il, module, result, axisValue ? "CollapseAxes" : "Collapse", rt, () =>
                 {
                     Load(rule.Out);
                     Load(rule.Self);
-                    EmitAxis(ctx, il, m, map);
+                    if (axisValue)
+                        EmitAxisValue(ctx, il, m, map);
+                    else
+                        EmitAxis(ctx, il, m, map);
                     il.Append(il.Create(rule.SubtypeOthers ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0));
                     il.Append(il.Create(OpCodes.Ldc_I4, rule.ZeroDim));
                 });
@@ -1723,9 +1730,10 @@ internal static class SubclassWeaver
     /// <param name="map">The function's parameters to the subclass path's.</param>
     /// <exception cref="WeaveException">NDSubclass lacks a conversion this method calls (NDW029: weaver and library out of
     ///     sync).</exception>
-    /// <remarks>A tuple reads as no axis, the answer the <c>int[]</c>-axis overloads (which had no axis this method could
-    ///     read) gave before the functions took NumPy's axis type: the collapse of a matrix intermediate decides row or
-    ///     column only for a single axis.</remarks>
+    /// <remarks>A tuple reads as no axis here. The <c>[ReducesThrough]</c> collapse of a function with NumPy's axis type no
+    ///     longer comes this way (it loads the axis itself, <see cref="EmitAxisValue"/>, so a matrix's tuple keeps its
+    ///     keepdims answer); the <c>NDAxis</c> branch converts such an axis for a mechanism that can only take an
+    ///     <c>int?</c>.</remarks>
     private static void EmitAxis(Context ctx, ILProcessor il, MethodDefinition m, Dictionary<ParameterDefinition, ParameterDefinition> map)
     {
         var axis = m.Parameters.FirstOrDefault(p => p.Name == "axis");
@@ -1745,6 +1753,34 @@ internal static class SubclassWeaver
         }
         else
             il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "NoAxis"))));
+    }
+
+    /// <summary>
+    ///     Whether the function's <c>axis</c> is NumPy's axis type (<c>NDAxis</c> or <c>NDAxis?</c>), the functions whose
+    ///     collapse is <c>NDSubclass.CollapseAxes</c> (<see cref="EmitAxisValue"/>).
+    /// </summary>
+    /// <param name="m">The function.</param>
+    /// <returns>True when a parameter named <c>axis</c> has one of the two types.</returns>
+    private static bool HasNDAxisAxis(MethodDefinition m)
+        => m.Parameters.FirstOrDefault(p => p.Name == "axis")?.ParameterType.FullName is NDAxisFullName or NullableNDAxisFullName;
+
+    /// <summary>
+    ///     Loads the function's <c>axis</c> as the <c>NDAxis?</c> <c>NDSubclass.CollapseAxes</c> takes: an <c>NDAxis?</c> as it
+    ///     is, an <c>NDAxis</c> through <c>NDSubclass.NullableAxis</c> (the conversion generating <c>Nullable&lt;T&gt;</c>'s
+    ///     constructor in IL would be).
+    /// </summary>
+    /// <param name="ctx">The weave.</param>
+    /// <param name="il">The IL.</param>
+    /// <param name="m">The function (its <c>axis</c> is one of the two types: <see cref="HasNDAxisAxis"/>).</param>
+    /// <param name="map">The function's parameters to the subclass path's.</param>
+    /// <exception cref="WeaveException">NDSubclass lacks <c>NullableAxis</c> (NDW029: weaver and library out of sync).</exception>
+    /// <remarks>Unlike <see cref="EmitAxis"/> a tuple keeps its axes, so the collapse can give NumPy's keepdims result for it.</remarks>
+    private static void EmitAxisValue(Context ctx, ILProcessor il, MethodDefinition m, Dictionary<ParameterDefinition, ParameterDefinition> map)
+    {
+        var axis = m.Parameters.First(p => p.Name == "axis");
+        il.Append(il.Create(OpCodes.Ldarg, map[axis]));
+        if (axis.ParameterType.FullName == NDAxisFullName)
+            il.Append(il.Create(OpCodes.Call, m.Module.ImportReference(Runtime(ctx, "NullableAxis", NDAxisFullName))));
     }
 
     /// <summary>

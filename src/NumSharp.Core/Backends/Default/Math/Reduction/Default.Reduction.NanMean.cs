@@ -10,7 +10,8 @@ namespace NumSharp.Backends
         ///     <see cref="NanMeanNumPy"/>.
         /// </summary>
         /// <param name="a">The array to reduce, any layout.</param>
-        /// <param name="axis">The reduced axis (negative counts from the end), or null for a flat reduction.</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), a tuple of axes (NumPy's statements over the
+        ///     set: the count and the sum each one pass of the reduction iterator), or null for a flat reduction.</param>
         /// <param name="dtype">The loop of the sum (NumPy's <c>dtype=</c>), or null for the input's dtype.</param>
         /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
         /// <param name="out">NumPy's <c>out=</c> (returned), or null.</param>
@@ -19,16 +20,33 @@ namespace NumSharp.Backends
         ///     given.</returns>
         /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/> or
         ///     <paramref name="out"/>.</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) outside the operand.</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (<c>duplicate value in 'axis'</c>, from the count's sum);
+        ///     a <c>StringDType</c> operand over two axes or more (np.mean's not-reorderable sum).</exception>
         /// <remarks>
         ///     A public entry point since the np-layer dtype plan's phase PE (E1), so it owns its scope: the count, the
         ///     NaN-zeroed copy and the sums are reclaimed here even when no scoped facade called it.
         /// </remarks>
         [NDScoped] // the count, the K-order copy and the sum before the division are this call's own; the mean is yielded
-        public override NDArray NanMean(NDArray a, int? axis = null, DType dtype = null, bool keepdims = false,
+        public override NDArray NanMean(NDArray a, NDAxis? axis = null, DType dtype = null, bool keepdims = false,
             NDArray @out = null, NDArray @where = null)
+        {
+            // A tuple: one axis or every axis is the integer / None route (the same flags in every sum); any other tuple runs
+            // NumPy's statements as written over the set (NanMeanKeywords: _replace_nan, the count, the sum, the division),
+            // which raise in NumPy's order.
+            int? single;
+            if (axis is { IsTuple: true } tuple)
+            {
+                if (!ReductionArguments.TryIntegerForm(a.ndim, tuple, out single))
+                    return NanMeanKeywords(a, tuple, keepdims, dtype, @out, @where);
+            }
+            else
+                single = ReductionArguments.IntegerAxis(axis);
             // out= / where= run NumPy's statements as written (NanMeanKeywords); the keyword-free call keeps the fused route.
-            => @out is null && @where is null ? NanMeanNumPy(a, axis, keepdims, dtype) : NanMeanKeywords(a, axis, keepdims, dtype, @out, @where);
+            return @out is null && @where is null
+                ? NanMeanNumPy(a, single, keepdims, dtype)
+                : NanMeanKeywords(a, single, keepdims, dtype, @out, @where);
+        }
 
         /// <summary>
         ///     NumPy's <c>nanmean</c> with <c>out=</c> / <c>where=</c>, statement for statement:
@@ -42,7 +60,7 @@ namespace NumSharp.Backends
         ///     </code>
         /// </summary>
         /// <param name="a">The array to reduce, any layout.</param>
-        /// <param name="axis">The reduced axis, or null for a flat reduction (np.sum's axis rules).</param>
+        /// <param name="axis">The reduced axis, a tuple of axes, or null for a flat reduction (np.sum's axis rules).</param>
         /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
         /// <param name="dtype">The loop of the sum, or null.</param>
         /// <param name="out">The sum's and the division's destination (returned), or null.</param>
@@ -51,11 +69,13 @@ namespace NumSharp.Backends
         ///     <paramref name="keepdims"/> and <paramref name="out"/>.</returns>
         /// <exception cref="TypeError">A non-inexact <paramref name="dtype"/> or <paramref name="out"/> for an inexact
         ///     input (NumPy's texts, before the axis is read).</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> outside the operand (the count's np.sum).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) outside the operand (the count's
+        ///     np.sum).</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (the count's np.sum).</exception>
         /// <remarks>A slice without a non-NaN element is 0 / 0: NaN, which NumPy keeps (it only warns). The scope reclaims
         ///     the mask, the copy and the count; the mean is yielded.</remarks>
         [NDScoped]
-        private NDArray NanMeanKeywords(NDArray a, int? axis, bool keepdims, DType dtype, NDArray @out, NDArray @where)
+        private NDArray NanMeanKeywords(NDArray a, NDAxis? axis, bool keepdims, DType dtype, NDArray @out, NDArray @where)
         {
             var engine = a.TensorEngine;
             NPTypeCode inT = a.GetTypeCode;

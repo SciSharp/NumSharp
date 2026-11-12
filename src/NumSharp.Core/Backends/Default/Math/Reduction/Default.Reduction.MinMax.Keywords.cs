@@ -1441,7 +1441,8 @@ namespace NumSharp.Backends
         ///     the two engines).
         /// </summary>
         /// <param name="a">The array to reduce, any layout.</param>
-        /// <param name="axis">The reduced axis (negative counts from the end), or <c>null</c> for every axis.</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), a tuple of axes reduced together in ONE pass of
+        ///     the iterator (the empty tuple reduces none), or <c>null</c> for every axis.</param>
         /// <param name="out">The array to receive the result (any dtype: the loop's result is cast into it), or <c>null</c>.</param>
         /// <param name="keepdims">Keep the reduced axes as length-1 dimensions.</param>
         /// <param name="initial">The value every output starts from (<see cref="ReductionInitial"/>'s conversion), or
@@ -1454,9 +1455,11 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is <c>null</c>.</exception>
         /// <exception cref="ValueError">A read-only or misshapen out, a mask with more axes than <paramref name="a"/>, a mask
         ///     without <paramref name="initial"/>, or an empty reduced axis without <paramref name="initial"/> (NumPy's
-        ///     texts); an unconvertible <paramref name="initial"/> (a NaN into an integer loop, a sequence).</exception>
+        ///     texts); an unconvertible <paramref name="initial"/> (a NaN into an integer loop, a sequence); a tuple that names
+        ///     an axis twice (<c>duplicate value in 'axis'</c>); a <c>StringDType</c> reduction over two axes or more (not
+        ///     reorderable).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException">The mask or out does not broadcast against <paramref name="a"/>.</exception>
         /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="TypeError"><paramref name="initial"/> is a complex for a real loop, or of an unconvertible type.</exception>
@@ -1466,7 +1469,7 @@ namespace NumSharp.Backends
         ///     <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> until it returns, so a
         ///     caller's temporary operand or mask cannot be collected under the kernel.</remarks>
         [NDAnchored]
-        internal unsafe NDArray MaxMinNumPy(NDArray a, int? axis, NDArray @out, bool keepdims, object initial, NDArray @where,
+        internal unsafe NDArray MaxMinNumPy(NDArray a, NDAxis? axis, NDArray @out, bool keepdims, object initial, NDArray @where,
             MinMaxOp op)
         {
             if (a is null)
@@ -1480,10 +1483,16 @@ namespace NumSharp.Backends
             bool[] flags = ReductionArguments.AxisFlags(a.ndim, axis);
             // StringDType in the input or the out: the StringDType loops' resolution (maximum / minimum compute, fmax / fmin
             // have none), then PyUFunc_ReduceWrapper's checks and the reduction (initial= packed into the StringDType loop).
+            // The empty tuple of an input with dimensions reduces no axis: each output is its own element (a copy, or the
+            // initial value against it) - the reduction along an appended axis of length 1.
             if (Strings.NDStringUfuncs.IsVString(a) || Strings.NDStringUfuncs.IsVString(@out))
-                return Strings.NDVStringReduction.MaxMinNumPy(
-                    op switch { MinMaxOp.Max => "max", MinMaxOp.Min => "min", MinMaxOp.FMax => "nanmax", _ => "nanmin" },
-                    a, axis, @out, keepdims, initial, @where);
+            {
+                string name = op switch { MinMaxOp.Max => "max", MinMaxOp.Min => "min", MinMaxOp.FMax => "nanmax", _ => "nanmin" };
+                if (op is MinMaxOp.Max or MinMaxOp.Min && Strings.NDStringUfuncs.IsVString(a) && IsNoAxisSet(axis, flags))
+                    return VStringReduceOverNoAxis(a, flags, keepdims, @out, initial, @where, funcname,
+                        (lane, mask) => Strings.NDVStringReduction.MaxMinNumPy(name, lane, -1, @out, false, initial, mask));
+                return Strings.NDVStringReduction.MaxMinNumPy(name, a, TextAxis(axis, flags), @out, keepdims, initial, @where);
+            }
             if (Strings.NDStringUfuncs.IsString(a) || Strings.NDStringUfuncs.IsString(@out))
                 throw Strings.NDStringUfuncs.NoLoop(funcname, (@out ?? a).dtype, a.dtype);
             ReductionArguments.ValidateOperands(a, flags, keepdims, @out, @where, funcname);
@@ -1517,6 +1526,9 @@ namespace NumSharp.Backends
 
             bool flat = Array.TrueForAll(flags, f => f);
             int ax = flat ? -1 : Array.IndexOf(flags, true);
+            // The seeded exact engines below reduce ONE axis or every axis: a set of two axes or more short of every axis,
+            // or the empty tuple's none (ax is -1 there, which those engines would read as the last axis), runs the iterator.
+            bool oneOrEvery = flat || (ax >= 0 && Array.IndexOf(flags, true, ax + 1) < 0);
 
             // 4b. A broadcast input: an element met again along a stride-0 axis changes nothing the loop can see in the
             // cases MaxMinBroadcastShortcut proves, which then reduce one copy instead of every repeat.
@@ -1531,7 +1543,7 @@ namespace NumSharp.Backends
             // loop dtype comes from a safe cast, which keeps order, and an integer value has one bit pattern, so the loop's
             // extreme IS the cast of the input's extreme — reduced by the fast path in the input's own dtype, then copied
             // (cast) into the out. With initial= or where= the iterator runs (the initial lives in the loop dtype).
-            if (!hasInitial && @where is null && @out is not null && @out.GetTypeCode == loop && inT != loop
+            if (oneOrEvery && !hasInitial && @where is null && @out is not null && @out.GetTypeCode == loop && inT != loop
                 && NumPyMinMaxReduce.Supports(inT) && !NumPyMinMaxReduce.IsFloat(inT) && inT != NPTypeCode.Half)
             {
                 var narrow = TryMaxMinSeeded(a, flat, ax, keepdims, null, op);
@@ -1551,7 +1563,7 @@ namespace NumSharp.Backends
             }
 
             // 5a. The fast path: the seeded exact engines (see the file header for what they may serve).
-            if (@where is null && (@out is null || (@out.GetTypeCode == loop && inT == loop)))
+            if (oneOrEvery && @where is null && (@out is null || (@out.GetTypeCode == loop && inT == loop)))
             {
                 var fast = TryMaxMinSeeded(a, flat, ax, keepdims, hasInitial ? seed : null, op);
                 if (fast is not null)
@@ -1673,14 +1685,15 @@ namespace NumSharp.Backends
         /// </remarks>
         /// <param name="a">The broadcast input.</param>
         /// <param name="flags">The reduced-axis flags.</param>
-        /// <param name="axis">The axis argument, passed on unchanged.</param>
+        /// <param name="axis">The axis argument (an integer, a tuple, or null), passed on unchanged: a cut view keeps every
+        ///     axis, so the flags stay valid for it.</param>
         /// <param name="keepdims">Keep the reduced axes as length-1 dimensions.</param>
         /// <param name="out">The out (its dtype is the loop's), or <c>null</c>.</param>
         /// <param name="initial">The initial value, passed on unchanged.</param>
         /// <param name="loop">The loop dtype.</param>
         /// <param name="op">The reduction.</param>
         /// <returns>The result (<paramref name="out"/> when given), or <c>null</c> when the shortcut does not apply.</returns>
-        private unsafe NDArray MaxMinBroadcastShortcut(NDArray a, bool[] flags, int? axis, bool keepdims, NDArray @out,
+        private unsafe NDArray MaxMinBroadcastShortcut(NDArray a, bool[] flags, NDAxis? axis, bool keepdims, NDArray @out,
             object initial, NPTypeCode loop, MinMaxOp op)
         {
             if (loop is NPTypeCode.Single or NPTypeCode.Double)

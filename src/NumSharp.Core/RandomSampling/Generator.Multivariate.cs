@@ -22,7 +22,8 @@ namespace NumSharp
         /// <param name="n">Number of experiments, non-negative.</param>
         /// <param name="pvals">Probabilities of each of the <c>d</c> outcomes, each in <c>[0, 1]</c>; <c>sum(pvals[:-1])</c>
         ///     must not exceed 1 (the last entry takes whatever probability is left).</param>
-        /// <param name="size">Leading output shape. Default (NumPy's <c>None</c>) draws one vector of shape <c>(d,)</c>.</param>
+        /// <param name="size">Leading output shape. <c>null</c> (NumPy's <c>None</c>, the default) draws one vector of
+        ///     shape <c>(d,)</c>.</param>
         /// <returns>The int64 counts, shape <c>(*size, d)</c>.</returns>
         /// <exception cref="ValueError">In NumPy's order: <paramref name="pvals"/> is empty; an element is outside
         ///     <c>[0, 1]</c> or NaN; <c>sum(pvals[:-1]) &gt; 1.0</c>; then (after the output exists) <paramref name="n"/> is
@@ -32,13 +33,13 @@ namespace NumSharp
         ///     <br/>NumPy's <c>random_multinomial</c> — one conditional binomial per category over this Generator's
         ///     binomial cache. Byte-identical to <c>default_rng(seed).multinomial</c>.
         /// </remarks>
-        public NDArray multinomial(long n, double[] pvals, Shape size = default)
+        public NDArray multinomial(long n, double[] pvals, Shape? size = null)
         {
             // NumPy converts pvals first; None becomes a 0-d array, which fails the dimension test below. Both wrappers are
             // private to this call (the core returns a fresh array and retains neither).
             using var on = NDArray.WritableScalar(n);
             using var parr = pvals is null ? NDArray.WritableScalar(double.NaN) : np.array(pvals);
-            return MultinomialCore(on, parr, castMessage: false, size);
+            return MultinomialCore(on, parr, castMessage: false, size.GetValueOrDefault());
         }
 
         /// <summary>
@@ -50,7 +51,7 @@ namespace NumSharp
         /// <returns>The int64 counts, shape <c>(*broadcast, d)</c>.</returns>
         /// <exception cref="ValueError">See <see cref="multinomial(NDArray, NDArray, Shape)"/>.</exception>
         /// <exception cref="TypeError"><paramref name="pvals"/> is complex (not safely castable to float64).</exception>
-        public NDArray multinomial(long n, NDArray pvals, Shape size = default)
+        public NDArray multinomial(long n, NDArray pvals, Shape? size = null)
         {
             using var on = NDArray.WritableScalar(n); // private to this call: the result is a fresh array
             return multinomial(on, pvals, size);
@@ -63,7 +64,8 @@ namespace NumSharp
         ///     shape. Its dtype must reach int64 under the <c>'safe'</c> rule (bool, the signed integers, uint8-uint32).</param>
         /// <param name="pvals">Probabilities; the last axis holds the <c>d</c> outcomes, the leading axes broadcast. Any real
         ///     dtype and layout (cast to float64); null reads as NumPy's <c>None</c> (a 0-d NaN, rejected as dimensionless).</param>
-        /// <param name="size">Leading output shape. Default (NumPy's <c>None</c>) uses the broadcast shape of
+        /// <param name="size">Leading output shape. <c>null</c> (NumPy's <c>None</c>, the default) uses the broadcast
+        ///     shape of
         ///     <paramref name="n"/> and <paramref name="pvals"/>' leading axes.</param>
         /// <returns>The int64 counts, shape <c>(*broadcast, d)</c>.</returns>
         /// <exception cref="TypeError">In NumPy's order: <paramref name="n"/> is null, or its dtype is not safely castable to
@@ -79,7 +81,7 @@ namespace NumSharp
         ///     position); otherwise NumPy's vector path, which pairs every broadcast position with its own count and
         ///     probability row, in C order.
         /// </remarks>
-        public NDArray multinomial(NDArray n, NDArray pvals, Shape size = default)
+        public NDArray multinomial(NDArray n, NDArray pvals, Shape? size = null)
         {
             // NumPy converts n first (PyArray_FROM_OTF(n, NPY_INT64)): None fails inside int(), a float/uint64 array fails
             // the safe cast — both before pvals is looked at.
@@ -98,7 +100,7 @@ namespace NumSharp
                 {
                     ownParr = true;
                     parr = NDArray.WritableScalar(double.NaN);
-                    return MultinomialCore(on, parr, castMessage: false, size);
+                    return MultinomialCore(on, parr, castMessage: false, size.GetValueOrDefault());
                 }
                 RandomConstraints.CheckSafeCast(pvals, NPTypeCode.Double);
 
@@ -115,7 +117,7 @@ namespace NumSharp
 
                 ownParr = !(pvals.typecode == NPTypeCode.Double && pvals.Shape.IsContiguous);
                 parr = ownParr ? pvals.astype(np.float64) : pvals;
-                return MultinomialCore(on, parr, castMessage, size);
+                return MultinomialCore(on, parr, castMessage, size.GetValueOrDefault());
             }
             finally
             {
@@ -359,7 +361,8 @@ namespace NumSharp
         ///     Draw samples from the Dirichlet distribution.
         /// </summary>
         /// <param name="alpha">Concentration parameters (length k, each non-negative; NaN accepted and samples NaN).</param>
-        /// <param name="size">Leading output shape. Default (NumPy's <c>None</c>) draws one vector of shape <c>(k,)</c>.</param>
+        /// <param name="size">Leading output shape. <c>null</c> (NumPy's <c>None</c>, the default) draws one vector of
+        ///     shape <c>(k,)</c>.</param>
         /// <returns>The float64 draws, shape <c>(*size, k)</c>; each row sums to 1.</returns>
         /// <exception cref="TypeError"><paramref name="alpha"/> is null (<c>object of type 'NoneType' has no len()</c>).</exception>
         /// <exception cref="ValueError">An element of <paramref name="alpha"/> is negative (<c>alpha &lt; 0</c>).</exception>
@@ -370,19 +373,20 @@ namespace NumSharp
         ///     standard gammas normalized by the reciprocal of their sum. Unlike RandomState, zeros are allowed.
         ///     Byte-identical to <c>default_rng(seed).dirichlet</c>.
         /// </remarks>
-        public unsafe NDArray dirichlet(double[] alpha, Shape size = default)
+        public unsafe NDArray dirichlet(double[] alpha, Shape? size = null)
         {
             if (alpha is null)
                 throw new TypeError("object of type 'NoneType' has no len()");
             fixed (double* a = alpha)
-                return DirichletCore(a, alpha.Length, size);
+                return DirichletCore(a, alpha.Length, size.GetValueOrDefault());
         }
 
         /// <summary>
         ///     Draw samples from the Dirichlet distribution with the concentration given as a 1-D array.
         /// </summary>
         /// <param name="alpha">Concentration parameters, 1-D, any numeric dtype and layout (cast to float64).</param>
-        /// <param name="size">Leading output shape. Default (NumPy's <c>None</c>) draws one vector.</param>
+        /// <param name="size">Leading output shape. <c>null</c> (NumPy's <c>None</c>, the default) draws one
+        ///     vector.</param>
         /// <returns>The float64 draws, shape <c>(*size, k)</c>.</returns>
         /// <exception cref="TypeError"><paramref name="alpha"/> is null or 0-d (<c>len() of unsized object</c>), or complex
         ///     (<c>Cannot cast array data from dtype('complex128') to dtype('float64') according to the rule 'safe'</c>).</exception>
@@ -392,7 +396,7 @@ namespace NumSharp
         ///     NumPy's order: <c>len(alpha)</c> (fails for 0-d), then <c>PyArray_FROMANY(alpha, NPY_DOUBLE, 1, 1)</c>, whose
         ///     depth test precedes its safe-cast test — so a 2-D complex array reports the depth.
         /// </remarks>
-        public unsafe NDArray dirichlet(NDArray alpha, Shape size = default)
+        public unsafe NDArray dirichlet(NDArray alpha, Shape? size = null)
         {
             if (alpha is null)
                 throw new TypeError("object of type 'NoneType' has no len()");
@@ -408,7 +412,7 @@ namespace NumSharp
             try
             {
                 NDIter.Copy(new UnmanagedStorage(slice, new Shape(k)), alpha.Storage);
-                return DirichletCore((double*)slice.Address, k, size);
+                return DirichletCore((double*)slice.Address, k, size.GetValueOrDefault());
             }
             finally
             {
@@ -513,7 +517,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="colors">The number of each type of item in the collection (non-negative integers).</param>
         /// <param name="nsample">The number of items selected, <c>0 &lt;= nsample &lt;= sum(colors)</c>.</param>
-        /// <param name="size">Leading output shape. Default (NumPy's <c>None</c>) draws one variate of shape <c>(len(colors),)</c>.</param>
+        /// <param name="size">Leading output shape. <c>null</c> (NumPy's <c>None</c>, the default) draws one variate of
+        ///     shape <c>(len(colors),)</c>.</param>
         /// <param name="method"><c>"marginals"</c> (default; successive univariate hypergeometric draws, <c>sum(colors) &lt; 10^9</c>)
         ///     or <c>"count"</c> (a partial Fisher-Yates shuffle over an array of <c>sum(colors)</c> entries).</param>
         /// <returns>The int64 variates, shape <c>(*size, len(colors))</c>.</returns>
@@ -526,7 +531,7 @@ namespace NumSharp
         ///     <br/>NumPy's <c>random_multivariate_hypergeometric_count</c> / <c>_marginals</c>. Byte-identical to
         ///     <c>default_rng(seed).multivariate_hypergeometric</c>.
         /// </remarks>
-        public NDArray multivariate_hypergeometric(long[] colors, long nsample, Shape size = default, string method = "marginals")
+        public NDArray multivariate_hypergeometric(long[] colors, long nsample, Shape? size = null, string method = "marginals")
         {
             if (method != "count" && method != "marginals")
                 throw new ValueError("method must be \"count\" or \"marginals\".");
@@ -537,7 +542,7 @@ namespace NumSharp
             for (int i = 0; i < colors.Length; i++)
                 if (colors[i] < 0)
                     throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"colors must be a one-dimensional sequence of nonnegative integers not exceeding {long.MaxValue}."));
-            return MultivariateHypergeometricCore(colors, nsample, size, method);
+            return MultivariateHypergeometricCore(colors, nsample, size.GetValueOrDefault(), method);
         }
 
         /// <summary>
@@ -545,13 +550,14 @@ namespace NumSharp
         /// </summary>
         /// <param name="colors">1-D array of non-negative integers (any integer dtype; an empty array of any dtype is allowed).</param>
         /// <param name="nsample">The number of items selected.</param>
-        /// <param name="size">Leading output shape. Default (NumPy's <c>None</c>) draws one variate.</param>
+        /// <param name="size">Leading output shape. <c>null</c> (NumPy's <c>None</c>, the default) draws one
+        ///     variate.</param>
         /// <param name="method"><c>"marginals"</c> (default) or <c>"count"</c>.</param>
         /// <returns>The int64 variates, shape <c>(*size, len(colors))</c>.</returns>
         /// <exception cref="ValueError">See <see cref="multivariate_hypergeometric(long[], long, Shape, string)"/>; also a
         ///     non-1-D or non-integer <paramref name="colors"/>.</exception>
         /// <exception cref="OutOfMemoryException"><c>"count"</c> cannot allocate its work array.</exception>
-        public NDArray multivariate_hypergeometric(NDArray colors, long nsample, Shape size = default, string method = "marginals")
+        public NDArray multivariate_hypergeometric(NDArray colors, long nsample, Shape? size = null, string method = "marginals")
         {
             if (method != "count" && method != "marginals")
                 throw new ValueError("method must be \"count\" or \"marginals\".");
@@ -576,7 +582,7 @@ namespace NumSharp
             for (int i = 0; i < c.Length; i++)
                 if (c[i] < 0 || (colors.typecode == NPTypeCode.UInt64 && (ulong)colors.GetAtIndex<ulong>(i) > long.MaxValue))
                     throw new ValueError(invalid);
-            return MultivariateHypergeometricCore(c, nsample, size, method);
+            return MultivariateHypergeometricCore(c, nsample, size.GetValueOrDefault(), method);
         }
 
         /// <summary>Whether <paramref name="tc"/> is one of NumPy's integer dtypes (bool is not).</summary>
@@ -1123,7 +1129,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="mean">Mean of the N-dimensional distribution (1-D).</param>
         /// <param name="cov">Covariance matrix (N x N, symmetric positive-semidefinite for proper sampling).</param>
-        /// <param name="size">Leading output shape. Default (NumPy's <c>None</c>) draws one sample of shape <c>(N,)</c>.</param>
+        /// <param name="size">Leading output shape. <c>null</c> (NumPy's <c>None</c>, the default) draws one sample of
+        ///     shape <c>(N,)</c>.</param>
         /// <param name="check_valid">Behaviour when <paramref name="cov"/> is not positive-semidefinite: <c>"warn"</c> (NumPy
         ///     warns; NumSharp has no warnings channel, so this is silent), <c>"raise"</c> or <c>"ignore"</c>.</param>
         /// <param name="tol">Tolerance of the positive-semidefiniteness check.</param>
@@ -1143,7 +1150,7 @@ namespace NumSharp
         ///     without it managed factorisations stand in (Jacobi eigen for svd/eigh, Cholesky-Banachiewicz), which give a
         ///     valid sample but can differ in a singular vector's sign.
         /// </remarks>
-        public NDArray multivariate_normal(NDArray mean, NDArray cov, Shape size = default, string check_valid = "warn",
+        public NDArray multivariate_normal(NDArray mean, NDArray cov, Shape? size = null, string check_valid = "warn",
                                            double tol = 1e-8, string method = "svd")
         {
             if (method != "eigh" && method != "svd" && method != "cholesky")
@@ -1160,7 +1167,7 @@ namespace NumSharp
                     throw new ValueError("mean must be 1 dimensional");
                 throw new ValueError("cov must be 2 dimensional and square");
             }
-            return MultivariateNormalCore(mean, cov, size, check_valid, tol, method);
+            return MultivariateNormalCore(mean, cov, size.GetValueOrDefault(), check_valid, tol, method);
         }
 
         /// <summary>
@@ -1168,14 +1175,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="mean">Mean of the N-dimensional distribution.</param>
         /// <param name="cov">Covariance matrix, N x N.</param>
-        /// <param name="size">Leading output shape. Default (NumPy's <c>None</c>) draws one sample.</param>
+        /// <param name="size">Leading output shape. <c>null</c> (NumPy's <c>None</c>, the default) draws one
+        ///     sample.</param>
         /// <param name="check_valid"><c>"warn"</c>, <c>"raise"</c> or <c>"ignore"</c>.</param>
         /// <param name="tol">Tolerance of the positive-semidefiniteness check.</param>
         /// <param name="method"><c>"svd"</c>, <c>"eigh"</c> or <c>"cholesky"</c>.</param>
         /// <returns>The float64 samples, shape <c>(*size, N)</c>.</returns>
         /// <exception cref="ValueError">See <see cref="multivariate_normal(NDArray, NDArray, Shape, string, double, string)"/>.</exception>
         /// <exception cref="LinAlgError"><c>"cholesky"</c> of a covariance that is not positive definite.</exception>
-        public NDArray multivariate_normal(double[] mean, double[,] cov, Shape size = default, string check_valid = "warn",
+        public NDArray multivariate_normal(double[] mean, double[,] cov, Shape? size = null, string check_valid = "warn",
                                            double tol = 1e-8, string method = "svd")
         {
             // np.array(mean) / np.array(cov): owned copies that die with this call (the result is a fresh array).

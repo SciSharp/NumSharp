@@ -147,15 +147,27 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     NumPy's <c>_count_reduce_items(arr, axis)</c> without a mask, the count <c>_mean</c> and <c>_var</c> divide by:
-        ///     the size for every axis, else the extent of the normalized axis.
+        ///     the size for every axis, else the product of the extents of the named axes (an integer is a tuple of one; the
+        ///     empty tuple counts 1).
         /// </summary>
         /// <param name="arr">The reduced array.</param>
-        /// <param name="axis">The axis, or null for every axis.</param>
+        /// <param name="axis">The axis, a tuple of axes, or null for every axis.</param>
         /// <returns>The number of elements each result element combines.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds — for a 0-d input every axis is
-        ///     (<c>normalize_axis_index</c>, unlike <c>ufunc.reduce</c>'s rule).</exception>
-        private static long ReduceItemCount(NDArray arr, int? axis)
-            => axis is null ? arr.size : arr.Shape.dimensions[NormalizeAxis(axis.Value, arr.ndim)];
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple, checked in order) is out of bounds —
+        ///     for a 0-d input every axis is (<c>normalize_axis_index</c>, unlike <c>ufunc.reduce</c>'s rule).</exception>
+        /// <remarks>Footgun: a repeated axis is counted twice and NOT refused here, as in NumPy, whose
+        ///     <c>_count_reduce_items</c> has no repeat check: the sum that follows raises <c>duplicate value in 'axis'</c>
+        ///     (after its own out check), so a caller must run that sum before it trusts the count.</remarks>
+        private static long ReduceItemCount(NDArray arr, NDAxis? axis)
+        {
+            if (axis is not { } given)
+                return arr.size;
+            // `for ax in axis: items *= arr.shape[mu.normalize_axis_index(ax, arr.ndim)]`.
+            long items = 1;
+            for (int i = 0; i < given.Count; i++)
+                items *= arr.Shape.dimensions[NormalizeAxis(given[i], arr.ndim)];
+            return items;
+        }
 
         /// <summary>
         ///     NumPy's <c>_mean(arr, axis, dtype, out, keepdims)</c> with an <c>out=</c> argument: <c>umr_sum(arr, axis, dtype,

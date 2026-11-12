@@ -248,8 +248,8 @@ namespace NumSharp.Tests.Fuzz
                 case "ndarray.var":
                     return VfOptInt(p, "axis") is int vAx ? a.var(vAx, keepdims: VfKeepdims(p)) : a.var(keepdims: VfKeepdims(p));
                 case "ndarray.prod": return a.prod(VfOptInt(p, "axis"), null, keepdims: VfKeepdims(p));
-                case "ndarray.argmax": return a.argmax(p["axis"].GetInt32(), VfKeepdims(p));
-                case "ndarray.argmin": return a.argmin(p["axis"].GetInt32(), VfKeepdims(p));
+                case "ndarray.argmax": return a.argmax(p["axis"].GetInt32(), keepdims: VfKeepdims(p));
+                case "ndarray.argmin": return a.argmin(p["axis"].GetInt32(), keepdims: VfKeepdims(p));
                 case "ndarray.argsort": return a.argsort(VfOptInt(p, "axis"));
                 case "ndarray.argpartition": return a.argpartition(p["kth"].GetInt32(), VfOptInt(p, "axis"));
                 case "ndarray.repeat": return a.repeat(p["repeats"].GetInt32(), VfOptInt(p, "axis"));

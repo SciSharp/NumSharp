@@ -6,7 +6,9 @@ namespace NumSharp
         /// Return the sum of array elements over a given axis treating Not a Numbers (NaNs) as zero.
         /// </summary>
         /// <param name="a">Array containing numbers whose sum is desired. If a is not an array, a conversion is attempted.</param>
-        /// <param name="axis">Axis or axes along which the sum is computed. The default is to compute the sum of the flattened array.</param>
+        /// <param name="axis">Axis or axes along which the sum is computed. The default is to compute the sum of the
+        ///     flattened array. A tuple (<c>(0, 2)</c>) reduces every axis it names together, in one pass (NumPy's
+        ///     tuple axis; the empty tuple reduces none, and a tuple item gets no 0-d allowance).</param>
         /// <param name="dtype">np.sum's <c>dtype=</c>: the type of the accumulator and the result, or null for np.sum's
         ///     default (the input's dtype; int64 for a narrower integer or bool input).</param>
         /// <param name="out">np.sum's <c>out=</c>: the destination, of the expected output shape (returned), or null.</param>
@@ -16,6 +18,7 @@ namespace NumSharp
         /// <returns>A new array containing the sum, with NaN values treated as zero
         ///     (<paramref name="out"/> itself when given).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <paramref name="a"/>'s dimensions.</exception>
+        /// <exception cref="ValueError">A tuple that names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.nansum.html
         /// Only applicable to float and double arrays.
@@ -29,7 +32,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>, <c>initial=</c> or
         ///     <c>where=</c>: NumPy calls the matrix method, which has no such keyword (<c>matrix.sum() got an unexpected
         ///     keyword argument 'where'</c>).</exception>
-        public static NDArray nansum(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
+        public static NDArray nansum(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
             object initial = null, NDArray @where = null)
             => a.TensorEngine.NanSum(a, axis, keepdims, dtype, @out, initial, @where);
     }

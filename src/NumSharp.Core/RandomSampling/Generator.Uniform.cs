@@ -9,7 +9,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="low">Lower boundary (inclusive). Default 0.</param>
         /// <param name="high">Upper boundary (exclusive). Default 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="OverflowError"><c>high - low</c> is not finite (NumPy's <c>OverflowError</c>).</exception>
         /// <exception cref="ValueError"><c>high - low</c> has its sign bit set (NumPy's <c>CONS_NON_NEGATIVE</c>: <c>-0.0</c> included).</exception>
@@ -17,7 +18,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.uniform.html
         ///     <br/><c>low + (high - low) * next_double()</c>, byte-identical to NumPy.
         /// </remarks>
-        public NDArray uniform(double low = 0.0, double high = 1.0, Shape size = default)
+        public NDArray uniform(double low = 0.0, double high = 1.0, Shape? size = null)
         {
             double range = high - low;
             if (double.IsInfinity(range) || double.IsNaN(range))
@@ -31,7 +32,7 @@ namespace NumSharp
 
                 // One bulk uniform fill, then low + range * u in place — NumPy's per-element expression. The output is
                 // np.empty(size) from `size`'s dimensions only (AsClean): the fill writes in memory order.
-                var ret = new NDArray(typeof(double), size.AsClean(), false);
+                var ret = new NDArray(typeof(double), size.GetValueOrDefault().AsClean(), false);
                 unsafe
                 {
                     var p = (double*)ret.Address;

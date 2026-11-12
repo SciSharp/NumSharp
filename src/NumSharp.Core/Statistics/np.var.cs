@@ -25,7 +25,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">The values whose variance is desired.</param>
         /// <param name="axis">The axis to compute along (negative counts from the end); <c>null</c> uses every element. A 0-d
-        ///     array takes no axis unless <paramref name="where"/> is a mask.</param>
+        ///     array takes no axis unless <paramref name="where"/> is a mask. A tuple (<c>(0, 2)</c>) reduces every
+        ///     axis it names together, in one pass (NumPy's tuple axis; the empty tuple reduces none, and a tuple item
+        ///     gets no 0-d allowance).</param>
         /// <param name="dtype">The loop of both sums. <c>null</c> is NumPy's default: float64 for bool and integer input, the
         ///     input's own dtype otherwise; an integer dtype truncates the mean, as in NumPy.</param>
         /// <param name="out">The array the variance is written into and returned (the result's shape). NumPy hands it to the
@@ -49,7 +51,8 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="ValueError">A nonzero <paramref name="ddof"/> together with <paramref name="correction"/>
         ///     (<c>ddof and correction can't be provided simultaneously.</c>, raised first); a read-only or misshapen
-        ///     <paramref name="out"/>.</exception>
+        ///     <paramref name="out"/>. Also a tuple that names an axis twice (<c>duplicate value in
+        ///     'axis'</c>).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/>, <paramref name="where"/> or
@@ -60,7 +63,7 @@ namespace NumSharp
         ///     <paramref name="mean"/> (<c>matrix.var() got an unexpected keyword argument 'keepdims'</c>).</exception>
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain (non-matrix) <paramref name="out"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.var.html</remarks>
-        public static NDArray var(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0,
+        public static NDArray var(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0,
             bool keepdims = false, NDArray @where = null, NDArray mean = null, int? correction = null)
         {
             if (a is null)

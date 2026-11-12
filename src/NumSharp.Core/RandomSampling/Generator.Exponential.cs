@@ -7,7 +7,8 @@ namespace NumSharp
         /// <summary>
         ///     Draw samples from the standard exponential distribution.
         /// </summary>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value; <c>()</c> returns a 0-d array.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single value;
+        ///     <c>()</c> returns a 0-d array.</param>
         /// <param name="dtype">Native <c>float64</c> (default) or <c>float32</c>.</param>
         /// <param name="method"><c>"zig"</c> (ziggurat, default); any other string selects the inverse-CDF sampler, as in NumPy.</param>
         /// <param name="out">Optional C- or F-contiguous output array, filled in memory order and returned.</param>
@@ -17,7 +18,7 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.standard_exponential.html
         /// </remarks>
-        public NDArray standard_exponential(Shape size = default, DType dtype = null, string method = "zig", NDArray @out = null)
+        public NDArray standard_exponential(Shape? size = null, DType dtype = null, string method = "zig", NDArray @out = null)
         {
             dtype ??= DType.Double;
             NPTypeCode tc = ResolveFloatDtype(dtype, "standard_exponential");
@@ -45,7 +46,7 @@ namespace NumSharp
 
                 // NumPy's np.empty(size, dtype), from `size`'s dimensions only (AsClean): the fill writes in memory order,
                 // so a view's Shape must not reach the allocation.
-                var ret = new NDArray(tc == NPTypeCode.Single ? typeof(float) : typeof(double), size.AsClean(), false);
+                var ret = new NDArray(tc == NPTypeCode.Single ? typeof(float) : typeof(double), size.GetValueOrDefault().AsClean(), false);
                 unsafe
                 {
                     FillStandardExponentialInto((byte*)ret.Address, ret.size, tc, zig);
@@ -95,14 +96,15 @@ namespace NumSharp
         ///     Draw samples from an exponential distribution.
         /// </summary>
         /// <param name="scale">The scale parameter (1/rate); sign bit must be clear, NaN propagates.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="scale"/> is negative, including <c>-0.0</c> (NumPy's <c>scale &lt; 0</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.exponential.html
         ///     <br/><c>scale * standard_exponential()</c> (ziggurat), byte-identical to NumPy.
         /// </remarks>
-        public NDArray exponential(double scale = 1.0, Shape size = default)
+        public NDArray exponential(double scale = 1.0, Shape? size = null)
         {
             CheckNonNegative(scale, "scale");
 
@@ -112,7 +114,7 @@ namespace NumSharp
                     return NDArray.WritableScalar(scale * NextStandardExponential());
 
                 // np.empty(size) from `size`'s dimensions only (AsClean): the fill below writes in memory order.
-                var ret = new NDArray(typeof(double), size.AsClean(), false);
+                var ret = new NDArray(typeof(double), size.GetValueOrDefault().AsClean(), false);
                 unsafe
                 {
                     var p = (double*)ret.Address;

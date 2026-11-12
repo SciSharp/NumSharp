@@ -178,7 +178,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input data (any numeric dtype; text has no multiply loop and is refused).</param>
         /// <param name="axis">The axis to multiply over (negative counts from the end); <c>null</c> multiplies every element.
-        ///     A 0-d array accepts 0 and -1 as every axis (ufunc.reduce's rule).</param>
+        ///     A 0-d array accepts 0 and -1 as every axis (ufunc.reduce's rule). A tuple (<c>(0, 2)</c>) reduces every
+        ///     axis it names together, in one pass (NumPy's tuple axis; the empty tuple reduces none, and a tuple item
+        ///     gets no 0-d allowance).</param>
         /// <param name="dtype">The accumulator and result dtype: every element is cast to it before it is multiplied.
         ///     <c>null</c> is NumPy's default: int64 for bool and the signed integers narrower than 64 bits, uint64 for the
         ///     unsigned ones, the input's own dtype otherwise — or, with <paramref name="out"/>, <c>promote_types(out, a)</c>
@@ -201,7 +203,8 @@ namespace NumSharp
         ///     <paramref name="initial"/> or <paramref name="where"/> (<c>matrix.prod() got an unexpected keyword argument
         ///     'keepdims'</c>).</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>; a mask with more axes than
-        ///     <paramref name="a"/>; an unconvertible <paramref name="initial"/>.</exception>
+        ///     <paramref name="a"/>; an unconvertible <paramref name="initial"/>. Also a tuple that names an axis twice
+        ///     (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
@@ -213,7 +216,7 @@ namespace NumSharp
         ///     NaN keeps the payload of the first NaN met); without them a flat float product multiplies in SIMD lane order,
         ///     which can differ from NumPy's in the last bit (the open NL3).
         /// </remarks>
-        public static NDArray prod(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
+        public static NDArray prod(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
             object initial = null, NDArray @where = null)
         {
             if (a is null)

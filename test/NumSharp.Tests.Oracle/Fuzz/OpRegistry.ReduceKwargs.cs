@@ -13,8 +13,9 @@ namespace NumSharp.Tests.Fuzz
     /// </summary>
     /// <remarks>
     ///     Params: <c>{"fn", "a", "axis", "keepdims", "out"?, "where"?, "initial"?}</c>. <c>axis</c> is JSON null
-    ///     (NumPy's <c>axis=None</c>), an integer, or an array (NumPy's tuple axis, which binds the <c>int[]</c>
-    ///     overload). The array arguments use the <c>clip_ufunc</c> spec grammar (<see cref="ClipUfuncResolve"/>).
+    ///     (NumPy's <c>axis=None</c>), an integer, or an array (NumPy's tuple axis, an <see cref="NDAxis"/> tuple: every
+    ///     function of the tier takes NumPy's axis type since API-parity batch 5). The array arguments use the
+    ///     <c>clip_ufunc</c> spec grammar (<see cref="ClipUfuncResolve"/>).
     ///     The result is a tuple: the returned array; then, when <c>out=</c> is given, the whole base buffer behind
     ///     it (a write outside the view fails) and a 0-d bool that is true when the call returned <c>out</c> itself
     ///     (NumPy's <c>r is out</c>).
@@ -38,7 +39,9 @@ namespace NumSharp.Tests.Fuzz
             bool keepdims = p.TryGetValue("keepdims", out var kd) && kd.GetBoolean();
             JsonElement axisSpec = p.TryGetValue("axis", out var ax) ? ax : default;
             int[] axes = axisSpec.ValueKind == JsonValueKind.Array ? axisSpec.EnumerateArray().Select(e => e.GetInt32()).ToArray() : null;
-            int? axis = axisSpec.ValueKind == JsonValueKind.Number ? axisSpec.GetInt32() : null;
+            int? single = axisSpec.ValueKind == JsonValueKind.Number ? axisSpec.GetInt32() : null;
+            // NumPy's axis argument: a JSON array is the tuple (the empty one included), a number the single axis, null None.
+            NDAxis? axis = axes is not null ? new NDAxis(axes) : single;
             DType dtype = p.TryGetValue("dtype", out var dt) ? (DType)FuzzCorpus.DtypeToTC(dt.GetString()) : null;
             int ddof = p.TryGetValue("ddof", out var dd) ? dd.GetInt32() : 0;
             int? correction = p.TryGetValue("correction", out var cr) ? cr.GetInt32() : null;
@@ -47,8 +50,8 @@ namespace NumSharp.Tests.Fuzz
 
             NDArray returned = fn switch
             {
-                "all" => axes is not null ? np.all(a, axes, target, keepdims, where) : np.all(a, axis, target, keepdims, where),
-                "any" => axes is not null ? np.any(a, axes, target, keepdims, where) : np.any(a, axis, target, keepdims, where),
+                "all" => np.all(a, axis, target, keepdims, where),
+                "any" => np.any(a, axis, target, keepdims, where),
                 // np-layer dtype plan, P10 item 1: NumPy's whole signature, by name, so a reordered parameter fails here.
                 "sum" => np.sum(a, axis, dtype: dtype, @out: target, keepdims: keepdims, initial: initial, @where: where),
                 "prod" => np.prod(a, axis, dtype: dtype, @out: target, keepdims: keepdims, initial: initial, @where: where),

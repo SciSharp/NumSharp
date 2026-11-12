@@ -142,13 +142,14 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     The quantile family's answer for a <c>numpy.matrix</c> operand where NumPy's own Python body keeps the matrix
-        ///     2-d: <c>np.median(m, (1,))</c> is the 2 x 1 column (as axis 1), <c>np.median(m, (0, 1))</c> and
-        ///     <c>np.percentile(m, 50, (0, 1))</c> the 1 x 1 matrix <c>[[3.0]]</c>, and <c>np.percentile(m, 50, 1)</c> /
-        ///     <c>np.quantile(m, 0.5, (1,))</c> the 1 x 2 ROW (its <c>_quantile</c> moves the axis first and takes rows of the
-        ///     matrix). NumSharp's <c>[ReducesThrough]</c> rule reads no axis from a tuple (the scalar for a full tuple, a row
-        ///     otherwise) and puts a 1-d result along axis 1 back as a column, for percentile too. Found by API-parity batch 4
-        ///     (batch4_matrix_evidence.py); the answers predate the batch (the <c>int[]</c> overloads gave them).
+        ///     np.percentile / np.quantile of a <c>numpy.matrix</c> along axis 1: NumPy's <c>_quantile</c> moves the axis first
+        ///     and takes rows of the matrix, so <c>np.percentile(m, 50, 1)</c> and <c>np.quantile(m, 0.5, (1,))</c> are the
+        ///     1 x 2 ROW. NumSharp's <c>[ReducesThrough]</c> collapse puts a 1-d result along axis 1 back as a column, as
+        ///     <c>matrix._collapse</c> does for the reductions that call the matrix method (np.median's <c>(1,)</c> IS that
+        ///     column). Found by API-parity batch 4 (batch4_matrix_evidence.py), predating it; batch 5 made the collapse read
+        ///     a tuple (np.median's and np.percentile's <c>(0, 1)</c> are now NumPy's 1 x 1 matrix:
+        ///     <c>NumPyKeywordParityBatch5Tests.MatrixOperand_QuantileFamily_FullTuple_IsTheOneByOneMatrix</c>), leaving this
+        ///     row.
         /// </summary>
         [TestMethod, OpenBugs(IssueUrl = "api-parity-batch-4")]
         public void ApiParity_QuantileFamily_MatrixOperand_KeepsNumPysMatrixShape()
@@ -161,9 +162,6 @@ namespace NumSharp.Tests
                 r.ToArray<double>().Should().Equal(values);
             }
 
-            Matrix(np.median(m, new[] { 1 }), 2, 1, 2.0, 4.0);
-            Matrix(np.median(m, (0, 1)), 1, 1, 3.0);
-            Matrix(np.percentile(m, 50, (0, 1)), 1, 1, 3.0);
             Matrix(np.percentile(m, 50, 1), 1, 2, 2.0, 4.0);
             Matrix(np.quantile(m, 0.5, new[] { 1 }), 1, 2, 2.0, 4.0);
         }

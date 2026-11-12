@@ -14,7 +14,9 @@ namespace NumSharp
         ///     parameters behave as <see cref="np.std"/>'s. There is no <c>correction=</c>: NumPy 2.4.2's method refuses it;
         ///     <see cref="np.std"/> takes it.
         /// </summary>
-        /// <param name="axis">The axis to compute along (negative counts from the end); <c>null</c> uses every element.</param>
+        /// <param name="axis">The axis to compute along (negative counts from the end); <c>null</c> uses every element.
+        ///     A tuple (<c>(0, 2)</c>) reduces every axis it names together, in one pass (NumPy's tuple axis; the empty
+        ///     tuple reduces none, and a tuple item gets no 0-d allowance).</param>
         /// <param name="dtype">The loop of both sums, or <c>null</c> for NumPy's default.</param>
         /// <param name="out">The float or complex array the result is written into and returned. Footgun: the THIRD positional
         ///     parameter, as in NumPy; write <c>ddof:</c> and <c>keepdims:</c> by name.</param>
@@ -25,7 +27,8 @@ namespace NumSharp
         /// <returns><paramref name="out"/> itself when given; else a fresh array — 0-d (NumPy's read-only scalar) when the
         ///     result has no dimensions.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>.</exception>
+        /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>. Also a tuple that names an
+        ///     axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/> or <paramref name="out"/> with a
         ///     result that has dimensions (NumPy's sqrt output-cast error).</exception>
         /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>.</exception>
@@ -36,7 +39,7 @@ namespace NumSharp
         /// <remarks>The member keeps the plain-array meaning for a numpy.matrix object reached through an
         ///     <see cref="NDArray"/> reference.</remarks>
         [PlainReceiver]
-        public NDArray std(int? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0, bool keepdims = false,
+        public NDArray std(NDAxis? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0, bool keepdims = false,
             NDArray @where = null, NDArray mean = null)
         {
             return TensorEngine.ReduceStd(this, axis, keepdims, ddof, dtype, @out, @where, mean);

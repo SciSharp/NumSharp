@@ -44,6 +44,9 @@ namespace NumSharp.Tests.Fuzz
             bool tuple = AxisArgIsTuple(p, "axis");
             int ax = !tuple && p.ContainsKey("axis") ? p["axis"].GetInt32() : 0;
             int[] axt = tuple ? ParseIntArray(p["axis"]) : null;
+            // NumPy's axis argument for the functions that take its axis type (API-parity batches 4 and 5): the tuple, or
+            // the integer.
+            NDAxis axis = tuple ? new NDAxis(axt) : ax;
             NDArray a = ops.Length > 0 ? ops[0] : null;
 
             // The stacking family's empty operand list: NumPy's "need at least one array to …" ValueError.
@@ -61,33 +64,33 @@ namespace NumSharp.Tests.Fuzz
             switch (fn)
             {
                 // ---- the reductions (NumPy's ufunc reduce or its Python wrappers) ----
-                case "sum": return np.sum(a, ax);
-                case "prod": return np.prod(a, ax);
-                case "mean": return np.mean(a, ax);
-                case "std": return np.std(a, ax);
-                case "var": return np.var(a, ax);
-                case "max": return np.max(a, ax);
-                case "min": return np.min(a, ax);
-                case "amax": return np.amax(a, ax);
-                case "amin": return np.amin(a, ax);
+                case "sum": return np.sum(a, axis);
+                case "prod": return np.prod(a, axis);
+                case "mean": return np.mean(a, axis);
+                case "std": return np.std(a, axis);
+                case "var": return np.var(a, axis);
+                case "max": return np.max(a, axis);
+                case "min": return np.min(a, axis);
+                case "amax": return np.amax(a, axis);
+                case "amin": return np.amin(a, axis);
                 case "ptp": return tuple ? np.ptp(a, axt) : np.ptp(a, ax);
                 case "all": return tuple ? np.all(a, axt) : np.all(a, ax);
                 case "any": return tuple ? np.any(a, axt) : np.any(a, ax);
-                case "argmax": return np.argmax(a, ax);
-                case "argmin": return np.argmin(a, ax);
+                case "argmax": return np.argmax(a, axis);
+                case "argmin": return np.argmin(a, axis);
                 case "nanargmax": return np.nanargmax(a, ax);
                 case "nanargmin": return np.nanargmin(a, ax);
                 case "cumsum": return np.cumsum(a, ax);
                 case "cumprod": return np.cumprod(a, ax);
                 case "nancumsum": return np.nancumsum(a, ax);
                 case "nancumprod": return np.nancumprod(a, ax);
-                case "nansum": return np.nansum(a, ax);
-                case "nanprod": return np.nanprod(a, ax);
-                case "nanmean": return np.nanmean(a, ax);
-                case "nanstd": return np.nanstd(a, ax);
-                case "nanvar": return np.nanvar(a, ax);
-                case "nanmax": return np.nanmax(a, ax);
-                case "nanmin": return np.nanmin(a, ax);
+                case "nansum": return np.nansum(a, axis);
+                case "nanprod": return np.nanprod(a, axis);
+                case "nanmean": return np.nanmean(a, axis);
+                case "nanstd": return np.nanstd(a, axis);
+                case "nanvar": return np.nanvar(a, axis);
+                case "nanmax": return np.nanmax(a, axis);
+                case "nanmin": return np.nanmin(a, axis);
                 case "median": return tuple ? np.median(a, axt) : np.median(a, ax);
                 case "nanmedian": return tuple ? np.nanmedian(a, axt) : np.nanmedian(a, ax);
                 case "percentile": return tuple ? np.percentile(a, 50, axt) : np.percentile(a, 50, ax);
@@ -119,7 +122,7 @@ namespace NumSharp.Tests.Fuzz
                 case "append": return np.append(a, a, ax);
                 case "unique": return np.unique(a, axis: ax);
                 case "flip": return tuple ? np.flip(a, axt) : np.flip(a, ax);
-                case "roll": return np.roll(a, 1, ax);
+                case "roll": return np.roll(a, 1, axis);
                 case "rollaxis":
                     return np.rollaxis(a, ax, p.TryGetValue("start", out var st) ? st.GetInt32() : 0);
                 case "concatenate": return np.concatenate(new[] { a, a }, ax);

@@ -182,7 +182,7 @@ namespace NumSharp.Interop.OnnxRuntime
             // A 0-d array is left to np.argmax, which has NumPy's own rule for it (axis 0 and -1 are accepted).
             if (ndim > 0 && (axis < -ndim || axis >= ndim))
                 throw new AxisError(axis, ndim);
-            return np.argmax(scores, axis, keepdims);
+            return np.argmax(scores, axis, keepdims: keepdims);
         }
 
         /// <summary>

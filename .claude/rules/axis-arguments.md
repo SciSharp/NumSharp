@@ -28,14 +28,24 @@ type-strict, zero-excuse `axis_args.jsonl` oracle tier, the `evaluate.jsonl` tie
   converts implicitly from `int` (lifted: an `int?` too, null = None), `int[]` (a null array is None for `NDAxis?` and an
   ArgumentNullException for `NDAxis`), `(int, int)` and `(int, int, int)`, and has public constructors for the same
   values. It only HOLDS the axes as given: each function normalizes them itself, because NumPy's functions read an axis
-  three ways - `normalize_axis_tuple` (`NDAxis.Normalize`; flip, expand_dims, moveaxis, the quantile family, average,
-  trim_zeros, size, gradient: every range, then "repeated axis"), the ufunc reduction (all / any / ptp / the sum behind
-  count_nonzero: every range, then "duplicate value in 'axis'", and the INTEGER axis 0 / -1 of a 0-d input) and
-  `PyArray_ConvertMultiAxis` (squeeze: each item's range and repeat in order, so `(0, 0, 5)` is the repeat). `IsTuple`
+  four ways - `normalize_axis_tuple` (`NDAxis.Normalize`; flip, expand_dims, moveaxis, the quantile family, average,
+  trim_zeros, size, gradient, roll with `allow_duplicate`: every range, then "repeated axis"), the ufunc reduction (sum /
+  prod / max / min / all / any / ptp / the nan reductions / the sum behind count_nonzero: the out / where converters,
+  every range, then "duplicate value in 'axis'", and the INTEGER axis 0 / -1 of a 0-d input), `_count_reduce_items`
+  (np.mean / var / std: each item's range from the count, the repeat only from the sum after its out check, so
+  `np.mean(a, (0, 0), out=read_only)` is the read-only error and `np.var`'s the repeat) and `PyArray_ConvertMultiAxis`
+  (squeeze: each item's range and repeat in order, so `(0, 0, 5)` is the repeat); np.argmax / argmin take ONE integer
+  (a tuple of any length is `TypeError "'tuple' object cannot be interpreted as an integer"`, before the out). `IsTuple`
   tells `1` from `(1,)` (Python's `1 != (1,)`); `default(NDAxis)` and `new NDAxis()` are the EMPTY tuple. Trap: the null
   literal converts to `NDAxis` through the `int[]` operator, so `flag ? null : someAxis` is typed `NDAxis` and throws -
-  write `(NDAxis?)null`. NumSharp.Build reads an `NDAxis` axis for a `[ReducesThrough]` collapse through
-  `NDSubclass.AxisArgument`: the single axis, null for None AND for a tuple (the class answer the `int[]` overloads had).
+  write `(NDAxis?)null`. NumSharp.Build hands an `NDAxis` axis to a `[ReducesThrough]` collapse as it is
+  (`NDSubclass.CollapseAxes`, the weaver's `EmitAxisValue`), so `matrix._collapse` keeps a tuple's kept-dims matrix (the
+  1 x 1 matrix for `(0, 1)`, the whole matrix for `()`); an `int` / `int?` axis keeps `Collapse`.
+- The reductions route a tuple by `ReductionArguments.TryIntegerForm`: a set of ONE axis takes the integer route and a
+  set of EVERY axis the None route (NumPy builds the same flags, so the exact schedules and the text routes are reused);
+  every other tuple (two axes or more short of every axis, the empty tuple of an input with dimensions, or a tuple NumPy
+  refuses) takes the function's NumPy statements over the set, which raise in NumPy's order
+  (`Default.Reduction.AxisSet.cs`, `reductions.md`).
 
 Rules every caller follows:
 - Never wrap then test. `while (axis < 0) axis += ndim` accepts `-ndim - 1` (wrapping twice, to the last axis) and

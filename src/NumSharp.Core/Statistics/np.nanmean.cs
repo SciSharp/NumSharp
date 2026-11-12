@@ -10,7 +10,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">The array whose mean is desired; any dtype and layout.</param>
         /// <param name="axis">The axis along which the means are computed (negative counts from the end); null (the
-        /// default) computes the mean of the flattened array.</param>
+        /// default) computes the mean of the flattened array. A tuple (<c>(0, 2)</c>) reduces every axis it names
+        ///     together, in one pass (NumPy's tuple axis; the empty tuple reduces none, and a tuple item gets no 0-d
+        ///     allowance).</param>
         /// <param name="dtype">The type of the sum (NumPy's <c>dtype=</c>). For a float or complex input it must be inexact;
         /// null uses the input's dtype (np.mean's float64 for an integer or bool input).</param>
         /// <param name="out">NumPy's <c>out=</c>: the destination of the sum and the division (returned); for a float or
@@ -25,6 +27,7 @@ namespace NumSharp
         /// out must be inexact".</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <paramref name="a"/>'s dimensions. A 0-d float or
         /// complex array takes axis 0 and -1 as a flat reduction (NumPy's nanmean reads the axis through np.sum).</exception>
+        /// <exception cref="ValueError">A tuple that names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <remarks>
         ///     <para>
         ///     An array that cannot hold NaN (integer, bool, char, decimal) has no NaN to ignore: the result is
@@ -43,7 +46,7 @@ namespace NumSharp
         ///     <c>where=</c>: NumPy calls the matrix method, which has no such keyword (<c>matrix.sum() got an unexpected
         ///     keyword argument 'where'</c>).</exception>
         [NDScoped]
-        public static NDArray nanmean(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
+        public static NDArray nanmean(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
             NDArray @where = null)
             => a.TensorEngine.NanMean(a, axis, dtype, keepdims, @out, @where);
     }

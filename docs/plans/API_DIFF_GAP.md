@@ -62,6 +62,17 @@ gradient); OD4 is decided (`Shape? size = null`, §8). Entries that stay on purp
 of NumPy's `*varargs`), `np.average` [M] (`returned=`, plan B10). The fixes are recorded in
 [`api-parameter-parity.md`](api-parameter-parity.md) §7.
 
+**Refresh 2026-11-12 (API-parity batch 5 on `journey5` at `f9991a52`).** Regenerated on the batch's tree: 809 → 837
+NumPy names with NumPy's signature, 497 → 469 to change; L 94 → 56, Q 61 → 30, O 298 → 297, M 184, X 65, B 24, T 21
+and the 83 absent names unchanged; the coverage artifact's headline with NumPy's exact signature 314 → 336. The
+reductions take NumPy's tuple axis (sum, prod, mean, var, std, max, amax, min, amin and the seven nan reductions, on
+np, ndarray and numpy.matrix), np.roll has one signature (`NDArray shift`, `NDAxis? axis`), np.argmax / np.argmin and
+the ndarray methods one axis signature (`NDAxis?`, a tuple is NumPy's TypeError), and the Generator samplers take
+`Shape? size = null` (OD4). Entries that stay on purpose: `np.argmax` / `np.argmin` [O2] (the C# `long` of the no-axis
+call, decision S8), the Generator samplers' scalar and array forms [O2] (a separate pick); the legacy np.random
+samplers' `size=None` was deferred by the owner (re-offered with a clearer example). The fixes are recorded in
+[`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
 ---
 
 ## Contents

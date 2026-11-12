@@ -6,7 +6,9 @@ namespace NumSharp
         /// Return the product of array elements over a given axis treating Not a Numbers (NaNs) as ones.
         /// </summary>
         /// <param name="a">Array containing numbers whose product is desired. If a is not an array, a conversion is attempted.</param>
-        /// <param name="axis">Axis or axes along which the product is computed. The default is to compute the product of the flattened array.</param>
+        /// <param name="axis">Axis or axes along which the product is computed. The default is to compute the product
+        ///     of the flattened array. A tuple (<c>(0, 2)</c>) reduces every axis it names together, in one pass
+        ///     (NumPy's tuple axis; the empty tuple reduces none, and a tuple item gets no 0-d allowance).</param>
         /// <param name="dtype">np.prod's <c>dtype=</c>: the type of the accumulator and the result, or null for np.prod's
         ///     default (the input's dtype; int64 for a narrower integer or bool input).</param>
         /// <param name="out">np.prod's <c>out=</c>: the destination, of the expected output shape (returned), or null.</param>
@@ -16,6 +18,7 @@ namespace NumSharp
         /// <returns>A new array containing the product, with NaN values treated as one
         ///     (<paramref name="out"/> itself when given).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <paramref name="a"/>'s dimensions.</exception>
+        /// <exception cref="ValueError">A tuple that names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.nanprod.html
         /// Only applicable to float and double arrays.
@@ -29,7 +32,7 @@ namespace NumSharp
         /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>, <c>initial=</c> or
         ///     <c>where=</c>: NumPy calls the matrix method, which has no such keyword (<c>matrix.prod() got an unexpected
         ///     keyword argument 'where'</c>).</exception>
-        public static NDArray nanprod(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
+        public static NDArray nanprod(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
             object initial = null, NDArray @where = null)
             => a.TensorEngine.NanProd(a, axis, keepdims, dtype, @out, initial, @where);
     }

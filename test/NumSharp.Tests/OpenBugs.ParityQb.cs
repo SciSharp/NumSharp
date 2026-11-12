@@ -1677,23 +1677,23 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QB-60 — an explicit axis=None (axis: null) is ambiguous where an int? and an int[] axis overload coexist
+        // QB-60 — REGRESSION PIN (fixed by API-parity batch 4, 2026-11-12): an explicit axis=None (axis: null) binds one
+        // overload
         // ------------------------------------------------------------------
 
         /// <summary>
-        ///     NumPy's <c>axis=None</c> is spelled explicitly wherever code forwards its own axis argument
-        ///     (<c>np.median(a, axis=axis)</c> with <c>axis=None</c>). Nine NumSharp functions declare the axis twice, an
-        ///     <c>int? axis</c> overload and a tuple-axis <c>int[] axis</c> overload with the same other parameters, and
-        ///     the null literal converts equally well to both, so <c>np.flip(a, axis: null)</c>, <c>np.ptp(a, axis: null)</c>,
-        ///     <c>np.average(a, axis: null, weights: w)</c>, <c>np.median</c>, <c>np.nanmedian</c>, <c>np.quantile</c>,
-        ///     <c>np.percentile</c>, <c>np.nanquantile</c> and <c>np.nanpercentile</c> with <c>axis: null</c> are CS0121
-        ///     (named or positional); np.all / np.any resolve through <c>[OverloadResolutionPriority]</c>, and every
-        ///     reduction with one <c>int? axis</c> binds (q166, q167). A compile error cannot fail at run time, and the
-        ///     runtime binder sees a null <c>dynamic</c> as <c>object</c>, so this pin reads the overload sets: it lists the
-        ///     functions with an <c>int?</c> / <c>int[]</c> axis pair that agree on every other parameter type and carry the
-        ///     same priority, which is exactly when C# cannot pick one for <c>axis: null</c>.
+        ///     Guards that NumPy's <c>axis=None</c>, spelled explicitly wherever code forwards its own axis argument
+        ///     (<c>np.median(a, axis=axis)</c> with <c>axis=None</c>), binds ONE overload. Nine functions used to declare the
+        ///     axis twice, an <c>int? axis</c> overload and a tuple-axis <c>int[] axis</c> overload with the same other
+        ///     parameters, so <c>np.flip(a, axis: null)</c>, <c>np.ptp</c>, <c>np.average</c>, <c>np.median</c>,
+        ///     <c>np.nanmedian</c>, <c>np.quantile</c>, <c>np.percentile</c>, <c>np.nanquantile</c> and
+        ///     <c>np.nanpercentile</c> with <c>axis: null</c> were CS0121; API-parity batch 4 gave each ONE signature with
+        ///     NumPy's axis type (<see cref="NDAxis"/>?). A compile error cannot fail at run time, and the runtime binder sees
+        ///     a null <c>dynamic</c> as <c>object</c>, so the pin reads the overload sets: it lists the functions with an
+        ///     <c>int?</c> / <c>int[]</c> axis pair that agree on every other parameter type and carry the same priority,
+        ///     which is exactly when C# cannot pick one for <c>axis: null</c>.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB60")]
+        [TestMethod]
         public void ParityQb_QB60_ExplicitAxisNone_BindsOneOverload()
         {
             var names = new[]

@@ -31,7 +31,7 @@ namespace NumSharp
         /// <remarks>The engine order (axis, keepdims, dtype, out, initial, where) is <see cref="ReduceAdd"/>'s; np.nansum
         ///     takes NumPy's. The keywords beyond axis / keepdims arrived with API-parity batch 3 (2026-11-11).</remarks>
         [ReducesThrough("sum")]
-        public abstract NDArray NanSum(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null, NDArray @out = null,
+        public abstract NDArray NanSum(NDArray a, NDAxis? axis = null, bool keepdims = false, DType dtype = null, NDArray @out = null,
             object initial = null, NDArray @where = null);
 
         /// <summary>
@@ -52,7 +52,7 @@ namespace NumSharp
         /// <remarks>The engine order is <see cref="ReduceProduct"/>'s; np.nanprod takes NumPy's. The keywords beyond axis /
         ///     keepdims arrived with API-parity batch 3 (2026-11-11).</remarks>
         [ReducesThrough("prod")]
-        public abstract NDArray NanProd(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null, NDArray @out = null,
+        public abstract NDArray NanProd(NDArray a, NDAxis? axis = null, bool keepdims = false, DType dtype = null, NDArray @out = null,
             object initial = null, NDArray @where = null);
         /// <summary>
         ///     NumPy's <c>np.nanmin</c>, the whole call: the minimum ignoring NaNs, which on an ndarray IS
@@ -82,7 +82,7 @@ namespace NumSharp
         ///     (the np-layer dtype plan, phase PE, E5). This is NumPy's branch for a BASE ndarray: np.nanmin asks the
         ///     operand's class first (<see cref="NDArray.NanMin"/>, virtual), which calls this member for an ndarray and
         ///     takes NumPy's branch for subclasses in a matrix's or chararray's override.</remarks>
-        public abstract NDArray NanMin(NDArray a, int? axis = null, bool keepdims = false, NDArray @out = null,
+        public abstract NDArray NanMin(NDArray a, NDAxis? axis = null, bool keepdims = false, NDArray @out = null,
             object initial = null, NDArray @where = null);
 
         /// <summary>
@@ -113,7 +113,7 @@ namespace NumSharp
         ///     (the np-layer dtype plan, phase PE, E5). This is NumPy's branch for a BASE ndarray: np.nanmax asks the
         ///     operand's class first (<see cref="NDArray.NanMax"/>, virtual), which calls this member for an ndarray and
         ///     takes NumPy's branch for subclasses in a matrix's or chararray's override.</remarks>
-        public abstract NDArray NanMax(NDArray a, int? axis = null, bool keepdims = false, NDArray @out = null,
+        public abstract NDArray NanMax(NDArray a, NDAxis? axis = null, bool keepdims = false, NDArray @out = null,
             object initial = null, NDArray @where = null);
 
         /// <summary>
@@ -200,7 +200,7 @@ namespace NumSharp
         ///     plan, phase PE).
         /// </remarks>
         [ReducesThrough("mean", InexactMethod = "sum")]
-        public abstract NDArray NanMean(NDArray a, int? axis = null, DType dtype = null, bool keepdims = false, NDArray @out = null,
+        public abstract NDArray NanMean(NDArray a, NDAxis? axis = null, DType dtype = null, bool keepdims = false, NDArray @out = null,
             NDArray @where = null);
 
         /// <summary>
@@ -241,7 +241,7 @@ namespace NumSharp
         ///     that changes one should change both. New in 0.80.0 (the np-layer dtype plan, phase PE).
         /// </remarks>
         [ReducesThrough("var", InexactMethod = "sum")]
-        public abstract NDArray NanVar(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false,
+        public abstract NDArray NanVar(NDArray a, NDAxis? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false,
             NDArray @out = null, NDArray @where = null, NDArray mean = null, int? correction = null);
 
         /// <summary>
@@ -277,7 +277,7 @@ namespace NumSharp
         ///     phase PE).
         /// </remarks>
         [ReducesThrough("var", InexactMethod = "sum")]
-        public abstract NDArray NanStd(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false,
+        public abstract NDArray NanStd(NDArray a, NDAxis? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false,
             NDArray @out = null, NDArray @where = null, NDArray mean = null, int? correction = null);
 
         /// <summary>

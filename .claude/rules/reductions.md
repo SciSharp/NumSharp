@@ -256,6 +256,24 @@ engine's exact pieces:
 - Gates: `mean_loops.jsonl` (zero excuses), `Math/np.mean.NumPyPort.Test.cs`, the tightness tests
   `Mean_NoDivergenceIsExcused` / `Mean_ReversedAndBroadcastLayouts_AreNotExcused`.
 
+## Tuple axes: one reduction over the axis set
+
+sum, prod, mean, var, std, max / amax, min / amin and the nan family (nansum, nanprod,
+nanmean, nanvar, nanstd, nanmax, nanmin) take NumPy's axis type on np, ndarray and numpy.matrix, and so do the 14
+engine members behind them (`ReduceAdd`, `ReduceProduct`, `ReduceMean`, `ReduceVar`, `ReduceStd`, `ReduceAMax`,
+`ReduceAMin`, `NanSum` ... `NanStd`: a breaking change for an engine implementer). A tuple of one axis or of every axis
+takes the integer / None route (`ReductionArguments.TryIntegerForm`); any other set is NumPy's statements over the WHOLE
+set, never a chain of single-axis reductions (two float32 sums over `(0, 2)` of a (3, 50, 7) array differ from the chain
+in 34 of 50 outputs): sum / prod through `AddMulNumPy` (the reduction iterator from the identity, every loop), max / min
+/ nanmax / nanmin through `MaxMinNumPy` (its seeded exact engines only for one axis or every axis), mean through
+`MeanWhereNumPy` (the count is the product of the reduced extents, `ReduceItemCount`), var / std through
+`VarStdKeywordsNumPy`, the nan family through its keyword statements (`NanReplacedReduceKeywords`, `NanMeanKeywords`,
+`NanVarStdKeywords`). The empty tuple reduces nothing: identity + each element (`np.sum(-0.0, ())` is +0.0, the prod
+keeps -0.0), a copy for max / min, and an empty reduced set needs no identity (`np.max(zeros((0, 3)), ())` is the
+empty result). Text under a set: StringDType's add / maximum / minimum are not reorderable (two axes or more is NumPy's
+"at most one axis may be specified", the None route's answer), its empty tuple computes through an appended axis of
+length 1 (`VStringReduceOverNoAxis`), and every loop refusal is the axis-free one.
+
 ## `np.any` / `np.all` / `np.count_nonzero` along an axis
 
 Laid out like NumPy's reduction: NumPy allocates the result with `npyiter_new_temp_array` over the reduce iterator, so an

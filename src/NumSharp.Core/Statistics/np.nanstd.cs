@@ -10,7 +10,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">The array whose standard deviation is desired; any dtype and layout.</param>
         /// <param name="axis">The axis along which the standard deviation is computed (negative counts from the end); null
-        /// (the default) computes it over the flattened array.</param>
+        /// (the default) computes it over the flattened array. A tuple (<c>(0, 2)</c>) reduces every axis it names
+        ///     together, in one pass (NumPy's tuple axis; the empty tuple reduces none, and a tuple item gets no 0-d
+        ///     allowance).</param>
         /// <param name="ddof">Delta degrees of freedom: the variance's divisor is <c>N - ddof</c>, where <c>N</c> is the
         /// number of non-NaN elements of each slice. Default 0.</param>
         /// <param name="dtype">The type used to compute the variance (both sums run in it). For a float or complex input it
@@ -29,7 +31,8 @@ namespace NumSharp
         /// "If a is inexact, then dtype must be inexact"; or with a non-inexact <paramref name="out"/>: "If a is inexact, then
         /// out must be inexact".</exception>
         /// <exception cref="ValueError">A non-zero <paramref name="ddof"/> with <paramref name="correction"/>: "ddof and
-        /// correction can't be provided simultaneously.".</exception>
+        /// correction can't be provided simultaneously.". Also a tuple that names an axis twice (<c>duplicate value in
+        ///     'axis'</c>).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <paramref name="a"/>'s dimensions (a 0-d array
         /// included).</exception>
         /// <exception cref="TypeError">An integer or bool input with an integer <paramref name="dtype"/>
@@ -38,7 +41,7 @@ namespace NumSharp
         ///     <para>
         ///     NumPy's <c>nanstd</c> is <c>sqrt(nanvar(...), out=var)</c> for an array and
         ///     <c>var.dtype.type(np.sqrt(var))</c> for a scalar; for an array that cannot hold NaN that is exactly
-        ///     <see cref="std(NDArray, int?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/>.
+        ///     <see cref="std(NDArray, NDAxis?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/>.
         ///     </para>
         ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.nanstd.html</para>
         ///     <para>One signature in NumPy's order (API-parity batch 3, 2026-11-11): it replaces <c>nanstd(a, axis, keepdims, ddof, dtype)</c>, so <c>dtype</c> is the third
@@ -50,7 +53,7 @@ namespace NumSharp
         ///     <c>where=</c>: NumPy calls the matrix method, which has no such keyword (<c>matrix.sum() got an unexpected
         ///     keyword argument 'where'</c>).</exception>
         [NDScoped]
-        public static NDArray nanstd(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0,
+        public static NDArray nanstd(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0,
             bool keepdims = false, NDArray @where = null, NDArray mean = null, int? correction = null)
             => a.TensorEngine.NanStd(a, axis, dtype, ddof, keepdims, @out, @where, mean, correction);
     }

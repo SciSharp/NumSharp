@@ -729,6 +729,15 @@ namespace NumSharp.Tests
                 return ConvertArgument(value, underlying);
             if (target == typeof(NDArray))
                 return np.asanyarray(value);
+            // NumPy's axis type (API-parity batch 5): a case's int axis is the single axis, an int[] the tuple - as the C#
+            // implicit conversions read them, which reflection does not apply.
+            if (target == typeof(NDAxis))
+                return value switch
+                {
+                    int axis => new NDAxis(axis),
+                    int[] axes => new NDAxis(axes),
+                    _ => throw new ArgumentException($"cannot pass a {value.GetType().Name} as a {target.Name} parameter"),
+                };
             if (value is IConvertible && (target.IsPrimitive || target == typeof(decimal)))
                 return Convert.ChangeType(value, target, CultureInfo.InvariantCulture);
             throw new ArgumentException($"cannot pass a {value.GetType().Name} as a {target.Name} parameter");
