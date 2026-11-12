@@ -159,24 +159,6 @@ namespace NumSharp
             => ScalarClassOf(arg1 is null ? null : DType.From(arg1)).IsSubclassOf(ScalarClassOf(arg2));
 
         /// <summary>
-        ///     NumSharp convenience: <see cref="issubdtype(DType, string)"/> over the array's dtype
-        ///     (<c>np.issubdtype(arr, "f8")</c> is <c>np.issubdtype(arr.dtype, "f8")</c>). NumPy itself refuses an array
-        ///     argument (<c>Cannot construct a dtype from an array</c>); write <c>arr.dtype</c> in ported code.
-        /// </summary>
-        /// <param name="arr">The array whose dtype is tested.</param>
-        /// <param name="arg2">A dtype string; null is NumPy's <c>None</c>, i.e. float64.</param>
-        /// <returns>True when the array's dtype and <paramref name="arg2"/> name the same dtype class.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="arr"/> is null.</exception>
-        /// <exception cref="TypeError"><paramref name="arg2"/> is not a dtype string (NumPy's <c>data type 'x' not understood</c>).</exception>
-        /// <exception cref="NotSupportedException"><paramref name="arg2"/> names a dtype NumSharp has no class for.</exception>
-        public static bool issubdtype(NDArray arr, string arg2)
-        {
-            if (arr is null)
-                throw new ArgumentNullException(nameof(arr));
-            return issubdtype(arr.dtype, arg2);
-        }
-
-        /// <summary>
         ///     Returns True if the two C# element types are the same dtype's: <c>issubdtype(typeof(int), typeof(long))</c> is
         ///     False, as NumPy's <c>issubdtype(np.int32, np.int64)</c> is.
         /// </summary>

@@ -47,16 +47,17 @@ np.random.rand(3, 4);                      // np.random.rand(3, 4)
 np.random.randn(100);                      // np.random.randn(100)
 ```
 
-> **Where `(3, 4)` comes from.** NumSharp's `Shape` struct has implicit conversions from `int`, `long`, `int[]`, `long[]`, and value tuples of 2–6 dimensions. So these four calls all produce the same (3, 4) array:
+> **Where `(3, 4)` comes from.** NumSharp's `Shape` struct has implicit conversions from `int`, `long`, `int[]`, `long[]`, and value tuples of 2–6 dimensions, and it is a C# collection type, so a collection expression is NumPy's list shape. These calls all produce the same (3, 4) array:
 >
 > ```csharp
+> np.zeros([3, 4]);              // collection expression → Shape, like NumPy's np.zeros([3, 4])
 > np.zeros((3, 4));              // tuple → Shape
 > np.zeros(new[] {3, 4});        // int[] → Shape
 > np.zeros(new Shape(3, 4));     // explicit Shape
 > np.zeros(new Shape(new[] {3L, 4L}));
 > ```
 >
-> A bare `np.zeros(5)` creates a 1-D length-5 array - it hits the `int shape` overload, not a tuple.
+> A bare `np.zeros(5)` creates a 1-D length-5 array (the int converts to the shape `(5,)`), and `np.zeros([])` is 0-d. A shape enumerates its dimensions, as Python's `for d in a.shape` does: `foreach (long d in a.Shape) ...`.
 
 Scalars (0-d arrays) flow in implicitly:
 

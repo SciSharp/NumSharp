@@ -419,35 +419,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Returns True if the array's dtype is of a specified category (NumSharp convenience: NumPy's <c>isdtype</c> takes
-        /// only a dtype, so this is <c>np.isdtype(arr.dtype, kind)</c>).
-        /// </summary>
-        /// <param name="arr">The NDArray to check.</param>
-        /// <param name="kind">The dtype category.</param>
-        /// <returns>True if array's dtype belongs to the specified category.</returns>
-        /// <exception cref="ArgumentNullException">Thrown if arr is null.</exception>
-        public static bool isdtype(NDArray arr, string kind)
-        {
-            if (arr is null)
-                throw new ArgumentNullException(nameof(arr));
-            return isdtype(arr.dtype, kind);
-        }
-
-        /// <summary>
-        /// Returns True if the array's dtype is of any of the specified categories.
-        /// </summary>
-        /// <param name="arr">The NDArray to check.</param>
-        /// <param name="kinds">Array of dtype categories to check.</param>
-        /// <returns>True if array's dtype belongs to any of the specified categories.</returns>
-        /// <exception cref="ArgumentNullException">Thrown if arr is null.</exception>
-        public static bool isdtype(NDArray arr, string[] kinds)
-        {
-            if (arr is null)
-                throw new ArgumentNullException(nameof(arr));
-            return isdtype(arr.dtype, kinds);
-        }
-
-        /// <summary>
         /// Determine if a class is a subclass of a second class — NumPy 1.x's <c>np.issubsctype(arg1, arg2)</c>. Kept on
         /// purpose, so code written against NumPy 1.x compiles and runs unchanged, although NumPy 2.0 removed it
         /// (<c>AttributeError: `np.issubsctype` was removed in the NumPy 2.0 release. Use `np.issubdtype` instead.</c>).

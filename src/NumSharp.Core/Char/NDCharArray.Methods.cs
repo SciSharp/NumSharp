@@ -244,40 +244,40 @@ namespace NumSharp
         [NDScoped]
         public new NDCharArray swapaxes(int axis1, int axis2) => From(base.swapaxes(axis1, axis2), this);
 
-        /// <summary>The elements under another shape, as a chararray (NumPy's <c>c.reshape(shape)</c>).</summary>
-        /// <param name="newShape">The requested dimensions; one may be -1 (inferred).</param>
-        /// <returns>A view when the layout allows it, otherwise a copy.</returns>
-        /// <exception cref="IncorrectShapeException">The requested size differs from the chararray's size.</exception>
-        /// <exception cref="ValueError">This chararray holds data that is not string data.</exception>
-        [NDScoped]
-        public new NDCharArray reshape(Shape newShape) => From(base.reshape(newShape), this);
-
-        /// <inheritdoc cref="reshape(Shape)" path="/*[not(self::param[@name='newShape'])]"/>
-        /// <param name="newShape">The requested dimensions; one may be -1 (inferred).</param>
+        /// <summary>The elements under another shape, as a chararray — NumPy's <c>c.reshape(shape, /, *, order='C',
+        ///     copy=None)</c>.</summary>
+        /// <param name="shape">The requested dimensions; one may be -1 (inferred). An int, a tuple, an <c>int[]</c> /
+        ///     <c>long[]</c>, a C# collection expression or a <see cref="Shape"/>. NumPy's name (it was <c>newShape</c> until
+        ///     API-parity batch 9).</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c> or <c>'A'</c>: the index order the elements are read and placed in.</param>
         /// <param name="copy">NumPy's <c>copy</c> keyword (API-parity batch 7): null copies only when needed, true always
         ///     copies, false raises <c>Unable to avoid creating a copy while reshaping.</c> when no view can express the
         ///     reshape — <see cref="NDArray.reshape(Shape, char, bool?)"/>'s modes, the result wrapped as a chararray.</param>
+        /// <returns>A view when the layout allows it, otherwise a copy.</returns>
+        /// <exception cref="IncorrectShapeException">The requested size differs from the chararray's size.</exception>
+        /// <exception cref="ValueError">This chararray holds data that is not string data, 'K', or the refusal of
+        ///     <paramref name="copy"/> false.</exception>
+        /// <remarks>Since API-parity batch 9 this and the loose integers (<see cref="reshape(long[])"/>,
+        ///     <see cref="reshape(ReadOnlySpan{long})"/>) are the chararray method's spellings, as on NDArray: the
+        ///     <c>(Shape)</c>, <c>(ref Shape)</c> and <c>(int[])</c> forms went.</remarks>
         [NDScoped]
-        public new NDCharArray reshape(Shape newShape, char order = 'C', bool? copy = null) => From(base.reshape(newShape, order, copy), this);
+        public new NDCharArray reshape(Shape shape, char order = 'C', bool? copy = null) => From(base.reshape(shape, order, copy), this);
 
-        /// <inheritdoc cref="reshape(Shape)" path="/*[not(self::param[@name='newShape'])]"/>
-        /// <param name="newShape">The requested dimensions; one may be -1 (inferred).</param>
-        [NDScoped]
-        public new NDCharArray reshape(ref Shape newShape) => From(base.reshape(ref newShape), this);
-
-        /// <inheritdoc cref="reshape(Shape)"/>
+        /// <summary>The chararray under NumPy's loose integers (<c>c.reshape(2, 3)</c>) when they arrive as a C#
+        ///     <c>long[]</c>; see <see cref="reshape(Shape, char, bool?)"/>.</summary>
         /// <param name="shape">The requested dimensions; one may be -1.</param>
-        [NDScoped]
-        public new NDCharArray reshape(int[] shape) => From(base.reshape(shape), this);
-
-        /// <inheritdoc cref="reshape(Shape)"/>
-        /// <param name="shape">The requested dimensions; one may be -1.</param>
+        /// <returns>A view when the layout allows it, otherwise a copy, wrapped as a chararray.</returns>
+        /// <exception cref="IncorrectShapeException">The requested size differs from the chararray's size.</exception>
+        /// <exception cref="ValueError">This chararray holds data that is not string data.</exception>
         [NDScoped]
         public new NDCharArray reshape(params long[] shape) => From(base.reshape(shape), this);
 
-        /// <inheritdoc cref="reshape(Shape)"/>
+        /// <summary>The chararray under NumPy's loose integers (<c>c.reshape(2, 3)</c>) as C# 13 passes them (a span on
+        ///     the caller's stack); see <see cref="reshape(Shape, char, bool?)"/>.</summary>
         /// <param name="shape">The requested dimensions; one may be -1.</param>
+        /// <returns>A view when the layout allows it, otherwise a copy, wrapped as a chararray.</returns>
+        /// <exception cref="IncorrectShapeException">The requested size differs from the chararray's size.</exception>
+        /// <exception cref="ValueError">This chararray holds data that is not string data.</exception>
         [NDScoped]
         public new NDCharArray reshape(params ReadOnlySpan<long> shape) => From(base.reshape(shape), this);
 

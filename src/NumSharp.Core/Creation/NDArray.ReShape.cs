@@ -8,22 +8,13 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        ///     Gives a new shape to an array without changing its data.
-        /// </summary>
-        /// <param name="newShape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
-        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
-        [NewSubtype("this")]
-        public NDArray reshape(Shape newShape)
-        {
-            return ReshapeCore(newShape, 'C');
-        }
-
-        /// <summary>
         ///     Gives a new shape to an array without changing its data, reading the elements in the
-        ///     specified index order.
+        ///     specified index order — NumPy's <c>a.reshape(shape, /, *, order='C', copy=None)</c>.
         /// </summary>
-        /// <param name="newShape">The new shape (one dimension may be -1 — inferred, any order).</param>
+        /// <param name="shape">The new shape (one dimension may be -1 — inferred, any order): an int, a tuple, an
+        ///     <c>int[]</c> / <c>long[]</c>, a C# collection expression (<c>a.reshape([3, 2], order: 'F')</c>) or a
+        ///     <see cref="Shape"/>; only its dimensions are read. NumPy's name (it was <c>newShape</c> until API-parity
+        ///     batch 9).</param>
         /// <param name="order">
         ///     Read/write index order for the reshape.
         ///     'C' (default) - row-major, 'F' - column-major,
@@ -50,49 +41,30 @@ namespace NumSharp
         /// <exception cref="ArgumentException">An order letter outside NumPy's vocabulary (OrderResolver's text).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html — the method form of
         ///     <see cref="np.reshape(NDArray, Shape, char, bool?)"/> (NumPy's np.reshape calls this method). The
-        ///     <paramref name="copy"/> keyword arrived in API-parity batch 7, with np.reshape's.</remarks>
+        ///     <paramref name="copy"/> keyword arrived in API-parity batch 7, with np.reshape's. Since API-parity batch 9
+        ///     this and NumPy's loose ints (<see cref="reshape(long[])"/>, <see cref="reshape(ReadOnlySpan{long})"/>) are
+        ///     the method's only spellings: the <c>(Shape)</c>, <c>(ref Shape)</c> and <c>(int[])</c> forms went (an
+        ///     <c>int[]</c> converts to <see cref="Shape"/>, and <c>a.reshape([3, 2])</c>, which the <c>int[]</c> form made
+        ///     ambiguous with the span form, binds the span form).</remarks>
         [NewSubtype("this")]
-        public NDArray reshape(Shape newShape, char order = 'C', bool? copy = null)
+        public NDArray reshape(Shape shape, char order = 'C', bool? copy = null)
         {
-            return ReshapeCore(newShape, order, copy);
+            return ReshapeCore(shape, order, copy);
         }
 
         /// <summary>
-        ///     Gives a new shape to an array without changing its data.
-        /// </summary>
-        /// <param name="newShape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
-        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
-        [NewSubtype("this")]
-        public NDArray reshape(ref Shape newShape)
-        {
-            return ReshapeCore(newShape, 'C');
-        }
-
-        /// <summary>
-        ///     Gives a new shape to an array without changing its data.
+        ///     Gives a new shape to an array without changing its data — NumPy's loose integers
+        ///     (<c>a.reshape(2, 3)</c>) when the dimensions arrive as a C# <c>long[]</c> (an array variable, or the
+        ///     expanded form of compilers before C# 13).
         /// </summary>
         /// <param name="shape">The new shape should be compatible with the original shape. If an integer, then the result will be a
         /// 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array
         /// and remaining dimensions.</param>
         /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the
         /// memory layout (C- or Fortran- contiguous) of the returned array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
-        [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        [NewSubtype("this")]
-        public NDArray reshape(int[] shape)
-        {
-            return reshape(new Shape(Shape.ComputeLongShape(shape), copy: false));
-        }
-
-        /// <summary>
-        ///     Gives a new shape to an array without changing its data.
-        /// </summary>
-        /// <param name="shape">The new shape should be compatible with the original shape. If an integer, then the result will be a
-        /// 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array
-        /// and remaining dimensions.</param>
-        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the
-        /// memory layout (C- or Fortran- contiguous) of the returned array.</returns>
+        /// <exception cref="IncorrectShapeException">The size does not match: NumPy's
+        ///     <c>cannot reshape array of size {n} into shape {s}</c>.</exception>
+        /// <exception cref="ValueError">More than one dimension is negative.</exception>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         [NewSubtype("this")]
@@ -111,7 +83,7 @@ namespace NumSharp
         /// <param name="shape">The new dimensions. One of them may be negative (the unknown dimension, inferred from the
         ///     size); empty reshapes a one-element array to 0-d.</param>
         /// <returns>A view whenever the reshape can be expressed over the existing strides, otherwise a view over an
-        ///     internal copy (NumPy's <c>reshape</c>; see <see cref="reshape(Shape, char)"/>).</returns>
+        ///     internal copy (NumPy's <c>reshape</c>; see <see cref="reshape(Shape, char, bool?)"/>).</returns>
         /// <exception cref="IncorrectShapeException">The size does not match: NumPy's
         ///     <c>cannot reshape array of size {n} into shape {s}</c>.</exception>
         /// <exception cref="ValueError">More than one dimension is negative.</exception>

@@ -46,7 +46,12 @@ namespace NumSharp
     /// <summary>
     ///     Represents a shape of an N-D array. Immutable after construction (NumPy-aligned).
     /// </summary>
-    /// <remarks>Handles slicing, indexing based on coordinates or linear offset and broadcastted indexing.</remarks>
+    /// <remarks>Handles slicing, indexing based on coordinates or linear offset and broadcastted indexing. A C# collection
+    ///     expression is a shape, as NumPy's list is (<c>np.zeros([2, 3])</c>, <c>a.reshape([3, 2], order: 'F')</c>, a
+    ///     <see cref="Shape"/>? <c>size: [2, 3]</c>): <see cref="Create(ReadOnlySpan{long})"/> builds it, and
+    ///     <see cref="GetEnumerator"/> walks the dimensions (<c>foreach (long d in a.Shape)</c>, Python's
+    ///     <c>for d in a.shape</c>).</remarks>
+    [CollectionBuilder(typeof(Shape), nameof(Create))]
     public readonly partial struct Shape : ICloneable, IEquatable<Shape>
     {
         /// <summary>
@@ -1644,6 +1649,69 @@ namespace NumSharp
 
         public static implicit operator Shape((int, int, int, int, int, int) dims) =>
             new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4, dims.Item5, dims.Item6);
+
+#endregion
+
+#region Collection expressions and enumeration
+
+        /// <summary>
+        ///     Builds the shape a C# collection expression writes (<c>Shape s = [2, 3];</c>, <c>np.zeros([2, 3])</c>,
+        ///     <c>np.zeros([])</c>): the C# spelling of NumPy's list shape. The compiler calls it; it is public only because
+        ///     <see cref="CollectionBuilderAttribute"/> needs a builder the caller can reach.
+        /// </summary>
+        /// <param name="dims">The dimensions, in order (one may be -1 where the consumer infers it, as reshape does); empty
+        ///     is the 0-d shape <c>()</c>.</param>
+        /// <returns>A C-order shape over a copy of <paramref name="dims"/> (the span lives on the caller's stack, so the shape
+        ///     cannot keep it).</returns>
+        /// <remarks>
+        ///     Added in API-parity batch 9. Batch 8 removed the <c>int[]</c> overloads (one NumPy signature), which were what
+        ///     <c>[2, 3]</c> bound to, so the collection expressions stopped compiling (CS9174); making Shape the collection
+        ///     type restores them on every <see cref="Shape"/> and <c>Shape?</c> parameter, including those that never had an
+        ///     array overload. C#'s rules prefer an array or a span parameter over this type (an <c>int[]</c> / <c>long[]</c>
+        ///     converts to Shape, and a span beats any non-span), so a call that binds an array or span overload today keeps
+        ///     binding it (proven at C# 12 / net8.0 and C# 14 / net10.0).
+        /// </remarks>
+        public static Shape Create(ReadOnlySpan<long> dims) => new Shape(dims);
+
+        /// <summary>
+        ///     Enumerates the dimensions, outermost first — what Python's <c>for d in a.shape</c> walks, and what makes Shape a
+        ///     C# collection type for <see cref="Create(ReadOnlySpan{long})"/>.
+        /// </summary>
+        /// <returns>A value-type enumerator over the dimension array this shape already holds (no copy, no boxing); a 0-d
+        ///     shape yields nothing.</returns>
+        /// <remarks>A pattern-based enumerator, not <see cref="IEnumerable{T}"/>: implementing the interface would box every
+        ///     <c>foreach</c> through it and would add LINQ's extension methods to every shape. Read
+        ///     <c>shape.dimensions</c> directly in Core code; this exists for callers and for the collection-expression
+        ///     contract.</remarks>
+        public Enumerator GetEnumerator() => new Enumerator(dimensions);
+
+        /// <summary>
+        ///     The dimension enumerator <see cref="GetEnumerator"/> returns: a cursor over the shape's own dimension array.
+        /// </summary>
+        /// <remarks>Footgun: it reads the array the shape shares with its arrays (Core never writes into it, see
+        ///     <see cref="Shape"/>'s sharing rule); a caller that writes into <c>shape.dimensions</c> while enumerating sees the
+        ///     write.</remarks>
+        public struct Enumerator
+        {
+            private readonly long[] _dims;
+            private int _index;
+
+            /// <summary>Starts a walk over <paramref name="dims"/> before its first element.</summary>
+            /// <param name="dims">The dimension array; null (an uninitialized shape) is walked as empty.</param>
+            internal Enumerator(long[] dims)
+            {
+                _dims = dims;
+                _index = -1;
+            }
+
+            /// <summary>The dimension at the cursor; valid only after <see cref="MoveNext"/> returned true.</summary>
+            /// <exception cref="IndexOutOfRangeException">Read before the first <see cref="MoveNext"/> or after the last.</exception>
+            public long Current => _dims[_index];
+
+            /// <summary>Advances to the next dimension.</summary>
+            /// <returns>True while a dimension remains; false at the end (and for a 0-d or uninitialized shape at once).</returns>
+            public bool MoveNext() => ++_index < (_dims?.Length ?? 0);
+        }
 
 #endregion
 

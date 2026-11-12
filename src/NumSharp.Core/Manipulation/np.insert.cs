@@ -47,42 +47,54 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr">Input array.</param>
         /// <param name="obj">The index before which the value is inserted; negative values count from the end.</param>
-        /// <param name="value">The value(s) to insert: a scalar, a C# array or collection, or an
+        /// <param name="values">The value(s) to insert: a scalar, a C# array or collection, or an
         ///     <see cref="NDArray"/> whose static type is <see cref="object"/>. Cast to <paramref name="arr"/>'s
-        ///     dtype.</param>
+        ///     dtype.
+        ///     NumPy's name (<c>insert(arr, obj, values, axis=None)</c>); until API-parity batch 9 it was
+        ///     <c>value</c>, which NumPy refuses (<c>insert() got an unexpected keyword argument 'value'</c>).</param>
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).
         ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
         ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="value"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="values"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
         ///     <c>StringDType</c> NA object, converted after the index checks; int()'s TypeError for an integer array).</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         /// <remarks>
-        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
+        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="values"/> is built in THIS frame,
         ///     before the array overload's scope opens, so this overload releases it with a scope of its own. An
-        ///     <see cref="NDArray"/> passed as <paramref name="value"/> comes back unchanged and was built before
+        ///     <see cref="NDArray"/> passed as <paramref name="values"/> comes back unchanged and was built before
         ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
         ///     unconditionally, which released the caller's own array.)
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
-        public static NDArray insert(NDArray arr, long obj, object value, int? axis = null)
+        public static NDArray insert(NDArray arr, long obj, object values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
-            var asArr = NDArray.ScalarValueAsArray(value, arr.dtype);
+            var asArr = NDArray.ScalarValueAsArray(values, arr.dtype);
             return insert(arr, obj, asArr, axis);
         }
 
         /// <summary>
-        ///     int-overload accepting a scalar value.
+        ///     int-overload accepting a scalar value: the C# <c>int</c> index of
+        ///     <see cref="insert(NDArray, long, object, int?)"/> (a literal index binds here, not to the long form).
         /// </summary>
+        /// <param name="arr">Input array.</param>
+        /// <param name="obj">The index before which the value is inserted; negative values count from the end.</param>
+        /// <param name="values">The value(s) to insert: a scalar, a C# array or collection, or an
+        ///     <see cref="NDArray"/> whose static type is <see cref="object"/>. Cast to <paramref name="arr"/>'s dtype.
+        ///     NumPy's name; until API-parity batch 9 it was <c>value</c>, which NumPy refuses.</param>
+        /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
+        /// <returns>A fresh array with the value(s) inserted (see <see cref="insert(NDArray, long, object, int?)"/>).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> is null.</exception>
+        /// <exception cref="IndexOutOfRangeException">The insertion index is outside <c>[-N, N]</c>.</exception>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <remarks>
         ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
         ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.
         /// </remarks>
-        public static NDArray insert(NDArray arr, int obj, object value, int? axis = null)
-            => insert(arr, (long)obj, value, axis);
+        public static NDArray insert(NDArray arr, int obj, object values, int? axis = null)
+            => insert(arr, (long)obj, values, axis);
 
         /// <summary>
         ///     Slice-obj overload. <paramref name="obj"/> is expanded via
@@ -109,29 +121,31 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr">Input array.</param>
         /// <param name="obj">The insertion positions, expanded with Python's <c>slice.indices(N)</c>.</param>
-        /// <param name="value">The value(s) to insert: a scalar, a C# array or collection, or an
+        /// <param name="values">The value(s) to insert: a scalar, a C# array or collection, or an
         ///     <see cref="NDArray"/> whose static type is <see cref="object"/>. Cast to <paramref name="arr"/>'s
-        ///     dtype.</param>
+        ///     dtype.
+        ///     NumPy's name (<c>insert(arr, obj, values, axis=None)</c>); until API-parity batch 9 it was
+        ///     <c>value</c>, which NumPy refuses (<c>insert() got an unexpected keyword argument 'value'</c>).</param>
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).
         ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
         ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="value"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="values"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
         ///     <c>StringDType</c> NA object, converted after the index checks; int()'s TypeError for an integer array).</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         /// <remarks>
-        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
+        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="values"/> is built in THIS frame,
         ///     before the array overload's scope opens, so this overload releases it with a scope of its own. An
-        ///     <see cref="NDArray"/> passed as <paramref name="value"/> comes back unchanged and was built before
+        ///     <see cref="NDArray"/> passed as <paramref name="values"/> comes back unchanged and was built before
         ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
         ///     unconditionally, which released the caller's own array.)
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
-        public static NDArray insert(NDArray arr, Slice obj, object value, int? axis = null)
+        public static NDArray insert(NDArray arr, Slice obj, object values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
-            var asArr = NDArray.ScalarValueAsArray(value, arr.dtype);
+            var asArr = NDArray.ScalarValueAsArray(values, arr.dtype);
             return insert(arr, obj, asArr, axis);
         }
 
@@ -171,29 +185,31 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr">Input array.</param>
         /// <param name="obj">The insertion positions (each before the original element at that index).</param>
-        /// <param name="value">The value(s) to insert: a scalar, a C# array or collection, or an
+        /// <param name="values">The value(s) to insert: a scalar, a C# array or collection, or an
         ///     <see cref="NDArray"/> whose static type is <see cref="object"/>. Cast to <paramref name="arr"/>'s
-        ///     dtype.</param>
+        ///     dtype.
+        ///     NumPy's name (<c>insert(arr, obj, values, axis=None)</c>); until API-parity batch 9 it was
+        ///     <c>value</c>, which NumPy refuses (<c>insert() got an unexpected keyword argument 'value'</c>).</param>
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).
         ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
         ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="value"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="values"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
         ///     <c>StringDType</c> NA object, converted after the index checks; int()'s TypeError for an integer array).</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         /// <remarks>
-        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
+        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="values"/> is built in THIS frame,
         ///     before the array overload's scope opens, so this overload releases it with a scope of its own. An
-        ///     <see cref="NDArray"/> passed as <paramref name="value"/> comes back unchanged and was built before
+        ///     <see cref="NDArray"/> passed as <paramref name="values"/> comes back unchanged and was built before
         ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
         ///     unconditionally, which released the caller's own array.)
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
-        public static NDArray insert(NDArray arr, int[] obj, object value, int? axis = null)
+        public static NDArray insert(NDArray arr, int[] obj, object values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
-            var asArr = NDArray.ScalarValueAsArray(value, arr.dtype);
+            var asArr = NDArray.ScalarValueAsArray(values, arr.dtype);
             return insert(arr, obj, asArr, axis);
         }
 
@@ -227,29 +243,31 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr">Input array.</param>
         /// <param name="obj">The insertion positions (each before the original element at that index).</param>
-        /// <param name="value">The value(s) to insert: a scalar, a C# array or collection, or an
+        /// <param name="values">The value(s) to insert: a scalar, a C# array or collection, or an
         ///     <see cref="NDArray"/> whose static type is <see cref="object"/>. Cast to <paramref name="arr"/>'s
-        ///     dtype.</param>
+        ///     dtype.
+        ///     NumPy's name (<c>insert(arr, obj, values, axis=None)</c>); until API-parity batch 9 it was
+        ///     <c>value</c>, which NumPy refuses (<c>insert() got an unexpected keyword argument 'value'</c>).</param>
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).
         ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
         ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="value"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="values"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
         ///     <c>StringDType</c> NA object, converted after the index checks; int()'s TypeError for an integer array).</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         /// <remarks>
-        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
+        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="values"/> is built in THIS frame,
         ///     before the array overload's scope opens, so this overload releases it with a scope of its own. An
-        ///     <see cref="NDArray"/> passed as <paramref name="value"/> comes back unchanged and was built before
+        ///     <see cref="NDArray"/> passed as <paramref name="values"/> comes back unchanged and was built before
         ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
         ///     unconditionally, which released the caller's own array.)
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
-        public static NDArray insert(NDArray arr, long[] obj, object value, int? axis = null)
+        public static NDArray insert(NDArray arr, long[] obj, object values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
-            var asArr = NDArray.ScalarValueAsArray(value, arr.dtype);
+            var asArr = NDArray.ScalarValueAsArray(values, arr.dtype);
             return insert(arr, obj, asArr, axis);
         }
 
@@ -258,32 +276,34 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr">Input array.</param>
         /// <param name="obj">A 0-d or 1-D integer index array, or a 1-D boolean mask of insertion positions.</param>
-        /// <param name="value">The value(s) to insert: a scalar, a C# array or collection, or an
+        /// <param name="values">The value(s) to insert: a scalar, a C# array or collection, or an
         ///     <see cref="NDArray"/> whose static type is <see cref="object"/>. Cast to <paramref name="arr"/>'s
-        ///     dtype.</param>
+        ///     dtype.
+        ///     NumPy's name (<c>insert(arr, obj, values, axis=None)</c>); until API-parity batch 9 it was
+        ///     <c>value</c>, which NumPy refuses (<c>insert() got an unexpected keyword argument 'value'</c>).</param>
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the value(s) inserted (F-ordered when <paramref name="arr"/> is).
         ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
         ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="value"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
+        /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null (a null <paramref name="values"/> is Python's <c>None</c>: NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c> or a
         ///     <c>StringDType</c> NA object, converted after the index checks; int()'s TypeError for an integer array).</exception>
         /// <exception cref="ValueError">See <see cref="insert(NDArray, NDArray, NDArray, int?)"/>.</exception>
         /// <exception cref="TypeError">See <see cref="insert(NDArray, NDArray, NDArray, int?)"/>.</exception>
         /// <exception cref="IndexError">See <see cref="insert(NDArray, NDArray, NDArray, int?)"/>.</exception>
         /// <exception cref="IndexOutOfRangeException">An insertion index is outside <c>[-N, N]</c>.</exception>
         /// <remarks>
-        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="value"/> is built in THIS frame,
+        ///     Scoped by <c>[NDScoped]</c>: the conversion of <paramref name="values"/> is built in THIS frame,
         ///     before the array overload's scope opens, so this overload releases it with a scope of its own. An
-        ///     <see cref="NDArray"/> passed as <paramref name="value"/> comes back unchanged and was built before
+        ///     <see cref="NDArray"/> passed as <paramref name="values"/> comes back unchanged and was built before
         ///     the scope opened, so it is never disposed. (The hand-written version disposed the conversion
         ///     unconditionally, which released the caller's own array.)
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
-        public static NDArray insert(NDArray arr, NDArray obj, object value, int? axis = null)
+        public static NDArray insert(NDArray arr, NDArray obj, object values, int? axis = null)
         {
             if (arr is null) throw new ArgumentNullException(nameof(arr));
-            var asArr = NDArray.ScalarValueAsArray(value, arr.dtype);
+            var asArr = NDArray.ScalarValueAsArray(values, arr.dtype);
             return insert(arr, obj, asArr, axis);
         }
 

@@ -210,19 +210,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Machine limits for integer types.
-        /// </summary>
-        /// <typeparam name="T">An integer type (bool, byte, short, ushort, int, uint, long, ulong, char).</typeparam>
-        /// <returns>An iinfo object describing the integer type limits.</returns>
-        /// <example>
-        /// <code>
-        /// var info = np.iinfo&lt;int&gt;();
-        /// Console.WriteLine(info.bits);  // 32
-        /// </code>
-        /// </example>
-        public static iinfo iinfo<T>() where T : struct => new iinfo(typeof(T));
-
-        /// <summary>
         ///     Machine limits of the integer dtype a STRING names — NumPy's <c>np.iinfo("int32")</c>, read as NumPy reads it:
         ///     <c>numeric.dtype(int_type)</c>, and when that raises TypeError (the string names no dtype) the dtype of the
         ///     value's TYPE, <c>str</c> — so <c>np.iinfo("foo")</c> and <c>np.iinfo("")</c> are the str kind's

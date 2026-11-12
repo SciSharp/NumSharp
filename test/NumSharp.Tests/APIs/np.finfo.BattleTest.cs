@@ -114,35 +114,52 @@ public class NpFInfoBattleTests
 
     #endregion
 
-    #region Generic Overload Tests
+    #region C# type spellings (the generic finfo<T> went in API-parity batch 9, OD7)
 
+    /// <summary>
+    ///     The generic <c>finfo&lt;float&gt;()</c> went (OD7): <c>np.finfo(typeof(float))</c> is NumPy's
+    ///     <c>np.finfo(np.float32)</c> (32 bits, precision 6).
+    /// </summary>
     [TestMethod]
-    public void FInfo_Generic_Float()
+    public void FInfo_TypeofFloat()
     {
-        var info = np.finfo<float>();
+        // NumPy: np.finfo(np.float32).bits == 32, .precision == 6.
+        var info = np.finfo(typeof(float));
         info.bits.Should().Be(32);
         info.precision.Should().Be(6);
     }
 
+    /// <summary>
+    ///     <c>np.finfo(typeof(double))</c> is NumPy's <c>np.finfo(np.float64)</c> (64 bits, precision 15).
+    /// </summary>
     [TestMethod]
-    public void FInfo_Generic_Double()
+    public void FInfo_TypeofDouble()
     {
-        var info = np.finfo<double>();
+        var info = np.finfo(typeof(double));
         info.bits.Should().Be(64);
         info.precision.Should().Be(15);
     }
 
+    /// <summary>
+    ///     NumSharp's decimal dtype is inexact, so <c>np.finfo(typeof(decimal))</c> answers (128 bits).
+    /// </summary>
     [TestMethod]
-    public void FInfo_Generic_Decimal()
+    public void FInfo_TypeofDecimal()
     {
-        var info = np.finfo<decimal>();
+        var info = np.finfo(typeof(decimal));
         info.bits.Should().Be(128);
     }
 
+    /// <summary>
+    ///     An integer type is NumPy's <c>ValueError: data type &lt;class 'numpy.int32'&gt; not inexact</c> (the generic
+    ///     form threw some exception; the dtype form throws NumPy's).
+    /// </summary>
     [TestMethod]
-    public void FInfo_Generic_Int_Throws()
+    public void FInfo_TypeofInt_IsNumPysValueError()
     {
-        new Action(() => np.finfo<int>()).Should().Throw<Exception>();
+        // NumPy: np.finfo(np.int32) -> ValueError: data type <class 'numpy.int32'> not inexact
+        new Action(() => np.finfo(typeof(int))).Should().Throw<ValueError>()
+            .WithMessage("data type <class 'numpy.int32'> not inexact");
     }
 
     #endregion

@@ -152,10 +152,11 @@ np.full((2, 2), 7.5);                  // filled with 7.5
 np.zeros((2, 3), np.int32);            // dtype override
 ```
 
-`np.indices(shape)` returns one grid array per dimension (stacked), useful for evaluating functions on a regular grid. The shape is one `Shape`: an `int[]`/`long[]`, a value tuple (reads like NumPy) or an array's own `.shape` (a `long[]`, so no cast is needed) converts to it:
+`np.indices(shape)` returns one grid array per dimension (stacked), useful for evaluating functions on a regular grid. The shape is one `Shape`: a collection expression (NumPy's list), an `int[]`/`long[]`, a value tuple (reads like NumPy) or an array's own `.shape` (a `long[]`, so no cast is needed) converts to it:
 
 ```csharp
-np.indices(new[] { 3, 3 });    // int[] (a collection expression [3, 3] does not convert to Shape)
+np.indices([3, 3]);            // collection expression - like NumPy's np.indices([3, 3])
+np.indices(new[] { 3, 3 });    // int[]
 np.indices((3, 3));            // value tuple - like NumPy's np.indices((3, 3))
 np.indices(new long[]{ 3, 3 });
 np.indices(other.shape);       // feed an array's own long[] shape directly

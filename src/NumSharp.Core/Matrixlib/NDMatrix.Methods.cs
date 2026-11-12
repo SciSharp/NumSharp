@@ -278,35 +278,44 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The elements under another shape, folded back onto two axes (NumPy's <c>m.reshape(shape)</c>):
-        ///     <c>m.reshape(6)</c> is the row <c>(1, 6)</c>, <c>m.reshape(1, 2, 3)</c> is <c>(2, 3)</c>.
+        ///     The elements under another shape, folded back onto two axes — NumPy's <c>m.reshape(shape, /, *, order='C',
+        ///     copy=None)</c>: <c>m.reshape(6)</c> is the row <c>(1, 6)</c>, <c>m.reshape(1, 2, 3)</c> is <c>(2, 3)</c>.
         /// </summary>
-        /// <param name="newShape">The requested dimensions; one may be -1 (inferred).</param>
-        /// <returns>A view when the layout allows it, otherwise a copy.</returns>
-        /// <exception cref="IncorrectShapeException">The requested size differs from the matrix's size.</exception>
-        /// <exception cref="ValueError">More than two requested dimensions are longer than 1.</exception>
-        [NDScoped]
-        public new NDMatrix reshape(Shape newShape) => From(base.reshape(newShape), this);
-
-        /// <inheritdoc cref="reshape(Shape)" path="/*[not(self::param[@name='newShape'])]"/>
-        /// <param name="newShape">The requested dimensions; one may be -1 (inferred).</param>
+        /// <param name="shape">The requested dimensions; one may be -1 (inferred). An int, a tuple, an <c>int[]</c> /
+        ///     <c>long[]</c>, a C# collection expression or a <see cref="Shape"/>. NumPy's name (it was <c>newShape</c> until
+        ///     API-parity batch 9).</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c> or <c>'A'</c>: the index order the elements are read and
         ///     placed in.</param>
         /// <param name="copy">NumPy's <c>copy</c> keyword (API-parity batch 7): null copies only when needed, true always
         ///     copies, false raises <c>Unable to avoid creating a copy while reshaping.</c> when no view can express the
         ///     reshape — <see cref="NDArray.reshape(Shape, char, bool?)"/>'s modes, the result wrapped as a matrix.</param>
+        /// <returns>A view when the layout allows it, otherwise a copy.</returns>
+        /// <exception cref="IncorrectShapeException">The requested size differs from the matrix's size.</exception>
+        /// <exception cref="ValueError">More than two requested dimensions are longer than 1, 'K', or the refusal of
+        ///     <paramref name="copy"/> false.</exception>
+        /// <remarks>Since API-parity batch 9 this and the loose integers (<see cref="reshape(long[])"/>,
+        ///     <see cref="reshape(ReadOnlySpan{long})"/>) are the matrix method's spellings, as on NDArray: the
+        ///     <c>(Shape)</c> and <c>(int[])</c> forms went (an <c>int[]</c> converts to <see cref="Shape"/>).</remarks>
         [NDScoped]
-        public new NDMatrix reshape(Shape newShape, char order = 'C', bool? copy = null) => From(base.reshape(newShape, order, copy), this);
+        public new NDMatrix reshape(Shape shape, char order = 'C', bool? copy = null) => From(base.reshape(shape, order, copy), this);
 
-        /// <inheritdoc cref="reshape(Shape)"/>
+        /// <summary>The matrix under NumPy's loose integers (<c>m.reshape(2, 3)</c>) when they arrive as a C#
+        ///     <c>long[]</c>; see <see cref="reshape(Shape, char, bool?)"/>.</summary>
         /// <param name="shape">The requested dimensions; one may be -1.</param>
-        [NDScoped]
-        public new NDMatrix reshape(int[] shape) => From(base.reshape(shape), this);
-
-        /// <inheritdoc cref="reshape(Shape)"/>
-        /// <param name="shape">The requested dimensions; one may be -1.</param>
+        /// <returns>A view when the layout allows it, otherwise a copy, wrapped as a matrix.</returns>
+        /// <exception cref="IncorrectShapeException">The requested size differs from the matrix's size.</exception>
+        /// <exception cref="ValueError">More than two requested dimensions are longer than 1.</exception>
         [NDScoped]
         public new NDMatrix reshape(params long[] shape) => From(base.reshape(shape), this);
+
+        /// <summary>The matrix under NumPy's loose integers (<c>m.reshape(2, 3)</c>) as C# 13 passes them (a span on the
+        ///     caller's stack); added in API-parity batch 9 so the matrix has NDArray's spellings.</summary>
+        /// <param name="shape">The requested dimensions; one may be -1.</param>
+        /// <returns>A view when the layout allows it, otherwise a copy, wrapped as a matrix.</returns>
+        /// <exception cref="IncorrectShapeException">The requested size differs from the matrix's size.</exception>
+        /// <exception cref="ValueError">More than two requested dimensions are longer than 1.</exception>
+        [NDScoped]
+        public new NDMatrix reshape(params ReadOnlySpan<long> shape) => From(base.reshape(shape), this);
 
         #endregion
 

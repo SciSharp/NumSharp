@@ -153,8 +153,15 @@ the storage-lane fills `UnmanagedStorage.FullCore` / `FullFillElement` / `OnesCo
 - NumPy's `zeros(shape, dtype=None, order='C', *, device=None)` (ones and empty alike) and `full(shape, fill_value,
   dtype=None, order='C', *, device=None)`: ONE `Shape shape` parameter, which an int, a tuple, an `int[]` / `long[]` or a
   Shape converts to; the dtype is an argument (no generic `<T>` forms). `np.zeros(s, 'F')` does not compile, where NumPy
-  reads that `'F'` as the dtype (complex64): write `order: 'F'`. A C# collection expression (`np.zeros([2, 3])`) does
-  not convert to a Shape.
+  reads that `'F'` as the dtype (complex64): write `order: 'F'`.
+- Shape is a C# collection type (API-parity batch 9): `[CollectionBuilder(typeof(Shape), nameof(Create))]` and a
+  pattern `GetEnumerator` over its dimensions, so a collection expression is NumPy's list shape on EVERY `Shape` /
+  `Shape?` parameter (`np.zeros([2, 3])`, `np.zeros([])` 0-d, `np.tile(a, [2, 2])`, `np.reshape(a, [3, 2])`,
+  `np.random.normal(0, 1, [2, 3])`), and `foreach (long d in a.Shape)` walks the dimensions. C#'s overload rules prefer
+  an array or span parameter over Shape (an `int[]` / `long[]` converts to Shape; a span beats any non-span), so a
+  `[..]` call that binds an array or span overload keeps binding it (proven at C# 12 / net8.0 and C# 14 / net10.0); a new
+  tie would be a CS0121 the build lists. Batch 8's removal of the `int[]` overloads had broken these calls (CS9174): when
+  removing an overload, census the `[..]` callers too, not only `new[] {..}`.
 - `np.CreationLayout` (`Creation/np.empty.cs`) checks in NumPy's argument order: the order letter
   (`PyArray_OrderConverter`: `order must be one of 'C', 'F', 'A', or 'K' (got 'X')`), the device (`Device not
   understood. Only "cpu" is allowed, but received: gpu`), the C-or-F switch (`only 'C' or 'F' order is permitted`), then
@@ -387,6 +394,11 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
 - Text divergences (each typed and texted on both sides): `np.split(a, 0)` raises "number sections must be
   larger than 0." where NumPy leaks `ZeroDivisionError: integer modulo by zero`; the `repeat(-1)` text differs in wording;
   `np.broadcast_to(a, (2^62, 6))` builds the view where NumPy refuses with `iterator is too large`.
+- The reshape METHOD of NDArray, `NDArray<T>`, NDMatrix and NDCharArray has NumPy's two spellings (batch 9):
+  `reshape(Shape shape, char order = 'C', bool? copy = null)` and the loose integers (`params long[]` + its
+  `params ReadOnlySpan<long>` twin); the `(Shape)`, `(ref Shape)` and `(int[])` forms went (the `int[]` one made
+  `a.reshape([3, 2])` CS0121 against the span). `NDArray<T>`'s order / copy form runs the untyped engine
+  (`ReshapeCore`, NumPy's `_reshape_with_copy_arg`) and re-wraps typed; its loose-int forms keep their alias engine.
 - `np.tile(A, Shape reps)` is one signature: the repetitions are ONE argument (an int, a tuple, an array; the loose
   `np.tile(a, 2, 2)` is NumPy's TypeError and does not compile; a null `int[]` is the empty tuple, a copy). A negative
   repetition raises NumPy's `negative dimensions are not allowed` from the repeat allocation while the tile holds

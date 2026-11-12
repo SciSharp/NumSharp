@@ -144,23 +144,23 @@ public class NpTypeChecksBattleTests
 
     #endregion
 
-    #region isdtype Tests - NDArray Overload
+    #region isdtype Tests - an array's dtype
 
+    /// <summary>
+    ///     NumPy's isdtype takes a dtype: <c>np.isdtype(arr, 'integral')</c> raises <c>TypeError: dtype argument must be a
+    ///     NumPy dtype, but it is a &lt;class 'numpy.ndarray'&gt;.</c>, so an array is asked through <c>arr.dtype</c> (the
+    ///     NDArray convenience overloads went in API-parity batch 9; a C# array argument no longer compiles).
+    /// </summary>
     [TestMethod]
-    public void IsDtype_NDArray_Integral()
+    public void IsDtype_ArrayDtype_Integral()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
-        np.isdtype(arr, "integral").Should().BeTrue();
-        np.isdtype(arr, "real floating").Should().BeFalse();
+        np.isdtype(arr.dtype, "integral").Should().BeTrue();
+        np.isdtype(arr.dtype, "real floating").Should().BeFalse();
+        np.isdtype(arr.dtype, "integral", "bool").Should().BeTrue();
         // "floating" is issubdtype's vocabulary, not isdtype's — NumPy 2.4.2 raises ValueError for it.
-        Action looseKind = () => np.isdtype(arr, "floating");
+        Action looseKind = () => np.isdtype(arr.dtype, "floating");
         looseKind.Should().Throw<ValueError>().WithMessage("kind argument is a string, but 'floating' is not a known kind name.");
-    }
-
-    [TestMethod]
-    public void IsDtype_NDArray_Null_Throws()
-    {
-        new Action(() => np.isdtype((NDArray)null!, "integral")).Should().Throw<Exception>();
     }
 
     #endregion

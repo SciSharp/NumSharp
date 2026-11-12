@@ -353,19 +353,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Machine limits for floating point types.
-        /// </summary>
-        /// <typeparam name="T">A floating point type (float, double, decimal).</typeparam>
-        /// <returns>An finfo object describing the floating point type limits.</returns>
-        /// <example>
-        /// <code>
-        /// var info = np.finfo&lt;double&gt;();
-        /// Console.WriteLine(info.bits);  // 64
-        /// </code>
-        /// </example>
-        public static finfo finfo<T>() where T : struct => new finfo(typeof(T));
-
-        /// <summary>
         ///     Machine limits of the floating-point dtype a STRING names — NumPy's <c>np.finfo("float64")</c>, read as NumPy
         ///     reads it: <c>numeric.dtype(dtype)</c>, and when that raises TypeError (the string names no dtype) the dtype of
         ///     the value's TYPE, <c>str</c> — so <c>np.finfo("foo")</c> and <c>np.finfo("")</c> are NumPy's <c>data type

@@ -38,10 +38,6 @@ namespace NumSharp.Tests.APIs
             np.iinfo(typeof(sbyte)).bits.Should().Be(8);
 
         [TestMethod]
-        public void IInfo_SByte_From_Generic() =>
-            np.iinfo<sbyte>().bits.Should().Be(8);
-
-        [TestMethod]
         public void IInfo_SByte_From_Array()
         {
             var arr = np.array(new sbyte[] { 1, 2, 3 });
