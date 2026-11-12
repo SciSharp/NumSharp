@@ -161,7 +161,8 @@ the elements the mask selects, sparse masks 1.1–62× faster), NL2 (`c39a29bc`:
 method), NL10 (`5ea19a4c`: np.einsum_path's IndexErrors), NL5 (`a5b0ff85`: np.nested_iters' converters and
 np.einsum's out extent and explicit path in NumPy's order), NL9 (`4f16e102`: np.polyder's recursion) and NL11
 (`4a680b5d`: np.isscalar, 1.7–3.7× faster as well) are fixed; NL12 was fixed the same week by the parity QA (QA-30).
-NL3 is a documented divergence by decision (`095b2395`: np.prod keeps its SIMD lanes, 3.7–16× NumPy). NL5's fix found
+NL3 was a documented divergence by decision (`095b2395`: np.prod keeps its SIMD lanes, 3.7–16× NumPy), reversed
+on 2026-11-12 (D25: NumPy's sequential order on every route). NL5's fix found
 NL14 (np.einsum's `out=` rules), pinned. NL7 is fixed by the subclass redesign that replaced the class boundary
 (2026-11-07, merged from `subclass/woven-rules`: `e8a6c3cd`; see the state log). Open: P10 item 6, NL8 and NL14;
 PA5 and PA6 are deferred. Re-probing the open items (2026-11-07) widened NL14's pins to every `optimize=` route and
@@ -637,6 +638,7 @@ The owner's answers (2026-10-24; D1 again twice on 2026-10-28), and what they me
 | D22 | 2026-10-31, the step round: the rebase, P6b, P8, P9, P10 and P7b-d "Accept and start" (P7b-d dropped later, D7); P7a "Skip"; PA3 "Defer until after P7"; PA2 "Defer until after PA3"; PA6 "Defer until after PA5" | The order of the work: the rebase; P6b; P8; P9; P10; PA3 (where P7 stood); PA2. PA5 and PA6 later (D20). |
 | D23 | 2026-11-05, the PA round: "continue but for each you must prove that its faster and if its not after some effort then we should not land the change ... i'll approve each task individually"; on its pages PA3a "Approve, faster only"; PA3b "Approve, only if faster", "and complete full dtype and edge cases parity"; PA2a "Approve" and PA2b + PA2c "Approve both", each with the same parity note | Each task lands only where it is measured faster: old and new route switchable in one process, CPUs 2 and 4 pinned, best of 9 interleaved rounds after warm-up; faster above 1.05× old, slower below 0.95× old re-measured once. A call site still slower after the effort keeps its code. PA3b's moved code lands only where it is faster (identical code moved is not). Order: PA3a, PA3b, PA2a, PA2b, PA2c. |
 | D24 | 2026-11-06, the divergence round: NL3 "Keep SIMD lanes (Misaligned)"; the fixes "NL1 masked StringDType copy", "NL2 + NL4 complex NaN / inf", "Error parity NL5/10/12/13" and "NL9 + NL11" (NL8 not chosen); PA5 / PA6 "Defer both"; P10 item 6 and NL7 "With the re-prototype" | NL1, NL2, NL4, NL5, NL9, NL10, NL11 and NL13 are fixed, each a D4 commit measured equal or faster where it touches a hot path (NL12 was fixed meanwhile by the parity QA's QA-30); NL3 becomes a `[Misaligned]` documented divergence (`Math/np.prod.LaneOrder.Test.cs`); NL8 stays pinned; PA5 and PA6 wait; P10 item 6 and NL7 wait for the class-boundary re-prototype. |
+| D25 | 2026-11-12, the OptunaSharp brief's item 2 ("Exact by default"): NL3 reversed | The float32 / float64 np.prod is NumPy's sequential multiply.reduce on every route (branch `fix/prod-sequential`): `Default.Reduction.Product.Sequential.cs` for a contiguous flat product and a C-contiguous axis product, `AddMulNumPy` elsewhere; `Math/np.prod.SequentialOrder.Test.cs` replaces the `[Misaligned]` lane-order tests. A flat product runs at NumPy's own speed; axis products stay fast. |
 
 The recommendations as written before the answers:
 
@@ -1757,7 +1759,8 @@ The divergences pinned as `[OpenBugs]` in `test/NumSharp.Tests/OpenBugs.NpLayer.
   gone.
 - NL3, kept as a `[Misaligned]` documented divergence (`095b2395`): the float32 / float64 np.prod (flat, along an axis,
   `out=`) multiplies in SIMD lane order, 3.7–16× NumPy, where NumPy's reduce is sequential; `initial=` or `where=`
-  run NumPy's loop. The `reduce_kwargs` tier skips np.prod's plain inexact cells.
+  run NumPy's loop. The `reduce_kwargs` tier skips np.prod's plain inexact cells. REVERSED 2026-11-12 (D25): every
+  route is NumPy's sequential loop.
 - NL4, fixed (`b0d2d390`): 1-D np.polyval takes its first product in x's dtype (`zeros_like(x)`).
 - NL5, fixed (`a5b0ff85`): np.nested_iters runs its converters first and raises ValueError without an operand; np.einsum
   refuses an `out=` extent before any cast check and plans an explicit path first.

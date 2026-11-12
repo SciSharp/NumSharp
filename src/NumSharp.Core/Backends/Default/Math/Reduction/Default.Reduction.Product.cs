@@ -23,8 +23,8 @@ namespace NumSharp.Backends
         ///     prologue, the out= loop rule, the unsafe store.</param>
         /// <param name="initial">NumPy's <c>initial=</c>: the start value of every output instead of the identity 1, or null.
         ///     With it (or with <paramref name="where"/>) the call is PyUFunc_ReduceWrapper's keyword path
-        ///     (<see cref="AddMulNumPy"/>): NumPy's sequential multiply loop, which can differ in the last bit of a float
-        ///     product from this call's own flat loop (NL3).</param>
+        ///     (<see cref="AddMulNumPy"/>): NumPy's sequential multiply loop, the same order as the call without it (every
+        ///     float route multiplies sequentially since 2026-11-12).</param>
         /// <param name="where">NumPy's <c>where=</c> mask of the elements to multiply, or null (a 0-d true mask is no
         ///     mask).</param>
         /// <returns><paramref name="out"/> itself when given; otherwise the product (a read-only 0-d scalar for a full
@@ -132,8 +132,16 @@ namespace NumSharp.Backends
             // exactly that. The size-1 shortcuts below keep their copying routes: the complex identity they skip is a
             // separate pin (OpenBugsReductionTests.Prod_OneComplexElement_IsTheIdentityTimesTheElement), and for float16
             // the identity is exact.
+            // float32 / float64 take it too (the owner's decision of 2026-11-12, reversing D24 / NL3 "Keep SIMD lanes"):
+            // NumPy's FLOAT / DOUBLE_multiply reduce is sequential (`acc *= *src`, multiply is not pairwise), so only its
+            // own order gives its last bits, and an overflow before a zero is NaN as in NumPy. A C- or F-contiguous product
+            // (over every axis or along one) takes the exact kernels of Default.Reduction.Product.Sequential.cs
+            // below (the same sequence per output, without the iterator's per-call and per-row costs); every other layout
+            // and every cast loop takes the iterator here.
             NPTypeCode productLoop = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
-            if ((productLoop == NPTypeCode.Complex || productLoop == NPTypeCode.Half)
+            bool sequentialFloat = SequentialFloatProductApplies(arr, axis_, productLoop);
+            if ((productLoop == NPTypeCode.Complex || productLoop == NPTypeCode.Half
+                 || ((productLoop == NPTypeCode.Single || productLoop == NPTypeCode.Double) && !sequentialFloat))
                 && !shape.IsEmpty && shape.size > 0
                 && !shape.IsScalar && !(shape.size == 1 && shape.NDim == 1)
                 && (axis_ is null || shape[NormalizeAxis(axis_.Value, arr.ndim)] != 1))
@@ -186,7 +194,7 @@ namespace NumSharp.Backends
 
             if (axis_ == null)
             {
-                var result = prod_elementwise_il(arr, typeCode);
+                var result = sequentialFloat ? SequentialFloatProductFlat(arr) : prod_elementwise_il(arr, typeCode);
                 var r = NewScalar(result);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
@@ -199,6 +207,8 @@ namespace NumSharp.Backends
             if (shape[axis2] == 1)
                 return HandleTrivialAxisReduction(arr, axis2, keepdims, outputType, null);
 
+            if (sequentialFloat)
+                return SequentialFloatProductAlong(arr, axis2, keepdims, outputType);
             return ExecuteAxisReduction(arr, axis2, keepdims, outputType, null, ReductionOp.Prod);
         }
 

@@ -56,14 +56,22 @@ which NumPy's methods refuse). A positional third argument is `dtype` and a four
   NumPy's three forms (a complex `x` squared into its `real` view, which the last sum reads at stride 2), the masked last
   sum into `out`, `max(count - ddof, 0)` per output (`CountsMinusDdof`), `_std`'s sqrt.
 - A numpy.matrix operand takes the matrix method's rules (`matrix.md`).
-- `[Misaligned]` by decision (NL3, 2026-11-06: "Keep SIMD lanes"): the plain float32 / float64 `np.prod` (flat, along an
-  axis, and the `out=` route) multiplies in SIMD lane order, NumPy's reduce in sequence: the last bits differ, and an
-  overflow before a zero is NaN in NumPy and 0 here. The lanes are 3.7-16x NumPy; `initial=` or `where=` run NumPy's
-  sequential loop bit for bit (`Math/np.prod.LaneOrder.Test.cs`). NumPy's `initial=None` (copy each output's first
-  element) has no C# spelling.
-- Gates: `Math/ReductionKeywords.NumPyPort.Test.cs` and the `reduce_kwargs` tier's sum / prod / mean / var / std cells
-  (sections A–E with I `initial=`, D `dtype=`, M `mean=` / `ddof` / `correction=`; the NL12 mask cells and np.prod's
-  plain inexact cells are not generated).
+- The float32 / float64 `np.prod` is NumPy's sequential `FLOAT` / `DOUBLE_multiply` reduce on every route (the owner,
+  2026-11-12, reversing NL3 / D24 "Keep SIMD lanes"): each output starts at 1 and multiplies its elements in NumPy's
+  iterator order (a contiguous array over every axis in MEMORY order, so an F array column by column; a reversed view in
+  its INDEX order, which NumPy does not flip; an axis product in increasing reduced index). A C- or F-contiguous
+  product (flat or along an axis; F as the C array of its reversed axes) takes `Default.Reduction.Product.Sequential.cs` (rows: eight independent chains at
+  once; an outer axis: NumPy's elementwise form with vectors, the second operand's NaN kept; a run that ends in NaN is
+  computed again by NumPy's loop for its NaN bits); every other layout and every cast loop takes `AddMulNumPy`. A flat
+  product is NumPy's dependent chain, at NumPy's own speed (1M float64: 1.39 ms, NumPy 1.50; the lanes it replaced took
+  0.23 ms); axis products stay fast (a (100000, 8) along axis 1: 0.27 ms, NumPy 1.84). `initial=` / `where=` give the
+  same bits as the plain call. NumPy's `initial=None` (copy each output's first element) has no C# spelling. TRAP:
+  NumPy's multiply loops (`NumPyMultiplyLoops`) are function-pointer targets the tiered JIT left at tier-0 (5-8x slow);
+  they carry `[MethodImpl(AggressiveOptimization)]`.
+- Gates: `Math/ReductionKeywords.NumPyPort.Test.cs`, `Math/np.prod.SequentialOrder.Test.cs` (NumPy's bits flat, reversed,
+  float32 and along both axes; an overflow before a zero is NaN) and the `reduce_kwargs` tier's sum / prod / mean / var /
+  std cells (sections A–E with I `initial=`, D `dtype=`, M `mean=` / `ddof` / `correction=`; the NL12 mask cells and
+  np.prod's plain inexact cells are not generated); the fuzz tier's prod cells are strict (no order excuse).
 
 ## `np.prod` / `np.cumprod`: the complex128 and float16 loops
 

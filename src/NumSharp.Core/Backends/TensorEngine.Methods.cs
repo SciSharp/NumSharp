@@ -591,8 +591,8 @@ namespace NumSharp
         ///     <paramref name="out"/> was added to the contract in 0.80.0 (the np-layer dtype plan's P1d, decision D2: a
         ///     breaking change for a subclass), <paramref name="initial"/> and <paramref name="where"/> in its P10 (D10);
         ///     numpy.matrix's <c>prod(out=)</c> runs through it. With either keyword the product is NumPy's sequential
-        ///     <c>multiply.reduce</c> loop through its reduction iterator, which can differ in the last bit of a float product
-        ///     from the call without them (that call's flat float loop multiplies in SIMD lane order, the open NL3).
+        ///     <c>multiply.reduce</c> loop through its reduction iterator; without them a float product is NumPy's sequential
+        ///     order too (the SIMD lanes of NL3 were removed on 2026-11-12), so the keywords change no bits.
         /// </remarks>
         [WrapReduction("prod")]
         public abstract NDArray ReduceProduct(NDArray arr, NDAxis? axis, bool keepdims = false, DType dtype = null, NDArray @out = null,

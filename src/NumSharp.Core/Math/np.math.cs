@@ -211,10 +211,11 @@ namespace NumSharp
         /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain (non-matrix) <paramref name="out"/>.</exception>
         /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/generated/numpy.prod.html. With <paramref name="initial"/> or
-        ///     <paramref name="where"/> the product is NumPy's sequential multiply loop through its reduction iterator (a
-        ///     NaN keeps the payload of the first NaN met); without them a flat float product multiplies in SIMD lane order,
-        ///     which can differ from NumPy's in the last bit (the open NL3).
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.prod.html. A float product is NumPy's sequential
+        ///     multiply loop on every route (a NaN keeps the payload of the first NaN met in a reduce run), bit for bit:
+        ///     a contiguous product at NumPy's own speed (a dependent multiply per element), an axis product of a C-ordered
+        ///     array eight rows at a time or row by row with vectors; <paramref name="initial"/> or
+        ///     <paramref name="where"/> run NumPy's reduction iterator.
         /// </remarks>
         public static NDArray prod(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
             object initial = null, NDArray @where = null)
