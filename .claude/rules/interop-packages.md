@@ -14,16 +14,18 @@ paths:
 
 ## Unreleased packages
 
-`NumSharp.Interop.ParquetNet` (Parquet columns decoded straight into `NDArray` buffers) is unreleased: it builds, tests
-and merges like everything else, but no NuGet package is created and no release or public documentation mentions it.
-`NumSharp.Interop.OnnxRuntime` and `NumSharp.Interop.MLNet` were unreleased the same way from 2026-10-02 and ship from
-0.80.0 (the owner's decision of 2026-11-02). Unreleased is exactly three things:
+`NumSharp.Interop.ParquetNet` (Parquet columns decoded straight into `NDArray` buffers) and `NumSharp.Interop.TorchSharp`
+(NDArray ↔ TorchSharp tensors, below) are unreleased: they build, test and merge like everything else, but no NuGet
+package is created and no release or public documentation mentions them. `NumSharp.Interop.OnnxRuntime` and
+`NumSharp.Interop.MLNet` were unreleased the same way from 2026-10-02 and ship from 0.80.0 (the owner's decision of
+2026-11-02). Unreleased is exactly three things:
 1. No package. The csproj sets `<IsPackable>false</IsPackable>`, which makes `dotnet pack` a silent no-op (exit 0, no
    `.nupkg`, not even a compile). CI still names it in the signing check and in `build-nuget`'s Build and Pack steps,
    and `create-release` lists exactly the `.nupkg` files that were packed (ids read from each nuspec), so packing,
    signing, publishing and the release text all follow that one property.
-2. No docs. ParquetNet has no page (its `PackageProjectUrl` points at the page to write when it ships). DocFX publishes
-   every `.md` under `docs/website-src`, toc entry or not, so a hidden package's page needs a `docfx.json` exclude.
+2. No docs. ParquetNet and TorchSharp have no page (each `PackageProjectUrl` points at the page to write when it ships).
+   DocFX publishes every `.md` under `docs/website-src`, toc entry or not, so a hidden package's page needs a
+   `docfx.json` exclude.
 3. Gated. The `interop-test` job builds and tests it on both TFMs; apart from `build-nuget`'s Build step on a release
    tag (which compiles it so that releasing it needs no workflow edit), nothing else compiles it in CI. It READS text
    (`ParquetConvert.TextKindOf`, keyed on both Parquet.Net's CLR type - `ReadOnlyMemory<char>` / `<byte>` in Parquet.Net
@@ -281,6 +283,65 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   `UnicodeDecodeError` / `UnicodeEncodeError`) and `TextRefusalTests` (every class × layout × unmanaged verb refused
   before any layout check, naming the class and `ToStringTensor()`); `ApiSurfaceTests` approves the text verbs.
 - Docs: `docs/website-src/docs/interop/system-numerics-tensors.md`.
+
+### `NumSharp.Interop.TorchSharp` (unreleased)
+
+- `NDArrayTorchInterop` verbs and `TorchCodecMode { Auto, View, Copy }` (the owner's codec modes; NumPy/PyTorch's
+  `copy=None/False/True`). Sources (`src/NumSharp.Interop.TorchSharp/`): `NDArrayTorchInterop.{cs,Export.cs,Import.cs}`
+  (counters, dtype maps, `MayShareMemory`, shared plumbing; `AsTensor` / `ToTensor`; `AsNDArray` / `ToNDArray`),
+  `LibTorchSharpNative.cs` (the five natives the bridge binds itself, the `THSTensor_new` ABI detection),
+  `TorchLeases.cs` (`ExportLease`, `ImportLease`). TorchSharp's sources are not vendored: read them on GitHub.
+- How memory crosses. TorchSharp has no public way to wrap memory it did not allocate (`from_array` / `frombuffer` pin a
+  managed `Array` only, its `Memory<T>` overloads copy), so the export calls LibTorchSharp's `THSTensor_new` (libtorch's
+  `from_blob` with a deleter) itself and wraps the handle with the public `Tensor.UnsafeCreateTensor`. A C-contiguous
+  array is one `from_blob`; any other non-negative-stride layout is `from_blob` over its reach + `as_strided`; a broadcast
+  over writeable memory (`Storage.BaseStorage`'s flag, never `nd.@base`, which allocates a pinned NDArray) is the memory
+  under it + torch's `expand`. Each export lease holds one ARC reference (`TryAddRef`) and a per-lease delegate rooted in a
+  static dictionary until libtorch's deleter runs; the deleter `Release`s (not `Abandon`s: libtorch calls it exactly when
+  nothing in torch can read the memory) on whichever thread drops the storage. The import holds a `THSTensor_detach` of the
+  tensor (its own `TensorImpl` over the storage) as a raw handle in an `ImportLease` (no managed `Tensor`, so no
+  `DisposeScope` can dispose it under the view), books the storage's `THSStorage_nbytes`, and is released by the view's
+  memory-block Disposer. Copies are NumSharp buffers: `np.copyto(…, casting)` into a fresh array, lent like a view.
+- The owner's decisions (2026-11-12): a broadcast of writeable memory crosses as `expand`, every other read-only array
+  (NumPy scalars, read-only foreign memory, a broadcast of either) copies under Auto and throws under View; NumSharp's
+  uint16 / uint32 / uint64 / char take NEP 50's `np.promote_types(dtype, np.int8)` (int32, int64, float64, int32), decimal
+  float64, and an explicit `dtype` converts through `np.copyto`'s `casting` (default `"same_kind"`), so `dtype: Int64`
+  downcasts uint64; torch's complex64 / bfloat16 widen exactly in NumSharp (float pairs → `.real` / `.imag`; bf16 bits
+  zero-extended into a uint32 view of the result and `left_shift` 16), View throws; a `requires_grad` tensor is a
+  READ-ONLY view (no TorchSharp / LibTorchSharp API bumps autograd's version counter; `t.detach().AsNDArray()` is the
+  writeable route); floor TorchSharp 0.100.0, tested with 0.107.0, no upper bound; unreleased until the owner decides.
+- Torch facts the package is built around (measured on 0.107.0 unless noted): `conj()` is lazy (the memory holds the
+  unconjugated values; `.imag` of it carries the neg bit), so a view refuses `is_conj()` / `is_neg()`; `THSTensor_data` of
+  a META tensor is null with NO recorded error (decide by `device_type`), of a sparse one null with an error; an empty
+  tensor's data pointer is null; `THSTensor_alias` shares the caller's `TensorImpl` (its data pointer moved after
+  `t.set_(other)`), `detach` does not; the deleter fires even for a 0-byte storage and on the GC finalizer thread
+  through TorchSharp's `~Tensor`; `from_blob` storage is not resizable; `as_strided` refuses negative strides and any
+  layout past the storage; libtorch refuses in-place ops over overlapping (expanded) lanes but `t[0].fill_()` writes one;
+  TorchSharp's `Tensor.Dispose` takes no lock.
+- Version traps (the package compiles against 0.100.0): every `Tensor.to(...)` overload gained parameters by 0.107.0
+  (MissingMethodException for a floor binary), so the package never calls `to` (conversions in NumSharp, device moves
+  via `cpu()`, which never changed; no `device:` parameter - `nd.AsTensor().cuda()`); `THSTensor_new` took 6 arguments in
+  0.100.x (`TorchSharp.PInvoke.LibTorchSharp`) and 9 from 0.101.0 (`TorchSharp.PInvoke.NativeMethods`):
+  `LibTorchSharpNative.DetectAbi` reads TorchSharp's own declaration and refuses an unknown form; `ScalarType` names the
+  quantized codes (12-14) only from 0.107.0 and never names libtorch's uint16/32/64 (27-29, imported as NumSharp's
+  unsigned dtypes), so the sources use the ordinals; 0.100.0 ships no osx-arm64 natives; TorchSharp 0.100.0 brings
+  SkiaSharp 2.88.3 (NU1903 audit warning; current TorchSharp brings 2.88.6).
+- The namespace is the package name, so inside `NumSharp.Interop.TorchSharp` (and the test namespace) a qualified
+  `TorchSharp.` resolves to this namespace: import TorchSharp with file-level `using`s, never qualify.
+- What no reference covers (documented, not guarded): an in-place resize of an imported tensor's storage (libtorch's
+  `resize_`) frees the memory a view reads - PyTorch's `numpy()` marks the storage non-resizable, which TorchSharp offers
+  no way to; a tensor disposed on another thread while a verb reads it.
+- Gate: `test/NumSharp.Tests.Interop.TorchSharp` (`TorchSharpVersion` / `LibTorchVersion` properties, default the floor
+  0.100.0 / 2.0.1.1; it references `TorchSharp` + the runner's `libtorch-cpu-<rid>` package, not `TorchSharp-cpu`, which
+  restores all three OSes' natives, ~1.2 GB per version). The `interop-test` job runs the floor leg (Windows, Linux) and
+  the current leg (0.107.0 / 2.10.0, all three OSes) on both TFMs; the current leg is the binary-compatibility gate for
+  the floor-compiled package, and runs the sparse / quantized / libtorch-uint16 tests the floor leg reports Inconclusive.
+  Suites: `AbiTests` (the detected form, the floor reference), `DtypeMapTests`, `ExportTests`, `ExportLayoutTests` (every
+  shared dtype × layout, broadcast `expand`, reversed / read-only / misaligned copies, views ending at the buffer's last
+  element), `ImportTests`, `LifetimeTests` (dispose / scope / finalizer / torch views / `set_` / booking),
+  `ConcurrencyTests`, `ApiSurfaceTests`, `DocExampleTests`; the leak gate (`LiveExports` / `LiveImports` back to the
+  baseline) after every test. Run it under `NUMSHARP_DEBUG_GUARD_PAGES=1` after touching the export layouts (green on
+  both legs).
 
 ## The pythonnet bridge carries text
 

@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <AssemblyName>NumSharp.Interop.TorchSharp</AssemblyName>
+    <!-- The namespace is the package name, like the ONNX Runtime and ML.NET bridges. Inside it the simple name
+         `TorchSharp` resolves to THIS namespace (NumSharp.Interop.TorchSharp), so the sources never write a qualified
+         `TorchSharp.` reference: they import TorchSharp's types with file-level using directives instead. -->
+    <RootNamespace>NumSharp.Interop.TorchSharp</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <!-- NuGet package (co-versioned with NumSharp: the version comes from the repo-root
+         Directory.Build.props VersionPrefix, never a number in this file). -->
+    <PackageId>NumSharp.Interop.TorchSharp</PackageId>
+    <!-- UNRELEASED: merged, but hidden until the owner releases it. With IsPackable=false, `dotnet pack`
+         is a silent no-op (exit 0, no .nupkg), so CI packs, signs, publishes and lists nothing for this
+         project. It has no docs page yet. To release it, delete this property and write the page that
+         PackageProjectUrl points at: "Unreleased packages" in ../../.claude/rules/interop-packages.md. -->
+    <IsPackable>false</IsPackable>
+    <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
+    <Product>NumSharp</Product>
+    <Company>SciSharp STACK</Company>
+    <Copyright>2021 © SciSharp STACK Team</Copyright>
+    <Description>Interop between NumSharp NDArray and TorchSharp tensors (.NET bindings for libtorch, the engine under PyTorch). nd.AsTensor() hands a NumSharp buffer to libtorch without copying - any non-negative-stride layout, broadcast views as torch's own expand - and tensor.AsNDArray() views a CPU tensor's storage as an NDArray. Each verb takes a TorchCodecMode: Auto (view when possible, else a copy), View (sharing or an exception) or Copy (always independent). Dtypes without a counterpart cross by NumPy's NEP 50 promotion; libtorch's deleter releases the NumSharp buffer when the last tensor over it is freed. Conversion library only: no engine backend, no ModuleInitializer, no native asset of its own (it binds TorchSharp's LibTorchSharp).</Description>
+    <PackageTags>NumSharp;NumPy;TorchSharp;PyTorch;libtorch;Tensor;interop;zero-copy;deep-learning;scientific-computing</PackageTags>
+    <PackageProjectUrl>https://scisharp.github.io/NumSharp/docs/interop/torchsharp.html</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <!-- No PackageReadmeFile, deliberately: the package embeds no README, so each version's README
+         tab stays owner-editable on nuget.org, where the release notes are pasted after publishing.
+         README.md in this folder is repo documentation only and is not packed. See "No embedded
+         package README" in ../../Directory.Build.props, whose guard fails `dotnet pack` if this returns. -->
+    <PackageOutputPath>../../packages</PackageOutputPath>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Symbols: embed the .pdb in the .nupkg (matches NumSharp.Core / the other interop packages). -->
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- In-repo: ProjectReference (packs as a NuGet dependency on "NumSharp" $(Version)). -->
+    <ProjectReference Include="../NumSharp.Core/NumSharp.Core.csproj" />
+
+    <!-- The ONLY external dependency: the MANAGED `TorchSharp` package (the C# API plus LibTorchSharp, its small native
+         shim). Deliberately NOT a runtime flavour: libtorch itself ships as mutually exclusive packages (TorchSharp-cpu,
+         TorchSharp-cuda-windows, TorchSharp-cuda-linux, or libtorch-* directly; two of them together fail TorchSharp's
+         own CheckOneTorchSharpRuntime target), and every one of them depends on this same `TorchSharp` package.
+         Depending on it alone composes with whichever flavour the consumer references - the ONNX Runtime bridge's
+         `.Managed` rule. The tests reference the CPU libtorch.
+
+         The version is the FLOOR and nothing else (no upper bound, the form the ONNX and ML.NET bridges declare their
+         hosts in: a cap below a consumer's TorchSharp would be a restore error, NU1107/NU1605):
+         0.100.0 (May 2023, libtorch 2.0.1) is the OLDEST release exposing every member this package calls, checked
+         per published package. The package COMPILES against the floor, so every managed member it uses must keep its
+         signature in every later release; the ones it calls are identical from 0.100.0 to 0.107.0, and the suite runs
+         against both. Two traps found that way, which the sources work around:
+           - Every Tensor.to(...) overload gained parameters in 0.101-0.107 (a binary compiled against 0.100.0 calling
+             `to` throws MissingMethodException on 0.107.0), so the package never calls `to`: conversions run in
+             NumSharp (np.copyto) and a device move comes back through `cpu()`, which never changed.
+           - The native THSTensor_new (libtorch's from_blob behind TorchSharp) took 6 arguments in 0.100.x and takes 9
+             from 0.101.0 on. LibTorchSharpNative reads which one the LOADED TorchSharp declares and calls that form. -->
+    <PackageReference Include="TorchSharp" Version="0.100.0" />
+  </ItemGroup>
+
+</Project>

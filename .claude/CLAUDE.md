@@ -215,8 +215,8 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
 - Indexing: integers and slice strings (`nd[0]`, `nd["1:3"]`, `nd["::-1"]`), boolean masks (`nd[mask]`, and
   `nd[mask] = v`), fancy indexing (`nd[indices]`). A raw `int[]`/`long[]` as the ONLY index is fancy (`nd[new int[]{0,2}]` selects rows 0 and 2); `nd[0,2]`
   is a coordinate, and coordinate access by array is `nd.GetData(int[]/long[])` → `selection-indexing.md`.
-- Interop packages (OpenBLAS, ONNX Runtime, ML.NET, System.Numerics.Tensors, pythonnet) → `openblas.md`,
-  `interop-packages.md`. ParquetNet is UNRELEASED: no package, no docs, no mention in release notes.
+- Interop packages (OpenBLAS, ONNX Runtime, ML.NET, System.Numerics.Tensors, TorchSharp, pythonnet) → `openblas.md`,
+  `interop-packages.md`. ParquetNet and TorchSharp are UNRELEASED: no package, no docs, no mention in release notes.
 
 ## Build and test
 
