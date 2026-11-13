@@ -331,6 +331,12 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   quantized codes (12-14) only from 0.107.0 and never names libtorch's uint16/32/64 (27-29, imported as NumSharp's
   unsigned dtypes), so the sources use the ordinals; 0.100.0 ships no osx-arm64 natives; TorchSharp 0.100.0 brings
   SkiaSharp 2.88.3 (NU1903 audit warning; current TorchSharp brings 2.88.6).
+- macOS trap: libtorch 2.10.0's osx-arm64 `libtorch_cpu.dylib` links OpenMP by Homebrew's ABSOLUTE path
+  (`/opt/homebrew/opt/libomp/lib/libomp.dylib`, read from its `LC_LOAD_DYLIB`), so the `libomp.dylib` the
+  `libtorch-cpu-osx-arm64` package ships beside it is never found, and without `brew install libomp` TorchSharp's own
+  native load fails ("Failed to load native component ... libLibTorchSharp.dylib") in every test. The `interop-test`
+  job's "TorchSharp: libomp (macOS)" step installs it (PR #635's first macOS run failed every test of the current leg
+  on `macos-26-arm64`); the TorchSharp page tells users the same.
 - The namespace is the package name, so inside `NumSharp.Interop.TorchSharp` (and the test namespace) a qualified
   `TorchSharp.` resolves to this namespace: import TorchSharp with file-level `using`s, never qualify.
 - What no reference covers (documented, not guarded): an in-place resize of an imported tensor's storage (libtorch's

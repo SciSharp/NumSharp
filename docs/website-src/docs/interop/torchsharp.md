@@ -256,6 +256,11 @@ upgrade. Two differences between those releases shape the code:
 TorchSharp 0.100.0 brings SkiaSharp 2.88.3, which NuGet's audit flags (NU1903); any current TorchSharp brings 2.88.6.
 TorchSharp 0.100.0 ships no osx-arm64 natives.
 
+On macOS, install OpenMP from Homebrew before the first tensor: `brew install libomp`. libtorch's `libtorch_cpu.dylib`
+(libtorch 2.10.0, TorchSharp 0.107.0) links it by Homebrew's absolute path, `/opt/homebrew/opt/libomp/lib/libomp.dylib`,
+so the `libomp.dylib` the libtorch package ships beside it is not the one the loader looks for. Without it TorchSharp's
+own native load fails ("Failed to load native component ... libLibTorchSharp.dylib"), before NumSharp is involved.
+
 ## Limits
 
 - **CPU memory only.** A view needs memory the CPU can address: a CUDA or MPS tensor crosses as a copy through `cpu()`
