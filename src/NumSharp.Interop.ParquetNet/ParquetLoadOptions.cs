@@ -39,7 +39,7 @@ namespace NumSharp.Interop.ParquetNet
         /// Fill value for <see cref="NullHandling.Fill"/>. <c>null</c> ⇒ <c>default(T)</c> of the column dtype.
         /// A non-null value converts into each column it fills as NumPy's <c>a[i] = fill</c> does (NumSharp's
         /// <c>PyArray_Pack</c>): a float truncates toward zero into an integer column, NaN or an infinity into one is
-        /// refused (<c>ValueError</c> / <c>OverflowException</c>), an integer out of the dtype's range is refused with
+        /// refused (<c>ValueError</c> / <c>OverflowError</c>), an integer out of the dtype's range is refused with
         /// NumPy's <c>OverflowError</c> text, a string is parsed (any non-empty string is <c>True</c> in a boolean
         /// column), and into a text column a number becomes its text (NaN is <c>'nan'</c>).
         /// </summary>

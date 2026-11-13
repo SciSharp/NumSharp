@@ -363,8 +363,10 @@ namespace NumSharp.Tests.Interop.ParquetNet
         /// <param name="Column">The nullable column: <c>maybe_i64</c>, <c>maybe_u8</c>, <c>maybe_flag</c>, <c>maybe_f64</c> or <c>all_null</c>.</param>
         /// <param name="NumpyFill">numpy's value for the fill in the column's dtype; <c>null</c> when numpy refuses the fill.</param>
         /// <param name="Refusal">
-        ///     When numpy refuses, the exception the bridge must throw: <see cref="OverflowException"/> for numpy's
-        ///     <c>OverflowError</c>, <see cref="ValueError"/> for its <c>ValueError</c>; <c>null</c> otherwise.
+        ///     When numpy refuses, the exception the bridge must throw: NumSharp's Python classes, <see cref="OverflowError"/>
+        ///     for numpy's <c>OverflowError</c> (a sibling of .NET's <see cref="OverflowException"/> under
+        ///     <see cref="ArithmeticException"/>, not one of its subclasses) and <see cref="ValueError"/> for its
+        ///     <c>ValueError</c>; <c>null</c> otherwise.
         /// </param>
         /// <param name="Text">numpy's error text for a refusal (LP64 numpy 2.4.2's), or <c>null</c>.</param>
         public readonly record struct FillCase(object Fill, string Column, object NumpyFill, Type Refusal, string Text = null);
@@ -428,9 +430,9 @@ namespace NumSharp.Tests.Interop.ParquetNet
                 new(double.NaN, "maybe_i64", null, typeof(ValueError), "cannot convert float NaN to integer"),
                 new("1.5", "maybe_i64", null, typeof(ValueError), "invalid literal for int() with base 10: '1.5'"),
                 new("7", "maybe_u8", (byte)7, null),
-                new(-1L, "maybe_u8", null, typeof(OverflowException), "Python integer -1 out of bounds for uint8"),
-                new(300L, "maybe_u8", null, typeof(OverflowException), "Python integer 300 out of bounds for uint8"),
-                new(-1.5, "maybe_u8", null, typeof(OverflowException), "Python integer -1 out of bounds for uint8"),
+                new(-1L, "maybe_u8", null, typeof(OverflowError), "Python integer -1 out of bounds for uint8"),
+                new(300L, "maybe_u8", null, typeof(OverflowError), "Python integer 300 out of bounds for uint8"),
+                new(-1.5, "maybe_u8", null, typeof(OverflowError), "Python integer -1 out of bounds for uint8"),
                 new(double.NaN, "maybe_flag", true, null),
                 new(-1L, "maybe_flag", true, null),
                 new(1.5, "maybe_flag", true, null),
