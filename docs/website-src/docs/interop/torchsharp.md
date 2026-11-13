@@ -17,7 +17,8 @@ direction, who frees what, dtypes and versions.
 
 > Verified on TorchSharp 0.100.0 (the floor, libtorch 2.0.1) and 0.107.0 (libtorch 2.10.0) · net8.0/net10.0.
 > Every claim below is reproduced by a test in `NumSharp.Tests.Interop.TorchSharp` (222 tests). The layout and flag
-> tables are held to NumPy 2.4.2 and PyTorch 2.12.1 through a committed fixture, so no Python runs at test time.
+> tables are held to NumPy 2.5.4 (the pinned release) and PyTorch 2.13.0 through a committed fixture, so no Python runs at
+> test time.
 
 ---
 

@@ -354,8 +354,10 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   (24 tensor states × their dtypes × the modes against `t.numpy()` / `t.numpy(force=True)`), `StateMatrixRoundTripTests`,
   `ConvertedDtypeStateTests` (the five NEP 50 dtypes × 13 deciding layouts) and `StateCatalogSyncTests`; the leak gate
   (`LiveExports` / `LiveImports` back to the baseline) after every test. The matrix's answers are
-  `Fixtures/torch_interop_states.json`, written by `test/oracle/gen_torch_interop_states.py` (NumPy 2.4.2 + PyTorch,
-  `~/.claude/python` has both; 386 array cases, 205 tensor cases), with the recipes mirrored by name in `StateCatalog.cs`.
+  `Fixtures/torch_interop_states.json`, written by `test/oracle/gen_torch_interop_states.py` (the pinned NumPy +
+  PyTorch: run it WITHOUT `-I` under the interop ecosystem venv `python-envs/make_env.py` builds, numpy 2.5.4 with
+  torch 2.13.0+cpu; 386 array cases, 205 tensor cases; `StateCatalogSyncTests.Fixture_IsThePinnedNumPy` holds it to
+  `numpy-version.txt`), with the recipes mirrored by name in `StateCatalog.cs`.
   Divergences from PyTorch asserted as such: read-only, broadcast-over-read-only, misaligned and off-16-byte complex128
   arrays copy where `from_numpy` shares; a negative stride on a length-1 axis shares where `from_numpy` refuses; an
   expanded tensor and a tensor that requires grad import READ-ONLY where `numpy()` gives a writeable view / refuses;
