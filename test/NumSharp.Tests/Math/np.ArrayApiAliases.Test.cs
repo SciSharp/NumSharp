@@ -25,16 +25,28 @@ namespace NumSharp.Tests.Math
         /// <returns>The bits of every element in C order.</returns>
         private static long[] Bits(NDArray a) => a.ToArray<double>().Select(BitConverter.DoubleToInt64Bits).ToArray();
 
-        /// <summary>acos / asin / atan answer bit for bit as arccos / arcsin / arctan, and NumPy's values at a point.</summary>
+        /// <summary>
+        ///     acos / asin / atan answer bit for bit as arccos / arcsin / arctan (the alias property, exact on every host), and
+        ///     NumPy's values at a point.
+        /// </summary>
+        /// <remarks>
+        ///     The point values pass through the platform libm, so they are NumPy's win-amd64 bits on the pinned host and
+        ///     within <see cref="HostLibm.OffHostUlpBudget"/> elsewhere (<see cref="HostLibm.Matches(double, double)"/>):
+        ///     macOS arm64's libm rounds <c>acos(0.5)</c> to <c>1.0471975511965976</c>, one ULP under the UCRT's and glibc's
+        ///     correctly rounded <c>1.0471975511965979</c> (PR #635's macOS CI, 2026-11-13), as NumPy on that host does.
+        /// </remarks>
         [TestMethod]
         public void InverseTrig_Aliases_AreTheOriginals()
         {
             Bits(np.acos(Specials)).Should().Equal(Bits(np.arccos(Specials)));
             Bits(np.asin(Specials)).Should().Equal(Bits(np.arcsin(Specials)));
             Bits(np.atan(Specials)).Should().Equal(Bits(np.arctan(Specials)));
-            np.acos(np.array(new[] { 0.5 })).GetDouble(0).Should().Be(1.0471975511965979);
-            np.asin(np.array(new[] { 1.0 })).GetDouble(0).Should().Be(1.5707963267948966);
-            np.atan(np.array(new[] { 1.0 })).GetDouble(0).Should().Be(0.7853981633974483);
+            double acos = np.acos(np.array(new[] { 0.5 })).GetDouble(0);
+            Assert.IsTrue(HostLibm.Matches(1.0471975511965979, acos), HostLibm.Describe("acos(0.5)", 1.0471975511965979, acos));
+            double asin = np.asin(np.array(new[] { 1.0 })).GetDouble(0);
+            Assert.IsTrue(HostLibm.Matches(1.5707963267948966, asin), HostLibm.Describe("asin(1.0)", 1.5707963267948966, asin));
+            double atan = np.atan(np.array(new[] { 1.0 })).GetDouble(0);
+            Assert.IsTrue(HostLibm.Matches(0.7853981633974483, atan), HostLibm.Describe("atan(1.0)", 0.7853981633974483, atan));
             np.acos(np.array(new[] { 0.5 }), dtype: np.float32).dtype.Should().Be(np.float32);
         }
 
@@ -45,7 +57,10 @@ namespace NumSharp.Tests.Math
             var y = Specials.reshape(-1, 1);
             var x = Specials.reshape(1, -1);
             Bits(np.atan2(y, x)).Should().Equal(Bits(np.arctan2(y, x)));
-            np.atan2(np.array(new[] { 1.0 }), np.array(new[] { -1.0 })).GetDouble(0).Should().Be(2.356194490192345);
+            // atan2 passes through the platform libm: NumPy's win-amd64 bits on the pinned host, HostLibm's ULP budget
+            // elsewhere (the inverse-trig points above showed macOS's libm one ULP off; this one agrees today).
+            double atan2 = np.atan2(np.array(new[] { 1.0 }), np.array(new[] { -1.0 })).GetDouble(0);
+            Assert.IsTrue(HostLibm.Matches(2.356194490192345, atan2), HostLibm.Describe("atan2(1.0, -1.0)", 2.356194490192345, atan2));
         }
 
         /// <summary>
