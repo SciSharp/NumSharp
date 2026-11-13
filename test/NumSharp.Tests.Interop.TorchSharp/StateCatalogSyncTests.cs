@@ -33,11 +33,19 @@ namespace NumSharp.Tests.Interop.TorchSharp
                 ((Action)(() => StateCatalog.ScalarTypeOf(dtype))).Should().NotThrow($"the fixture's torch dtype '{dtype}' must map to a ScalarType");
         }
 
-        /// <summary>The fixture was recorded with NumPy 2.4.2, the version the repository pins.</summary>
+        /// <summary>
+        ///     The fixture was recorded with the NumPy release the repository pins (<c>numpy-version.txt</c>, compiled in as
+        ///     <see cref="NumPyPin.Version"/>), so the state matrix holds the bridge to that release's flags and strides.
+        /// </summary>
+        /// <remarks>
+        ///     Compared against the pin rather than a literal: after a NumPy bump this fails until
+        ///     <c>test/oracle/gen_torch_interop_states.py</c> regenerates the fixture under the new release, where a literal
+        ///     would keep agreeing with the old fixture.
+        /// </remarks>
         [TestMethod]
-        public void Fixture_IsNumPy242()
+        public void Fixture_IsThePinnedNumPy()
         {
-            StateOracle.NumPyVersion.Should().Be("2.4.2");
+            StateOracle.NumPyVersion.Should().Be(NumPyPin.Version, "the fixture must hold the pinned NumPy's answers (numpy-version.txt)");
         }
     }
 }

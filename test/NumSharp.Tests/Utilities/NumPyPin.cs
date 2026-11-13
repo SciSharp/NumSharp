@@ -14,6 +14,11 @@ namespace NumSharp.Tests
     /// <remarks>
     ///     The value is fixed at BUILD time: after editing <c>numpy-version.txt</c>, rebuild before running the gates (a
     ///     <c>--no-build</c> run still compares against the release the assembly was built with).
+    ///     <para>
+    ///     Other test projects LINK this file and compile the same metadata from the same pin file
+    ///     (<c>NumSharp.Tests.Interop.TorchSharp.csproj</c>, whose state fixture records the NumPy it was generated with),
+    ///     so the type reads the metadata of whichever assembly it is compiled into.
+    ///     </para>
     /// </remarks>
     internal static class NumPyPin
     {
@@ -33,11 +38,16 @@ namespace NumSharp.Tests
         ///     version gate from comparing against an empty string and reporting a misleading corpus mismatch.</exception>
         private static string Read()
         {
-            string version = typeof(NumPyPin).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+            // Fully qualified: NumSharp.Tests has a NumSharp.Tests.Assembly namespace (the strong-name tests), which the
+            // bare name would bind to here.
+            System.Reflection.Assembly assembly = typeof(NumPyPin).Assembly;
+            string version = assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
                 .FirstOrDefault(a => a.Key == "NumPyVersion")?.Value?.Trim();
+            // The message names the assembly the file is compiled into: a linking project that forgot the csproj's pin
+            // block must be told which csproj to fix, not pointed at NumSharp.Tests.
             if (string.IsNullOrEmpty(version))
                 throw new InvalidOperationException(
-                    "NumSharp.Tests carries no NumPyVersion assembly metadata: build it through NumSharp.Tests.csproj, which reads numpy-version.txt.");
+                    $"{assembly.GetName().Name} carries no NumPyVersion assembly metadata: build it through its csproj, which reads numpy-version.txt.");
             return version;
         }
     }

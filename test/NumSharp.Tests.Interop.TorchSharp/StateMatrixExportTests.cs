@@ -12,7 +12,8 @@ namespace NumSharp.Tests.Interop.TorchSharp
 {
     /// <summary>
     ///     NumSharp → torch for every array STATE of <see cref="StateCatalog.ArrayStates"/>, every shared dtype and every mode,
-    ///     held to NumPy 2.4.2 and PyTorch (the fixture of <c>test/oracle/gen_torch_interop_states.py</c>).
+    ///     held to the pinned NumPy (<c>numpy-version.txt</c>) and PyTorch (the fixture of
+    ///     <c>test/oracle/gen_torch_interop_states.py</c>).
     /// </summary>
     /// <remarks>
     ///     <para>Per state and dtype it checks, in order:</para>

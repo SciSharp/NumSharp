@@ -114,7 +114,11 @@ metadata the corpus-version gates compare against (`Utilities/NumPyPin.cs`).
    (`openblas.md`).
 3. Regenerate EVERY corpus with the new NumPy: every `gen_oracle.py` mode and every standalone generator, the
    matrix-operand and relayout tiers last (they re-emit other tiers' cases). Run them without `python -I`: isolated mode
-   drops the script's folder from `sys.path`, so `import numpy_pin` fails.
+   drops the script's folder from `sys.path`, so `import numpy_pin` fails. One fixture needs more than NumPy:
+   `gen_torch_interop_states.py` (the TorchSharp bridge's state matrix) imports torch, so run it with the interop
+   ecosystem venv `test/NumSharp.Tests.Interop/python-envs/make_env.py` builds; its gate
+   `StateCatalogSyncTests.Fixture_IsThePinnedNumPy` reads the same pin. `gen_find_common_type_oracle.py` stays on NumPy
+   1.26.4 (`np.find_common_type` is NumPy 1.x's), so it is not part of a bump.
 4. Regenerate a CONTROL copy under the OLD NumPy from the same tree: it must equal the committed corpus byte for byte,
    so every case whose bytes differ between the two is a NumPy behavior change (port it) or noise to explain.
 5. Read the release notes and diff, between the two tags, the Python functions NumSharp ports (per function, at the

@@ -1,5 +1,5 @@
 {
- "numpy": "2.4.2",
+ "numpy": "2.5.4",
  "numpy_states": {
   "aligned_flag_cleared": {
    "bool": {
@@ -12542,7 +12542,7 @@
    }
   }
  },
- "torch": "2.12.1+cu126",
+ "torch": "2.13.0+cpu",
  "torch_states": {
   "channels_last": {
    "bool": {
